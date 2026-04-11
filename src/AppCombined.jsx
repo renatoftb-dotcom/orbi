@@ -9940,7 +9940,7 @@ export default function ModuloClientesFornecedores() {
         </div>
         <div style={{ flex:1, overflowY:"auto" }}>
           {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} />}
+          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} />}
           {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
           {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}
