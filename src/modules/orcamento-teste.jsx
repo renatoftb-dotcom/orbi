@@ -1616,6 +1616,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       // valores finais
                       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
                     });
+                    // Salvar no card do cliente
+                    if (onSalvar) onSalvar({
+                      ...(orcBase || {}),
+                      tipo: tipoProjeto, subtipo: tipologia, tamanho, padrao,
+                      cliente: clienteNome, referencia,
+                      resultado: calculo,
+                      tipoPgto, temImposto, aliqImp,
+                      etapasPct,
+                      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+                    });
                     setShowModal(false);
                   }}>
                   Confirmar e Gerar Orçamento
