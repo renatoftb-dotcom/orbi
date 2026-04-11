@@ -17,6 +17,7 @@ const ORDER = [
   "orcamento-form.jsx",
   "resultado-pdf.jsx",
   "orcamento-teste.jsx",
+  "login.jsx",
   "app.jsx",
 ];
 

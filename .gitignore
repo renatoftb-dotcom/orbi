@@ -22,3 +22,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+node_modules
+backend/orbi.db
+backend/orbi.db-shm
+backend/orbi.db-wal
+dist
