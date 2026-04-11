@@ -2940,7 +2940,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
                 {s.subacoes.map(sa => (
                   <button key={sa.key}
                     style={{ background:"#1e3a5f", color: s.cor, border:`1px solid ${s.cor}`, borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}
-                    onClick={() => { setOrcBase(null); setSubView(s.key === "projeto" && sa.key === "orcamento" ? "orcamento-projeto" : null); }}>
+                    onClick={() => { setOrcBase(null); setSubView(s.key === "projeto" && sa.key === "orcamento" ? "orcamento-teste" : null); }}>
                     {sa.icon} {sa.label}
                   </button>
                 ))}
@@ -3002,7 +3002,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
                           </div>
                           <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
                             <button style={S.btnXsSm} onClick={() => { setOrcBase(o); setSubView("resultado"); }}>Ver</button>
-                            <button style={S.btnXsSm} onClick={() => { setOrcBase(o); setSubView("orcamento-projeto"); }}>Editar</button>
+                            <button style={S.btnXsSm} onClick={() => { setOrcBase(o); setSubView("orcamento-teste"); }}>Editar</button>
                             <div style={{ position:"relative" }}>
                               <button onClick={() => setOpenMenu(openMenu===o.id ? null : o.id)}
                                 style={{ ...S.btnXsSm, padding:"3px 8px", background:"#1e293b",
@@ -3181,7 +3181,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
             </div>
             <p style={{ color:"#64748b", fontSize:13, margin:"0 0 20px" }}>O que deseja fazer para {cliente.nome.split(" ")[0]}?</p>
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              <button style={{ ...S.btnSubacao2, display:"flex", alignItems:"center", gap:14, background:"#0f172a", border:"2px solid #1e293b", borderRadius:12, padding:"14px 16px", cursor:"pointer", fontFamily:"inherit", width:"100%", color:"#f1f5f9" }} onClick={() => { setModalServico(null); setOrcBase(null); setSubView("orcamento-projeto"); }}>
+              <button style={{ ...S.btnSubacao2, display:"flex", alignItems:"center", gap:14, background:"#0f172a", border:"2px solid #1e293b", borderRadius:12, padding:"14px 16px", cursor:"pointer", fontFamily:"inherit", width:"100%", color:"#f1f5f9" }} onClick={() => { setModalServico(null); setOrcBase(null); setSubView("orcamento-teste"); }}>
                 <span style={{ fontSize:24 }}>🧮</span>
                 <div style={{ textAlign:"left" }}>
                   <div style={{ color:"#f1f5f9", fontWeight:700, fontSize:14 }}>Orçar Projeto</div>
