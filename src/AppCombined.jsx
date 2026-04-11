@@ -2160,7 +2160,7 @@ function HomeMenu({ setAba, data }) {
       {/* Saudação */}
       <div style={{ textAlign:"center", marginBottom:48 }}>
         <div style={{ color:"#f1f5f9", fontWeight:900, fontSize:26, marginBottom:6 }}>
-          Orbi
+          Vicke
         </div>
         <div style={{ color:"#64748b", fontSize:14 }}>
           Selecione um módulo para começar
@@ -9784,7 +9784,7 @@ export default function ModuloClientesFornecedores() {
         await save(parsed);
         alert("Dados importados com sucesso!");
       } catch {
-        alert("Arquivo inválido. Use um backup gerado pelo ObraManager.");
+        alert("Arquivo inválido. Use um backup gerado pelo Vicke.");
       }
     };
     reader.readAsText(file);
@@ -9805,7 +9805,7 @@ export default function ModuloClientesFornecedores() {
       <div style={S.topbar}>
         <div style={S.topbarLeft}>
           <span style={S.logoMark}>⚒</span>
-          <span style={S.logoText}>Orbi</span>
+          <span style={S.logoText}>Vicke</span>
           <span style={S.logoDivider}>/</span>
           <span style={S.logoSub}>{["clientes","fornecedores","nf"].includes(aba) ? "Clientes" : aba === "projetos" ? "Projetos" : aba === "obras" ? "Obras" : aba === "financeiro" ? "Financeiro" : aba === "escritorio" ? "Escritório" : "Em breve"}</span>
         </div>
