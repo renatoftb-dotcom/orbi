@@ -5,9 +5,9 @@ function ResultadoOrcamentoProjeto({ orc, onEditar, onVerProposta, fmt, fmtM2 })
   const r = orc.resultado || {};
   const comodosAtivos = orc.comodos?.filter(c => c.qtd > 0) || [];
   // Controla quais cards têm detalhes expandidos (lojas, ancora, apto, memoria, tabela)
-  const [expandido, setExpandido] = React.useState({ lojas:false, ancora:false, apto:false, galpao:false, memoria:false, tabela:false, eng:false, arq:false });
-  const [incluiArq, setIncluiArq] = React.useState(true);
-  const [incluiEng, setIncluiEng] = React.useState(true);
+  const [expandido, setExpandido] = useState({ lojas:false, ancora:false, apto:false, galpao:false, memoria:false, tabela:false, eng:false, arq:false });
+  const [incluiArq, setIncluiArq] = useState(true);
+  const [incluiEng, setIncluiEng] = useState(true);
   const _arqBase = r.precoTotal || r.precoFinal || 0;
   const _engRaw  = Math.round((r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng) * 100) / 100;
   const _engRepFator = (r.nUnidades||1) > 1

@@ -39,8 +39,8 @@ function TesteOrcamento({ data, save }) {
 // FORM ORCAMENTO PROJETO — VERSAO TESTE
 // ═══════════════════════════════════════════════════════════════
 function AreaDetalhe({ calculo, fmtNum }) {
-  const [aberto, setAberto] = React.useState(false);
-  const [engAberto, setEngAberto] = React.useState(false);
+  const [aberto, setAberto] = useState(false);
+  const [engAberto, setEngAberto] = useState(false);
   const fmt  = (v) => fmtNum(v);
   const brl  = (v) => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const m2s  = (v, a) => a > 0 ? ` · R$ ${fmt(Math.round(v/a*100)/100)}/m²` : "";
@@ -186,7 +186,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
 }
 
 function ResumoDetalhes({ calculo, fmtNum, C }) {
-  const [repAberto, setRepAberto] = React.useState(false);
+  const [repAberto, setRepAberto] = useState(false);
   const fmt2   = (v) => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const m2str  = (v, area) => area > 0 ? ` (R$ ${fmtNum(Math.round(v / area * 100) / 100)}/m²)` : "";
   const hasRep = calculo.nRep > 1;
