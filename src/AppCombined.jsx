@@ -1,8 +1,8 @@
-import React from "react";
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { loadAllData, saveAllData } from "./api.js";
+// ════════════════════════════════════════════════════════════
+// shared.jsx
+// ════════════════════════════════════════════════════════════
 
-// ═══ shared.jsx ═══
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 // Carrega jsPDF e html2canvas
 if (typeof window !== "undefined" && !document.getElementById("jspdf-script")) {
@@ -406,7 +406,10 @@ var ESTADOS_BR = ["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","M
 var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura","Cobertura","Elétrico","Hidráulico","Revestimento","Acabamento","Ferramentas","Tintas","Vidros","Geral","Outros"];
 
 
-// ═══ outros.jsx ═══
+// ════════════════════════════════════════════════════════════
+// outros.jsx
+// ════════════════════════════════════════════════════════════
+
 // ═══════════════════════════════════════════════════════════════
 // FORNECEDORES
 // ═══════════════════════════════════════════════════════════════
@@ -2098,7 +2101,10 @@ var S = {
 };
 
 
-// ═══ clientes.jsx ═══
+// ════════════════════════════════════════════════════════════
+// clientes.jsx
+// ════════════════════════════════════════════════════════════
+
 function HomeMenu({ setAba, data }) {
   const modulos = [
     {
@@ -3622,7 +3628,10 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
 
 
 
-// ═══ orcamento-form.jsx ═══
+// ════════════════════════════════════════════════════════════
+// orcamento-form.jsx
+// ════════════════════════════════════════════════════════════
+
 // ═══════════════════════════════════════════════════════════════
 // FORMULÁRIO DE ORÇAMENTO
 // ═══════════════════════════════════════════════════════════════
@@ -5544,7 +5553,10 @@ function FormOrcamentoProjeto({ onSalvar, orcBase, clienteNome, clienteWA, onVol
 // ═══════════════════════════════════════════════════════════════
 
 
-// ═══ resultado-pdf.jsx ═══
+// ════════════════════════════════════════════════════════════
+// resultado-pdf.jsx
+// ════════════════════════════════════════════════════════════
+
 // ═══════════════════════════════════════════════════════════════
 // RESULTADO DO ORÇAMENTO
 // ═══════════════════════════════════════════════════════════════
@@ -8004,7 +8016,10 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
 
 
 
-// ═══ orcamento-teste.jsx ═══
+// ════════════════════════════════════════════════════════════
+// orcamento-teste.jsx
+// ════════════════════════════════════════════════════════════
+
 function TesteOrcamento({ data, save }) {
   const [orcBase, setOrcBase] = useState(null);
 
@@ -9692,7 +9707,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
 
 
-// ═══ app.jsx ═══
+// ════════════════════════════════════════════════════════════
+// app.jsx
+// ════════════════════════════════════════════════════════════
+
 
 // ═══════════════════════════════════════════════════════════════
 // MAIN
@@ -9763,7 +9781,7 @@ export default function ModuloClientesFornecedores() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `obramanager-backup-${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `vicke-backup-${new Date().toISOString().slice(0,10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

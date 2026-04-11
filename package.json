@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "combine": "node combine.js",
+    "cb": "node combine.js && vite build",
+    "cpush": "node combine.js && vite build && git add . && git commit -m \"update\" && git push"
   },
   "dependencies": {
     "react": "^19.1.0",
