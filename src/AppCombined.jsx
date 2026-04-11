@@ -9999,7 +9999,7 @@ export default function ModuloClientesFornecedores() {
 
   function handleLogin(usr, tok) { setUsuario(usr); setToken(tok); setAutenticado(true); }
   function handleLogout() { clearAuth(); setUsuario(null); setToken(null); setAutenticado(false); setData(null); }
-  if (!autenticado) return React.createElement(TelaLogin, { onLogin: handleLogin });
+  if (!autenticado) return <TelaLogin onLogin={handleLogin} />;
 
   if (loading) return (
     <div style={S.center}>
