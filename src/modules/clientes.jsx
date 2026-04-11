@@ -968,7 +968,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                     {orcamentos.map(o => {
                       const r = o.resultado || {};
                       const nUnid = r.nUnidades || 1;
-                      const arqTotal = Math.round((r.precoArq || r.precoTotal || r.precoFinal || 0) * 100) / 100;
+                      const arqTotal = Math.round((r.precoArq || 0) * 100) / 100;
                       const engUnit = Math.round((r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng) * 100) / 100;
                       const engTotalRepet = Math.round((engUnit * (nUnid > 1 ? (1 + (r.repeticaoFaixas||[]).reduce((s,f)=>s+f.pct,0)) : 1)) * 100) / 100;
                       const grandTotal = Math.round((arqTotal + engTotalRepet) * 100) / 100;
