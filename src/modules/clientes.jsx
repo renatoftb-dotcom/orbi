@@ -59,7 +59,7 @@ function HomeMenu({ setAba, data }) {
       {/* Saudação */}
       <div style={{ textAlign:"center", marginBottom:48 }}>
         <div style={{ color:"#f1f5f9", fontWeight:900, fontSize:26, marginBottom:6 }}>
-          ObraManager
+          Vicke
         </div>
         <div style={{ color:"#64748b", fontSize:14 }}>
           Selecione um módulo para começar
