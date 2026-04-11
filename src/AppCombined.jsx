@@ -2052,7 +2052,7 @@ function ClienteExpandivel({ cliente, data, waLink }) {
   );
 }
 
-function Clientes({ data, save }) {
+function Clientes({ data, save, onReload }) {
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
@@ -2253,7 +2253,7 @@ function Clientes({ data, save }) {
       const novo = {...orc, clienteId:orcView.cliente.id, cliente:orcView.cliente.nome, whatsapp:orcView.cliente.contatos?.find(c=>c.whatsapp)?.telefone||"", id:orc.id||"ORC-"+String(maxSeq+1).padStart(4,"0"), criadoEm:orc.criadoEm||new Date().toISOString()};
       const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
       // salva mas NÃO fecha — o fechamento vem do onVoltar do PDF
-      setOrcView(v => v ? {...v, orcBase:novo} : v);
+      setOrcView(null); if (onReload) setTimeout(onReload, 800);
       save({...data, orcamentosProjeto:novos}).catch(console.error);
     }
     return (
