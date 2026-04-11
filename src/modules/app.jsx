@@ -68,7 +68,7 @@ export default function ModuloClientesFornecedores() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `obramanager-backup-${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `vicke-backup-${new Date().toISOString().slice(0,10)}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -89,7 +89,7 @@ export default function ModuloClientesFornecedores() {
         await save(parsed);
         alert("Dados importados com sucesso!");
       } catch {
-        alert("Arquivo inválido. Use um backup gerado pelo ObraManager.");
+        alert("Arquivo inválido. Use um backup gerado pelo Vicke.");
       }
     };
     reader.readAsText(file);
@@ -110,7 +110,7 @@ export default function ModuloClientesFornecedores() {
       <div style={S.topbar}>
         <div style={S.topbarLeft}>
           <span style={S.logoMark}>⚒</span>
-          <span style={S.logoText}>ObraManager</span>
+          <span style={S.logoText}>Vicke</span>
           <span style={S.logoDivider}>/</span>
           <span style={S.logoSub}>{["clientes","fornecedores","nf"].includes(aba) ? "Clientes" : aba === "projetos" ? "Projetos" : aba === "obras" ? "Obras" : aba === "financeiro" ? "Financeiro" : aba === "escritorio" ? "Escritório" : "Em breve"}</span>
         </div>
