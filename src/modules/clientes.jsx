@@ -1,90 +1,93 @@
-function ClienteExpandivel({ cliente, data, waLink, S, DetailRow }) {
-  const [abertos, setAbertos] = React.useState({ cadastro:false, financeiro:false });
-  const toggle = k => setAbertos(p => ({...p, [k]:!p[k]}));
+// ═══════════════════════════════════════════════════════════════
+// CLIENTES — visual minimalista
+// ═══════════════════════════════════════════════════════════════
 
+const C = {
+  wrap:    { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
+  input:   { border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  label:   { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
+  btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+  btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btnGhost:{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+  card:    { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px", cursor:"pointer", transition:"border-color 0.15s" },
+  tag:     (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background: cor+"15", color: cor }),
+  grid2:   { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
+  grid3:   { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
+  secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:14 },
+  divider: { border:"none", borderTop:"1px solid #f3f4f6", margin:"20px 0" },
+  row:     { display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid #f9fafb" },
+};
+
+function ClienteExpandivel({ cliente, data, waLink }) {
+  const [abertos, setAbertos] = useState({ cadastro:false, financeiro:false });
+  const toggle = k => setAbertos(p => ({...p, [k]:!p[k]}));
   const cpfCliente = cliente.cpfCnpj || cliente.id;
-  const lancsCli = (data.receitasFinanceiro||[]).filter(r =>
-    r.clienteId === cpfCliente || r.clienteId === cliente.id
-  );
+  const lancsCli = (data.receitasFinanceiro||[]).filter(r => r.clienteId === cpfCliente || r.clienteId === cliente.id);
   const totalContabil = lancsCli.filter(r=>r.contabil1==="Receita Total" && r.tipoConta!=="Conta Redutora").reduce((s,r)=>s+(r.valor||0),0);
   const totalRecebido = lancsCli.filter(r=>r.recebimento==="Recebido").reduce((s,r)=>s+(r.valor||0),0);
   const totalReceber  = lancsCli.filter(r=>r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const fmtV = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
 
-  const btnStyle = aberto => ({
+  const secBtn = (aberto) => ({
     width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
-    background: aberto ? "#0d1a2e" : "#0d1526",
-    border:"1px solid " + (aberto ? "#2563eb" : "#1e293b"),
-    borderRadius: aberto ? "8px 8px 0 0" : 8,
-    padding:"12px 16px", cursor:"pointer", fontFamily:"inherit",
-    color: aberto ? "#60a5fa" : "#94a3b8", fontSize:13, fontWeight:600,
+    background:"none", border:"none", borderBottom:"1px solid #f3f4f6",
+    padding:"12px 0", cursor:"pointer", fontFamily:"inherit",
+    color:"#374151", fontSize:13, fontWeight:600,
   });
 
   return (
     <>
-      {/* Cadastro expansivel */}
-      <div style={{ marginBottom:12 }}>
-        <button style={btnStyle(abertos.cadastro)} onClick={()=>toggle("cadastro")}>
-          <span>Cadastro</span>
-          <span style={{ fontSize:11 }}>{abertos.cadastro ? "▲" : "▼"}</span>
+      <div style={{ marginBottom:4 }}>
+        <button style={secBtn(abertos.cadastro)} onClick={()=>toggle("cadastro")}>
+          <span>Endereço e contatos</span>
+          <span style={{ fontSize:11, color:"#9ca3af" }}>{abertos.cadastro ? "▲" : "▼"}</span>
         </button>
         {abertos.cadastro && (
-          <div style={{ border:"1px solid #2563eb", borderTop:"none", borderRadius:"0 0 8px 8px",
-            background:"#080e1a", padding:"16px" }}>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-              <div>
-                <div style={S.detailCardTitle}>Endereco</div>
-                <div style={S.detailFields}>
-                  <DetailRow label="CEP" value={cliente.cep} />
-                  <DetailRow label="Logradouro" value={`${cliente.logradouro}, ${cliente.numero}${cliente.complemento ? " - "+cliente.complemento : ""}`} />
-                  <DetailRow label="Bairro" value={cliente.bairro} />
-                  <DetailRow label="Cidade/Estado" value={`${cliente.cidade} - ${cliente.estado}`} />
+          <div style={{ padding:"16px 0", display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, borderBottom:"1px solid #f3f4f6", marginBottom:4 }}>
+            <div>
+              <div style={C.secTit}>Endereço</div>
+              {[["CEP", cliente.cep],["Logradouro", `${cliente.logradouro||""}${cliente.numero?", "+cliente.numero:""}${cliente.complemento?" - "+cliente.complemento:""}`],["Bairro", cliente.bairro],["Cidade", `${cliente.cidade||""} — ${cliente.estado||""}`]].map(([l,v]) => (
+                <div key={l} style={C.row}>
+                  <span style={{ fontSize:12, color:"#9ca3af" }}>{l}</span>
+                  <span style={{ fontSize:13, color:"#374151" }}>{v || "—"}</span>
                 </div>
-              </div>
-              <div>
-                <div style={S.detailCardTitle}>Contatos</div>
-                {cliente.contatos?.map(ct => (
-                  <div key={ct.id} style={{ ...S.contatoRow, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <div>
-                      <div style={{ fontWeight:600, color:"#e2e8f0", fontSize:13 }}>{ct.nome} <span style={{ color:"#64748b", fontWeight:400 }}>({ct.cargo})</span></div>
-                      <div style={{ color:"#94a3b8", fontSize:12, marginTop:2 }}>
-                        {ct.telefone} {ct.whatsapp && <span style={S.waBadge}>WhatsApp</span>}
-                      </div>
-                    </div>
-                    {ct.whatsapp && ct.telefone && (
-                      <a href={waLink(ct.telefone, `Ola ${ct.nome.split(" ")[0]}, tudo bem?`)} target="_blank" rel="noopener noreferrer" style={{ ...S.waBtnSm, textDecoration:"none" }}>Mensagem</a>
-                    )}
+              ))}
+            </div>
+            <div>
+              <div style={C.secTit}>Contatos</div>
+              {cliente.contatos?.map(ct => (
+                <div key={ct.id} style={{ ...C.row, alignItems:"center" }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:600, color:"#111" }}>{ct.nome} <span style={{ fontWeight:400, color:"#9ca3af" }}>({ct.cargo})</span></div>
+                    <div style={{ fontSize:12, color:"#6b7280", marginTop:2 }}>{ct.telefone}</div>
                   </div>
-                ))}
-              </div>
+                  {ct.whatsapp && ct.telefone && (
+                    <a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer"
+                      style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px" }}>
+                      WhatsApp
+                    </a>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         )}
       </div>
-
-      {/* Financeiro expansivel */}
-      <div style={{ marginBottom:12 }}>
-        <button style={btnStyle(abertos.financeiro)} onClick={()=>toggle("financeiro")}>
+      <div>
+        <button style={secBtn(abertos.financeiro)} onClick={()=>toggle("financeiro")}>
           <span>Financeiro</span>
-          <span style={{ fontSize:11 }}>{abertos.financeiro ? "▲" : "▼"}</span>
+          <span style={{ fontSize:11, color:"#9ca3af" }}>{abertos.financeiro ? "▲" : "▼"}</span>
         </button>
         {abertos.financeiro && (
-          <div style={{ border:"1px solid #2563eb", borderTop:"none", borderRadius:"0 0 8px 8px",
-            background:"#080e1a", padding:"16px" }}>
+          <div style={{ padding:"16px 0", borderBottom:"1px solid #f3f4f6" }}>
             {lancsCli.length === 0 ? (
-              <p style={{ color:"#475569", fontSize:13, margin:0 }}>Nenhum lancamento para este cliente.</p>
+              <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Nenhum lançamento para este cliente.</p>
             ) : (
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
-                {[
-                  { label:"Receita Total", v:totalContabil, c:"#3b82f6" },
-                  { label:"Recebido",      v:totalRecebido, c:"#10b981" },
-                  { label:"A Receber",     v:totalReceber,  c:"#f59e0b" },
-                ].map(item => (
-                  <div key={item.label} style={{ background:"#0d1526", border:"1px solid #1e293b",
-                    borderRadius:8, padding:"12px 14px" }}>
-                    <div style={{ color:"#64748b", fontSize:10, fontWeight:600,
-                      textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>{item.label}</div>
-                    <div style={{ color:item.c, fontWeight:800, fontSize:16 }}>{fmtV(item.v)}</div>
+              <div style={C.grid3}>
+                {[["Receita total", totalContabil, "#2563eb"],["Recebido", totalRecebido, "#16a34a"],["A receber", totalReceber, "#d97706"]].map(([l,v,cor]) => (
+                  <div key={l} style={{ border:"1px solid #e5e7eb", borderRadius:10, padding:"14px" }}>
+                    <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>{l}</div>
+                    <div style={{ fontSize:16, fontWeight:700, color:cor }}>{fmtV(v)}</div>
                   </div>
                 ))}
               </div>
@@ -95,13 +98,11 @@ function ClienteExpandivel({ cliente, data, waLink, S, DetailRow }) {
     </>
   );
 }
-
 function Clientes({ data, save }) {
-  const [view, setView] = useState("list"); // list | form | detail
-  const [sel, setSel] = useState(null);
-  const [busca, setBusca] = useState("");
+  const [view, setView]             = useState("list");
+  const [sel, setSel]               = useState(null);
+  const [busca, setBusca]           = useState("");
   const [filtroTipo, setFiltroTipo] = useState("todos");
-  const [viewMode, setViewMode] = useState("card"); // card | lista
 
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
@@ -112,15 +113,12 @@ function Clientes({ data, save }) {
   };
   const [form, setForm] = useState(emptyCliente);
 
-  // filtrados calculado dentro do render para garantir reatividade
-
-  function openNew() { setForm(emptyCliente); setView("form"); }
-  function openEdit(c) { setForm(c); setView("form"); }
+  function openNew()     { setForm(emptyCliente); setView("form"); }
+  function openEdit(c)   { setForm(c); setView("form"); }
   function openDetail(c) { setSel(c); setView("detail"); }
 
-  function saveCliente(e) {
-    if (e && e.preventDefault) e.preventDefault();
-    if (!form.nome || form.nome.trim() === "") { alert("Informe o nome do cliente."); return; }
+  function saveCliente() {
+    if (!form.nome?.trim()) { alert("Informe o nome do cliente."); return; }
     const novos = form.id
       ? data.clientes.map(c => c.id === form.id ? form : c)
       : [...data.clientes, { ...form, id: uid() }];
@@ -129,7 +127,7 @@ function Clientes({ data, save }) {
   }
 
   function removeCliente(id) {
-    if (!confirm("Remover cliente? Esta ação não pode ser desfeita.")) return;
+    if (!confirm("Remover cliente?")) return;
     save({ ...data, clientes: data.clientes.filter(c => c.id !== id) });
     setView("list");
   }
@@ -139,8 +137,6 @@ function Clientes({ data, save }) {
     const numero = num.startsWith("55") ? num : `55${num}`;
     return `https://wa.me/${numero}${msg ? "?text="+encodeURIComponent(msg) : ""}`;
   }
-
-
 
   async function buscarCEP(cep) {
     const clean = cep.replace(/\D/g, "");
@@ -152,406 +148,212 @@ function Clientes({ data, save }) {
     } catch {}
   }
 
-  // LISTA
+  // ── LISTA ───────────────────────────────────────────────────
   if (view === "list") {
-  const filtrados = data.clientes.filter(c => {
-    const b = busca.toLowerCase();
-    const matchBusca = !b
-      || c.nome.toLowerCase().includes(b)
-      || (c.cpfCnpj||"").includes(b)
-      || (c.logradouro||"").toLowerCase().includes(b)
-      || (c.cidade||"").toLowerCase().includes(b)
-      || (c.contatos||[]).some(ct => (ct.telefone||"").replace(/\D/g,"").includes(b.replace(/\D/g,"")));
-    const matchTipo = filtroTipo === "todos" || c.tipo === filtroTipo;
-    return matchBusca && matchTipo;
-  });
-  return (
-    <div style={S.moduleWrap}>
-      {/* Toolbar */}
-      <div style={S.toolbar}>
-        <div style={S.toolbarLeft}>
-          <div style={{ ...S.searchWrap, position:"relative" }}>
-            <span style={S.searchIcon}>🔍</span>
-            <input
-              style={{ ...S.searchInput, width:320 }}
-              placeholder="Buscar por nome, CPF, endereço ou telefone..."
-              value={busca}
-              onChange={e => setBusca(e.target.value)}
-              onBlur={() => setTimeout(() => setBusca(""), 180)}
-              autoComplete="off"
-            />
-            {busca.trim().length >= 1 && (() => {
-              const sugestoes = data.clientes.filter(c => {
-                const b = busca.toLowerCase();
-                return c.nome.toLowerCase().includes(b)
-                  || (c.cpfCnpj||"").includes(b)
-                  || (c.cidade||"").toLowerCase().includes(b)
-                  || (c.contatos||[]).some(ct => (ct.telefone||"").includes(b));
-              }).slice(0, 8);
-              if (sugestoes.length === 0) return null;
-              return (
-                <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0,
-                  background:"#0f172a", border:"1px solid #334155", borderRadius:10,
-                  boxShadow:"0 8px 32px rgba(0,0,0,0.6)", zIndex:999, overflow:"hidden" }}>
-                  {sugestoes.map(c => (
-                    <div key={c.id}
-                      onMouseDown={() => { openDetail(c); setBusca(""); }}
-                      style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px",
-                        cursor:"pointer", borderBottom:"1px solid #1e293b" }}
-                      onMouseEnter={e => e.currentTarget.style.background="#1e293b"}
-                      onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                      <div style={{ width:32, height:32, borderRadius:8, flexShrink:0,
-                        display:"flex", alignItems:"center", justifyContent:"center",
-                        fontSize:11, fontWeight:800, color:"#fff",
-                        background: c.tipo==="PJ"
-                          ? "linear-gradient(135deg,#8b5cf6,#6d28d9)"
-                          : "linear-gradient(135deg,#3b82f6,#2563eb)" }}>
-                        {c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase()}
-                      </div>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ color:"#f1f5f9", fontWeight:600, fontSize:13,
-                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                          {c.nome}
-                        </div>
-                        <div style={{ color:"#64748b", fontSize:11 }}>
-                          {c.cpfCnpj && <span style={{ marginRight:8 }}>{c.cpfCnpj}</span>}
-                          {c.cidade && <span>{c.cidade} — {c.estado}</span>}
-                        </div>
-                      </div>
-                      <span style={{ fontSize:10, padding:"2px 7px", borderRadius:4, fontWeight:600,
-                        background: c.tipo==="PJ"?"#2e1065":"#1e1b4b",
-                        color: c.tipo==="PJ"?"#c4b5fd":"#a5b4fc" }}>{c.tipo}</span>
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
+    const filtrados = data.clientes.filter(c => {
+      const b = busca.toLowerCase();
+      const matchBusca = !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b) || (c.contatos||[]).some(ct => (ct.telefone||"").includes(b));
+      const matchTipo = filtroTipo === "todos" || c.tipo === filtroTipo;
+      return matchBusca && matchTipo;
+    });
+
+    return (
+      <div style={{ padding:"28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+          <div>
+            <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
+            <div style={{ fontSize:13, color:"#9ca3af", marginTop:2 }}>{data.clientes.length} cadastrado{data.clientes.length !== 1 ? "s" : ""}</div>
           </div>
-          <div style={S.filterGroup}>
-            {[["todos","Todos"],["PF","Pessoa Física"],["PJ","Pessoa Jurídica"]].map(([k,l]) => (
-              <button key={k} className="filter-btn" style={{ ...S.filterBtn, ...(filtroTipo===k?S.filterBtnActive:{}) }} onClick={() => setFiltroTipo(k)}>{l}</button>
-            ))}
-          </div>
+          <button style={C.btn} onClick={openNew}>+ Novo cliente</button>
         </div>
-        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          {/* Toggle card / lista */}
-          <div style={{ display:"flex", background:"#0f172a", border:"1px solid #1e293b", borderRadius:7, overflow:"hidden" }}>
-            {[["card","⊞ Cards"],["lista","≡ Lista"]].map(([k,l]) => (
-              <button key={k} onClick={() => setViewMode(k)}
-                style={{ padding:"6px 14px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit", border:"none",
-                  background: viewMode===k ? "#1e3a5f" : "transparent",
-                  color: viewMode===k ? "#60a5fa" : "#64748b",
-                  transition:"all 0.15s" }}>
+        <div style={{ display:"flex", gap:10, marginBottom:20, alignItems:"center" }}>
+          <input style={{ ...C.input, maxWidth:320 }} placeholder="Buscar por nome, CPF ou cidade..."
+            value={busca} onChange={e => setBusca(e.target.value)} />
+          <div style={{ display:"flex", gap:4 }}>
+            {[["todos","Todos"],["PF","PF"],["PJ","PJ"]].map(([k,l]) => (
+              <button key={k} onClick={() => setFiltroTipo(k)}
+                style={{ border:"1px solid #e5e7eb", borderRadius:7, padding:"7px 14px", fontSize:12, fontWeight: filtroTipo===k ? 600 : 400, background: filtroTipo===k ? "#111" : "#fff", color: filtroTipo===k ? "#fff" : "#6b7280", cursor:"pointer", fontFamily:"inherit" }}>
                 {l}
               </button>
             ))}
           </div>
-          <button style={S.btnPrimary} onClick={openNew}>+ Novo Cliente</button>
         </div>
-      </div>
-
-      {/* Stats rápidas */}
-      <div style={S.statsRow}>
-        {[
-          ["Total", data.clientes.length, "#3b82f6"],
-          ["Ativos", data.clientes.filter(c=>c.ativo).length, "#10b981"],
-          ["PF", data.clientes.filter(c=>c.tipo==="PF").length, "#f59e0b"],
-          ["PJ", data.clientes.filter(c=>c.tipo==="PJ").length, "#8b5cf6"],
-        ].map(([l,v,c]) => (
-          <div key={l} style={{ ...S.statCard, borderLeft:`3px solid ${c}` }}>
-            <span style={{ color:"#64748b", fontSize:11, textTransform:"uppercase", letterSpacing:1 }}>{l}</span>
-            <span style={{ color:c, fontWeight:800, fontSize:22 }}>{v}</span>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:24 }}>
+          {[["Total", data.clientes.length],["Ativos", data.clientes.filter(c=>c.ativo).length],["PF", data.clientes.filter(c=>c.tipo==="PF").length],["PJ", data.clientes.filter(c=>c.tipo==="PJ").length]].map(([l,v]) => (
+            <div key={l} style={{ border:"1px solid #f3f4f6", borderRadius:10, padding:"14px 16px", background:"#fafafa" }}>
+              <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>{l}</div>
+              <div style={{ fontSize:22, fontWeight:700, color:"#111" }}>{v}</div>
+            </div>
+          ))}
+        </div>
+        {filtrados.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"60px 0", color:"#d1d5db" }}>
+            <div style={{ fontSize:14, marginBottom:12 }}>Nenhum cliente encontrado</div>
+            <button style={C.btn} onClick={openNew}>Cadastrar primeiro cliente</button>
           </div>
-        ))}
-      </div>
-
-      {/* Cards ou Lista */}
-      {viewMode === "card" ? (
-        <div style={S.cardGrid}>
-          {filtrados.map(c => {
-            const obras = data.obras.filter(o => o.clienteId === c.id);
-            return (
-              <div key={c.id} className="client-card" style={S.clientCard} onClick={() => openDetail(c)}>
-                <div style={S.clientCardHeader}>
-                  <div style={{ ...S.avatar, background: c.tipo==="PJ" ? "linear-gradient(135deg,#8b5cf6,#6d28d9)" : "linear-gradient(135deg,#3b82f6,#2563eb)" }}>
-                    {c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase()}
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {filtrados.map(c => {
+              const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
+              const corAvatar = c.tipo === "PJ" ? "#7c3aed" : "#2563eb";
+              const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone || c.contatos?.[0]?.telefone || "";
+              return (
+                <div key={c.id} style={{ ...C.card, display:"flex", alignItems:"center", gap:14 }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor="#111"}
+                  onMouseLeave={e => e.currentTarget.style.borderColor="#e5e7eb"}
+                  onClick={() => openDetail(c)}>
+                  <div style={{ width:40, height:40, borderRadius:10, background:corAvatar+"15", color:corAvatar, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>
+                    {iniciais}
                   </div>
-                  <div style={{ flex:1 }}>
-                    <div style={S.clientName}>{c.nome}</div>
-                    <div style={S.clientCpf}>{c.cpfCnpj}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:600, color:"#111", marginBottom:2 }}>{c.nome}</div>
+                    <div style={{ fontSize:12, color:"#9ca3af" }}>{c.cpfCnpj}{c.cidade ? ` · ${c.cidade}` : ""}</div>
                   </div>
-                  <span style={{ ...S.tipoBadge, background: c.tipo==="PJ"?"#2e1065":"#1e1b4b", color: c.tipo==="PJ"?"#c4b5fd":"#a5b4fc" }}>{c.tipo}</span>
-                </div>
-                <div style={S.clientInfo}>
-                  {c.email && <div style={S.infoRow}><span style={S.infoIcon}>✉</span><span>{c.email}</span></div>}
-                  {c.contatos?.[0]?.telefone && <div style={S.infoRow}><span style={S.infoIcon}>📞</span><span>{c.contatos[0].telefone}</span>{c.contatos[0].whatsapp && <span style={S.waBadge}>WA</span>}</div>}
-                  {c.cidade && <div style={S.infoRow}><span style={S.infoIcon}>📍</span><span>{c.cidade} — {c.estado}</span></div>}
-                </div>
-                {c.servicos && Object.values(c.servicos).some(Boolean) && (
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginBottom:8 }}>
-                    {[["projeto","📐"],["acompanhamentoObra","🏗"],["gestaoObra","⚙️"],["empreendimento","🏢"]]
-                      .filter(([k]) => c.servicos[k])
-                      .map(([k,icon]) => <span key={k} style={{ background:"#0d1f3c", color:"#60a5fa", fontSize:10, padding:"2px 7px", borderRadius:4, border:"1px solid #1e3a5f" }}>{icon}</span>)}
+                  <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                    <span style={C.tag(c.tipo==="PJ"?"#7c3aed":"#2563eb")}>{c.tipo}</span>
+                    <span style={C.tag(c.ativo?"#16a34a":"#dc2626")}>{c.ativo?"Ativo":"Inativo"}</span>
+                    {tel && (
+                      <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                        style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px" }}>
+                        WA
+                      </a>
+                    )}
+                    <button onClick={e => { e.stopPropagation(); openEdit(c); }}
+                      style={{ fontSize:12, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                      Editar
+                    </button>
                   </div>
-                )}
-                <div style={S.clientFooter}>
-                  <span style={S.obrasCount}>🏗 {obras.length} obra{obras.length!==1?"s":""}</span>
-                  <span style={{ ...S.statusDot, color: c.ativo?"#4ade80":"#f87171" }}>● {c.ativo?"Ativo":"Inativo"}</span>
                 </div>
-                <div style={S.clientActions} onClick={e => e.stopPropagation()}>
-                  <button className="action-btn" style={S.actionBtn} onClick={() => openEdit(c)}>✏ Editar</button>
-                  {c.contatos?.find(ct => ct.whatsapp) && (
-                    <a className="action-btn"
-                      href={waLink(c.contatos.find(ct=>ct.whatsapp).telefone, `Olá ${c.nome.split(" ")[0]}, tudo bem?`)}
-                      target="_blank" rel="noopener noreferrer"
-                      style={{ ...S.actionBtn, color:"#25d366", textDecoration:"none" }}>
-                      💬 WhatsApp
-                    </a>
-                  )}
-                  <button className="action-btn" style={{ ...S.actionBtn, color:"#f87171" }} onClick={() => removeCliente(c.id)}>✕ Remover</button>
-                </div>
-              </div>
-            );
-          })}
-        {filtrados.length === 0 && (
-          <div style={S.empty}>
-            <div style={S.emptyIcon}>👤</div>
-            <div style={S.emptyText}>Nenhum cliente encontrado</div>
-            <button style={S.btnPrimary} onClick={openNew}>Cadastrar primeiro cliente</button>
+              );
+            })}
           </div>
         )}
-        </div>
-      ) : (
-        /* MODO LISTA */
-        <div style={{ display:"flex", flexDirection:"column", gap:0, border:"1px solid #1e293b", borderRadius:10, overflow:"hidden" }}>
-          {/* Cabeçalho da tabela */}
-          <div style={{ display:"grid", gridTemplateColumns:"2fr 1.2fr 1.2fr 1fr 0.7fr 120px", gap:0,
-            background:"#0a1222", borderBottom:"1px solid #1e293b", padding:"8px 16px" }}>
-            {["Cliente","CPF/CNPJ","Contato","Cidade","Status","Ações"].map(h => (
-              <div key={h} style={{ color:"#64748b", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>{h}</div>
-            ))}
-          </div>
-          {/* Linhas */}
-          {filtrados.map((c, idx) => {
-            const tel = c.contatos?.find(ct => ct.whatsapp)?.telefone || c.contatos?.[0]?.telefone || "";
-            return (
-              <div key={c.id}
-                onClick={() => openDetail(c)}
-                style={{ display:"grid", gridTemplateColumns:"2fr 1.2fr 1.2fr 1fr 0.7fr 120px", gap:0,
-                  padding:"11px 16px", cursor:"pointer", alignItems:"center",
-                  background: idx%2===0 ? "#0d1526" : "#0a1122",
-                  borderBottom:"1px solid #0f172a",
-                  transition:"background 0.1s" }}
-                onMouseEnter={e=>e.currentTarget.style.background="#1e293b"}
-                onMouseLeave={e=>e.currentTarget.style.background=idx%2===0?"#0d1526":"#0a1122"}
-              >
-                {/* Nome + tipo */}
-                <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
-                  <div style={{ width:32, height:32, borderRadius:8, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:12, fontWeight:800, color:"#fff",
-                    background: c.tipo==="PJ" ? "linear-gradient(135deg,#8b5cf6,#6d28d9)" : "linear-gradient(135deg,#3b82f6,#2563eb)" }}>
-                    {c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase()}
-                  </div>
-                  <div style={{ minWidth:0 }}>
-                    <div style={{ color:"#f1f5f9", fontWeight:600, fontSize:13, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.nome}</div>
-                    <span style={{ fontSize:10, background: c.tipo==="PJ"?"#2e1065":"#1e1b4b", color: c.tipo==="PJ"?"#c4b5fd":"#a5b4fc", padding:"1px 6px", borderRadius:3 }}>{c.tipo}</span>
-                  </div>
-                </div>
-                {/* CPF/CNPJ */}
-                <div style={{ color:"#64748b", fontSize:12 }}>{c.cpfCnpj||"—"}</div>
-                {/* Contato */}
-                <div style={{ fontSize:12 }}>
-                  {tel ? (
-                    <span style={{ color:"#94a3b8" }}>
-                      {tel}
-                      {c.contatos?.find(ct=>ct.whatsapp) && <span style={{ color:"#25d366", marginLeft:5, fontSize:10 }}>● WA</span>}
-                    </span>
-                  ) : <span style={{ color:"#334155" }}>—</span>}
-                </div>
-                {/* Cidade */}
-                <div style={{ color:"#64748b", fontSize:12 }}>{c.cidade ? `${c.cidade} — ${c.estado}` : "—"}</div>
-                {/* Status */}
-                <div>
-                  <span style={{ fontSize:11, fontWeight:600, color: c.ativo?"#4ade80":"#f87171" }}>● {c.ativo?"Ativo":"Inativo"}</span>
-                </div>
-                {/* Ações */}
-                <div style={{ display:"flex", gap:6 }} onClick={e=>e.stopPropagation()}>
-                  <button style={{ ...S.btnXsSm, fontSize:11 }} onClick={()=>openEdit(c)}>✏ Editar</button>
-                  <button style={{ ...S.btnXsSm, fontSize:11, color:"#f87171" }} onClick={()=>removeCliente(c.id)}>✕</button>
-                </div>
-              </div>
-            );
-          })}
-          {filtrados.length === 0 && (
-            <div style={{ padding:"40px", textAlign:"center", color:"#475569" }}>Nenhum cliente encontrado</div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
-  } // fim if view === list
-
-  // DETALHE
-  if (view === "detail" && sel) {
-    const cliente = data.clientes.find(c => c.id === sel.id) || sel;
-    // keep sel in sync
-    if (cliente !== sel) setSel(cliente);
-    const obras = data.obras.filter(o => o.clienteId === cliente.id);
-    return (
-      <div style={S.moduleWrap}>
-        <div style={S.detailHeader}>
-          <button style={S.backBtn} onClick={() => setView("list")}>← Voltar</button>
-          <button style={S.btnPrimary} onClick={() => openEdit(cliente)}>✏ Editar</button>
-        </div>
-        <div style={S.detailWrap}>
-          {/* Perfil */}
-          <div style={S.detailCard}>
-            <div style={S.detailProfile}>
-              <div style={{ ...S.avatarLg, background: cliente.tipo==="PJ"?"linear-gradient(135deg,#8b5cf6,#6d28d9)":"linear-gradient(135deg,#3b82f6,#2563eb)" }}>
-                {cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase()}
-              </div>
-              <div>
-                <h2 style={{ color:"#f1f5f9", fontWeight:800, fontSize:20, margin:0 }}>{cliente.nome}</h2>
-                <p style={{ color:"#64748b", fontSize:13, margin:"4px 0 0" }}>{cliente.cpfCnpj}</p>
-                <div style={{ display:"flex", gap:8, marginTop:8 }}>
-                  <span style={{ ...S.tipoBadge, background: cliente.tipo==="PJ"?"#2e1065":"#1e1b4b", color: cliente.tipo==="PJ"?"#c4b5fd":"#a5b4fc" }}>{cliente.tipo}</span>
-                  <span style={{ ...S.tipoBadge, background: cliente.ativo?"#052e16":"#450a0a", color: cliente.ativo?"#4ade80":"#f87171" }}>● {cliente.ativo?"Ativo":"Inativo"}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} S={S} DetailRow={DetailRow} />
-
-          {/* Serviços */}
-          <ServicosPanel cliente={cliente} data={data} save={save} />
-
-          {/* Observações */}
-          {cliente.observacoes && (
-            <div style={S.detailCard}>
-              <div style={S.detailCardTitle}>📝 Observações internas</div>
-              <p style={{ color:"#94a3b8", fontSize:13, lineHeight:1.6 }}>{cliente.observacoes}</p>
-            </div>
-          )}
-        </div>
       </div>
     );
   }
 
-  // FORMULÁRIO
-  return (
-    <div style={S.moduleWrap}>
-      <div style={S.formHeader}>
-        <button style={S.backBtn} onClick={() => setView("list")}>← Voltar</button>
-        <h2 style={S.formTitle}>{form.id ? "Editar Cliente" : "Novo Cliente"}</h2>
+  // ── DETALHE ─────────────────────────────────────────────────
+  if (view === "detail" && sel) {
+    const cliente = data.clientes.find(c => c.id === sel.id) || sel;
+    const iniciais = cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
+    const corAvatar = cliente.tipo === "PJ" ? "#7c3aed" : "#2563eb";
+    return (
+      <div style={{ padding:"28px 32px", maxWidth:780, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
+          <button style={C.btnGhost} onClick={() => setView("list")}>← Voltar</button>
+          <div style={{ flex:1 }} />
+          <button style={C.btnSec} onClick={() => openEdit(cliente)}>Editar</button>
+          <button style={{ ...C.btnGhost, color:"#dc2626" }} onClick={() => removeCliente(cliente.id)}>Remover</button>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:28 }}>
+          <div style={{ width:56, height:56, borderRadius:14, background:corAvatar+"15", color:corAvatar, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:700, flexShrink:0 }}>
+            {iniciais}
+          </div>
+          <div>
+            <div style={{ fontSize:20, fontWeight:700, color:"#111" }}>{cliente.nome}</div>
+            <div style={{ fontSize:13, color:"#9ca3af", marginTop:3, display:"flex", alignItems:"center", gap:6 }}>
+              {cliente.cpfCnpj}
+              <span style={C.tag(corAvatar)}>{cliente.tipo}</span>
+              <span style={C.tag(cliente.ativo?"#16a34a":"#dc2626")}>{cliente.ativo?"Ativo":"Inativo"}</span>
+            </div>
+          </div>
+        </div>
+        <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
+        <hr style={C.divider} />
+        <ServicosPanel cliente={cliente} data={data} save={save} />
       </div>
-      <div style={S.formWrap}>
+    );
+  }
 
-        {/* Tipo */}
-        <div style={S.formSection}>
-          <div style={S.sectionTitle}>Tipo de Pessoa</div>
-          <div style={S.radioGroup}>
-            {[["PF","Pessoa Física"],["PJ","Pessoa Jurídica"]].map(([v,l]) => (
-              <label key={v} style={{ ...S.radioLabel, ...(form.tipo===v?S.radioActive:{}) }}>
-                <input type="radio" name="tipo-cliente" value={v} checked={form.tipo===v} onChange={()=>setForm({...form,tipo:v})} style={{ display:"none" }} />
-                {l}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Dados principais */}
-        <div style={S.formSection}>
-          <div style={S.sectionTitle}>Dados Principais</div>
-          <div style={S.formGrid2}>
-            <FormField label={form.tipo==="PJ"?"Razão Social":"Nome Completo"} value={form.nome} onChange={v=>setForm({...form,nome:v})} required />
-            <FormField label={form.tipo==="PJ"?"CNPJ":"CPF"} value={form.cpfCnpj} onChange={v=>setForm({...form,cpfCnpj:v})} required placeholder={form.tipo==="PJ"?"00.000.000/0001-00":"000.000.000-00"} />
-          </div>
-          <div style={S.formGrid2}>
-            <FormField label="E-mail" type="email" value={form.email} onChange={v=>setForm({...form,email:v})} />
-            <FormField label="Cliente desde" type="date" value={form.desde} onChange={v=>setForm({...form,desde:v})} />
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:8 }}>
-            <label style={{ ...S.radioLabel, ...(form.ativo?S.radioActive:{}) }}>
-              <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} style={{ display:"none" }} />
-              ● Ativo
-            </label>
-          </div>
-        </div>
-
-        {/* Endereço */}
-        <div style={S.formSection}>
-          <div style={S.sectionTitle}>Endereço</div>
-          <div style={S.formGrid3}>
-            <div>
-              <FormField label="CEP" value={form.cep} onChange={v=>{ setForm({...form,cep:v}); buscarCEP(v); }} placeholder="00000-000" />
-              <span style={{ color:"#3b82f6", fontSize:11, cursor:"pointer" }} onClick={()=>buscarCEP(form.cep)}>Buscar CEP →</span>
-            </div>
-            <FormField label="Logradouro" value={form.logradouro} onChange={v=>setForm({...form,logradouro:v})} />
-            <FormField label="Número" value={form.numero} onChange={v=>setForm({...form,numero:v})} />
-          </div>
-          <div style={S.formGrid3}>
-            <FormField label="Complemento" value={form.complemento} onChange={v=>setForm({...form,complemento:v})} />
-            <FormField label="Bairro" value={form.bairro} onChange={v=>setForm({...form,bairro:v})} />
-            <FormField label="Cidade" value={form.cidade} onChange={v=>setForm({...form,cidade:v})} />
-          </div>
-          <div style={{ maxWidth:120 }}>
-            <label style={S.fieldLabel}>Estado</label>
-            <select style={S.select} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
-              {ESTADOS_BR.map(e=><option key={e}>{e}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {/* Contatos */}
-        <div style={S.formSection}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={S.sectionTitle}>Contatos / Telefones</div>
-            <button type="button" style={S.btnSecondary} onClick={()=>setForm({...form, contatos:[...form.contatos,{id:uid(),nome:"",telefone:"",cargo:"",whatsapp:false}]})}>
-              + Adicionar contato
+  // ── FORMULÁRIO ───────────────────────────────────────────────
+  return (
+    <div style={{ padding:"28px 32px", maxWidth:680, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
+        <button style={C.btnGhost} onClick={() => setView("list")}>← Voltar</button>
+        <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>{form.id ? "Editar cliente" : "Novo cliente"}</div>
+      </div>
+      <div style={{ marginBottom:20 }}>
+        <div style={C.secTit}>Tipo de pessoa</div>
+        <div style={{ display:"flex", gap:8 }}>
+          {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l]) => (
+            <button key={v} onClick={() => setForm({...form,tipo:v})}
+              style={{ border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight: form.tipo===v ? 600 : 400, background: form.tipo===v ? "#111" : "#fff", color: form.tipo===v ? "#fff" : "#6b7280", cursor:"pointer", fontFamily:"inherit" }}>
+              {l}
             </button>
-          </div>
-          {form.contatos?.map((ct,i) => (
-            <div key={ct.id} style={S.contatoFormRow}>
-              <div style={S.formGrid3}>
-                <FormField label="Nome" value={ct.nome} onChange={v=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:v}:x)})} />
-                <FormField label="Telefone" value={ct.telefone} onChange={v=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:v}:x)})} />
-                <FormField label="Cargo" value={ct.cargo} onChange={v=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:v}:x)})} />
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:8 }}>
-                <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", color:"#64748b", fontSize:13 }}>
-                  <input type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
-                  <span style={{ color:"#25d366" }}>WhatsApp</span>
-                </label>
-                {form.contatos.length > 1 && (
-                  <button type="button" style={{ ...S.btnSecondary, color:"#f87171", fontSize:12 }} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>
-                    Remover
-                  </button>
-                )}
-              </div>
-            </div>
           ))}
         </div>
-
-        {/* Observações */}
-        <div style={S.formSection}>
-          <div style={S.sectionTitle}>Observações Internas</div>
-          <textarea style={S.textarea} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} placeholder="Notas internas sobre este cliente (não visíveis para ele)..." rows={3} />
+      </div>
+      <hr style={C.divider} />
+      <div style={{ marginBottom:20 }}>
+        <div style={C.secTit}>Dados principais</div>
+        <div style={{ ...C.grid2, marginBottom:14 }}>
+          <div><label style={C.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input style={C.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
+          <div><label style={C.label}>{form.tipo==="PJ"?"CNPJ":"CPF"}</label><input style={C.input} value={form.cpfCnpj} onChange={e=>setForm({...form,cpfCnpj:e.target.value})} /></div>
         </div>
-
-        <div style={S.formActions}>
-          <button type="button" style={S.btnCancel} onClick={()=>setView("list")}>Cancelar</button>
-          <button type="button" style={S.btnPrimary} onClick={saveCliente}>{form.id ? "Salvar alterações" : "✓ Cadastrar cliente"}</button>
+        <div style={{ ...C.grid2, marginBottom:14 }}>
+          <div><label style={C.label}>E-mail</label><input style={C.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
+          <div><label style={C.label}>Cliente desde</label><input style={C.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
         </div>
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151" }}>
+          <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} />
+          Cliente ativo
+        </label>
+      </div>
+      <hr style={C.divider} />
+      <div style={{ marginBottom:20 }}>
+        <div style={C.secTit}>Endereço</div>
+        <div style={{ ...C.grid3, marginBottom:14 }}>
+          <div><label style={C.label}>CEP</label><input style={C.input} value={form.cep} onChange={e=>{setForm({...form,cep:e.target.value});buscarCEP(e.target.value);}} placeholder="00000-000" /></div>
+          <div><label style={C.label}>Logradouro</label><input style={C.input} value={form.logradouro} onChange={e=>setForm({...form,logradouro:e.target.value})} /></div>
+          <div><label style={C.label}>Número</label><input style={C.input} value={form.numero} onChange={e=>setForm({...form,numero:e.target.value})} /></div>
+        </div>
+        <div style={{ ...C.grid3, marginBottom:14 }}>
+          <div><label style={C.label}>Complemento</label><input style={C.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>
+          <div><label style={C.label}>Bairro</label><input style={C.input} value={form.bairro} onChange={e=>setForm({...form,bairro:e.target.value})} /></div>
+          <div><label style={C.label}>Cidade</label><input style={C.input} value={form.cidade} onChange={e=>setForm({...form,cidade:e.target.value})} /></div>
+        </div>
+        <div style={{ maxWidth:120 }}>
+          <label style={C.label}>Estado</label>
+          <select style={{ ...C.input, cursor:"pointer" }} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
+            {ESTADOS_BR.map(e=><option key={e}>{e}</option>)}
+          </select>
+        </div>
+      </div>
+      <hr style={C.divider} />
+      <div style={{ marginBottom:20 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+          <div style={C.secTit}>Contatos</div>
+          <button style={C.btnSec} onClick={()=>setForm({...form,contatos:[...form.contatos,{id:uid(),nome:"",telefone:"",cargo:"",whatsapp:false}]})}>+ Adicionar</button>
+        </div>
+        {form.contatos?.map((ct,i) => (
+          <div key={ct.id} style={{ border:"1px solid #f3f4f6", borderRadius:10, padding:"14px", marginBottom:10 }}>
+            <div style={{ ...C.grid3, marginBottom:10 }}>
+              <div><label style={C.label}>Nome</label><input style={C.input} value={ct.nome} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:e.target.value}:x)})} /></div>
+              <div><label style={C.label}>Telefone</label><input style={C.input} value={ct.telefone} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:e.target.value}:x)})} /></div>
+              <div><label style={C.label}>Cargo</label><input style={C.input} value={ct.cargo} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:e.target.value}:x)})} /></div>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:13, color:"#374151" }}>
+                <input type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
+                <span style={{ color:"#16a34a" }}>WhatsApp</span>
+              </label>
+              {form.contatos.length > 1 && <button style={{ ...C.btnGhost, color:"#dc2626", fontSize:12 }} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
+            </div>
+          </div>
+        ))}
+      </div>
+      <hr style={C.divider} />
+      <div style={{ marginBottom:28 }}>
+        <div style={C.secTit}>Observações internas</div>
+        <textarea style={{ ...C.input, resize:"vertical" }} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} />
+      </div>
+      <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+        <button style={C.btnSec} onClick={() => setView("list")}>Cancelar</button>
+        <button style={C.btn} onClick={saveCliente}>{form.id ? "Salvar alterações" : "Cadastrar cliente"}</button>
       </div>
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════
-// SERVIÇOS PANEL — dentro do detalhe do cliente
-// ═══════════════════════════════════════════════════════════════
 function ModalConfirmarGanho({ orc, arqTotal, engTotal, grandTotal, data, save, onClose }) {
   function addDias(dateStr, dias) {
     if (!dateStr) return "";
