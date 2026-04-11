@@ -2859,7 +2859,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
 
   const [orcamentos, setOrcamentos] = useState((data.orcamentosProjeto||[]).filter(o=>o.clienteId===cliente.id));
   useEffect(() => {
-    fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos?clienteId=${cliente.id}`)
+    fetch(`http://localhost:3000/api/orcamentos?clienteId=${cliente.id}`)
       .then(r=>r.json())
       .then(d=>{ if(d.ok) setOrcamentos(d.data||[]); })
       .catch(()=>setOrcamentos((data.orcamentosProjeto||[]).filter(o=>o.clienteId===cliente.id)));
