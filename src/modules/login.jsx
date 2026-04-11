@@ -17,10 +17,10 @@ function clearAuth() {
 }
 
 function TelaLogin({ onLogin }) {
-  const [email, setEmail]       = React.useState("");
-  const [senha, setSenha]       = React.useState("");
-  const [erro, setErro]         = React.useState("");
-  const [loading, setLoading]   = React.useState(false);
+  const [email, setEmail]       = useState("");
+  const [senha, setSenha]       = useState("");
+  const [erro, setErro]         = useState("");
+  const [loading, setLoading]   = useState(false);
 
   async function handleLogin() {
     if (!email || !senha) { setErro("Preencha e-mail e senha."); return; }
