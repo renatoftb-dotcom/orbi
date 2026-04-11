@@ -9774,6 +9774,7 @@ function HomeMenu({ data, setAba }) {
     </div>
   );
 }
+
 // ═══════════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════════
@@ -9812,8 +9813,13 @@ export default function ModuloClientesFornecedores() {
   }
 
   async function save(newData) {
-    const oldData = data; setData(newData);
-    try { await saveAllData(newData, oldData); }
+    const oldData = data;
+    setData(newData);
+    try {
+      await saveAllData(newData, oldData);
+      const fresh = await loadAllData();
+      setData(fresh);
+    }
     catch(e) { console.error("Erro ao salvar:", e); }
   }
 
