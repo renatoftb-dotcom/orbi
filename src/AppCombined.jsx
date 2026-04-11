@@ -1,7 +1,8 @@
+import React from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { loadAllData, saveAllData } from "./api.js";
 
 // ═══ shared.jsx ═══
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 // Carrega jsPDF e html2canvas
 if (typeof window !== "undefined" && !document.getElementById("jspdf-script")) {
