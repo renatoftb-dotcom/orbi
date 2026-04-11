@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// ORBI — Backend Server
+// VICKE — Backend Server
 // Node.js + Express + SQLite
 // ═══════════════════════════════════════════════════════════════
 
@@ -8,6 +8,10 @@ const { DatabaseSync }   = require("node:sqlite");
 const cors               = require("cors");
 const path               = require("path");
 const fs                 = require("fs");
+const jwt                = require("jsonwebtoken");
+const bcrypt             = require("bcryptjs");
+
+const JWT_SECRET = process.env.JWT_SECRET || "vicke-secret-dev-2026";
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -94,6 +98,28 @@ db.exec(`
     dados       TEXT NOT NULL,
     atualizadoEm TEXT DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS empresas (
+    id          TEXT PRIMARY KEY,
+    nome        TEXT NOT NULL,
+    plano       TEXT DEFAULT 'gratuito',
+    ativo       INTEGER DEFAULT 1,
+    criadoEm    TEXT DEFAULT (datetime('now')),
+    atualizadoEm TEXT DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS usuarios (
+    id          TEXT PRIMARY KEY,
+    empresa_id  TEXT NOT NULL,
+    nome        TEXT NOT NULL,
+    email       TEXT UNIQUE NOT NULL,
+    senha_hash  TEXT NOT NULL,
+    perfil      TEXT DEFAULT 'escritorio',
+    ativo       INTEGER DEFAULT 1,
+    criadoEm    TEXT DEFAULT (datetime('now')),
+    atualizadoEm TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY (empresa_id) REFERENCES empresas(id)
+  );
 `);
 
 // ── Helpers ────────────────────────────────────────────────────
@@ -112,6 +138,138 @@ const upsert = (tabela, id, dados, extra = {}) => {
     ON CONFLICT(id) DO UPDATE SET ${sets.join(", ")}
   `).run(...vals);
 };
+
+// ── Middleware de autenticação ─────────────────────────────────
+function authMiddleware(req, res, next) {
+  const header = req.headers["authorization"];
+  if (!header) return err(res, "Token não fornecido", 401);
+  const token = header.replace("Bearer ", "");
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    req.user = decoded;
+    next();
+  } catch {
+    err(res, "Token inválido ou expirado", 401);
+  }
+}
+
+function masterOnly(req, res, next) {
+  if (req.user?.perfil !== "master") return err(res, "Acesso negado", 403);
+  next();
+}
+
+// ── AUTH ───────────────────────────────────────────────────────
+// POST /auth/login
+app.post("/auth/login", (req, res) => {
+  const { email, senha } = req.body;
+  if (!email || !senha) return err(res, "Email e senha são obrigatórios");
+
+  const usuario = db.prepare("SELECT * FROM usuarios WHERE email = ? AND ativo = 1").get(email);
+  if (!usuario) return err(res, "Email ou senha inválidos", 401);
+
+  const senhaOk = bcrypt.compareSync(senha, usuario.senha_hash);
+  if (!senhaOk) return err(res, "Email ou senha inválidos", 401);
+
+  const empresa = db.prepare("SELECT * FROM empresas WHERE id = ? AND ativo = 1").get(usuario.empresa_id);
+  if (!empresa) return err(res, "Empresa inativa ou não encontrada", 401);
+
+  const token = jwt.sign(
+    { id: usuario.id, nome: usuario.nome, email: usuario.email,
+      perfil: usuario.perfil, empresa_id: usuario.empresa_id,
+      empresa_nome: empresa.nome },
+    JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+
+  ok(res, { token, usuario: {
+    id: usuario.id, nome: usuario.nome, email: usuario.email,
+    perfil: usuario.perfil, empresa_id: usuario.empresa_id,
+    empresa_nome: empresa.nome
+  }});
+});
+
+// GET /auth/me — valida token e retorna dados do usuário
+app.get("/auth/me", authMiddleware, (req, res) => {
+  const usuario = db.prepare("SELECT id,nome,email,perfil,empresa_id,ativo FROM usuarios WHERE id = ?").get(req.user.id);
+  if (!usuario || !usuario.ativo) return err(res, "Usuário inativo", 401);
+  const empresa = db.prepare("SELECT id,nome,plano,ativo FROM empresas WHERE id = ?").get(usuario.empresa_id);
+  ok(res, { ...usuario, empresa_nome: empresa?.nome });
+});
+
+// ── ADMIN — EMPRESAS (só master) ──────────────────────────────
+app.get("/admin/empresas", authMiddleware, masterOnly, (req, res) => {
+  const empresas = db.prepare("SELECT * FROM empresas ORDER BY criadoEm ASC").all();
+  ok(res, empresas);
+});
+
+app.post("/admin/empresas", authMiddleware, masterOnly, (req, res) => {
+  const { nome, plano } = req.body;
+  if (!nome) return err(res, "nome é obrigatório");
+  const id = `emp_${Date.now()}`;
+  db.prepare("INSERT INTO empresas (id, nome, plano, ativo, criadoEm, atualizadoEm) VALUES (?,?,?,1,?,?)")
+    .run(id, nome, plano || "gratuito", now(), now());
+  ok(res, { id, nome, plano: plano || "gratuito", ativo: 1 });
+});
+
+app.put("/admin/empresas/:id", authMiddleware, masterOnly, (req, res) => {
+  const { nome, plano, ativo } = req.body;
+  db.prepare("UPDATE empresas SET nome=?, plano=?, ativo=?, atualizadoEm=? WHERE id=?")
+    .run(nome, plano, ativo, now(), req.params.id);
+  ok(res, { id: req.params.id, nome, plano, ativo });
+});
+
+// ── ADMIN — USUÁRIOS (só master) ──────────────────────────────
+app.get("/admin/usuarios", authMiddleware, masterOnly, (req, res) => {
+  const usuarios = db.prepare(
+    "SELECT id,empresa_id,nome,email,perfil,ativo,criadoEm FROM usuarios ORDER BY criadoEm ASC"
+  ).all();
+  ok(res, usuarios);
+});
+
+app.post("/admin/usuarios", authMiddleware, masterOnly, (req, res) => {
+  const { empresa_id, nome, email, senha, perfil } = req.body;
+  if (!empresa_id || !nome || !email || !senha) return err(res, "empresa_id, nome, email e senha são obrigatórios");
+  const existe = db.prepare("SELECT id FROM usuarios WHERE email = ?").get(email);
+  if (existe) return err(res, "Email já cadastrado");
+  const id = `usr_${Date.now()}`;
+  const senha_hash = bcrypt.hashSync(senha, 10);
+  db.prepare("INSERT INTO usuarios (id,empresa_id,nome,email,senha_hash,perfil,ativo,criadoEm,atualizadoEm) VALUES (?,?,?,?,?,?,1,?,?)")
+    .run(id, empresa_id, nome, email, senha_hash, perfil || "escritorio", now(), now());
+  ok(res, { id, empresa_id, nome, email, perfil: perfil || "escritorio", ativo: 1 });
+});
+
+app.put("/admin/usuarios/:id", authMiddleware, masterOnly, (req, res) => {
+  const { nome, email, perfil, ativo, senha } = req.body;
+  if (senha) {
+    const senha_hash = bcrypt.hashSync(senha, 10);
+    db.prepare("UPDATE usuarios SET nome=?,email=?,perfil=?,ativo=?,senha_hash=?,atualizadoEm=? WHERE id=?")
+      .run(nome, email, perfil, ativo, senha_hash, now(), req.params.id);
+  } else {
+    db.prepare("UPDATE usuarios SET nome=?,email=?,perfil=?,ativo=?,atualizadoEm=? WHERE id=?")
+      .run(nome, email, perfil, ativo, now(), req.params.id);
+  }
+  ok(res, { id: req.params.id, nome, email, perfil, ativo });
+});
+
+// ── SEED MASTER (cria usuário master se não existir) ───────────
+function seedMaster() {
+  const empresa = db.prepare("SELECT id FROM empresas WHERE id = 'emp_master'").get();
+  if (!empresa) {
+    db.prepare("INSERT INTO empresas (id,nome,plano,ativo,criadoEm,atualizadoEm) VALUES (?,?,?,1,?,?)")
+      .run("emp_master", "Vicke Master", "master", now(), now());
+    console.log("  ✓ Empresa master criada");
+  }
+  const master = db.prepare("SELECT id FROM usuarios WHERE email = 'renato@vicke.com.br'").get();
+  if (!master) {
+    const senha_hash = bcrypt.hashSync("vicke2026", 10);
+    db.prepare("INSERT INTO usuarios (id,empresa_id,nome,email,senha_hash,perfil,ativo,criadoEm,atualizadoEm) VALUES (?,?,?,?,?,?,1,?,?)")
+      .run("usr_master", "emp_master", "Renato", "renato@vicke.com.br", senha_hash, "master", now(), now());
+    console.log("  ✓ Usuário master criado: renato@vicke.com.br / vicke2026");
+  }
+}
+seedMaster();
+
+
 
 // ── CLIENTES ───────────────────────────────────────────────────
 app.get("/api/clientes", (req, res) => {
