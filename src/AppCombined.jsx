@@ -2937,20 +2937,43 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       const grandTotal = Math.round((arqTotal + engTotalRepet) * 100) / 100;
                       const st = o.status ? STATUS_ORC[o.status] : null;
                       return (
-                        <div key={o.id} style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:8, padding:"10px 12px", borderLeft: st ? `3px solid ${st.cor}` : "3px solid #e5e7eb" }}>
+                        <div key={o.id} style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:8, padding:"12px 14px", borderLeft: st ? `3px solid ${st.cor}` : "3px solid #e5e7eb" }}>
                           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
                             <div style={{ flex:1, minWidth:0 }}>
-                              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
-                                <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{o.tipo} — {o.subtipo}</span>
+                              {/* Linha 1: tipo + status + ID */}
+                              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:6 }}>
+                                <span style={{ fontSize:13, fontWeight:700, color:"#111" }}>{o.tipo} — {o.subtipo}</span>
                                 {st && <span style={{ fontSize:11, fontWeight:600, padding:"1px 8px", borderRadius:6, background:st.cor+"15", color:st.cor }}>{st.label}</span>}
                                 <span style={{ fontSize:10, color:"#d1d5db", fontFamily:"monospace" }}>{o.id}</span>
                               </div>
-                              <div style={{ fontSize:12, color:"#9ca3af" }}>{o.padrao} · {o.tamanho} · {fmtA(r.areaTotal,0)}m²{nUnid>1?` · ${nUnid} unidades`:""}</div>
-                              <div style={{ display:"flex", gap:12, marginTop:6 }}>
-                                <span style={{ fontSize:12, color:"#6b7280" }}>Arq.: <strong style={{ color:"#2563eb" }}>{fmt(arqTotal)}</strong></span>
-                                <span style={{ fontSize:12, color:"#6b7280" }}>Eng.: <strong style={{ color:"#7c3aed" }}>{fmt(engTotalRepet)}</strong></span>
-                                <span style={{ fontSize:12, color:"#6b7280", marginLeft:"auto" }}>Total: <strong style={{ color:"#111", fontSize:13 }}>{fmt(grandTotal)}</strong></span>
+                              {/* Linha 2: referência */}
+                              {o.referencia && <div style={{ fontSize:12, color:"#374151", fontWeight:500, marginBottom:4 }}>📍 {o.referencia}</div>}
+                              {/* Linha 3: padrão + tamanho + área */}
+                              <div style={{ fontSize:12, color:"#9ca3af", marginBottom:6 }}>
+                                Padrão: <strong style={{ color:"#6b7280" }}>{o.padrao}</strong>
+                                {" · "}Tamanho: <strong style={{ color:"#6b7280" }}>{o.tamanho}</strong>
+                                {" · "}{fmtA(r.areaTotal,0)}m²
+                                {nUnid>1 && <> · <strong style={{ color:"#2563eb" }}>{nUnid} unidades</strong></>}
                               </div>
+                              {/* Linha 4: valores */}
+                              <div style={{ display:"flex", gap:12, marginBottom:6, flexWrap:"wrap" }}>
+                                <span style={{ fontSize:12, color:"#6b7280" }}>Arq.: <strong style={{ color:"#2563eb" }}>{fmt(arqTotal)}</strong>{r.areaTotal>0 && <span style={{ color:"#9ca3af", fontSize:11 }}> ({fmt(Math.round(arqTotal/(r.areaTotal||1)*100)/100)}/m²)</span>}</span>
+                                <span style={{ fontSize:12, color:"#6b7280" }}>Eng.: <strong style={{ color:"#7c3aed" }}>{fmt(engTotalRepet)}</strong>{r.areaTotal>0 && <span style={{ color:"#9ca3af", fontSize:11 }}> ({fmt(Math.round(engTotalRepet/(r.areaTotal||1)*100)/100)}/m²)</span>}</span>
+                                <span style={{ fontSize:12, color:"#6b7280", marginLeft:"auto" }}>Total: <strong style={{ color:"#111", fontSize:14 }}>{fmt(grandTotal)}</strong></span>
+                              </div>
+                              {/* Linha 5: data + contador + contato */}
+                              {(() => {
+                                const criado = o.criadoEm ? new Date(o.criadoEm) : null;
+                                const diasPassados = criado ? Math.floor((Date.now() - criado.getTime()) / 86400000) : null;
+                                return (
+                                  <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
+                                    {criado && <span style={{ fontSize:11, color:"#9ca3af" }}>Enviado: <strong style={{ color:"#6b7280" }}>{criado.toLocaleDateString("pt-BR")}</strong></span>}
+                                    {diasPassados !== null && <span style={{ fontSize:11, color: diasPassados > 7 ? "#dc2626" : "#9ca3af" }}>⏱ {diasPassados === 0 ? "hoje" : `${diasPassados} dia${diasPassados!==1?"s":""}`}</span>}
+                                    <span style={{ fontSize:11, color:"#9ca3af" }}>2º contato: <strong style={{ color: o.segundoContato ? "#16a34a" : "#dc2626" }}>{o.segundoContato ? "Sim" : "Não"}</strong></span>
+                                    {!o.segundoContato && <button onClick={e=>{e.stopPropagation();const novosOrc=(data.orcamentosProjeto||[]).map(x=>x.id===o.id?{...x,segundoContato:true}:x);save({...data,orcamentosProjeto:novosOrc});}} style={{ fontSize:11, color:"#16a34a", background:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"1px 8px", cursor:"pointer", fontFamily:"inherit" }}>Marcar</button>}
+                                  </div>
+                                );
+                              })()}
                             </div>
                             <div style={{ display:"flex", gap:4, marginLeft:12, flexShrink:0 }}>
                               <button style={btnSm} onClick={()=>onAbrirOrcamento(o)}>Ver</button>
