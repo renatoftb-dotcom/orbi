@@ -3,6 +3,9 @@
 // MAIN
 // ═══════════════════════════════════════════════════════════════
 export default function ModuloClientesFornecedores() {
+  const [usuario, setUsuario]   = useState(null);
+  const [token, setToken]       = useState(null);
+  const [autenticado, setAutenticado] = useState(false);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [aba, setAba] = useState("home");
@@ -95,6 +98,10 @@ export default function ModuloClientesFornecedores() {
     reader.readAsText(file);
     e.target.value = "";
   }
+
+  function handleLogin(usr, tok) { setUsuario(usr); setToken(tok); setAutenticado(true); }
+  function handleLogout() { clearAuth(); setUsuario(null); setToken(null); setAutenticado(false); setData(null); }
+  if (!autenticado) return React.createElement(TelaLogin, { onLogin: handleLogin });
 
   if (loading) return (
     <div style={S.center}>
