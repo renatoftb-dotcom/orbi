@@ -12,13 +12,11 @@ const OUTPUT = join(__dirname, "src", "AppCombined.jsx");
 
 const ORDER = [
   "shared.jsx",
-  "api.js",
   "outros.jsx",
   "clientes.jsx",
   "orcamento-form.jsx",
   "resultado-pdf.jsx",
   "orcamento-teste.jsx",
-  "login.jsx",
   "app.jsx",
 ];
 
