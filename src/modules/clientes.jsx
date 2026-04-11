@@ -866,68 +866,57 @@ function ModalConfirmarGanho({ orc, arqTotal, engTotal, grandTotal, data, save, 
 
 function ServicosPanel({ cliente: clienteProp, data, save }) {
   const [modalServico, setModalServico] = useState(null);
-  const [subView, setSubView] = useState(null);
+  const [subView, setSubView]           = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
-  const [openMenu, setOpenMenu] = useState(null);
-  const [modalGanho, setModalGanho] = useState(null); // { orc, arqTotal, engTotal, grandTotal }
-  const [orcBase, setOrcBase] = useState(null);
+  const [openMenu, setOpenMenu]         = useState(null);
+  const [modalGanho, setModalGanho]     = useState(null);
+  const [orcBase, setOrcBase]           = useState(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
     if (!openMenu) return;
-    const handler = e => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) {
-        setOpenMenu(null);
-      }
-    };
+    const handler = e => { if (menuRef.current && !menuRef.current.contains(e.target)) setOpenMenu(null); };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [openMenu]);
-  // Always use fresh data from store
+
   const cliente = data.clientes.find(c => c.id === clienteProp.id) || clienteProp;
 
   const SERVICOS_DEF = [
-    { key:"projeto",            icon:"📐", label:"Projeto",              cor:"#3b82f6", subacoes:[{ key:"orcamento", label:"Orçar Projeto", icon:"🧮" }] },
-    { key:"acompanhamentoObra", icon:"🏗", label:"Acompanhamento de Obra",cor:"#f59e0b", subacoes:[] },
-    { key:"gestaoObra",         icon:"⚙️", label:"Gestão de Obra",        cor:"#10b981", subacoes:[] },
-    { key:"empreendimento",     icon:"🏢", label:"Empreendimento",         cor:"#8b5cf6", subacoes:[] },
+    { key:"projeto",            label:"Projeto",               cor:"#2563eb", subacoes:[{ key:"orcamento", label:"Orçar projeto" }] },
+    { key:"acompanhamentoObra", label:"Acompanhamento de obra", cor:"#d97706", subacoes:[] },
+    { key:"gestaoObra",         label:"Gestão de obra",         cor:"#16a34a", subacoes:[] },
+    { key:"empreendimento",     label:"Empreendimento",          cor:"#7c3aed", subacoes:[] },
   ];
 
   const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
 
   async function salvarOrcamento(orc) {
     const todos = data.orcamentosProjeto || [];
-    const todosOrc = data.orcamentosProjeto || [];
-    const nextOrcCod = () => {
-      const maxSeq = todosOrc.reduce((mx, o) => {
-        const m = (o.id||"").match(/^ORC-(\d+)$/);
-        return m ? Math.max(mx, parseInt(m[1])) : mx;
-      }, 0);
-      return "ORC-" + String(maxSeq + 1).padStart(4, "0");
-    };
+    const maxSeq = todos.reduce((mx, o) => { const m = (o.id||"").match(/^ORC-(\d+)$/); return m ? Math.max(mx, parseInt(m[1])) : mx; }, 0);
     const novo = { ...orc, clienteId: cliente.id, cliente: cliente.nome,
       whatsapp: cliente.contatos?.find(c=>c.whatsapp)?.telefone || "",
-      id: orc.id || nextOrcCod(), criadoEm: orc.criadoEm || new Date().toISOString() };
+      id: orc.id || "ORC-" + String(maxSeq + 1).padStart(4, "0"),
+      criadoEm: orc.criadoEm || new Date().toISOString() };
     const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
-    setOrcBase(novo);
-    setSubView("resultado");
+    setOrcBase(novo); setSubView("resultado");
     save({ ...data, orcamentosProjeto: novos }).catch(console.error);
   }
 
-  // Se está em subview de orçamento, renderiza o módulo completo
+  const btnSm = { fontSize:12, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" };
+
+  // subviews
   if (subView === "orcamento-projeto" || subView === "resultado") {
     return (
-      <div style={S.detailCard}>
+      <div>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-          <button style={S.backBtn} onClick={() => { setSubView(null); setOrcBase(null); }}>← Voltar</button>
-          <div>
-            <div style={{ color:"#f1f5f9", fontWeight:700, fontSize:15 }}>Orçamento de Projeto</div>
-            <div style={{ color:"#64748b", fontSize:12 }}>Cliente: {cliente.nome}</div>
-          </div>
+          <button style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{setSubView(null);setOrcBase(null);}}>← Voltar</button>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Orçamento de Projeto</div>
+          <div style={{ fontSize:12, color:"#9ca3af" }}>— {cliente.nome}</div>
         </div>
         {subView === "orcamento-projeto"
           ? <FormOrcamentoProjeto clienteNome={cliente.nome} clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""} onSalvar={salvarOrcamento} orcBase={orcBase} onVoltar={()=>{setSubView(null);setOrcBase(null);}} />
-          : <ResultadoOrcamentoProjeto orc={orcBase} onEditar={() => setSubView("orcamento-projeto")} onVerProposta={(o) => { setOrcBase(o); setSubView("resultado"); }} fmt={fmt} fmtM2={fmtM2} />
+          : <ResultadoOrcamentoProjeto orc={orcBase} onEditar={()=>setSubView("orcamento-projeto")} onVerProposta={(o)=>{setOrcBase(o);setSubView("resultado");}} fmt={fmt} fmtM2={fmtM2} />
         }
       </div>
     );
@@ -935,13 +924,10 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
 
   if (subView === "orcamento-teste") {
     return (
-      <div style={S.detailCard}>
+      <div>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-          <button style={S.backBtn} onClick={() => { setSubView(null); setOrcBase(null); }}>← Voltar</button>
-          <div>
-            <div style={{ color:"#f59e0b", fontWeight:700, fontSize:15 }}>🧪 Orçamento de Projeto — Teste</div>
-            <div style={{ color:"#64748b", fontSize:12 }}>Cliente: {cliente.nome}</div>
-          </div>
+          <button style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{setSubView(null);setOrcBase(null);}}>← Voltar</button>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Orçamento — Teste</div>
         </div>
         <FormOrcamentoProjetoTeste clienteNome={cliente.nome} clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""} onSalvar={salvarOrcamento} orcBase={orcBase} onVoltar={()=>{setSubView(null);setOrcBase(null);}} />
       </div>
@@ -949,248 +935,173 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
   }
 
   return (
-    <div style={S.detailCard}>
+    <div>
+      {/* Header serviços */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-        <div style={S.detailCardTitle}>🎯 Serviços</div>
-        <button style={S.btnPrimary} onClick={() => setModalServico("menu")}>+ Cadastrar Serviço</button>
+        <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Serviços</div>
+        <button style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"7px 16px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
+          onClick={()=>setModalServico("menu")}>+ Cadastrar serviço</button>
       </div>
 
-      {/* Serviços ativos com ações */}
+      {/* Serviços ativos */}
       <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-        {SERVICOS_DEF.filter(s => cliente.servicos?.[s.key]).map(s => (
-          <div key={s.key} style={{ background:"#0f172a", border:"1px solid #1e293b", borderRadius:10, padding:"14px 16px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <span style={{ fontSize:20 }}>{s.icon}</span>
-                <span style={{ color:"#e2e8f0", fontWeight:700, fontSize:14 }}>{s.label}</span>
-              </div>
-              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                {s.subacoes.map(sa => (
-                  <button key={sa.key}
-                    style={{ background:"#1e3a5f", color: s.cor, border:`1px solid ${s.cor}`, borderRadius:8, padding:"7px 14px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}
-                    onClick={() => { setOrcBase(null); setSubView(s.key === "projeto" && sa.key === "orcamento" ? "orcamento-projeto" : null); }}>
-                    {sa.icon} {sa.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Histórico de orçamentos deste serviço */}
-            {s.key === "projeto" && orcamentos.length > 0 && (()=>{
-              const STATUS_ORC = {
-                ganho:    { label:"Ganho",    cor:"#10b981", bg:"rgba(16,185,129,0.15)", icon:"✅" },
-                perdido:  { label:"Perdido",  cor:"#f87171", bg:"rgba(248,113,113,0.15)", icon:"❌" },
-                descarte: { label:"Descarte", cor:"#64748b", bg:"rgba(100,116,139,0.15)", icon:"🗑" },
-              };
-              const setStatusOrc = async (orcId, novoStatus) => {
-                const todos = data.orcamentosProjeto || [];
-                const orc = todos.find(o => o.id === orcId);
-                // Estorno: se estava ganho e vai para perdido, remove lancamentos do financeiro
-                let novosLanc = data.receitasFinanceiro || [];
-                if (orc && orc.status === "ganho" && novoStatus === "perdido") {
-                  novosLanc = novosLanc.filter(r => r.orcId !== orcId);
-                }
-                const novosOrc = todos.map(o => o.id===orcId ? {...o, status:novoStatus} : o);
-                await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc });
-              };
-              return (
-              <div style={{ marginTop:12, borderTop:"1px solid #1e293b", paddingTop:10 }}>
-                <div style={{ color:"#64748b", fontSize:11, textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>Orçamentos realizados</div>
-                <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                  {orcamentos.map(o => {
-                    const r = o.resultado || {};
-                    const nUnid = r.nUnidades || 1;
-                    const arqTotal = Math.round((r.precoTotal || r.precoFinal || 0) * 100) / 100;
-                    const engUnit = Math.round((r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng) * 100) / 100;
-                    const engTotalRepet = Math.round((engUnit * (nUnid > 1
-                      ? (1 + (r.repeticaoFaixas||[]).reduce((s,f) => s + f.pct, 0))
-                      : 1)) * 100) / 100;
-                    const grandTotal = Math.round((arqTotal + engTotalRepet) * 100) / 100;
-                    const st = o.status ? STATUS_ORC[o.status] : null;
-                    return (
-                      <div key={o.id} style={{ background:"#0d1526", borderRadius:8, padding:"10px 12px",
-                        borderLeft: st ? `3px solid ${st.cor}` : "3px solid transparent" }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-                              <span style={{ color:"#e2e8f0", fontSize:13, fontWeight:600 }}>{o.tipo} — {o.subtipo}</span>
-                              {st && (
-                                <span style={{ background:st.bg, color:st.cor, fontSize:11, fontWeight:700,
-                                  borderRadius:4, padding:"1px 8px", border:`1px solid ${st.cor}` }}>
-                                  {st.icon} {st.label}
-                                </span>
-                              )}
-                              <span style={{ color:"#334155", fontSize:10, fontFamily:"monospace" }}>{o.id}</span>
-                            </div>
-                            <span style={{ color:"#64748b", fontSize:12 }}>{o.padrao} · {o.tamanho} · {fmtA(r.areaTotal,0)}m²</span>
-                            {nUnid > 1 && (
-                              <span style={{ display:"inline-block", marginLeft:8, background:"#1e3a5f", color:"#60a5fa", fontSize:11, fontWeight:700, borderRadius:4, padding:"1px 7px" }}>
-                                🔁 {nUnid} unidades
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
-                            <button style={S.btnXsSm} onClick={() => { setOrcBase(o); setSubView("resultado"); }}>Ver</button>
-                            <button style={S.btnXsSm} onClick={() => { setOrcBase(o); setSubView("orcamento-projeto"); }}>Editar</button>
-                            <div style={{ position:"relative" }}>
-                              <button onClick={() => setOpenMenu(openMenu===o.id ? null : o.id)}
-                                style={{ ...S.btnXsSm, padding:"3px 8px", background:"#1e293b",
-                                  border:"1px solid #334155", borderRadius:5, color:"#94a3b8",
-                                  fontSize:14, cursor:"pointer", lineHeight:1 }}>
-                                ⋯
-                              </button>
-                              {openMenu === o.id && (
-                                <div ref={menuRef} style={{ position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
-                                  background:"#0f172a", border:"1px solid #334155", borderRadius:8,
-                                  boxShadow:"0 8px 24px rgba(0,0,0,0.5)", minWidth:140, overflow:"hidden" }}>
-                                  <button
-                                    disabled={o.status === "ganho"}
-                                    onClick={() => {
-                                      if (o.status !== "ganho") {
-                                        setModalGanho({ orc:o, arqTotal, engTotal:engTotalRepet, grandTotal });
-                                        setOpenMenu(null);
-                                      }
-                                    }}
-                                    style={{ display:"block", width:"100%", textAlign:"left",
-                                      background: o.status==="ganho" ? "rgba(16,185,129,0.12)" : "transparent",
-                                      border:"none", borderBottom:"1px solid #1e293b",
-                                      color: o.status==="ganho" ? "#10b981" : "#cbd5e1",
-                                      padding:"9px 14px", fontSize:13, cursor: o.status==="ganho" ? "not-allowed" : "pointer",
-                                      fontFamily:"inherit", fontWeight: o.status==="ganho" ? 700 : 400,
-                                      opacity: o.status==="ganho" ? 0.7 : 1 }}>
-                                    {o.status==="ganho" ? "Ganho ✓" : "Ganho"}
-                                  </button>
-                                  <button onClick={() => {
-                                      setStatusOrc(o.id, o.status==="perdido" ? null : "perdido");
-                                      setOpenMenu(null);
-                                    }}
-                                    style={{ display:"block", width:"100%", textAlign:"left",
-                                      background: o.status==="perdido" ? "rgba(248,113,113,0.12)" : "transparent",
-                                      border:"none", borderBottom:"1px solid #1e293b",
-                                      color: o.status==="perdido" ? "#f87171" : "#cbd5e1",
-                                      padding:"9px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit",
-                                      fontWeight: o.status==="perdido" ? 700 : 400 }}>
-                                    {o.status==="perdido" ? "Perdido ✓" : o.status==="ganho" ? "Perdido (estorna)" : "Perdido"}
-                                  </button>
-                                  <button
-                                    onClick={() => { setConfirmDelete(o.id); setOpenMenu(null); }}
-                                    style={{ display:"block", width:"100%", textAlign:"left",
-                                      background:"transparent", border:"none",
-                                      color:"#f87171", padding:"9px 14px", fontSize:13,
-                                      cursor:"pointer", fontFamily:"inherit" }}>
-                                    🗑 Descartar
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ display:"flex", gap:16, marginTop:6 }}>
-                          <span style={{ color:"#94a3b8", fontSize:11 }}>Arq.: <span style={{ color:"#10b981", fontWeight:600 }}>{fmt(arqTotal)}</span></span>
-                          <span style={{ color:"#94a3b8", fontSize:11 }}>Eng.: <span style={{ color:"#a78bfa", fontWeight:600 }}>{fmt(engTotalRepet)}</span></span>
-                          <span style={{ color:"#94a3b8", fontSize:11, marginLeft:"auto" }}>Total: <span style={{ color:"#f59e0b", fontWeight:800, fontSize:14 }}>{fmt(grandTotal)}</span></span>
-                        </div>
-                      </div>
-                    );
-                  })}
+        {SERVICOS_DEF.filter(s => cliente.servicos?.[s.key]).map(s => {
+          const STATUS_ORC = {
+            ganho:   { label:"Ganho",   cor:"#16a34a" },
+            perdido: { label:"Perdido", cor:"#dc2626" },
+          };
+          const setStatusOrc = async (orcId, novoStatus) => {
+            const todos = data.orcamentosProjeto || [];
+            const orc = todos.find(o => o.id === orcId);
+            let novosLanc = data.receitasFinanceiro || [];
+            if (orc && orc.status === "ganho" && novoStatus === "perdido") novosLanc = novosLanc.filter(r => r.orcId !== orcId);
+            const novosOrc = todos.map(o => o.id===orcId ? {...o, status:novoStatus} : o);
+            await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc });
+          };
+          return (
+            <div key={s.key} style={{ border:"1px solid #e5e7eb", borderRadius:10, padding:"14px 16px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: s.key==="projeto"&&orcamentos.length>0 ? 12 : 0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <div style={{ width:8, height:8, borderRadius:"50%", background:s.cor }} />
+                  <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>{s.label}</span>
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  {s.subacoes.map(sa => (
+                    <button key={sa.key}
+                      style={{ ...btnSm, color:s.cor, borderColor:s.cor+"40", fontWeight:600 }}
+                      onClick={()=>{ setOrcBase(null); setSubView(s.key==="projeto"&&sa.key==="orcamento"?"orcamento-projeto":null); }}>
+                      {sa.label}
+                    </button>
+                  ))}
                 </div>
               </div>
-              );
-            })()}
+
+              {/* Orçamentos */}
+              {s.key === "projeto" && orcamentos.length > 0 && (
+                <div style={{ borderTop:"1px solid #f3f4f6", paddingTop:10 }}>
+                  <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>Orçamentos</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {orcamentos.map(o => {
+                      const r = o.resultado || {};
+                      const nUnid = r.nUnidades || 1;
+                      const arqTotal = Math.round((r.precoTotal || r.precoFinal || 0) * 100) / 100;
+                      const engUnit = Math.round((r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng) * 100) / 100;
+                      const engTotalRepet = Math.round((engUnit * (nUnid > 1 ? (1 + (r.repeticaoFaixas||[]).reduce((s,f)=>s+f.pct,0)) : 1)) * 100) / 100;
+                      const grandTotal = Math.round((arqTotal + engTotalRepet) * 100) / 100;
+                      const st = o.status ? STATUS_ORC[o.status] : null;
+                      return (
+                        <div key={o.id} style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:8, padding:"10px 12px", borderLeft: st ? `3px solid ${st.cor}` : "3px solid #e5e7eb" }}>
+                          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+                                <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{o.tipo} — {o.subtipo}</span>
+                                {st && <span style={{ fontSize:11, fontWeight:600, padding:"1px 8px", borderRadius:6, background:st.cor+"15", color:st.cor }}>{st.label}</span>}
+                                <span style={{ fontSize:10, color:"#d1d5db", fontFamily:"monospace" }}>{o.id}</span>
+                              </div>
+                              <div style={{ fontSize:12, color:"#9ca3af" }}>{o.padrao} · {o.tamanho} · {fmtA(r.areaTotal,0)}m²{nUnid>1?` · ${nUnid} unidades`:""}</div>
+                              <div style={{ display:"flex", gap:12, marginTop:6 }}>
+                                <span style={{ fontSize:12, color:"#6b7280" }}>Arq.: <strong style={{ color:"#2563eb" }}>{fmt(arqTotal)}</strong></span>
+                                <span style={{ fontSize:12, color:"#6b7280" }}>Eng.: <strong style={{ color:"#7c3aed" }}>{fmt(engTotalRepet)}</strong></span>
+                                <span style={{ fontSize:12, color:"#6b7280", marginLeft:"auto" }}>Total: <strong style={{ color:"#111", fontSize:13 }}>{fmt(grandTotal)}</strong></span>
+                              </div>
+                            </div>
+                            <div style={{ display:"flex", gap:4, marginLeft:12, flexShrink:0 }}>
+                              <button style={btnSm} onClick={()=>{setOrcBase(o);setSubView("resultado");}}>Ver</button>
+                              <button style={btnSm} onClick={()=>{setOrcBase(o);setSubView("orcamento-projeto");}}>Editar</button>
+                              <div style={{ position:"relative" }}>
+                                <button onClick={()=>setOpenMenu(openMenu===o.id?null:o.id)}
+                                  style={{ ...btnSm, padding:"4px 8px", fontSize:16, lineHeight:1 }}>⋯</button>
+                                {openMenu === o.id && (
+                                  <div ref={menuRef} style={{ position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999, background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:160, overflow:"hidden" }}>
+                                    <button disabled={o.status==="ganho"}
+                                      onClick={()=>{ if(o.status!=="ganho"){setModalGanho({orc:o,arqTotal,engTotal:engTotalRepet,grandTotal});setOpenMenu(null);} }}
+                                      style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="ganho"?"#f0fdf4":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="ganho"?"#16a34a":"#374151", padding:"9px 14px", fontSize:13, cursor: o.status==="ganho"?"not-allowed":"pointer", fontFamily:"inherit", fontWeight: o.status==="ganho"?600:400 }}>
+                                      {o.status==="ganho"?"Ganho ✓":"Ganho"}
+                                    </button>
+                                    <button onClick={()=>{setStatusOrc(o.id,o.status==="perdido"?null:"perdido");setOpenMenu(null);}}
+                                      style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="perdido"?"#fef2f2":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="perdido"?"#dc2626":"#374151", padding:"9px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight: o.status==="perdido"?600:400 }}>
+                                      {o.status==="perdido"?"Perdido ✓":o.status==="ganho"?"Perdido (estorna)":"Perdido"}
+                                    </button>
+                                    <button onClick={()=>{setConfirmDelete(o.id);setOpenMenu(null);}}
+                                      style={{ display:"block", width:"100%", textAlign:"left", background:"transparent", border:"none", color:"#dc2626", padding:"9px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                                      Descartar
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {!SERVICOS_DEF.some(s => cliente.servicos?.[s.key]) && (
+          <div style={{ textAlign:"center", padding:"24px 0", color:"#d1d5db", fontSize:13 }}>
+            Nenhum serviço cadastrado.
           </div>
-        ))}
+        )}
+      </div>
 
-      {modalGanho && <ModalConfirmarGanho
-        orc={modalGanho.orc}
-        arqTotal={modalGanho.arqTotal}
-        engTotal={modalGanho.engTotal}
-        grandTotal={modalGanho.grandTotal}
-        data={data} save={save}
-        onClose={() => setModalGanho(null)}
-      />}
-
-        {/* MODAL CONFIRMA EXCLUSÃO */}
-      {modalGanho && <ModalConfirmarGanho
-        orc={modalGanho.orc}
-        arqTotal={modalGanho.arqTotal}
-        engTotal={modalGanho.engTotal}
-        grandTotal={modalGanho.grandTotal}
-        data={data} save={save}
-        onClose={() => setModalGanho(null)}
-      />}
+      {modalGanho && <ModalConfirmarGanho orc={modalGanho.orc} arqTotal={modalGanho.arqTotal} engTotal={modalGanho.engTotal} grandTotal={modalGanho.grandTotal} data={data} save={save} onClose={()=>setModalGanho(null)} />}
 
       {confirmDelete && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9999,
-          display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:12,
-            padding:"28px 32px", maxWidth:380, width:"90%", boxShadow:"0 24px 48px rgba(0,0,0,0.6)" }}>
-            <div style={{ color:"#f1f5f9", fontWeight:700, fontSize:16, marginBottom:10 }}>Excluir orçamento?</div>
-            <div style={{ color:"#94a3b8", fontSize:13, marginBottom:24, lineHeight:1.6 }}>
-              Tem certeza que deseja excluir este orçamento? Esta ação não pode ser desfeita.
-            </div>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:380, width:"90%", boxShadow:"0 20px 40px rgba(0,0,0,0.15)" }}>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>Excluir orçamento?</div>
+            <div style={{ fontSize:13, color:"#6b7280", marginBottom:24, lineHeight:1.6 }}>Esta ação não pode ser desfeita.</div>
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-              <button onClick={() => setConfirmDelete(null)}
-                style={{ background:"#1e293b", color:"#94a3b8", border:"1px solid #334155",
-                  borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
-                Cancelar
-              </button>
-              <button onClick={async () => {
-                  const idParaExcluir = confirmDelete;
-                  setConfirmDelete(null);
-                  const novos = (data.orcamentosProjeto||[]).filter(x => x.id !== idParaExcluir);
-                  save({ ...data, orcamentosProjeto: novos }).catch(console.error);
-                }}
-                style={{ background:"#dc2626", color:"#fff", border:"none",
-                  borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:700,
-                  cursor:"pointer", fontFamily:"inherit" }}>
-                Sim, excluir
+              <button onClick={()=>setConfirmDelete(null)} style={{ background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+              <button onClick={async()=>{ const id=confirmDelete; setConfirmDelete(null); const novos=(data.orcamentosProjeto||[]).filter(x=>x.id!==id); save({...data,orcamentosProjeto:novos}).catch(console.error); }}
+                style={{ background:"#dc2626", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                Excluir
               </button>
             </div>
           </div>
         </div>
       )}
 
-
-      {!SERVICOS_DEF.some(s => cliente.servicos?.[s.key]) && (
-          <div style={{ color:"#475569", fontSize:13, textAlign:"center", padding:"20px 0" }}>
-            Nenhum serviço cadastrado. Clique em "+ Cadastrar Serviço" para adicionar.
-          </div>
-        )}
-      </div>
-
-      {/* MODAL — menu de serviços */}
+      {/* Modal cadastrar serviço */}
       {modalServico === "menu" && (
-        <div style={S.overlay}>
-          <div style={{ ...S.modalBox, maxWidth:480 }}>
-            <div style={S.modalHead}>
-              <h2 style={{ color:"#f1f5f9", fontWeight:800, fontSize:18, margin:0 }}>Cadastrar Serviço</h2>
-              <button style={S.closeBtn} onClick={() => setModalServico(null)}>✕</button>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <div style={{ background:"#fff", borderRadius:14, padding:"28px", width:"100%", maxWidth:480, boxShadow:"0 20px 40px rgba(0,0,0,0.15)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+              <div style={{ fontSize:16, fontWeight:700, color:"#111" }}>Cadastrar serviço</div>
+              <button onClick={()=>setModalServico(null)} style={{ background:"none", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
-            <p style={{ color:"#64748b", fontSize:13, margin:"0 0 20px" }}>Selecione o serviço para {cliente.nome}:</p>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               {SERVICOS_DEF.map(s => {
                 const ativo = cliente.servicos?.[s.key];
                 return (
-                  <button key={s.key} style={{ ...S.servicoMenuItem, borderColor: ativo ? s.cor : "#1e293b", background: ativo ? "#0d1f3c" : "#0f172a" }}
-                    onClick={() => {
+                  <button key={s.key}
+                    style={{ display:"flex", alignItems:"center", gap:14, background:"#fff", border:`1px solid ${ativo?s.cor:"#e5e7eb"}`, borderRadius:10, padding:"14px 16px", cursor:"pointer", fontFamily:"inherit", width:"100%", textAlign:"left" }}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=s.cor}
+                    onMouseLeave={e=>e.currentTarget.style.borderColor=ativo?s.cor:"#e5e7eb"}
+                    onClick={()=>{
                       const novosServicos = { ...cliente.servicos, [s.key]: true };
-                      const novosClientes = data.clientes.map(c => c.id===cliente.id ? { ...c, servicos:novosServicos } : c);
+                      const novosClientes = data.clientes.map(c => c.id===cliente.id ? {...c,servicos:novosServicos} : c);
                       save({ ...data, clientes: novosClientes });
-                      if (s.key === "projeto") { setModalServico("projeto"); }
-                      else { setModalServico(null); }
+                      if (s.key === "projeto") setModalServico("projeto");
+                      else setModalServico(null);
                     }}>
-                    <span style={{ fontSize:22 }}>{s.icon}</span>
-                    <div style={{ flex:1, textAlign:"left" }}>
-                      <div style={{ color: ativo ? s.cor : "#e2e8f0", fontWeight:700, fontSize:14 }}>
-                        {s.label} {ativo && <span style={{ fontSize:11, color:"#4ade80" }}>● Ativo</span>}
+                    <div style={{ width:8, height:8, borderRadius:"50%", background:s.cor, flexShrink:0 }} />
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:14, fontWeight:600, color: ativo?s.cor:"#111" }}>
+                        {s.label} {ativo && <span style={{ fontSize:11, color:"#16a34a" }}>● Ativo</span>}
                       </div>
-                      <div style={{ color:"#475569", fontSize:12, marginTop:2 }}>
-                        {s.key==="projeto" && "Elaboração de projetos arquitetônicos com orçamento"}
-                        {s.key==="acompanhamentoObra" && "Visitas técnicas e relatórios periódicos"}
-                        {s.key==="gestaoObra" && "Gestão completa de custos, equipe e cronograma"}
-                        {s.key==="empreendimento" && "Incorporação ou desenvolvimento imobiliário"}
+                      <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+                        {s.key==="projeto"&&"Elaboração de projetos com orçamento"}
+                        {s.key==="acompanhamentoObra"&&"Visitas técnicas e relatórios periódicos"}
+                        {s.key==="gestaoObra"&&"Gestão completa de custos e cronograma"}
+                        {s.key==="empreendimento"&&"Incorporação ou desenvolvimento imobiliário"}
                       </div>
                     </div>
-                    <span style={{ color: ativo ? s.cor : "#334155", fontSize:18 }}>›</span>
+                    <span style={{ color:"#9ca3af", fontSize:18 }}>›</span>
                   </button>
                 );
               })}
@@ -1199,30 +1110,29 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
         </div>
       )}
 
-      {/* MODAL — submenu projeto */}
+      {/* Modal projeto */}
       {modalServico === "projeto" && (
-        <div style={S.overlay}>
-          <div style={{ ...S.modalBox, maxWidth:420 }}>
-            <div style={S.modalHead}>
-              <h2 style={{ color:"#f1f5f9", fontWeight:800, fontSize:18, margin:0 }}>📐 Projeto</h2>
-              <button style={S.closeBtn} onClick={() => setModalServico(null)}>✕</button>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+          <div style={{ background:"#fff", borderRadius:14, padding:"28px", width:"100%", maxWidth:420, boxShadow:"0 20px 40px rgba(0,0,0,0.15)" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+              <div style={{ fontSize:16, fontWeight:700, color:"#111" }}>Projeto</div>
+              <button onClick={()=>setModalServico(null)} style={{ background:"none", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
-            <p style={{ color:"#64748b", fontSize:13, margin:"0 0 20px" }}>O que deseja fazer para {cliente.nome.split(" ")[0]}?</p>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              <button style={{ ...S.btnSubacao2, display:"flex", alignItems:"center", gap:14, background:"#0f172a", border:"2px solid #1e293b", borderRadius:12, padding:"14px 16px", cursor:"pointer", fontFamily:"inherit", width:"100%", color:"#f1f5f9" }} onClick={() => { setModalServico(null); setOrcBase(null); setSubView("orcamento-projeto"); }}>
-                <span style={{ fontSize:24 }}>🧮</span>
-                <div style={{ textAlign:"left" }}>
-                  <div style={{ color:"#f1f5f9", fontWeight:700, fontSize:14 }}>Orçar Projeto</div>
-                  <div style={{ color:"#64748b", fontSize:12 }}>Calcular valor do projeto com base nos cômodos e padrão</div>
-                </div>
-                <span style={{ color:"#3b82f6", fontSize:20 }}>›</span>
-              </button>
-            </div>
-            <button style={{ ...S.btnSecondary, marginTop:12, width:"100%" }} onClick={() => setModalServico("menu")}>← Voltar</button>
+            <p style={{ fontSize:13, color:"#6b7280", margin:"0 0 16px" }}>O que deseja fazer para {cliente.nome.split(" ")[0]}?</p>
+            <button style={{ display:"flex", alignItems:"center", gap:14, background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"14px 16px", cursor:"pointer", fontFamily:"inherit", width:"100%", textAlign:"left" }}
+              onMouseEnter={e=>e.currentTarget.style.borderColor="#2563eb"}
+              onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}
+              onClick={()=>{setModalServico(null);setOrcBase(null);setSubView("orcamento-projeto");}}>
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>Orçar projeto</div>
+                <div style={{ fontSize:12, color:"#9ca3af" }}>Calcular valor com base nos cômodos e padrão</div>
+              </div>
+              <span style={{ color:"#9ca3af", fontSize:18 }}>›</span>
+            </button>
+            <button style={{ marginTop:10, background:"none", border:"none", color:"#9ca3af", fontSize:13, cursor:"pointer", fontFamily:"inherit", padding:"8px 0" }} onClick={()=>setModalServico("menu")}>← Voltar</button>
           </div>
         </div>
       )}
     </div>
   );
 }
-
