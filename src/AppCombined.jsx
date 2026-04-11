@@ -2057,6 +2057,7 @@ function Clientes({ data, save }) {
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
   const [dragId, setDragId]           = useState(null);
+  const [orcView, setOrcView] = useState(null); // { cliente, orcBase }
   const [dragOver, setDragOver]       = useState(null);
 
   const emptyCliente = {
@@ -2245,17 +2246,57 @@ function Clientes({ data, save }) {
   }
 
   // ── DETALHE ─────────────────────────────────────────────────
+  if (orcView) {
+    async function salvarOrc(orc) {
+      const todos = data.orcamentosProjeto || [];
+      const maxSeq = todos.reduce((mx,o)=>{const m=(o.id||"").match(/^ORC-(\d+)$/);return m?Math.max(mx,parseInt(m[1])):mx;},0);
+      const novo = {...orc, clienteId:orcView.cliente.id, cliente:orcView.cliente.nome, whatsapp:orcView.cliente.contatos?.find(c=>c.whatsapp)?.telefone||"", id:orc.id||"ORC-"+String(maxSeq+1).padStart(4,"0"), criadoEm:orc.criadoEm||new Date().toISOString()};
+      const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
+      setOrcView({...orcView, orcBase:novo});
+      save({...data, orcamentosProjeto:novos}).catch(console.error);
+    }
+    return (
+      <FormOrcamentoProjetoTeste
+        clienteNome={orcView.cliente.nome}
+        clienteWA={orcView.cliente.contatos?.find(c=>c.whatsapp)?.telefone||""}
+        onSalvar={salvarOrc}
+        orcBase={orcView.orcBase||null}
+        onVoltar={()=>setOrcView(null)}
+      />
+    );
+  }
   if (view === "detail" && sel) {
     const cliente = data.clientes.find(c => c.id === sel.id) || sel;
     const iniciais = cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===(cliente.status||""))||COLUNAS[0];
+
+    // subView de orçamento — tela cheia
+    if (view === "detail" && sel._subView === "orcamento") {
+      async function salvarOrcTela(orc) {
+        const todos = data.orcamentosProjeto || [];
+        const maxSeq = todos.reduce((mx,o)=>{const m=(o.id||"").match(/^ORC-(\d+)$/);return m?Math.max(mx,parseInt(m[1])):mx;},0);
+        const novo = {...orc, clienteId:cliente.id, cliente:cliente.nome, whatsapp:cliente.contatos?.find(c=>c.whatsapp)?.telefone||"", id:orc.id||"ORC-"+String(maxSeq+1).padStart(4,"0"), criadoEm:orc.criadoEm||new Date().toISOString()};
+        const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
+        setSel({...sel, _subView:null, _orcBase:novo});
+        save({...data, orcamentosProjeto:novos}).catch(console.error);
+      }
+      return (
+        <FormOrcamentoProjetoTeste
+          clienteNome={cliente.nome}
+          clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""}
+          onSalvar={salvarOrcTela}
+          orcBase={sel._orcBase||null}
+          onVoltar={()=>setSel({...sel, _subView:null, _orcBase:null})}
+        />
+      );
+    }
+
     return (
       <div style={{ padding:"28px 32px", maxWidth:780, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
           <button style={C.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
           <div style={{ flex:1 }} />
-          {/* Mover de status */}
           <select value={cliente.status||""} onChange={e=>moverCliente(cliente.id, e.target.value)}
             style={{ ...C.input, width:"auto", fontSize:12, padding:"6px 10px", cursor:"pointer" }}>
             {COLUNAS.map(x=><option key={x.key} value={x.key}>{x.label}</option>)}
@@ -2276,7 +2317,12 @@ function Clientes({ data, save }) {
         </div>
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
         <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} />
+        <ServicosPanel
+  cliente={cliente}
+  data={data}
+  save={save}
+  onAbrirOrcamento={(orc)=>setOrcView({cliente, orcBase:orc||null})}
+           />
       </div>
     );
   }
@@ -2828,13 +2874,11 @@ function ModalConfirmarGanho({ orc, arqTotal, engTotal, grandTotal, data, save, 
   );
 }
 
-function ServicosPanel({ cliente: clienteProp, data, save }) {
+function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const [modalServico, setModalServico] = useState(null);
-  const [subView, setSubView]           = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [openMenu, setOpenMenu]         = useState(null);
   const [modalGanho, setModalGanho]     = useState(null);
-  const [orcBase, setOrcBase]           = useState(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -2855,48 +2899,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
 
   const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
 
-  async function salvarOrcamento(orc) {
-    const todos = data.orcamentosProjeto || [];
-    const maxSeq = todos.reduce((mx, o) => { const m = (o.id||"").match(/^ORC-(\d+)$/); return m ? Math.max(mx, parseInt(m[1])) : mx; }, 0);
-    const novo = { ...orc, clienteId: cliente.id, cliente: cliente.nome,
-      whatsapp: cliente.contatos?.find(c=>c.whatsapp)?.telefone || "",
-      id: orc.id || "ORC-" + String(maxSeq + 1).padStart(4, "0"),
-      criadoEm: orc.criadoEm || new Date().toISOString() };
-    const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
-    setOrcBase(novo); setSubView("resultado");
-    save({ ...data, orcamentosProjeto: novos }).catch(console.error);
-  }
-
   const btnSm = { fontSize:12, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" };
-
-  // subviews
-  if (subView === "orcamento-teste" || subView === "resultado") {
-    return (
-      <div>
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-          <button style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{setSubView(null);setOrcBase(null);}}>← Voltar</button>
-          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Orçamento de Projeto</div>
-          <div style={{ fontSize:12, color:"#9ca3af" }}>— {cliente.nome}</div>
-        </div>
-        {subView === "orcamento-teste"
-          ? <FormOrcamentoProjetoTeste clienteNome={cliente.nome} clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""} onSalvar={salvarOrcamento} orcBase={orcBase} onVoltar={()=>{setSubView(null);setOrcBase(null);}} />
-          : <ResultadoOrcamentoProjeto orc={orcBase} onEditar={()=>setSubView("orcamento-teste")} onVerProposta={(o)=>{setOrcBase(o);setSubView("resultado");}} fmt={fmt} fmtM2={fmtM2} />
-        }
-      </div>
-    );
-  }
-
-  if (subView === "orcamento-teste") {
-    return (
-      <div>
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
-          <button style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{setSubView(null);setOrcBase(null);}}>← Voltar</button>
-          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Orçamento — Teste</div>
-        </div>
-        <FormOrcamentoProjetoTeste clienteNome={cliente.nome} clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""} onSalvar={salvarOrcamento} orcBase={orcBase} onVoltar={()=>{setSubView(null);setOrcBase(null);}} />
-      </div>
-    );
-  }
 
   return (
     <div>
@@ -2933,7 +2936,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
                   {s.subacoes.map(sa => (
                     <button key={sa.key}
                       style={{ ...btnSm, color:s.cor, borderColor:s.cor+"40", fontWeight:600 }}
-                      onClick={()=>{ setOrcBase(null); setSubView(s.key==="projeto"&&sa.key==="orcamento"?"orcamento-teste":null); }}>
+                      onClick={()=>{ if(s.key==="projeto"&&sa.key==="orcamento") onAbrirOrcamento(null); }}>
                       {sa.label}
                     </button>
                   ))}
@@ -2970,8 +2973,8 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
                               </div>
                             </div>
                             <div style={{ display:"flex", gap:4, marginLeft:12, flexShrink:0 }}>
-                              <button style={btnSm} onClick={()=>{setOrcBase(o);setSubView("resultado");}}>Ver</button>
-                              <button style={btnSm} onClick={()=>{setOrcBase(o);setSubView("orcamento-teste");}}>Editar</button>
+                              <button style={btnSm} onClick={()=>onAbrirOrcamento(o)}>Ver</button>
+                              <button style={btnSm} onClick={()=>onAbrirOrcamento(o)}>Editar</button>
                               <div style={{ position:"relative" }}>
                                 <button onClick={()=>setOpenMenu(openMenu===o.id?null:o.id)}
                                   style={{ ...btnSm, padding:"4px 8px", fontSize:16, lineHeight:1 }}>⋯</button>
@@ -3086,7 +3089,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
             <button style={{ display:"flex", alignItems:"center", gap:14, background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"14px 16px", cursor:"pointer", fontFamily:"inherit", width:"100%", textAlign:"left" }}
               onMouseEnter={e=>e.currentTarget.style.borderColor="#2563eb"}
               onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}
-              onClick={()=>{setModalServico(null);setOrcBase(null);setSubView("orcamento-teste");}}>
+              onClick={()=>{setModalServico(null);onAbrirOrcamento(null);}}>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>Orçar projeto</div>
                 <div style={{ fontSize:12, color:"#9ca3af" }}>Calcular valor com base nos cômodos e padrão</div>
