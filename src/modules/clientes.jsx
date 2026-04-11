@@ -288,7 +288,7 @@ function Clientes({ data, save }) {
       const maxSeq = todos.reduce((mx,o)=>{const m=(o.id||"").match(/^ORC-(\d+)$/);return m?Math.max(mx,parseInt(m[1])):mx;},0);
       const novo = {...orc, clienteId:orcView.cliente.id, cliente:orcView.cliente.nome, whatsapp:orcView.cliente.contatos?.find(c=>c.whatsapp)?.telefone||"", id:orc.id||"ORC-"+String(maxSeq+1).padStart(4,"0"), criadoEm:orc.criadoEm||new Date().toISOString()};
       const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
-      setOrcView(null);
+      setOrcView(null); save({...data, orcamentosProjeto:novos}).catch(console.error);
       save({...data, orcamentosProjeto:novos}).catch(console.error);
     }
     return (
