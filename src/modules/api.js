@@ -3,9 +3,7 @@
 // Substitui o DB (localStorage/window.storage) pelo backend real
 // ═══════════════════════════════════════════════════════════════
 
-const API_URL = typeof window !== "undefined" && window.location.hostname !== "localhost"
-  ? "https://orbi-production-0c32.up.railway.app"
-  : "http://localhost:3000";
+const API_URL = "https://orbi-production-0c32.up.railway.app";
 
 async function req(method, path, body) {
   const res = await fetch(`${API_URL}${path}`, {
