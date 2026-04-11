@@ -2870,7 +2870,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
   const btnSm = { fontSize:12, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" };
 
   // subviews
-  if (subView === "orcamento-projeto" || subView === "resultado") {
+  if (subView === "orcamento-teste" || subView === "resultado") {
     return (
       <div>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20 }}>
@@ -2878,9 +2878,9 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
           <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Orçamento de Projeto</div>
           <div style={{ fontSize:12, color:"#9ca3af" }}>— {cliente.nome}</div>
         </div>
-        {subView === "orcamento-projeto"
-          ? <FormOrcamentoProjeto clienteNome={cliente.nome} clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""} onSalvar={salvarOrcamento} orcBase={orcBase} onVoltar={()=>{setSubView(null);setOrcBase(null);}} />
-          : <ResultadoOrcamentoProjeto orc={orcBase} onEditar={()=>setSubView("orcamento-projeto")} onVerProposta={(o)=>{setOrcBase(o);setSubView("resultado");}} fmt={fmt} fmtM2={fmtM2} />
+        {subView === "orcamento-teste"
+          ? <FormOrcamentoProjetoTeste clienteNome={cliente.nome} clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""} onSalvar={salvarOrcamento} orcBase={orcBase} onVoltar={()=>{setSubView(null);setOrcBase(null);}} />
+          : <ResultadoOrcamentoProjeto orc={orcBase} onEditar={()=>setSubView("orcamento-teste")} onVerProposta={(o)=>{setOrcBase(o);setSubView("resultado");}} fmt={fmt} fmtM2={fmtM2} />
         }
       </div>
     );
@@ -2933,7 +2933,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
                   {s.subacoes.map(sa => (
                     <button key={sa.key}
                       style={{ ...btnSm, color:s.cor, borderColor:s.cor+"40", fontWeight:600 }}
-                      onClick={()=>{ setOrcBase(null); setSubView(s.key==="projeto"&&sa.key==="orcamento"?"orcamento-projeto":null); }}>
+                      onClick={()=>{ setOrcBase(null); setSubView(s.key==="projeto"&&sa.key==="orcamento"?"orcamento-teste":null); }}>
                       {sa.label}
                     </button>
                   ))}
@@ -2971,7 +2971,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
                             </div>
                             <div style={{ display:"flex", gap:4, marginLeft:12, flexShrink:0 }}>
                               <button style={btnSm} onClick={()=>{setOrcBase(o);setSubView("resultado");}}>Ver</button>
-                              <button style={btnSm} onClick={()=>{setOrcBase(o);setSubView("orcamento-projeto");}}>Editar</button>
+                              <button style={btnSm} onClick={()=>{setOrcBase(o);setSubView("orcamento-teste");}}>Editar</button>
                               <div style={{ position:"relative" }}>
                                 <button onClick={()=>setOpenMenu(openMenu===o.id?null:o.id)}
                                   style={{ ...btnSm, padding:"4px 8px", fontSize:16, lineHeight:1 }}>⋯</button>
@@ -3086,7 +3086,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
             <button style={{ display:"flex", alignItems:"center", gap:14, background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"14px 16px", cursor:"pointer", fontFamily:"inherit", width:"100%", textAlign:"left" }}
               onMouseEnter={e=>e.currentTarget.style.borderColor="#2563eb"}
               onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}
-              onClick={()=>{setModalServico(null);setOrcBase(null);setSubView("orcamento-projeto");}}>
+              onClick={()=>{setModalServico(null);setOrcBase(null);setSubView("orcamento-teste");}}>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>Orçar projeto</div>
                 <div style={{ fontSize:12, color:"#9ca3af" }}>Calcular valor com base nos cômodos e padrão</div>
