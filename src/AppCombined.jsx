@@ -1963,74 +1963,65 @@ var S = {
 // ════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
-// CLIENTES — visual minimalista
+// CLIENTES — Kanban + visual minimalista
 // ═══════════════════════════════════════════════════════════════
 
 const C = {
-  wrap:    { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
-  input:   { border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-  label:   { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
-  btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-  btnGhost:{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
-  card:    { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px", cursor:"pointer", transition:"border-color 0.15s" },
-  tag:     (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background: cor+"15", color: cor }),
-  grid2:   { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
-  grid3:   { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
-  secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:14 },
-  divider: { border:"none", borderTop:"1px solid #f3f4f6", margin:"20px 0" },
-  row:     { display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid #f9fafb" },
+  input:    { border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  label:    { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
+  btn:      { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+  btnSec:   { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+  tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
+  grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
+  grid3:    { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
+  secTit:   { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:14 },
+  divider:  { border:"none", borderTop:"1px solid #f3f4f6", margin:"20px 0" },
+  row:      { display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid #f9fafb" },
 };
+
+const COLUNAS = [
+  { key:"",             label:"Sem status",    cor:"#9ca3af" },
+  { key:"orcamento",    label:"Em orçamento",  cor:"#f59e0b" },
+  { key:"estudo",       label:"Em estudo",     cor:"#3b82f6" },
+  { key:"andamento",    label:"Em andamento",  cor:"#10b981" },
+];
 
 function ClienteExpandivel({ cliente, data, waLink }) {
   const [abertos, setAbertos] = useState({ cadastro:false, financeiro:false });
   const toggle = k => setAbertos(p => ({...p, [k]:!p[k]}));
   const cpfCliente = cliente.cpfCnpj || cliente.id;
   const lancsCli = (data.receitasFinanceiro||[]).filter(r => r.clienteId === cpfCliente || r.clienteId === cliente.id);
-  const totalContabil = lancsCli.filter(r=>r.contabil1==="Receita Total" && r.tipoConta!=="Conta Redutora").reduce((s,r)=>s+(r.valor||0),0);
+  const totalContabil = lancsCli.filter(r=>r.contabil1==="Receita Total"&&r.tipoConta!=="Conta Redutora").reduce((s,r)=>s+(r.valor||0),0);
   const totalRecebido = lancsCli.filter(r=>r.recebimento==="Recebido").reduce((s,r)=>s+(r.valor||0),0);
   const totalReceber  = lancsCli.filter(r=>r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const fmtV = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
-
-  const secBtn = (aberto) => ({
-    width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center",
-    background:"none", border:"none", borderBottom:"1px solid #f3f4f6",
-    padding:"12px 0", cursor:"pointer", fontFamily:"inherit",
-    color:"#374151", fontSize:13, fontWeight:600,
-  });
+  const secBtn = () => ({ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", borderBottom:"1px solid #f3f4f6", padding:"12px 0", cursor:"pointer", fontFamily:"inherit", color:"#374151", fontSize:13, fontWeight:600 });
 
   return (
     <>
       <div style={{ marginBottom:4 }}>
-        <button style={secBtn(abertos.cadastro)} onClick={()=>toggle("cadastro")}>
+        <button style={secBtn()} onClick={()=>toggle("cadastro")}>
           <span>Endereço e contatos</span>
-          <span style={{ fontSize:11, color:"#9ca3af" }}>{abertos.cadastro ? "▲" : "▼"}</span>
+          <span style={{ fontSize:11, color:"#9ca3af" }}>{abertos.cadastro?"▲":"▼"}</span>
         </button>
         {abertos.cadastro && (
-          <div style={{ padding:"16px 0", display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, borderBottom:"1px solid #f3f4f6", marginBottom:4 }}>
+          <div style={{ padding:"16px 0", display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, borderBottom:"1px solid #f3f4f6" }}>
             <div>
               <div style={C.secTit}>Endereço</div>
-              {[["CEP", cliente.cep],["Logradouro", `${cliente.logradouro||""}${cliente.numero?", "+cliente.numero:""}${cliente.complemento?" - "+cliente.complemento:""}`],["Bairro", cliente.bairro],["Cidade", `${cliente.cidade||""} — ${cliente.estado||""}`]].map(([l,v]) => (
-                <div key={l} style={C.row}>
-                  <span style={{ fontSize:12, color:"#9ca3af" }}>{l}</span>
-                  <span style={{ fontSize:13, color:"#374151" }}>{v || "—"}</span>
-                </div>
+              {[["CEP",cliente.cep],["Logradouro",`${cliente.logradouro||""}${cliente.numero?", "+cliente.numero:""}${cliente.complemento?" - "+cliente.complemento:""}`],["Bairro",cliente.bairro],["Cidade",`${cliente.cidade||""} — ${cliente.estado||""}`]].map(([l,v])=>(
+                <div key={l} style={C.row}><span style={{fontSize:12,color:"#9ca3af"}}>{l}</span><span style={{fontSize:13,color:"#374151"}}>{v||"—"}</span></div>
               ))}
             </div>
             <div>
               <div style={C.secTit}>Contatos</div>
-              {cliente.contatos?.map(ct => (
-                <div key={ct.id} style={{ ...C.row, alignItems:"center" }}>
+              {cliente.contatos?.map(ct=>(
+                <div key={ct.id} style={{...C.row,alignItems:"center"}}>
                   <div>
-                    <div style={{ fontSize:13, fontWeight:600, color:"#111" }}>{ct.nome} <span style={{ fontWeight:400, color:"#9ca3af" }}>({ct.cargo})</span></div>
-                    <div style={{ fontSize:12, color:"#6b7280", marginTop:2 }}>{ct.telefone}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:"#111"}}>{ct.nome} <span style={{fontWeight:400,color:"#9ca3af"}}>({ct.cargo})</span></div>
+                    <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{ct.telefone}</div>
                   </div>
-                  {ct.whatsapp && ct.telefone && (
-                    <a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer"
-                      style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px" }}>
-                      WhatsApp
-                    </a>
-                  )}
+                  {ct.whatsapp&&ct.telefone&&<a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#16a34a",textDecoration:"none",border:"1px solid #e5e7eb",borderRadius:6,padding:"4px 10px"}}>WhatsApp</a>}
                 </div>
               ))}
             </div>
@@ -2038,20 +2029,18 @@ function ClienteExpandivel({ cliente, data, waLink }) {
         )}
       </div>
       <div>
-        <button style={secBtn(abertos.financeiro)} onClick={()=>toggle("financeiro")}>
+        <button style={secBtn()} onClick={()=>toggle("financeiro")}>
           <span>Financeiro</span>
-          <span style={{ fontSize:11, color:"#9ca3af" }}>{abertos.financeiro ? "▲" : "▼"}</span>
+          <span style={{fontSize:11,color:"#9ca3af"}}>{abertos.financeiro?"▲":"▼"}</span>
         </button>
-        {abertos.financeiro && (
-          <div style={{ padding:"16px 0", borderBottom:"1px solid #f3f4f6" }}>
-            {lancsCli.length === 0 ? (
-              <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Nenhum lançamento para este cliente.</p>
-            ) : (
+        {abertos.financeiro&&(
+          <div style={{padding:"16px 0",borderBottom:"1px solid #f3f4f6"}}>
+            {lancsCli.length===0?<p style={{color:"#9ca3af",fontSize:13,margin:0}}>Nenhum lançamento.</p>:(
               <div style={C.grid3}>
-                {[["Receita total", totalContabil, "#2563eb"],["Recebido", totalRecebido, "#16a34a"],["A receber", totalReceber, "#d97706"]].map(([l,v,cor]) => (
-                  <div key={l} style={{ border:"1px solid #e5e7eb", borderRadius:10, padding:"14px" }}>
-                    <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>{l}</div>
-                    <div style={{ fontSize:16, fontWeight:700, color:cor }}>{fmtV(v)}</div>
+                {[["Receita total",totalContabil,"#2563eb"],["Recebido",totalRecebido,"#16a34a"],["A receber",totalReceber,"#d97706"]].map(([l,v,cor])=>(
+                  <div key={l} style={{border:"1px solid #e5e7eb",borderRadius:10,padding:"14px"}}>
+                    <div style={{fontSize:11,color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{l}</div>
+                    <div style={{fontSize:16,fontWeight:700,color:cor}}>{fmtV(v)}</div>
                   </div>
                 ))}
               </div>
@@ -2062,17 +2051,20 @@ function ClienteExpandivel({ cliente, data, waLink }) {
     </>
   );
 }
+
 function Clientes({ data, save }) {
-  const [view, setView]             = useState("list");
-  const [sel, setSel]               = useState(null);
-  const [busca, setBusca]           = useState("");
-  const [filtroTipo, setFiltroTipo] = useState("todos");
+  const [view, setView]               = useState("kanban");
+  const [sel, setSel]                 = useState(null);
+  const [busca, setBusca]             = useState("");
+  const [dragId, setDragId]           = useState(null);
+  const [dragOver, setDragOver]       = useState(null);
 
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
     complemento:"", bairro:"", cidade:"", estado:"SP",
     contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
     observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
+    status:"",
     servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
   };
   const [form, setForm] = useState(emptyCliente);
@@ -2087,13 +2079,18 @@ function Clientes({ data, save }) {
       ? data.clientes.map(c => c.id === form.id ? form : c)
       : [...data.clientes, { ...form, id: uid() }];
     save({ ...data, clientes: novos });
-    setView("list");
+    setView("kanban");
   }
 
   function removeCliente(id) {
     if (!confirm("Remover cliente?")) return;
     save({ ...data, clientes: data.clientes.filter(c => c.id !== id) });
-    setView("list");
+    setView("kanban");
+  }
+
+  function moverCliente(id, novoStatus) {
+    const novos = data.clientes.map(c => c.id === id ? {...c, status: novoStatus} : c);
+    save({ ...data, clientes: novos });
   }
 
   function waLink(telefone, msg = "") {
@@ -2112,86 +2109,137 @@ function Clientes({ data, save }) {
     } catch {}
   }
 
+  // ── KANBAN ───────────────────────────────────────────────────
+  if (view === "kanban") {
+    const filtrados = data.clientes.filter(c => {
+      if (!busca) return true;
+      const b = busca.toLowerCase();
+      return c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
+    });
+
+    return (
+      <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", height:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+        {/* Header */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <div>
+            <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
+            <div style={{ fontSize:13, color:"#9ca3af", marginTop:2 }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
+          </div>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
+            <button style={C.btnSec} onClick={() => setView("list")}>Lista</button>
+            <button style={C.btn} onClick={openNew}>+ Novo cliente</button>
+          </div>
+        </div>
+
+        {/* Kanban */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, flex:1, overflowY:"hidden" }}>
+          {COLUNAS.map(col => {
+            const cards = filtrados.filter(c => (c.status||"") === col.key);
+            const isOver = dragOver === col.key;
+            return (
+              <div key={col.key}
+                style={{ background: isOver ? col.cor+"08" : "#fafafa", border:`1px solid ${isOver ? col.cor : "#f3f4f6"}`, borderRadius:12, display:"flex", flexDirection:"column", transition:"border-color 0.15s, background 0.15s" }}
+                onDragOver={e => { e.preventDefault(); setDragOver(col.key); }}
+                onDragLeave={() => setDragOver(null)}
+                onDrop={e => { e.preventDefault(); if (dragId) moverCliente(dragId, col.key); setDragId(null); setDragOver(null); }}>
+                {/* Header coluna */}
+                <div style={{ padding:"14px 16px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <div style={{ width:8, height:8, borderRadius:"50%", background:col.cor }} />
+                    <span style={{ fontSize:13, fontWeight:600, color:"#374151" }}>{col.label}</span>
+                  </div>
+                  <span style={{ fontSize:12, color:"#9ca3af", background:"#f3f4f6", borderRadius:10, padding:"1px 8px" }}>{cards.length}</span>
+                </div>
+                {/* Cards */}
+                <div style={{ flex:1, overflowY:"auto", padding:"10px 10px" }}>
+                  {cards.map(c => {
+                    const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
+                    const corAv = c.tipo==="PJ" ? "#7c3aed" : "#2563eb";
+                    const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone || c.contatos?.[0]?.telefone || "";
+                    return (
+                      <div key={c.id}
+                        draggable
+                        onDragStart={() => setDragId(c.id)}
+                        onDragEnd={() => { setDragId(null); setDragOver(null); }}
+                        onClick={() => openDetail(c)}
+                        style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"12px", marginBottom:8, cursor:"grab", transition:"box-shadow 0.15s, opacity 0.15s", opacity: dragId===c.id ? 0.4 : 1, boxShadow: dragId===c.id ? "0 4px 12px rgba(0,0,0,0.1)" : "none" }}
+                        onMouseEnter={e=>e.currentTarget.style.borderColor="#111"}
+                        onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                          <div style={{ width:32, height:32, borderRadius:8, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>
+                            {iniciais}
+                          </div>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.nome}</div>
+                            <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>{c.cidade||c.cpfCnpj||""}</div>
+                          </div>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                          <span style={C.tag(corAv)}>{c.tipo}</span>
+                          <div style={{ display:"flex", gap:4 }} onClick={e=>e.stopPropagation()}>
+                            {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 7px" }}>WA</a>}
+                            <button onClick={()=>openEdit(c)} style={{ fontSize:11, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 7px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {cards.length === 0 && (
+                    <div style={{ textAlign:"center", padding:"24px 0", color:"#d1d5db", fontSize:12 }}>
+                      Arraste um cliente aqui
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // ── LISTA ───────────────────────────────────────────────────
   if (view === "list") {
     const filtrados = data.clientes.filter(c => {
       const b = busca.toLowerCase();
-      const matchBusca = !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b) || (c.contatos||[]).some(ct => (ct.telefone||"").includes(b));
-      const matchTipo = filtroTipo === "todos" || c.tipo === filtroTipo;
-      return matchBusca && matchTipo;
+      return !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
     });
-
     return (
       <div style={{ padding:"28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
-          <div>
-            <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
-            <div style={{ fontSize:13, color:"#9ca3af", marginTop:2 }}>{data.clientes.length} cadastrado{data.clientes.length !== 1 ? "s" : ""}</div>
-          </div>
-          <button style={C.btn} onClick={openNew}>+ Novo cliente</button>
-        </div>
-        <div style={{ display:"flex", gap:10, marginBottom:20, alignItems:"center" }}>
-          <input style={{ ...C.input, maxWidth:320 }} placeholder="Buscar por nome, CPF ou cidade..."
-            value={busca} onChange={e => setBusca(e.target.value)} />
-          <div style={{ display:"flex", gap:4 }}>
-            {[["todos","Todos"],["PF","PF"],["PJ","PJ"]].map(([k,l]) => (
-              <button key={k} onClick={() => setFiltroTipo(k)}
-                style={{ border:"1px solid #e5e7eb", borderRadius:7, padding:"7px 14px", fontSize:12, fontWeight: filtroTipo===k ? 600 : 400, background: filtroTipo===k ? "#111" : "#fff", color: filtroTipo===k ? "#fff" : "#6b7280", cursor:"pointer", fontFamily:"inherit" }}>
-                {l}
-              </button>
-            ))}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+          <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
+          <div style={{ display:"flex", gap:8 }}>
+            <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
+            <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>
+            <button style={C.btn} onClick={openNew}>+ Novo cliente</button>
           </div>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:24 }}>
-          {[["Total", data.clientes.length],["Ativos", data.clientes.filter(c=>c.ativo).length],["PF", data.clientes.filter(c=>c.tipo==="PF").length],["PJ", data.clientes.filter(c=>c.tipo==="PJ").length]].map(([l,v]) => (
-            <div key={l} style={{ border:"1px solid #f3f4f6", borderRadius:10, padding:"14px 16px", background:"#fafafa" }}>
-              <div style={{ fontSize:11, color:"#9ca3af", fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>{l}</div>
-              <div style={{ fontSize:22, fontWeight:700, color:"#111" }}>{v}</div>
-            </div>
-          ))}
-        </div>
-        {filtrados.length === 0 ? (
-          <div style={{ textAlign:"center", padding:"60px 0", color:"#d1d5db" }}>
-            <div style={{ fontSize:14, marginBottom:12 }}>Nenhum cliente encontrado</div>
-            <button style={C.btn} onClick={openNew}>Cadastrar primeiro cliente</button>
-          </div>
-        ) : (
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {filtrados.map(c => {
-              const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
-              const corAvatar = c.tipo === "PJ" ? "#7c3aed" : "#2563eb";
-              const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone || c.contatos?.[0]?.telefone || "";
-              return (
-                <div key={c.id} style={{ ...C.card, display:"flex", alignItems:"center", gap:14 }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor="#111"}
-                  onMouseLeave={e => e.currentTarget.style.borderColor="#e5e7eb"}
-                  onClick={() => openDetail(c)}>
-                  <div style={{ width:40, height:40, borderRadius:10, background:corAvatar+"15", color:corAvatar, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>
-                    {iniciais}
-                  </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:14, fontWeight:600, color:"#111", marginBottom:2 }}>{c.nome}</div>
-                    <div style={{ fontSize:12, color:"#9ca3af" }}>{c.cpfCnpj}{c.cidade ? ` · ${c.cidade}` : ""}</div>
-                  </div>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-                    <span style={C.tag(c.tipo==="PJ"?"#7c3aed":"#2563eb")}>{c.tipo}</span>
-                    <span style={C.tag(c.ativo?"#16a34a":"#dc2626")}>{c.ativo?"Ativo":"Inativo"}</span>
-                    {tel && (
-                      <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                        style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px" }}>
-                        WA
-                      </a>
-                    )}
-                    <button onClick={e => { e.stopPropagation(); openEdit(c); }}
-                      style={{ fontSize:12, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
-                      Editar
-                    </button>
-                  </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {filtrados.map(c => {
+            const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
+            const corAv = c.tipo==="PJ"?"#7c3aed":"#2563eb";
+            const col = COLUNAS.find(x=>x.key===(c.status||"")) || COLUNAS[0];
+            const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
+            return (
+              <div key={c.id} style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="#111"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}
+                onClick={()=>openDetail(c)}>
+                <div style={{ width:40, height:40, borderRadius:10, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>{c.nome}</div>
+                  <div style={{ fontSize:12, color:"#9ca3af" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
+                  <span style={C.tag(col.cor)}>{col.label||"Sem status"}</span>
+                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px" }}>WA</a>}
+                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     );
   }
@@ -2200,25 +2248,29 @@ function Clientes({ data, save }) {
   if (view === "detail" && sel) {
     const cliente = data.clientes.find(c => c.id === sel.id) || sel;
     const iniciais = cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
-    const corAvatar = cliente.tipo === "PJ" ? "#7c3aed" : "#2563eb";
+    const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
+    const col = COLUNAS.find(x=>x.key===(cliente.status||""))||COLUNAS[0];
     return (
       <div style={{ padding:"28px 32px", maxWidth:780, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
-          <button style={C.btnGhost} onClick={() => setView("list")}>← Voltar</button>
+          <button style={C.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
           <div style={{ flex:1 }} />
-          <button style={C.btnSec} onClick={() => openEdit(cliente)}>Editar</button>
-          <button style={{ ...C.btnGhost, color:"#dc2626" }} onClick={() => removeCliente(cliente.id)}>Remover</button>
+          {/* Mover de status */}
+          <select value={cliente.status||""} onChange={e=>moverCliente(cliente.id, e.target.value)}
+            style={{ ...C.input, width:"auto", fontSize:12, padding:"6px 10px", cursor:"pointer" }}>
+            {COLUNAS.map(x=><option key={x.key} value={x.key}>{x.label}</option>)}
+          </select>
+          <button style={C.btnSec} onClick={()=>openEdit(cliente)}>Editar</button>
+          <button style={{...C.btnGhost,color:"#dc2626"}} onClick={()=>removeCliente(cliente.id)}>Remover</button>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:28 }}>
-          <div style={{ width:56, height:56, borderRadius:14, background:corAvatar+"15", color:corAvatar, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:700, flexShrink:0 }}>
-            {iniciais}
-          </div>
+          <div style={{ width:56, height:56, borderRadius:14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
           <div>
             <div style={{ fontSize:20, fontWeight:700, color:"#111" }}>{cliente.nome}</div>
             <div style={{ fontSize:13, color:"#9ca3af", marginTop:3, display:"flex", alignItems:"center", gap:6 }}>
               {cliente.cpfCnpj}
-              <span style={C.tag(corAvatar)}>{cliente.tipo}</span>
-              <span style={C.tag(cliente.ativo?"#16a34a":"#dc2626")}>{cliente.ativo?"Ativo":"Inativo"}</span>
+              <span style={C.tag(corAv)}>{cliente.tipo}</span>
+              <span style={C.tag(col.cor)}>{col.label||"Sem status"}</span>
             </div>
           </div>
         </div>
@@ -2233,16 +2285,25 @@ function Clientes({ data, save }) {
   return (
     <div style={{ padding:"28px 32px", maxWidth:680, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
-        <button style={C.btnGhost} onClick={() => setView("list")}>← Voltar</button>
-        <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>{form.id ? "Editar cliente" : "Novo cliente"}</div>
+        <button style={C.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
+        <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
       </div>
       <div style={{ marginBottom:20 }}>
         <div style={C.secTit}>Tipo de pessoa</div>
         <div style={{ display:"flex", gap:8 }}>
-          {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l]) => (
-            <button key={v} onClick={() => setForm({...form,tipo:v})}
-              style={{ border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight: form.tipo===v ? 600 : 400, background: form.tipo===v ? "#111" : "#fff", color: form.tipo===v ? "#fff" : "#6b7280", cursor:"pointer", fontFamily:"inherit" }}>
-              {l}
+          {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
+            <button key={v} onClick={()=>setForm({...form,tipo:v})}
+              style={{ border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+          ))}
+        </div>
+      </div>
+      <div style={{ marginBottom:20 }}>
+        <div style={C.secTit}>Status</div>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {COLUNAS.map(col=>(
+            <button key={col.key} onClick={()=>setForm({...form,status:col.key})}
+              style={{ border:`1px solid ${form.status===col.key?col.cor:"#e5e7eb"}`, borderRadius:8, padding:"7px 16px", fontSize:12, fontWeight:form.status===col.key?600:400, background:form.status===col.key?col.cor+"15":"#fff", color:form.status===col.key?col.cor:"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>
+              {col.label||"Sem status"}
             </button>
           ))}
         </div>
@@ -2250,70 +2311,64 @@ function Clientes({ data, save }) {
       <hr style={C.divider} />
       <div style={{ marginBottom:20 }}>
         <div style={C.secTit}>Dados principais</div>
-        <div style={{ ...C.grid2, marginBottom:14 }}>
+        <div style={{...C.grid2,marginBottom:14}}>
           <div><label style={C.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input style={C.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
           <div><label style={C.label}>{form.tipo==="PJ"?"CNPJ":"CPF"}</label><input style={C.input} value={form.cpfCnpj} onChange={e=>setForm({...form,cpfCnpj:e.target.value})} /></div>
         </div>
-        <div style={{ ...C.grid2, marginBottom:14 }}>
+        <div style={{...C.grid2,marginBottom:14}}>
           <div><label style={C.label}>E-mail</label><input style={C.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
           <div><label style={C.label}>Cliente desde</label><input style={C.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
         </div>
-        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151" }}>
-          <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} />
-          Cliente ativo
+        <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"#374151"}}>
+          <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
         </label>
       </div>
       <hr style={C.divider} />
       <div style={{ marginBottom:20 }}>
         <div style={C.secTit}>Endereço</div>
-        <div style={{ ...C.grid3, marginBottom:14 }}>
+        <div style={{...C.grid3,marginBottom:14}}>
           <div><label style={C.label}>CEP</label><input style={C.input} value={form.cep} onChange={e=>{setForm({...form,cep:e.target.value});buscarCEP(e.target.value);}} placeholder="00000-000" /></div>
           <div><label style={C.label}>Logradouro</label><input style={C.input} value={form.logradouro} onChange={e=>setForm({...form,logradouro:e.target.value})} /></div>
           <div><label style={C.label}>Número</label><input style={C.input} value={form.numero} onChange={e=>setForm({...form,numero:e.target.value})} /></div>
         </div>
-        <div style={{ ...C.grid3, marginBottom:14 }}>
+        <div style={{...C.grid3,marginBottom:14}}>
           <div><label style={C.label}>Complemento</label><input style={C.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>
           <div><label style={C.label}>Bairro</label><input style={C.input} value={form.bairro} onChange={e=>setForm({...form,bairro:e.target.value})} /></div>
           <div><label style={C.label}>Cidade</label><input style={C.input} value={form.cidade} onChange={e=>setForm({...form,cidade:e.target.value})} /></div>
         </div>
-        <div style={{ maxWidth:120 }}>
-          <label style={C.label}>Estado</label>
-          <select style={{ ...C.input, cursor:"pointer" }} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
-            {ESTADOS_BR.map(e=><option key={e}>{e}</option>)}
-          </select>
-        </div>
+        <div style={{maxWidth:120}}><label style={C.label}>Estado</label><select style={{...C.input,cursor:"pointer"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_BR.map(e=><option key={e}>{e}</option>)}</select></div>
       </div>
       <hr style={C.divider} />
       <div style={{ marginBottom:20 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
           <div style={C.secTit}>Contatos</div>
           <button style={C.btnSec} onClick={()=>setForm({...form,contatos:[...form.contatos,{id:uid(),nome:"",telefone:"",cargo:"",whatsapp:false}]})}>+ Adicionar</button>
         </div>
-        {form.contatos?.map((ct,i) => (
-          <div key={ct.id} style={{ border:"1px solid #f3f4f6", borderRadius:10, padding:"14px", marginBottom:10 }}>
-            <div style={{ ...C.grid3, marginBottom:10 }}>
+        {form.contatos?.map((ct,i)=>(
+          <div key={ct.id} style={{border:"1px solid #f3f4f6",borderRadius:10,padding:"14px",marginBottom:10}}>
+            <div style={{...C.grid3,marginBottom:10}}>
               <div><label style={C.label}>Nome</label><input style={C.input} value={ct.nome} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:e.target.value}:x)})} /></div>
               <div><label style={C.label}>Telefone</label><input style={C.input} value={ct.telefone} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:e.target.value}:x)})} /></div>
               <div><label style={C.label}>Cargo</label><input style={C.input} value={ct.cargo} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:e.target.value}:x)})} /></div>
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", fontSize:13, color:"#374151" }}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13,color:"#374151"}}>
                 <input type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
-                <span style={{ color:"#16a34a" }}>WhatsApp</span>
+                <span style={{color:"#16a34a"}}>WhatsApp</span>
               </label>
-              {form.contatos.length > 1 && <button style={{ ...C.btnGhost, color:"#dc2626", fontSize:12 }} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
+              {form.contatos.length>1&&<button style={{...C.btnGhost,color:"#dc2626",fontSize:12}} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
             </div>
           </div>
         ))}
       </div>
       <hr style={C.divider} />
-      <div style={{ marginBottom:28 }}>
+      <div style={{marginBottom:28}}>
         <div style={C.secTit}>Observações internas</div>
-        <textarea style={{ ...C.input, resize:"vertical" }} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} />
+        <textarea style={{...C.input,resize:"vertical"}} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} />
       </div>
-      <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-        <button style={C.btnSec} onClick={() => setView("list")}>Cancelar</button>
-        <button style={C.btn} onClick={saveCliente}>{form.id ? "Salvar alterações" : "Cadastrar cliente"}</button>
+      <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+        <button style={C.btnSec} onClick={()=>setView("kanban")}>Cancelar</button>
+        <button style={C.btn} onClick={saveCliente}>{form.id?"Salvar alterações":"Cadastrar cliente"}</button>
       </div>
     </div>
   );
