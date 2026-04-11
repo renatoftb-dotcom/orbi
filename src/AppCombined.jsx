@@ -2057,7 +2057,7 @@ function Clientes({ data, save }) {
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
   const [dragId, setDragId]           = useState(null);
-  const [orcView, setOrcView] = useState(null); // { cliente, orcBase }
+  const [orcView, setOrcView]         = useState(null);
   const [dragOver, setDragOver]       = useState(null);
 
   const emptyCliente = {
@@ -2252,7 +2252,7 @@ function Clientes({ data, save }) {
       const maxSeq = todos.reduce((mx,o)=>{const m=(o.id||"").match(/^ORC-(\d+)$/);return m?Math.max(mx,parseInt(m[1])):mx;},0);
       const novo = {...orc, clienteId:orcView.cliente.id, cliente:orcView.cliente.nome, whatsapp:orcView.cliente.contatos?.find(c=>c.whatsapp)?.telefone||"", id:orc.id||"ORC-"+String(maxSeq+1).padStart(4,"0"), criadoEm:orc.criadoEm||new Date().toISOString()};
       const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
-      setOrcView({...orcView, orcBase:novo});
+      setOrcView(null);
       save({...data, orcamentosProjeto:novos}).catch(console.error);
     }
     return (
@@ -2265,32 +2265,12 @@ function Clientes({ data, save }) {
       />
     );
   }
+
   if (view === "detail" && sel) {
     const cliente = data.clientes.find(c => c.id === sel.id) || sel;
     const iniciais = cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===(cliente.status||""))||COLUNAS[0];
-
-    // subView de orçamento — tela cheia
-    if (view === "detail" && sel._subView === "orcamento") {
-      async function salvarOrcTela(orc) {
-        const todos = data.orcamentosProjeto || [];
-        const maxSeq = todos.reduce((mx,o)=>{const m=(o.id||"").match(/^ORC-(\d+)$/);return m?Math.max(mx,parseInt(m[1])):mx;},0);
-        const novo = {...orc, clienteId:cliente.id, cliente:cliente.nome, whatsapp:cliente.contatos?.find(c=>c.whatsapp)?.telefone||"", id:orc.id||"ORC-"+String(maxSeq+1).padStart(4,"0"), criadoEm:orc.criadoEm||new Date().toISOString()};
-        const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
-        setSel({...sel, _subView:null, _orcBase:novo});
-        save({...data, orcamentosProjeto:novos}).catch(console.error);
-      }
-      return (
-        <FormOrcamentoProjetoTeste
-          clienteNome={cliente.nome}
-          clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""}
-          onSalvar={salvarOrcTela}
-          orcBase={sel._orcBase||null}
-          onVoltar={()=>setSel({...sel, _subView:null, _orcBase:null})}
-        />
-      );
-    }
 
     return (
       <div style={{ padding:"28px 32px", maxWidth:780, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
@@ -2318,11 +2298,11 @@ function Clientes({ data, save }) {
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
         <hr style={C.divider} />
         <ServicosPanel
-  cliente={cliente}
-  data={data}
-  save={save}
-  onAbrirOrcamento={(orc)=>setOrcView({cliente, orcBase:orc||null})}
-           />
+          cliente={cliente}
+          data={data}
+          save={save}
+          onAbrirOrcamento={(orc)=>setOrcView({cliente, orcBase:orc||null})}
+        />
       </div>
     );
   }
