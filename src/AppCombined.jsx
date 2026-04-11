@@ -1981,7 +1981,7 @@ const C = {
 };
 
 const COLUNAS = [
-  { key:"",             label:"Sem status",    cor:"#9ca3af" },
+  { key:"",             label:"Leads",         cor:"#9ca3af" },
   { key:"orcamento",    label:"Em orçamento",  cor:"#f59e0b" },
   { key:"estudo",       label:"Em estudo",     cor:"#3b82f6" },
   { key:"andamento",    label:"Em andamento",  cor:"#10b981" },
