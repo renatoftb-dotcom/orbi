@@ -358,7 +358,7 @@ function PropostaPreview({ data, onVoltar }) {
       const engTotal = engCI;
       const grandTotal = totCI;
       const engUnit = engCI;
-      const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoFinal: arqTotal, precoTotal: arqTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
+      const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
       const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
       const fmtM2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m²";
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:data.etapasPct, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, criadoEm:new Date().toISOString(), resultado:r };
