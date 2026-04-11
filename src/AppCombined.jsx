@@ -407,6 +407,218 @@ var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura",
 
 
 // ════════════════════════════════════════════════════════════
+// api.js
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// ORBI — API Client
+// Substitui o DB (localStorage/window.storage) pelo backend real
+// ═══════════════════════════════════════════════════════════════
+
+const API_URL = "http://localhost:3000";
+
+async function req(method, path, body) {
+  const res = await fetch(`${API_URL}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json();
+  if (!json.ok) throw new Error(json.error || "Erro na API");
+  return json.data;
+}
+
+const get  = (path)        => req("GET",    path);
+const post = (path, body)  => req("POST",   path, body);
+const put  = (path, body)  => req("PUT",    path, body);
+const del  = (path)        => req("DELETE", path);
+
+// ── Clientes ───────────────────────────────────────────────────
+const api = {
+  clientes: {
+    list:   ()       => get("/api/clientes"),
+    get:    (id)     => get(`/api/clientes/${id}`),
+    save:   (c)      => post("/api/clientes", c),
+    update: (id, c)  => put(`/api/clientes/${id}`, c),
+    delete: (id)     => del(`/api/clientes/${id}`),
+  },
+
+  fornecedores: {
+    list:   ()       => get("/api/fornecedores"),
+    save:   (f)      => post("/api/fornecedores", f),
+    update: (id, f)  => put(`/api/fornecedores/${id}`, f),
+    delete: (id)     => del(`/api/fornecedores/${id}`),
+  },
+
+  materiais: {
+    list:   ()       => get("/api/materiais"),
+    save:   (m)      => post("/api/materiais", m),
+    delete: (id)     => del(`/api/materiais/${id}`),
+  },
+
+  obras: {
+    list:   ()       => get("/api/obras"),
+    save:   (o)      => post("/api/obras", o),
+    delete: (id)     => del(`/api/obras/${id}`),
+  },
+
+  lancamentos: {
+    list:   ()       => get("/api/lancamentos"),
+    save:   (l)      => post("/api/lancamentos", l),
+    delete: (id)     => del(`/api/lancamentos/${id}`),
+  },
+
+  orcamentos: {
+    list:       (clienteId) => get(`/api/orcamentos${clienteId ? `?clienteId=${clienteId}` : ""}`),
+    save:       (o)         => post("/api/orcamentos", o),
+    update:     (id, o)     => put(`/api/orcamentos/${id}`, o),
+    delete:     (id)        => del(`/api/orcamentos/${id}`),
+  },
+
+  receitas: {
+    list:           (filtros)    => get(`/api/receitas${filtros ? `?${new URLSearchParams(filtros)}` : ""}`),
+    save:           (r)          => post("/api/receitas", r),
+    batch:          (receitas)   => post("/api/receitas/batch", { receitas }),
+    delete:         (id)         => del(`/api/receitas/${id}`),
+    deleteByOrc:    (orcId)      => del(`/api/receitas/por-orcamento/${orcId}`),
+  },
+
+  escritorio: {
+    get:    ()  => get("/api/escritorio"),
+    save:   (e) => put("/api/escritorio", e),
+  },
+
+  logo: {
+    get:  ()      => get("/api/logo"),
+    save: (data)  => put("/api/logo", { data }),
+  },
+
+  config: {
+    get:  (chave)        => get(`/api/config/${chave}`),
+    save: (chave, dados) => put(`/api/config/${chave}`, dados),
+  },
+
+  backup: {
+    exportar: () => get("/api/backup"),
+    importar: (dados) => post("/api/backup/importar", dados),
+  },
+
+  health: () => get("/api/health"),
+};
+
+// ── Carrega todos os dados de uma vez (compatível com o data object atual) ──
+// Substitui o DB.get("obramanager-v1")
+async function loadAllData() {
+  const [
+    clientes,
+    fornecedores,
+    materiais,
+    obras,
+    lancamentos,
+    orcamentosProjeto,
+    receitasFinanceiro,
+    escritorio,
+  ] = await Promise.all([
+    api.clientes.list(),
+    api.fornecedores.list(),
+    api.materiais.list(),
+    api.obras.list(),
+    api.lancamentos.list(),
+    api.orcamentos.list(),
+    api.receitas.list(),
+    api.escritorio.get(),
+  ]);
+
+  return {
+    clientes,
+    fornecedores,
+    materiais,
+    obras,
+    lancamentos,
+    orcamentosProjeto,
+    receitasFinanceiro,
+    escritorio: escritorio || {},
+  };
+}
+
+// ── Salva todos os dados (compatível com o save(newData) atual) ──
+// Substitui o DB.set("obramanager-v1", newData)
+// Por enquanto faz um diff simples — no futuro cada módulo salva individualmente
+async function saveAllData(newData, oldData = {}) {
+  const tasks = [];
+
+  // Clientes
+  const clientesNovos = (newData.clientes || []).filter(
+    c => !oldData.clientes?.find(o => o.id === c.id && JSON.stringify(o) === JSON.stringify(c))
+  );
+  const clientesRemovidos = (oldData.clientes || []).filter(
+    o => !newData.clientes?.find(c => c.id === o.id)
+  );
+  clientesNovos.forEach(c => tasks.push(api.clientes.save(c)));
+  clientesRemovidos.forEach(c => tasks.push(api.clientes.delete(c.id)));
+
+  // Fornecedores
+  const fornsNovos = (newData.fornecedores || []).filter(
+    f => !oldData.fornecedores?.find(o => o.id === f.id && JSON.stringify(o) === JSON.stringify(f))
+  );
+  const fornsRemovidos = (oldData.fornecedores || []).filter(
+    o => !newData.fornecedores?.find(f => f.id === o.id)
+  );
+  fornsNovos.forEach(f => tasks.push(api.fornecedores.save(f)));
+  fornsRemovidos.forEach(f => tasks.push(api.fornecedores.delete(f.id)));
+
+  // Orçamentos
+  const orcsNovos = (newData.orcamentosProjeto || []).filter(
+    o => !oldData.orcamentosProjeto?.find(a => a.id === o.id && JSON.stringify(a) === JSON.stringify(o))
+  );
+  const orcsRemovidos = (oldData.orcamentosProjeto || []).filter(
+    a => !newData.orcamentosProjeto?.find(o => o.id === a.id)
+  );
+  orcsNovos.forEach(o => tasks.push(api.orcamentos.save(o)));
+  orcsRemovidos.forEach(o => tasks.push(api.orcamentos.delete(o.id)));
+
+  // Receitas
+  const recNovos = (newData.receitasFinanceiro || []).filter(
+    r => !oldData.receitasFinanceiro?.find(a => a.id === r.id && JSON.stringify(a) === JSON.stringify(r))
+  );
+  const recRemovidos = (oldData.receitasFinanceiro || []).filter(
+    a => !newData.receitasFinanceiro?.find(r => r.id === a.id)
+  );
+  recNovos.forEach(r => tasks.push(api.receitas.save(r)));
+  recRemovidos.forEach(r => tasks.push(api.receitas.delete(r.id)));
+
+  // Obras
+  const obrasNovas = (newData.obras || []).filter(
+    o => !oldData.obras?.find(a => a.id === o.id && JSON.stringify(a) === JSON.stringify(o))
+  );
+  const obrasRemovidas = (oldData.obras || []).filter(
+    a => !newData.obras?.find(o => o.id === a.id)
+  );
+  obrasNovas.forEach(o => tasks.push(api.obras.save(o)));
+  obrasRemovidas.forEach(o => tasks.push(api.obras.delete(o.id)));
+
+  // Lançamentos
+  const lancsNovos = (newData.lancamentos || []).filter(
+    l => !oldData.lancamentos?.find(a => a.id === l.id && JSON.stringify(a) === JSON.stringify(l))
+  );
+  const lancsRemovidos = (oldData.lancamentos || []).filter(
+    a => !newData.lancamentos?.find(l => l.id === a.id)
+  );
+  lancsNovos.forEach(l => tasks.push(api.lancamentos.save(l)));
+  lancsRemovidos.forEach(l => tasks.push(api.lancamentos.delete(l.id)));
+
+  // Escritório
+  if (newData.escritorio && JSON.stringify(newData.escritorio) !== JSON.stringify(oldData.escritorio)) {
+    tasks.push(api.escritorio.save(newData.escritorio));
+  }
+
+  await Promise.all(tasks);
+}
+
+
+
+
+// ════════════════════════════════════════════════════════════
 // outros.jsx
 // ════════════════════════════════════════════════════════════
 
@@ -875,361 +1087,6 @@ function Financeiro({ data, save }) {
           </table>
         </div>
       )}
-    </div>
-  );
-}
-
-function Escritorio({ data, save }) {
-  const cfg = data.escritorio || {};
-  const temDados = !!(cfg.nome);
-  const [pagina, setPagina] = useState(temDados ? "view" : "input");
-  const [form, setForm] = useState({
-    nome:        cfg.nome        || "",
-    cnpj:        cfg.cnpj        || "",
-    email:       cfg.email       || "",
-    telefone:    cfg.telefone    || "",
-    endereco:    cfg.endereco    || "",
-    cidade:      cfg.cidade      || "",
-    estado:      cfg.estado      || "SP",
-    responsavel: cfg.responsavel || "",
-    cau:         cfg.cau         || "",
-    site:        cfg.site        || "",
-    instagram:   cfg.instagram   || "",
-    banco:       cfg.banco       || "",
-    agencia:     cfg.agencia     || "",
-    conta:       cfg.conta       || "",
-    tipoConta:   cfg.tipoConta   || "Corrente",
-    pixTipo:     cfg.pixTipo     || "CNPJ",
-    pixChave:    cfg.pixChave    || "",
-  });
-  const emptyResponsavel = { id:"", nome:"", cau:"", cpf:"" };
-  const [responsaveis, setResponsaveis] = useState(
-    cfg.responsaveis?.length ? cfg.responsaveis
-    : cfg.responsavel ? [{ id:"r1", nome:cfg.responsavel, cau:cfg.cau||"", cpf:cfg.cpfResponsavel||"" }]
-    : []
-  );
-  const [equipe, setEquipe]                    = useState(cfg.equipe || []);
-  const [saved, setSaved]                      = useState(false);
-  const emptyMembro                            = { id:"", nome:"", cargo:"", email:"", telefone:"", cau:"", cpf:"", rg:"", nascimento:"", admissao:"", endereco:"", cidade:"", estado:"", cep:"" };
-  const [novoMembro, setNovoMembro]            = useState(emptyMembro);
-  const [novoMembroModal, setNovoMembroModal]  = useState(false);
-  const [editandoMembroId, setEditandoMembroId]= useState(null);
-
-  function handleSave() {
-    save({ ...data, escritorio: { ...form, equipe, responsaveis } });
-    setSaved(true);
-    setPagina("view");
-    setTimeout(() => setSaved(false), 2000);
-  }
-  function removerMembro(id) { setEquipe(eq => eq.filter(m => m.id !== id)); }
-
-  const inputStyle = { background:"#0a1122", border:"1px solid #1e293b", borderRadius:7, color:"#f1f5f9", padding:"8px 11px", fontSize:13, outline:"none", fontFamily:"inherit", width:"100%", boxSizing:"border-box" };
-  const secStyle   = { background:"#0d1526", border:"1px solid #1e293b", borderRadius:12, padding:"24px", marginBottom:16 };
-  const labelStyle = { color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 };
-
-  // ─── VIEW ───────────────────────────────────────────────
-  if (pagina === "view") {
-    const V = ({ label, value }) => (
-      <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-        <div style={{ color:"#475569", fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</div>
-        <div style={{ color: value ? "#e2e8f0" : "#334155", fontSize:13, fontStyle: value ? "normal" : "italic" }}>{value || "—"}</div>
-      </div>
-    );
-    return (
-      <div style={{ padding:"32px 28px", maxWidth:900 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
-          <div>
-            <h2 style={{ color:"#f1f5f9", fontWeight:900, fontSize:22, margin:0 }}>🏢 {form.nome || "Escritório"}</h2>
-            <p style={{ color:"#64748b", fontSize:13, marginTop:4 }}>{form.cidade}{form.estado ? ` — ${form.estado}` : ""}</p>
-          </div>
-          <button onClick={() => setPagina("input")} style={{ background:"#1e293b", color:"#94a3b8", border:"1px solid #334155", borderRadius:8, padding:"9px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>✏ Editar</button>
-        </div>
-        <div style={secStyle}>
-          <div style={{ color:"#0ea5e9", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Identificação</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom: responsaveis.length ? 16 : 0 }}>
-            <V label="Nome do Escritório" value={form.nome} />
-            <V label="CNPJ / CPF" value={form.cnpj} />
-          </div>
-          {responsaveis.length > 0 && (
-            <div style={{ marginTop:8 }}>
-              <div style={{ color:"#475569", fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5, marginBottom:10 }}>Responsáveis Técnicos</div>
-              <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:12, padding:"0 14px", marginBottom:4 }}>
-                {["Nome","CAU / CREA","CPF"].map(h => <div key={h} style={{ color:"#475569", fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>{h}</div>)}
-              </div>
-              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                {responsaveis.map((r, idx) => (
-                  <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:12, background:"#0a1122", border:"1px solid #1e293b", borderRadius:8, padding:"10px 14px", alignItems:"center" }}>
-                    <div>
-                      <div style={{ color:"#f1f5f9", fontWeight:600, fontSize:13 }}>{r.nome||"—"}</div>
-                      <div style={{ color:"#64748b", fontSize:11, marginTop:2 }}>Responsável Técnico</div>
-                    </div>
-                    <div style={{ color:"#e2e8f0", fontSize:12 }}>{r.cau||"—"}</div>
-                    <div style={{ color:"#e2e8f0", fontSize:12 }}>{r.cpf||"—"}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <div style={secStyle}>
-          <div style={{ color:"#0ea5e9", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Contato</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-            <V label="E-mail" value={form.email} /><V label="Telefone / WhatsApp" value={form.telefone} />
-            <V label="Site" value={form.site} /><V label="Instagram" value={form.instagram} />
-          </div>
-        </div>
-        <div style={secStyle}>
-          <div style={{ color:"#0ea5e9", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Endereço</div>
-          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 0.5fr", gap:16 }}>
-            <V label="Endereço" value={form.endereco} /><V label="Cidade" value={form.cidade} /><V label="Estado" value={form.estado} />
-          </div>
-        </div>
-        <div style={secStyle}>
-          <div style={{ color:"#10b981", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Dados Bancários</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:16 }}>
-            <V label="Banco" value={form.banco} /><V label="Agência" value={form.agencia} /><V label="Tipo de Conta" value={form.tipoConta} />
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 }}>
-            <V label="Número da Conta" value={form.conta} /><V label="Tipo de Chave PIX" value={form.pixTipo} /><V label="Chave PIX" value={form.pixChave} />
-          </div>
-        </div>
-        <div style={secStyle}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-            <div style={{ color:"#a78bfa", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1 }}>Equipe ({equipe.length})</div>
-            <button onClick={() => setNovoMembroModal(true)} style={{ background:"#7c3aed", color:"#fff", border:"none", borderRadius:7, padding:"7px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>+ Adicionar Membro</button>
-          </div>
-          {equipe.length === 0 ? (
-            <div style={{ textAlign:"center", padding:"24px 0", color:"#334155", fontSize:13 }}>Nenhum membro cadastrado.</div>
-          ) : (
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"2fr 1.2fr 1.2fr 1fr auto", padding:"6px 14px", gap:10 }}>
-                {["Nome / Cargo","Contato","E-mail","CAU / CREA",""].map((h,i) => <div key={i} style={{ color:"#475569", fontSize:10, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>{h}</div>)}
-              </div>
-              {equipe.map((m, idx) => (
-                <div key={m.id} style={{ display:"grid", gridTemplateColumns:"2fr 1.2fr 1.2fr 1fr auto", background: idx%2===0 ? "#0a1122" : "#0d1526", border:"1px solid #1e293b", borderRadius:8, padding:"12px 14px", gap:10, alignItems:"center" }}>
-                  <div><div style={{ color:"#f1f5f9", fontWeight:600, fontSize:13 }}>{m.nome||"—"}</div><div style={{ color:"#64748b", fontSize:11, marginTop:2 }}>{m.cargo||""}</div></div>
-                  <div>{m.telefone ? <a href={"https://wa.me/55"+(m.telefone||"").replace(/\D/g,"")} target="_blank" rel="noopener noreferrer" style={{ color:"#25d366", fontSize:12, textDecoration:"none" }}>💬 {m.telefone}</a> : <span style={{ color:"#334155", fontSize:12 }}>—</span>}</div>
-                  <div style={{ color:"#64748b", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{m.email||"—"}</div>
-                  <div style={{ color:"#64748b", fontSize:12 }}>{m.cau||"—"}</div>
-                  <div style={{ display:"flex", gap:6 }}>
-                    <button onClick={() => { setNovoMembro(m); setEditandoMembroId(m.id); setNovoMembroModal(true); }} style={{ background:"#1e293b", border:"none", borderRadius:5, color:"#94a3b8", padding:"5px 10px", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>✏</button>
-                    <button onClick={() => removerMembro(m.id)} style={{ background:"transparent", border:"none", color:"#f87171", padding:"5px 10px", fontSize:11, cursor:"pointer", fontFamily:"inherit" }}>✕</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        {novoMembroModal && <ModalMembro novoMembro={novoMembro} setNovoMembro={setNovoMembro} editandoMembroId={editandoMembroId} setEditandoMembroId={setEditandoMembroId} setNovoMembroModal={setNovoMembroModal} setEquipe={setEquipe} emptyMembro={emptyMembro} />}
-      </div>
-    );
-  }
-
-  // ─── INPUT ──────────────────────────────────────────────
-  return (
-    <div style={{ padding:"32px 28px", maxWidth:900 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
-        <div>
-          <h2 style={{ color:"#f1f5f9", fontWeight:900, fontSize:22, margin:0 }}>🏢 Escritório</h2>
-          <p style={{ color:"#64748b", fontSize:13, marginTop:4 }}>Preencha os dados do escritório</p>
-        </div>
-        <div style={{ display:"flex", gap:10 }}>
-          {temDados && <button onClick={() => setPagina("view")} style={{ background:"#1e293b", color:"#94a3b8", border:"1px solid #334155", borderRadius:8, padding:"9px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>}
-          <button onClick={handleSave} style={{ background: saved ? "#10b981" : "#2563eb", color:"#fff", border:"none", borderRadius:8, padding:"9px 22px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>{saved ? "✓ Salvo!" : "💾 Salvar"}</button>
-        </div>
-      </div>
-
-      {/* Identificação */}
-      <div style={secStyle}>
-        <div style={{ color:"#0ea5e9", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Identificação</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:16 }}>
-          {[["Nome do Escritório","nome","Ex: Padovan Arquitetos"],["CNPJ / CPF","cnpj","000.000.000-00 ou 00.000.000/0001-00"]].map(([lbl,key,ph]) => (
-            <div key={key} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={labelStyle}>{lbl}</label>
-              <input type="text" defaultValue={form[key]||""} placeholder={ph}
-                onBlur={e => {
-                  const v = e.target.value;
-                  let fmt = v;
-                  if (key === "cnpj") {
-                    const d = v.replace(/\D/g, "");
-                    if (d.length === 11) fmt = d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-                    else if (d.length === 14) fmt = d.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
-                    e.target.value = fmt;
-                  }
-                  setForm(f => {
-                    const novo = { ...f, [key]: key==="cnpj" ? fmt : v };
-                    if (key==="cnpj" && (f.pixTipo==="CNPJ" || f.pixTipo==="CPF")) novo.pixChave = fmt;
-                    if (key==="email" && f.pixTipo==="E-mail") novo.pixChave = v;
-                    if (key==="telefone" && f.pixTipo==="Telefone") novo.pixChave = v;
-                    return novo;
-                  });
-                }}
-                style={inputStyle} />
-            </div>
-          ))}
-        </div>
-        {/* Responsáveis */}
-        <div style={{ borderTop:"1px solid #1e293b", paddingTop:16 }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-            <div style={{ color:"#64748b", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:0.5 }}>Responsáveis Técnicos</div>
-            <button onClick={() => setResponsaveis(r => [...r, { ...emptyResponsavel, id: uid() }])} style={{ background:"#1e3a5f", color:"#60a5fa", border:"1px solid #2563eb", borderRadius:6, padding:"5px 12px", fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>+ Adicionar Responsável</button>
-          </div>
-          {responsaveis.length === 0 && <div style={{ color:"#334155", fontSize:12, fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>}
-          {responsaveis.map((r, idx) => (
-            <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:10, marginBottom:10, alignItems:"end" }}>
-              {[["Nome","nome","Nome do responsável"],["CAU / CREA","cau","A000000-0"],["CPF","cpf","000.000.000-00"]].map(([lbl,fld,ph]) => (
-                <div key={fld} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                  <label style={labelStyle}>{lbl}</label>
-                  <input type="text" defaultValue={r[fld]||""} placeholder={ph}
-                    onBlur={e => setResponsaveis(rs => rs.map((x,i) => i===idx ? {...x,[fld]:e.target.value} : x))}
-                    style={inputStyle} />
-                </div>
-              ))}
-              <button onClick={() => setResponsaveis(rs => rs.filter((_,i) => i!==idx))} style={{ background:"transparent", border:"none", color:"#f87171", fontSize:16, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>✕</button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Contato */}
-      <div style={secStyle}>
-        <div style={{ color:"#0ea5e9", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Contato</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
-          {[["E-mail","email","contato@escritorio.com"],["Telefone / WhatsApp","telefone","(14) 99999-0000"],["Site","site","www.escritorio.com.br"],["Instagram","instagram","@escritorio"]].map(([lbl,key,ph]) => (
-            <div key={key} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={labelStyle}>{lbl}</label>
-              <input type="text" defaultValue={form[key]||""} placeholder={ph}
-                onBlur={e => {
-                  const v = e.target.value;
-                  setForm(f => {
-                    const novo = {...f, [key]: v};
-                    if (key==="email" && f.pixTipo==="E-mail") novo.pixChave = v;
-                    if (key==="telefone" && f.pixTipo==="Telefone") novo.pixChave = v;
-                    return novo;
-                  });
-                }}
-                style={inputStyle} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Endereço */}
-      <div style={secStyle}>
-        <div style={{ color:"#0ea5e9", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Endereço</div>
-        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 0.5fr", gap:14 }}>
-          {[["Endereço","endereco","Rua, número, bairro"],["Cidade","cidade","Ourinhos"],["Estado","estado","SP"]].map(([lbl,key,ph]) => (
-            <div key={key} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={labelStyle}>{lbl}</label>
-              <input type="text" defaultValue={form[key]||""} placeholder={ph}
-                onBlur={e => setForm(f => ({...f, [key]: e.target.value}))}
-                style={inputStyle} />
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Dados Bancários */}
-      <div style={secStyle}>
-        <div style={{ color:"#10b981", fontWeight:700, fontSize:12, textTransform:"uppercase", letterSpacing:1, marginBottom:16 }}>Dados Bancários</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:14 }}>
-          {[["Banco","banco","Ex: Sicoob"],["Agência","agencia","0000"],["Número da Conta","conta","00000-0"]].map(([lbl,key,ph]) => (
-            <div key={key} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={labelStyle}>{lbl}</label>
-              <input type="text" defaultValue={form[key]||""} placeholder={ph}
-                onBlur={e => setForm(f => ({...f,[key]:e.target.value}))}
-                style={inputStyle} />
-            </div>
-          ))}
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 }}>
-          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-            <label style={labelStyle}>Tipo de Conta</label>
-            <select defaultValue={form.tipoConta} onChange={e => setForm(f => ({...f,tipoConta:e.target.value}))} style={{ ...inputStyle, cursor:"pointer" }}>
-              <option>Corrente</option><option>Poupança</option><option>Pagamento</option>
-            </select>
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-            <label style={labelStyle}>Tipo de Chave PIX</label>
-            <select value={form.pixTipo} onChange={e => {
-              const tipo = e.target.value;
-              let chave = form.pixChave;
-              if (tipo==="CNPJ" || tipo==="CPF") chave = form.cnpj || chave;
-              if (tipo==="E-mail") chave = form.email || chave;
-              if (tipo==="Telefone") chave = form.telefone || chave;
-              setForm(f => ({...f, pixTipo:tipo, pixChave:chave}));
-            }} style={{ ...inputStyle, cursor:"pointer" }}>
-              <option>CNPJ</option><option>CPF</option><option>E-mail</option><option>Telefone</option><option>Chave Aleatória</option>
-            </select>
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-            <label style={labelStyle}>Chave PIX</label>
-            <input type="text" key={form.pixChave} defaultValue={form.pixChave||""} placeholder="Chave PIX"
-              onBlur={e => setForm(f => ({...f,pixChave:e.target.value}))}
-              style={inputStyle} />
-          </div>
-        </div>
-      </div>
-
-    </div>
-  );
-}
-
-function ModalMembro({ novoMembro, setNovoMembro, editandoMembroId, setEditandoMembroId, setNovoMembroModal, setEquipe, emptyMembro }) {
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:14, padding:"28px 32px", width:"100%", maxWidth:560, boxShadow:"0 24px 48px rgba(0,0,0,0.6)", maxHeight:"90vh", overflowY:"auto" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <div style={{ color:"#f1f5f9", fontWeight:700, fontSize:16 }}>{editandoMembroId ? "Editar Membro" : "Novo Membro da Equipe"}</div>
-          <button onClick={() => { setNovoMembroModal(false); setEditandoMembroId(null); setNovoMembro(emptyMembro); }} style={{ background:"transparent", border:"none", color:"#64748b", fontSize:18, cursor:"pointer" }}>✕</button>
-        </div>
-        <div style={{ color:"#a78bfa", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>Identificação</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-          {[["Nome completo","nome","Ex: João Silva"],["Cargo","cargo","Ex: Arquiteto"],["CPF","cpf","000.000.000-00"],["RG","rg","00.000.000-0"],["CAU / CREA","cau","A000000-0"]].map(([lbl,key,ph]) => (
-            <div key={key} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={{ color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 }}>{lbl}</label>
-              <input type="text" defaultValue={novoMembro[key]||""} onBlur={e=>setNovoMembro(m=>({...m,[key]:e.target.value}))} placeholder={ph} style={{ background:"#0a1122", border:"1px solid #1e293b", borderRadius:7, color:"#f1f5f9", padding:"8px 11px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-            </div>
-          ))}
-          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-            <label style={{ color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 }}>Data de Nascimento</label>
-            <input type="date" defaultValue={novoMembro.nascimento||""} onBlur={e=>setNovoMembro(m=>({...m,nascimento:e.target.value}))} style={{ background:"#0a1122", border:"1px solid #1e293b", borderRadius:7, color:"#f1f5f9", padding:"8px 11px", fontSize:13, outline:"none", colorScheme:"dark", width:"100%", cursor:"pointer" }} />
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-            <label style={{ color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 }}>Data de Admissão</label>
-            <input type="date" defaultValue={novoMembro.admissao||""} onBlur={e=>setNovoMembro(m=>({...m,admissao:e.target.value}))} style={{ background:"#0a1122", border:"1px solid #1e293b", borderRadius:7, color:"#f1f5f9", padding:"8px 11px", fontSize:13, outline:"none", colorScheme:"dark", width:"100%", cursor:"pointer" }} />
-          </div>
-        </div>
-        <div style={{ color:"#a78bfa", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>Contato</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-          {[["Telefone / WhatsApp","telefone","(14) 99999-0000"],["E-mail","email","email@escritorio.com"]].map(([lbl,key,ph]) => (
-            <div key={key} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={{ color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 }}>{lbl}</label>
-              <input defaultValue={novoMembro[key]||""} onBlur={e=>setNovoMembro(m=>({...m,[key]:e.target.value}))} placeholder={ph} style={{ background:"#0a1122", border:"1px solid #1e293b", borderRadius:7, color:"#f1f5f9", padding:"8px 11px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-            </div>
-          ))}
-        </div>
-        <div style={{ color:"#a78bfa", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:10 }}>Endereço</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:24 }}>
-          {[["Endereço","endereco","Rua, número, bairro"],["Cidade","cidade","Ourinhos"],["Estado","estado","SP"],["CEP","cep","00000-000"]].map(([lbl,key,ph]) => (
-            <div key={key} style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={{ color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 }}>{lbl}</label>
-              <input defaultValue={novoMembro[key]||""} onBlur={e=>setNovoMembro(m=>({...m,[key]:e.target.value}))} placeholder={ph} style={{ background:"#0a1122", border:"1px solid #1e293b", borderRadius:7, color:"#f1f5f9", padding:"8px 11px", fontSize:13, outline:"none", fontFamily:"inherit" }} />
-            </div>
-          ))}
-        </div>
-        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-          <button onClick={() => { setNovoMembroModal(false); setEditandoMembroId(null); setNovoMembro(emptyMembro); }} style={{ background:"#1e293b", color:"#94a3b8", border:"1px solid #334155", borderRadius:7, padding:"9px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-          <button onClick={() => {
-            if (!novoMembro.nome?.trim()) return;
-            if (editandoMembroId) { setEquipe(eq => eq.map(m => m.id===editandoMembroId ? {...novoMembro} : m)); }
-            else { setEquipe(eq => [...eq, {...novoMembro, id:uid()}]); }
-            setNovoMembroModal(false); setEditandoMembroId(null); setNovoMembro(emptyMembro);
-          }} style={{ background:"#7c3aed", color:"#fff", border:"none", borderRadius:7, padding:"9px 20px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-            {editandoMembroId ? "Salvar Alterações" : "Adicionar à Equipe"}
-          </button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -9705,6 +9562,523 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 }
 
 
+
+
+// ════════════════════════════════════════════════════════════
+// escritorio.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// ESCRITÓRIO — Módulo reformulado
+// Visual minimalista, fundo branco, estilo Claude.ai
+// ═══════════════════════════════════════════════════════════════
+
+function Escritorio({ data, save }) {
+  const cfg = data.escritorio || {};
+  const [aba, setAba] = useState("dados");
+  const [form, setForm] = useState({
+    nome:        cfg.nome        || "",
+    cnpj:        cfg.cnpj        || "",
+    email:       cfg.email       || "",
+    telefone:    cfg.telefone    || "",
+    endereco:    cfg.endereco    || "",
+    cidade:      cfg.cidade      || "",
+    estado:      cfg.estado      || "SP",
+    site:        cfg.site        || "",
+    instagram:   cfg.instagram   || "",
+    banco:       cfg.banco       || "",
+    agencia:     cfg.agencia     || "",
+    conta:       cfg.conta       || "",
+    tipoConta:   cfg.tipoConta   || "Corrente",
+    pixTipo:     cfg.pixTipo     || "CNPJ",
+    pixChave:    cfg.pixChave    || "",
+  });
+  const [responsaveis, setResponsaveis] = useState(
+    cfg.responsaveis?.length ? cfg.responsaveis
+    : cfg.responsavel ? [{ id:"r1", nome:cfg.responsavel, cau:cfg.cau||"", cpf:cfg.cpfResponsavel||"" }]
+    : []
+  );
+  const [equipe, setEquipe] = useState(cfg.equipe || []);
+  const [saved, setSaved] = useState(false);
+  const [novoMembro, setNovoMembro] = useState(null);
+
+  const emptyMembro = { id:"", nome:"", cargo:"", email:"", telefone:"", cau:"", cpf:"" };
+
+  function handleSave() {
+    save({ ...data, escritorio: { ...form, equipe, responsaveis } });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  function setF(key, val) {
+    setForm(f => {
+      const novo = { ...f, [key]: val };
+      if (key === "cnpj" && (f.pixTipo === "CNPJ" || f.pixTipo === "CPF")) novo.pixChave = val;
+      if (key === "email" && f.pixTipo === "E-mail") novo.pixChave = val;
+      if (key === "telefone" && f.pixTipo === "Telefone") novo.pixChave = val;
+      return novo;
+    });
+  }
+
+  const E = {
+    wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
+    header: { borderBottom:"1px solid #e5e7eb", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
+    titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
+    sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
+    abas: { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
+    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
+    body: { padding:"32px", maxWidth:760 },
+    secao: { marginBottom:32 },
+    secTitulo: { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
+    grid2: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 },
+    grid3: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 },
+    campo: { display:"flex", flexDirection:"column", gap:5 },
+    label: { fontSize:12, color:"#6b7280", fontWeight:500 },
+    input: { border:"1px solid #d1d5db", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+    select: { border:"1px solid #d1d5db", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
+    divisor: { border:"none", borderTop:"1px solid #f3f4f6", margin:"24px 0" },
+    btn: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnSec: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnAdd: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
+    btnSalvo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
+    // Equipe
+    membroCard: { border:"1px solid #e5e7eb", borderRadius:10, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
+    membroNome: { fontSize:14, fontWeight:600, color:"#111", marginBottom:2 },
+    membroCargo: { fontSize:12, color:"#9ca3af" },
+    membroInfo: { fontSize:12, color:"#6b7280", marginTop:6, display:"flex", gap:16 },
+    // Modal
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.3)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
+    modal: { background:"#fff", borderRadius:14, padding:"28px", width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 40px rgba(0,0,0,0.15)" },
+    modalTitulo: { fontSize:16, fontWeight:700, color:"#111", marginBottom:20 },
+    // View
+    viewVal: { fontSize:14, color:"#111", marginBottom:2 },
+    viewLabel: { fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
+    viewBloco: { display:"flex", flexDirection:"column", gap:3 },
+  };
+
+  // ── ABA DADOS ───────────────────────────────────────────────
+  const renderDados = () => (
+    <div style={E.body}>
+      {/* Identificação */}
+      <div style={E.secao}>
+        <div style={E.secTitulo}>Identificação</div>
+        <div style={{ ...E.grid2, marginBottom:16 }}>
+          <div style={E.campo}>
+            <label style={E.label}>Nome do escritório</label>
+            <input style={E.input} value={form.nome} onChange={e => setF("nome", e.target.value)} placeholder="Ex: Padovan Arquitetos" />
+          </div>
+          <div style={E.campo}>
+            <label style={E.label}>CNPJ / CPF</label>
+            <input style={E.input} value={form.cnpj} onChange={e => setF("cnpj", e.target.value)} placeholder="00.000.000/0001-00" />
+          </div>
+        </div>
+
+        {/* Responsáveis técnicos */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+          <span style={{ fontSize:12, color:"#6b7280", fontWeight:500 }}>Responsáveis técnicos</span>
+          <button style={E.btnAdd} onClick={() => setResponsaveis(r => [...r, { id:uid(), nome:"", cau:"", cpf:"" }])}>
+            + Adicionar
+          </button>
+        </div>
+        {responsaveis.length === 0 && (
+          <div style={{ fontSize:13, color:"#d1d5db", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
+        )}
+        {responsaveis.map((r, idx) => (
+          <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:10, marginBottom:10, alignItems:"end" }}>
+            {[["Nome","nome","Nome do responsável"],["CAU / CREA","cau","A000000-0"],["CPF","cpf","000.000.000-00"]].map(([lbl,fld,ph]) => (
+              <div key={fld} style={E.campo}>
+                <label style={E.label}>{lbl}</label>
+                <input style={E.input} value={r[fld]||""} placeholder={ph}
+                  onChange={e => setResponsaveis(rs => rs.map((x,i) => i===idx ? {...x,[fld]:e.target.value} : x))} />
+              </div>
+            ))}
+            <button onClick={() => setResponsaveis(rs => rs.filter((_,i) => i!==idx))}
+              style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
+          </div>
+        ))}
+      </div>
+
+      <hr style={E.divisor} />
+
+      {/* Contato */}
+      <div style={E.secao}>
+        <div style={E.secTitulo}>Contato</div>
+        <div style={{ ...E.grid2, marginBottom:12 }}>
+          {[["E-mail","email","contato@escritorio.com"],["Telefone / WhatsApp","telefone","(14) 99999-0000"]].map(([lbl,key,ph]) => (
+            <div key={key} style={E.campo}>
+              <label style={E.label}>{lbl}</label>
+              <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+            </div>
+          ))}
+        </div>
+        <div style={E.grid2}>
+          {[["Site","site","www.escritorio.com.br"],["Instagram","instagram","@escritorio"]].map(([lbl,key,ph]) => (
+            <div key={key} style={E.campo}>
+              <label style={E.label}>{lbl}</label>
+              <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <hr style={E.divisor} />
+
+      {/* Endereço */}
+      <div style={E.secao}>
+        <div style={E.secTitulo}>Endereço</div>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 0.5fr", gap:16 }}>
+          {[["Endereço","endereco","Rua, número, bairro"],["Cidade","cidade","Ourinhos"],["Estado","estado","SP"]].map(([lbl,key,ph]) => (
+            <div key={key} style={E.campo}>
+              <label style={E.label}>{lbl}</label>
+              <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <hr style={E.divisor} />
+
+      {/* Dados bancários */}
+      <div style={E.secao}>
+        <div style={E.secTitulo}>Dados bancários</div>
+        <div style={{ ...E.grid3, marginBottom:16 }}>
+          {[["Banco","banco","Ex: Sicoob"],["Agência","agencia","0000"],["Conta","conta","00000-0"]].map(([lbl,key,ph]) => (
+            <div key={key} style={E.campo}>
+              <label style={E.label}>{lbl}</label>
+              <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+            </div>
+          ))}
+        </div>
+        <div style={E.grid3}>
+          <div style={E.campo}>
+            <label style={E.label}>Tipo de conta</label>
+            <select style={E.select} value={form.tipoConta} onChange={e => setF("tipoConta", e.target.value)}>
+              <option>Corrente</option><option>Poupança</option><option>Pagamento</option>
+            </select>
+          </div>
+          <div style={E.campo}>
+            <label style={E.label}>Tipo de chave PIX</label>
+            <select style={E.select} value={form.pixTipo} onChange={e => {
+              const tipo = e.target.value;
+              let chave = form.pixChave;
+              if (tipo==="CNPJ"||tipo==="CPF") chave = form.cnpj||chave;
+              if (tipo==="E-mail") chave = form.email||chave;
+              if (tipo==="Telefone") chave = form.telefone||chave;
+              setForm(f => ({...f, pixTipo:tipo, pixChave:chave}));
+            }}>
+              <option>CNPJ</option><option>CPF</option><option>E-mail</option><option>Telefone</option><option>Chave Aleatória</option>
+            </select>
+          </div>
+          <div style={E.campo}>
+            <label style={E.label}>Chave PIX</label>
+            <input style={E.input} value={form.pixChave} onChange={e => setF("pixChave", e.target.value)} placeholder="Chave PIX" />
+          </div>
+        </div>
+      </div>
+
+      {/* Salvar */}
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:10, paddingTop:8 }}>
+        <button style={saved ? E.btnSalvo : E.btn} onClick={handleSave}>
+          {saved ? "Salvo!" : "Salvar alterações"}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── ABA EQUIPE ──────────────────────────────────────────────
+  const renderEquipe = () => (
+    <div style={E.body}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+        <div>
+          <div style={{ fontSize:14, color:"#111", fontWeight:600 }}>{equipe.length} membro{equipe.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>Gerencie os membros da equipe</div>
+        </div>
+        <button style={E.btn} onClick={() => setNovoMembro({...emptyMembro, id:uid()})}>+ Adicionar membro</button>
+      </div>
+
+      {equipe.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"60px 0", color:"#d1d5db", fontSize:14 }}>
+          Nenhum membro cadastrado ainda.
+        </div>
+      ) : (
+        equipe.map(m => (
+          <div key={m.id} style={E.membroCard}>
+            <div>
+              <div style={E.membroNome}>{m.nome}</div>
+              <div style={E.membroCargo}>{m.cargo || "—"}</div>
+              <div style={E.membroInfo}>
+                {m.email && <span>{m.email}</span>}
+                {m.telefone && <span>{m.telefone}</span>}
+                {m.cau && <span>{m.cau}</span>}
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:6 }}>
+              <button onClick={() => setNovoMembro(m)}
+                style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                Editar
+              </button>
+              <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
+                style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
+            </div>
+          </div>
+        ))
+      )}
+
+      {/* Modal membro */}
+      {novoMembro && (
+        <div style={E.overlay}>
+          <div style={E.modal}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+              <div style={E.modalTitulo}>{novoMembro.nome ? "Editar membro" : "Novo membro"}</div>
+              <button onClick={() => setNovoMembro(null)} style={{ background:"none", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:20 }}>
+              {[["Nome completo","nome"],["Cargo","cargo"],["E-mail","email"],["Telefone","telefone"],["CAU / CREA","cau"],["CPF","cpf"]].map(([lbl,key]) => (
+                <div key={key} style={E.campo}>
+                  <label style={E.label}>{lbl}</label>
+                  <input style={E.input} value={novoMembro[key]||""} onChange={e => setNovoMembro(m => ({...m,[key]:e.target.value}))} />
+                </div>
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button style={E.btnSec} onClick={() => setNovoMembro(null)}>Cancelar</button>
+              <button style={E.btn} onClick={() => {
+                if (!novoMembro.nome?.trim()) return;
+                const existe = equipe.find(m => m.id === novoMembro.id);
+                const novaEquipe = existe
+                  ? equipe.map(m => m.id === novoMembro.id ? novoMembro : m)
+                  : [...equipe, novoMembro];
+                setEquipe(novaEquipe);
+                save({ ...data, escritorio: { ...form, equipe: novaEquipe, responsaveis } });
+                setNovoMembro(null);
+              }}>
+                {equipe.find(m => m.id === novoMembro.id) ? "Salvar" : "Adicionar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // ── ABA USUÁRIOS ────────────────────────────────────────────
+  const renderUsuarios = () => (
+    <div style={E.body}>
+      <div style={{ fontSize:13, color:"#9ca3af", padding:"40px 0", textAlign:"center" }}>
+        Gestão de usuários em breve — invite por e-mail, perfis e permissões.
+      </div>
+    </div>
+  );
+
+  return (
+    <div style={E.wrap}>
+      {/* Header */}
+      <div style={E.header}>
+        <div>
+          <div style={E.titulo}>{form.nome || "Escritório"}</div>
+          <div style={E.sub}>{form.cidade}{form.estado ? ` — ${form.estado}` : ""}</div>
+        </div>
+      </div>
+
+      {/* Abas */}
+      <div style={E.abas}>
+        {[["dados","Dados gerais"],["equipe","Equipe"],["usuarios","Usuários"]].map(([key,lbl]) => (
+          <button key={key} style={E.aba(aba===key)} onClick={() => setAba(key)}>{lbl}</button>
+        ))}
+      </div>
+
+      {/* Conteúdo */}
+      {aba === "dados"    && renderDados()}
+      {aba === "equipe"   && renderEquipe()}
+      {aba === "usuarios" && renderUsuarios()}
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════
+// login.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// LOGIN — Vicke
+// ═══════════════════════════════════════════════════════════════
+
+const TOKEN_KEY = "vicke-token";
+const USER_KEY  = "vicke-user";
+
+function getToken()   { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } }
+function getUser()    { try { return JSON.parse(localStorage.getItem(USER_KEY)); } catch { return null; } }
+function saveAuth(token, usuario) {
+  localStorage.setItem(TOKEN_KEY, token);
+  localStorage.setItem(USER_KEY, JSON.stringify(usuario));
+}
+function clearAuth() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+
+async function apiPost(path, body) {
+  const res = await fetch("https://orbi-production-0c32.up.railway.app" + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+function TelaLogin({ onLogin }) {
+  const [email, setEmail]       = useState("");
+  const [senha, setSenha]       = useState("");
+  const [erro, setErro]         = useState("");
+  const [loading, setLoading]   = useState(false);
+
+  async function handleLogin() {
+    if (!email || !senha) { setErro("Preencha e-mail e senha."); return; }
+    setErro("");
+    setLoading(true);
+    try {
+      const res  = await apiPost("/auth/login", { email, senha });
+      if (res.ok) {
+        saveAuth(res.data.token, res.data.usuario);
+        onLogin(res.data.usuario, res.data.token);
+      } else {
+        setErro(res.error || "E-mail ou senha inválidos.");
+      }
+    } catch {
+      setErro("Não foi possível conectar ao servidor.");
+    }
+    setLoading(false);
+  }
+
+  function handleKey(e) { if (e.key === "Enter") handleLogin(); }
+
+  const S = {
+    wrap: {
+      fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+      minHeight: "100vh",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      background: "#fff",
+      padding: "20px",
+    },
+    box: {
+      width: "100%",
+      maxWidth: 360,
+    },
+    header: {
+      textAlign: "center",
+      marginBottom: 32,
+    },
+    titulo: {
+      fontSize: 22,
+      fontWeight: 700,
+      color: "#111",
+      letterSpacing: -0.5,
+      margin: 0,
+    },
+    sub: {
+      fontSize: 13,
+      color: "#9ca3af",
+      marginTop: 6,
+    },
+    card: {
+      background: "#fff",
+      border: "1px solid #e5e7eb",
+      borderRadius: 12,
+      padding: "28px 24px",
+    },
+    label: {
+      fontSize: 13,
+      color: "#6b7280",
+      display: "block",
+      marginBottom: 6,
+    },
+    input: {
+      width: "100%",
+      border: "1px solid #d1d5db",
+      borderRadius: 10,
+      padding: "11px 14px",
+      fontSize: 14,
+      color: "#111",
+      outline: "none",
+      background: "#fff",
+      boxSizing: "border-box",
+      fontFamily: "inherit",
+      transition: "border-color 0.15s",
+    },
+    grupo: { marginBottom: 16 },
+    btn: {
+      width: "100%",
+      background: "#111",
+      color: "#fff",
+      border: "none",
+      borderRadius: 10,
+      padding: "12px 0",
+      fontSize: 14,
+      fontWeight: 600,
+      cursor: "pointer",
+      fontFamily: "inherit",
+      marginTop: 8,
+      opacity: loading ? 0.6 : 1,
+    },
+    erro: {
+      fontSize: 13,
+      color: "#dc2626",
+      textAlign: "center",
+      marginTop: 12,
+      minHeight: 20,
+    },
+    rodape: {
+      textAlign: "center",
+      marginTop: 24,
+      fontSize: 12,
+      color: "#d1d5db",
+    },
+  };
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.box}>
+        <div style={S.header}>
+          <div style={S.titulo}>Vicke</div>
+          <div style={S.sub}>Entre na sua conta</div>
+        </div>
+        <div style={S.card}>
+          <div style={S.grupo}>
+            <label style={S.label}>E-mail</label>
+            <input
+              style={S.input}
+              type="email"
+              placeholder="seu@email.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              onKeyDown={handleKey}
+              autoFocus
+            />
+          </div>
+          <div style={S.grupo}>
+            <label style={S.label}>Senha</label>
+            <input
+              style={S.input}
+              type="password"
+              placeholder="••••••••"
+              value={senha}
+              onChange={e => setSenha(e.target.value)}
+              onKeyDown={handleKey}
+            />
+          </div>
+          <button style={S.btn} onClick={handleLogin} disabled={loading}>
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+          {erro && <div style={S.erro}>{erro}</div>}
+        </div>
+        <div style={S.rodape}>Vicke — Conectando elos</div>
+      </div>
+    </div>
+  );
+}
 
 
 // ════════════════════════════════════════════════════════════
