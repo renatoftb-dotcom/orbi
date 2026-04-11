@@ -8600,7 +8600,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       etapasPct,
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
     };
-    return <PropostaPreview data={liveData} onVoltar={() => setPropostaData(null)} />;
+    return <PropostaPreview data={liveData} onVoltar={() => {
+      setPropostaData(null);
+      if (onVoltar) onVoltar();
+    }} />;
   }
 
   return (
