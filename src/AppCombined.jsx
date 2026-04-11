@@ -9729,6 +9729,15 @@ function clearAuth() {
   localStorage.removeItem(USER_KEY);
 }
 
+async function apiPost(path, body) {
+  const res = await fetch("https://orbi-production-0c32.up.railway.app" + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
 function TelaLogin({ onLogin }) {
   const [email, setEmail]       = useState("");
   const [senha, setSenha]       = useState("");
