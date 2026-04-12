@@ -2832,6 +2832,12 @@ function ModalConfirmarGanho({ orc, arqTotal, engTotal, grandTotal, data, save, 
 }
 
 function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
@@ -2944,7 +2950,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                 const enviado = o.criadoEm ? new Date(o.criadoEm).toLocaleDateString("pt-BR") : "—";
                 return (
                   <div key={o.id} style={{ border:"1px solid #e5e7eb", borderRadius:10, padding:"12px 14px", background:"#fafafa", borderLeft: st ? `3px solid ${st.cor}` : "1px solid #e5e7eb" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                    <div style={{ display:"flex", flexDirection: isMobile ? "column" : "row", justifyContent:"space-between", alignItems: isMobile ? "stretch" : "flex-start" }}>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
                           <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{o.tipo || o.subtipo} — {o.subtipo || ""}</span>
@@ -2958,22 +2964,22 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         <div style={{ fontSize:12, color:"#6b7280" }}>
                           {o.padrao} · {o.tamanho} · {r.areaTotal ? Math.round(r.areaTotal) : 0}m²
                         </div>
-                        <div style={{ display:"flex", gap:12, marginTop:6, flexWrap:"wrap" }}>
-                          <span style={{ fontSize:12, color:"#6b7280" }}>Arq.: <span style={{ color:"#2563eb", fontWeight:600 }}>{fmt(arqTotal)}</span> <span style={{ color:"#9ca3af" }}>({r.areaTotal ? "R$ "+Math.round(arqTotal/(r.areaTotal||1)*100)/100+"/m²" : ""})</span></span>
+                        <div style={{ display:"flex", gap:8, marginTop:6, flexWrap:"wrap" }}>
+                          <span style={{ fontSize:12, color:"#6b7280" }}>Arq.: <span style={{ color:"#2563eb", fontWeight:600 }}>{fmt(arqTotal)}</span></span>
                           <span style={{ fontSize:12, color:"#6b7280" }}>Eng.: <span style={{ color:"#7c3aed", fontWeight:600 }}>{fmt(engTotal)}</span></span>
-                          <span style={{ fontSize:12, color:"#6b7280", marginLeft:"auto" }}>Total: <span style={{ color:"#111", fontWeight:700, fontSize:13 }}>{fmt(grandTotal)}</span></span>
+                          <span style={{ fontSize:12, color:"#6b7280" }}>Total: <span style={{ color:"#111", fontWeight:700 }}>{fmt(grandTotal)}</span></span>
                         </div>
                         <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>Enviado: {enviado}</div>
                       </div>
-                      <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:12 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft: isMobile ? 0 : 12, marginTop: isMobile ? 10 : 0 }}>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o)}
-                          style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                          onClick={async () => { const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null); const orcCompleto = res?.ok ? res.data : o; onAbrirOrcamento(cliente, orcCompleto, "ver"); }}
+                          style={{ flex: isMobile ? 1 : "none", fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", cursor:"pointer", fontFamily:"inherit", textAlign:"center" }}>
                           Ver
                         </button>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o)}
-                          style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                          onClick={async () => { const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null); const orcCompleto = res?.ok ? res.data : o; onAbrirOrcamento(cliente, orcCompleto, "editar"); }}
+                          style={{ flex: isMobile ? 1 : "none", fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", cursor:"pointer", fontFamily:"inherit", textAlign:"center" }}>
                           Editar
                         </button>
                         <div style={{ position:"relative" }}>
