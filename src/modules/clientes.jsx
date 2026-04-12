@@ -1087,62 +1087,50 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                 const grandTotal = Math.round((arqTotal + engTotal) * 100) / 100;
                 const st = o.status ? STATUS_ORC[o.status] : null;
                 const enviado = o.criadoEm ? new Date(o.criadoEm).toLocaleDateString("pt-BR") : "—";
+                const fetchOrc = async (modo) => {
+                  const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+                  const orcCompleto = res?.ok ? res.data : o;
+                  onAbrirOrcamento(cliente, orcCompleto, modo);
+                };
                 return (
                   <div key={o.id} style={{ border:"1px solid #e5e7eb", borderRadius:10, padding:"12px 14px", background:"#fafafa", borderLeft: st ? `3px solid ${st.cor}` : "1px solid #e5e7eb" }}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+
+                    {/* Linha 1: título + botões */}
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:6 }}>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
-                          <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{o.tipo || o.subtipo} — {o.subtipo || ""}</span>
-                          <span style={{ fontSize:10, color:"#9ca3af", fontFamily:"monospace" }}>{o.id}</span>
-                          {st && (
-                            <span style={{ fontSize:11, fontWeight:600, color:st.cor, background:st.bg, borderRadius:4, padding:"1px 7px" }}>
-                              {st.label}
-                            </span>
-                          )}
+                        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:2 }}>
+                          <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{o.tipo} — {o.subtipo}</span>
+                          {st && <span style={{ fontSize:11, fontWeight:600, color:st.cor, background:st.bg, borderRadius:4, padding:"1px 7px" }}>{st.label}</span>}
                         </div>
-                        <div style={{ fontSize:12, color:"#6b7280" }}>
-                          {o.padrao} · {o.tamanho} · {r.areaTotal ? Math.round(r.areaTotal) : 0}m²
-                        </div>
-                        <div style={{ display:"flex", gap:8, marginTop:6, flexWrap:"wrap" }}>
-                          <span style={{ fontSize:12, color:"#6b7280" }}>Arq.: <span style={{ color:"#2563eb", fontWeight:600 }}>{fmt(arqTotal)}</span> {!isMobile && <span style={{ color:"#9ca3af" }}>({r.areaTotal ? "R$ "+Math.round(arqTotal/(r.areaTotal||1)*100)/100+"/m²" : ""})</span>}</span>
-                          <span style={{ fontSize:12, color:"#6b7280" }}>Eng.: <span style={{ color:"#7c3aed", fontWeight:600 }}>{fmt(engTotal)}</span></span>
-                          <span style={{ fontSize:12, color:"#6b7280", marginLeft:"auto" }}>Total: <span style={{ color:"#111", fontWeight:700, fontSize:13 }}>{fmt(grandTotal)}</span></span>
-                        </div>
-                        <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>Enviado: {enviado}</div>
+                        <div style={{ fontSize:11, color:"#9ca3af", fontFamily:"monospace" }}>{o.id} · {enviado}</div>
                       </div>
-                      <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:12 }}>
-                        <button
-                          onClick={async () => { const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null); const orcCompleto = res?.ok ? res.data : o; onAbrirOrcamento(cliente, orcCompleto, "ver"); }}
-                          style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                      {/* Botões sempre à direita, compactos */}
+                      <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
+                        <button onClick={() => fetchOrc("ver")}
+                          style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Ver
                         </button>
-                        <button
-                          onClick={async () => { const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null); const orcCompleto = res?.ok ? res.data : o; onAbrirOrcamento(cliente, orcCompleto, "editar"); }}
-                          style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                        <button onClick={() => fetchOrc("editar")}
+                          style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Editar
                         </button>
                         <div style={{ position:"relative" }}>
-                          <button
-                            onClick={() => setOpenMenu(openMenu===o.id ? null : o.id)}
-                            style={{ fontSize:16, color:"#9ca3af", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"2px 8px", cursor:"pointer", fontFamily:"inherit", lineHeight:1.4 }}>
+                          <button onClick={() => setOpenMenu(openMenu===o.id ? null : o.id)}
+                            style={{ fontSize:15, color:"#9ca3af", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"3px 8px", cursor:"pointer", fontFamily:"inherit", lineHeight:1.4 }}>
                             ···
                           </button>
                           {openMenu === o.id && (
-                            <div ref={menuRef} style={{ position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999, background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:150, overflow:"hidden" }}>
-                              <button
-                                disabled={o.status === "ganho"}
-                                onClick={() => { setStatusOrc(o.id, "ganho"); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="ganho" ? "#f0fdf4" : "transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="ganho" ? "#16a34a" : "#374151", padding:"9px 14px", fontSize:13, cursor: o.status==="ganho" ? "not-allowed" : "pointer", fontFamily:"inherit", fontWeight: o.status==="ganho" ? 600 : 400 }}>
+                            <div ref={menuRef} style={{ position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999, background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:160, overflow:"hidden" }}>
+                              <button disabled={o.status==="ganho"} onClick={() => { setStatusOrc(o.id, "ganho"); setOpenMenu(null); }}
+                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="ganho"?"#f0fdf4":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="ganho"?"#16a34a":"#374151", padding:"10px 14px", fontSize:13, cursor: o.status==="ganho"?"not-allowed":"pointer", fontFamily:"inherit", fontWeight: o.status==="ganho"?600:400 }}>
                                 {o.status==="ganho" ? "✓ Ganho" : "Marcar como Ganho"}
                               </button>
-                              <button
-                                onClick={() => { setStatusOrc(o.id, o.status==="perdido" ? null : "perdido"); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="perdido" ? "#fef2f2" : "transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="perdido" ? "#dc2626" : "#374151", padding:"9px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight: o.status==="perdido" ? 600 : 400 }}>
+                              <button onClick={() => { setStatusOrc(o.id, o.status==="perdido" ? null : "perdido"); setOpenMenu(null); }}
+                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="perdido"?"#fef2f2":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="perdido"?"#dc2626":"#374151", padding:"10px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight: o.status==="perdido"?600:400 }}>
                                 {o.status==="perdido" ? "✓ Perdido" : "Marcar como Perdido"}
                               </button>
-                              <button
-                                onClick={() => { setConfirmDelete(o.id); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background:"transparent", border:"none", color:"#dc2626", padding:"9px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                              <button onClick={() => { setConfirmDelete(o.id); setOpenMenu(null); }}
+                                style={{ display:"block", width:"100%", textAlign:"left", background:"transparent", border:"none", color:"#dc2626", padding:"10px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
                                 Excluir
                               </button>
                             </div>
@@ -1150,6 +1138,28 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         </div>
                       </div>
                     </div>
+
+                    {/* Linha 2: padrão · tamanho · área */}
+                    <div style={{ fontSize:12, color:"#6b7280", marginBottom:8 }}>
+                      {o.padrao} · {o.tamanho} · {r.areaTotal ? Math.round(r.areaTotal) : 0}m²
+                    </div>
+
+                    {/* Linha 3: valores em grid 3 colunas no mobile */}
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
+                      <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, padding:"7px 8px" }}>
+                        <div style={{ fontSize:10, color:"#9ca3af", marginBottom:2 }}>Arq.</div>
+                        <div style={{ fontSize:12, fontWeight:700, color:"#2563eb" }}>{fmt(arqTotal)}</div>
+                      </div>
+                      <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, padding:"7px 8px" }}>
+                        <div style={{ fontSize:10, color:"#9ca3af", marginBottom:2 }}>Eng.</div>
+                        <div style={{ fontSize:12, fontWeight:700, color:"#7c3aed" }}>{fmt(engTotal)}</div>
+                      </div>
+                      <div style={{ background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:7, padding:"7px 8px" }}>
+                        <div style={{ fontSize:10, color:"#9ca3af", marginBottom:2 }}>Total</div>
+                        <div style={{ fontSize:12, fontWeight:800, color:"#111" }}>{fmt(grandTotal)}</div>
+                      </div>
+                    </div>
+
                   </div>
                 );
               })}
