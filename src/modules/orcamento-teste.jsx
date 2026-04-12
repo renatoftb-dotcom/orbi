@@ -615,6 +615,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [panelPos,     setPanelPos]     = useState({ top:0, left:0 });
   const [showModal,     setShowModal]     = useState(false);
   const [propostaData,  setPropostaData]  = useState(null); // quando definido, abre o preview
+  const [orcPendente,   setOrcPendente]   = useState(null); // orçamento a salvar após PDF
   const [tipoPgto,      setTipoPgto]      = useState("padrao"); // "padrao" | "etapas"
   const [temImposto,    setTemImposto]    = useState(false);
   const [aliqImp,       setAliqImp]       = useState(16);
@@ -1114,7 +1115,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     };
     return <PropostaPreview data={liveData} onVoltar={() => {
       setPropostaData(null);
-      if (onVoltar) onVoltar();
+      if (orcPendente && onSalvar) {
+        onSalvar(orcPendente);
+        setOrcPendente(null);
+      } else if (onVoltar) {
+        onVoltar();
+      }
     }} />;
   }
 
@@ -1634,8 +1640,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       // valores finais
                       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
                     });
-                    // Salvar no card do cliente
-                    if (onSalvar) onSalvar({
+                    // Guardar para salvar após fechar o PDF
+                    setOrcPendente({
                       ...(orcBase || {}),
                       tipo: tipoProjeto, subtipo: tipologia, tamanho, padrao,
                       cliente: clienteNome, referencia,
