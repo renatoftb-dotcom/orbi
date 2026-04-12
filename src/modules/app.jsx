@@ -228,6 +228,8 @@ export default function ModuloClientesFornecedores() {
       </div>
 
       {/* Orçamento em tela cheia */}
+
+
       {orcamentoTelaCheia && (
         <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#fff", overflow:"auto" }}>
           <FormOrcamentoProjetoTeste
@@ -236,29 +238,21 @@ export default function ModuloClientesFornecedores() {
             orcBase={orcamentoTelaCheia.orcBase || null}
             onSalvar={async (orc) => {
               const todos = data.orcamentosProjeto || [];
-              const maxSeq = todos.reduce((mx, o) => {
-                const m = (o.id||"").match(/^ORC-(\d+)$/);
-                return m ? Math.max(mx, parseInt(m[1])) : mx;
+              const maxSeq = todos.reduce((mx2, o2) => {
+                const mm = (o2.id||"").match(/^ORC-(\d+)$/);
+                return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
               }, 0);
               const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
-              const novo = {
-                ...orc,
-                clienteId: orcamentoTelaCheia.clienteOrc.id,
-                cliente: orcamentoTelaCheia.clienteOrc.nome,
-                whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "",
-                id: orc.id || nextId,
-                criadoEm: orc.criadoEm || new Date().toISOString()
-              };
-              const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
-              await save({ ...data, orcamentosProjeto: novos });
+              const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
+              const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
+              await save({ ...data, orcamentosProjeto: novos2 });
               setOrcamentoTelaCheia(null);
               setClientesKey(n=>n+1);
             }}
-            onVoltar={() => { setOrcamentoTelaCheia(null); }}
+            onVoltar={() => setOrcamentoTelaCheia(null)}
           />
         </div>
       )}
-
       {showBackup && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
           <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:14, padding:24, width:"100%", maxWidth:600, maxHeight:"85vh", display:"flex", flexDirection:"column", gap:16 }}>
