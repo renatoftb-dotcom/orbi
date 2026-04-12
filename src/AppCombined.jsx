@@ -2866,8 +2866,7 @@ function ModalConfirmarGanho({ orc, arqTotal, engTotal, grandTotal, data, save, 
 }
 
 function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
-  const [subView, setSubView] = useState(null);
-  const [orcBase, setOrcBase] = useState(null);
+
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const menuRef = useRef(null);
@@ -2892,45 +2891,9 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
       .catch(()=>setOrcamentos((data.orcamentosProjeto||[]).filter(o=>o.clienteId===cliente.id)));
   }, [cliente.id, data.orcamentosProjeto?.length]);
 
-  async function salvarOrcamento(orc) {
-    const todos = data.orcamentosProjeto || [];
-    const nextOrcCod = () => {
-      const maxSeq = todos.reduce((mx, o) => {
-        const m = (o.id||"").match(/^ORC-(\d+)$/);
-        return m ? Math.max(mx, parseInt(m[1])) : mx;
-      }, 0);
-      return "ORC-" + String(maxSeq + 1).padStart(4, "0");
-    };
-    const novo = {
-      ...orc,
-      clienteId: cliente.id,
-      cliente: cliente.nome,
-      whatsapp: cliente.contatos?.find(c=>c.whatsapp)?.telefone || "",
-      id: orc.id || nextOrcCod(),
-      criadoEm: orc.criadoEm || new Date().toISOString()
-    };
-    const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
-    setOrcBase(novo);
-    setOrcamentos(novos.filter(o=>o.clienteId===cliente.id));
-    setSubView(null);
-    save({ ...data, orcamentosProjeto: novos }).catch(console.error);
-  }
+
 
   // ── Subview: módulo orçamento-teste ─────────────────────────
-  if (subView === "orcamento-teste") {
-    return (
-      <div style={{ fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-        <FormOrcamentoProjetoTeste
-          clienteNome={cliente.nome}
-          clienteWA={cliente.contatos?.find(c=>c.whatsapp)?.telefone||""}
-          onSalvar={salvarOrcamento}
-          orcBase={orcBase}
-          onVoltar={() => { setSubView(null); setOrcBase(null); }}
-        />
-      </div>
-    );
-  }
-
   // ── Card principal ───────────────────────────────────────────
   const temProjeto = cliente.servicos?.projeto;
   const fmt = v => "R$ " + (v||0).toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
