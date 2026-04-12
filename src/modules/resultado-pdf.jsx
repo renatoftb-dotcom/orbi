@@ -1553,17 +1553,17 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
     }
   }
   const engTotal   = engUnit + engRepet;
-  // Se totSI está salvo no orc e os valores individuais parecem inflados, usa totSI como base
+  // Usa sempre totSI do orc como fonte da verdade para valores sem imposto
   const totSIOrc   = orc.totSI || 0;
-  const grandTotalRaw = Math.round((arqTotal + engTotal) * 100) / 100;
-  // Detecta valores inflados: se arqTotal > totSI, os valores foram salvos com imposto
   const temImpOrc  = !!(orc.temImposto ?? r.impostoAplicado);
   const aliqImpOrc2 = orc.aliqImp ?? r.aliquotaImposto ?? 0;
-  const arqTotalFix = temImpOrc && totSIOrc > 0 && grandTotalRaw > totSIOrc
-    ? Math.round(arqTotal * (1 - aliqImpOrc2/100) * 100) / 100
+  const grandTotalRaw = Math.round((arqTotal + engTotal) * 100) / 100;
+  // Se totSI está disponível, deriva arq e eng proporcionalmente a partir dele
+  const arqTotalFix = totSIOrc > 0 && grandTotalRaw > 0
+    ? Math.round(totSIOrc * (arqTotal / grandTotalRaw) * 100) / 100
     : arqTotal;
-  const engTotalFix = temImpOrc && totSIOrc > 0 && grandTotalRaw > totSIOrc
-    ? Math.round(engTotal * (1 - aliqImpOrc2/100) * 100) / 100
+  const engTotalFix = totSIOrc > 0 && grandTotalRaw > 0
+    ? Math.round(totSIOrc * (engTotal / grandTotalRaw) * 100) / 100
     : engTotal;
   const grandTotal = Math.round((arqTotalFix + engTotalFix) * 100) / 100;
 
