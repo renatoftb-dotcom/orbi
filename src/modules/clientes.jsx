@@ -90,7 +90,6 @@ function ClienteExpandivel({ cliente, data, waLink }) {
 
 function Clientes({ data, save, onAbrirOrcamento }) {
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
-  if (abrindoOrcamento) return null;
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
@@ -148,6 +147,8 @@ function Clientes({ data, save, onAbrirOrcamento }) {
   }
 
   // ── KANBAN ───────────────────────────────────────────────────
+  if (abrindoOrcamento) return null;
+
   if (view === "kanban") {
     const filtrados = data.clientes.filter(c => {
       if (!busca) return true;

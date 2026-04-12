@@ -171,6 +171,7 @@ export default function ModuloClientesFornecedores() {
                 onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
                 onClick={() => {
                   setAba(k);
+                  setOrcamentoTelaCheia(null);
                   if(k==="clientes")    setClientesKey(n=>n+1);
                   if(k==="projetos")    setProjetosKey(n=>n+1);
                   if(k==="obras")       setObrasKey(n=>n+1);
@@ -186,7 +187,7 @@ export default function ModuloClientesFornecedores() {
             <button style={itemStyle(aba==="escritorio")}
               onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
               onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
-              onClick={() => { setAba("escritorio"); setEscritorioKey(n=>n+1); }}>
+              onClick={() => { setAba("escritorio"); setEscritorioKey(n=>n+1); setOrcamentoTelaCheia(null); }}>
               Escritório
             </button>
             <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -216,6 +217,27 @@ export default function ModuloClientesFornecedores() {
         </div>
         <div style={{ flex:1, overflowY:"auto" }}>
           <>
+          {orcamentoTelaCheia ? (
+            <FormOrcamentoProjetoTeste
+              clienteNome={orcamentoTelaCheia.clienteOrc.nome}
+              clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
+              orcBase={orcamentoTelaCheia.orcBase || null}
+              onSalvar={async (orc) => {
+                const todos = data.orcamentosProjeto || [];
+                const maxSeq = todos.reduce((mx2, o2) => {
+                  const mm = (o2.id||"").match(/^ORC-(\d+)$/);
+                  return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
+                }, 0);
+                const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
+                const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
+                const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
+                await save({ ...data, orcamentosProjeto: novos2 });
+                setOrcamentoTelaCheia(null);
+                setClientesKey(n=>n+1);
+              }}
+              onVoltar={() => setOrcamentoTelaCheia(null)}
+            />
+          ) : (<>
           {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
           {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc })} orcamentoAberto={!!orcamentoTelaCheia} />}
           {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
@@ -225,36 +247,10 @@ export default function ModuloClientesFornecedores() {
           {aba === "nf"           && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"   && <Escritorio key={escritorioKey} data={data} save={save} />}
           {aba === "teste"        && <TesteOrcamento data={data} save={save} />}
+          </>)}
           </>
         </div>
       </div>
-
-      {/* Orçamento em tela cheia */}
-
-
-      {orcamentoTelaCheia && (
-        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#fff", overflow:"auto" }}>
-          <FormOrcamentoProjetoTeste
-            clienteNome={orcamentoTelaCheia.clienteOrc.nome}
-            clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
-            orcBase={orcamentoTelaCheia.orcBase || null}
-            onSalvar={async (orc) => {
-              const todos = data.orcamentosProjeto || [];
-              const maxSeq = todos.reduce((mx2, o2) => {
-                const mm = (o2.id||"").match(/^ORC-(\d+)$/);
-                return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
-              }, 0);
-              const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
-              const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
-              const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
-              await save({ ...data, orcamentosProjeto: novos2 });
-              setOrcamentoTelaCheia(null);
-              setClientesKey(n=>n+1);
-            }}
-            onVoltar={() => setOrcamentoTelaCheia(null)}
-          />
-        </div>
-      )}
       {showBackup && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
           <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:14, padding:24, width:"100%", maxWidth:600, maxHeight:"85vh", display:"flex", flexDirection:"column", gap:16 }}>
