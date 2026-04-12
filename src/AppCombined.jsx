@@ -3055,7 +3055,7 @@ function ResultadoOrcamentoProjeto({ orc, onEditar, onVerProposta, fmt, fmtM2 })
   const [expandido, setExpandido] = useState({ lojas:false, ancora:false, apto:false, galpao:false, memoria:false, tabela:false, eng:false, arq:false });
   const [incluiArq, setIncluiArq] = useState(true);
   const [incluiEng, setIncluiEng] = useState(true);
-  const _arqBase = r.precoTotal || r.precoFinal || 0;
+  const _arqBase = r.precoArq || r.precoTotal || r.precoFinal || 0;
   const _engRaw  = Math.round((r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng) * 100) / 100;
   const _engRepFator = (r.nUnidades||1) > 1
     ? (r.repeticaoFaixas||[]).length > 0
@@ -3206,8 +3206,8 @@ function ResultadoOrcamentoProjeto({ orc, onEditar, onVerProposta, fmt, fmtM2 })
           const atTotal = at1 * nUnid;
           const tcfgR = getTipoConfig(r.tipo);
           // Imposto
-          const temImposto = r.impostoAplicado && (r.aliquotaImposto||0) > 0;
-          const aliqImp = r.aliquotaImposto || 0;
+          const temImposto = !!(orc.temImposto ?? r.impostoAplicado);
+          const aliqImp = orc.aliqImp ?? r.aliquotaImposto ?? 0;
           // Valor sem imposto = valor_bruto * (1 - aliq/100) pois foi calculado por dentro
           const totalComImposto = (incluiArq?arqTotal:0)+(incluiEng?engTotalRepet:0);
           const totalSemImposto = temImposto ? Math.round(totalComImposto * (1 - aliqImp/100) * 100) / 100 : totalComImposto;
@@ -3927,13 +3927,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const nUnid   = r.nUnidades || 1;
 
   // Imposto
-  const temImp  = r.impostoAplicado && (r.aliquotaImposto||0) > 0;
-  const aliqImp = r.aliquotaImposto || 0;
+  const temImp  = !!(orc.temImposto ?? r.impostoAplicado);
+  const aliqImp = orc.aliqImp ?? r.aliquotaImposto ?? 0;
   const semFat  = temImp ? (1 - aliqImp/100) : 1;
 
-  // Arq e Eng COM imposto (igual preview)
-  const arqCI   = temImp ? Math.round((r.precoTotal||r.precoFinal||0)*100)/100
-                         : Math.round((r.precoTotal||r.precoFinal||0)*100)/100;
+  // Arq e Eng SEM imposto
+  const arqCI   = Math.round((r.precoArq||r.precoTotal||r.precoFinal||0)*100)/100;
   const engRaw  = Math.round((r.engTotal ?? calcularEngenharia(area).totalEng)*100)/100;
   let engRepet  = 0;
   if (nUnid > 1) {
@@ -3944,10 +3943,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     }
   }
   const engBase = Math.round((engRaw + engRepet)*100)/100;
-  const engCI   = temImp ? Math.round(engBase/semFat*100)/100 : engBase;
-  const totSI   = Math.round((arqCI*semFat + engCI*semFat)*100)/100;
-  const impostoV= temImp ? Math.round((arqCI+engCI - totSI)*100)/100 : 0;
-  const totCI   = Math.round((arqCI + engCI)*100)/100;
+  const engCI   = Math.round((r.precoEng||engBase)*100)/100;
+  const totSI   = Math.round((arqCI + engCI)*100)/100;
+  const totCI   = temImp ? Math.round(totSI/(1-aliqImp/100)*100)/100 : totSI;
+  const impostoV= temImp ? Math.round((totCI - totSI)*100)/100 : 0;
 
   // Escopo (igual preview)
   const escopoDefault = [
@@ -4590,7 +4589,7 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
   const r        = orc.resultado || {};
   const nUnid    = r.nUnidades || 1;
   const engUnit  = r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng;
-  const arqTotal = r.precoTotal || r.precoFinal || 0;
+  const arqTotal = r.precoArq || r.precoTotal || r.precoFinal || 0;
   let engRepet   = 0;
   if (nUnid > 1) {
     let areaAcum = r.areaTotal || 0;
@@ -4675,7 +4674,8 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
     }));
   })();
   const engItemNaoIncl = "Projetos de Engenharia (Estrutural · Elétrico · Hidrossanitário)";
-  const temImposto = r.impostoAplicado && (r.aliquotaImposto||0) > 0;
+  const temImposto = !!(orc.temImposto ?? r.impostoAplicado);
+  const aliqImpostoOrc = orc.aliqImp ?? r.aliquotaImposto ?? 0;
   const naoInclusosComEng = [
     ...(mRaw.naoInclusos||[]).filter(i =>
       !i.includes("Projetos de Engenharia") &&
@@ -4812,8 +4812,8 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
 
   const totalServicos = (m.servicos||[]).reduce((s,sv)=>s+(sv.valor||0),0);
   // Imposto no editor HTML
-  const temImpHTML   = r.impostoAplicado && (r.aliquotaImposto||0) > 0;
-  const aliqImpHTML  = r.aliquotaImposto || 0;
+  const temImpHTML   = !!(orc.temImposto ?? r.impostoAplicado);
+  const aliqImpHTML  = orc.aliqImp ?? r.aliquotaImposto ?? 0;
   const semImpHTML   = temImpHTML ? (1 - aliqImpHTML/100) : 1;
   // servicos já têm valor COM imposto; extraímos SEM imposto para exibir nos itens
   const totalSemImpHTML  = Math.round(totalServicos * semImpHTML * 100)/100;
