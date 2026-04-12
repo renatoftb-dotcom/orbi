@@ -4589,18 +4589,10 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
 
   const r        = orc.resultado || {};
   const nUnid    = r.nUnidades || 1;
-  const engUnit  = r.precoEng || (r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng);
+  // Usa sempre os valores já calculados e salvos no banco
   const arqTotal = r.precoArq || r.precoTotal || r.precoFinal || 0;
-  let engRepet   = 0;
-  if (nUnid > 1) {
-    let areaAcum = r.areaTotal || 0;
-    for (let i = 2; i <= nUnid; i++) {
-      const pct = getTipoConfig(r.tipo || orc.tipo).repeticaoPcts(areaAcum);
-      engRepet += engUnit * pct;
-      areaAcum += (r.areaTotal||0);
-    }
-  }
-  const engTotal   = engUnit + engRepet;
+  const engTotal = r.precoEng || (r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng);
+  const engUnit  = engTotal;
   // Usa sempre totSI do orc como fonte da verdade para valores sem imposto
   const totSIOrc   = orc.totSI || 0;
   const temImpOrc  = !!(orc.temImposto ?? r.impostoAplicado);
