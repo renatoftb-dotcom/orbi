@@ -1,167 +1,141 @@
 // ═══════════════════════════════════════════════════════════════
 // VICKE — Backend Server
-// Node.js + Express + SQLite
+// Node.js + Express + PostgreSQL
 // ═══════════════════════════════════════════════════════════════
 
-const express            = require("express");
-const { DatabaseSync }   = require("node:sqlite");
-const cors               = require("cors");
-const path               = require("path");
-const fs                 = require("fs");
-const jwt                = require("jsonwebtoken");
-const bcrypt             = require("bcryptjs");
+const express  = require("express");
+const { Pool } = require("pg");
+const cors     = require("cors");
+const path     = require("path");
+const fs       = require("fs");
+const jwt      = require("jsonwebtoken");
+const bcrypt   = require("bcryptjs");
 
 const JWT_SECRET = process.env.JWT_SECRET || "vicke-secret-dev-2026";
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
-const DB_PATH = process.env.DB_PATH || path.join(__dirname, "vicke.db");
 
 // ── Middleware ────────────────────────────────────────────────
 app.use(cors());
 app.use(express.json({ limit: "10mb" }));
 
-// Serve frontend estático (pasta ../frontend)
 const FRONTEND_PATH = path.join(__dirname, "..", "frontend");
 if (fs.existsSync(FRONTEND_PATH)) {
   app.use(express.static(FRONTEND_PATH));
 }
 
-// ── Banco de dados ─────────────────────────────────────────────
-// Aguarda o volume estar montado antes de abrir o banco
-function waitForVolume(path, retries = 10, delay = 500) {
-  const dir = require("path").dirname(path);
-  for (let i = 0; i < retries; i++) {
-    try {
-      fs.mkdirSync(dir, { recursive: true });
-      // Testa escrita no diretório
-      const testFile = require("path").join(dir, ".test");
-      fs.writeFileSync(testFile, "ok");
-      fs.unlinkSync(testFile);
-      console.log(`  Volume disponível em: ${dir}`);
-      return true;
-    } catch(e) {
-      console.log(`  Aguardando volume... tentativa ${i+1}/${retries}`);
-      // Espera síncrona
-      const start = Date.now();
-      while (Date.now() - start < delay) {}
-    }
+// ── Banco de dados — PostgreSQL ────────────────────────────────
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL?.includes("railway") ? { rejectUnauthorized: false } : false,
+});
+
+async function query(sql, params = []) {
+  const client = await pool.connect();
+  try {
+    const result = await client.query(sql, params);
+    return result;
+  } finally {
+    client.release();
   }
-  console.warn(`  Volume não disponível após ${retries} tentativas, usando caminho padrão`);
-  return false;
 }
 
-waitForVolume(DB_PATH);
-const db = new DatabaseSync(DB_PATH);
-
-db.exec("PRAGMA journal_mode = WAL");
-db.exec("PRAGMA foreign_keys = ON");
-
 // ── Criação das tabelas ────────────────────────────────────────
-db.exec(`
-  CREATE TABLE IF NOT EXISTS clientes (
-    id          TEXT PRIMARY KEY,
-    dados       TEXT NOT NULL,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+async function initDB() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS clientes (
+      id           TEXT PRIMARY KEY,
+      dados        JSONB NOT NULL,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS fornecedores (
-    id          TEXT PRIMARY KEY,
-    dados       TEXT NOT NULL,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS fornecedores (
+      id           TEXT PRIMARY KEY,
+      dados        JSONB NOT NULL,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS materiais (
-    id          TEXT PRIMARY KEY,
-    dados       TEXT NOT NULL,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS materiais (
+      id           TEXT PRIMARY KEY,
+      dados        JSONB NOT NULL,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS obras (
-    id          TEXT PRIMARY KEY,
-    dados       TEXT NOT NULL,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS obras (
+      id           TEXT PRIMARY KEY,
+      dados        JSONB NOT NULL,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS lancamentos (
-    id          TEXT PRIMARY KEY,
-    dados       TEXT NOT NULL,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS lancamentos (
+      id           TEXT PRIMARY KEY,
+      dados        JSONB NOT NULL,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS orcamentos_projeto (
-    id          TEXT PRIMARY KEY,
-    clienteId   TEXT,
-    dados       TEXT NOT NULL,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS orcamentos_projeto (
+      id           TEXT PRIMARY KEY,
+      cliente_id   TEXT,
+      dados        JSONB NOT NULL,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS receitas_financeiro (
-    id          TEXT PRIMARY KEY,
-    orcId       TEXT,
-    clienteId   TEXT,
-    dados       TEXT NOT NULL,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS receitas_financeiro (
+      id           TEXT PRIMARY KEY,
+      orc_id       TEXT,
+      cliente_id   TEXT,
+      dados        JSONB NOT NULL,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS escritorio (
-    id          INTEGER PRIMARY KEY DEFAULT 1,
-    dados       TEXT NOT NULL,
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS escritorio (
+      id           INTEGER PRIMARY KEY DEFAULT 1,
+      dados        JSONB NOT NULL,
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS config_comodos (
-    chave       TEXT PRIMARY KEY,
-    dados       TEXT NOT NULL,
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS config_geral (
+      chave        TEXT PRIMARY KEY,
+      dados        JSONB NOT NULL,
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS empresas (
-    id          TEXT PRIMARY KEY,
-    nome        TEXT NOT NULL,
-    plano       TEXT DEFAULT 'gratuito',
-    ativo       INTEGER DEFAULT 1,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now'))
-  );
+    CREATE TABLE IF NOT EXISTS empresas (
+      id           TEXT PRIMARY KEY,
+      nome         TEXT NOT NULL,
+      plano        TEXT DEFAULT 'gratuito',
+      ativo        BOOLEAN DEFAULT TRUE,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
 
-  CREATE TABLE IF NOT EXISTS usuarios (
-    id          TEXT PRIMARY KEY,
-    empresa_id  TEXT NOT NULL,
-    nome        TEXT NOT NULL,
-    email       TEXT UNIQUE NOT NULL,
-    senha_hash  TEXT NOT NULL,
-    perfil      TEXT DEFAULT 'escritorio',
-    ativo       INTEGER DEFAULT 1,
-    criadoEm    TEXT DEFAULT (datetime('now')),
-    atualizadoEm TEXT DEFAULT (datetime('now')),
-    FOREIGN KEY (empresa_id) REFERENCES empresas(id)
-  );
-`);
+    CREATE TABLE IF NOT EXISTS usuarios (
+      id           TEXT PRIMARY KEY,
+      empresa_id   TEXT NOT NULL REFERENCES empresas(id),
+      nome         TEXT NOT NULL,
+      email        TEXT UNIQUE NOT NULL,
+      senha_hash   TEXT NOT NULL,
+      perfil       TEXT DEFAULT 'escritorio',
+      ativo        BOOLEAN DEFAULT TRUE,
+      criado_em    TIMESTAMPTZ DEFAULT NOW(),
+      atualizado_em TIMESTAMPTZ DEFAULT NOW()
+    );
+  `);
+  console.log("  ✓ Tabelas verificadas/criadas");
+}
 
 // ── Helpers ────────────────────────────────────────────────────
-const parseAll = rows => rows.map(r => JSON.parse(r.dados));
 const ok  = (res, data)         => res.json({ ok: true, data });
 const err = (res, msg, s = 400) => res.status(s).json({ ok: false, error: msg });
 const now = ()                  => new Date().toISOString();
-
-const upsert = (tabela, id, dados, extra = {}) => {
-  const cols = ["id", "dados", "criadoEm", "atualizadoEm", ...Object.keys(extra)];
-  const vals = [id, JSON.stringify(dados), now(), now(), ...Object.values(extra)];
-  const sets = ["dados = excluded.dados", "atualizadoEm = excluded.atualizadoEm",
-                ...Object.keys(extra).map(k => `${k} = excluded.${k}`)];
-  db.prepare(`
-    INSERT INTO ${tabela} (${cols.join(",")}) VALUES (${cols.map(() => "?").join(",")})
-    ON CONFLICT(id) DO UPDATE SET ${sets.join(", ")}
-  `).run(...vals);
-};
 
 // ── Middleware de autenticação ─────────────────────────────────
 function authMiddleware(req, res, next) {
@@ -183,460 +157,499 @@ function masterOnly(req, res, next) {
 }
 
 // ── AUTH ───────────────────────────────────────────────────────
-// POST /auth/login
-app.post("/auth/login", (req, res) => {
-  const { email, senha } = req.body;
-  if (!email || !senha) return err(res, "Email e senha são obrigatórios");
+app.post("/auth/login", async (req, res) => {
+  try {
+    const { email, senha } = req.body;
+    if (!email || !senha) return err(res, "Email e senha são obrigatórios");
 
-  const usuario = db.prepare("SELECT * FROM usuarios WHERE email = ? AND ativo = 1").get(email);
-  if (!usuario) return err(res, "Email ou senha inválidos", 401);
+    const { rows } = await query("SELECT * FROM usuarios WHERE email = $1 AND ativo = TRUE", [email]);
+    const usuario = rows[0];
+    if (!usuario) return err(res, "Email ou senha inválidos", 401);
 
-  const senhaOk = bcrypt.compareSync(senha, usuario.senha_hash);
-  if (!senhaOk) return err(res, "Email ou senha inválidos", 401);
+    const senhaOk = bcrypt.compareSync(senha, usuario.senha_hash);
+    if (!senhaOk) return err(res, "Email ou senha inválidos", 401);
 
-  const empresa = db.prepare("SELECT * FROM empresas WHERE id = ? AND ativo = 1").get(usuario.empresa_id);
-  if (!empresa) return err(res, "Empresa inativa ou não encontrada", 401);
+    const { rows: empRows } = await query("SELECT * FROM empresas WHERE id = $1 AND ativo = TRUE", [usuario.empresa_id]);
+    const empresa = empRows[0];
+    if (!empresa) return err(res, "Empresa inativa ou não encontrada", 401);
 
-  const token = jwt.sign(
-    { id: usuario.id, nome: usuario.nome, email: usuario.email,
+    const token = jwt.sign(
+      { id: usuario.id, nome: usuario.nome, email: usuario.email,
+        perfil: usuario.perfil, empresa_id: usuario.empresa_id,
+        empresa_nome: empresa.nome },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    ok(res, { token, usuario: {
+      id: usuario.id, nome: usuario.nome, email: usuario.email,
       perfil: usuario.perfil, empresa_id: usuario.empresa_id,
-      empresa_nome: empresa.nome },
-    JWT_SECRET,
-    { expiresIn: "7d" }
-  );
-
-  ok(res, { token, usuario: {
-    id: usuario.id, nome: usuario.nome, email: usuario.email,
-    perfil: usuario.perfil, empresa_id: usuario.empresa_id,
-    empresa_nome: empresa.nome
-  }});
+      empresa_nome: empresa.nome
+    }});
+  } catch(e) { err(res, e.message); }
 });
 
-// GET /auth/me — valida token e retorna dados do usuário
-app.get("/auth/me", authMiddleware, (req, res) => {
-  const usuario = db.prepare("SELECT id,nome,email,perfil,empresa_id,ativo FROM usuarios WHERE id = ?").get(req.user.id);
-  if (!usuario || !usuario.ativo) return err(res, "Usuário inativo", 401);
-  const empresa = db.prepare("SELECT id,nome,plano,ativo FROM empresas WHERE id = ?").get(usuario.empresa_id);
-  ok(res, { ...usuario, empresa_nome: empresa?.nome });
+app.get("/auth/me", authMiddleware, async (req, res) => {
+  try {
+    const { rows } = await query("SELECT id,nome,email,perfil,empresa_id,ativo FROM usuarios WHERE id = $1", [req.user.id]);
+    const usuario = rows[0];
+    if (!usuario || !usuario.ativo) return err(res, "Usuário inativo", 401);
+    const { rows: empRows } = await query("SELECT nome FROM empresas WHERE id = $1", [usuario.empresa_id]);
+    ok(res, { ...usuario, empresa_nome: empRows[0]?.nome });
+  } catch(e) { err(res, e.message); }
 });
 
-// ── ADMIN — EMPRESAS (só master) ──────────────────────────────
-app.get("/admin/empresas", authMiddleware, masterOnly, (req, res) => {
-  const empresas = db.prepare("SELECT * FROM empresas ORDER BY criadoEm ASC").all();
-  ok(res, empresas);
+// ── ADMIN — EMPRESAS ──────────────────────────────────────────
+app.get("/admin/empresas", authMiddleware, masterOnly, async (req, res) => {
+  try {
+    const { rows } = await query("SELECT * FROM empresas ORDER BY criado_em ASC");
+    ok(res, rows);
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/admin/empresas", authMiddleware, masterOnly, (req, res) => {
-  const { nome, plano } = req.body;
-  if (!nome) return err(res, "nome é obrigatório");
-  const id = `emp_${Date.now()}`;
-  db.prepare("INSERT INTO empresas (id, nome, plano, ativo, criadoEm, atualizadoEm) VALUES (?,?,?,1,?,?)")
-    .run(id, nome, plano || "gratuito", now(), now());
-  ok(res, { id, nome, plano: plano || "gratuito", ativo: 1 });
+app.post("/admin/empresas", authMiddleware, masterOnly, async (req, res) => {
+  try {
+    const { nome, plano } = req.body;
+    if (!nome) return err(res, "nome é obrigatório");
+    const id = `emp_${Date.now()}`;
+    await query("INSERT INTO empresas (id,nome,plano,ativo) VALUES ($1,$2,$3,TRUE)", [id, nome, plano || "gratuito"]);
+    ok(res, { id, nome, plano: plano || "gratuito", ativo: true });
+  } catch(e) { err(res, e.message); }
 });
 
-app.put("/admin/empresas/:id", authMiddleware, masterOnly, (req, res) => {
-  const { nome, plano, ativo } = req.body;
-  db.prepare("UPDATE empresas SET nome=?, plano=?, ativo=?, atualizadoEm=? WHERE id=?")
-    .run(nome, plano, ativo, now(), req.params.id);
-  ok(res, { id: req.params.id, nome, plano, ativo });
+app.put("/admin/empresas/:id", authMiddleware, masterOnly, async (req, res) => {
+  try {
+    const { nome, plano, ativo } = req.body;
+    await query("UPDATE empresas SET nome=$1,plano=$2,ativo=$3,atualizado_em=NOW() WHERE id=$4", [nome, plano, ativo, req.params.id]);
+    ok(res, { id: req.params.id, nome, plano, ativo });
+  } catch(e) { err(res, e.message); }
 });
 
-// ── ADMIN — USUÁRIOS (só master) ──────────────────────────────
-app.get("/admin/usuarios", authMiddleware, masterOnly, (req, res) => {
-  const usuarios = db.prepare(
-    "SELECT id,empresa_id,nome,email,perfil,ativo,criadoEm FROM usuarios ORDER BY criadoEm ASC"
-  ).all();
-  ok(res, usuarios);
+// ── ADMIN — USUÁRIOS ──────────────────────────────────────────
+app.get("/admin/usuarios", authMiddleware, masterOnly, async (req, res) => {
+  try {
+    const { rows } = await query("SELECT id,empresa_id,nome,email,perfil,ativo,criado_em FROM usuarios ORDER BY criado_em ASC");
+    ok(res, rows);
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/admin/usuarios", authMiddleware, masterOnly, (req, res) => {
-  const { empresa_id, nome, email, senha, perfil } = req.body;
-  if (!empresa_id || !nome || !email || !senha) return err(res, "empresa_id, nome, email e senha são obrigatórios");
-  const existe = db.prepare("SELECT id FROM usuarios WHERE email = ?").get(email);
-  if (existe) return err(res, "Email já cadastrado");
-  const id = `usr_${Date.now()}`;
-  const senha_hash = bcrypt.hashSync(senha, 10);
-  db.prepare("INSERT INTO usuarios (id,empresa_id,nome,email,senha_hash,perfil,ativo,criadoEm,atualizadoEm) VALUES (?,?,?,?,?,?,1,?,?)")
-    .run(id, empresa_id, nome, email, senha_hash, perfil || "escritorio", now(), now());
-  ok(res, { id, empresa_id, nome, email, perfil: perfil || "escritorio", ativo: 1 });
-});
-
-app.put("/admin/usuarios/:id", authMiddleware, masterOnly, (req, res) => {
-  const { nome, email, perfil, ativo, senha } = req.body;
-  if (senha) {
+app.post("/admin/usuarios", authMiddleware, masterOnly, async (req, res) => {
+  try {
+    const { empresa_id, nome, email, senha, perfil } = req.body;
+    if (!empresa_id || !nome || !email || !senha) return err(res, "empresa_id, nome, email e senha são obrigatórios");
+    const { rows: existe } = await query("SELECT id FROM usuarios WHERE email = $1", [email]);
+    if (existe.length > 0) return err(res, "Email já cadastrado");
+    const id = `usr_${Date.now()}`;
     const senha_hash = bcrypt.hashSync(senha, 10);
-    db.prepare("UPDATE usuarios SET nome=?,email=?,perfil=?,ativo=?,senha_hash=?,atualizadoEm=? WHERE id=?")
-      .run(nome, email, perfil, ativo, senha_hash, now(), req.params.id);
-  } else {
-    db.prepare("UPDATE usuarios SET nome=?,email=?,perfil=?,ativo=?,atualizadoEm=? WHERE id=?")
-      .run(nome, email, perfil, ativo, now(), req.params.id);
-  }
-  ok(res, { id: req.params.id, nome, email, perfil, ativo });
+    await query("INSERT INTO usuarios (id,empresa_id,nome,email,senha_hash,perfil,ativo) VALUES ($1,$2,$3,$4,$5,$6,TRUE)",
+      [id, empresa_id, nome, email, senha_hash, perfil || "escritorio"]);
+    ok(res, { id, empresa_id, nome, email, perfil: perfil || "escritorio", ativo: true });
+  } catch(e) { err(res, e.message); }
 });
 
-// ── SEED MASTER (cria usuário master se não existir) ───────────
-function seedMaster() {
-  const empresa = db.prepare("SELECT id FROM empresas WHERE id = 'emp_master'").get();
-  if (!empresa) {
-    db.prepare("INSERT INTO empresas (id,nome,plano,ativo,criadoEm,atualizadoEm) VALUES (?,?,?,1,?,?)")
-      .run("emp_master", "Vicke Master", "master", now(), now());
+app.put("/admin/usuarios/:id", authMiddleware, masterOnly, async (req, res) => {
+  try {
+    const { nome, email, perfil, ativo, senha } = req.body;
+    if (senha) {
+      const senha_hash = bcrypt.hashSync(senha, 10);
+      await query("UPDATE usuarios SET nome=$1,email=$2,perfil=$3,ativo=$4,senha_hash=$5,atualizado_em=NOW() WHERE id=$6",
+        [nome, email, perfil, ativo, senha_hash, req.params.id]);
+    } else {
+      await query("UPDATE usuarios SET nome=$1,email=$2,perfil=$3,ativo=$4,atualizado_em=NOW() WHERE id=$5",
+        [nome, email, perfil, ativo, req.params.id]);
+    }
+    ok(res, { id: req.params.id, nome, email, perfil, ativo });
+  } catch(e) { err(res, e.message); }
+});
+
+// ── SEED MASTER ────────────────────────────────────────────────
+async function seedMaster() {
+  const { rows: empRows } = await query("SELECT id FROM empresas WHERE id = 'emp_master'");
+  if (empRows.length === 0) {
+    await query("INSERT INTO empresas (id,nome,plano,ativo) VALUES ('emp_master','Vicke Master','master',TRUE)");
     console.log("  ✓ Empresa master criada");
   }
-  const master = db.prepare("SELECT id FROM usuarios WHERE email = 'renato@vicke.com.br'").get();
-  if (!master) {
+  const { rows: usrRows } = await query("SELECT id FROM usuarios WHERE email = 'renato@vicke.com.br'");
+  if (usrRows.length === 0) {
     const senha_hash = bcrypt.hashSync("vicke2026", 10);
-    db.prepare("INSERT INTO usuarios (id,empresa_id,nome,email,senha_hash,perfil,ativo,criadoEm,atualizadoEm) VALUES (?,?,?,?,?,?,1,?,?)")
-      .run("usr_master", "emp_master", "Renato", "renato@vicke.com.br", senha_hash, "master", now(), now());
+    await query("INSERT INTO usuarios (id,empresa_id,nome,email,senha_hash,perfil,ativo) VALUES ('usr_master','emp_master','Renato','renato@vicke.com.br',$1,'master',TRUE)", [senha_hash]);
     console.log("  ✓ Usuário master criado: renato@vicke.com.br / vicke2026");
   }
 }
-seedMaster();
-
-
 
 // ── CLIENTES ───────────────────────────────────────────────────
-app.get("/api/clientes", (req, res) => {
-  ok(res, parseAll(db.prepare("SELECT dados FROM clientes ORDER BY criadoEm ASC").all()));
+app.get("/api/clientes", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM clientes ORDER BY criado_em ASC");
+    ok(res, rows.map(r => r.dados));
+  } catch(e) { err(res, e.message); }
 });
 
-app.get("/api/clientes/:id", (req, res) => {
-  const row = db.prepare("SELECT dados FROM clientes WHERE id = ?").get(req.params.id);
-  row ? ok(res, JSON.parse(row.dados)) : err(res, "Não encontrado", 404);
+app.get("/api/clientes/:id", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM clientes WHERE id = $1", [req.params.id]);
+    rows[0] ? ok(res, rows[0].dados) : err(res, "Não encontrado", 404);
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/api/clientes", (req, res) => {
-  const c = req.body;
-  if (!c.id || !c.nome) return err(res, "id e nome são obrigatórios");
-  upsert("clientes", c.id, c);
-  ok(res, c);
+app.post("/api/clientes", async (req, res) => {
+  try {
+    const c = req.body;
+    if (!c.id || !c.nome) return err(res, "id e nome são obrigatórios");
+    await query(`INSERT INTO clientes (id,dados) VALUES ($1,$2)
+      ON CONFLICT(id) DO UPDATE SET dados=$2, atualizado_em=NOW()`, [c.id, c]);
+    ok(res, c);
+  } catch(e) { err(res, e.message); }
 });
 
-app.put("/api/clientes/:id", (req, res) => {
-  const c = { ...req.body, id: req.params.id };
-  const r = db.prepare("UPDATE clientes SET dados=?, atualizadoEm=? WHERE id=?")
-               .run(JSON.stringify(c), now(), req.params.id);
-  r.changes === 0 ? err(res, "Não encontrado", 404) : ok(res, c);
+app.put("/api/clientes/:id", async (req, res) => {
+  try {
+    const c = { ...req.body, id: req.params.id };
+    const { rowCount } = await query("UPDATE clientes SET dados=$1, atualizado_em=NOW() WHERE id=$2", [c, req.params.id]);
+    rowCount === 0 ? err(res, "Não encontrado", 404) : ok(res, c);
+  } catch(e) { err(res, e.message); }
 });
 
-app.delete("/api/clientes/:id", (req, res) => {
-  db.prepare("DELETE FROM clientes WHERE id=?").run(req.params.id);
-  ok(res, { id: req.params.id });
+app.delete("/api/clientes/:id", async (req, res) => {
+  try {
+    await query("DELETE FROM clientes WHERE id=$1", [req.params.id]);
+    ok(res, { id: req.params.id });
+  } catch(e) { err(res, e.message); }
 });
 
 // ── FORNECEDORES ───────────────────────────────────────────────
-app.get("/api/fornecedores", (req, res) => {
-  const rows = db.prepare("SELECT dados FROM fornecedores ORDER BY criadoEm ASC").all();
-  ok(res, parseAll(rows));
+app.get("/api/fornecedores", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM fornecedores ORDER BY criado_em ASC");
+    ok(res, rows.map(r => r.dados));
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/api/fornecedores", (req, res) => {
-  const forn = req.body;
-  if (!forn.id) return err(res, "id é obrigatório");
-  db.prepare(`
-    INSERT INTO fornecedores (id, dados, criadoEm, atualizadoEm)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `).run(forn.id, JSON.stringify(forn), now(), now());
-  ok(res, forn);
+app.post("/api/fornecedores", async (req, res) => {
+  try {
+    const f = req.body;
+    if (!f.id) return err(res, "id é obrigatório");
+    await query(`INSERT INTO fornecedores (id,dados) VALUES ($1,$2)
+      ON CONFLICT(id) DO UPDATE SET dados=$2, atualizado_em=NOW()`, [f.id, f]);
+    ok(res, f);
+  } catch(e) { err(res, e.message); }
 });
 
-app.put("/api/fornecedores/:id", (req, res) => {
-  const forn = { ...req.body, id: req.params.id };
-  const result = db.prepare(
-    "UPDATE fornecedores SET dados = ?, atualizadoEm = ? WHERE id = ?"
-  ).run(JSON.stringify(forn), now(), req.params.id);
-  if (result.changes === 0) return err(res, "Fornecedor não encontrado", 404);
-  ok(res, forn);
+app.put("/api/fornecedores/:id", async (req, res) => {
+  try {
+    const f = { ...req.body, id: req.params.id };
+    const { rowCount } = await query("UPDATE fornecedores SET dados=$1, atualizado_em=NOW() WHERE id=$2", [f, req.params.id]);
+    rowCount === 0 ? err(res, "Não encontrado", 404) : ok(res, f);
+  } catch(e) { err(res, e.message); }
 });
 
-app.delete("/api/fornecedores/:id", (req, res) => {
-  db.prepare("DELETE FROM fornecedores WHERE id = ?").run(req.params.id);
-  ok(res, { id: req.params.id });
+app.delete("/api/fornecedores/:id", async (req, res) => {
+  try {
+    await query("DELETE FROM fornecedores WHERE id=$1", [req.params.id]);
+    ok(res, { id: req.params.id });
+  } catch(e) { err(res, e.message); }
 });
 
 // ── MATERIAIS ──────────────────────────────────────────────────
-app.get("/api/materiais", (req, res) => {
-  const rows = db.prepare("SELECT dados FROM materiais ORDER BY criadoEm ASC").all();
-  ok(res, parseAll(rows));
+app.get("/api/materiais", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM materiais ORDER BY criado_em ASC");
+    ok(res, rows.map(r => r.dados));
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/api/materiais", (req, res) => {
-  const mat = req.body;
-  if (!mat.id) return err(res, "id é obrigatório");
-  db.prepare(`
-    INSERT INTO materiais (id, dados, criadoEm, atualizadoEm)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `).run(mat.id, JSON.stringify(mat), now(), now());
-  ok(res, mat);
+app.post("/api/materiais", async (req, res) => {
+  try {
+    const m = req.body;
+    if (!m.id) return err(res, "id é obrigatório");
+    await query(`INSERT INTO materiais (id,dados) VALUES ($1,$2)
+      ON CONFLICT(id) DO UPDATE SET dados=$2, atualizado_em=NOW()`, [m.id, m]);
+    ok(res, m);
+  } catch(e) { err(res, e.message); }
 });
 
-app.delete("/api/materiais/:id", (req, res) => {
-  db.prepare("DELETE FROM materiais WHERE id = ?").run(req.params.id);
-  ok(res, { id: req.params.id });
+app.delete("/api/materiais/:id", async (req, res) => {
+  try {
+    await query("DELETE FROM materiais WHERE id=$1", [req.params.id]);
+    ok(res, { id: req.params.id });
+  } catch(e) { err(res, e.message); }
 });
 
 // ── OBRAS ──────────────────────────────────────────────────────
-app.get("/api/obras", (req, res) => {
-  const rows = db.prepare("SELECT dados FROM obras ORDER BY criadoEm ASC").all();
-  ok(res, parseAll(rows));
+app.get("/api/obras", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM obras ORDER BY criado_em ASC");
+    ok(res, rows.map(r => r.dados));
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/api/obras", (req, res) => {
-  const obra = req.body;
-  if (!obra.id) return err(res, "id é obrigatório");
-  db.prepare(`
-    INSERT INTO obras (id, dados, criadoEm, atualizadoEm)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `).run(obra.id, JSON.stringify(obra), now(), now());
-  ok(res, obra);
+app.post("/api/obras", async (req, res) => {
+  try {
+    const o = req.body;
+    if (!o.id) return err(res, "id é obrigatório");
+    await query(`INSERT INTO obras (id,dados) VALUES ($1,$2)
+      ON CONFLICT(id) DO UPDATE SET dados=$2, atualizado_em=NOW()`, [o.id, o]);
+    ok(res, o);
+  } catch(e) { err(res, e.message); }
 });
 
-app.delete("/api/obras/:id", (req, res) => {
-  db.prepare("DELETE FROM obras WHERE id = ?").run(req.params.id);
-  ok(res, { id: req.params.id });
+app.delete("/api/obras/:id", async (req, res) => {
+  try {
+    await query("DELETE FROM obras WHERE id=$1", [req.params.id]);
+    ok(res, { id: req.params.id });
+  } catch(e) { err(res, e.message); }
 });
 
 // ── LANÇAMENTOS ────────────────────────────────────────────────
-app.get("/api/lancamentos", (req, res) => {
-  const rows = db.prepare("SELECT dados FROM lancamentos ORDER BY criadoEm ASC").all();
-  ok(res, parseAll(rows));
+app.get("/api/lancamentos", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM lancamentos ORDER BY criado_em ASC");
+    ok(res, rows.map(r => r.dados));
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/api/lancamentos", (req, res) => {
-  const lanc = req.body;
-  if (!lanc.id) return err(res, "id é obrigatório");
-  db.prepare(`
-    INSERT INTO lancamentos (id, dados, criadoEm, atualizadoEm)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `).run(lanc.id, JSON.stringify(lanc), now(), now());
-  ok(res, lanc);
+app.post("/api/lancamentos", async (req, res) => {
+  try {
+    const l = req.body;
+    if (!l.id) return err(res, "id é obrigatório");
+    await query(`INSERT INTO lancamentos (id,dados) VALUES ($1,$2)
+      ON CONFLICT(id) DO UPDATE SET dados=$2, atualizado_em=NOW()`, [l.id, l]);
+    ok(res, l);
+  } catch(e) { err(res, e.message); }
 });
 
-app.delete("/api/lancamentos/:id", (req, res) => {
-  db.prepare("DELETE FROM lancamentos WHERE id = ?").run(req.params.id);
-  ok(res, { id: req.params.id });
+app.delete("/api/lancamentos/:id", async (req, res) => {
+  try {
+    await query("DELETE FROM lancamentos WHERE id=$1", [req.params.id]);
+    ok(res, { id: req.params.id });
+  } catch(e) { err(res, e.message); }
 });
 
-// ── ORÇAMENTOS DE PROJETO ──────────────────────────────────────
-app.get("/api/orcamentos", (req, res) => {
-  const { clienteId } = req.query;
-  const sql = clienteId
-    ? "SELECT dados FROM orcamentos_projeto WHERE clienteId = ? ORDER BY criadoEm ASC"
-    : "SELECT dados FROM orcamentos_projeto ORDER BY criadoEm ASC";
-  const rows = clienteId
-    ? db.prepare(sql).all(clienteId)
-    : db.prepare(sql).all();
-  ok(res, parseAll(rows));
+// ── ORÇAMENTOS ─────────────────────────────────────────────────
+app.get("/api/orcamentos", async (req, res) => {
+  try {
+    const { clienteId } = req.query;
+    const { rows } = clienteId
+      ? await query("SELECT dados FROM orcamentos_projeto WHERE cliente_id=$1 ORDER BY criado_em ASC", [clienteId])
+      : await query("SELECT dados FROM orcamentos_projeto ORDER BY criado_em ASC");
+    ok(res, rows.map(r => r.dados));
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/api/orcamentos", (req, res) => {
-  const orc = req.body;
-  if (!orc.id) return err(res, "id é obrigatório");
-  db.prepare(`
-    INSERT INTO orcamentos_projeto (id, clienteId, dados, criadoEm, atualizadoEm)
-    VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET dados = excluded.dados, clienteId = excluded.clienteId, atualizadoEm = excluded.atualizadoEm
-  `).run(orc.id, orc.clienteId || null, JSON.stringify(orc), orc.criadoEm || now(), now());
-  ok(res, orc);
+app.get("/api/orcamentos/:id", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM orcamentos_projeto WHERE id=$1", [req.params.id]);
+    rows[0] ? ok(res, rows[0].dados) : err(res, "Não encontrado", 404);
+  } catch(e) { err(res, e.message); }
 });
 
-app.get("/api/orcamentos/:id", (req, res) => {
-  const row = db.prepare("SELECT dados FROM orcamentos_projeto WHERE id = ?").get(req.params.id);
-  if (!row) return err(res, "Orçamento não encontrado", 404);
-  ok(res, JSON.parse(row.dados));
+app.post("/api/orcamentos", async (req, res) => {
+  try {
+    const o = req.body;
+    if (!o.id) return err(res, "id é obrigatório");
+    await query(`INSERT INTO orcamentos_projeto (id,cliente_id,dados) VALUES ($1,$2,$3)
+      ON CONFLICT(id) DO UPDATE SET dados=$3, cliente_id=$2, atualizado_em=NOW()`,
+      [o.id, o.clienteId || null, o]);
+    ok(res, o);
+  } catch(e) { err(res, e.message); }
 });
 
-app.put("/api/orcamentos/:id", (req, res) => {
-  const orc = { ...req.body, id: req.params.id };
-  const result = db.prepare(
-    "UPDATE orcamentos_projeto SET dados = ?, clienteId = ?, atualizadoEm = ? WHERE id = ?"
-  ).run(JSON.stringify(orc), orc.clienteId || null, now(), req.params.id);
-  if (result.changes === 0) return err(res, "Orçamento não encontrado", 404);
-  ok(res, orc);
+app.put("/api/orcamentos/:id", async (req, res) => {
+  try {
+    const o = { ...req.body, id: req.params.id };
+    const { rowCount } = await query("UPDATE orcamentos_projeto SET dados=$1, cliente_id=$2, atualizado_em=NOW() WHERE id=$3",
+      [o, o.clienteId || null, req.params.id]);
+    rowCount === 0 ? err(res, "Não encontrado", 404) : ok(res, o);
+  } catch(e) { err(res, e.message); }
 });
 
-app.delete("/api/orcamentos/:id", (req, res) => {
-  db.prepare("DELETE FROM orcamentos_projeto WHERE id = ?").run(req.params.id);
-  ok(res, { id: req.params.id });
+app.delete("/api/orcamentos/:id", async (req, res) => {
+  try {
+    await query("DELETE FROM orcamentos_projeto WHERE id=$1", [req.params.id]);
+    ok(res, { id: req.params.id });
+  } catch(e) { err(res, e.message); }
 });
 
-// ── RECEITAS FINANCEIRO ────────────────────────────────────────
-app.get("/api/receitas", (req, res) => {
-  const { orcId, clienteId } = req.query;
-  let sql = "SELECT dados FROM receitas_financeiro";
-  const params = [];
-  if (orcId)      { sql += " WHERE orcId = ?";     params.push(orcId); }
-  else if (clienteId) { sql += " WHERE clienteId = ?"; params.push(clienteId); }
-  sql += " ORDER BY criadoEm ASC";
-  const rows = db.prepare(sql).all(...params);
-  ok(res, parseAll(rows));
+// ── RECEITAS ───────────────────────────────────────────────────
+app.get("/api/receitas", async (req, res) => {
+  try {
+    const { orcId, clienteId } = req.query;
+    const { rows } = orcId
+      ? await query("SELECT dados FROM receitas_financeiro WHERE orc_id=$1 ORDER BY criado_em ASC", [orcId])
+      : clienteId
+        ? await query("SELECT dados FROM receitas_financeiro WHERE cliente_id=$1 ORDER BY criado_em ASC", [clienteId])
+        : await query("SELECT dados FROM receitas_financeiro ORDER BY criado_em ASC");
+    ok(res, rows.map(r => r.dados));
+  } catch(e) { err(res, e.message); }
 });
 
-app.post("/api/receitas", (req, res) => {
-  const rec = req.body;
-  if (!rec.id) return err(res, "id é obrigatório");
-  db.prepare(`
-    INSERT INTO receitas_financeiro (id, orcId, clienteId, dados, criadoEm, atualizadoEm)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `).run(rec.id, rec.orcId || null, rec.clienteId || null, JSON.stringify(rec), now(), now());
-  ok(res, rec);
+app.post("/api/receitas", async (req, res) => {
+  try {
+    const r = req.body;
+    if (!r.id) return err(res, "id é obrigatório");
+    await query(`INSERT INTO receitas_financeiro (id,orc_id,cliente_id,dados) VALUES ($1,$2,$3,$4)
+      ON CONFLICT(id) DO UPDATE SET dados=$4, atualizado_em=NOW()`,
+      [r.id, r.orcId || null, r.clienteId || null, r]);
+    ok(res, r);
+  } catch(e) { err(res, e.message); }
 });
 
-// Salvar múltiplas receitas de uma vez (usado ao confirmar ganho)
-app.post("/api/receitas/batch", (req, res) => {
-  const { receitas } = req.body;
-  if (!Array.isArray(receitas)) return err(res, "receitas deve ser um array");
-  const insert = db.prepare(`
-    INSERT INTO receitas_financeiro (id, orcId, clienteId, dados, criadoEm, atualizadoEm)
-    VALUES (?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `);
-  const insertMany = db.transaction((items) => {
-    for (const rec of items) {
-      insert.run(rec.id, rec.orcId || null, rec.clienteId || null, JSON.stringify(rec), now(), now());
+app.post("/api/receitas/batch", async (req, res) => {
+  try {
+    const { receitas } = req.body;
+    if (!Array.isArray(receitas)) return err(res, "receitas deve ser um array");
+    for (const r of receitas) {
+      if (!r.id) continue;
+      await query(`INSERT INTO receitas_financeiro (id,orc_id,cliente_id,dados) VALUES ($1,$2,$3,$4)
+        ON CONFLICT(id) DO UPDATE SET dados=$4, atualizado_em=NOW()`,
+        [r.id, r.orcId || null, r.clienteId || null, r]);
     }
-  });
-  insertMany(receitas);
-  ok(res, receitas);
+    ok(res, receitas);
+  } catch(e) { err(res, e.message); }
 });
 
-app.delete("/api/receitas/:id", (req, res) => {
-  db.prepare("DELETE FROM receitas_financeiro WHERE id = ?").run(req.params.id);
-  ok(res, { id: req.params.id });
+app.delete("/api/receitas/:id", async (req, res) => {
+  try {
+    await query("DELETE FROM receitas_financeiro WHERE id=$1", [req.params.id]);
+    ok(res, { id: req.params.id });
+  } catch(e) { err(res, e.message); }
 });
 
-// Deletar todas as receitas de um orçamento (estorno ao marcar como perdido)
-app.delete("/api/receitas/por-orcamento/:orcId", (req, res) => {
-  const result = db.prepare("DELETE FROM receitas_financeiro WHERE orcId = ?").run(req.params.orcId);
-  ok(res, { deleted: result.changes });
+app.delete("/api/receitas/por-orcamento/:orcId", async (req, res) => {
+  try {
+    const { rowCount } = await query("DELETE FROM receitas_financeiro WHERE orc_id=$1", [req.params.orcId]);
+    ok(res, { deleted: rowCount });
+  } catch(e) { err(res, e.message); }
 });
 
 // ── ESCRITÓRIO ─────────────────────────────────────────────────
-app.get("/api/escritorio", (req, res) => {
-  const row = db.prepare("SELECT dados FROM escritorio WHERE id = 1").get();
-  ok(res, row ? JSON.parse(row.dados) : null);
+app.get("/api/escritorio", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM escritorio WHERE id=1");
+    ok(res, rows[0]?.dados || null);
+  } catch(e) { err(res, e.message); }
 });
 
-app.put("/api/escritorio", (req, res) => {
-  const dados = req.body;
-  db.prepare(`
-    INSERT INTO escritorio (id, dados, atualizadoEm)
-    VALUES (1, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `).run(JSON.stringify(dados), now());
-  ok(res, dados);
+app.put("/api/escritorio", async (req, res) => {
+  try {
+    const dados = req.body;
+    await query(`INSERT INTO escritorio (id,dados) VALUES (1,$1)
+      ON CONFLICT(id) DO UPDATE SET dados=$1, atualizado_em=NOW()`, [dados]);
+    ok(res, dados);
+  } catch(e) { err(res, e.message); }
 });
 
-// ── CONFIG CÔMODOS (customizações do usuário) ──────────────────
-app.get("/api/config/:chave", (req, res) => {
-  const row = db.prepare("SELECT dados FROM config_comodos WHERE chave = ?").get(req.params.chave);
-  ok(res, row ? JSON.parse(row.dados) : null);
+// ── CONFIG ─────────────────────────────────────────────────────
+app.get("/api/config/:chave", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM config_geral WHERE chave=$1", [req.params.chave]);
+    ok(res, rows[0]?.dados || null);
+  } catch(e) { err(res, e.message); }
 });
 
-app.put("/api/config/:chave", (req, res) => {
-  const dados = req.body;
-  db.prepare(`
-    INSERT INTO config_comodos (chave, dados, atualizadoEm)
-    VALUES (?, ?, ?)
-    ON CONFLICT(chave) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `).run(req.params.chave, JSON.stringify(dados), now());
-  ok(res, dados);
+app.put("/api/config/:chave", async (req, res) => {
+  try {
+    const dados = req.body;
+    await query(`INSERT INTO config_geral (chave,dados) VALUES ($1,$2)
+      ON CONFLICT(chave) DO UPDATE SET dados=$2, atualizado_em=NOW()`, [req.params.chave, dados]);
+    ok(res, dados);
+  } catch(e) { err(res, e.message); }
 });
 
-// ── LOGO DO ESCRITÓRIO ─────────────────────────────────────────
-// Salva como base64 na tabela config_comodos
-app.get("/api/logo", (req, res) => {
-  const row = db.prepare("SELECT dados FROM config_comodos WHERE chave = 'escritorio-logo'").get();
-  ok(res, row ? JSON.parse(row.dados) : null);
+// ── LOGO ───────────────────────────────────────────────────────
+app.get("/api/logo", async (req, res) => {
+  try {
+    const { rows } = await query("SELECT dados FROM config_geral WHERE chave='escritorio-logo'");
+    ok(res, rows[0]?.dados || null);
+  } catch(e) { err(res, e.message); }
 });
 
-app.put("/api/logo", (req, res) => {
-  const { data } = req.body; // base64 string
-  if (!data) return err(res, "data é obrigatório");
-  db.prepare(`
-    INSERT INTO config_comodos (chave, dados, atualizadoEm)
-    VALUES ('escritorio-logo', ?, ?)
-    ON CONFLICT(chave) DO UPDATE SET dados = excluded.dados, atualizadoEm = excluded.atualizadoEm
-  `).run(JSON.stringify(data), now());
-  ok(res, { saved: true });
+app.put("/api/logo", async (req, res) => {
+  try {
+    const { data } = req.body;
+    if (!data) return err(res, "data é obrigatório");
+    await query(`INSERT INTO config_geral (chave,dados) VALUES ('escritorio-logo',$1)
+      ON CONFLICT(chave) DO UPDATE SET dados=$1, atualizado_em=NOW()`, [data]);
+    ok(res, { saved: true });
+  } catch(e) { err(res, e.message); }
 });
 
-// ── BACKUP COMPLETO ────────────────────────────────────────────
-// Exporta tudo como JSON (equivalente ao "Exportar Backup" do frontend)
-app.get("/api/backup", (req, res) => {
-  const backup = {
-    clientes:           parseAll(db.prepare("SELECT dados FROM clientes").all()),
-    fornecedores:       parseAll(db.prepare("SELECT dados FROM fornecedores").all()),
-    materiais:          parseAll(db.prepare("SELECT dados FROM materiais").all()),
-    obras:              parseAll(db.prepare("SELECT dados FROM obras").all()),
-    lancamentos:        parseAll(db.prepare("SELECT dados FROM lancamentos").all()),
-    orcamentosProjeto:  parseAll(db.prepare("SELECT dados FROM orcamentos_projeto").all()),
-    receitasFinanceiro: parseAll(db.prepare("SELECT dados FROM receitas_financeiro").all()),
-    escritorio:         (() => { const r = db.prepare("SELECT dados FROM escritorio WHERE id=1").get(); return r ? JSON.parse(r.dados) : {}; })(),
-    exportadoEm:        now(),
-  };
-  res.setHeader("Content-Disposition", `attachment; filename="orbi-backup-${new Date().toISOString().slice(0,10)}.json"`);
-  res.setHeader("Content-Type", "application/json");
-  res.json(backup);
+// ── BACKUP ─────────────────────────────────────────────────────
+app.get("/api/backup", async (req, res) => {
+  try {
+    const [cl, fo, ma, ob, la, orc, rec, esc] = await Promise.all([
+      query("SELECT dados FROM clientes"),
+      query("SELECT dados FROM fornecedores"),
+      query("SELECT dados FROM materiais"),
+      query("SELECT dados FROM obras"),
+      query("SELECT dados FROM lancamentos"),
+      query("SELECT dados FROM orcamentos_projeto"),
+      query("SELECT dados FROM receitas_financeiro"),
+      query("SELECT dados FROM escritorio WHERE id=1"),
+    ]);
+    const backup = {
+      clientes:           cl.rows.map(r => r.dados),
+      fornecedores:       fo.rows.map(r => r.dados),
+      materiais:          ma.rows.map(r => r.dados),
+      obras:              ob.rows.map(r => r.dados),
+      lancamentos:        la.rows.map(r => r.dados),
+      orcamentosProjeto:  orc.rows.map(r => r.dados),
+      receitasFinanceiro: rec.rows.map(r => r.dados),
+      escritorio:         esc.rows[0]?.dados || {},
+      exportadoEm:        now(),
+    };
+    res.setHeader("Content-Disposition", `attachment; filename="vicke-backup-${new Date().toISOString().slice(0,10)}.json"`);
+    res.setHeader("Content-Type", "application/json");
+    res.json(backup);
+  } catch(e) { err(res, e.message); }
 });
 
-// Importa backup completo
-app.post("/api/backup/importar", (req, res) => {
-  const dados = req.body;
-
-  const importarTabela = db.transaction((tabela, stmt, items) => {
-    for (const item of (items || [])) {
-      if (!item.id) continue;
-      stmt.run(item.id, JSON.stringify(item), now(), now());
+app.post("/api/backup/importar", async (req, res) => {
+  try {
+    const dados = req.body;
+    for (const c of (dados.clientes || [])) {
+      if (!c.id) continue;
+      await query(`INSERT INTO clientes (id,dados) VALUES ($1,$2) ON CONFLICT(id) DO UPDATE SET dados=$2`, [c.id, c]);
     }
-  });
-
-  const upsertCliente   = db.prepare("INSERT OR REPLACE INTO clientes (id,dados,criadoEm,atualizadoEm) VALUES (?,?,?,?)");
-  const upsertForn      = db.prepare("INSERT OR REPLACE INTO fornecedores (id,dados,criadoEm,atualizadoEm) VALUES (?,?,?,?)");
-  const upsertMat       = db.prepare("INSERT OR REPLACE INTO materiais (id,dados,criadoEm,atualizadoEm) VALUES (?,?,?,?)");
-  const upsertObra      = db.prepare("INSERT OR REPLACE INTO obras (id,dados,criadoEm,atualizadoEm) VALUES (?,?,?,?)");
-  const upsertLanc      = db.prepare("INSERT OR REPLACE INTO lancamentos (id,dados,criadoEm,atualizadoEm) VALUES (?,?,?,?)");
-
-  importarTabela("clientes",    upsertCliente, dados.clientes);
-  importarTabela("fornecedores",upsertForn,    dados.fornecedores);
-  importarTabela("materiais",   upsertMat,     dados.materiais);
-  importarTabela("obras",       upsertObra,    dados.obras);
-  importarTabela("lancamentos", upsertLanc,    dados.lancamentos);
-
-  // Orçamentos
-  for (const orc of (dados.orcamentosProjeto || [])) {
-    if (!orc.id) continue;
-    db.prepare("INSERT OR REPLACE INTO orcamentos_projeto (id,clienteId,dados,criadoEm,atualizadoEm) VALUES (?,?,?,?,?)")
-      .run(orc.id, orc.clienteId || null, JSON.stringify(orc), orc.criadoEm || now(), now());
-  }
-
-  // Receitas
-  for (const rec of (dados.receitasFinanceiro || [])) {
-    if (!rec.id) continue;
-    db.prepare("INSERT OR REPLACE INTO receitas_financeiro (id,orcId,clienteId,dados,criadoEm,atualizadoEm) VALUES (?,?,?,?,?,?)")
-      .run(rec.id, rec.orcId || null, rec.clienteId || null, JSON.stringify(rec), now(), now());
-  }
-
-  // Escritório
-  if (dados.escritorio) {
-    db.prepare("INSERT OR REPLACE INTO escritorio (id,dados,atualizadoEm) VALUES (1,?,?)")
-      .run(JSON.stringify(dados.escritorio), now());
-  }
-
-  ok(res, { importado: true });
+    for (const f of (dados.fornecedores || [])) {
+      if (!f.id) continue;
+      await query(`INSERT INTO fornecedores (id,dados) VALUES ($1,$2) ON CONFLICT(id) DO UPDATE SET dados=$2`, [f.id, f]);
+    }
+    for (const m of (dados.materiais || [])) {
+      if (!m.id) continue;
+      await query(`INSERT INTO materiais (id,dados) VALUES ($1,$2) ON CONFLICT(id) DO UPDATE SET dados=$2`, [m.id, m]);
+    }
+    for (const o of (dados.obras || [])) {
+      if (!o.id) continue;
+      await query(`INSERT INTO obras (id,dados) VALUES ($1,$2) ON CONFLICT(id) DO UPDATE SET dados=$2`, [o.id, o]);
+    }
+    for (const l of (dados.lancamentos || [])) {
+      if (!l.id) continue;
+      await query(`INSERT INTO lancamentos (id,dados) VALUES ($1,$2) ON CONFLICT(id) DO UPDATE SET dados=$2`, [l.id, l]);
+    }
+    for (const o of (dados.orcamentosProjeto || [])) {
+      if (!o.id) continue;
+      await query(`INSERT INTO orcamentos_projeto (id,cliente_id,dados) VALUES ($1,$2,$3) ON CONFLICT(id) DO UPDATE SET dados=$3`,
+        [o.id, o.clienteId || null, o]);
+    }
+    for (const r of (dados.receitasFinanceiro || [])) {
+      if (!r.id) continue;
+      await query(`INSERT INTO receitas_financeiro (id,orc_id,cliente_id,dados) VALUES ($1,$2,$3,$4) ON CONFLICT(id) DO UPDATE SET dados=$4`,
+        [r.id, r.orcId || null, r.clienteId || null, r]);
+    }
+    if (dados.escritorio) {
+      await query(`INSERT INTO escritorio (id,dados) VALUES (1,$1) ON CONFLICT(id) DO UPDATE SET dados=$1`, [dados.escritorio]);
+    }
+    ok(res, { importado: true });
+  } catch(e) { err(res, e.message); }
 });
 
-// ── HEALTH CHECK ───────────────────────────────────────────────
+// ── HEALTH ─────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
-  res.json({ ok: true, version: "1.0.0", timestamp: now() });
+  res.json({ ok: true, version: "2.0.0", db: "postgresql", timestamp: now() });
 });
 
-// ── SPA fallback (frontend React) ─────────────────────────────
+// ── SPA fallback ───────────────────────────────────────────────
 if (fs.existsSync(FRONTEND_PATH)) {
   app.get("*", (req, res) => {
     res.sendFile(path.join(FRONTEND_PATH, "index.html"));
@@ -644,12 +657,22 @@ if (fs.existsSync(FRONTEND_PATH)) {
 }
 
 // ── Start ──────────────────────────────────────────────────────
-app.listen(PORT, () => {
-  console.log(`\n✓ Orbi rodando em http://localhost:${PORT}`);
-  console.log(`  Banco de dados: ${DB_PATH}`);
-  console.log(`  Pressione Ctrl+C para parar\n`);
-});
+async function start() {
+  try {
+    await initDB();
+    await seedMaster();
+    app.listen(PORT, () => {
+      console.log(`\n✓ Vicke rodando em http://localhost:${PORT}`);
+      console.log(`  Banco: PostgreSQL`);
+      console.log(`  Pressione Ctrl+C para parar\n`);
+    });
+  } catch(e) {
+    console.error("Erro ao iniciar:", e);
+    process.exit(1);
+  }
+}
 
-// Graceful shutdown
-process.on("SIGINT",  () => { db.close(); process.exit(0); });
-process.on("SIGTERM", () => { db.close(); process.exit(0); });
+start();
+
+process.on("SIGINT",  () => { pool.end(); process.exit(0); });
+process.on("SIGTERM", () => { pool.end(); process.exit(0); });

@@ -1,7 +1,7 @@
 {
-  "name": "orbi-backend",
-  "version": "1.0.0",
-  "description": "Vicke — Backend API",
+  "name": "vicke-backend",
+  "version": "2.0.0",
+  "description": "Vicke — Backend API com PostgreSQL",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -11,9 +11,10 @@
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.3"
   },
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=18.0.0"
   }
 }
