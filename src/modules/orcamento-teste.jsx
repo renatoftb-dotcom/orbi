@@ -632,18 +632,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     resumoDescritivo: "",
   } : null); // quando definido, abre o preview
   const [orcPendente,   setOrcPendente]   = useState(null); // orçamento a salvar após PDF
-  const [tipoPgto,      setTipoPgto]      = useState("padrao"); // "padrao" | "etapas"
-  const [temImposto,    setTemImposto]    = useState(false);
-  const [aliqImp,       setAliqImp]       = useState(16);
-  const [descArq,       setDescArq]       = useState(5);
-  const [parcArq,       setParcArq]       = useState(3);
-  const [descPacote,    setDescPacote]    = useState(10);
-  const [parcPacote,    setParcPacote]    = useState(4);
-  const [descEtCtrt,    setDescEtCtrt]    = useState(5);
-  const [parcEtCtrt,    setParcEtCtrt]    = useState(2);
-  const [descPacCtrt,   setDescPacCtrt]   = useState(15);
-  const [parcPacCtrt,   setParcPacCtrt]   = useState(8);
-  const [etapasPct, setEtapasPct] = useState([
+  const [tipoPgto,      setTipoPgto]      = useState(orcBase?.tipoPgto    || "padrao");
+  const [temImposto,    setTemImposto]    = useState(orcBase?.temImposto  || false);
+  const [aliqImp,       setAliqImp]       = useState(orcBase?.aliqImp     || 16);
+  const [descArq,       setDescArq]       = useState(orcBase?.descArq     || 5);
+  const [parcArq,       setParcArq]       = useState(orcBase?.parcArq     || 3);
+  const [descPacote,    setDescPacote]    = useState(orcBase?.descPacote  || 10);
+  const [parcPacote,    setParcPacote]    = useState(orcBase?.parcPacote  || 4);
+  const [descEtCtrt,    setDescEtCtrt]    = useState(orcBase?.descEtCtrt  || 5);
+  const [parcEtCtrt,    setParcEtCtrt]    = useState(orcBase?.parcEtCtrt  || 2);
+  const [descPacCtrt,   setDescPacCtrt]   = useState(orcBase?.descPacCtrt || 15);
+  const [parcPacCtrt,   setParcPacCtrt]   = useState(orcBase?.parcPacCtrt || 8);
+  const [etapasPct, setEtapasPct] = useState(orcBase?.etapasPct || [
     { id:1, nome:"Estudo de Viabilidade",  pct:10 },
     { id:2, nome:"Estudo Preliminar",      pct:30 },
     { id:3, nome:"Aprovação na Prefeitura",pct:12 },
@@ -713,7 +713,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }
   const isComercial = tipoProjeto === "Conj. Comercial";
   // Qtd de repetições por grupo (nLojas, nAncoras, etc.)
-  const [grupoQtds, setGrupoQtds] = useState({
+  const [grupoQtds, setGrupoQtds] = useState(orcBase?.grupoQtds || {
     "Por Loja": 0, "Espaço Âncora": 0, "Áreas Comuns": 0, "Por Apartamento": 0, "Galpao": 0,
   });
 
@@ -740,8 +740,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     return Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd]));
   });
 
-  // Reset qtds ao mudar tipo de projeto
-  useEffect(() => { setQtds({}); }, [tipoProjeto]);
+  // Reset qtds ao mudar tipo de projeto — só zera se não veio de edição
+  const isEdicao = useRef(!!orcBase?.comodos?.length);
+  useEffect(() => {
+    if (isEdicao.current) { isEdicao.current = false; return; }
+    setQtds({});
+  }, [tipoProjeto]);
 
   // Fechar dropdown ao clicar fora
   const wrapRef = useRef(null);
