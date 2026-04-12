@@ -15,7 +15,6 @@ const ORDER = [
   "api.js",
   "outros.jsx",
   "clientes.jsx",
-  "orcamento-form.jsx",
   "resultado-pdf.jsx",
   "orcamento-teste.jsx",
   "escritorio.jsx",
