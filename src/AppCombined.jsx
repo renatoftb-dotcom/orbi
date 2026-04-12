@@ -410,6 +410,7 @@ var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura",
 // api.js
 // ════════════════════════════════════════════════════════════
 
+// v2 PostgreSQL
 // ═══════════════════════════════════════════════════════════════
 // ORBI — API Client
 // Substitui o DB (localStorage/window.storage) pelo backend real
