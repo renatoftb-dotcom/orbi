@@ -1002,12 +1002,20 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       </div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:12 }}>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o, "ver")}
+                          onClick={async () => {
+                            const res = await fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+                            const orcCompleto = res?.ok ? res.data : o;
+                            onAbrirOrcamento(cliente, orcCompleto, "ver");
+                          }}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Ver
                         </button>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o, "editar")}
+                          onClick={async () => {
+                            const res = await fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+                            const orcCompleto = res?.ok ? res.data : o;
+                            onAbrirOrcamento(cliente, orcCompleto, "editar");
+                          }}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Editar
                         </button>

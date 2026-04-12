@@ -420,6 +420,12 @@ app.post("/api/orcamentos", (req, res) => {
   ok(res, orc);
 });
 
+app.get("/api/orcamentos/:id", (req, res) => {
+  const row = db.prepare("SELECT dados FROM orcamentos_projeto WHERE id = ?").get(req.params.id);
+  if (!row) return err(res, "Orçamento não encontrado", 404);
+  ok(res, JSON.parse(row.dados));
+});
+
 app.put("/api/orcamentos/:id", (req, res) => {
   const orc = { ...req.body, id: req.params.id };
   const result = db.prepare(

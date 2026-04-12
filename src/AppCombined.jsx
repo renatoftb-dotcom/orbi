@@ -2966,12 +2966,20 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       </div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:12 }}>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o, "ver")}
+                          onClick={async () => {
+                            const res = await fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+                            const orcCompleto = res?.ok ? res.data : o;
+                            onAbrirOrcamento(cliente, orcCompleto, "ver");
+                          }}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Ver
                         </button>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o, "editar")}
+                          onClick={async () => {
+                            const res = await fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+                            const orcCompleto = res?.ok ? res.data : o;
+                            onAbrirOrcamento(cliente, orcCompleto, "editar");
+                          }}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Editar
                         </button>
@@ -7843,7 +7851,7 @@ export default function ModuloClientesFornecedores() {
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
   const [sidebarAberta, setSidebarAberta]     = useState(true);
-  const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase }
+  const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
 
@@ -7862,13 +7870,15 @@ export default function ModuloClientesFornecedores() {
     setLoading(false);
   }
 
-  async function save(newData) {
+  async function save(newData, opts = {}) {
     const oldData = data;
     setData(newData);
     try {
       await saveAllData(newData, oldData);
-      const fresh = await loadAllData();
-      setData(fresh);
+      if (!opts.skipReload) {
+        const fresh = await loadAllData();
+        setData(fresh);
+      }
     }
     catch(e) { console.error("Erro ao salvar:", e); }
   }
@@ -7996,6 +8006,7 @@ export default function ModuloClientesFornecedores() {
               clienteNome={orcamentoTelaCheia.clienteOrc.nome}
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
+              modoVer={orcamentoTelaCheia.modo === "ver"}
               onSalvar={async (orc) => {
                 const todos = data.orcamentosProjeto || [];
                 const maxSeq = todos.reduce((mx2, o2) => {
@@ -8005,15 +8016,15 @@ export default function ModuloClientesFornecedores() {
                 const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
                 const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
                 const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
-                await save({ ...data, orcamentosProjeto: novos2 });
-                setOrcamentoTelaCheia(null);
-                setClientesKey(n=>n+1);
+                await save({ ...data, orcamentosProjeto: novos2 }, { skipReload: true });
+                // Não fecha a tela — apenas atualiza o orcBase para o PDF continuar aberto
+                setOrcamentoTelaCheia(prev => ({ ...prev, orcBase: novo2 }));
               }}
-              onVoltar={() => setOrcamentoTelaCheia(null)}
+              onVoltar={() => { setOrcamentoTelaCheia(null); setClientesKey(n=>n+1); loadData(); }}
             />
           ) : (<>
           {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc })} orcamentoAberto={!!orcamentoTelaCheia} />}
+          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} />}
           {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
           {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}
