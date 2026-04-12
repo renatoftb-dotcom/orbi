@@ -28,6 +28,30 @@ if (fs.existsSync(FRONTEND_PATH)) {
 }
 
 // ── Banco de dados ─────────────────────────────────────────────
+// Aguarda o volume estar montado antes de abrir o banco
+function waitForVolume(path, retries = 10, delay = 500) {
+  const dir = require("path").dirname(path);
+  for (let i = 0; i < retries; i++) {
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      // Testa escrita no diretório
+      const testFile = require("path").join(dir, ".test");
+      fs.writeFileSync(testFile, "ok");
+      fs.unlinkSync(testFile);
+      console.log(`  Volume disponível em: ${dir}`);
+      return true;
+    } catch(e) {
+      console.log(`  Aguardando volume... tentativa ${i+1}/${retries}`);
+      // Espera síncrona
+      const start = Date.now();
+      while (Date.now() - start < delay) {}
+    }
+  }
+  console.warn(`  Volume não disponível após ${retries} tentativas, usando caminho padrão`);
+  return false;
+}
+
+waitForVolume(DB_PATH);
 const db = new DatabaseSync(DB_PATH);
 
 db.exec("PRAGMA journal_mode = WAL");

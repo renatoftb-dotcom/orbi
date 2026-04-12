@@ -1541,19 +1541,31 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
 
   const r        = orc.resultado || {};
   const nUnid    = r.nUnidades || 1;
-  const engUnit  = r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng;
+  const engUnit  = r.precoEng || (r.engTotal ?? calcularEngenharia(r.areaTotal||0).totalEng);
   const arqTotal = r.precoArq || r.precoTotal || r.precoFinal || 0;
   let engRepet   = 0;
   if (nUnid > 1) {
     let areaAcum = r.areaTotal || 0;
     for (let i = 2; i <= nUnid; i++) {
-      const pct = getTipoConfig(r.tipo).repeticaoPcts(areaAcum);
+      const pct = getTipoConfig(r.tipo || orc.tipo).repeticaoPcts(areaAcum);
       engRepet += engUnit * pct;
       areaAcum += (r.areaTotal||0);
     }
   }
   const engTotal   = engUnit + engRepet;
-  const grandTotal = Math.round((arqTotal + engTotal) * 100) / 100;
+  // Se totSI está salvo no orc e os valores individuais parecem inflados, usa totSI como base
+  const totSIOrc   = orc.totSI || 0;
+  const grandTotalRaw = Math.round((arqTotal + engTotal) * 100) / 100;
+  // Detecta valores inflados: se arqTotal > totSI, os valores foram salvos com imposto
+  const temImpOrc  = !!(orc.temImposto ?? r.impostoAplicado);
+  const aliqImpOrc2 = orc.aliqImp ?? r.aliquotaImposto ?? 0;
+  const arqTotalFix = temImpOrc && totSIOrc > 0 && grandTotalRaw > totSIOrc
+    ? Math.round(arqTotal * (1 - aliqImpOrc2/100) * 100) / 100
+    : arqTotal;
+  const engTotalFix = temImpOrc && totSIOrc > 0 && grandTotalRaw > totSIOrc
+    ? Math.round(engTotal * (1 - aliqImpOrc2/100) * 100) / 100
+    : engTotal;
+  const grandTotal = Math.round((arqTotalFix + engTotalFix) * 100) / 100;
 
   // Load logo + modelo
   // Prioridade: 1) modelo salvo para este orçamento específico
@@ -1576,7 +1588,7 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
             const padrao = JSON.parse(padR.value);
             // Mescla: mantém escopo/escritório/prazo/naoInclusos/aceite do padrão
             // mas usa dados do orçamento atual para cliente/serviços/valores/datas
-            const fresh = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
+            const fresh = defaultModelo(orc, arqTotalFix, engTotalFix, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
             const merged = {
               ...fresh,
               escritorio:  padrao.escritorio  || fresh.escritorio,
@@ -1598,7 +1610,7 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
   }, [orc.id]);
 
   // Build fresh model when orc changes and no saved model
-  const mRaw = modelo || defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
+  const mRaw = modelo || defaultModelo(orc, arqTotalFix, engTotalFix, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
 
   // Sincroniza escopoEtapas com etapasPct — adiciona blocos para etapas novas
   const etapasPctAtual = orc.etapasPct || [];
@@ -1672,7 +1684,7 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
   const set = (path, val) => {
     const parts = path.split(".");
     setModelo(prev => {
-      const base = prev || defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
+      const base = prev || defaultModelo(orc, arqTotalFix, engTotalFix, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
       const clone = JSON.parse(JSON.stringify(base));
       let cur = clone;
       for (let i = 0; i < parts.length - 1; i++) cur = cur[parts[i]];
@@ -1682,7 +1694,7 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
   };
 
   async function salvarModelo() {
-    const toSave = { ...(modelo || defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r)), logoPos };
+    const toSave = { ...(modelo || defaultModelo(orc, arqTotalFix, engTotalFix, grandTotal, fmt, fmtM2, nUnid, engUnit, r)), logoPos };
     // Salva modelo específico deste orçamento
     await window.storage.set(orcPropostaKey(orc.id), JSON.stringify(toSave));
     // Salva também como padrão — mas apenas a estrutura reutilizável (sem dados de cliente/valores)
@@ -1706,7 +1718,7 @@ function PropostaComercial({ orc, fmt, fmtM2, incluiArq=true, incluiEng=true }) 
     try {
       let logoData = null;
       try { const lr = await window.storage.get("escritorio-logo"); if (lr?.value) logoData = lr.value; } catch {}
-      await buildPdf(orc, logoData, modelo || defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r), corTema, bgLogo, incluiArq, incluiEng);
+      await buildPdf(orc, logoData, modelo || defaultModelo(orc, arqTotalFix, engTotalFix, grandTotal, fmt, fmtM2, nUnid, engUnit, r), corTema, bgLogo, incluiArq, incluiEng);
     } catch(err) { setSavedMsg("Erro: "+err.message); }
   }
 
