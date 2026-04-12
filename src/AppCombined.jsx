@@ -2068,6 +2068,7 @@ function Clientes({ data, save }) {
     servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
   };
   const [form, setForm] = useState(emptyCliente);
+  const [orcamentoAtivo, setOrcamentoAtivo] = useState(null);
 
   function openNew()     { setForm(emptyCliente); setView("form"); }
   function openEdit(c)   { setForm(c); setView("form"); }
@@ -2245,6 +2246,42 @@ function Clientes({ data, save }) {
   }
 
   // ── DETALHE ─────────────────────────────────────────────────
+  // ── ORÇAMENTO TELA CHEIA ─────────────────────────────────────
+  if (view === "orcamento" && orcamentoAtivo) {
+    const { clienteOrc, orcBase } = orcamentoAtivo;
+    async function salvarOrcamentoFull(orc) {
+      const todos = data.orcamentosProjeto || [];
+      const nextOrcCod = () => {
+        const maxSeq = todos.reduce((mx, o) => {
+          const m = (o.id||"").match(/^ORC-(\d+)$/);
+          return m ? Math.max(mx, parseInt(m[1])) : mx;
+        }, 0);
+        return "ORC-" + String(maxSeq + 1).padStart(4, "0");
+      };
+      const novo = {
+        ...orc,
+        clienteId: clienteOrc.id,
+        cliente: clienteOrc.nome,
+        whatsapp: clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "",
+        id: orc.id || nextOrcCod(),
+        criadoEm: orc.criadoEm || new Date().toISOString()
+      };
+      const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
+      await save({ ...data, orcamentosProjeto: novos });
+      setOrcamentoAtivo(null);
+      setView("detail");
+    }
+    return (
+      <FormOrcamentoProjetoTeste
+        clienteNome={clienteOrc.nome}
+        clienteWA={clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
+        onSalvar={salvarOrcamentoFull}
+        orcBase={orcBase || null}
+        onVoltar={() => { setOrcamentoAtivo(null); setView("detail"); }}
+      />
+    );
+  }
+
   if (view === "detail" && sel) {
     const cliente = data.clientes.find(c => c.id === sel.id) || sel;
     const iniciais = cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
@@ -2276,7 +2313,7 @@ function Clientes({ data, save }) {
         </div>
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
         <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} />
+        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc) => { setSel(c); setOrcamentoAtivo({ clienteOrc: c, orcBase: orc }); setView("orcamento"); }} />
       </div>
     );
   }
@@ -2828,7 +2865,7 @@ function ModalConfirmarGanho({ orc, arqTotal, engTotal, grandTotal, data, save, 
   );
 }
 
-function ServicosPanel({ cliente: clienteProp, data, save }) {
+function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const [subView, setSubView] = useState(null);
   const [orcBase, setOrcBase] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(null);
@@ -2959,7 +2996,7 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
               <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>Projeto</span>
             </div>
             <button
-              onClick={() => { setOrcBase(null); setSubView("orcamento-teste"); }}
+              onClick={() => onAbrirOrcamento(cliente, null)}
               style={{ background:"#fff", color:"#111", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
               Orçar projeto
             </button>
@@ -3001,12 +3038,12 @@ function ServicosPanel({ cliente: clienteProp, data, save }) {
                       </div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:12 }}>
                         <button
-                          onClick={() => { setOrcBase(o); setSubView("orcamento-teste"); }}
+                          onClick={() => onAbrirOrcamento(cliente, o)}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Ver
                         </button>
                         <button
-                          onClick={() => { setOrcBase(o); setSubView("orcamento-teste"); }}
+                          onClick={() => onAbrirOrcamento(cliente, o)}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Editar
                         </button>
