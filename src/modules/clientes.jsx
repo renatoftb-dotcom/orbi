@@ -88,7 +88,8 @@ function ClienteExpandivel({ cliente, data, waLink }) {
   );
 }
 
-function Clientes({ data, save, onAbrirOrcamento }) {
+function Clientes({ data, save, onAbrirOrcamento, orcamentoAberto }) {
+  if (orcamentoAberto) return null;
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");

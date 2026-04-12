@@ -2052,7 +2052,8 @@ function ClienteExpandivel({ cliente, data, waLink }) {
   );
 }
 
-function Clientes({ data, save, onAbrirOrcamento }) {
+function Clientes({ data, save, onAbrirOrcamento, orcamentoAberto }) {
+  if (orcamentoAberto) return null;
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
@@ -7979,7 +7980,7 @@ export default function ModuloClientesFornecedores() {
             />
           ) : (<>
           {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc })} />}
+          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc })} orcamentoAberto={!!orcamentoTelaCheia} />}
           {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
           {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}
