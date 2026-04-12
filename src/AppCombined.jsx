@@ -3081,21 +3081,21 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         </button>
                         <div style={{ position:"relative" }}>
                           <button onClick={() => setOpenMenu(openMenu===o.id ? null : o.id)}
-                            style={{ fontSize:15, color:"#9ca3af", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"3px 8px", cursor:"pointer", fontFamily:"inherit", lineHeight:1.4 }}>
-                            ···
+                            style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>
+                            Ações
                           </button>
                           {openMenu === o.id && (
-                            <div ref={menuRef} style={{ position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999, background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:160, overflow:"hidden" }}>
+                            <div ref={menuRef} style={{ position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999, background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:180, overflow:"hidden" }}>
                               <button disabled={o.status==="ganho"} onClick={() => { setStatusOrc(o.id, "ganho"); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="ganho"?"#f0fdf4":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="ganho"?"#16a34a":"#374151", padding:"10px 14px", fontSize:13, cursor: o.status==="ganho"?"not-allowed":"pointer", fontFamily:"inherit", fontWeight: o.status==="ganho"?600:400 }}>
+                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="ganho"?"#f0fdf4":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="ganho"?"#16a34a":"#374151", padding:"10px 14px", fontSize:13, cursor: o.status==="ganho"?"not-allowed":"pointer", fontFamily:"inherit", fontWeight: o.status==="ganho"?600:400, whiteSpace:"nowrap" }}>
                                 {o.status==="ganho" ? "✓ Ganho" : "Marcar como Ganho"}
                               </button>
                               <button onClick={() => { setStatusOrc(o.id, o.status==="perdido" ? null : "perdido"); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="perdido"?"#fef2f2":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="perdido"?"#dc2626":"#374151", padding:"10px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight: o.status==="perdido"?600:400 }}>
+                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="perdido"?"#fef2f2":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="perdido"?"#dc2626":"#374151", padding:"10px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight: o.status==="perdido"?600:400, whiteSpace:"nowrap" }}>
                                 {o.status==="perdido" ? "✓ Perdido" : "Marcar como Perdido"}
                               </button>
                               <button onClick={() => { setConfirmDelete(o.id); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background:"transparent", border:"none", color:"#dc2626", padding:"10px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                                style={{ display:"block", width:"100%", textAlign:"left", background:"transparent", border:"none", color:"#dc2626", padding:"10px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
                                 Excluir
                               </button>
                             </div>
