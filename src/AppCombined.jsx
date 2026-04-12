@@ -7898,6 +7898,34 @@ export default function ModuloClientesFornecedores() {
     width:"100%", textAlign:"left",
   });
 
+  // Orçamento em tela cheia — retorna só o formulário sem sidebar/header
+  if (orcamentoTelaCheia) {
+    const { clienteOrc, orcBase } = orcamentoTelaCheia;
+    return (
+      <div style={{ height:"100vh", overflow:"auto", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+        <FormOrcamentoProjetoTeste
+          clienteNome={clienteOrc.nome}
+          clienteWA={clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
+          orcBase={orcBase || null}
+          onSalvar={async (orc) => {
+            const todos = data.orcamentosProjeto || [];
+            const maxSeq = todos.reduce((mx2, o2) => {
+              const mm = (o2.id||"").match(/^ORC-(\d+)$/);
+              return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
+            }, 0);
+            const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
+            const novo2 = { ...orc, clienteId: clienteOrc.id, cliente: clienteOrc.nome, whatsapp: clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
+            const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
+            await save({ ...data, orcamentosProjeto: novos2 });
+            setOrcamentoTelaCheia(null);
+            setClientesKey(n=>n+1);
+          }}
+          onVoltar={() => setOrcamentoTelaCheia(null)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -7959,29 +7987,8 @@ export default function ModuloClientesFornecedores() {
           </div>
         </div>
         <div style={{ flex:1, overflowY:"auto" }}>
-          {orcamentoTelaCheia ? (
-            <FormOrcamentoProjetoTeste
-              clienteNome={orcamentoTelaCheia.clienteOrc.nome}
-              clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
-              orcBase={orcamentoTelaCheia.orcBase || null}
-              onSalvar={async (orc) => {
-                const todos = data.orcamentosProjeto || [];
-                const maxSeq = todos.reduce((mx2, o2) => {
-                  const mm = (o2.id||"").match(/^ORC-(\d+)$/);
-                  return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
-                }, 0);
-                const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
-                const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
-                const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
-                await save({ ...data, orcamentosProjeto: novos2 });
-                setOrcamentoTelaCheia(null);
-                setClientesKey(n=>n+1);
-              }}
-              onVoltar={() => setOrcamentoTelaCheia(null)}
-            />
-          ) : (<>
           {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc })} orcamentoAberto={!!orcamentoTelaCheia} />}
+          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc })} />}
           {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
           {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}
@@ -7989,7 +7996,6 @@ export default function ModuloClientesFornecedores() {
           {aba === "nf"           && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"   && <Escritorio key={escritorioKey} data={data} save={save} />}
           {aba === "teste"        && <TesteOrcamento data={data} save={save} />}
-          </>)}
         </div>
       </div>
 
