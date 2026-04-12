@@ -69,6 +69,7 @@ export default function ModuloClientesFornecedores() {
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
   const [sidebarAberta, setSidebarAberta]     = useState(true);
+  const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase }
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
 
@@ -215,7 +216,7 @@ export default function ModuloClientesFornecedores() {
         </div>
         <div style={{ flex:1, overflowY:"auto" }}>
           {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} />}
+          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc })} />}
           {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
           {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}
@@ -225,6 +226,38 @@ export default function ModuloClientesFornecedores() {
           {aba === "teste"        && <TesteOrcamento data={data} save={save} />}
         </div>
       </div>
+
+      {/* Orçamento em tela cheia */}
+      {orcamentoTelaCheia && (
+        <div style={{ position:"fixed", inset:0, zIndex:9999, background:"#fff", overflow:"auto" }}>
+          <FormOrcamentoProjetoTeste
+            clienteNome={orcamentoTelaCheia.clienteOrc.nome}
+            clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
+            orcBase={orcamentoTelaCheia.orcBase || null}
+            onSalvar={async (orc) => {
+              const todos = data.orcamentosProjeto || [];
+              const maxSeq = todos.reduce((mx, o) => {
+                const m = (o.id||"").match(/^ORC-(\d+)$/);
+                return m ? Math.max(mx, parseInt(m[1])) : mx;
+              }, 0);
+              const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
+              const novo = {
+                ...orc,
+                clienteId: orcamentoTelaCheia.clienteOrc.id,
+                cliente: orcamentoTelaCheia.clienteOrc.nome,
+                whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "",
+                id: orc.id || nextId,
+                criadoEm: orc.criadoEm || new Date().toISOString()
+              };
+              const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
+              await save({ ...data, orcamentosProjeto: novos });
+              setOrcamentoTelaCheia(null);
+              setClientesKey(n=>n+1);
+            }}
+            onVoltar={() => { setOrcamentoTelaCheia(null); }}
+          />
+        </div>
+      )}
 
       {showBackup && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
