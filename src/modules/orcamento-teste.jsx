@@ -635,6 +635,21 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   ]);
   const [qtdRep, setQtdRep] = useState(orcBase?.repeticao ? (orcBase?.nUnidades || 2) : 0);
 
+  // Sincroniza estados quando orcBase é carregado depois da montagem (Editar)
+  useEffect(() => {
+    if (!orcBase) return;
+    if (orcBase.referencia  !== undefined) setReferencia(orcBase.referencia || "");
+    if (orcBase.subtipo     !== undefined) setTipoObra(orcBase.subtipo);
+    if (orcBase.tipo        !== undefined) setTipoProjeto(orcBase.tipo);
+    if (orcBase.padrao      !== undefined) setPadrao(orcBase.padrao);
+    if (orcBase.tipologia   !== undefined) setTipologia(orcBase.tipologia);
+    if (orcBase.tamanho     !== undefined) setTamanho(orcBase.tamanho);
+    if (orcBase.comodos) {
+      setQtds(Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd])));
+    }
+    if (orcBase.repeticao !== undefined) setQtdRep(orcBase.repeticao ? (orcBase.nUnidades || 2) : 0);
+  }, [orcBase?.id]);
+
   // Parâmetros independentes por grupo comercial
   const GRUPOS_COMERCIAIS = ["Por Loja","Espaço Âncora","Áreas Comuns","Por Apartamento","Galpao"];
   const [grupoParams, setGrupoParams] = useState(() => {
