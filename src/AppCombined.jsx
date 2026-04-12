@@ -1988,7 +1988,7 @@ const COLUNAS = [
   { key:"andamento",    label:"Em andamento",  cor:"#10b981" },
 ];
 
-function ClienteExpandivel({ cliente, data, waLink }) {
+function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   const [abertos, setAbertos] = useState({ cadastro:false, financeiro:false });
   const toggle = k => setAbertos(p => ({...p, [k]:!p[k]}));
   const cpfCliente = cliente.cpfCnpj || cliente.id;
@@ -2007,7 +2007,7 @@ function ClienteExpandivel({ cliente, data, waLink }) {
           <span style={{ fontSize:11, color:"#9ca3af" }}>{abertos.cadastro?"▲":"▼"}</span>
         </button>
         {abertos.cadastro && (
-          <div style={{ padding:"16px 0", display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, borderBottom:"1px solid #f3f4f6" }}>
+          <div style={{ padding:"16px 0", display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 16 : 20, borderBottom:"1px solid #f3f4f6" }}>
             <div>
               <div style={C.secTit}>Endereço</div>
               {[["CEP",cliente.cep],["Logradouro",`${cliente.logradouro||""}${cliente.numero?", "+cliente.numero:""}${cliente.complemento?" - "+cliente.complemento:""}`],["Bairro",cliente.bairro],["Cidade",`${cliente.cidade||""} — ${cliente.estado||""}`]].map(([l,v])=>(
@@ -2037,7 +2037,7 @@ function ClienteExpandivel({ cliente, data, waLink }) {
         {abertos.financeiro&&(
           <div style={{padding:"16px 0",borderBottom:"1px solid #f3f4f6"}}>
             {lancsCli.length===0?<p style={{color:"#9ca3af",fontSize:13,margin:0}}>Nenhum lançamento.</p>:(
-              <div style={C.grid3}>
+              <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap:10 }}>
                 {[["Receita total",totalContabil,"#2563eb"],["Recebido",totalRecebido,"#16a34a"],["A receber",totalReceber,"#d97706"]].map(([l,v,cor])=>(
                   <div key={l} style={{border:"1px solid #e5e7eb",borderRadius:10,padding:"14px"}}>
                     <div style={{fontSize:11,color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{l}</div>
@@ -2061,6 +2061,14 @@ function Clientes({ data, save, onAbrirOrcamento }) {
   const [busca, setBusca]             = useState("");
   const [dragId, setDragId]           = useState(null);
   const [dragOver, setDragOver]       = useState(null);
+  const [isMobile, setIsMobile]       = useState(window.innerWidth < 768);
+  const [abaKanban, setAbaKanban]     = useState("");
+
+  useEffect(() => {
+    const handler = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handler);
+    return () => window.removeEventListener("resize", handler);
+  }, []);
 
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
@@ -2112,6 +2120,48 @@ function Clientes({ data, save, onAbrirOrcamento }) {
     } catch {}
   }
 
+  // ── Card de cliente — reutilizado em mobile e desktop ────────
+  function ClienteCard({ c, mobile }) {
+    const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
+    const corAv = c.tipo==="PJ" ? "#7c3aed" : "#2563eb";
+    const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone || c.contatos?.[0]?.telefone || "";
+    return (
+      <div
+        onClick={() => openDetail(c)}
+        style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"12px", marginBottom:8, cursor:"pointer", transition:"box-shadow 0.15s" }}
+        onMouseEnter={e=>e.currentTarget.style.borderColor="#111"}
+        onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+          <div style={{ width:36, height:36, borderRadius:9, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
+            {iniciais}
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.nome}</div>
+            <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>{c.cidade||c.cpfCnpj||""}</div>
+          </div>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={C.tag(corAv)}>{c.tipo}</span>
+          <div style={{ display:"flex", gap:4 }} onClick={e=>e.stopPropagation()}>
+            {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"4px 8px" }}>WA</a>}
+            {mobile ? (
+              /* Mobile: botão mover coluna */
+              <select
+                value={c.status||""}
+                onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
+                onClick={e => e.stopPropagation()}
+                style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
+                {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label||"Leads"}</option>)}
+              </select>
+            ) : (
+              <button onClick={e=>{e.stopPropagation();openEdit(c);}} style={{ fontSize:11, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 7px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ── KANBAN ───────────────────────────────────────────────────
   if (view === "kanban") {
     const filtrados = data.clientes.filter(c => {
@@ -2120,6 +2170,59 @@ function Clientes({ data, save, onAbrirOrcamento }) {
       return c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
     });
 
+    // ── MOBILE: abas por coluna ──────────────────────────────
+    if (isMobile) {
+      const colAtual = COLUNAS.find(x => x.key === abaKanban) || COLUNAS[0];
+      const cardsAba = filtrados.filter(c => (c.status||"") === abaKanban);
+      return (
+        <div style={{ fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+          {/* Header mobile */}
+          <div style={{ padding:"16px 16px 0", display:"flex", flexDirection:"column", gap:12 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>Clientes</div>
+                <div style={{ fontSize:12, color:"#9ca3af" }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
+              </div>
+              <button style={C.btn} onClick={openNew}>+ Novo</button>
+            </div>
+            <input style={{ ...C.input }} placeholder="Buscar cliente..." value={busca} onChange={e=>setBusca(e.target.value)} />
+          </div>
+
+          {/* Abas */}
+          <div style={{ display:"flex", overflowX:"auto", padding:"12px 16px 0", gap:0, borderBottom:"1px solid #f3f4f6" }}>
+            {COLUNAS.map(col => {
+              const count = filtrados.filter(c => (c.status||"") === col.key).length;
+              const ativa = abaKanban === col.key;
+              return (
+                <button key={col.key} onClick={() => setAbaKanban(col.key)}
+                  style={{ flexShrink:0, padding:"10px 16px", fontSize:13, fontWeight: ativa ? 700 : 400,
+                    color: ativa ? col.cor : "#6b7280",
+                    background:"transparent", border:"none", borderBottom: ativa ? `2px solid ${col.cor}` : "2px solid transparent",
+                    cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ width:7, height:7, borderRadius:"50%", background: ativa ? col.cor : "#d1d5db", display:"inline-block", flexShrink:0 }} />
+                  {col.label||"Leads"}
+                  <span style={{ fontSize:11, background: ativa ? col.cor+"18" : "#f3f4f6", color: ativa ? col.cor : "#9ca3af", borderRadius:10, padding:"1px 7px", fontWeight:600 }}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Cards da aba ativa */}
+          <div style={{ flex:1, overflowY:"auto", padding:"12px 16px" }}>
+            {cardsAba.length === 0 ? (
+              <div style={{ textAlign:"center", padding:"48px 0", color:"#d1d5db", fontSize:13 }}>
+                <div style={{ fontSize:28, marginBottom:8 }}>—</div>
+                Nenhum cliente em {colAtual.label||"Leads"}
+              </div>
+            ) : (
+              cardsAba.map(c => <ClienteCard key={c.id} c={c} mobile={true} />)
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // ── DESKTOP: kanban 4 colunas ────────────────────────────
     return (
       <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
         {/* Header */}
@@ -2135,7 +2238,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
           </div>
         </div>
 
-        {/* Kanban */}
+        {/* Kanban 4 colunas */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, flex:1, overflowY:"auto" }}>
           {COLUNAS.map(col => {
             const cards = filtrados.filter(c => (c.status||"") === col.key);
@@ -2209,13 +2312,13 @@ function Clientes({ data, save, onAbrirOrcamento }) {
       return !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
     });
     return (
-      <div style={{ padding:"28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+      <div style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
           <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
-          <div style={{ display:"flex", gap:8 }}>
-            <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
-            <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>
-            <button style={C.btn} onClick={openNew}>+ Novo cliente</button>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <input style={{ ...C.input, width: isMobile ? "100%" : 220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
+            {!isMobile && <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>}
+            <button style={C.btn} onClick={openNew}>+ Novo</button>
           </div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -2254,30 +2357,30 @@ function Clientes({ data, save, onAbrirOrcamento }) {
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===(cliente.status||""))||COLUNAS[0];
     return (
-      <div style={{ padding:"28px 32px", maxWidth:780, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
+      <div style={{ padding: isMobile ? "16px" : "28px 32px", maxWidth:780, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, flexWrap:"wrap" }}>
           <button style={C.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
           <div style={{ flex:1 }} />
-          {/* Mover de status */}
           <select value={cliente.status||""} onChange={e=>moverCliente(cliente.id, e.target.value)}
             style={{ ...C.input, width:"auto", fontSize:12, padding:"6px 10px", cursor:"pointer" }}>
             {COLUNAS.map(x=><option key={x.key} value={x.key}>{x.label}</option>)}
           </select>
           <button style={C.btnSec} onClick={()=>openEdit(cliente)}>Editar</button>
-          <button style={{...C.btnGhost,color:"#dc2626"}} onClick={()=>removeCliente(cliente.id)}>Remover</button>
+          {!isMobile && <button style={{...C.btnGhost,color:"#dc2626"}} onClick={()=>removeCliente(cliente.id)}>Remover</button>}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:28 }}>
-          <div style={{ width:56, height:56, borderRadius:14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:18, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
-          <div>
-            <div style={{ fontSize:20, fontWeight:700, color:"#111" }}>{cliente.nome}</div>
-            <div style={{ fontSize:13, color:"#9ca3af", marginTop:3, display:"flex", alignItems:"center", gap:6 }}>
-              {cliente.cpfCnpj}
+        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:24 }}>
+          <div style={{ width: isMobile ? 44 : 56, height: isMobile ? 44 : 56, borderRadius:14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize: isMobile ? 15 : 18, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize: isMobile ? 16 : 20, fontWeight:700, color:"#111", overflow:"hidden", textOverflow:"ellipsis" }}>{cliente.nome}</div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              {!isMobile && cliente.cpfCnpj}
               <span style={C.tag(corAv)}>{cliente.tipo}</span>
               <span style={C.tag(col.cor)}>{col.label||"Sem status"}</span>
             </div>
           </div>
+          {isMobile && <button style={{...C.btnGhost,color:"#dc2626",fontSize:12}} onClick={()=>removeCliente(cliente.id)}>Remover</button>}
         </div>
-        <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
+        <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} isMobile={isMobile} />
         <hr style={C.divider} />
         <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc); }} />
       </div>
@@ -2286,12 +2389,12 @@ function Clientes({ data, save, onAbrirOrcamento }) {
 
   // ── FORMULÁRIO ───────────────────────────────────────────────
   return (
-    <div style={{ padding:"28px 32px", maxWidth:680, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
+    <div style={{ padding: isMobile ? "16px" : "28px 32px", maxWidth:680, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
         <button style={C.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
-        <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
       </div>
-      <div style={{ marginBottom:20 }}>
+      <div style={{ marginBottom:16 }}>
         <div style={C.secTit}>Tipo de pessoa</div>
         <div style={{ display:"flex", gap:8 }}>
           {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
@@ -2300,7 +2403,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
           ))}
         </div>
       </div>
-      <div style={{ marginBottom:20 }}>
+      <div style={{ marginBottom:16 }}>
         <div style={C.secTit}>Status</div>
         <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
           {COLUNAS.map(col=>(
@@ -2312,13 +2415,13 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </div>
       </div>
       <hr style={C.divider} />
-      <div style={{ marginBottom:20 }}>
+      <div style={{ marginBottom:16 }}>
         <div style={C.secTit}>Dados principais</div>
-        <div style={{...C.grid2,marginBottom:14}}>
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
           <div><label style={C.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input style={C.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
           <div><label style={C.label}>{form.tipo==="PJ"?"CNPJ":"CPF"}</label><input style={C.input} value={form.cpfCnpj} onChange={e=>setForm({...form,cpfCnpj:e.target.value})} /></div>
         </div>
-        <div style={{...C.grid2,marginBottom:14}}>
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
           <div><label style={C.label}>E-mail</label><input style={C.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
           <div><label style={C.label}>Cliente desde</label><input style={C.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
         </div>
@@ -2327,15 +2430,16 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </label>
       </div>
       <hr style={C.divider} />
-      <div style={{ marginBottom:20 }}>
+      <div style={{ marginBottom:16 }}>
         <div style={C.secTit}>Endereço</div>
-        <div style={{...C.grid3,marginBottom:14}}>
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
           <div><label style={C.label}>CEP</label><input style={C.input} value={form.cep} onChange={e=>{setForm({...form,cep:e.target.value});buscarCEP(e.target.value);}} placeholder="00000-000" /></div>
-          <div><label style={C.label}>Logradouro</label><input style={C.input} value={form.logradouro} onChange={e=>setForm({...form,logradouro:e.target.value})} /></div>
           <div><label style={C.label}>Número</label><input style={C.input} value={form.numero} onChange={e=>setForm({...form,numero:e.target.value})} /></div>
+          {!isMobile && <div><label style={C.label}>Complemento</label><input style={C.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>}
         </div>
-        <div style={{...C.grid3,marginBottom:14}}>
-          <div><label style={C.label}>Complemento</label><input style={C.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
+          <div><label style={C.label}>Logradouro</label><input style={C.input} value={form.logradouro} onChange={e=>setForm({...form,logradouro:e.target.value})} /></div>
+          {isMobile && <div><label style={C.label}>Complemento</label><input style={C.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>}
           <div><label style={C.label}>Bairro</label><input style={C.input} value={form.bairro} onChange={e=>setForm({...form,bairro:e.target.value})} /></div>
           <div><label style={C.label}>Cidade</label><input style={C.input} value={form.cidade} onChange={e=>setForm({...form,cidade:e.target.value})} /></div>
         </div>
@@ -2349,8 +2453,8 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </div>
         {form.contatos?.map((ct,i)=>(
           <div key={ct.id} style={{border:"1px solid #f3f4f6",borderRadius:10,padding:"14px",marginBottom:10}}>
-            <div style={{...C.grid3,marginBottom:10}}>
-              <div><label style={C.label}>Nome</label><input style={C.input} value={ct.nome} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:e.target.value}:x)})} /></div>
+            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
+              <div style={isMobile ? { gridColumn:"1 / -1" } : {}}><label style={C.label}>Nome</label><input style={C.input} value={ct.nome} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:e.target.value}:x)})} /></div>
               <div><label style={C.label}>Telefone</label><input style={C.input} value={ct.telefone} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:e.target.value}:x)})} /></div>
               <div><label style={C.label}>Cargo</label><input style={C.input} value={ct.cargo} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:e.target.value}:x)})} /></div>
             </div>
