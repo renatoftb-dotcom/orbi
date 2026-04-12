@@ -266,8 +266,9 @@ function PropostaPreview({ data, onVoltar }) {
   const dataStr = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
   const validade = new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR");
 
-  const arqCI = temImposto ? Math.round(calculo.precoArq/(1-aliqImp/100)*100)/100 : calculo.precoArq;
-  const engCI = temImposto ? Math.round(calculo.precoEng/(1-aliqImp/100)*100)/100 : calculo.precoEng;
+  // Usa valores sem imposto diretamente — o imposto é calculado apenas no total
+  const arqCI = calculo.precoArq || 0;
+  const engCI = calculo.precoEng || 0;
   const areaTot = calculo.areaTot || calculo.areaTotal || 0;
 
   const escopoDefault = [
@@ -354,11 +355,11 @@ function PropostaPreview({ data, onVoltar }) {
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
-      const arqTotal = arqCI;
-      const engTotal = engCI;
+      const arqTotal = calculo.precoArq || 0;
+      const engTotal = calculo.precoEng || 0;
       const grandTotal = totCI;
-      const engUnit = engCI;
-      const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: c.precoArq||0, precoFinal: c.precoArq||0, precoTotal: c.precoArq||0, engTotal: c.precoEng||0, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
+      const engUnit = engTotal;
+      const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
       const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
       const fmtM2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m²";
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:data.etapasPct, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, criadoEm:new Date().toISOString(), resultado:r };
