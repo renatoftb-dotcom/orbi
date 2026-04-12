@@ -90,6 +90,7 @@ function ClienteExpandivel({ cliente, data, waLink }) {
 
 function Clientes({ data, save, onAbrirOrcamento }) {
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
+  if (abrindoOrcamento) return null;
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
@@ -147,8 +148,6 @@ function Clientes({ data, save, onAbrirOrcamento }) {
   }
 
   // ── KANBAN ───────────────────────────────────────────────────
-  if (abrindoOrcamento) return null;
-
   if (view === "kanban") {
     const filtrados = data.clientes.filter(c => {
       if (!busca) return true;
@@ -315,7 +314,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </div>
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
         <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc); }} />
+        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
       </div>
     );
   }
@@ -1003,12 +1002,12 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       </div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:12 }}>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o)}
+                          onClick={() => onAbrirOrcamento(cliente, o, "ver")}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Ver
                         </button>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o)}
+                          onClick={() => onAbrirOrcamento(cliente, o, "editar")}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Editar
                         </button>

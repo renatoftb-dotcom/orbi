@@ -2054,6 +2054,7 @@ function ClienteExpandivel({ cliente, data, waLink }) {
 
 function Clientes({ data, save, onAbrirOrcamento }) {
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
+  if (abrindoOrcamento) return null;
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
@@ -2111,8 +2112,6 @@ function Clientes({ data, save, onAbrirOrcamento }) {
   }
 
   // ── KANBAN ───────────────────────────────────────────────────
-  if (abrindoOrcamento) return null;
-
   if (view === "kanban") {
     const filtrados = data.clientes.filter(c => {
       if (!busca) return true;
@@ -2279,7 +2278,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </div>
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
         <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc); }} />
+        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
       </div>
     );
   }
@@ -2967,12 +2966,12 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       </div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:12 }}>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o)}
+                          onClick={() => onAbrirOrcamento(cliente, o, "ver")}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Ver
                         </button>
                         <button
-                          onClick={() => onAbrirOrcamento(cliente, o)}
+                          onClick={() => onAbrirOrcamento(cliente, o, "editar")}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Editar
                         </button>
@@ -6107,7 +6106,7 @@ function PropostaPreview({ data, onVoltar }) {
   );
 }
 
-function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar }) {
+function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer }) {
   const [referencia,   setReferencia]   = useState(orcBase?.referencia  || "");
   const [tipoObra,     setTipoObra]     = useState(orcBase?.subtipo     || null);
   const [tipoProjeto,  setTipoProjeto]  = useState(orcBase?.tipo        || null);
@@ -6117,7 +6116,23 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [aberto,       setAberto]       = useState(null);
   const [panelPos,     setPanelPos]     = useState({ top:0, left:0 });
   const [showModal,     setShowModal]     = useState(false);
-  const [propostaData,  setPropostaData]  = useState(null); // quando definido, abre o preview
+  const [propostaData,  setPropostaData]  = useState(modoVer && orcBase ? {
+    tipoProjeto: orcBase.tipo, tipoObra: orcBase.subtipo, padrao: orcBase.padrao,
+    tipologia: orcBase.tipologia, tamanho: orcBase.tamanho,
+    clienteNome, referencia: orcBase.referencia || "",
+    comodos: orcBase.comodos || [],
+    calculo: orcBase.resultado || {},
+    tipoPgto: orcBase.tipoPgto || "padrao",
+    temImposto: orcBase.temImposto || false,
+    aliqImp: orcBase.aliqImp || 16,
+    descArq: orcBase.descArq || 5, parcArq: orcBase.parcArq || 3,
+    descPacote: orcBase.descPacote || 10, parcPacote: orcBase.parcPacote || 4,
+    descEtCtrt: orcBase.descEtCtrt || 5, parcEtCtrt: orcBase.parcEtCtrt || 2,
+    descPacCtrt: orcBase.descPacCtrt || 15, parcPacCtrt: orcBase.parcPacCtrt || 8,
+    etapasPct: orcBase.etapasPct || [],
+    totSI: orcBase.totSI || 0, totCI: orcBase.totCI || 0, impostoV: orcBase.impostoV || 0,
+    resumoDescritivo: "",
+  } : null); // quando definido, abre o preview
   const [orcPendente,   setOrcPendente]   = useState(null); // orçamento a salvar após PDF
   const [tipoPgto,      setTipoPgto]      = useState("padrao"); // "padrao" | "etapas"
   const [temImposto,    setTemImposto]    = useState(false);
@@ -6630,12 +6645,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     };
     return <PropostaPreview data={liveData} onVoltar={() => {
       setPropostaData(null);
-      if (orcPendente && onSalvar) {
-        onSalvar(orcPendente);
-        setOrcPendente(null);
-      } else if (onVoltar) {
-        onVoltar();
-      }
     }} />;
   }
 
@@ -7155,8 +7164,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       // valores finais
                       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
                     });
-                    // Guardar para salvar após fechar o PDF
-                    setOrcPendente({
+                    // Salvar imediatamente no banco
+                    const orcParaSalvar = {
                       ...(orcBase || {}),
                       tipo: tipoProjeto, subtipo: tipoObra, tipologia, tamanho, padrao,
                       cliente: clienteNome, referencia,
@@ -7170,7 +7179,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
                       etapasPct,
                       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
-                    });
+                    };
+                    if (onSalvar) onSalvar(orcParaSalvar);
+                    setOrcPendente(null);
                     setShowModal(false);
                   }}>
                   Confirmar e Gerar Orçamento
