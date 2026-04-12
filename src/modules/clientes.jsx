@@ -88,7 +88,7 @@ function ClienteExpandivel({ cliente, data, waLink }) {
   );
 }
 
-function Clientes({ data, save }) {
+function Clientes({ data, save, onAbrirOrcamento }) {
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
@@ -104,7 +104,6 @@ function Clientes({ data, save }) {
     servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
   };
   const [form, setForm] = useState(emptyCliente);
-  const [orcamentoAtivo, setOrcamentoAtivo] = useState(null);
 
   function openNew()     { setForm(emptyCliente); setView("form"); }
   function openEdit(c)   { setForm(c); setView("form"); }
@@ -282,42 +281,6 @@ function Clientes({ data, save }) {
   }
 
   // ── DETALHE ─────────────────────────────────────────────────
-  // ── ORÇAMENTO TELA CHEIA ─────────────────────────────────────
-  if (view === "orcamento" && orcamentoAtivo) {
-    const { clienteOrc, orcBase } = orcamentoAtivo;
-    async function salvarOrcamentoFull(orc) {
-      const todos = data.orcamentosProjeto || [];
-      const nextOrcCod = () => {
-        const maxSeq = todos.reduce((mx, o) => {
-          const m = (o.id||"").match(/^ORC-(\d+)$/);
-          return m ? Math.max(mx, parseInt(m[1])) : mx;
-        }, 0);
-        return "ORC-" + String(maxSeq + 1).padStart(4, "0");
-      };
-      const novo = {
-        ...orc,
-        clienteId: clienteOrc.id,
-        cliente: clienteOrc.nome,
-        whatsapp: clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "",
-        id: orc.id || nextOrcCod(),
-        criadoEm: orc.criadoEm || new Date().toISOString()
-      };
-      const novos = orc.id ? todos.map(o=>o.id===orc.id?novo:o) : [...todos, novo];
-      await save({ ...data, orcamentosProjeto: novos });
-      setOrcamentoAtivo(null);
-      setView("detail");
-    }
-    return (
-      <FormOrcamentoProjetoTeste
-        clienteNome={clienteOrc.nome}
-        clienteWA={clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
-        onSalvar={salvarOrcamentoFull}
-        orcBase={orcBase || null}
-        onVoltar={() => { setOrcamentoAtivo(null); setView("detail"); }}
-      />
-    );
-  }
-
   if (view === "detail" && sel) {
     const cliente = data.clientes.find(c => c.id === sel.id) || sel;
     const iniciais = cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
@@ -349,7 +312,7 @@ function Clientes({ data, save }) {
         </div>
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
         <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc) => { setSel(c); setOrcamentoAtivo({ clienteOrc: c, orcBase: orc }); setView("orcamento"); }} />
+        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={onAbrirOrcamento} />
       </div>
     );
   }
