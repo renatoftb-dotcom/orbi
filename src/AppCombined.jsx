@@ -6148,10 +6148,22 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (orcBase.padrao      !== undefined) setPadrao(orcBase.padrao);
     if (orcBase.tipologia   !== undefined) setTipologia(orcBase.tipologia);
     if (orcBase.tamanho     !== undefined) setTamanho(orcBase.tamanho);
-    if (orcBase.comodos) {
-      setQtds(Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd])));
-    }
-    if (orcBase.repeticao !== undefined) setQtdRep(orcBase.repeticao ? (orcBase.nUnidades || 2) : 0);
+    if (orcBase.comodos)     setQtds(Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd])));
+    if (orcBase.repeticao   !== undefined) setQtdRep(orcBase.repeticao ? (orcBase.nUnidades || 2) : 0);
+    if (orcBase.tipoPgto    !== undefined) setTipoPgto(orcBase.tipoPgto);
+    if (orcBase.temImposto  !== undefined) setTemImposto(orcBase.temImposto);
+    if (orcBase.aliqImp     !== undefined) setAliqImp(orcBase.aliqImp);
+    if (orcBase.etapasPct   !== undefined) setEtapasPct(orcBase.etapasPct);
+    if (orcBase.descArq     !== undefined) setDescArq(orcBase.descArq);
+    if (orcBase.parcArq     !== undefined) setParcArq(orcBase.parcArq);
+    if (orcBase.descPacote  !== undefined) setDescPacote(orcBase.descPacote);
+    if (orcBase.parcPacote  !== undefined) setParcPacote(orcBase.parcPacote);
+    if (orcBase.descEtCtrt  !== undefined) setDescEtCtrt(orcBase.descEtCtrt);
+    if (orcBase.parcEtCtrt  !== undefined) setParcEtCtrt(orcBase.parcEtCtrt);
+    if (orcBase.descPacCtrt !== undefined) setDescPacCtrt(orcBase.descPacCtrt);
+    if (orcBase.parcPacCtrt !== undefined) setParcPacCtrt(orcBase.parcPacCtrt);
+    if (orcBase.grupoQtds   !== undefined) setGrupoQtds(orcBase.grupoQtds || { "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
+    if (orcBase.grupoParams  !== undefined && orcBase.grupoParams) setGrupoParams(orcBase.grupoParams);
   }, [orcBase?.id]);
 
   // Parâmetros independentes por grupo comercial
@@ -7146,10 +7158,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     // Guardar para salvar após fechar o PDF
                     setOrcPendente({
                       ...(orcBase || {}),
-                      tipo: tipoProjeto, subtipo: tipologia, tamanho, padrao,
+                      tipo: tipoProjeto, subtipo: tipoObra, tipologia, tamanho, padrao,
                       cliente: clienteNome, referencia,
+                      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
+                      repeticao: qtdRep > 0, nUnidades: qtdRep > 0 ? qtdRep : 1,
+                      grupoQtds: isComercial ? grupoQtds : null,
+                      grupoParams: isComercial ? grupoParams : null,
                       resultado: { ...calculo, precoArq: calculo?.precoArq || 0, precoEng: calculo?.precoEng || 0, areaTotal: calculo?.areaTotal || 0 },
                       tipoPgto, temImposto, aliqImp,
+                      descArq, parcArq, descPacote, parcPacote,
+                      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
                       etapasPct,
                       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
                     });
