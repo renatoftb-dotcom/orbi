@@ -156,7 +156,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
     });
 
     return (
-      <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", height:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+      <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
         {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div>
@@ -171,7 +171,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </div>
 
         {/* Kanban */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, flex:1, overflowY:"hidden" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, flex:1, overflowY:"auto" }}>
           {COLUNAS.map(col => {
             const cards = filtrados.filter(c => (c.status||"") === col.key);
             const isOver = dragOver === col.key;
@@ -314,7 +314,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </div>
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} />
         <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
+        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc); }} />
       </div>
     );
   }
@@ -1002,20 +1002,12 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       </div>
                       <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0, marginLeft:12 }}>
                         <button
-                          onClick={async () => {
-                            const res = await fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
-                            const orcCompleto = res?.ok ? res.data : o;
-                            onAbrirOrcamento(cliente, orcCompleto, "ver");
-                          }}
+                          onClick={() => onAbrirOrcamento(cliente, o)}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Ver
                         </button>
                         <button
-                          onClick={async () => {
-                            const res = await fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
-                            const orcCompleto = res?.ok ? res.data : o;
-                            onAbrirOrcamento(cliente, orcCompleto, "editar");
-                          }}
+                          onClick={() => onAbrirOrcamento(cliente, o)}
                           style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                           Editar
                         </button>
