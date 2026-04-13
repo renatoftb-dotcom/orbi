@@ -35,15 +35,12 @@ function TesteOrcamento({ data, save }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// FORM ORCAMENTO PROJETO — VERSAO TESTE
-// ═══════════════════════════════════════════════════════════════
 function AreaDetalhe({ calculo, fmtNum }) {
   const [aberto, setAberto] = useState(false);
   const [engAberto, setEngAberto] = useState(false);
-  const fmt  = (v) => fmtNum(v);
+  const fmt2  = (v) => fmtNum(v);
   const brl  = (v) => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
-  const m2s  = (v, a) => a > 0 ? ` · R$ ${fmt(Math.round(v/a*100)/100)}/m²` : "";
+  const m2s  = (v, a) => a > 0 ? ` · R$ ${fmt2(Math.round(v/a*100)/100)}/m²` : "";
   const pct  = (v) => (v * 100).toLocaleString("pt-BR",{minimumFractionDigits:0,maximumFractionDigits:0}) + "%";
   const row  = (lbl, val, opts={}) => (
     <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3, ...opts.style }}>
@@ -53,16 +50,14 @@ function AreaDetalhe({ calculo, fmtNum }) {
   );
   return (
     <div style={{ background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" }}>
-      {/* Linha Área útil */}
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
         <span style={{ fontSize:12, color:"#9ca3af" }}>Área útil</span>
-        <span style={{ fontSize:13, color:"#374151" }}>{fmt(calculo.areaBruta)} m²</span>
+        <span style={{ fontSize:13, color:"#374151" }}>{fmt2(calculo.areaBruta)} m²</span>
       </div>
-      {/* Linha Área total com seta */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
         <span style={{ fontSize:12, color:"#9ca3af" }}>Área total (+circ.)</span>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{fmt(calculo.areaTotal)} m²</span>
+          <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{fmt2(calculo.areaTotal)} m²</span>
           <span onClick={() => setAberto(v => !v)}
             style={{ cursor:"pointer", fontSize:11, color:"#9ca3af", userSelect:"none", lineHeight:1 }}>
             {aberto ? "▲" : "▼"}
@@ -70,52 +65,32 @@ function AreaDetalhe({ calculo, fmtNum }) {
         </div>
       </div>
 
-      {/* Detalhe expandido */}
       {aberto && (
         <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid #e5e7eb", display:"flex", flexDirection:"column", gap:5 }}>
-
           {calculo.isComercial ? (<>
-            {/* ── COMERCIAL ── */}
-            {row("Área útil", fmt(calculo.areaBruta)+" m²")}
-            {row(`+ ${pct(calculo.acrescimoCirk)} Circulação`, `+${fmt(Math.round(calculo.areaBruta*calculo.acrescimoCirk*100)/100)} m²`)}
-
+            {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
+            {row(`+ ${pct(calculo.acrescimoCirk)} Circulação`, `+${fmt2(Math.round(calculo.areaBruta*calculo.acrescimoCirk*100)/100)} m²`)}
             {(calculo.blocosCom||[]).map((b,i) => (
               <div key={i} style={{ borderTop:"1px solid #e5e7eb", marginTop:6, paddingTop:6 }}>
                 {b.label === "Área Comum" ? (<>
-                  {/* Área Comum — só total e R$/m² */}
                   <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, fontWeight:700, color:"#374151", marginBottom:3 }}>
-                    <span>Área Comum · {fmt(b.area1)} m²</span>
+                    <span>Área Comum · {fmt2(b.area1)} m²</span>
                     <span>{brl(b.precoTot)}{m2s(b.precoTot, b.area1)}</span>
                   </div>
                 </>) : (<>
-                  {/* Cabeçalho do bloco */}
                   <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, fontWeight:700, color:"#374151", marginBottom:3 }}>
-                    <span>{b.n > 1 ? `${b.n} ${b.label}s` : b.label} · {fmt(b.area1)} m² cada · total {fmt(Math.round(b.area1*b.n*100)/100)} m²</span>
+                    <span>{b.n > 1 ? `${b.n} ${b.label}s` : b.label} · {fmt2(b.area1)} m² cada · total {fmt2(Math.round(b.area1*b.n*100)/100)} m²</span>
                   </div>
-                  {/* Preço unitário */}
-                  {row(
-                    `${b.label} (1ª unid.)`,
-                    `${brl(b.precoUni)}${m2s(b.precoUni, b.area1)}`,
-                    { bold: false }
-                  )}
-                  {/* Total */}
-                  {b.n > 1 && row(
-                    `Total ${b.label}s`,
-                    `${brl(b.precoTot)}${m2s(b.precoTot, b.area1*b.n)}`,
-                    { bold: true, valColor:"#111" }
-                  )}
+                  {row(`${b.label} (1ª unid.)`, `${brl(b.precoUni)}${m2s(b.precoUni, b.area1)}`, { bold: false })}
+                  {b.n > 1 && row(`Total ${b.label}s`, `${brl(b.precoTot)}${m2s(b.precoTot, b.area1*b.n)}`, { bold: true, valColor:"#111" })}
                 </>)}
               </div>
             ))}
-
-            {/* Fachada */}
             {calculo.precoFachada > 0 && (
               <div style={{ borderTop:"1px solid #e5e7eb", marginTop:6, paddingTop:6 }}>
                 {row("+15% Fachada", brl(calculo.precoFachada), { bold:false })}
               </div>
             )}
-
-            {/* Engenharia faixas */}
             <div style={{ borderTop:"1px solid #e5e7eb", marginTop:6, paddingTop:6 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
                 <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Engenharia <span style={{ fontSize:8, fontWeight:400, letterSpacing:0, textTransform:"none" }}>(Faixas de desconto)</span></div>
@@ -124,47 +99,42 @@ function AreaDetalhe({ calculo, fmtNum }) {
               {engAberto && calculo.faixasEng.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
                   <span style={{ color:"#6b7280" }}>
-                    {f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt(f.area)} m² × R$ {fmt(Math.round(f.fator*50*100)/100)}/m²
+                    {f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*50*100)/100)}/m²
                   </span>
-                  <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt(Math.round(f.preco*100)/100)}</span>
+                  <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt2(Math.round(f.preco*100)/100)}</span>
                 </div>
               ))}
             </div>
           </>) : (<>
-            {/* ── NÃO COMERCIAL ── */}
-            {calculo.nRep > 1 && row(`Área Total (${calculo.nRep}x)`, `${fmt(calculo.areaTotal)} m² → Total ${fmt(calculo.areaTot)} m²`)}
+            {calculo.nRep > 1 && row(`Área Total (${calculo.nRep}x)`, `${fmt2(calculo.areaTotal)} m² → Total ${fmt2(calculo.areaTot)} m²`)}
             {row("Total de ambientes", calculo.totalAmbientes)}
-            {row("Área útil", fmt(calculo.areaBruta)+" m²")}
-            {calculo.areaPiscina > 0 && row("Piscina (Excluído)", fmt(calculo.areaPiscina)+" m²")}
+            {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
+            {calculo.areaPiscina > 0 && row("Piscina (Excluído)", fmt2(calculo.areaPiscina)+" m²")}
             {(() => {
               const base = (calculo.areaBruta||0) + (calculo.areaPiscina||0);
               const cirkReal = base > 0 ? Math.round((calculo.areaTotal/base - 1)*100) : 0;
               const vCirk = Math.round(base*(cirkReal/100)*100)/100;
-              return row(`+ ${cirkReal}% Circulação e paredes`, `+${fmt(vCirk)} m²`);
+              return row(`+ ${cirkReal}% Circulação e paredes`, `+${fmt2(vCirk)} m²`);
             })()}
-
             <div style={{ borderTop:"1px solid #e5e7eb", marginTop:4, paddingTop:6 }}>
               <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Índice multiplicador</div>
               {row("Qtd de cômodos", calculo.indiceComodos.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3}))}
               {row("Padrão", calculo.indicePadrao.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1}))}
               {row("Fator multiplicar", `x${calculo.fatorMult.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3})}`, { bold:true, valColor:"#111" })}
             </div>
-
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, borderTop:"1px solid #e5e7eb", paddingTop:6, marginTop:2 }}>
               <span style={{ color:"#6b7280" }}>Preço base</span>
-              <span style={{ color:"#374151" }}>{fmt(calculo.precoBaseVal)} × {calculo.fatorMult.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3})} = {fmt(Math.round(calculo.precoBaseVal*calculo.fatorMult*100)/100)} R$/m²</span>
+              <span style={{ color:"#374151" }}>{fmt2(calculo.precoBaseVal)} × {calculo.fatorMult.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3})} = {fmt2(Math.round(calculo.precoBaseVal*calculo.fatorMult*100)/100)} R$/m²</span>
             </div>
-
             <div style={{ borderTop:"1px solid #e5e7eb", marginTop:4, paddingTop:6 }}>
               <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Faixa de Desconto — Arquitetura (1ª Unidade)</div>
               {calculo.faixasArqDet.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
-                  <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${pct(f.desconto)} · ` : ""}{fmt(f.area)} m² × R$ {fmt(Math.round(f.precoM2*100)/100)}/m²</span>
-                  <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt(f.preco)}</span>
+                  <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${pct(f.desconto)} · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.precoM2*100)/100)}/m²</span>
+                  <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt2(f.preco)}</span>
                 </div>
               ))}
             </div>
-
             <div style={{ borderTop:"1px solid #e5e7eb", marginTop:4, paddingTop:6 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
                 <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Engenharia <span style={{ fontSize:8, fontWeight:400, letterSpacing:0 }}>(Faixas de desconto)</span></div>
@@ -172,13 +142,12 @@ function AreaDetalhe({ calculo, fmtNum }) {
               </div>
               {engAberto && calculo.faixasEng.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
-                  <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt(f.area)} m² × R$ {fmt(Math.round(f.fator*50*100)/100)}/m²</span>
-                  <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt(Math.round(f.preco*100)/100)}</span>
+                  <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*50*100)/100)}/m²</span>
+                  <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt2(Math.round(f.preco*100)/100)}</span>
                 </div>
               ))}
             </div>
           </>)}
-
         </div>
       )}
     </div>
@@ -192,7 +161,6 @@ function ResumoDetalhes({ calculo, fmtNum, C }) {
   const hasRep = calculo.nRep > 1;
   return (
     <>
-      {/* Arquitetura */}
       <div style={{ ...C.resumoSec, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <span>Arquitetura</span>
         {hasRep && (
@@ -215,8 +183,6 @@ function ResumoDetalhes({ calculo, fmtNum, C }) {
           ))}
         </div>
       )}
-
-      {/* Engenharia */}
       <div style={{ ...C.resumoSec, marginTop:16, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <span>Engenharia</span>
       </div>
@@ -234,8 +200,6 @@ function ResumoDetalhes({ calculo, fmtNum, C }) {
           ))}
         </div>
       )}
-
-      {/* Total Geral */}
       <div style={{ marginTop:20, paddingTop:14, borderTop:"1px solid #f3f4f6" }}>
         <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Total Geral</div>
         <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
@@ -247,16 +211,14 @@ function ResumoDetalhes({ calculo, fmtNum, C }) {
   );
 }
 
-// ═══════════════════════════════════════════════════════════════
-// PROPOSTA PREVIEW — espelho fiel do PDF em HTML
-// ═══════════════════════════════════════════════════════════════
 function PropostaPreview({ data, onVoltar }) {
   if (!data) return null;
   const { tipoProjeto, tipoObra, padrao, tipologia, tamanho, clienteNome,
           calculo, tipoPgto, temImposto, aliqImp,
           descArq, parcArq, descPacote, parcPacote,
           descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
-          etapasPct, totSI, totCI, impostoV } = data;
+          etapasPct, totSI, totCI, impostoV,
+          incluiArq = true, incluiEng = true, incluiMarcenaria = false } = data;
 
   const fmtV = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const fmtN = v => v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -266,36 +228,101 @@ function PropostaPreview({ data, onVoltar }) {
   const dataStr = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
   const validade = new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR");
 
-  // Usa valores sem imposto diretamente — o imposto é calculado apenas no total
-  const arqCI = calculo.precoArq || 0;
-  const engCI = calculo.precoEng || 0;
   const areaTot = calculo.areaTot || calculo.areaTotal || 0;
 
-  const escopoDefault = [
+  // ── Estados editáveis ──────────────────────────────────────
+  const [arqEdit, setArqEdit]               = useState(incluiArq ? (calculo.precoArq || 0) : 0);
+  const [engEdit, setEngEdit]               = useState(incluiEng ? (calculo.precoEng || 0) : 0);
+  const [resumoEdit, setResumoEdit]         = useState(data.resumoDescritivo || "");
+  const [editandoArq, setEditandoArq]       = useState(false);
+  const [editandoEng, setEditandoEng]       = useState(false);
+  const [editandoResumo, setEditandoResumo] = useState(false);
+  const [tmpArq, setTmpArq]                 = useState("");
+  const [tmpEng, setTmpEng]                 = useState("");
+
+  const arqOriginal  = incluiArq ? (calculo.precoArq || 0) : 0;
+  const engOriginal  = incluiEng ? (calculo.precoEng || 0) : 0;
+  const valorEditado = arqEdit !== arqOriginal || engEdit !== engOriginal;
+
+  const arqCI = arqEdit;
+  const engCI = engEdit;
+
+  // Recalcula totais com valores editados
+  const totSIEdit   = arqCI + engCI;
+  const totCIEdit   = temImposto && totSIEdit > 0 ? Math.round(totSIEdit / (1 - aliqImp/100) * 100) / 100 : totSIEdit;
+  const impostoEdit = temImposto ? Math.round((totCIEdit - totSIEdit) * 100) / 100 : 0;
+
+  function parseValorBR(str) {
+    return parseFloat(str.replace(/\./g,"").replace(",",".")) || 0;
+  }
+
+  const escopoTodos = [
     { titulo:"1. Estudo de Viabilidade", objetivo:"Analisar o potencial construtivo do terreno e verificar a viabilidade de implantação do empreendimento, considerando as condicionantes físicas, urbanísticas, legais e funcionais aplicáveis ao lote.", itens:["Levantamento inicial e consolidação das informações técnicas do terreno","Análise documental e física do lote, incluindo matrícula, dimensões, topografia e características existentes","Consulta e interpretação dos parâmetros urbanísticos e restrições legais aplicáveis","Verificação da viabilidade construtiva, considerando taxa de ocupação, coeficiente de aproveitamento, recuos obrigatórios, gabarito de altura e demais condicionantes normativas","Estimativa preliminar da área edificável e do potencial de aproveitamento do terreno","Avaliação da melhor ocupação do lote, alinhada ao programa de necessidades do cliente","Definição preliminar da implantação, organização dos acessos, fluxos, circulação, áreas livres e áreas construídas","Estudo de volumetria, análise de inserção no entorno e definição de pontos focais que contribuam para a valorização do empreendimento","Dimensionamento preliminar de estacionamentos, fluxos operacionais e viabilidade de circulação para veículos leves e pesados"], entregaveis:["Estudo técnico de ocupação do terreno, com planta de implantação e setorização preliminar","Esquema conceitual de implantação, incluindo diagramas de organização espacial, acessos e condicionantes do entorno","Representações gráficas, estudo volumétrico em 3D e imagens conceituais","Relatório sintético de viabilidade construtiva, contemplando memorial descritivo, quadro de áreas e síntese dos parâmetros urbanísticos aplicáveis"], obs:"Esta etapa tem como objetivo reduzir riscos e antecipar decisões estratégicas antes do desenvolvimento do projeto, permitindo validar a compatibilidade da proposta com o terreno, com a legislação municipal e com os objetivos do empreendimento." },
     { titulo:"2. Estudo Preliminar", objetivo:"Desenvolver o conceito arquitetônico inicial, organizando os ambientes, a implantação e a linguagem estética do projeto.", itens:["Reunião de briefing e entendimento das necessidades do cliente","Definição do programa de necessidades","Estudo de implantação da edificação no terreno","Desenvolvimento da concepção arquitetônica inicial","Definição preliminar de: layout, fluxos, volumetria, setorização e linguagem estética","Compatibilização entre funcionalidade, conforto, estética e viabilidade construtiva","Ajustes conforme alinhamento com o cliente"], entregaveis:["Planta baixa preliminar","Estudo volumétrico / fachada conceitual","Implantação inicial","Imagens, croquis ou perspectivas conceituais","Apresentação para validação do conceito arquitetônico"], obs:"É nesta etapa que o projeto ganha forma. O estudo preliminar define a essência da proposta e orienta todas as fases seguintes." },
     { titulo:"3. Aprovação na Prefeitura", objetivo:"Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.", itens:["Adequação do projeto às exigências legais e urbanísticas do município","Elaboração dos desenhos técnicos exigidos para aprovação","Montagem da documentação técnica necessária ao processo","Inserção de informações obrigatórias conforme normas municipais","Preparação de pranchas, quadros de áreas e demais peças gráficas","Apoio técnico durante o processo de aprovação","Atendimento a eventuais comunique-se ou exigências técnicas da prefeitura"], entregaveis:["Projeto legal para aprovação","Plantas, cortes, fachadas e implantação conforme exigência municipal","Quadros de áreas","Arquivos e documentação técnica para protocolo"], obs:"Não inclusos nesta etapa: taxas municipais, emolumentos, ART/RRT, levantamentos complementares, certidões e exigências extraordinárias de órgãos externos, salvo se expressamente previsto." },
     { titulo:"4. Projeto Executivo", objetivo:"Desenvolver o projeto arquitetônico em nível detalhado para execução da obra, fornecendo todas as informações necessárias para construção com precisão.", itens:["Desenvolvimento técnico completo do projeto aprovado","Detalhamento arquitetônico para obra","Definição precisa de: dimensões, níveis, cotas, eixos, paginações, esquadrias, acabamentos e elementos construtivos","Elaboração de desenhos técnicos executivos","Compatibilização arquitetônica com premissas de obra","Apoio técnico para leitura e entendimento do projeto pela equipe executora"], entregaveis:["Planta baixa executiva","Planta de locação e implantação","Planta de cobertura","Cortes e fachadas executivos","Planta de layout e pontos arquitetônicos","Planta de esquadrias e pisos","Detalhamentos construtivos","Quadro de esquadrias e quadro de áreas final"], obs:"É a etapa que transforma a ideia em construção real. Um bom projeto executivo reduz improvisos, retrabalhos e falhas de execução na obra." },
     { titulo:"5. Projetos Complementares de Engenharia", objetivo:"", itens:["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações","Elétrico: dimensionamento de cargas, circuitos, quadros e pontos","Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento","Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"], entregaveis:[], obs:"Obs.: Este item poderá ser contratado diretamente pelo cliente junto a engenheiros terceiros, ficando a compatibilização sob responsabilidade dos profissionais contratados." },
   ];
+  // Filtra escopo conforme serviços incluídos e tipo de pagamento
+  const escopoFiltrado = escopoTodos.filter((_, i) => {
+    if (i === 0 && isPadrao) return false; // Estudo de Viabilidade só aparece no pagamento por etapa
+    if (i < 4) return incluiArq;           // blocos 1-4 = Arquitetura
+    if (i === 4) return incluiEng;         // bloco 5 = Engenharia
+    return true;
+  });
+  // Renumera títulos dos blocos de arquitetura (1-4) conforme o que sobrou
+  let arqCount = 0;
+  const escopoDefault = escopoFiltrado.map((bloco, i) => {
+    const isEngBloco = bloco.titulo.includes("Engenharia");
+    if (!isEngBloco) {
+      arqCount++;
+      const tituloSemNum = bloco.titulo.replace(/^\d+\.\s*/, "");
+      return { ...bloco, titulo: `${arqCount}. ${tituloSemNum}` };
+    }
+    // Engenharia: renumera como próximo número
+    const tituloSemNum = bloco.titulo.replace(/^\d+\.\s*/, "");
+    return { ...bloco, titulo: `${arqCount + 1}. ${tituloSemNum}` };
+  });
 
-  const naoInclDefault = [
+  // Itens fixos — simples string ou { label, sub } para texto menor
+  const naoInclFixos = [
     "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
-    "Projetos de climatização","Projeto de prevenção de incêndio","Projeto de automação",
-    "Projeto de paisagismo","Projeto de interiores","Projeto de Marcenaria (Móveis internos)",
-    "Projeto estrutural de estruturas metálicas",
-    "Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura",
-    "Sondagem e Planialtimétrico do terreno","Acompanhamento semanal de obra",
-    "Gestão e execução de obra","Vistoria para Caixa Econômica Federal","RRT de Execução de obra",
+    "Projetos de climatização",
+    "Projeto de prevenção de incêndio",
+    "Projeto de automação",
+    "Projeto de paisagismo",
+    "Projeto de interiores",
+    ...(!incluiMarcenaria ? ["Projeto de Marcenaria (M\u00f3veis internos)"] : []),
+    "Projeto estrutural de estruturas met\u00e1licas",
+    "Projeto estrutural para muros de conten\u00e7\u00e3o (arrimo) acima de 1 m de altura",
+    "Sondagem e Planialtim\u00e9trico do terreno",
+    "Acompanhamento semanal de obra",
+    "Gest\u00e3o e execu\u00e7\u00e3o de obra",
+    "Vistoria para Caixa Econ\u00f4mica Federal",
+    "RRT de Execu\u00e7\u00e3o de obra",
     ...(!temImposto ? ["Impostos"] : []),
+  ];
+  // Itens dinâmicos baseados nos toggles — com sublabel menor
+  const naoInclDinamicos = [
+    ...(!incluiEng ? [{ label:"Projetos de Engenharia", sub:"(Estrutural, Elétrico e Hidrossanitário)" }] : []),
+    ...(!incluiArq ? [{ label:"Projetos de Arquitetura", sub:null }] : []),
+  ];
+  // Normaliza tudo para { label, sub }
+  const naoInclDefault = [
+    ...naoInclDinamicos,
+    ...naoInclFixos.map(s => ({ label: s, sub: null })),
   ];
 
   const prazoDefault = isPadrao
-    ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar.",
-       "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."]
-    : ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente.",
-       "Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte.",
-       "Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."];
+    ? [
+       ...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar."] : []),
+       ...(incluiEng ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : []),
+      ]
+    : [
+       ...(incluiArq || incluiEng ? ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente."] : []),
+       ...(incluiArq || incluiEng ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
+       ...(incluiEng ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
+      ];
 
   const C = "#111827";
   const LT = "#9ca3af";
@@ -320,73 +347,18 @@ function PropostaPreview({ data, onVoltar }) {
     </div>
   );
 
-  const Row = ({label, value, sub}) => (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:6 }}>
-      <span style={{ fontSize:13, color:MD }}>{label}</span>
-      <div style={{ textAlign:"right" }}>
-        <span style={{ fontSize:13, fontWeight:500, color:C }}>{value}</span>
-        {sub && <div style={{ fontSize:11, color:LT }}>{sub}</div>}
-      </div>
-    </div>
-  );
-
-  // QR SVG simples
-  const QR = () => (
-    <svg width="44" height="44" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <rect x="2" y="2" width="16" height="16" rx="1.5" stroke={C} strokeWidth="1.5" fill="none"/>
-      <rect x="5.5" y="5.5" width="9" height="9" rx="0.5" fill={C}/>
-      <rect x="26" y="2" width="16" height="16" rx="1.5" stroke={C} strokeWidth="1.5" fill="none"/>
-      <rect x="29.5" y="5.5" width="9" height="9" rx="0.5" fill={C}/>
-      <rect x="2" y="26" width="16" height="16" rx="1.5" stroke={C} strokeWidth="1.5" fill="none"/>
-      <rect x="5.5" y="29.5" width="9" height="9" rx="0.5" fill={C}/>
-      <rect x="26" y="26" width="5" height="5" fill={C}/>
-      <rect x="33" y="26" width="5" height="5" fill={C}/>
-      <rect x="26" y="33" width="5" height="5" fill={C}/>
-      <rect x="33" y="33" width="5" height="5" fill={C}/>
-      <rect x="40" y="26" width="2" height="2" fill={C}/>
-      <rect x="40" y="33" width="2" height="2" fill={C}/>
-      <rect x="26" y="40" width="5" height="2" fill={C}/>
-      <rect x="40" y="40" width="2" height="2" fill={C}/>
-    </svg>
-  );
-
-  const handlePdf = async () => {
-    if (!window.jspdf) { alert("Aguarde 2s e tente novamente."); return; }
-    try {
-      const c = data.calculo;
-      const nUnid = c.nRep || 1;
-      const arqTotal = calculo.precoArq || 0;
-      const engTotal = calculo.precoEng || 0;
-      const grandTotal = totCI;
-      const engUnit = engTotal;
-      const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
-      const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
-      const fmtM2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m²";
-      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:data.etapasPct, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, criadoEm:new Date().toISOString(), resultado:r };
-      const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
-      // Usar resumo gerado no preview (mais preciso para comercial)
-      if (data.resumoDescritivo && modelo.cliente) modelo.cliente.resumo = data.resumoDescritivo;
-      let logoData = null;
-      try { const lr = await window.storage.get("escritorio-logo"); if (lr?.value) logoData = lr.value; } catch {}
-      await buildPdf(orc, logoData, modelo, null, "#ffffff", true, true);
-    } catch(e) { console.error(e); alert("Erro ao gerar PDF: "+e.message); }
-  };
-
   return (
     <div style={wrap}>
       <div style={page}>
-
-        {/* Toolbar */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
           <button onClick={onVoltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             ← Voltar
           </button>
-          <button onClick={handlePdf} style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+          <button style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
             Gerar PDF
           </button>
         </div>
 
-        {/* Cabeçalho */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div style={{ background:C, borderRadius:6, width:80, height:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
             <div style={{ color:"#fff", fontSize:9, fontWeight:700, textAlign:"center", lineHeight:1.5, letterSpacing:"0.05em" }}>PADOVAN<br/><span style={{ letterSpacing:"0.15em" }}>ARQ</span>UITETOS</div>
@@ -394,66 +366,130 @@ function PropostaPreview({ data, onVoltar }) {
           <div style={{ fontSize:11, color:LT }}>Ourinhos, {dataStr} · Válido até {validade}</div>
         </div>
 
-        {/* Nome + Total */}
         <div style={{ borderTop:`1.5px solid ${C}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
           <div>
             <div style={{ fontSize:24, fontWeight:600, color:C }}>{clienteNome || "Cliente"}</div>
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}>Proposta Comercial de Projetos de Arquitetura e Engenharia</div>
           </div>
           <div style={{ textAlign:"right" }}>
-            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
-              <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
-              <span style={{ fontSize:22, fontWeight:600, color:C }}>{fmtV(arqCI)}</span>
-            </div>
-            <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round(arqCI/areaTot*100)/100)}/m²` : ""}</div>
+            {incluiArq && incluiEng && (
+              <>
+                <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
+                  <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
+                  <span style={{ fontSize:22, fontWeight:600, color:C }}>{fmtV(arqEdit)}</span>
+                </div>
+                <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round(arqCI/areaTot*100)/100)}/m²` : ""}</div>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Resumo descritivo */}
-        {data.resumoDescritivo && (
-          <div style={{ fontSize:13, color:MD, lineHeight:1.7, marginBottom:20 }}>{data.resumoDescritivo}</div>
+        {/* Texto descritivo editável */}
+        {(resumoEdit || data.resumoDescritivo) && (
+          <div style={{ marginBottom:20, position:"relative" }}>
+            {editandoResumo ? (
+              <textarea
+                autoFocus
+                value={resumoEdit}
+                onChange={e => setResumoEdit(e.target.value)}
+                onBlur={() => setEditandoResumo(false)}
+                style={{ width:"100%", fontSize:13, color:MD, lineHeight:1.7, fontFamily:"inherit",
+                  background:"#fffde7", border:"2px solid #f59e0b", borderRadius:4,
+                  padding:"6px 8px", outline:"none", resize:"vertical", minHeight:60, boxSizing:"border-box" }}
+              />
+            ) : (
+              <div
+                onClick={() => setEditandoResumo(true)}
+                title="Clique para editar"
+                style={{ fontSize:13, color:MD, lineHeight:1.7, cursor:"pointer",
+                  borderBottom:"1.5px dashed #f59e0b", paddingBottom:2 }}>
+                {resumoEdit || data.resumoDescritivo}
+              </div>
+            )}
+          </div>
         )}
 
-        {/* Valores */}
-        <Sec title="Valores dos projetos" mt={0}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 0.5px 1fr", gap:0, marginBottom:12 }}>
-            <div style={{ paddingRight:20 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 14px" }}>
+          <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#9ca3af", fontWeight:600, whiteSpace:"nowrap" }}>Valores dos projetos</span>
+          <div style={{ flex:1, height:1, background:"#e5e7eb" }} />
+          {valorEditado && (
+            <button className="no-print" onClick={() => { setArqEdit(arqOriginal); setEngEdit(engOriginal); }}
+              style={{ fontSize:11, color:"#dc2626", background:"#fef2f2", border:"1px solid #fca5a5",
+                borderRadius:6, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", fontWeight:600 }}>
+              ↺ Restaurar valores
+            </button>
+          )}
+        </div>
+        <div>
+
+          <div style={{ display:"grid", gridTemplateColumns: incluiArq && incluiEng ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
+            {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
-              <div style={{ fontSize:20, fontWeight:600, color:C }}>{fmtV(arqCI)}</div>
+              <div style={{ fontSize:20, fontWeight:600, color:C }}>
+                {editandoArq ? (
+                  <input autoFocus type="text"
+                    defaultValue={arqEdit.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setArqEdit(Math.round(v*100)/100); setEditandoArq(false); }}
+                    onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
+                    style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
+                      border:"2px solid #f59e0b", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
+                ) : (
+                  <span onClick={() => { setTmpArq(""); setEditandoArq(true); }} title="Clique para editar"
+                    style={{ cursor:"pointer", borderBottom:"1.5px dashed #f59e0b", paddingBottom:1 }}>
+                    {fmtV(arqCI)}
+                  </span>
+                )}
+              </div>
               <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round(arqCI/areaTot*100)/100)}/m²` : ""}</div>
-            </div>
-            <div style={{ background:LN }} />
-            <div style={{ paddingLeft:20 }}>
+            </div>}
+            {incluiArq && incluiEng && <div style={{ background:LN }} />}
+            {incluiEng && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}>(Opcional)</span></div>
-              <div style={{ fontSize:20, fontWeight:600, color:C }}>{fmtV(engCI)}</div>
+              <div style={{ fontSize:20, fontWeight:600, color:C }}>
+                {editandoEng ? (
+                  <input autoFocus type="text"
+                    defaultValue={engEdit.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}
+                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setEngEdit(Math.round(v*100)/100); setEditandoEng(false); }}
+                    onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoEng(false); }}
+                    style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
+                      border:"2px solid #f59e0b", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
+                ) : (
+                  <span onClick={() => { setTmpEng(""); setEditandoEng(true); }} title="Clique para editar"
+                    style={{ cursor:"pointer", borderBottom:"1.5px dashed #f59e0b", paddingBottom:1 }}>
+                    {fmtV(engCI)}
+                  </span>
+                )}
+              </div>
               <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round(engCI/areaTot*100)/100)}/m²` : ""}</div>
-            </div>
+            </div>}
           </div>
           <div style={{ border:`0.5px solid ${LN}`, borderRadius:8, padding:"8px 14px", fontSize:12, color:LT, marginBottom:4 }}>
             {temImposto ? (<>
-              + Impostos — <span style={{ color:MD, fontWeight:500 }}>{fmtV(impostoV)}</span>
-              &nbsp;·&nbsp; Total com impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCI)}</span>
+              + Impostos — <span style={{ color:MD, fontWeight:500 }}>{fmtV(impostoEdit)}</span>
+              &nbsp;·&nbsp; Total com impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIEdit)}</span>
             </>) : (<>
-              Total sem impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCI)}</span>
+              Total sem impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIEdit)}</span>
             </>)}
           </div>
-        </Sec>
+        </div>
 
-        {/* Pagamento */}
         <Sec title={isPadrao ? "Formas de pagamento" : "Contratação por etapa"}>
           {isPadrao ? (<>
             <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:6 }}>Apenas Arquitetura</div>
-              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>Antecipado ({descArq}% de desconto) — {fmtV(Math.round(arqCI*(1-descArq/100)*100)/100)}</div>
-              <div style={{ fontSize:13, color:MD }}>Parcelado {parcArq}× — {fmtV(Math.round(arqCI/parcArq*100)/100)}/mês</div>
+              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:6 }}>
+                {incluiArq && incluiEng ? "Apenas Arquitetura" : incluiEng ? "Apenas Engenharia" : "Apenas Arquitetura"}
+              </div>
+              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>Antecipado ({descArq}% de desconto) — {fmtV(Math.round(totSIEdit*(1-descArq/100)*100)/100)}</div>
+              <div style={{ fontSize:13, color:MD }}>Parcelado {parcArq}× — {fmtV(Math.round(totSIEdit/parcArq*100)/100)}/mês</div>
             </div>
+            {incluiArq && incluiEng && (
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:12, marginBottom:12 }}>
               <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:6 }}>Pacote Completo (Arq. + Eng.)</div>
-              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>De {fmtV(totCI)} por apenas: <strong style={{ color:C }}>{fmtV(Math.round(totCI*(1-descPacote/100)*100)/100)}</strong></div>
-              <div style={{ fontSize:11, color:LT }}>Desconto de {fmtV(Math.round(totCI*descPacote/100*100)/100)} ({descPacote}%) · Parcelado {parcPacote}× de {fmtV(Math.round(totCI*(1-descPacote/100)/parcPacote*100)/100)} c/ desconto</div>
+              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>De {fmtV(totCIEdit)} por apenas: <strong style={{ color:C }}>{fmtV(Math.round(totCIEdit*(1-descPacote/100)*100)/100)}</strong></div>
+              <div style={{ fontSize:11, color:LT }}>Desconto de {fmtV(Math.round(totCIEdit*descPacote/100*100)/100)} ({descPacote}%) · Parcelado {parcPacote}× de {fmtV(Math.round(totCIEdit*(1-descPacote/100)/parcPacote*100)/100)} c/ desconto</div>
             </div>
+            )}
           </>) : (<>
-            {/* Tabela etapas */}
             <div style={{ marginBottom:16 }}>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", paddingBottom:6, borderBottom:`1.5px solid ${C}` }}>
                 <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em" }}>Etapa</span>
@@ -464,47 +500,43 @@ function PropostaPreview({ data, onVoltar }) {
                 <div key={et.id} style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
                   <span style={{ color:C }}>{et.nome}</span>
                   <span style={{ color:LT, textAlign:"center" }}>{et.pct}%</span>
-                  <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(Math.round(totCI*et.pct/100*100)/100)}</span>
+                  <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(Math.round(totCIEdit*et.pct/100*100)/100)}</span>
                 </div>
               ))}
+              {incluiEng && (
               <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
                 <div>
                   <div style={{ color:C }}>Projetos de Engenharia</div>
                   <div style={{ fontSize:11, color:LT }}>Estrutural · Elétrico · Hidrossanitário</div>
                 </div>
                 <span style={{ color:LT, textAlign:"center" }}>—</span>
-                <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(engCI)}</span>
+                <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(engEdit)}</span>
               </div>
+              )}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"8px 0", borderTop:`1.5px solid ${C}`, marginTop:2 }}>
                 <span style={{ fontWeight:600, color:C }}>Total</span>
                 <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{etapasPct.reduce((s,e)=>s+e.pct,0)}%</span>
-                <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(totCI)}</span>
+                <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(totCIEdit)}</span>
               </div>
             </div>
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-              <div style={secH(0)}>
-                <span style={secL}>Forma de Pagamento</span>
-                <div style={secLn} />
-              </div>
-              <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between" }}>
-                <div style={{ fontSize:12, fontWeight:600, color:C }}>Etapa a Etapa</div>
-                <span style={{ fontSize:10, color:LT }}>{"Obs.: Nesta opção valores de etapas futuras podem ser reajustados."}</span>
-              </div>
+              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:5 }}>Etapa a Etapa</div>
               <div style={{ fontSize:13, color:MD, marginBottom:5 }}>Opção 1: Antecipado por etapa ({descEtCtrt}% de desconto)</div>
               <div style={{ fontSize:13, color:MD }}>Opção 2: Parcelado {parcEtCtrt}× por etapa</div>
             </div>
+            {incluiArq && incluiEng && (
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
               <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:5 }}>Pacote Completo (Arq. + Eng.)</div>
-              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>De {fmtV(totCI)} por apenas: <strong style={{ color:C }}>{fmtV(Math.round(totCI*(1-descPacCtrt/100)*100)/100)}</strong></div>
-              <div style={{ fontSize:11, color:LT }}>Desconto de {fmtV(Math.round(totCI*descPacCtrt/100*100)/100)} ({descPacCtrt}%) · Parcelado {parcPacCtrt}× de {fmtV(Math.round(totCI*(1-descPacCtrt/100)/parcPacCtrt*100)/100)}</div>
+              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>De {fmtV(totCIEdit)} por apenas: <strong style={{ color:C }}>{fmtV(Math.round(totCIEdit*(1-descPacCtrt/100)*100)/100)}</strong></div>
+              <div style={{ fontSize:11, color:LT }}>Desconto de {fmtV(Math.round(totCIEdit*descPacCtrt/100*100)/100)} ({descPacCtrt}%) · Parcelado {parcPacCtrt}× de {fmtV(Math.round(totCIEdit*(1-descPacCtrt/100)/parcPacCtrt*100)/100)}</div>
             </div>
+            )}
           </>)}
           <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, fontSize:11, color:LT }}>
             PIX · Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções · Banco Sicoob
           </div>
         </Sec>
 
-        {/* Escopo */}
         <Sec title="Escopo dos serviços">
           {escopoDefault.map((bloco, i) => (
             <div key={i} style={{ marginBottom:18 }}>
@@ -531,24 +563,27 @@ function PropostaPreview({ data, onVoltar }) {
           ))}
         </Sec>
 
-        {/* Não Inclusos */}
         <Sec title="Serviços não inclusos">
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"3px 32px", marginBottom:8 }}>
+          <div style={{ columns:"2", columnGap:32, marginBottom:8 }}>
             {naoInclDefault.map((item, i) => (
-              <div key={i} style={bl}><span style={dot}>•</span><span style={{ fontSize:13, color:MD }}>{item}</span></div>
+              <div key={i} style={{ ...bl, breakInside:"avoid", marginBottom:4 }}>
+                <span style={dot}>•</span>
+                <span style={{ fontSize:13, color:MD }}>
+                  {item.label}
+                  {item.sub && <span style={{ fontSize:11, color:LT, marginLeft:4 }}>{item.sub}</span>}
+                </span>
+              </div>
             ))}
           </div>
           <div style={{ fontSize:12, color:LT, fontStyle:"italic" }}>Todos os serviços não inclusos podem ser contratados como serviços adicionais.</div>
         </Sec>
 
-        {/* Prazo */}
         <Sec title="Prazo de execução">
           {prazoDefault.map((p, i) => (
             <div key={i} style={{ ...bl, marginBottom:6 }}><span style={dot}>•</span><span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{p}</span></div>
           ))}
         </Sec>
 
-        {/* Aceite */}
         <Sec title="Aceite da proposta">
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:8 }}>
             <div>
@@ -569,7 +604,6 @@ function PropostaPreview({ data, onVoltar }) {
           </div>
         </Sec>
 
-        {/* Rodapé com QR */}
         <div style={{ borderTop:`0.5px solid ${LN}`, marginTop:48, paddingTop:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, fontSize:11, color:LT }}>
             <span>Padovan Arquitetos</span><span>·</span>
@@ -577,29 +611,7 @@ function PropostaPreview({ data, onVoltar }) {
             <span>(14) 99767-4200</span><span>·</span>
             <span>@padovan_arquitetos</span>
           </div>
-          <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-            <div style={{ width:46, height:46, border:`0.5px solid ${LN}`, borderRadius:6, display:"flex", alignItems:"center", justifyContent:"center", padding:3 }}>
-              <svg width="36" height="36" viewBox="0 0 44 44" fill="none">
-                <rect x="2" y="2" width="16" height="16" rx="1.5" stroke={C} strokeWidth="1.5" fill="none"/>
-                <rect x="5.5" y="5.5" width="9" height="9" rx="0.5" fill={C}/>
-                <rect x="26" y="2" width="16" height="16" rx="1.5" stroke={C} strokeWidth="1.5" fill="none"/>
-                <rect x="29.5" y="5.5" width="9" height="9" rx="0.5" fill={C}/>
-                <rect x="2" y="26" width="16" height="16" rx="1.5" stroke={C} strokeWidth="1.5" fill="none"/>
-                <rect x="5.5" y="29.5" width="9" height="9" rx="0.5" fill={C}/>
-                <rect x="26" y="26" width="5" height="5" fill={C}/>
-                <rect x="33" y="26" width="5" height="5" fill={C}/>
-                <rect x="26" y="33" width="5" height="5" fill={C}/>
-                <rect x="33" y="33" width="5" height="5" fill={C}/>
-                <rect x="40" y="26" width="2" height="2" fill={C}/>
-                <rect x="40" y="33" width="2" height="2" fill={C}/>
-                <rect x="26" y="40" width="5" height="2" fill={C}/>
-                <rect x="40" y="40" width="2" height="2" fill={C}/>
-              </svg>
-            </div>
-            <div style={{ fontSize:10, color:LT, lineHeight:1.5 }}>Instagram<br/>@padovan_arquitetos</div>
-          </div>
         </div>
-
       </div>
     </div>
   );
@@ -631,8 +643,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     etapasPct: orcBase.etapasPct || [],
     totSI: orcBase.totSI || 0, totCI: orcBase.totCI || 0, impostoV: orcBase.impostoV || 0,
     resumoDescritivo: "",
-  } : null); // quando definido, abre o preview
-  const [orcPendente,   setOrcPendente]   = useState(null); // orçamento a salvar após PDF
+  } : null);
+  const [orcPendente,   setOrcPendente]   = useState(null);
   const [tipoPgto,      setTipoPgto]      = useState(orcBase?.tipoPgto    || "padrao");
   const [temImposto,    setTemImposto]    = useState(orcBase?.temImposto  || false);
   const [aliqImp,       setAliqImp]       = useState(orcBase?.aliqImp     || 16);
@@ -652,8 +664,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     { id:5, nome:"Engenharia",             pct:10 },
   ]);
   const [qtdRep, setQtdRep] = useState(orcBase?.repeticao ? (orcBase?.nUnidades || 2) : 0);
+  const [incluiArq,        setIncluiArq]        = useState(orcBase?.incluiArq        !== false);
+  const [incluiEng,        setIncluiEng]        = useState(orcBase?.incluiEng        !== false);
+  const [incluiMarcenaria, setIncluiMarcenaria] = useState(orcBase?.incluiMarcenaria || false);
 
-  // Sincroniza estados quando orcBase é carregado depois da montagem (Editar)
   useEffect(() => {
     if (!orcBase) return;
     if (orcBase.referencia  !== undefined) setReferencia(orcBase.referencia || "");
@@ -680,7 +694,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (orcBase.grupoParams  !== undefined && orcBase.grupoParams) setGrupoParams(orcBase.grupoParams);
   }, [orcBase?.id]);
 
-  // Parâmetros independentes por grupo comercial
   const GRUPOS_COMERCIAIS = ["Por Loja","Espaço Âncora","Áreas Comuns","Por Apartamento","Galpao"];
   const [grupoParams, setGrupoParams] = useState(() => {
     const init = {};
@@ -690,9 +703,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     GRUPOS_COMERCIAIS.forEach(g => { init[g] = { padrao:p, tipologia:ti, tamanho:ta }; });
     return init;
   });
-  const [abertoGrupo, setAbertoGrupo] = useState(null); // { grupo, param, top, left }
+  const [abertoGrupo, setAbertoGrupo] = useState(null);
 
-  // Sincroniza grupoParams quando parâmetros globais mudam
   useEffect(() => {
     if (!padrao && !tipologia && !tamanho) return;
     setGrupoParams(prev => {
@@ -713,7 +725,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setAbertoGrupo(null);
   }
   const isComercial = tipoProjeto === "Conj. Comercial";
-  // Qtd de repetições por grupo (nLojas, nAncoras, etc.)
   const [grupoQtds, setGrupoQtds] = useState(orcBase?.grupoQtds || {
     "Por Loja": 0, "Espaço Âncora": 0, "Áreas Comuns": 0, "Por Apartamento": 0, "Galpao": 0,
   });
@@ -722,7 +733,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setGrupoQtds(prev => ({ ...prev, [grupo]: Math.max(0, (prev[grupo] || 0) + delta) }));
   }
 
-  // Mapeia tipoProjeto → chave getComodosConfig
   function tipoParaConfig(tp) {
     if (tp === "Clínica")          return "Clínica";
     if (tp === "Conj. Comercial")  return "Comercial";
@@ -735,20 +745,17 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     return getComodosConfig(tipoParaConfig(tipoProjeto));
   }, [tipoProjeto]);
 
-  // qtds: { nomeCômodo: número }
   const [qtds, setQtds] = useState(() => {
     if (!orcBase?.comodos) return {};
     return Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd]));
   });
 
-  // Reset qtds ao mudar tipo de projeto — só zera se não veio de edição
   const isEdicao = useRef(!!orcBase?.comodos?.length);
   useEffect(() => {
     if (isEdicao.current) { isEdicao.current = false; return; }
     setQtds({});
   }, [tipoProjeto]);
 
-  // Fechar dropdown ao clicar fora
   const wrapRef = useRef(null);
   useEffect(() => {
     if (!aberto && !abertoGrupo) return;
@@ -776,7 +783,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   function selecionar(key, val) { SETS[key](val); setAberto(null); }
 
-  // Mapa cômodo → grupo (recalculado quando configAtual muda)
   const grupoDeComodo = useMemo(() => {
     const map = {};
     if (configAtual?.grupos) {
@@ -787,14 +793,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     return map;
   }, [configAtual]);
 
-  // ── Cálculo live ────────────────────────────────────────────
   const calculo = useMemo(() => {
     if (!configAtual || !tamanho || !padrao) return null;
     const { comodos: COMODOS_USE } = configAtual;
     const tcfg = getTipoConfig(tipoParaConfig(tipoProjeto));
     const pb = tcfg.precoBase;
 
-    // ── COMERCIAL — lógica fiel ao FormOrcamentoProjeto ──────────
     if (isComercial) {
       const nomesLoja   = Object.keys(COMODOS_GALERIA_LOJA);
       const nomesAncora = Object.keys(COMODOS_GALERIA_ANCORA);
@@ -826,7 +830,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const ipApto   = INDICE_PADRAO[gpApto.padrao   || padrao] || 0;
       const ipGalpao = INDICE_PADRAO[gpGalpao.padrao || padrao] || 0;
 
-      // Área e índice de 1 unidade de cada tipo
       const calcBloco = (nomes, tam, ip) => {
         let ab = 0, ic = 0;
         nomes.forEach(nome => {
@@ -870,8 +873,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         let total=precoUni, acum=area1;
         for (let i=2; i<=n; i++) {
           acum += area1;
-          const pct = acum<1000?0.25:acum<2000?0.20:0.15;
-          total += precoUni*pct;
+          const pct2 = acum<1000?0.25:acum<2000?0.20:0.15;
+          total += precoUni*pct2;
         }
         return Math.round(total*100)/100;
       };
@@ -900,7 +903,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         nAncoras >0&&atAnc1   >0 ? {label:"Âncora",       n:nAncoras, area1:atAnc1,    precoUni:p1Anc,    precoTot:pAncoras} : null,
         atComum  >0              ? {label:"Área Comum",    n:1,        area1:atComum,   precoUni:p1Comum,  precoTot:p1Comum}  : null,
         nAptos   >0&&atApto1  >0 ? {label:"Apartamento",  n:nAptos,   area1:atApto1,   precoUni:p1Apto,   precoTot:pAptos}   : null,
-        nGalpoes >0&&atGalpao1>0 ? {label:"Galpão",  n:nGalpoes, area1:atGalpao1, precoUni:p1Galpao, precoTot:pGalpoes} : null,
+        nGalpoes >0&&atGalpao1>0 ? {label:"Galpão",       n:nGalpoes, area1:atGalpao1, precoUni:p1Galpao, precoTot:pGalpoes} : null,
       ].filter(Boolean);
       return {
         isComercial: true,
@@ -916,7 +919,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       };
     }
 
-    // ── NÃO COMERCIAL ─────────────────────────────────────────
     let areaBruta = 0, areaPiscina = 0;
     Object.entries(qtds).forEach(([nome, qtd]) => {
       if (!qtd || qtd <= 0) return;
@@ -931,7 +933,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const areaTotal = Math.round((areaBruta + areaPiscina) * (1 + tcfg.acrescimoCirk) * 100) / 100;
     if (areaTotal === 0) return null;
 
-    // Memória de cálculo — índices
     const indiceComodos = (() => {
       let idx = 0;
       Object.entries(qtds).forEach(([nome, qtd]) => {
@@ -957,7 +958,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       }
       return Math.round(total * 100) / 100;
     }
-    // Faixas de desconto Arq detalhadas
     const faixasArqDet = (() => {
       let acum = 0, rest = areaTotal;
       const det = [];
@@ -977,10 +977,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const engCalc   = calcularEngenharia(areaTotal);
     const precoEng1 = Math.round(engCalc.totalEng * 100) / 100;
 
-    // Repetição: unidades 2+ = 25% da 1ª (fixo por ora)
     const nRep   = qtdRep > 1 ? qtdRep : 1;
     const pctRep = 0.25;
-    // array de unidades: [{und, precoArq, precoEng}]
     const unidades = [{ und: 1, arq: precoArq1, eng: precoEng1 }];
     for (let i = 2; i <= nRep; i++) {
       unidades.push({
@@ -996,19 +994,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     return {
       areaBruta: Math.round(areaBruta * 100) / 100,
       areaPiscina: Math.round(areaPiscina * 100) / 100,
-      areaTotal,
-      areaTot,
+      areaTotal, areaTot,
       precoArq1, precoArq,
       precoEng1, precoEng,
       precoM2Arq: areaTot > 0 ? Math.round(precoArq / areaTot * 100) / 100 : 0,
       precoM2Eng: areaTot > 0 ? Math.round(precoEng / areaTot * 100) / 100 : 0,
       nRep, pctRep, unidades,
-      // memória de cálculo
       indiceComodos, indicePadrao, fatorMult,
       precoBaseVal, precoM2Ef,
       faixasArqDet, faixasEng: engCalc.faixas,
       totalAmbientes,
-      // acrescimoCirk e labelCirk direto da config — derivado também da razão real
       acrescimoCirk: tcfg.acrescimoCirk,
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
     };
@@ -1018,8 +1013,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     ? Object.entries(grupoQtds).some(([g, gq]) => gq > 0 && Object.keys(qtds).some(nome => grupoDeComodo[nome] === g && (qtds[nome]||0) > 0))
     : Object.values(qtds).some(q => q > 0);
 
-  // ── Estilos ─────────────────────────────────────────────────
-  // Injeta keyframe slideUp uma vez
   useEffect(() => {
     if (document.getElementById("slide-up-style")) return;
     const s = document.createElement("style");
@@ -1044,7 +1037,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     sep:        { width:1, background:"#e5e7eb", alignSelf:"stretch", marginTop:22 },
     btnDefinir: { width:"100%", maxWidth:380, background:"#fff", border:"1px solid #d1d5db", borderRadius:10, padding:"13px 0", fontSize:14, color:"#374151", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
     aviso:      { fontSize:12, color:"#ef4444", textAlign:"center", marginTop:8 },
-    // Cômodos
     comodoGrupoHdr: { fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8, marginTop:20, background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:6, padding:"6px 10px", display:"inline-block" },
     comodoRow:  (ativo) => ({ display:"flex", alignItems:"center", gap:4, padding:"3px 0", borderBottom:"1px solid #f3f4f6", opacity: ativo ? 1 : 0.55 }),
     comodoNome: { flex:1, fontSize:14, color:"#374151" },
@@ -1053,7 +1045,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     qtdBtn:     { width:26, height:26, borderRadius:6, border:"1px solid #d1d5db", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
     qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#9ca3af" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
-    // Resumo
     resumoBox:  { background:"#fff", border:"1px solid #d1d5db", borderRadius:12, padding:"20px 20px" },
     resumoHdr:  { fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:16, paddingBottom:12, borderBottom:"1px solid #f3f4f6" },
     resumoSec:  { fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
@@ -1063,7 +1054,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     resumoArea: { background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" },
   };
 
-  // renderiza um step do fluxo inline
   function renderStep(id) {
     const open = aberto === id;
     const val  = VALS[id];
@@ -1096,7 +1086,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     );
   }
 
-  // Nomes de exibição dos grupos de Conj. Comercial
   const GRUPO_DISPLAY = {
     "Por Loja":        "Loja",
     "Espaço Âncora":   "Espaço Âncora",
@@ -1105,13 +1094,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     "Galpao":          "Galpão",
   };
 
-
   const [gruposAbertos, setGruposAbertos] = useState({});
   function toggleGrupo(grupo) {
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
   function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
-
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -1130,13 +1117,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const fmtNum = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
 
-  // Valores derivados do modal — sempre sincronizados com os estados
-  const modalTotSI   = calculo ? Math.round((calculo.precoArq + calculo.precoEng)*100)/100 : 0;
+  const modalTotSI   = calculo ? Math.round(((incluiArq?calculo.precoArq:0) + (incluiEng?calculo.precoEng:0))*100)/100 : 0;
   const modalTotCI   = temImposto && modalTotSI > 0 ? Math.round(modalTotSI/(1-aliqImp/100)*100)/100 : modalTotSI;
   const modalImposto = temImposto ? Math.round((modalTotCI - modalTotSI)*100)/100 : 0;
 
   if (propostaData) {
-    // Mescla propostaData com estados atuais de pagamento — sempre sincronizado
     const liveData = {
       ...propostaData,
       tipoPgto, temImposto, aliqImp,
@@ -1146,9 +1131,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       etapasPct,
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
     };
-    return <PropostaPreview data={liveData} onVoltar={() => {
-      setPropostaData(null);
-    }} />;
+    return <PropostaPreview data={liveData} onVoltar={() => { setPropostaData(null); }} />;
   }
 
   return (
@@ -1169,16 +1152,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Fluxo sequencial de parâmetros ── */}
       {!tamanho ? (
-        /* Modo vertical — ainda definindo */
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start" }}>
 
-          {/* Passo 1 — Tipo Obra */}
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
             {renderStep("tipoObra")}
             {tipoObra && <span onClick={() => { setAberto(null); setTipoObra(null); setTipoProjeto(null); setPadrao(null); setTipologia(null); setTamanho(null); }} style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"0 4px" }}>✕</span>}
           </div>
 
-          {/* Passo 2 — Tipo Projeto */}
           {tipoObra && <>
             <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -1187,7 +1167,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             </div>
           </>}
 
-          {/* Passo 3 — Padrão */}
           {tipoProjeto && <>
             <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -1196,7 +1175,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             </div>
           </>}
 
-          {/* Passo 4 — Tipologia */}
           {padrao && <>
             <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -1205,7 +1183,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             </div>
           </>}
 
-          {/* Passo 5 — Tamanho */}
           {tipologia && <>
             <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -1216,7 +1193,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
         </div>
       ) : (
-        /* Modo horizontal — todos definidos, na mesma linha, clique só abre dropdown */
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center", animation:"slideUp 0.4s ease forwards" }}>
           {renderStep("tipoObra")}
           {renderStep("tipoProjeto")}
@@ -1226,8 +1202,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         </div>
       )}
 
-
-
       {/* ── Cômodos + Resumo ── */}
       {!!tamanho && !!configAtual && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 400px", gap:32, alignItems:"start",
@@ -1235,9 +1209,37 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           marginTop:32,
         }}>
 
-          {/* Cômodos */}
           <div>
-            {/* Repetição de unidades — oculto só para Conj. Comercial */}
+            {/* Toggles de serviços */}
+            <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginBottom:12, alignItems:"center" }}>
+              {[
+                { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
+                { key:"incluiEng",        val:incluiEng,        set:setIncluiEng,        label:"Engenharia"   },
+                { key:"incluiMarcenaria", val:incluiMarcenaria, set:setIncluiMarcenaria, label:"Marcenaria"   },
+              ].map(({ key, val, set, label }) => (
+                <label key={key} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
+                  <span onClick={() => set(v => !v)} style={{
+                    position:"relative", display:"inline-block",
+                    width:36, height:20, borderRadius:10, flexShrink:0,
+                    background: val ? "#111" : "#d1d5db",
+                    transition:"background 0.2s",
+                    cursor:"pointer",
+                  }}>
+                    <span style={{
+                      position:"absolute", top:3, left: val ? 19 : 3,
+                      width:14, height:14, borderRadius:"50%",
+                      background:"#fff",
+                      transition:"left 0.2s",
+                      boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
+                    }} />
+                  </span>
+                  <span style={{ fontSize:13, color: val ? "#111" : "#9ca3af", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
+                    {label}
+                  </span>
+                </label>
+              ))}
+            </div>
+
             {tipoProjeto !== "Conj. Comercial" && (
               <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#f9fafb", border:"1px solid #d1d5db", borderRadius:8, marginBottom:12 }}>
                 <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", flex:1 }}>
@@ -1263,7 +1265,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 return true;
               }).map(([grupo, nomes]) => (
               <div key={grupo}>
-                {/* Cabeçalho do grupo — mesma estrutura de colunas que a linha de cômodo */}
                 <div style={{
                   display:"flex", alignItems:"center", gap:12,
                   background: "#f9fafb",
@@ -1272,7 +1273,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   padding: "8px 12px",
                   marginTop: 20, marginBottom: 10,
                 }}>
-                  {/* Nome — flex:1, igual ao comodoNome */}
                   <span onClick={() => toggleGrupo(grupo)} style={{ flex:1, fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, cursor:"pointer" }}>
                     {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                   </span>
@@ -1281,14 +1281,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   </span>
                   {isComercial ? (
                     <>
-                      {/* Botões de parâmetro por grupo */}
                       {["padrao","tipologia","tamanho"].map(key => {
                         const labels = { padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
-                        const opcoes = {
-                          padrao:    ["Alto","Médio","Baixo"],
-                          tipologia: ["Térreo","Sobrado"],
-                          tamanho:   ["Grande","Médio","Pequeno","Compacta"],
-                        };
                         const gp = grupoParams[grupo] || {};
                         const val = gp[key] || "";
                         const aKey = `${grupo}__${key}`;
@@ -1315,7 +1309,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           </div>
                         );
                       })}
-                      {/* Qtd do grupo */}
                       <div style={C.qtdWrap}>
                         <button style={C.qtdBtn} onClick={() => setGrupoQtd(grupo, -1)}>−</button>
                         <span style={C.qtdNum(grupoQtds[grupo]||0)}>{grupoQtds[grupo]||0}</span>
@@ -1332,7 +1325,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   return (
                     <div key={nome} style={C.comodoRow(q > 0)}>
                       <span style={C.comodoNome}>{nome}</span>
-                      <span style={C.comodoM2}>{area > 0 ? fmtNum(area)+" m²" : "—"}</span>
+                      <span style={C.comodoM2}>{area > 0 ? fmtNum(area)+" m²" : "—"}</span>
                       <div style={C.qtdWrap}>
                         <button style={C.qtdBtn} onClick={() => setQtd(nome, -1)}>−</button>
                         <span style={C.qtdNum(q)}>{q}</span>
@@ -1346,17 +1339,20 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             ))}
           </div>
 
-          {/* Resumo Cálculo — aparece ao preencher primeiro cômodo */}
+          {/* Resumo Cálculo */}
           <div style={{ position:"sticky", top:24 }}>
             {temComodos && calculo ? (
               <div>
                 <div style={C.resumoBox}>
                   <div style={C.resumoHdr}>Resumo Cálculo</div>
-
-                  {/* Áreas — expansível */}
                   <AreaDetalhe calculo={calculo} fmtNum={fmtNum} />
-
-                  <ResumoDetalhes calculo={calculo} fmtNum={fmtNum} C={C} />
+                  <ResumoDetalhes calculo={{
+                    ...calculo,
+                    precoArq:   incluiArq ? calculo.precoArq : 0,
+                    precoEng:   incluiEng ? calculo.precoEng : 0,
+                    precoM2Arq: incluiArq ? calculo.precoM2Arq : 0,
+                    precoM2Eng: incluiEng ? calculo.precoM2Eng : 0,
+                  }} fmtNum={fmtNum} C={C} />
                 </div>
                 <button
                   style={{ width:"100%", marginTop:12, background:"#f3f4f6", color:"#111", border:"1px solid #e5e7eb", borderRadius:10, padding:"13px 0", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
@@ -1377,7 +1373,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         </div>
       )}
 
-      {/* Valores derivados para o modal e propostaData — sempre atualizados */}
       {(() => {
         if (calculo) {
           const _arqV = calculo.precoArq;
@@ -1385,7 +1380,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           const _totSI = _arqV + _engV;
           const _totCI = temImposto ? Math.round(_totSI/(1-aliqImp/100)*100)/100 : _totSI;
           const _impostoV = temImposto ? Math.round((_totCI-_totSI)*100)/100 : 0;
-          // Injeta no escopo externo via ref para uso no setPropostaData
           window.__obraModalVals = { totSI: _totSI, totCI: _totCI, impostoV: _impostoV };
         }
         return null;
@@ -1394,8 +1388,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       {/* Modal Gerar Orçamento */}
       {showModal && calculo && (() => {
         const fmtV = (v) => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-        const arqV  = calculo.precoArq;
-        const engV  = calculo.precoEng;
+        const arqV  = incluiArq ? calculo.precoArq : 0;
+        const engV  = incluiEng ? calculo.precoEng : 0;
         const totSI = arqV + engV;
         const semImpFator = 1 - aliqImp/100;
         const totCI = temImposto ? Math.round(totSI/semImpFator*100)/100 : totSI;
@@ -1424,7 +1418,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   {tipoProjeto} · {tipoObra} · Padrão {padrao} · {tipologia} · Ambientes {tamanho}s
                 </div>
 
-                {/* Resumo valores */}
                 <div style={{ background:"#f9fafb", borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                     <span style={{ fontSize:12, color:"#6b7280" }}>Arquitetura</span>
@@ -1450,7 +1443,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   </div>
                 </div>
 
-                {/* Imposto */}
                 <div style={{ background:"#fafafa", border:"1px solid #f0f0f0", borderRadius:12, padding:"12px 14px", marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
                   <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", flex:1 }}>
                     <input type="checkbox" checked={temImposto} onChange={e=>setTemImposto(e.target.checked)} />
@@ -1464,13 +1456,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   )}
                 </div>
 
-                {/* Forma de Pagamento */}
                 <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:10, fontWeight:600 }}>Forma de pagamento</div>
 
-                {/* Dois cards lado a lado */}
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, alignItems:"start" }}>
 
-                  {/* Card Padrão */}
                   <div style={cardSty(isPadrao)} onClick={()=>setTipoPgto("padrao")}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: isPadrao ? 12 : 0 }}>
                       <div>
@@ -1519,7 +1508,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     )}
                   </div>
 
-                  {/* Card Por Etapas */}
                   <div style={cardSty(!isPadrao)} onClick={()=>setTipoPgto("etapas")}>
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: !isPadrao ? 12 : 0 }}>
                       <div>
@@ -1530,8 +1518,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     </div>
                     {!isPadrao && (
                       <div style={{ paddingTop:12, borderTop:"1px solid #f0f0f0", display:"grid", gridTemplateColumns:"1fr 1.5fr", gap:8 }} onClick={e=>e.stopPropagation()}>
-
-                        {/* Esquerda — condições */}
                         <div>
                           <div style={{ background:"#fafafa", borderRadius:8, padding:"8px 10px", marginBottom:8 }}>
                             <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Etapa a Etapa</div>
@@ -1569,7 +1555,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           </div>
                         </div>
 
-                        {/* Direita — etapas */}
                         <div style={{ background:"#fafafa", borderRadius:8, padding:"8px 10px" }}>
                           <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8, fontWeight:600 }}>Etapas</div>
                           {(() => {
@@ -1610,14 +1595,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             </>);
                           })()}
                         </div>
-
                       </div>
                     )}
                   </div>
 
                 </div>
 
-                {/* Confirmar */}
                 <button
                   style={{ width:"100%", marginTop:8, background:"#111", color:"#fff", border:"none", borderRadius:12, padding:"15px 0", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}
                   onClick={() => {
@@ -1628,7 +1611,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       resumoDescritivo: (() => {
                         const fmtN2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
                         const fmtArea = v => v > 0 ? fmtN2(v)+"m²" : null;
-                        // Conj. Comercial
                         if (isComercial && calculo?.isComercial) {
                           const c = calculo;
                           const partes = [];
@@ -1642,7 +1624,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           const lista = partes.length>1 ? partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1] : partes[0]||"";
                           return `Conjunto comercial, contendo ${lista}, totalizando ${fmtArea(c.areaTot||c.areaTotal)}.`;
                         }
-                        // Residencial
                         const nUnid = calculo?.nRep || 1;
                         const areaUni = calculo?.areaTotal || calculo?.areaTot || 0;
                         const areaTotR = Math.round(areaUni * nUnid * 100)/100;
@@ -1659,15 +1640,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       })(),
                       grupoQtds: isComercial ? grupoQtds : null,
                       calculo,
-                      // pagamento
+                      incluiArq, incluiEng, incluiMarcenaria,
                       tipoPgto, temImposto, aliqImp,
                       descArq, parcArq, descPacote, parcPacote,
                       descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
                       etapasPct,
-                      // valores finais
                       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
                     });
-                    // Salvar imediatamente no banco
                     const orcParaSalvar = {
                       ...(orcBase || {}),
                       tipo: tipoProjeto, subtipo: tipoObra, tipologia, tamanho, padrao,
@@ -1676,6 +1655,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       repeticao: qtdRep > 0, nUnidades: qtdRep > 0 ? qtdRep : 1,
                       grupoQtds: isComercial ? grupoQtds : null,
                       grupoParams: isComercial ? grupoParams : null,
+                      incluiArq, incluiEng, incluiMarcenaria,
                       resultado: { ...calculo, precoArq: calculo?.precoArq || 0, precoEng: calculo?.precoEng || 0, areaTotal: calculo?.areaTotal || 0 },
                       tipoPgto, temImposto, aliqImp,
                       descArq, parcArq, descPacote, parcPacote,
@@ -1723,7 +1703,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         </div>
       )}
 
-      {/* Painel dropdown — parâmetros por grupo comercial */}
       {abertoGrupo && (
         <div style={{
           position:"fixed",
@@ -1750,5 +1729,4 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     </div>
   );
 }
-
 
