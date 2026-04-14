@@ -4230,7 +4230,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   y += 10;
   sf("bold",16); stc(INK); tx(orc.cliente||"—", M, y);
   // Valor e label "Apenas Arquitetura" só aparecem quando ambos (arq+eng) incluídos
-  if (incluiArq && incluiEng) {
+  if (incluiArq && incluiEng && !temIsoladasPdf) {
     sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
     const wArqVal = doc.getTextWidth(fmtB(arqCI));
     sf("normal",6.5); stc(INK_LT); tx("Apenas Arquitetura", W-M-wArqVal-3, y+1, {align:"right"});
@@ -4262,10 +4262,11 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const colH = 22;
   nv(colH+4);
 
-  // Coluna ARQ
+  // Coluna ARQ — quando isolada usa valor proporcional
+  const arqCIExib = temIsoladasPdf ? totSIBasePdf : arqCI;
   sf("bold",7); stc(INK_LT); tx("ARQUITETURA", M, y);
-  sf("bold",11); stc(INK); tx(fmtB(arqCI), M, y+7);
-  if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, M, y+12); }
+  sf("bold",11); stc(INK); tx(fmtB(arqCIExib), M, y+7);
+  if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCIExib/area*100)/100)}/m²`, M, y+12); }
 
   // Divisor vertical e coluna Engenharia — só quando incluiEng
   if (incluiEng) {
@@ -4285,15 +4286,17 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   nv(12);
   sc(BG); doc.roundedRect(M,y,TW,8,2,2,"F");
   sf("normal",7); stc(INK_LT);
+  const totCIExib = temIsoladasPdf ? totCIBasePdf : totCI;
+  const impostoVExib = temIsoladasPdf ? Math.round((totCIBasePdf - totSIBasePdf)*100)/100 : impostoV;
   if (temImp) {
-    const itxt = `+ Impostos — ${fmtB(impostoV)}   ·   Total com impostos — `;
+    const itxt = `+ Impostos — ${fmtB(impostoVExib)}   ·   Total com impostos — `;
     tx(itxt, M+4, y+5.5);
     const itw = doc.getTextWidth(itxt);
-    sf("bold",7.5); stc(INK); tx(fmtB(totCI), M+4+itw, y+5.5);
+    sf("bold",7.5); stc(INK); tx(fmtB(totCIExib), M+4+itw, y+5.5);
   } else {
     tx("Total sem impostos — ", M+4, y+5.5);
     const itw2 = doc.getTextWidth("Total sem impostos — ");
-    sf("bold",7.5); stc(INK); tx(fmtB(totCI), M+4+itw2, y+5.5);
+    sf("bold",7.5); stc(INK); tx(fmtB(totCIExib), M+4+itw2, y+5.5);
   }
   y += 12;
 
@@ -4437,24 +4440,37 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     if (bi < escopoFiltradoPdf.length-1) { nv(5); hr(y); y+=5; }
   });
 
-  // ── SERVIÇOS NÃO INCLUSOS ─────────────────────────────────
+  // ── SERVIÇOS NÃO INCLUSOS — 2 colunas independentes ──────
   secTitle("Serviços não inclusos");
   const halfW = TW/2-8;
   const col1 = naoInclDefault.filter((_,i) => i%2===0);
   const col2 = naoInclDefault.filter((_,i) => i%2===1);
-  const nRows = Math.max(col1.length, col2.length);
-  for (let i=0; i<nRows; i++) {
-    // Calcular altura máxima da linha (maior entre col1 e col2)
-    sf("normal",8.5);
-    const ls1 = col1[i] ? doc.splitTextToSize(col1[i], halfW-6) : [];
-    const ls2 = col2[i] ? doc.splitTextToSize(col2[i], halfW-6) : [];
-    const rowH = Math.max(ls1.length, ls2.length) * 4.5 + 1.5;
-    nv(rowH + 1);
-    stc(INK_MD);
-    if(col1[i]) { tx("•",M+1,y); ls1.forEach((ln,li) => tx(ln, M+5, y+li*4.5)); }
-    if(col2[i]) { tx("•",midX+1,y); ls2.forEach((ln,li) => tx(ln, midX+5, y+li*4.5)); }
-    y += rowH;
-  }
+  sf("normal",8.5);
+  // Calcula alturas de cada item individualmente
+  const heights1 = col1.map(t => doc.splitTextToSize(t, halfW-6).length * 4.5 + 2);
+  const heights2 = col2.map(t => doc.splitTextToSize(t, halfW-6).length * 4.5 + 2);
+  const totalH = Math.max(
+    heights1.reduce((s,h)=>s+h,0),
+    heights2.reduce((s,h)=>s+h,0)
+  );
+  nv(totalH);
+  const yStart = y;
+  let y1 = yStart, y2 = yStart;
+  stc(INK_MD);
+  col1.forEach((txt, i) => {
+    const ls = doc.splitTextToSize(txt, halfW-6);
+    nv(heights1[i]);
+    tx("•", M+1, y1);
+    ls.forEach((ln, li) => tx(ln, M+5, y1+li*4.5));
+    y1 += heights1[i];
+  });
+  col2.forEach((txt, i) => {
+    const ls = doc.splitTextToSize(txt, halfW-6);
+    tx("•", midX+1, y2);
+    ls.forEach((ln, li) => tx(ln, midX+5, y2+li*4.5));
+    y2 += heights2[i];
+  });
+  y = Math.max(y1, y2);
   nv(6);
   sf("normal",7.5); stc(INK_LT);
   tx("Obs: Todos os serviços não inclusos podem ser contratados como serviços adicionais.",M,y); y+=8;
