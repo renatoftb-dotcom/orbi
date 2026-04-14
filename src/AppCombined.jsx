@@ -2382,7 +2382,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </div>
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} isMobile={isMobile} />
         <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc); }} />
+        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
       </div>
     );
   }
@@ -6449,7 +6449,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     descPacCtrt: orcBase.descPacCtrt || 15, parcPacCtrt: orcBase.parcPacCtrt || 8,
     etapasPct: orcBase.etapasPct || [],
     totSI: orcBase.totSI || 0, totCI: orcBase.totCI || 0, impostoV: orcBase.impostoV || 0,
-    resumoDescritivo: "",
+    incluiArq: orcBase.incluiArq !== false,
+    incluiEng: orcBase.incluiEng !== false,
+    incluiMarcenaria: orcBase.incluiMarcenaria || false,
+    grupoQtds: orcBase.grupoQtds || null,
+    resumoDescritivo: orcBase.resumoDescritivo || "",
   } : null);
   const [orcPendente,   setOrcPendente]   = useState(null);
   const [tipoPgto,      setTipoPgto]      = useState(orcBase?.tipoPgto    || "padrao");
@@ -6477,6 +6481,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   useEffect(() => {
     if (!orcBase) return;
+    // Ativa flag para evitar que useEffect de grupoParams sobrescreva durante sincronização
+    sincronizandoOrcBase.current = true;
     if (orcBase.referencia  !== undefined) setReferencia(orcBase.referencia || "");
     if (orcBase.subtipo     !== undefined) setTipoObra(orcBase.subtipo);
     if (orcBase.tipo        !== undefined) setTipoProjeto(orcBase.tipo);
@@ -6499,6 +6505,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (orcBase.parcPacCtrt !== undefined) setParcPacCtrt(orcBase.parcPacCtrt);
     if (orcBase.grupoQtds   !== undefined) setGrupoQtds(orcBase.grupoQtds || { "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
     if (orcBase.grupoParams  !== undefined && orcBase.grupoParams) setGrupoParams(orcBase.grupoParams);
+    // Desativa flag no próximo tick, após todos os estados terem sido setados
+    setTimeout(() => { sincronizandoOrcBase.current = false; }, 0);
   }, [orcBase?.id]);
 
   const GRUPOS_COMERCIAIS = ["Por Loja","Espaço Âncora","Áreas Comuns","Por Apartamento","Galpao"];
@@ -6512,8 +6520,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   });
   const [abertoGrupo, setAbertoGrupo] = useState(null);
 
+  // Ref para evitar que a sincronização do orcBase dispare o useEffect de grupoParams
+  const sincronizandoOrcBase = useRef(false);
+
   useEffect(() => {
     if (!padrao && !tipologia && !tamanho) return;
+    if (sincronizandoOrcBase.current) return; // não sobrescreve durante carregamento do orcBase
     setGrupoParams(prev => {
       const next = {};
       GRUPOS_COMERCIAIS.forEach(g => {

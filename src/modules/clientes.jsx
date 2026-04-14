@@ -417,7 +417,7 @@ function Clientes({ data, save, onAbrirOrcamento }) {
         </div>
         <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} isMobile={isMobile} />
         <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc); }} />
+        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
       </div>
     );
   }
