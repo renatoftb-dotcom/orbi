@@ -992,8 +992,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   sc(INK); doc.rect(M,6,TW,0.5,"F");
 
   // ── LOGO ───────────────────────────────────────────────────
-  let logoData = null;
-  try { const lr = await window.storage.get("escritorio-logo"); if (lr?.value) logoData = lr.value; } catch {}
+  let logoData = logo || null;
+  if (!logoData) {
+    try { const lr = await window.storage.get("escritorio-logo"); if (lr?.value) logoData = lr.value; } catch {}
+  }
   {
     const qX=M, qY=8, qR=3;
     if (logoData) {
