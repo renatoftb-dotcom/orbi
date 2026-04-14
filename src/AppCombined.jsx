@@ -4044,7 +4044,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const aliqImp = orc.aliqImp ?? r.aliquotaImposto ?? 0;
   const semFat  = temImp ? (1 - aliqImp/100) : 1;
 
-  // Arq e Eng SEM imposto
+  // Arq e Eng SEM imposto — usa valores editados passados pelo handlePdf
   const arqCI   = Math.round((r.precoArq||r.precoTotal||r.precoFinal||0)*100)/100;
   const engRaw  = Math.round((r.engTotal ?? calcularEngenharia(area).totalEng)*100)/100;
   let engRepet  = 0;
@@ -4057,9 +4057,14 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   }
   const engBase = Math.round((engRaw + engRepet)*100)/100;
   const engCI   = Math.round((r.precoEng||engBase)*100)/100;
-  const totSI   = Math.round((arqCI + engCI)*100)/100;
+  const totSI   = Math.round((arqCI + (incluiEng?engCI:0))*100)/100;
   const totCI   = temImp ? Math.round(totSI/(1-aliqImp/100)*100)/100 : totSI;
   const impostoV= temImp ? Math.round((totCI - totSI)*100)/100 : 0;
+  // Engenharia com imposto para linha separada na tabela
+  const engCIcom = temImp && engCI>0 ? Math.round(engCI/(1-aliqImp/100)*100)/100 : engCI;
+  // Etapas isoladas
+  const idsIsoladosPdf = new Set(orc.etapasIsoladas || []);
+  const temIsoladasPdf = idsIsoladosPdf.size > 0;
 
   // Escopo (igual preview)
   const escopoDefault = [
@@ -4071,6 +4076,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   ];
 
   const naoInclDefault = [
+    ...(!incluiEng || (temIsoladasPdf && !idsIsoladosPdf.has(5)) ? ["Projetos de Engenharia (Estrutural · Elétrico · Hidrossanitário)"] : []),
     "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
     "Projetos de climatização","Projeto de prevenção de incêndio","Projeto de automação",
     "Projeto de paisagismo","Projeto de interiores","Projeto de Marcenaria (Móveis internos)",
@@ -4212,7 +4218,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // Data + validade direita
   sf("normal",7.5); stc(INK_LT);
-  tx(`Ourinhos, ${dataStr}  ·  Válido até ${validade}`, W-M, y, {align:"right"});
+  tx(`${orc.cidade||"Ourinhos"}, ${dataStr}  ·  Válido até ${orc.validadeStr||validade}`, W-M, y, {align:"right"});
   hr(y+3);
 
   // Nome cliente + Arq à direita (label inline + valor)
@@ -4300,9 +4306,9 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     etapasPdf.forEach(et => {
       nv(rH+3);
       sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
-      sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
       const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-      sf("normal",8.5); stc(INK); tx(fmtB(Math.round(arqCIBase*(et.pct/100)*100)/100),cV,y,{align:"right"});
+      sf("normal",8.5); stc(INK_LT); tx(et.id===5?"—":`${et.pct}%`,cP,y,{align:"right"});
+      sf("normal",8.5); stc(INK); tx(fmtB(et.id===5 ? engCIcom : Math.round(arqCIBase*(et.pct/100)*100)/100),cV,y,{align:"right"});
       y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     });
 
@@ -4324,8 +4330,11 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
     sf("bold",8.5); stc(INK);
     tx("Total",cE,y);
-    tx(`${etapasPdf.reduce((s,e)=>s+Number(e.pct),0)}%`,cP,y,{align:"right"});
-    tx(fmtB(Math.round((arqCIpdf*(etapasPdf.reduce((s,e)=>s+Number(e.pct),0)/100)+engCIpdf)*100)/100),cV,y,{align:"right"});
+    const pctArqTotal = etapasPdf.filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
+    const arqCIBasePdf = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+    const totalPdf = Math.round((arqCIBasePdf*(pctArqTotal/100) + (incluiEng&&!temIsoladasPdf?engCIcom:0))*100)/100;
+    tx(`${pctArqTotal}%`,cP,y,{align:"right"});
+    tx(fmtB(totalPdf),cV,y,{align:"right"});
     y+=10;
 
     // Condições etapa a etapa — reservar espaço para todo o bloco
@@ -4340,16 +4349,19 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     tx(`Opção 1: Antecipado por etapa (${dEt}% de desconto)`,M+2,y); y+=7;
     tx(`Opção 2: Parcelado ${pEt}× por etapa`,M+2,y); hr(y+3); y+=10;
 
-    // Pacote completo etapas
-    const dPac=orc.descontoPacoteCtrt??15, pPac=orc.parcelasPacoteCtrt??8;
-    const tDesc=Math.round(totCI*(1-dPac/100)*100)/100;
-    sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=6;
-    sf("normal",8.5); stc(INK_MD);
-    tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
-    sf("bold",9); stc(INK); tx(fmtB(tDesc),W-M,y,{align:"right"}); y+=5;
-    sf("normal",7.5); stc(INK_LT);
-    tx(`Desconto de ${fmtB(Math.round(totCI*dPac/100*100)/100)} (${dPac}%)  ·  Parcelado ${pPac}× de ${fmtB(Math.round(tDesc/pPac*100)/100)} c/ desconto`,M+2,y);
-    hr(y+3); y+=9;
+    // Pacote completo etapas — só quando incluiArq && incluiEng && sem isoladas
+    if (incluiArq && incluiEng && !temIsoladasPdf) {
+      const dPac=orc.descontoPacoteCtrt??15, pPac=orc.parcelasPacoteCtrt??8;
+      const tDescP=Math.round(totCI*(1-dPac/100)*100)/100;
+      nv(30);
+      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=6;
+      sf("normal",8.5); stc(INK_MD);
+      tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
+      sf("bold",9); stc(INK); tx(fmtB(tDescP),W-M,y,{align:"right"}); y+=5;
+      sf("normal",7.5); stc(INK_LT);
+      tx(`Desconto de ${fmtB(Math.round(totCI*dPac/100*100)/100)} (${dPac}%)  ·  Parcelado ${pPac}× de ${fmtB(Math.round(tDescP/pPac*100)/100)} c/ desconto`,M+2,y);
+      hr(y+3); y+=9;
+    }
 
   } else {
     // Pagamento padrão — reservar espaço para todo o bloco
@@ -4360,20 +4372,22 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     tx(`Antecipado (${dA}% de desconto) — ${fmtB(Math.round(arqCI*(1-dA/100)*100)/100)}`,M+2,y); hr(y+3); y+=8;
     tx(`Parcelado ${pA}× — ${fmtB(Math.round(arqCI/pA*100)/100)}/mês`,M+2,y); hr(y+3); y+=10;
 
-    const dP=orc.descontoPacote??10, pP=orc.parcelasPacote??4;
-    const tDesc=Math.round(totCI*(1-dP/100)*100)/100;
-    sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=6;
-    sf("normal",8.5); stc(INK_MD);
-    tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
-    sf("bold",9); stc(INK); tx(fmtB(tDesc),W-M,y,{align:"right"}); y+=5;
-    sf("normal",7.5); stc(INK_LT);
-    tx(`Desconto de ${fmtB(Math.round(totCI*dP/100*100)/100)} (${dP}%)  ·  Parcelado ${pP}× de ${fmtB(Math.round(tDesc/pP*100)/100)} c/ desconto`,M+2,y);
-    hr(y+3); y+=9;
+    if (incluiArq && incluiEng) {
+      const dP=orc.descontoPacote??10, pP=orc.parcelasPacote??4;
+      const tDescPad=Math.round(totCI*(1-dP/100)*100)/100;
+      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=6;
+      sf("normal",8.5); stc(INK_MD);
+      tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
+      sf("bold",9); stc(INK); tx(fmtB(tDescPad),W-M,y,{align:"right"}); y+=5;
+      sf("normal",7.5); stc(INK_LT);
+      tx(`Desconto de ${fmtB(Math.round(totCI*dP/100*100)/100)} (${dP}%)  ·  Parcelado ${pP}× de ${fmtB(Math.round(tDescPad/pP*100)/100)} c/ desconto`,M+2,y);
+      hr(y+3); y+=9;
+    }
   }
 
   // PIX
   sf("normal",8); stc(INK_LT);
-  tx("PIX  ·  Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções  ·  Banco Sicoob",M,y);
+  tx(orc.pixTexto || "PIX  ·  Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções  ·  Banco Sicoob",M,y);
   y+=8;
 
   // ── ESCOPO DOS SERVIÇOS ───────────────────────────────────
@@ -6010,7 +6024,22 @@ function PropostaPreview({ data, onVoltar }) {
     : totCIEdit;
 
   function parseValorBR(str) {
-    return parseFloat(str.replace(/\./g,"").replace(",",".")) || 0;
+    if (!str) return 0;
+    const s = String(str).trim();
+    // Detecta formato: se tem vírgula após ponto -> pt-BR (1.234,56)
+    // Se só tem vírgula -> pode ser 1234,56 ou 1.234,56
+    // Remove tudo que não é dígito nem vírgula/ponto
+    const temPontoEVirgula = s.includes(".") && s.includes(",");
+    if (temPontoEVirgula) {
+      // pt-BR: ponto=milhar, vírgula=decimal
+      return parseFloat(s.replace(/\./g,"").replace(",",".")) || 0;
+    } else if (s.includes(",")) {
+      // só vírgula = decimal
+      return parseFloat(s.replace(",",".")) || 0;
+    } else {
+      // só ponto ou número puro
+      return parseFloat(s) || 0;
+    }
   }
 
   // ── Escopo como estado (sincronizado com etapasPct) ────────
@@ -6153,7 +6182,10 @@ function PropostaPreview({ data, onVoltar }) {
       const etapasPdfFinal = temIsoladas
         ? etapasIsoladasObjs.map(e => ({ ...e }))
         : data.etapasPct;
-      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:etapasPdfFinal, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, etapasIsoladas:Array.from(idsIsolados), criadoEm:new Date().toISOString(), resultado:r };
+      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:etapasPdfFinal, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, etapasIsoladas:Array.from(idsIsolados), criadoEm:new Date().toISOString(), resultado:r,
+        // Textos editáveis
+        cidade: cidadeEdit, validadeStr: validadeEdit, pixTexto: pixEdit,
+      };
       const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
       if (resumoEdit && modelo.cliente) modelo.cliente.resumo = resumoEdit;
       await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng && (!temIsoladas || idsIsolados.has(5)));
@@ -6264,9 +6296,9 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoArq ? (
                   <input autoFocus type="text"
-                    ref={tmpArqRef}
-                    defaultValue={String(Math.round((temIsoladas ? totSIBase : arqCI)*100)/100).replace(".",",")}
-                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setArqEdit(Math.round(v*100)/100); setEditandoArq(false); }}
+                    key={arqCI}
+                    defaultValue={(temIsoladas ? totSIBase : arqCI).toFixed(2).replace(".",",")}
+                    onBlur={e => { const v = parseValorBR(e.target.value); setArqEdit(v>0 ? Math.round(v*100)/100 : arqCI); setEditandoArq(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
@@ -6284,9 +6316,9 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
                   <input autoFocus type="text"
-                    ref={tmpEngRef}
-                    defaultValue={String(Math.round(engCI*100)/100).replace(".",",")}
-                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setEngEdit(Math.round(v*100)/100); setEditandoEng(false); }}
+                    key={engCI}
+                    defaultValue={engCI.toFixed(2).replace(".",",")}
+                    onBlur={e => { const v = parseValorBR(e.target.value); setEngEdit(v>0 ? Math.round(v*100)/100 : engCI); setEditandoEng(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoEng(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />

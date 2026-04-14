@@ -347,7 +347,22 @@ function PropostaPreview({ data, onVoltar }) {
     : totCIEdit;
 
   function parseValorBR(str) {
-    return parseFloat(str.replace(/\./g,"").replace(",",".")) || 0;
+    if (!str) return 0;
+    const s = String(str).trim();
+    // Detecta formato: se tem vírgula após ponto -> pt-BR (1.234,56)
+    // Se só tem vírgula -> pode ser 1234,56 ou 1.234,56
+    // Remove tudo que não é dígito nem vírgula/ponto
+    const temPontoEVirgula = s.includes(".") && s.includes(",");
+    if (temPontoEVirgula) {
+      // pt-BR: ponto=milhar, vírgula=decimal
+      return parseFloat(s.replace(/\./g,"").replace(",",".")) || 0;
+    } else if (s.includes(",")) {
+      // só vírgula = decimal
+      return parseFloat(s.replace(",",".")) || 0;
+    } else {
+      // só ponto ou número puro
+      return parseFloat(s) || 0;
+    }
   }
 
   // ── Escopo como estado (sincronizado com etapasPct) ────────
@@ -490,7 +505,10 @@ function PropostaPreview({ data, onVoltar }) {
       const etapasPdfFinal = temIsoladas
         ? etapasIsoladasObjs.map(e => ({ ...e }))
         : data.etapasPct;
-      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:etapasPdfFinal, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, etapasIsoladas:Array.from(idsIsolados), criadoEm:new Date().toISOString(), resultado:r };
+      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:etapasPdfFinal, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, etapasIsoladas:Array.from(idsIsolados), criadoEm:new Date().toISOString(), resultado:r,
+        // Textos editáveis
+        cidade: cidadeEdit, validadeStr: validadeEdit, pixTexto: pixEdit,
+      };
       const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
       if (resumoEdit && modelo.cliente) modelo.cliente.resumo = resumoEdit;
       await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng && (!temIsoladas || idsIsolados.has(5)));
@@ -601,9 +619,9 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoArq ? (
                   <input autoFocus type="text"
-                    ref={tmpArqRef}
-                    defaultValue={String(Math.round((temIsoladas ? totSIBase : arqCI)*100)/100).replace(".",",")}
-                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setArqEdit(Math.round(v*100)/100); setEditandoArq(false); }}
+                    key={arqCI}
+                    defaultValue={(temIsoladas ? totSIBase : arqCI).toFixed(2).replace(".",",")}
+                    onBlur={e => { const v = parseValorBR(e.target.value); setArqEdit(v>0 ? Math.round(v*100)/100 : arqCI); setEditandoArq(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
@@ -621,9 +639,9 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
                   <input autoFocus type="text"
-                    ref={tmpEngRef}
-                    defaultValue={String(Math.round(engCI*100)/100).replace(".",",")}
-                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setEngEdit(Math.round(v*100)/100); setEditandoEng(false); }}
+                    key={engCI}
+                    defaultValue={engCI.toFixed(2).replace(".",",")}
+                    onBlur={e => { const v = parseValorBR(e.target.value); setEngEdit(v>0 ? Math.round(v*100)/100 : engCI); setEditandoEng(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoEng(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
