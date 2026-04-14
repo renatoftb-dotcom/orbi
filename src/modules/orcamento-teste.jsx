@@ -607,7 +607,7 @@ function PropostaPreview({ data, onVoltar }) {
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
                   <span onClick={() => {
-                    setTmpArq((temIsoladas ? totSIBase : arqCI).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}));
+                    setTmpArq(String(Math.round((temIsoladas ? totSIBase : arqCI)*100)/100).replace(".",","));
                     setEditandoArq(true);
                   }} title="Clique para editar" style={{ cursor:"pointer" }}>
                     {fmtV(temIsoladas ? totSIBase : arqCI)}
@@ -630,7 +630,7 @@ function PropostaPreview({ data, onVoltar }) {
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
                   <span onClick={() => {
-                    setTmpEng(engCI.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}));
+                    setTmpEng(String(Math.round(engCI*100)/100).replace(".",","));
                     setEditandoEng(true);
                   }} title="Clique para editar" style={{ cursor:"pointer" }}>
                     {fmtV(engCI)}
