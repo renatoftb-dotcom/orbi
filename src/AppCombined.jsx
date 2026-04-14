@@ -5881,7 +5881,8 @@ function PropostaPreview({ data, onVoltar }) {
           descArq, parcArq, descPacote, parcPacote,
           descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
           etapasPct, totSI, totCI, impostoV,
-          incluiArq = true, incluiEng = true, incluiMarcenaria = false } = data;
+          incluiArq = true, incluiEng = true, incluiMarcenaria = false,
+          etapasIsoladas = [] } = data;
 
   const fmtV = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const fmtN = v => v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -5902,6 +5903,46 @@ function PropostaPreview({ data, onVoltar }) {
   const [editandoResumo, setEditandoResumo] = useState(false);
   const [tmpArq, setTmpArq]                 = useState("");
   const [tmpEng, setTmpEng]                 = useState("");
+  // Textos editáveis da proposta
+  const [subTituloEdit, setSubTituloEdit]   = useState("Proposta Comercial de Projetos de Arquitetura e Engenharia");
+  const [validadeEdit, setValidadeEdit]     = useState(new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR"));
+  const [naoInclEdit, setNaoInclEdit]       = useState(null); // null = usar default
+  const [prazoEdit, setPrazoEdit]           = useState(null); // null = usar default
+  const [responsavelEdit, setResponsavelEdit] = useState("Arq. Leonardo Padovan");
+  const [cauEdit, setCauEdit]               = useState("CAU A30278-3 · Ourinhos");
+  const [emailEdit, setEmailEdit]           = useState("leopadovan.arq@gmail.com");
+  const [telefoneEdit, setTelefoneEdit]     = useState("(14) 99767-4200");
+  const [instagramEdit, setInstagramEdit]   = useState("@padovan_arquitetos");
+  const [cidadeEdit, setCidadeEdit]         = useState("Ourinhos");
+  const [pixEdit, setPixEdit]               = useState("PIX · Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções · Banco Sicoob");
+  const [labelApenasEdit, setLabelApenasEdit] = useState(null); // null = usar dinâmico
+
+  // Helper: campo de texto editável inline
+  function TextoEditavel({ valor, onChange, style={}, multiline=false, placeholder="" }) {
+    const [editando, setEditando] = useState(false);
+    const [tmp, setTmp] = useState(valor);
+    if (editando) {
+      const baseStyle = { fontSize:"inherit", fontWeight:"inherit", color:"inherit", fontFamily:"inherit",
+        lineHeight:"inherit", letterSpacing:"inherit", background:"#fffde7",
+        border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none",
+        width:"100%", resize: multiline ? "vertical" : "none", boxSizing:"border-box" };
+      return multiline
+        ? <textarea autoFocus value={tmp} onChange={e=>setTmp(e.target.value)}
+            onBlur={()=>{ onChange(tmp); setEditando(false); }}
+            style={{ ...baseStyle, minHeight:60, display:"block" }} />
+        : <input autoFocus value={tmp} onChange={e=>setTmp(e.target.value)}
+            onBlur={()=>{ onChange(tmp); setEditando(false); }}
+            onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditando(false); }}
+            style={baseStyle} />;
+    }
+    return (
+      <span onClick={()=>{ setTmp(valor); setEditando(true); }}
+        title="Clique para editar"
+        style={{ cursor:"pointer", ...style }}>
+        {valor || placeholder}
+      </span>
+    );
+  }
   const [logoPreview, setLogoPreview]       = useState(null);
 
   // Carrega logo do storage ao abrir a proposta
@@ -5948,6 +5989,24 @@ function PropostaPreview({ data, onVoltar }) {
   // Engenharia com imposto (para linha separada na tabela de etapas)
   const engCIEdit   = temImposto && engCI > 0 ? Math.round(engCI / (1 - aliqImp/100) * 100) / 100 : engCI;
 
+  // Etapa isolada — valor proporcional do total
+  // Etapas isoladas — múltipla seleção
+  const idsIsolados     = new Set(etapasIsoladas || []);
+  const temIsoladas     = idsIsolados.size > 0;
+  const etapasIsoladasObjs = temIsoladas ? etapasPct.filter(e => idsIsolados.has(e.id)) : [];
+  // Compatibilidade com código que usa etapaIsoladaObj (single)
+  const etapaIsoladaObj = temIsoladas ? etapasIsoladasObjs[0] : null;
+  const etapasVisiveis  = (temIsoladas ? etapasPct.filter(e => idsIsolados.has(e.id)) : etapasPct).filter(e => incluiEng || e.id !== 5);
+  // totSIBase = soma dos valores proporcionais sem imposto
+  const pctTotalIsolado = etapasIsoladasObjs.reduce((s,e) => s + (e.id !== 5 ? e.pct : 0), 0);
+  const totSIBase       = temIsoladas
+    ? Math.round(arqCI * (pctTotalIsolado / 100) * 100) / 100
+    : totSIEdit;
+  // totCIBase = com imposto
+  const totCIBase       = temIsoladas
+    ? (temImposto ? Math.round(totSIBase / (1 - aliqImp/100) * 100) / 100 : totSIBase)
+    : totCIEdit;
+
   function parseValorBR(str) {
     return parseFloat(str.replace(/\./g,"").replace(",",".")) || 0;
   }
@@ -5989,9 +6048,10 @@ function PropostaPreview({ data, onVoltar }) {
   // Escopo filtrado e renumerado
   const escopoDefault = (() => {
     const blocos = escopoState.filter(b => {
-      if (b.isEng) return incluiEng;
+      if (b.isEng) return incluiEng && (!temIsoladas || idsIsolados.has(5));
       if (!incluiArq) return false;
       if (b.etapaId === 1 && isPadrao) return false;
+      if (temIsoladas && !b.isEng && !idsIsolados.has(b.etapaId) && !b.custom) return false;
       return true;
     });
     let n = 0;
@@ -6031,7 +6091,7 @@ function PropostaPreview({ data, onVoltar }) {
   ];
   // Itens dinâmicos baseados nos toggles — com sublabel menor
   const naoInclDinamicos = [
-    ...(!incluiEng ? [{ label:"Projetos de Engenharia", sub:"(Estrutural, Elétrico e Hidrossanitário)" }] : []),
+    ...(!incluiEng || (temIsoladas && !idsIsolados.has(5)) ? [{ label:"Projetos de Engenharia", sub:"(Estrutural, Elétrico e Hidrossanitário)" }] : []),
     ...(!incluiArq ? [{ label:"Projetos de Arquitetura", sub:null }] : []),
   ];
   // Normaliza tudo para { label, sub }
@@ -6079,17 +6139,22 @@ function PropostaPreview({ data, onVoltar }) {
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
-      const arqTotal = arqEdit;
-      const engTotal = engEdit;
-      const grandTotal = totCIEdit;
+      // Quando etapa isolada, usar valores proporcionais
+      const arqTotal = temIsoladas ? totSIBase : arqEdit;
+      const engTotal = temIsoladas && !idsIsolados.has(5) ? 0 : engEdit;
+      const grandTotal = temIsoladas ? totCIBase : totCIEdit;
       const engUnit = engTotal;
       const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
       const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
       const fmtM2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m²";
-      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:data.etapasPct, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, criadoEm:new Date().toISOString(), resultado:r };
+      // etapasPct no PDF: quando isolada, só a etapa selecionada com 100%
+      const etapasPdfFinal = temIsoladas
+        ? etapasIsoladasObjs.map(e => ({ ...e }))
+        : data.etapasPct;
+      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:etapasPdfFinal, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, etapasIsoladas:Array.from(idsIsolados), criadoEm:new Date().toISOString(), resultado:r };
       const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
       if (resumoEdit && modelo.cliente) modelo.cliente.resumo = resumoEdit;
-      await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng);
+      await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng && (!temIsoladas || idsIsolados.has(5)));
     } catch(e) { console.error(e); alert("Erro ao gerar PDF: "+e.message); }
   };
 
@@ -6127,16 +6192,16 @@ function PropostaPreview({ data, onVoltar }) {
             )}
             <input ref={inputLogoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleLogoUpload} />
           </div>
-          <div style={{ fontSize:11, color:LT }}>Ourinhos, {dataStr} · Válido até {validade}</div>
+          <div style={{ fontSize:11, color:LT }}><TextoEditavel valor={cidadeEdit} onChange={setCidadeEdit} style={{}} />, {dataStr} · Válido até <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{}} /></div>
         </div>
 
         <div style={{ borderTop:`1.5px solid ${C}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
           <div>
             <div style={{ fontSize:24, fontWeight:600, color:C }}>{clienteNome || "Cliente"}</div>
-            <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}>Proposta Comercial de Projetos de Arquitetura e Engenharia</div>
+            <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloEdit} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
           </div>
           <div style={{ textAlign:"right" }}>
-            {incluiArq && incluiEng && (
+            {incluiArq && incluiEng && !temIsoladas && (
               <>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
                   <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
@@ -6149,6 +6214,12 @@ function PropostaPreview({ data, onVoltar }) {
         </div>
 
         {/* Texto descritivo editável */}
+        {temIsoladas && (
+          <div className="no-print" style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12,
+            background:"#f0f9ff", border:"1px solid #bae6fd", borderRadius:6, padding:"6px 12px" }}>
+            <span style={{ fontSize:12, color:"#0369a1", fontWeight:600 }}>◎ Orçamento isolado: {etapasIsoladasObjs.map(e=>e.nome).join(", ")}</span>
+          </div>
+        )}
         {(resumoEdit || data.resumoDescritivo) && (
           <div style={{ marginBottom:20, position:"relative" }}>
             {editandoResumo ? (
@@ -6165,8 +6236,7 @@ function PropostaPreview({ data, onVoltar }) {
               <div
                 onClick={() => setEditandoResumo(true)}
                 title="Clique para editar"
-                style={{ fontSize:13, color:MD, lineHeight:1.7, cursor:"pointer",
-                  borderBottom:"1.5px dashed #f59e0b", paddingBottom:2 }}>
+                style={{ fontSize:13, color:MD, lineHeight:1.7, cursor:"pointer" }}>
                 {resumoEdit || data.resumoDescritivo}
               </div>
             )}
@@ -6186,40 +6256,46 @@ function PropostaPreview({ data, onVoltar }) {
         </div>
         <div>
 
-          <div style={{ display:"grid", gridTemplateColumns: incluiArq && incluiEng ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns: incluiArq && incluiEng && !temIsoladas ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoArq ? (
                   <input autoFocus type="text"
-                    defaultValue={arqEdit.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}
-                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setArqEdit(Math.round(v*100)/100); setEditandoArq(false); }}
+                    value={tmpArq}
+                    onChange={e => setTmpArq(e.target.value)}
+                    onBlur={() => { const v = parseValorBR(tmpArq); if(v>0) setArqEdit(Math.round(v*100)/100); setEditandoArq(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
-                      border:"2px solid #f59e0b", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
+                      border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
-                  <span onClick={() => { setTmpArq(""); setEditandoArq(true); }} title="Clique para editar"
-                    style={{ cursor:"pointer", borderBottom:"1.5px dashed #f59e0b", paddingBottom:1 }}>
-                    {fmtV(arqCI)}
+                  <span onClick={() => {
+                    setTmpArq((temIsoladas ? totSIBase : arqCI).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}));
+                    setEditandoArq(true);
+                  }} title="Clique para editar" style={{ cursor:"pointer" }}>
+                    {fmtV(temIsoladas ? totSIBase : arqCI)}
                   </span>
                 )}
               </div>
-              <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round(arqCI/areaTot*100)/100)}/m²` : ""}</div>
+              <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round((temIsoladas ? totSIBase : arqCI)/areaTot*100)/100)}/m²` : ""}</div>
             </div>}
-            {incluiArq && incluiEng && <div style={{ background:LN }} />}
-            {incluiEng && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
+            {incluiArq && incluiEng && !temIsoladas && <div style={{ background:LN }} />}
+            {incluiEng && !temIsoladas && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}>(Opcional)</span></div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
                   <input autoFocus type="text"
-                    defaultValue={engEdit.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}
-                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setEngEdit(Math.round(v*100)/100); setEditandoEng(false); }}
+                    value={tmpEng}
+                    onChange={e => setTmpEng(e.target.value)}
+                    onBlur={() => { const v = parseValorBR(tmpEng); if(v>0) setEngEdit(Math.round(v*100)/100); setEditandoEng(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoEng(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
-                      border:"2px solid #f59e0b", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
+                      border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
-                  <span onClick={() => { setTmpEng(""); setEditandoEng(true); }} title="Clique para editar"
-                    style={{ cursor:"pointer", borderBottom:"1.5px dashed #f59e0b", paddingBottom:1 }}>
+                  <span onClick={() => {
+                    setTmpEng(engCI.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2}));
+                    setEditandoEng(true);
+                  }} title="Clique para editar" style={{ cursor:"pointer" }}>
                     {fmtV(engCI)}
                   </span>
                 )}
@@ -6229,10 +6305,10 @@ function PropostaPreview({ data, onVoltar }) {
           </div>
           <div style={{ border:`0.5px solid ${LN}`, borderRadius:8, padding:"8px 14px", fontSize:12, color:LT, marginBottom:4 }}>
             {temImposto ? (<>
-              + Impostos — <span style={{ color:MD, fontWeight:500 }}>{fmtV(impostoEdit)}</span>
-              &nbsp;·&nbsp; Total com impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIEdit)}</span>
+              + Impostos — <span style={{ color:MD, fontWeight:500 }}>{fmtV(temIsoladas ? Math.round((totCIBase - totSIBase)*100)/100 : impostoEdit)}</span>
+              &nbsp;·&nbsp; Total com impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIBase)}</span>
             </>) : (<>
-              Total sem impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIEdit)}</span>
+              Total sem impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIBase)}</span>
             </>)}
           </div>
         </div>
@@ -6241,16 +6317,23 @@ function PropostaPreview({ data, onVoltar }) {
           {isPadrao ? (<>
             <div style={{ marginBottom:12 }}>
               <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:6 }}>
-                {incluiArq && incluiEng ? "Apenas Arquitetura" : incluiEng ? "Apenas Engenharia" : "Apenas Arquitetura"}
+                <TextoEditavel
+                  valor={labelApenasEdit || (incluiArq && incluiEng ? "Apenas Arquitetura" : incluiEng ? "Apenas Engenharia" : "Apenas Arquitetura")}
+                  onChange={setLabelApenasEdit}
+                  style={{ fontSize:12, fontWeight:600 }} />
               </div>
-              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>Antecipado ({descArq}% de desconto) — {fmtV(Math.round(totSIEdit*(1-descArq/100)*100)/100)}</div>
-              <div style={{ fontSize:13, color:MD }}>Parcelado {parcArq}× — {fmtV(Math.round(totSIEdit/parcArq*100)/100)}/mês</div>
+              <TextoEditavel valor={`Antecipado (${descArq}% de desconto) — ${fmtV(Math.round(totSIEdit*(1-descArq/100)*100)/100)}`}
+                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block", marginBottom:3 }} />
+              <TextoEditavel valor={`Parcelado ${parcArq}× — ${fmtV(Math.round(totSIEdit/parcArq*100)/100)}/mês`}
+                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block" }} />
             </div>
             {incluiArq && incluiEng && (
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:12, marginBottom:12 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:6 }}>Pacote Completo (Arq. + Eng.)</div>
-              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>De {fmtV(totCIEdit)} por apenas: <strong style={{ color:C }}>{fmtV(Math.round(totCIEdit*(1-descPacote/100)*100)/100)}</strong></div>
-              <div style={{ fontSize:11, color:LT }}>Desconto de {fmtV(Math.round(totCIEdit*descPacote/100*100)/100)} ({descPacote}%) · Parcelado {parcPacote}× de {fmtV(Math.round(totCIEdit*(1-descPacote/100)/parcPacote*100)/100)} c/ desconto</div>
+              <TextoEditavel valor="Pacote Completo (Arq. + Eng.)" onChange={v=>{}} style={{ fontSize:12, fontWeight:600, display:"block", marginBottom:6 }} />
+              <TextoEditavel valor={`De ${fmtV(totCIEdit)} por apenas: ${fmtV(Math.round(totCIEdit*(1-descPacote/100)*100)/100)}`}
+                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block", marginBottom:3 }} />
+              <TextoEditavel valor={`Desconto de ${fmtV(Math.round(totCIEdit*descPacote/100*100)/100)} (${descPacote}%) · Parcelado ${parcPacote}× de ${fmtV(Math.round(totCIEdit*(1-descPacote/100)/parcPacote*100)/100)} c/ desconto`}
+                onChange={v=>{}} style={{ fontSize:11, color:LT, display:"block" }} />
             </div>
             )}
           </>) : (<>
@@ -6260,14 +6343,14 @@ function PropostaPreview({ data, onVoltar }) {
                 <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em", textAlign:"center" }}>%</span>
                 <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em", textAlign:"right" }}>Valor</span>
               </div>
-              {etapasPct.map((et,i) => (
+              {etapasVisiveis.map((et,i) => (
                 <div key={et.id} style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
                   <span style={{ color:C }}>{et.nome}</span>
-                  <span style={{ color:LT, textAlign:"center" }}>{et.pct}%</span>
-                  <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(Math.round(arqCIEdit*et.pct/100*100)/100)}</span>
+                  <span style={{ color:LT, textAlign:"center" }}>{et.id === 5 ? "—" : `${et.pct}%`}</span>
+                  <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(et.id === 5 ? engCIEdit : Math.round(arqCIEdit*et.pct/100*100)/100)}</span>
                 </div>
               ))}
-              {incluiEng && (
+              {incluiEng && !temIsoladas && (
               <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
                 <div>
                   <div style={{ color:C }}>Projetos de Engenharia</div>
@@ -6279,25 +6362,29 @@ function PropostaPreview({ data, onVoltar }) {
               )}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"8px 0", borderTop:`1.5px solid ${C}`, marginTop:2 }}>
                 <span style={{ fontWeight:600, color:C }}>Total</span>
-                <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{etapasPct.reduce((s,e)=>s+e.pct,0)}%</span>
-                <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(Math.round((arqCIEdit*(etapasPct.reduce((s,e)=>s+e.pct,0)/100) + (incluiEng?engCIEdit:0))*100)/100)}</span>
+                <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{etapasVisiveis.filter(e=>e.id!==5).reduce((s,e)=>s+e.pct,0)}%</span>
+                <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(temIsoladas ? totCIBase : Math.round((arqCIEdit*(etapasPct.reduce((s,e)=>s+e.pct,0)/100) + (incluiEng?engCIEdit:0))*100)/100)}</span>
               </div>
             </div>
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:5 }}>Etapa a Etapa</div>
-              <div style={{ fontSize:13, color:MD, marginBottom:5 }}>Opção 1: Antecipado por etapa ({descEtCtrt}% de desconto)</div>
-              <div style={{ fontSize:13, color:MD }}>Opção 2: Parcelado {parcEtCtrt}× por etapa</div>
+              <TextoEditavel valor="Etapa a Etapa" onChange={v=>{}} style={{ fontSize:12, fontWeight:600, display:"block", marginBottom:5 }} />
+              <TextoEditavel valor={`Opção 1: Antecipado por etapa (${descEtCtrt}% de desconto)`}
+                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block", marginBottom:5 }} />
+              <TextoEditavel valor={`Opção 2: Parcelado ${parcEtCtrt}× por etapa`}
+                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block" }} />
             </div>
-            {incluiArq && incluiEng && (
+            {incluiArq && incluiEng && !temIsoladas && (
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:5 }}>Pacote Completo (Arq. + Eng.)</div>
-              <div style={{ fontSize:13, color:MD, marginBottom:3 }}>De {fmtV(totCIEdit)} por apenas: <strong style={{ color:C }}>{fmtV(Math.round(totCIEdit*(1-descPacCtrt/100)*100)/100)}</strong></div>
-              <div style={{ fontSize:11, color:LT }}>Desconto de {fmtV(Math.round(totCIEdit*descPacCtrt/100*100)/100)} ({descPacCtrt}%) · Parcelado {parcPacCtrt}× de {fmtV(Math.round(totCIEdit*(1-descPacCtrt/100)/parcPacCtrt*100)/100)}</div>
+              <TextoEditavel valor="Pacote Completo (Arq. + Eng.)" onChange={v=>{}} style={{ fontSize:12, fontWeight:600, display:"block", marginBottom:5 }} />
+              <TextoEditavel valor={`De ${fmtV(totCIEdit)} por apenas: ${fmtV(Math.round(totCIEdit*(1-descPacCtrt/100)*100)/100)}`}
+                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block", marginBottom:3 }} />
+              <TextoEditavel valor={`Desconto de ${fmtV(Math.round(totCIEdit*descPacCtrt/100*100)/100)} (${descPacCtrt}%) · Parcelado ${parcPacCtrt}× de ${fmtV(Math.round(totCIEdit*(1-descPacCtrt/100)/parcPacCtrt*100)/100)}`}
+                onChange={v=>{}} style={{ fontSize:11, color:LT, display:"block" }} />
             </div>
             )}
           </>)}
           <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, fontSize:11, color:LT }}>
-            PIX · Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções · Banco Sicoob
+            <TextoEditavel valor={pixEdit} onChange={setPixEdit} style={{ fontSize:11, color:LT }} />
           </div>
         </Sec>
 
@@ -6344,25 +6431,39 @@ function PropostaPreview({ data, onVoltar }) {
                   </div>
                 </div>
               ) : (
-                // Bloco fixo — exibição normal
+                // Bloco fixo — editável inline
                 <>
-                  {bloco.objetivo && <>
+                  {bloco.objetivo !== undefined && <>
                     <div style={tag}>Objetivo</div>
-                    <p style={{ fontSize:13, color:MD, lineHeight:1.7, margin:"0 0 8px" }}>{bloco.objetivo}</p>
+                    <TextoEditavel valor={bloco.objetivo} onChange={v => setEscopoBloco(bloco.etapaId, "objetivo", v)}
+                      style={{ fontSize:13, color:MD, lineHeight:1.7, display:"block" }} multiline={true} />
                   </>}
-                  {bloco.itens.length > 0 && <>
+                  {bloco.itens && bloco.itens.length > 0 && <>
                     <div style={tag}>Serviços inclusos</div>
                     {bloco.itens.map((it,j) => (
-                      <div key={j} style={bl}><span style={dot}>•</span><span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{it}</span></div>
+                      <div key={j} style={bl}><span style={dot}>•</span>
+                        <TextoEditavel valor={it} onChange={v => {
+                          const arr = [...bloco.itens]; arr[j] = v;
+                          setEscopoBloco(bloco.etapaId, "itens", arr);
+                        }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} />
+                      </div>
                     ))}
                   </>}
-                  {bloco.entregaveis.length > 0 && <>
+                  {bloco.entregaveis && bloco.entregaveis.length > 0 && <>
                     <div style={tag}>Entregáveis</div>
                     {bloco.entregaveis.map((it,j) => (
-                      <div key={j} style={bl}><span style={dot}>•</span><span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{it}</span></div>
+                      <div key={j} style={bl}><span style={dot}>•</span>
+                        <TextoEditavel valor={it} onChange={v => {
+                          const arr = [...bloco.entregaveis]; arr[j] = v;
+                          setEscopoBloco(bloco.etapaId, "entregaveis", arr);
+                        }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} />
+                      </div>
                     ))}
                   </>}
-                  {bloco.obs && <div style={{ fontSize:12, color:LT, marginTop:8, lineHeight:1.6, fontStyle:"italic" }}>{bloco.obs}</div>}
+                  {bloco.obs !== undefined && <div style={{ fontSize:12, color:LT, marginTop:8, lineHeight:1.6, fontStyle:"italic" }}>
+                    <TextoEditavel valor={bloco.obs} onChange={v => setEscopoBloco(bloco.etapaId, "obs", v)}
+                      style={{ fontSize:12, color:LT, fontStyle:"italic" }} multiline={true} />
+                  </div>}
                 </>
               )}
               {i < escopoDefault.length-1 && <div style={{ borderBottom:`0.5px solid ${LN}`, marginTop:14 }} />}
@@ -6372,13 +6473,15 @@ function PropostaPreview({ data, onVoltar }) {
 
         <Sec title="Serviços não inclusos">
           <div style={{ columns:"2", columnGap:32, marginBottom:8 }}>
-            {naoInclDefault.map((item, i) => (
+            {(naoInclEdit || naoInclDefault).map((item, i) => (
               <div key={i} style={{ ...bl, breakInside:"avoid", marginBottom:4 }}>
                 <span style={dot}>•</span>
-                <span style={{ fontSize:13, color:MD }}>
-                  {item.label}
-                  {item.sub && <span style={{ fontSize:11, color:LT, marginLeft:4 }}>{item.sub}</span>}
-                </span>
+                <TextoEditavel valor={item.label} onChange={v => {
+                  const arr = [...(naoInclEdit || naoInclDefault)];
+                  arr[i] = { ...arr[i], label: v };
+                  setNaoInclEdit(arr);
+                }} style={{ fontSize:13, color:MD }} />
+                {item.sub && <span style={{ fontSize:11, color:LT, marginLeft:4 }}>{item.sub}</span>}
               </div>
             ))}
           </div>
@@ -6386,8 +6489,21 @@ function PropostaPreview({ data, onVoltar }) {
         </Sec>
 
         <Sec title="Prazo de execução">
-          {prazoDefault.map((p, i) => (
-            <div key={i} style={{ ...bl, marginBottom:6 }}><span style={dot}>•</span><span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{p}</span></div>
+          {(prazoEdit || prazoDefault).filter(p => {
+              if (p.toLowerCase().includes("engenharia")) {
+                if (!incluiEng) return false; // toggle desligado
+                if (temIsoladas && !idsIsolados.has(5)) return false; // etapas isoladas não incluem eng
+              }
+              return true;
+            }).map((p, i) => (
+            <div key={i} style={{ ...bl, marginBottom:6 }}>
+              <span style={dot}>•</span>
+              <TextoEditavel valor={p} onChange={v => {
+                const arr = [...(prazoEdit || prazoDefault)];
+                arr[i] = v;
+                setPrazoEdit(arr);
+              }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} multiline={true} />
+            </div>
           ))}
         </Sec>
 
@@ -6402,8 +6518,8 @@ function PropostaPreview({ data, onVoltar }) {
             </div>
             <div>
               <div style={{ fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Responsável técnico</div>
-              <div style={{ fontSize:14, fontWeight:600, color:C, marginBottom:4 }}>Arq. Leonardo Padovan</div>
-              <div style={{ fontSize:12, color:LT, marginBottom:20 }}>CAU A30278-3 · Ourinhos</div>
+              <div style={{ fontSize:14, fontWeight:600, color:C, marginBottom:4 }}><TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:14, fontWeight:600 }} /></div>
+              <div style={{ fontSize:12, color:LT, marginBottom:20 }}><TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:12 }} /></div>
               <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:6, display:"flex", justifyContent:"space-between", fontSize:11, color:LT }}>
                 <span>Assinatura</span><span>{dataStr}</span>
               </div>
@@ -6414,9 +6530,9 @@ function PropostaPreview({ data, onVoltar }) {
         <div style={{ borderTop:`0.5px solid ${LN}`, marginTop:48, paddingTop:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, fontSize:11, color:LT }}>
             <span>Padovan Arquitetos</span><span>·</span>
-            <span>leopadovan.arq@gmail.com</span><span>·</span>
-            <span>(14) 99767-4200</span><span>·</span>
-            <span>@padovan_arquitetos</span>
+            <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:11 }} /><span>·</span>
+            <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:11 }} /><span>·</span>
+            <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:11 }} />
           </div>
         </div>
       </div>
@@ -6469,12 +6585,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [parcPacCtrt,   setParcPacCtrt]   = useState(orcBase?.parcPacCtrt || 8);
   const [etapasPct, setEtapasPct] = useState(orcBase?.etapasPct || [
     { id:1, nome:"Estudo de Viabilidade",  pct:10 },
-    { id:2, nome:"Estudo Preliminar",      pct:30 },
+    { id:2, nome:"Estudo Preliminar",      pct:40 },
     { id:3, nome:"Aprovação na Prefeitura",pct:12 },
     { id:4, nome:"Projeto Executivo",      pct:38 },
-    { id:5, nome:"Engenharia",             pct:10 },
   ]);
   const [qtdRep, setQtdRep] = useState(orcBase?.repeticao ? (orcBase?.nUnidades || 2) : 0);
+  const [etapasIsoladas, setEtapasIsoladas] = useState(new Set(orcBase?.etapasIsoladas || []));
   const [incluiArq,        setIncluiArq]        = useState(orcBase?.incluiArq        !== false);
   const [incluiEng,        setIncluiEng]        = useState(orcBase?.incluiEng        !== false);
   const [incluiMarcenaria, setIncluiMarcenaria] = useState(orcBase?.incluiMarcenaria || false);
@@ -6494,7 +6610,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (orcBase.tipoPgto    !== undefined) setTipoPgto(orcBase.tipoPgto);
     if (orcBase.temImposto  !== undefined) setTemImposto(orcBase.temImposto);
     if (orcBase.aliqImp     !== undefined) setAliqImp(orcBase.aliqImp);
-    if (orcBase.etapasPct   !== undefined) setEtapasPct(orcBase.etapasPct);
+    if (orcBase.etapasPct   !== undefined) setEtapasPct((orcBase.etapasPct || []).filter(e => e.id !== 5));
     if (orcBase.descArq     !== undefined) setDescArq(orcBase.descArq);
     if (orcBase.parcArq     !== undefined) setParcArq(orcBase.parcArq);
     if (orcBase.descPacote  !== undefined) setDescPacote(orcBase.descPacote);
@@ -6504,6 +6620,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (orcBase.descPacCtrt !== undefined) setDescPacCtrt(orcBase.descPacCtrt);
     if (orcBase.parcPacCtrt !== undefined) setParcPacCtrt(orcBase.parcPacCtrt);
     if (orcBase.grupoQtds   !== undefined) setGrupoQtds(orcBase.grupoQtds || { "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
+    if (orcBase.etapasIsoladas !== undefined) setEtapasIsoladas(new Set(orcBase.etapasIsoladas || []));
     if (orcBase.grupoParams  !== undefined && orcBase.grupoParams) setGrupoParams(orcBase.grupoParams);
     // Desativa flag no próximo tick, após todos os estados terem sido setados
     setTimeout(() => { sincronizandoOrcBase.current = false; }, 0);
@@ -7396,7 +7513,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           {(() => {
                             const totalPct = etapasPct.reduce((s,e)=>s+e.pct,0);
                             return (<>
-                              {etapasPct.map((et, i) => {
+                              {etapasPct.filter(et => et.id !== 5).map((et, i) => {
                                 const arqCIModal = temImposto && arqV > 0 ? Math.round(arqV / (1 - aliqImp/100) * 100) / 100 : arqV;
                                 const val = Math.round(arqCIModal * et.pct/100 * 100)/100;
                                 return (
@@ -7415,8 +7532,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                       <span style={{ color:"#9ca3af", fontSize:10 }}>%</span>
                                     </div>
                                     <span style={{ color:"#374151", fontWeight:600, fontSize:10, whiteSpace:"nowrap", minWidth:72, textAlign:"right" }}>{fmtV(val)}</span>
+                                    <span
+                                      onClick={()=>setEtapasIsoladas(prev => { const s=new Set(prev); s.has(et.id)?s.delete(et.id):s.add(et.id); return s; })}
+                                      title={etapasIsoladas.has(et.id) ? "Cancelar orçamento isolado" : "Incluir neste orçamento isolado"}
+                                      style={{ cursor:"pointer", fontSize:10, flexShrink:0, width:16, height:16, borderRadius:"50%",
+                                        border:`1.5px solid ${etapasIsoladas.has(et.id)?"#111":"#d1d5db"}`,
+                                        background: etapasIsoladas.has(et.id)?"#111":"transparent",
+                                        display:"flex", alignItems:"center", justifyContent:"center",
+                                        color: etapasIsoladas.has(et.id)?"#fff":"#d1d5db", lineHeight:1 }}>
+                                      ◎
+                                    </span>
                                     {etapasPct.length > 1 && (
-                                      <span onClick={()=>setEtapasPct(prev=>prev.filter((_,j)=>j!==i))} style={{ color:"#d1d5db", cursor:"pointer", fontSize:11, flexShrink:0 }}>✕</span>
+                                      <span onClick={()=>{ setEtapasPct(prev=>prev.filter((_,j)=>j!==i)); setEtapasIsoladas(prev=>{const s=new Set(prev);s.delete(et.id);return s;}); }} style={{ color:"#d1d5db", cursor:"pointer", fontSize:11, flexShrink:0 }}>✕</span>
                                     )}
                                   </div>
                                 );
@@ -7425,6 +7552,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                 <span style={{ fontSize:10, color: totalPct===100?"#9ca3af":"#ef4444", fontWeight:600 }}>{totalPct}%</span>
                                 <span style={{ fontSize:10, fontWeight:700, color:"#111" }}>{fmtV(Math.round((temImposto&&arqV>0?Math.round(arqV/(1-aliqImp/100)*100)/100:arqV)*totalPct/100*100)/100)}</span>
                               </div>
+                              {etapasIsoladas.size > 0 && (
+                                <div style={{ marginTop:5, padding:"4px 8px", background:"#f0f9ff", border:"1px solid #bae6fd", borderRadius:5, fontSize:10, color:"#0369a1" }}>
+                                  ◎ Orçamento isolado: {etapasPct.filter(e=>etapasIsoladas.has(e.id)).map(e=>e.nome).join(", ")}
+                                </div>
+                              )}
                               <button onClick={()=>setEtapasPct(prev=>[...prev,{id:Date.now(),nome:`Etapa ${prev.length+1}`,pct:0}])}
                                 style={{ marginTop:5, fontSize:10, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 6px", cursor:"pointer", fontFamily:"inherit", width:"100%" }}>
                                 + Etapa
@@ -7478,6 +7610,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       grupoQtds: isComercial ? grupoQtds : null,
                       calculo,
                       incluiArq, incluiEng, incluiMarcenaria,
+                      etapasIsoladas: Array.from(etapasIsoladas),
                       tipoPgto, temImposto, aliqImp,
                       descArq, parcArq, descPacote, parcPacote,
                       descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
@@ -7493,6 +7626,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       grupoQtds: isComercial ? grupoQtds : null,
                       grupoParams: isComercial ? grupoParams : null,
                       incluiArq, incluiEng, incluiMarcenaria,
+                      etapasIsoladas: Array.from(etapasIsoladas),
                       resultado: { ...calculo, precoArq: calculo?.precoArq || 0, precoEng: calculo?.precoEng || 0, areaTotal: calculo?.areaTotal || 0 },
                       tipoPgto, temImposto, aliqImp,
                       descArq, parcArq, descPacote, parcPacote,
