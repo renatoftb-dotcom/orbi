@@ -897,7 +897,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   }
   const engBase = Math.round((engRaw + engRepet)*100)/100;
   const engCI   = Math.round((r.precoEng||engBase)*100)/100;
-  console.log("[PDF DEBUG] arqCI="+arqCI+" r.precoArq="+r.precoArq+" etapasPct="+JSON.stringify(orc.etapasPct)+" etapasIsoladas="+JSON.stringify(orc.etapasIsoladas));
   const totSI   = Math.round((arqCI + (incluiEng?engCI:0))*100)/100;
   const totCI   = temImp ? Math.round(totSI/(1-aliqImp/100)*100)/100 : totSI;
   const impostoV= temImp ? Math.round((totCI - totSI)*100)/100 : 0;
@@ -906,10 +905,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Etapas isoladas
   const idsIsoladosPdf = new Set(orc.etapasIsoladas || []);
   const temIsoladasPdf = idsIsoladosPdf.size > 0;
-  // Valor total proporcional das etapas isoladas (com imposto)
+  // pctTotalIsoladoPdf: soma dos pcts das etapas selecionadas (usado para proporção entre etapas)
   const pctTotalIsoladoPdf = (orc.etapasPct||[]).filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
-  const totSIBasePdf = Math.round(arqCI * (pctTotalIsoladoPdf/100) * 100) / 100;
-  const totCIBasePdf = temImp ? Math.round(totSIBasePdf/(1-aliqImp/100)*100)/100 : totSIBasePdf;
+  // Quando isolado, arqCI já é o valor correto — totCI já reflete o total do orçamento isolado
+  const totCIBasePdf = totCI;
 
   // Escopo (igual preview)
   const escopoDefault = [
@@ -1103,11 +1102,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const colH = 22;
   nv(colH+4);
 
-  // Coluna ARQ — quando isolada usa valor proporcional
-  const arqCIExib = temIsoladasPdf ? totSIBasePdf : arqCI;
+  // Coluna ARQ — sempre mostra valor total de arquitetura
   sf("bold",7); stc(INK_LT); tx("ARQUITETURA", M, y);
-  sf("bold",11); stc(INK); tx(fmtB(arqCIExib), M, y+7);
-  if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCIExib/area*100)/100)}/m²`, M, y+12); }
+  sf("bold",11); stc(INK); tx(fmtB(arqCI), M, y+7);
+  if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, M, y+12); }
 
   // Divisor vertical e coluna Engenharia — só quando incluiEng
   if (incluiEng) {
@@ -1127,8 +1125,8 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   nv(12);
   sc(BG); doc.roundedRect(M,y,TW,8,2,2,"F");
   sf("normal",7); stc(INK_LT);
-  const totCIExib = temIsoladasPdf ? totCIBasePdf : totCI;
-  const impostoVExib = temIsoladasPdf ? Math.round((totCIBasePdf - totSIBasePdf)*100)/100 : impostoV;
+  const totCIExib = totCI;
+  const impostoVExib = impostoV;
   if (temImp) {
     const itxt = `+ Impostos — ${fmtB(impostoVExib)}   ·   Total com impostos — `;
     tx(itxt, M+4, y+5.5);
@@ -1158,9 +1156,9 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
       const valEtapa = et.id===5 ? engCIcom
         : temIsoladasPdf && pctTotalIsoladoPdf>0
-          ? Math.round(totCIBasePdf * (et.pct / pctTotalIsoladoPdf) * 100) / 100
+          ? Math.round(totCI * (et.pct / pctTotalIsoladoPdf) * 100) / 100
           : Math.round(arqCIBase*(et.pct/100)*100)/100;
-      sf("normal",8.5); stc(INK_LT); tx(et.id===5?"—":`${et.pct}%`,cP,y,{align:"right"});
+      sf("normal",8.5); stc(INK_LT); tx(et.id===5||temIsoladasPdf?"—":`${et.pct}%`,cP,y,{align:"right"});
       sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
       y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     });
@@ -1186,9 +1184,9 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     const pctArqTotal = etapasPdf.filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
     const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
     const totalPdfBase = temIsoladasPdf
-      ? totCIBasePdf
+      ? totCI
       : Math.round((arqCIBasePdf2*(pctArqTotal/100) + (incluiEng?engCIcom:0))*100)/100;
-    tx(`${pctArqTotal}%`,cP,y,{align:"right"});
+    tx(temIsoladasPdf?"—":`${pctArqTotal}%`,cP,y,{align:"right"});
     tx(fmtB(totalPdfBase),cV,y,{align:"right"});
     y+=10;
 
