@@ -897,7 +897,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   }
   const engBase = Math.round((engRaw + engRepet)*100)/100;
   const engCI   = Math.round((r.precoEng||engBase)*100)/100;
-  console.log("[PDF DEBUG] arqCI="+arqCI+" totCI="+totCI+" temIsoladasPdf="+temIsoladasPdf+" pctTotalIsoladoPdf="+pctTotalIsoladoPdf);
   const totSI   = Math.round((arqCI + (incluiEng?engCI:0))*100)/100;
   const totCI   = temImp ? Math.round(totSI/(1-aliqImp/100)*100)/100 : totSI;
   const impostoV= temImp ? Math.round((totCI - totSI)*100)/100 : 0;
@@ -910,6 +909,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const pctTotalIsoladoPdf = (orc.etapasPct||[]).filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
   // Quando isolado, arqCI já é o valor correto — totCI já reflete o total do orçamento isolado
   const totCIBasePdf = totCI;
+  console.log("[PDF DEBUG] arqCI="+arqCI+" totCI="+totCI+" temIsoladasPdf="+temIsoladasPdf+" pctTotalIsoladoPdf="+pctTotalIsoladoPdf);
 
   // Escopo (igual preview)
   const escopoDefault = [
