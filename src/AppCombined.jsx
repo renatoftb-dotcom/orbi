@@ -4091,6 +4091,39 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   const etapasPdf = orc.etapasPct || [];
 
+  // IDs das etapas ativas (1-4 = arq, 5 = eng)
+  const etapasAtivas = new Set(etapasPdf.map(e => e.id));
+  // Mapa etapaId -> nome personalizado (para etapas customizadas)
+  const etapaNomeMap = Object.fromEntries(etapasPdf.map(e => [e.id, e.nome]));
+
+  // Filtra e renumera escopoDefault conforme etapas ativas e toggles
+  const escopoFiltradoPdf = (() => {
+    const ESCOPO_IDS = [1,2,3,4]; // ids fixos de arq
+    const blocos = escopoDefault.filter((bloco, i) => {
+      const etId = i + 1; // índice 0 = etapaId 1, etc (bloco 5 = eng)
+      if (i === 4) return incluiEng; // eng
+      if (!incluiArq) return false;
+      if (!etapasAtivas.has(etId)) return false; // etapa excluída
+      if (etId === 1 && isPadrao) return false; // viabilidade só no por etapas
+      return true;
+    });
+    // Adiciona blocos customizados (etapas com id > 5)
+    etapasPdf.forEach(et => {
+      if (et.id > 5) {
+        blocos.splice(blocos.length - (incluiEng ? 1 : 0), 0, {
+          titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:""
+        });
+      }
+    });
+    // Renumera
+    let n = 0;
+    return blocos.map(b => {
+      const isEng = b.titulo.includes("Engenharia") && !b.titulo.includes("Viabilidade");
+      if (!isEng) { n++; return { ...b, titulo: `${n}. ${b.titulo.replace(/^\d+\.\s*/,"")}` }; }
+      return { ...b, titulo: `${n+1}. ${b.titulo.replace(/^\d+\.\s*/,"")}` };
+    });
+  })();
+
   // ── jsPDF setup ────────────────────────────────────────────
   const doc = new jsPDF({ unit:"mm", format:"a4" });
   const W=210, H=297, M=20, TW=W-2*M;
@@ -4173,12 +4206,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
         img.src = logoData;
       });
     } else {
-      const qs=26;
-      sc(INK); doc.roundedRect(qX,qY,qs,qs,qR,qR,"F");
-      sf("bold",6.5); stc([255,255,255]);
-      tx("PADOVAN",qX+qs/2,qY+qs/2-1,{align:"center"});
-      tx("ARQUITETOS",qX+qs/2,qY+qs/2+4,{align:"center"});
-      y = qY+qs+3;
+      y = qY + 3; // sem logo — só avança o y minimamente
     }
   }
 
@@ -4190,13 +4218,13 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Nome cliente + Arq à direita (label inline + valor)
   y += 10;
   sf("bold",16); stc(INK); tx(orc.cliente||"—", M, y);
-  // Valor bold
-  sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
-  // Label "Apenas Arquitetura" cinza pequeno à esquerda do valor
-  const wArqVal = doc.getTextWidth(fmtB(arqCI));
-  sf("normal",6.5); stc(INK_LT); tx("Apenas Arquitetura", W-M-wArqVal-3, y+1, {align:"right"});
-  // R$/m² abaixo mais próximo
-  if (area>0) { sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, W-M, y+6, {align:"right"}); }
+  // Valor e label "Apenas Arquitetura" só aparecem quando ambos (arq+eng) incluídos
+  if (incluiArq && incluiEng) {
+    sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
+    const wArqVal = doc.getTextWidth(fmtB(arqCI));
+    sf("normal",6.5); stc(INK_LT); tx("Apenas Arquitetura", W-M-wArqVal-3, y+1, {align:"right"});
+    if (area>0) { sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, W-M, y+6, {align:"right"}); }
+  }
 
   // "Proposta Comercial..." abaixo do nome
   y += 7;
@@ -4228,17 +4256,17 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   sf("bold",11); stc(INK); tx(fmtB(arqCI), M, y+7);
   if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, M, y+12); }
 
-  // Divisor vertical
-  sc(LINE,"draw"); doc.setLineWidth(0.3); doc.line(midX, y-1, midX, y+colH);
-
-  // Coluna ENG
-  sf("bold",7); stc(INK_LT); tx("ENGENHARIA", midX+4, y);
-  const wEng = doc.getTextWidth("ENGENHARIA");
-  sf("normal",6); stc(INK_LT); tx("(Opcional)", midX+4+wEng+2, y);
-  sf("bold",11); stc(INK); tx(fmtB(engCI), midX+4, y+7);
-  sf("normal",6.5); stc(INK_LT);
-  tx("Estrutural · Elétrico · Hidrossanitário", midX+4, y+12);
-  if(area>0) tx(`R$ ${fmtN(Math.round(engCI/area*100)/100)}/m²`, midX+4, y+16);
+  // Divisor vertical e coluna Engenharia — só quando incluiEng
+  if (incluiEng) {
+    sc(LINE,"draw"); doc.setLineWidth(0.3); doc.line(midX, y-1, midX, y+colH);
+    sf("bold",7); stc(INK_LT); tx("ENGENHARIA", midX+4, y);
+    const wEng = doc.getTextWidth("ENGENHARIA");
+    sf("normal",6); stc(INK_LT); tx("(Opcional)", midX+4+wEng+2, y);
+    sf("bold",11); stc(INK); tx(fmtB(engCI), midX+4, y+7);
+    sf("normal",6.5); stc(INK_LT);
+    tx("Estrutural · Elétrico · Hidrossanitário", midX+4, y+12);
+    if(area>0) tx(`R$ ${fmtN(Math.round(engCI/area*100)/100)}/m²`, midX+4, y+16);
+  }
 
   y += colH+2;
 
@@ -4273,25 +4301,31 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       nv(rH+3);
       sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
       sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
-      sf("normal",8.5); stc(INK); tx(fmtB(Math.round(totCI*(et.pct/100)*100)/100),cV,y,{align:"right"});
+      const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+      sf("normal",8.5); stc(INK); tx(fmtB(Math.round(arqCIBase*(et.pct/100)*100)/100),cV,y,{align:"right"});
       y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     });
 
-    // Linha Engenharia
-    nv(rH+5);
-    sf("normal",8.5); stc(INK_MD); tx("Projetos de Engenharia",cE,y);
-    sf("normal",6.5); stc(INK_LT); tx("Estrutural  ·  Elétrico  ·  Hidrossanitário",cE,y+4);
-    sf("normal",8.5); stc(INK_LT); tx("—",cP,y+2,{align:"right"});
-    sf("normal",8.5); stc(INK); tx(fmtB(engCI),cV,y+2,{align:"right"});
-    y+=6; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
+    // Linha Engenharia — só quando incluiEng
+    if (incluiEng) {
+      nv(rH+5);
+      sf("normal",8.5); stc(INK_MD); tx("Projetos de Engenharia",cE,y);
+      sf("normal",6.5); stc(INK_LT); tx("Estrutural  ·  Elétrico  ·  Hidrossanitário",cE,y+4);
+      sf("normal",8.5); stc(INK_LT); tx("—",cP,y+2,{align:"right"});
+      sf("normal",8.5); stc(INK); tx(fmtB(engCI),cV,y+2,{align:"right"});
+      y+=6; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
+    }
 
     // Total
+    const engCIpdf = incluiEng ? engCI : 0;
+    const totCIpdf = incluiEng ? totCI : (temImp ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI);
+    const arqCIpdf = temImp && arqCI > 0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
     nv(10);
     y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
     sf("bold",8.5); stc(INK);
     tx("Total",cE,y);
     tx(`${etapasPdf.reduce((s,e)=>s+Number(e.pct),0)}%`,cP,y,{align:"right"});
-    tx(fmtB(totCI),cV,y,{align:"right"});
+    tx(fmtB(Math.round((arqCIpdf*(etapasPdf.reduce((s,e)=>s+Number(e.pct),0)/100)+engCIpdf)*100)/100),cV,y,{align:"right"});
     y+=10;
 
     // Condições etapa a etapa — reservar espaço para todo o bloco
@@ -4345,7 +4379,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // ── ESCOPO DOS SERVIÇOS ───────────────────────────────────
   secTitle("Escopo dos serviços");
 
-  escopoDefault.forEach((bloco,bi) => {
+  escopoFiltradoPdf.forEach((bloco,bi) => {
     nv(20);
     sf("bold",9); stc(INK); tx(bloco.titulo,M,y); y+=6;
 
@@ -4375,7 +4409,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       ls.forEach(ln => { nv(5); tx(ln,M,y); y+=4; }); y+=2;
     }
 
-    if (bi < escopoDefault.length-1) { nv(5); hr(y); y+=5; }
+    if (bi < escopoFiltradoPdf.length-1) { nv(5); hr(y); y+=5; }
   });
 
   // ── SERVIÇOS NÃO INCLUSOS ─────────────────────────────────
