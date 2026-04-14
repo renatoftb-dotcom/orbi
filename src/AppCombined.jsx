@@ -5866,6 +5866,35 @@ function PropostaPreview({ data, onVoltar }) {
   const [editandoResumo, setEditandoResumo] = useState(false);
   const [tmpArq, setTmpArq]                 = useState("");
   const [tmpEng, setTmpEng]                 = useState("");
+  const [logoPreview, setLogoPreview]       = useState(null);
+
+  // Carrega logo do storage ao abrir a proposta
+  useEffect(() => {
+    try {
+      window.storage.get("escritorio-logo").then(lr => {
+        if (lr?.value) setLogoPreview(lr.value);
+      }).catch(()=>{});
+    } catch {}
+  }, []);
+
+  const inputLogoRef = useRef(null);
+
+  function handleLogoUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const data64 = ev.target.result;
+      setLogoPreview(data64);
+      try { window.storage.set("escritorio-logo", data64).catch(()=>{}); } catch {}
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function handleLogoRemove() {
+    setLogoPreview(null);
+    try { window.storage.delete("escritorio-logo").catch(()=>{}); } catch {}
+  }
 
   const arqOriginal  = incluiArq ? (calculo.precoArq || 0) : 0;
   const engOriginal  = incluiEng ? (calculo.precoEng || 0) : 0;
@@ -5878,40 +5907,75 @@ function PropostaPreview({ data, onVoltar }) {
   const totSIEdit   = arqCI + engCI;
   const totCIEdit   = temImposto && totSIEdit > 0 ? Math.round(totSIEdit / (1 - aliqImp/100) * 100) / 100 : totSIEdit;
   const impostoEdit = temImposto ? Math.round((totCIEdit - totSIEdit) * 100) / 100 : 0;
+  // Base das etapas = só arquitetura com imposto
+  const arqCIEdit   = temImposto && arqCI > 0 ? Math.round(arqCI / (1 - aliqImp/100) * 100) / 100 : arqCI;
+  // Engenharia com imposto (para linha separada na tabela de etapas)
+  const engCIEdit   = temImposto && engCI > 0 ? Math.round(engCI / (1 - aliqImp/100) * 100) / 100 : engCI;
 
   function parseValorBR(str) {
     return parseFloat(str.replace(/\./g,"").replace(",",".")) || 0;
   }
 
-  const escopoTodos = [
-    { titulo:"1. Estudo de Viabilidade", objetivo:"Analisar o potencial construtivo do terreno e verificar a viabilidade de implantação do empreendimento, considerando as condicionantes físicas, urbanísticas, legais e funcionais aplicáveis ao lote.", itens:["Levantamento inicial e consolidação das informações técnicas do terreno","Análise documental e física do lote, incluindo matrícula, dimensões, topografia e características existentes","Consulta e interpretação dos parâmetros urbanísticos e restrições legais aplicáveis","Verificação da viabilidade construtiva, considerando taxa de ocupação, coeficiente de aproveitamento, recuos obrigatórios, gabarito de altura e demais condicionantes normativas","Estimativa preliminar da área edificável e do potencial de aproveitamento do terreno","Avaliação da melhor ocupação do lote, alinhada ao programa de necessidades do cliente","Definição preliminar da implantação, organização dos acessos, fluxos, circulação, áreas livres e áreas construídas","Estudo de volumetria, análise de inserção no entorno e definição de pontos focais que contribuam para a valorização do empreendimento","Dimensionamento preliminar de estacionamentos, fluxos operacionais e viabilidade de circulação para veículos leves e pesados"], entregaveis:["Estudo técnico de ocupação do terreno, com planta de implantação e setorização preliminar","Esquema conceitual de implantação, incluindo diagramas de organização espacial, acessos e condicionantes do entorno","Representações gráficas, estudo volumétrico em 3D e imagens conceituais","Relatório sintético de viabilidade construtiva, contemplando memorial descritivo, quadro de áreas e síntese dos parâmetros urbanísticos aplicáveis"], obs:"Esta etapa tem como objetivo reduzir riscos e antecipar decisões estratégicas antes do desenvolvimento do projeto, permitindo validar a compatibilidade da proposta com o terreno, com a legislação municipal e com os objetivos do empreendimento." },
-    { titulo:"2. Estudo Preliminar", objetivo:"Desenvolver o conceito arquitetônico inicial, organizando os ambientes, a implantação e a linguagem estética do projeto.", itens:["Reunião de briefing e entendimento das necessidades do cliente","Definição do programa de necessidades","Estudo de implantação da edificação no terreno","Desenvolvimento da concepção arquitetônica inicial","Definição preliminar de: layout, fluxos, volumetria, setorização e linguagem estética","Compatibilização entre funcionalidade, conforto, estética e viabilidade construtiva","Ajustes conforme alinhamento com o cliente"], entregaveis:["Planta baixa preliminar","Estudo volumétrico / fachada conceitual","Implantação inicial","Imagens, croquis ou perspectivas conceituais","Apresentação para validação do conceito arquitetônico"], obs:"É nesta etapa que o projeto ganha forma. O estudo preliminar define a essência da proposta e orienta todas as fases seguintes." },
-    { titulo:"3. Aprovação na Prefeitura", objetivo:"Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.", itens:["Adequação do projeto às exigências legais e urbanísticas do município","Elaboração dos desenhos técnicos exigidos para aprovação","Montagem da documentação técnica necessária ao processo","Inserção de informações obrigatórias conforme normas municipais","Preparação de pranchas, quadros de áreas e demais peças gráficas","Apoio técnico durante o processo de aprovação","Atendimento a eventuais comunique-se ou exigências técnicas da prefeitura"], entregaveis:["Projeto legal para aprovação","Plantas, cortes, fachadas e implantação conforme exigência municipal","Quadros de áreas","Arquivos e documentação técnica para protocolo"], obs:"Não inclusos nesta etapa: taxas municipais, emolumentos, ART/RRT, levantamentos complementares, certidões e exigências extraordinárias de órgãos externos, salvo se expressamente previsto." },
-    { titulo:"4. Projeto Executivo", objetivo:"Desenvolver o projeto arquitetônico em nível detalhado para execução da obra, fornecendo todas as informações necessárias para construção com precisão.", itens:["Desenvolvimento técnico completo do projeto aprovado","Detalhamento arquitetônico para obra","Definição precisa de: dimensões, níveis, cotas, eixos, paginações, esquadrias, acabamentos e elementos construtivos","Elaboração de desenhos técnicos executivos","Compatibilização arquitetônica com premissas de obra","Apoio técnico para leitura e entendimento do projeto pela equipe executora"], entregaveis:["Planta baixa executiva","Planta de locação e implantação","Planta de cobertura","Cortes e fachadas executivos","Planta de layout e pontos arquitetônicos","Planta de esquadrias e pisos","Detalhamentos construtivos","Quadro de esquadrias e quadro de áreas final"], obs:"É a etapa que transforma a ideia em construção real. Um bom projeto executivo reduz improvisos, retrabalhos e falhas de execução na obra." },
-    { titulo:"5. Projetos Complementares de Engenharia", objetivo:"", itens:["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações","Elétrico: dimensionamento de cargas, circuitos, quadros e pontos","Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento","Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"], entregaveis:[], obs: incluiArq ? "Obs.: Este item poderá ser contratado diretamente pelo cliente junto a engenheiros terceiros, ficando a compatibilização sob responsabilidade dos profissionais contratados." : "" },
+  // ── Escopo como estado (sincronizado com etapasPct) ────────
+  const ESCOPO_BASE = [
+    { etapaId:1, titulo:"Estudo de Viabilidade", objetivo:"Analisar o potencial construtivo do terreno e verificar a viabilidade de implantação do empreendimento, considerando as condicionantes físicas, urbanísticas, legais e funcionais aplicáveis ao lote.", itens:["Levantamento inicial e consolidação das informações técnicas do terreno","Análise documental e física do lote, incluindo matrícula, dimensões, topografia e características existentes","Consulta e interpretação dos parâmetros urbanísticos e restrições legais aplicáveis","Verificação da viabilidade construtiva, considerando taxa de ocupação, coeficiente de aproveitamento, recuos obrigatórios, gabarito de altura e demais condicionantes normativas","Estimativa preliminar da área edificável e do potencial de aproveitamento do terreno","Avaliação da melhor ocupação do lote, alinhada ao programa de necessidades do cliente","Definição preliminar da implantação, organização dos acessos, fluxos, circulação, áreas livres e áreas construídas","Estudo de volumetria, análise de inserção no entorno e definição de pontos focais que contribuam para a valorização do empreendimento","Dimensionamento preliminar de estacionamentos, fluxos operacionais e viabilidade de circulação para veículos leves e pesados"], entregaveis:["Estudo técnico de ocupação do terreno, com planta de implantação e setorização preliminar","Esquema conceitual de implantação, incluindo diagramas de organização espacial, acessos e condicionantes do entorno","Representações gráficas, estudo volumétrico em 3D e imagens conceituais","Relatório sintético de viabilidade construtiva, contemplando memorial descritivo, quadro de áreas e síntese dos parâmetros urbanísticos aplicáveis"], obs:"Esta etapa tem como objetivo reduzir riscos e antecipar decisões estratégicas antes do desenvolvimento do projeto, permitindo validar a compatibilidade da proposta com o terreno, com a legislação municipal e com os objetivos do empreendimento.", isEng:false },
+    { etapaId:2, titulo:"Estudo Preliminar", objetivo:"Desenvolver o conceito arquitetônico inicial, organizando os ambientes, a implantação e a linguagem estética do projeto.", itens:["Reunião de briefing e entendimento das necessidades do cliente","Definição do programa de necessidades","Estudo de implantação da edificação no terreno","Desenvolvimento da concepção arquitetônica inicial","Definição preliminar de: layout, fluxos, volumetria, setorização e linguagem estética","Compatibilização entre funcionalidade, conforto, estética e viabilidade construtiva","Ajustes conforme alinhamento com o cliente"], entregaveis:["Planta baixa preliminar","Estudo volumétrico / fachada conceitual","Implantação inicial","Imagens, croquis ou perspectivas conceituais","Apresentação para validação do conceito arquitetônico"], obs:"É nesta etapa que o projeto ganha forma. O estudo preliminar define a essência da proposta e orienta todas as fases seguintes.", isEng:false },
+    { etapaId:3, titulo:"Aprovação na Prefeitura", objetivo:"Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.", itens:["Adequação do projeto às exigências legais e urbanísticas do município","Elaboração dos desenhos técnicos exigidos para aprovação","Montagem da documentação técnica necessária ao processo","Inserção de informações obrigatórias conforme normas municipais","Preparação de pranchas, quadros de áreas e demais peças gráficas","Apoio técnico durante o processo de aprovação","Atendimento a eventuais comunique-se ou exigências técnicas da prefeitura"], entregaveis:["Projeto legal para aprovação","Plantas, cortes, fachadas e implantação conforme exigência municipal","Quadros de áreas","Arquivos e documentação técnica para protocolo"], obs:"Não inclusos nesta etapa: taxas municipais, emolumentos, ART/RRT, levantamentos complementares, certidões e exigências extraordinárias de órgãos externos, salvo se expressamente previsto.", isEng:false },
+    { etapaId:4, titulo:"Projeto Executivo", objetivo:"Desenvolver o projeto arquitetônico em nível detalhado para execução da obra, fornecendo todas as informações necessárias para construção com precisão.", itens:["Desenvolvimento técnico completo do projeto aprovado","Detalhamento arquitetônico para obra","Definição precisa de: dimensões, níveis, cotas, eixos, paginações, esquadrias, acabamentos e elementos construtivos","Elaboração de desenhos técnicos executivos","Compatibilização arquitetônica com premissas de obra","Apoio técnico para leitura e entendimento do projeto pela equipe executora"], entregaveis:["Planta baixa executiva","Planta de locação e implantação","Planta de cobertura","Cortes e fachadas executivos","Planta de layout e pontos arquitetônicos","Planta de esquadrias e pisos","Detalhamentos construtivos","Quadro de esquadrias e quadro de áreas final"], obs:"É a etapa que transforma a ideia em construção real. Um bom projeto executivo reduz improvisos, retrabalhos e falhas de execução na obra.", isEng:false },
+    { etapaId:5, titulo:"Projetos Complementares de Engenharia", objetivo:"", itens:["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações","Elétrico: dimensionamento de cargas, circuitos, quadros e pontos","Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento","Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"], entregaveis:[], obs:"", isEng:true },
   ];
-  // Filtra escopo conforme serviços incluídos e tipo de pagamento
-  const escopoFiltrado = escopoTodos.filter((_, i) => {
-    if (i === 0 && isPadrao) return false; // Estudo de Viabilidade só aparece no pagamento por etapa
-    if (i < 4) return incluiArq;           // blocos 1-4 = Arquitetura
-    if (i === 4) return incluiEng;         // bloco 5 = Engenharia
-    return true;
-  });
-  // Renumera títulos dos blocos de arquitetura (1-4) conforme o que sobrou
-  let arqCount = 0;
-  const escopoDefault = escopoFiltrado.map((bloco, i) => {
-    const isEngBloco = bloco.titulo.includes("Engenharia");
-    if (!isEngBloco) {
-      arqCount++;
-      const tituloSemNum = bloco.titulo.replace(/^\d+\.\s*/, "");
-      return { ...bloco, titulo: `${arqCount}. ${tituloSemNum}` };
-    }
-    // Engenharia: renumera como próximo número
-    const tituloSemNum = bloco.titulo.replace(/^\d+\.\s*/, "");
-    return { ...bloco, titulo: `${arqCount + 1}. ${tituloSemNum}` };
+
+  // Estado do escopo — sincronizado com etapasPct
+  const [escopoState, setEscopoState] = useState(() => {
+    // IDs das etapas ativas (excluindo Engenharia que é controlada pelo toggle)
+    const idsAtivos = new Set(etapasPct.map(e => e.id));
+    return ESCOPO_BASE.filter(b => b.isEng || idsAtivos.has(b.etapaId));
   });
 
-  // Itens fixos — simples string ou { label, sub } para texto menor
+  // Sincroniza escopo quando etapasPct muda (adiciona/remove etapas)
+  useEffect(() => {
+    setEscopoState(prev => {
+      const idsAtivos = new Set(etapasPct.map(e => e.id));
+      // Remove blocos de etapas que foram excluídas (não-eng)
+      const filtrado = prev.filter(b => b.isEng || idsAtivos.has(b.etapaId));
+      // Adiciona blocos de etapas novas (id > 5 = customizadas)
+      etapasPct.forEach(et => {
+        if (et.id > 5 && !filtrado.find(b => b.etapaId === et.id)) {
+          filtrado.splice(filtrado.findIndex(b=>b.isEng), 0, {
+            etapaId: et.id, titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true,
+          });
+        }
+      });
+      return filtrado;
+    });
+  }, [etapasPct]);
+
+  // Escopo filtrado e renumerado
+  const escopoDefault = (() => {
+    const blocos = escopoState.filter(b => {
+      if (b.isEng) return incluiEng;
+      if (!incluiArq) return false;
+      if (b.etapaId === 1 && isPadrao) return false;
+      return true;
+    });
+    let n = 0;
+    return blocos.map(b => {
+      if (!b.isEng) {
+        n++;
+        const semNum = b.titulo.replace(/^\d+\.\s*/, "");
+        return { ...b, tituloNum: `${n}. ${semNum}` };
+      }
+      const semNum = b.titulo.replace(/^\d+\.\s*/, "");
+      return { ...b, tituloNum: `${n+1}. ${semNum}` };
+    });
+  })();
+
+  // Helpers para editar escopo
+  function setEscopoBloco(etapaId, campo, valor) {
+    setEscopoState(prev => prev.map(b => b.etapaId === etapaId ? { ...b, [campo]: valor } : b));
+  }
+
+    // Itens fixos — simples string ou { label, sub } para texto menor
   const naoInclFixos = [
     "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
     "Projetos de climatização",
@@ -5919,14 +5983,14 @@ function PropostaPreview({ data, onVoltar }) {
     "Projeto de automação",
     "Projeto de paisagismo",
     "Projeto de interiores",
-    ...(!incluiMarcenaria ? ["Projeto de Marcenaria (M\u00f3veis internos)"] : []),
-    "Projeto estrutural de estruturas met\u00e1licas",
-    "Projeto estrutural para muros de conten\u00e7\u00e3o (arrimo) acima de 1 m de altura",
-    "Sondagem e Planialtim\u00e9trico do terreno",
+    ...(!incluiMarcenaria ? ["Projeto de Marcenaria (Móveis internos)"] : []),
+    "Projeto estrutural de estruturas metálicas",
+    "Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura",
+    "Sondagem e Planialtimétrico do terreno",
     "Acompanhamento semanal de obra",
-    "Gest\u00e3o e execu\u00e7\u00e3o de obra",
-    "Vistoria para Caixa Econ\u00f4mica Federal",
-    "RRT de Execu\u00e7\u00e3o de obra",
+    "Gestão e execução de obra",
+    "Vistoria para Caixa Econômica Federal",
+    "RRT de Execução de obra",
     ...(!temImposto ? ["Impostos"] : []),
   ];
   // Itens dinâmicos baseados nos toggles — com sublabel menor
@@ -5989,9 +6053,7 @@ function PropostaPreview({ data, onVoltar }) {
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:data.etapasPct, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, criadoEm:new Date().toISOString(), resultado:r };
       const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
       if (resumoEdit && modelo.cliente) modelo.cliente.resumo = resumoEdit;
-      let logoData = null;
-      try { const lr = await window.storage.get("escritorio-logo"); if (lr?.value) logoData = lr.value; } catch {}
-      await buildPdf(orc, logoData, modelo, null, "#ffffff", incluiArq, incluiEng);
+      await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng);
     } catch(e) { console.error(e); alert("Erro ao gerar PDF: "+e.message); }
   };
 
@@ -6008,8 +6070,26 @@ function PropostaPreview({ data, onVoltar }) {
         </div>
 
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-          <div style={{ background:C, borderRadius:6, width:80, height:44, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <div style={{ color:"#fff", fontSize:9, fontWeight:700, textAlign:"center", lineHeight:1.5, letterSpacing:"0.05em" }}>PADOVAN<br/><span style={{ letterSpacing:"0.15em" }}>ARQ</span>UITETOS</div>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            {logoPreview ? (
+              <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
+                <img src={logoPreview} alt="Logo" style={{ height:44, maxWidth:120, objectFit:"contain", borderRadius:4 }} />
+                <button onClick={handleLogoRemove} title="Remover logo"
+                  style={{ position:"absolute", top:-6, right:-6, width:16, height:16, borderRadius:"50%",
+                    background:"#ef4444", border:"none", cursor:"pointer", display:"flex", alignItems:"center",
+                    justifyContent:"center", fontSize:9, color:"#fff", fontWeight:700, lineHeight:1 }}>
+                  ✕
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => inputLogoRef.current?.click()}
+                style={{ height:44, padding:"0 12px", border:"1.5px dashed #d1d5db", borderRadius:6,
+                  background:"#fafafa", cursor:"pointer", fontSize:11, color:"#9ca3af", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", gap:5, whiteSpace:"nowrap" }}>
+                + Logo
+              </button>
+            )}
+            <input ref={inputLogoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleLogoUpload} />
           </div>
           <div style={{ fontSize:11, color:LT }}>Ourinhos, {dataStr} · Válido até {validade}</div>
         </div>
@@ -6148,7 +6228,7 @@ function PropostaPreview({ data, onVoltar }) {
                 <div key={et.id} style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
                   <span style={{ color:C }}>{et.nome}</span>
                   <span style={{ color:LT, textAlign:"center" }}>{et.pct}%</span>
-                  <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(Math.round(totCIEdit*et.pct/100*100)/100)}</span>
+                  <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(Math.round(arqCIEdit*et.pct/100*100)/100)}</span>
                 </div>
               ))}
               {incluiEng && (
@@ -6158,13 +6238,13 @@ function PropostaPreview({ data, onVoltar }) {
                   <div style={{ fontSize:11, color:LT }}>Estrutural · Elétrico · Hidrossanitário</div>
                 </div>
                 <span style={{ color:LT, textAlign:"center" }}>—</span>
-                <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(engEdit)}</span>
+                <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(engCIEdit)}</span>
               </div>
               )}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"8px 0", borderTop:`1.5px solid ${C}`, marginTop:2 }}>
                 <span style={{ fontWeight:600, color:C }}>Total</span>
                 <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{etapasPct.reduce((s,e)=>s+e.pct,0)}%</span>
-                <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(totCIEdit)}</span>
+                <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(Math.round((arqCIEdit*(etapasPct.reduce((s,e)=>s+e.pct,0)/100) + (incluiEng?engCIEdit:0))*100)/100)}</span>
               </div>
             </div>
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
@@ -6187,25 +6267,68 @@ function PropostaPreview({ data, onVoltar }) {
 
         <Sec title="Escopo dos serviços">
           {escopoDefault.map((bloco, i) => (
-            <div key={i} style={{ marginBottom:18 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:C, marginBottom:6 }}>{bloco.titulo}</div>
-              {bloco.objetivo && <>
-                <div style={tag}>Objetivo</div>
-                <p style={{ fontSize:13, color:MD, lineHeight:1.7, margin:"0 0 8px" }}>{bloco.objetivo}</p>
-              </>}
-              {bloco.itens.length > 0 && <>
-                <div style={tag}>Serviços inclusos</div>
-                {bloco.itens.map((it,j) => (
-                  <div key={j} style={bl}><span style={dot}>•</span><span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{it}</span></div>
-                ))}
-              </>}
-              {bloco.entregaveis.length > 0 && <>
-                <div style={tag}>Entregáveis</div>
-                {bloco.entregaveis.map((it,j) => (
-                  <div key={j} style={bl}><span style={dot}>•</span><span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{it}</span></div>
-                ))}
-              </>}
-              {bloco.obs && <div style={{ fontSize:12, color:LT, marginTop:8, lineHeight:1.6, fontStyle:"italic" }}>{bloco.obs}</div>}
+            <div key={bloco.etapaId} style={{ marginBottom:18 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:C, marginBottom:6 }}>{bloco.tituloNum}</div>
+              {bloco.custom ? (
+                // Bloco customizado — totalmente editável
+                <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                  <div>
+                    <div style={tag}>Objetivo</div>
+                    <textarea
+                      value={bloco.objetivo}
+                      onChange={e => setEscopoBloco(bloco.etapaId, "objetivo", e.target.value)}
+                      placeholder="Descreva o objetivo desta etapa..."
+                      style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
+                        border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", outline:"none",
+                        resize:"vertical", minHeight:60, boxSizing:"border-box", background:"#fafafa" }}
+                    />
+                  </div>
+                  <div>
+                    <div style={tag}>Descrição / Serviços inclusos</div>
+                    <textarea
+                      value={(bloco.itens||[]).join("\n")}
+                      onChange={e => setEscopoBloco(bloco.etapaId, "itens", e.target.value.split("\n").filter(s=>s.trim()))}
+                      placeholder={"Um item por linha..."}
+                      style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
+                        border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", outline:"none",
+                        resize:"vertical", minHeight:80, boxSizing:"border-box", background:"#fafafa" }}
+                    />
+                    <div style={{ fontSize:11, color:LT, marginTop:3 }}>Um item por linha</div>
+                  </div>
+                  <div>
+                    <div style={tag}>Observação</div>
+                    <textarea
+                      value={bloco.obs}
+                      onChange={e => setEscopoBloco(bloco.etapaId, "obs", e.target.value)}
+                      placeholder="Observação opcional..."
+                      style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
+                        border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", outline:"none",
+                        resize:"vertical", minHeight:40, boxSizing:"border-box", background:"#fafafa" }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                // Bloco fixo — exibição normal
+                <>
+                  {bloco.objetivo && <>
+                    <div style={tag}>Objetivo</div>
+                    <p style={{ fontSize:13, color:MD, lineHeight:1.7, margin:"0 0 8px" }}>{bloco.objetivo}</p>
+                  </>}
+                  {bloco.itens.length > 0 && <>
+                    <div style={tag}>Serviços inclusos</div>
+                    {bloco.itens.map((it,j) => (
+                      <div key={j} style={bl}><span style={dot}>•</span><span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{it}</span></div>
+                    ))}
+                  </>}
+                  {bloco.entregaveis.length > 0 && <>
+                    <div style={tag}>Entregáveis</div>
+                    {bloco.entregaveis.map((it,j) => (
+                      <div key={j} style={bl}><span style={dot}>•</span><span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{it}</span></div>
+                    ))}
+                  </>}
+                  {bloco.obs && <div style={{ fontSize:12, color:LT, marginTop:8, lineHeight:1.6, fontStyle:"italic" }}>{bloco.obs}</div>}
+                </>
+              )}
               {i < escopoDefault.length-1 && <div style={{ borderBottom:`0.5px solid ${LN}`, marginTop:14 }} />}
             </div>
           ))}
@@ -6372,7 +6495,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setGrupoParams(prev => ({ ...prev, [grupo]: { ...prev[grupo], [key]: val } }));
     setAbertoGrupo(null);
   }
-  const isComercial = tipoProjeto === "Conj. Comercial";
+  const isComercial = tipoProjeto === "Conj. Comercial" || tipoProjeto === "Galpão";
   const [grupoQtds, setGrupoQtds] = useState(orcBase?.grupoQtds || {
     "Por Loja": 0, "Espaço Âncora": 0, "Áreas Comuns": 0, "Por Apartamento": 0, "Galpao": 0,
   });
@@ -6442,7 +6565,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, [configAtual]);
 
   const calculo = useMemo(() => {
-    if (!configAtual || !tamanho || !padrao) return null;
+    if (!configAtual) return null;
+    if (!isComercial && (!tamanho || !padrao)) return null;
     const { comodos: COMODOS_USE } = configAtual;
     const tcfg = getTipoConfig(tipoParaConfig(tipoProjeto));
     const pb = tcfg.precoBase;
@@ -6799,7 +6923,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       </div>
 
       {/* ── Fluxo sequencial de parâmetros ── */}
-      {!tamanho ? (
+      {!(tamanho || isComercial) ? (
         <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start" }}>
 
           <div style={{ display:"flex", alignItems:"center", gap:6 }}>
@@ -6811,11 +6935,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               {renderStep("tipoProjeto")}
-              {tipoProjeto && <span onClick={() => { setAberto(null); setTipoProjeto(null); setPadrao(null); setTipologia(null); setTamanho(null); }} style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"0 4px" }}>✕</span>}
+              {tipoProjeto && !isComercial && <span onClick={() => { setAberto(null); setTipoProjeto(null); setPadrao(null); setTipologia(null); setTamanho(null); }} style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"0 4px" }}>✕</span>}
             </div>
           </>}
 
-          {tipoProjeto && <>
+          {tipoProjeto && !isComercial && <>
             <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
             <div style={{ display:"flex", alignItems:"center", gap:6 }}>
               {renderStep("padrao")}
@@ -6844,14 +6968,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center", animation:"slideUp 0.4s ease forwards" }}>
           {renderStep("tipoObra")}
           {renderStep("tipoProjeto")}
-          {renderStep("padrao")}
-          {renderStep("tipologia")}
-          {renderStep("tamanho")}
+          {!isComercial && renderStep("padrao")}
+          {!isComercial && renderStep("tipologia")}
+          {!isComercial && renderStep("tamanho")}
         </div>
       )}
 
       {/* ── Cômodos + Resumo ── */}
-      {!!tamanho && !!configAtual && (
+      {!!(tamanho || isComercial) && !!configAtual && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 400px", gap:32, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
           marginTop:32,
@@ -6941,9 +7065,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                               style={{ ...C.dropBtn(open), minWidth:80, background: val ? "#f9fafb" : "#fff", padding:"5px 10px" }}
                               onClick={e => {
                                 e.stopPropagation();
-                                if (open) { setAbertoGrupo(null); return; }
-                                const r = e.currentTarget.getBoundingClientRect();
-                                setAbertoGrupo({ key: aKey, grupo, param: key, top: r.bottom + window.scrollY + 4, left: r.left + window.scrollX });
+                                setAbertoGrupo(open ? null : { key: aKey, grupo, param: key });
                               }}>
                               <span style={{ ...C.dropBtnTxt(val), fontSize:10 }}>
                                 {val
@@ -6954,6 +7076,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                 <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                               </span>
                             </button>
+                            {open && (
+                              <div style={{ position:"absolute", top:"100%", left:0, zIndex:9999,
+                                background:"#fff", border:"1px solid #d1d5db", borderRadius:10,
+                                boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:130, overflow:"hidden", marginTop:4 }}>
+                                {(["padrao","tipologia","tamanho"].includes(key) ? { padrao:["Alto","Médio","Baixo"], tipologia:["Térreo","Sobrado"], tamanho:["Grande","Médio","Pequeno","Compacta"] }[key] : []).map(op => {
+                                  const cur = (grupoParams[grupo] || {})[key];
+                                  return (
+                                    <div key={op}
+                                      style={C.dropItem(cur === op)}
+                                      onMouseEnter={e => { if (cur !== op) e.currentTarget.style.background = "#f9fafb"; }}
+                                      onMouseLeave={e => { if (cur !== op) e.currentTarget.style.background = cur === op ? "#f5f5f5" : "#fff"; }}
+                                      onClick={e => { e.stopPropagation(); setGrupoParam(grupo, key, op); }}>
+                                      {op}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
@@ -7209,7 +7349,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             const totalPct = etapasPct.reduce((s,e)=>s+e.pct,0);
                             return (<>
                               {etapasPct.map((et, i) => {
-                                const val = Math.round(totCI * et.pct/100 * 100)/100;
+                                const arqCIModal = temImposto && arqV > 0 ? Math.round(arqV / (1 - aliqImp/100) * 100) / 100 : arqV;
+                                const val = Math.round(arqCIModal * et.pct/100 * 100)/100;
                                 return (
                                   <div key={et.id} style={{ display:"flex", alignItems:"center", gap:5, marginBottom:5 }}>
                                     <input
@@ -7234,7 +7375,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                               })}
                               <div style={{ display:"flex", justifyContent:"space-between", paddingTop:5, borderTop:"1px solid #e5e7eb", marginTop:2 }}>
                                 <span style={{ fontSize:10, color: totalPct===100?"#9ca3af":"#ef4444", fontWeight:600 }}>{totalPct}%</span>
-                                <span style={{ fontSize:10, fontWeight:700, color:"#111" }}>{fmtV(Math.round(totCI*totalPct/100*100)/100)}</span>
+                                <span style={{ fontSize:10, fontWeight:700, color:"#111" }}>{fmtV(Math.round((temImposto&&arqV>0?Math.round(arqV/(1-aliqImp/100)*100)/100:arqV)*totalPct/100*100)/100)}</span>
                               </div>
                               <button onClick={()=>setEtapasPct(prev=>[...prev,{id:Date.now(),nome:`Etapa ${prev.length+1}`,pct:0}])}
                                 style={{ marginTop:5, fontSize:10, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 6px", cursor:"pointer", fontFamily:"inherit", width:"100%" }}>
@@ -7351,28 +7492,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         </div>
       )}
 
-      {abertoGrupo && (
-        <div style={{
-          position:"fixed",
-          top: abertoGrupo.top, left: abertoGrupo.left,
-          zIndex:9999,
-          background:"#fff", border:"1px solid #d1d5db", borderRadius:10,
-          boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:130, overflow:"hidden",
-        }}>
-          {({ padrao:["Alto","Médio","Baixo"], tipologia:["Térreo","Sobrado"], tamanho:["Grande","Médio","Pequeno","Compacta"] }[abertoGrupo.param] || []).map(op => {
-            const cur = (grupoParams[abertoGrupo.grupo] || {})[abertoGrupo.param];
-            return (
-              <div key={op}
-                style={C.dropItem(cur === op)}
-                onMouseEnter={e => { if (cur !== op) e.currentTarget.style.background = "#f9fafb"; }}
-                onMouseLeave={e => { if (cur !== op) e.currentTarget.style.background = cur === op ? "#f5f5f5" : "#fff"; }}
-                onClick={() => setGrupoParam(abertoGrupo.grupo, abertoGrupo.param, op)}>
-                {op}
-              </div>
-            );
-          })}
-        </div>
-      )}
+
 
     </div>
   );
