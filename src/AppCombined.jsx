@@ -4036,7 +4036,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // ── Dados base ─────────────────────────────────────────────
   const r       = orc.resultado || {};
-  console.log("[buildPdf] precoArq=", r.precoArq, "totSI=", orc.totSI, "incluiEng=", incluiEng);
   const area    = r.areaTotal || 0;
   const nUnid   = r.nUnidades || 1;
 
@@ -4066,6 +4065,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Etapas isoladas
   const idsIsoladosPdf = new Set(orc.etapasIsoladas || []);
   const temIsoladasPdf = idsIsoladosPdf.size > 0;
+  console.log("[PDF] arqCI=", arqCI, "r.precoArq=", r.precoArq, "etapasPdf=", JSON.stringify(orc.etapasPct));
 
   // Escopo (igual preview)
   const escopoDefault = [
@@ -4332,10 +4332,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     sf("bold",8.5); stc(INK);
     tx("Total",cE,y);
     const pctArqTotal = etapasPdf.filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
-    const arqCIBasePdf = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-    const totalPdf = Math.round((arqCIBasePdf*(pctArqTotal/100) + (incluiEng&&!temIsoladasPdf?engCIcom:0))*100)/100;
+    const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+    const totalPdfBase = Math.round((arqCIBasePdf2*(pctArqTotal/100) + (incluiEng&&!temIsoladasPdf?engCIcom:0))*100)/100;
     tx(`${pctArqTotal}%`,cP,y,{align:"right"});
-    tx(fmtB(totalPdf),cV,y,{align:"right"});
+    tx(fmtB(totalPdfBase),cV,y,{align:"right"});
     y+=10;
 
     // Condições etapa a etapa — reservar espaço para todo o bloco
@@ -6375,8 +6375,12 @@ function PropostaPreview({ data, onVoltar }) {
               {etapasVisiveis.map((et,i) => (
                 <div key={et.id} style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
                   <span style={{ color:C }}>{et.nome}</span>
-                  <span style={{ color:LT, textAlign:"center" }}>{et.id === 5 ? "—" : `${et.pct}%`}</span>
-                  <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(et.id === 5 ? engCIEdit : Math.round(arqCIEdit*et.pct/100*100)/100)}</span>
+                  <span style={{ color:LT, textAlign:"center" }}>
+                    {et.id === 5 ? "—" : `${et.pct}%`}
+                  </span>
+                  <span style={{ fontWeight:500, textAlign:"right" }}>
+                    {fmtV(et.id === 5 ? engCIEdit : Math.round(arqCIEdit*(et.pct/100)*100)/100)}
+                  </span>
                 </div>
               ))}
               {incluiEng && !temIsoladas && (

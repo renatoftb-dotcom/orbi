@@ -697,8 +697,12 @@ function PropostaPreview({ data, onVoltar }) {
               {etapasVisiveis.map((et,i) => (
                 <div key={et.id} style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
                   <span style={{ color:C }}>{et.nome}</span>
-                  <span style={{ color:LT, textAlign:"center" }}>{et.id === 5 ? "—" : `${et.pct}%`}</span>
-                  <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(et.id === 5 ? engCIEdit : Math.round(arqCIEdit*et.pct/100*100)/100)}</span>
+                  <span style={{ color:LT, textAlign:"center" }}>
+                    {et.id === 5 ? "—" : `${et.pct}%`}
+                  </span>
+                  <span style={{ fontWeight:500, textAlign:"right" }}>
+                    {fmtV(et.id === 5 ? engCIEdit : Math.round(arqCIEdit*(et.pct/100)*100)/100)}
+                  </span>
                 </div>
               ))}
               {incluiEng && !temIsoladas && (
