@@ -4065,7 +4065,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Etapas isoladas
   const idsIsoladosPdf = new Set(orc.etapasIsoladas || []);
   const temIsoladasPdf = idsIsoladosPdf.size > 0;
-  console.log("[PDF] arqCI=", arqCI, "r.precoArq=", r.precoArq, "etapasPdf=", JSON.stringify(orc.etapasPct));
+  // Valor total proporcional das etapas isoladas (com imposto)
+  const pctTotalIsoladoPdf = (orc.etapasPct||[]).filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
+  const totSIBasePdf = Math.round(arqCI * (pctTotalIsoladoPdf/100) * 100) / 100;
+  const totCIBasePdf = temImp ? Math.round(totSIBasePdf/(1-aliqImp/100)*100)/100 : totSIBasePdf;
 
   // Escopo (igual preview)
   const escopoDefault = [
@@ -4309,8 +4312,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       nv(rH+3);
       sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
       const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+      const valEtapa = et.id===5 ? engCIcom
+        : temIsoladasPdf && pctTotalIsoladoPdf>0
+          ? Math.round(totCIBasePdf * (et.pct / pctTotalIsoladoPdf) * 100) / 100
+          : Math.round(arqCIBase*(et.pct/100)*100)/100;
       sf("normal",8.5); stc(INK_LT); tx(et.id===5?"—":`${et.pct}%`,cP,y,{align:"right"});
-      sf("normal",8.5); stc(INK); tx(fmtB(et.id===5 ? engCIcom : Math.round(arqCIBase*(et.pct/100)*100)/100),cV,y,{align:"right"});
+      sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
       y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     });
 
@@ -4334,7 +4341,9 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     tx("Total",cE,y);
     const pctArqTotal = etapasPdf.filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
     const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-    const totalPdfBase = Math.round((arqCIBasePdf2*(pctArqTotal/100) + (incluiEng&&!temIsoladasPdf?engCIcom:0))*100)/100;
+    const totalPdfBase = temIsoladasPdf
+      ? totCIBasePdf
+      : Math.round((arqCIBasePdf2*(pctArqTotal/100) + (incluiEng?engCIcom:0))*100)/100;
     tx(`${pctArqTotal}%`,cP,y,{align:"right"});
     tx(fmtB(totalPdfBase),cV,y,{align:"right"});
     y+=10;
