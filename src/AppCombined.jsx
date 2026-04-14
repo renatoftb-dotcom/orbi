@@ -5902,6 +5902,8 @@ function PropostaPreview({ data, onVoltar }) {
   const [editandoEng, setEditandoEng]       = useState(false);
   const [editandoResumo, setEditandoResumo] = useState(false);
   const [tmpArq, setTmpArq]                 = useState("");
+  const tmpArqRef = useRef("");
+  const tmpEngRef = useRef("");
   const [tmpEng, setTmpEng]                 = useState("");
   // Textos editáveis da proposta
   const [subTituloEdit, setSubTituloEdit]   = useState("Proposta Comercial de Projetos de Arquitetura e Engenharia");
@@ -6262,17 +6264,14 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoArq ? (
                   <input autoFocus type="text"
-                    value={tmpArq}
-                    onChange={e => setTmpArq(e.target.value)}
-                    onBlur={() => { const v = parseValorBR(tmpArq); if(v>0) setArqEdit(Math.round(v*100)/100); setEditandoArq(false); }}
+                    ref={tmpArqRef}
+                    defaultValue={String(Math.round((temIsoladas ? totSIBase : arqCI)*100)/100).replace(".",",")}
+                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setArqEdit(Math.round(v*100)/100); setEditandoArq(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
-                  <span onClick={() => {
-                    setTmpArq(String(Math.round((temIsoladas ? totSIBase : arqCI)*100)/100).replace(".",","));
-                    setEditandoArq(true);
-                  }} title="Clique para editar" style={{ cursor:"pointer" }}>
+                  <span onClick={() => setEditandoArq(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
                     {fmtV(temIsoladas ? totSIBase : arqCI)}
                   </span>
                 )}
@@ -6285,17 +6284,14 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
                   <input autoFocus type="text"
-                    value={tmpEng}
-                    onChange={e => setTmpEng(e.target.value)}
-                    onBlur={() => { const v = parseValorBR(tmpEng); if(v>0) setEngEdit(Math.round(v*100)/100); setEditandoEng(false); }}
+                    ref={tmpEngRef}
+                    defaultValue={String(Math.round(engCI*100)/100).replace(".",",")}
+                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0) setEngEdit(Math.round(v*100)/100); setEditandoEng(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoEng(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
-                  <span onClick={() => {
-                    setTmpEng(String(Math.round(engCI*100)/100).replace(".",","));
-                    setEditandoEng(true);
-                  }} title="Clique para editar" style={{ cursor:"pointer" }}>
+                  <span onClick={() => setEditandoEng(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
                     {fmtV(engCI)}
                   </span>
                 )}
