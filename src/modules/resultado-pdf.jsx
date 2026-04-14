@@ -876,6 +876,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // ── Dados base ─────────────────────────────────────────────
   const r       = orc.resultado || {};
+  console.log("[buildPdf] precoArq=", r.precoArq, "totSI=", orc.totSI, "incluiEng=", incluiEng);
   const area    = r.areaTotal || 0;
   const nUnid   = r.nUnidades || 1;
 
