@@ -929,12 +929,13 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   ];
 
   const isPadrao = (orc.tipoPagamento || "padrao") !== "etapas";
+  const mostrarPrazoEng = incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5));
   const prazoDefault = isPadrao
     ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar.",
-       "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."]
+       ...(mostrarPrazoEng ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : [])]
     : ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente.",
        "Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte.",
-       "Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."];
+       ...(mostrarPrazoEng ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : [])];
 
   const etapasPdf = orc.etapasPct || [];
 

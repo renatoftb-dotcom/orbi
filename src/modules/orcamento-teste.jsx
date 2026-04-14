@@ -621,7 +621,7 @@ function PropostaPreview({ data, onVoltar }) {
                   <input autoFocus type="text"
                     key={arqCI}
                     defaultValue={(temIsoladas ? totSIBase : arqCI).toFixed(2).replace(".",",")}
-                    onBlur={e => { const v = parseValorBR(e.target.value); setArqEdit(v>0 ? Math.round(v*100)/100 : arqCI); setEditandoArq(false); }}
+                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0){ if(temIsoladas && pctTotalIsolado>0){ setArqEdit(Math.round(v/(pctTotalIsolado/100)*100)/100); } else { setArqEdit(Math.round(v*100)/100); } } setEditandoArq(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
@@ -701,7 +701,10 @@ function PropostaPreview({ data, onVoltar }) {
                     {et.id === 5 ? "—" : `${et.pct}%`}
                   </span>
                   <span style={{ fontWeight:500, textAlign:"right" }}>
-                    {fmtV(et.id === 5 ? engCIEdit : Math.round(arqCIEdit*(et.pct/100)*100)/100)}
+                    {fmtV(et.id === 5 ? engCIEdit
+                      : temIsoladas
+                        ? Math.round(totCIBase * (et.pct / pctTotalIsolado) * 100) / 100
+                        : Math.round(arqCIEdit*(et.pct/100)*100)/100)}
                   </span>
                 </div>
               ))}

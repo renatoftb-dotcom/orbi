@@ -4089,12 +4089,13 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   ];
 
   const isPadrao = (orc.tipoPagamento || "padrao") !== "etapas";
+  const mostrarPrazoEng = incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5));
   const prazoDefault = isPadrao
     ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar.",
-       "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."]
+       ...(mostrarPrazoEng ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : [])]
     : ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente.",
        "Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte.",
-       "Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."];
+       ...(mostrarPrazoEng ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : [])];
 
   const etapasPdf = orc.etapasPct || [];
 
@@ -6299,7 +6300,7 @@ function PropostaPreview({ data, onVoltar }) {
                   <input autoFocus type="text"
                     key={arqCI}
                     defaultValue={(temIsoladas ? totSIBase : arqCI).toFixed(2).replace(".",",")}
-                    onBlur={e => { const v = parseValorBR(e.target.value); setArqEdit(v>0 ? Math.round(v*100)/100 : arqCI); setEditandoArq(false); }}
+                    onBlur={e => { const v = parseValorBR(e.target.value); if(v>0){ if(temIsoladas && pctTotalIsolado>0){ setArqEdit(Math.round(v/(pctTotalIsolado/100)*100)/100); } else { setArqEdit(Math.round(v*100)/100); } } setEditandoArq(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
@@ -6379,7 +6380,10 @@ function PropostaPreview({ data, onVoltar }) {
                     {et.id === 5 ? "—" : `${et.pct}%`}
                   </span>
                   <span style={{ fontWeight:500, textAlign:"right" }}>
-                    {fmtV(et.id === 5 ? engCIEdit : Math.round(arqCIEdit*(et.pct/100)*100)/100)}
+                    {fmtV(et.id === 5 ? engCIEdit
+                      : temIsoladas
+                        ? Math.round(totCIBase * (et.pct / pctTotalIsolado) * 100) / 100
+                        : Math.round(arqCIEdit*(et.pct/100)*100)/100)}
                   </span>
                 </div>
               ))}
