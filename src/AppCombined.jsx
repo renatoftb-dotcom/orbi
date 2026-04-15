@@ -4108,31 +4108,36 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Mapa etapaId -> nome personalizado (para etapas customizadas)
   const etapaNomeMap = Object.fromEntries(etapasPdf.map(e => [e.id, e.nome]));
 
-  // Filtra e renumera escopoDefault conforme etapas ativas e toggles
+  // Filtra e renumera escopo — usa editado da preview se disponível
+  const escopoBase = (orc.escopoEditado && orc.escopoEditado.length > 0) ? orc.escopoEditado : escopoDefault;
   const escopoFiltradoPdf = (() => {
-    const ESCOPO_IDS = [1,2,3,4]; // ids fixos de arq
-    const blocos = escopoDefault.filter((bloco, i) => {
-      const etId = i + 1; // índice 0 = etapaId 1, etc (bloco 5 = eng)
-      if (i === 4) return incluiEng; // eng
+    const blocos = escopoBase.filter((bloco, i) => {
+      const etId = bloco.etapaId || (i + 1);
+      const isEng = bloco.isEng || (i === 4 && !orc.escopoEditado);
+      if (isEng) return incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5));
       if (!incluiArq) return false;
-      if (!etapasAtivas.has(etId)) return false; // etapa excluída
-      if (etId === 1 && isPadrao) return false; // viabilidade só no por etapas
+      if (temIsoladasPdf && !idsIsoladosPdf.has(etId) && !bloco.custom) return false;
+      if (!etapasAtivas.has(etId) && !bloco.custom) return false;
+      if (etId === 1 && isPadrao) return false;
       return true;
     });
-    // Adiciona blocos customizados (etapas com id > 5)
-    etapasPdf.forEach(et => {
-      if (et.id > 5) {
-        blocos.splice(blocos.length - (incluiEng ? 1 : 0), 0, {
-          titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:""
-        });
-      }
-    });
+    // Blocos customizados já vêm no escopoBase quando usa escopoEditado
+    if (!orc.escopoEditado) {
+      etapasPdf.forEach(et => {
+        if (et.id > 5) {
+          blocos.splice(blocos.length - (incluiEng ? 1 : 0), 0, {
+            titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:""
+          });
+        }
+      });
+    }
     // Renumera
     let n = 0;
     return blocos.map(b => {
-      const isEng = b.titulo.includes("Engenharia") && !b.titulo.includes("Viabilidade");
-      if (!isEng) { n++; return { ...b, titulo: `${n}. ${b.titulo.replace(/^\d+\.\s*/,"")}` }; }
-      return { ...b, titulo: `${n+1}. ${b.titulo.replace(/^\d+\.\s*/,"")}` };
+      const isEng = b.isEng || (b.titulo && b.titulo.includes("Engenharia") && !b.titulo.includes("Viabilidade"));
+      const tituloBase = (b.titulo||"").replace(/^\d+\.\s*/,"");
+      if (!isEng) { n++; return { ...b, titulo: `${n}. ${tituloBase}` }; }
+      return { ...b, titulo: `${n+1}. ${tituloBase}` };
     });
   })();
 
@@ -6212,6 +6217,8 @@ function PropostaPreview({ data, onVoltar }) {
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:etapasPdfFinal, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, etapasIsoladas:Array.from(idsIsolados), totSI:0, criadoEm:new Date().toISOString(), resultado:r,
         // Textos editáveis
         cidade: cidadeEdit, validadeStr: validadeEdit, pixTexto: pixEdit,
+        // Escopo editado na preview
+        escopoEditado: escopoState,
       };
       const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
       if (resumoEdit && modelo.cliente) modelo.cliente.resumo = resumoEdit;
