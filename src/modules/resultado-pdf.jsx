@@ -1022,11 +1022,11 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     nv(10);
     y += mt;
     sf("bold",7); stc(INK_LT);
-    doc.setCharSpace(0.8);
+    doc.setCharSpace(0.6);
     tx(txt.toUpperCase(),M,y);
+    const tw = doc.getTextWidth(txt.toUpperCase())+3;
     doc.setCharSpace(0);
-    const tw = doc.getTextWidth(txt.toUpperCase())+2;
-    sc(LINE,"draw"); doc.setLineWidth(0.25); doc.line(M+tw+3,y-1,W-M,y-1);
+    sc(LINE,"draw"); doc.setLineWidth(0.25); doc.line(M+tw,y-1.5,W-M,y-1.5);
     y += 6;
   };
 
@@ -1112,14 +1112,14 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   nv(colH+4);
 
   // Coluna ARQ — sempre mostra valor total de arquitetura
-  doc.setCharSpace(0.6); sf("bold",6.5); stc(INK_LT); tx("ARQUITETURA", M, y); doc.setCharSpace(0);
+  sf("bold",6.5); stc(INK_LT); tx("ARQUITETURA", M, y);
   sf("bold",12); stc(INK); tx(fmtB(arqCI), M, y+8);
   if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, M, y+14); }
 
   // Divisor vertical e coluna Engenharia — só quando incluiEng
   if (incluiEng) {
     sc(LINE,"draw"); doc.setLineWidth(0.3); doc.line(midX, y-1, midX, y+colH);
-    doc.setCharSpace(0.6); sf("bold",6.5); stc(INK_LT); tx("ENGENHARIA", midX+4, y); doc.setCharSpace(0);
+    sf("bold",6.5); stc(INK_LT); tx("ENGENHARIA", midX+4, y);
     const wEng = doc.getTextWidth("ENGENHARIA");
     sf("normal",6); stc(INK_LT); tx("(Opcional)", midX+4+wEng+2, y);
     sf("bold",12); stc(INK); tx(fmtB(engCI), midX+4, y+8);
@@ -1260,7 +1260,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     sf("bold",9.5); stc(INK); tx(bloco.titulo,M,y); y+=6;
 
     const tagPdf = (txt) => {
-      doc.setCharSpace(0.8);
+      doc.setCharSpace(0.5);
       sf("bold",7); stc(INK_LT); tx(txt.toUpperCase(),M,y);
       doc.setCharSpace(0);
       y+=5;
