@@ -1199,10 +1199,9 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     tx(fmtB(totalPdfBase),cV,y,{align:"right"});
     y+=10;
 
-    // Condições etapa a etapa — reservar espaço para todo o bloco
+    // Condições etapa a etapa
     const dEt = orc.descontoEtapaCtrt??5, pEt = orc.parcelasEtapaCtrt??2;
     y+=4;
-    nv(75);
     secTitle("Forma de Pagamento");
     sf("bold",8.5); stc(INK); tx("Etapa a Etapa",M,y);
     sf("normal",6.5); stc(INK_LT); tx("Obs.: Nesta opção valores de etapas futuras podem ser reajustados.",W-M,y,{align:"right"});
@@ -1226,9 +1225,8 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     }
 
   } else {
-    // Pagamento padrão — reservar espaço para todo o bloco
     const dA=orc.descontoEtapa??5, pA=orc.parcelasEtapa??3;
-    nv(70);
+    nv(25);
     sf("bold",8.5); stc(INK); tx("Apenas Arquitetura",M,y); y+=6;
     sf("normal",8.5); stc(INK_MD);
     tx(`Antecipado (${dA}% de desconto) — ${fmtB(Math.round(arqCI*(1-dA/100)*100)/100)}`,M+2,y); hr(y+3); y+=8;
@@ -1335,8 +1333,8 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   y+=4;
 
   // ── ACEITE DA PROPOSTA ────────────────────────────────────
+  nv(55);
   secTitle("Aceite da proposta");
-  nv(40);
 
   const halfAc = TW/2-10;
   // Cliente
