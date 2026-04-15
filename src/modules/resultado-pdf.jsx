@@ -1022,9 +1022,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     nv(10);
     y += mt;
     sf("bold",7); stc(INK_LT);
+    // Calcular largura SEM charSpace primeiro, depois aplicar charSpace ao desenhar
+    const tw = doc.getTextWidth(txt.toUpperCase()) + txt.length * 0.6 + 4;
     doc.setCharSpace(0.6);
     tx(txt.toUpperCase(),M,y);
-    const tw = doc.getTextWidth(txt.toUpperCase())+3;
     doc.setCharSpace(0);
     sc(LINE,"draw"); doc.setLineWidth(0.25); doc.line(M+tw,y-1.5,W-M,y-1.5);
     y += 6;
