@@ -6507,25 +6507,43 @@ function PropostaPreview({ data, onVoltar }) {
                     <TextoEditavel valor={bloco.objetivo} onChange={v => setEscopoBloco(bloco.etapaId, "objetivo", v)}
                       style={{ fontSize:13, color:MD, lineHeight:1.7, display:"block" }} multiline={true} />
                   </>}
-                  {bloco.itens && bloco.itens.length > 0 && <>
-                    <div style={tag}>Serviços inclusos</div>
-                    {bloco.itens.map((it,j) => (
-                      <div key={j} style={bl}><span style={dot}>•</span>
+                  {bloco.itens !== undefined && <>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:2 }}>
+                      <div style={tag}>Serviços inclusos</div>
+                      <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", [...(bloco.itens||[]), "Novo item"])}
+                        title="Adicionar item"
+                        style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
+                          background:"#f3f4f6", border:"1px solid #e5e7eb", lineHeight:"16px" }}>+ item</span>
+                    </div>
+                    {(bloco.itens||[]).map((it,j) => (
+                      <div key={j} style={{ ...bl, alignItems:"flex-start" }}>
+                        <span style={dot}>•</span>
                         <TextoEditavel valor={it} onChange={v => {
                           const arr = [...bloco.itens]; arr[j] = v;
                           setEscopoBloco(bloco.etapaId, "itens", arr);
-                        }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} />
+                        }} style={{ fontSize:13, color:MD, lineHeight:1.6, flex:1 }} />
+                        <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", bloco.itens.filter((_,k)=>k!==j))}
+                          style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
                       </div>
                     ))}
                   </>}
-                  {bloco.entregaveis && bloco.entregaveis.length > 0 && <>
-                    <div style={tag}>Entregáveis</div>
-                    {bloco.entregaveis.map((it,j) => (
-                      <div key={j} style={bl}><span style={dot}>•</span>
+                  {bloco.entregaveis !== undefined && <>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:2, marginTop:6 }}>
+                      <div style={tag}>Entregáveis</div>
+                      <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", [...(bloco.entregaveis||[]), "Novo entregável"])}
+                        title="Adicionar entregável"
+                        style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
+                          background:"#f3f4f6", border:"1px solid #e5e7eb", lineHeight:"16px" }}>+ item</span>
+                    </div>
+                    {(bloco.entregaveis||[]).map((it,j) => (
+                      <div key={j} style={{ ...bl, alignItems:"flex-start" }}>
+                        <span style={dot}>•</span>
                         <TextoEditavel valor={it} onChange={v => {
                           const arr = [...bloco.entregaveis]; arr[j] = v;
                           setEscopoBloco(bloco.etapaId, "entregaveis", arr);
-                        }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} />
+                        }} style={{ fontSize:13, color:MD, lineHeight:1.6, flex:1 }} />
+                        <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", bloco.entregaveis.filter((_,k)=>k!==j))}
+                          style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
                       </div>
                     ))}
                   </>}
@@ -6543,16 +6561,23 @@ function PropostaPreview({ data, onVoltar }) {
         <Sec title="Serviços não inclusos">
           <div style={{ columns:"2", columnGap:32, marginBottom:8 }}>
             {(naoInclEdit || naoInclDefault).map((item, i) => (
-              <div key={i} style={{ ...bl, breakInside:"avoid", marginBottom:4 }}>
+              <div key={i} style={{ ...bl, breakInside:"avoid", marginBottom:4, alignItems:"flex-start" }}>
                 <span style={dot}>•</span>
                 <TextoEditavel valor={item.label} onChange={v => {
                   const arr = [...(naoInclEdit || naoInclDefault)];
                   arr[i] = { ...arr[i], label: v };
                   setNaoInclEdit(arr);
-                }} style={{ fontSize:13, color:MD }} />
+                }} style={{ fontSize:13, color:MD, flex:1 }} />
                 {item.sub && <span style={{ fontSize:11, color:LT, marginLeft:4 }}>{item.sub}</span>}
+                <span onClick={() => setNaoInclEdit((naoInclEdit || naoInclDefault).filter((_,k)=>k!==i))}
+                  style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
               </div>
             ))}
+          </div>
+          <div style={{ marginBottom:8 }}>
+            <span onClick={() => setNaoInclEdit([...(naoInclEdit||naoInclDefault), { label:"Novo item", sub:null }])}
+              style={{ fontSize:11, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
+                background:"#f3f4f6", border:"1px solid #e5e7eb" }}>+ item</span>
           </div>
           <div style={{ fontSize:12, color:LT, fontStyle:"italic" }}>Todos os serviços não inclusos podem ser contratados como serviços adicionais.</div>
         </Sec>
