@@ -1018,17 +1018,20 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const nv = (h) => { if (y+h > H-18) novaPg(); };
 
   // Título de seção (label uppercase + linha horizontal — igual preview)
-  const secTitle = (txt, mt=10) => {
-    nv(12);
+  const secTitle = (txt, mt=8) => {
+    nv(10);
     y += mt;
-    sf("bold",7.5); stc(INK_LT); tx(txt.toUpperCase(),M,y);
-    const tw = doc.getTextWidth(txt.toUpperCase());
-    sc(LINE,"draw"); doc.setLineWidth(0.3); doc.line(M+tw+4,y-1,W-M,y-1);
-    y += 7;
+    sf("bold",7); stc(INK_LT);
+    doc.setCharSpace(0.8);
+    tx(txt.toUpperCase(),M,y);
+    doc.setCharSpace(0);
+    const tw = doc.getTextWidth(txt.toUpperCase())+2;
+    sc(LINE,"draw"); doc.setLineWidth(0.25); doc.line(M+tw+3,y-1,W-M,y-1);
+    y += 6;
   };
 
   // Bullet item
-  const bullet = (txt, x=M+3, maxW=TW-6) => {
+  const bullet = (txt, x=M+3, maxW=TW-7) => {
     sf("normal",8.5); stc(INK_MD);
     const ls = doc.splitTextToSize(txt, maxW-5);
     nv(ls.length*5+2);
@@ -1074,7 +1077,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // Nome cliente + Arq à direita (label inline + valor)
   y += 10;
-  sf("bold",16); stc(INK); tx(orc.cliente||"—", M, y);
+  sf("bold",18); stc(INK); tx(orc.cliente||"—", M, y);
   // Valor e label "Apenas Arquitetura" só aparecem quando ambos (arq+eng) incluídos
   if (incluiArq && incluiEng && !temIsoladasPdf) {
     sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
@@ -1109,20 +1112,20 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   nv(colH+4);
 
   // Coluna ARQ — sempre mostra valor total de arquitetura
-  sf("bold",7); stc(INK_LT); tx("ARQUITETURA", M, y);
-  sf("bold",11); stc(INK); tx(fmtB(arqCI), M, y+7);
-  if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, M, y+12); }
+  doc.setCharSpace(0.6); sf("bold",6.5); stc(INK_LT); tx("ARQUITETURA", M, y); doc.setCharSpace(0);
+  sf("bold",12); stc(INK); tx(fmtB(arqCI), M, y+8);
+  if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, M, y+14); }
 
   // Divisor vertical e coluna Engenharia — só quando incluiEng
   if (incluiEng) {
     sc(LINE,"draw"); doc.setLineWidth(0.3); doc.line(midX, y-1, midX, y+colH);
-    sf("bold",7); stc(INK_LT); tx("ENGENHARIA", midX+4, y);
+    doc.setCharSpace(0.6); sf("bold",6.5); stc(INK_LT); tx("ENGENHARIA", midX+4, y); doc.setCharSpace(0);
     const wEng = doc.getTextWidth("ENGENHARIA");
     sf("normal",6); stc(INK_LT); tx("(Opcional)", midX+4+wEng+2, y);
-    sf("bold",11); stc(INK); tx(fmtB(engCI), midX+4, y+7);
+    sf("bold",12); stc(INK); tx(fmtB(engCI), midX+4, y+8);
     sf("normal",6.5); stc(INK_LT);
-    tx("Estrutural · Elétrico · Hidrossanitário", midX+4, y+12);
-    if(area>0) tx(`R$ ${fmtN(Math.round(engCI/area*100)/100)}/m²`, midX+4, y+16);
+    tx("Estrutural · Elétrico · Hidrossanitário", midX+4, y+14);
+    if(area>0) tx(`R$ ${fmtN(Math.round(engCI/area*100)/100)}/m²`, midX+4, y+18);
   }
 
   y += colH+2;
@@ -1253,36 +1256,42 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   secTitle("Escopo dos serviços");
 
   escopoFiltradoPdf.forEach((bloco,bi) => {
-    nv(20);
-    sf("bold",9); stc(INK); tx(bloco.titulo,M,y); y+=6;
+    nv(16);
+    sf("bold",9.5); stc(INK); tx(bloco.titulo,M,y); y+=6;
+
+    const tagPdf = (txt) => {
+      doc.setCharSpace(0.8);
+      sf("bold",7); stc(INK_LT); tx(txt.toUpperCase(),M,y);
+      doc.setCharSpace(0);
+      y+=5;
+    };
 
     if (bloco.objetivo) {
-      sf("bold",7.5); stc(INK_LT); tx("OBJETIVO",M,y); y+=5;
+      tagPdf("Objetivo");
       sf("normal",8.5); stc(INK_MD);
       const ls = doc.splitTextToSize(bloco.objetivo, TW);
       ls.forEach(ln => { nv(5); tx(ln,M,y); y+=4.5; }); y+=2;
     }
 
-    if (bloco.itens.length) {
-      sf("bold",7.5); stc(INK_LT); tx("SERVIÇOS INCLUSOS",M,y); y+=5;
+    if (bloco.itens && bloco.itens.length) {
+      tagPdf("Serviços inclusos");
       bloco.itens.forEach(it => bullet(it));
       y+=2;
     }
 
-    if (bloco.entregaveis.length) {
-      sf("bold",7.5); stc(INK_LT); tx("ENTREGÁVEIS",M,y); y+=5;
+    if (bloco.entregaveis && bloco.entregaveis.length) {
+      tagPdf("Entregáveis");
       bloco.entregaveis.forEach(it => bullet(it));
       y+=2;
     }
 
     if (bloco.obs) {
-      sf("normal",7.5);
+      sf("normal",7.5); stc(INK_LT);
       const ls = doc.splitTextToSize(bloco.obs, TW);
-      stc(INK_LT);
       ls.forEach(ln => { nv(5); tx(ln,M,y); y+=4; }); y+=2;
     }
 
-    if (bi < escopoFiltradoPdf.length-1) { nv(5); hr(y); y+=5; }
+    if (bi < escopoFiltradoPdf.length-1) { nv(4); sc(LINE,"draw"); doc.setLineWidth(0.2); doc.line(M,y,W-M,y); y+=5; }
   });
 
   // ── SERVIÇOS NÃO INCLUSOS — 2 colunas independentes ──────
