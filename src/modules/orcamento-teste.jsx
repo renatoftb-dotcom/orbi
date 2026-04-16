@@ -478,11 +478,12 @@ function PropostaPreview({ data, onVoltar }) {
   const bl    = { display:"flex", gap:8, marginBottom:4 };
   const dot   = { color:LT, flexShrink:0 };
 
-  const Sec = ({title, mt, children}) => (
+  const Sec = ({title, mt, children, action}) => (
     <div>
       <div style={secH(mt)}>
         <span style={secL}>{title}</span>
         <div style={secLn} />
+        {action && action}
       </div>
       {children}
     </div>
@@ -748,7 +749,20 @@ function PropostaPreview({ data, onVoltar }) {
           </div>
         </Sec>
 
-        <Sec title="Escopo dos serviços">
+        <Sec title="Escopo dos serviços" action={
+          <span
+            onClick={() => {
+              const num = escopoDefault.filter(b => !b.isEng).length + 1;
+              const newId = Date.now();
+              setEscopoState(prev => {
+                const semEng = prev.filter(b => !b.isEng);
+                const eng = prev.filter(b => b.isEng);
+                return [...semEng, { etapaId:newId, titulo:`Etapa ${num}`, objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true }, ...eng];
+              });
+            }}
+            style={{ fontSize:10, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
+              border:`1px solid ${LN}`, background:"#f3f4f6", whiteSpace:"nowrap", userSelect:"none" }}>+ bloco</span>
+        }>
           {escopoDefault.map((bloco, i) => (
             <div key={bloco.etapaId} style={{ marginBottom:18 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
@@ -855,17 +869,7 @@ function PropostaPreview({ data, onVoltar }) {
               {i < escopoDefault.length-1 && <div style={{ borderBottom:`0.5px solid ${LN}`, marginTop:14 }} />}
             </div>
           ))}
-          <div style={{ marginTop:8 }}>
-            <span
-              onClick={() => {
-                const newId = Date.now();
-                setEscopoState(prev => [...prev, {
-                  etapaId: newId, titulo:"Novo bloco", objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true
-                }]);
-              }}
-              style={{ fontSize:11, color:LT, cursor:"pointer", padding:"4px 10px", borderRadius:6,
-                border:"1px solid #e5e7eb", background:"#f3f4f6", userSelect:"none" }}>+ adicionar bloco</span>
-          </div>
+
         </Sec>
 
         <Sec title="Serviços não inclusos">
