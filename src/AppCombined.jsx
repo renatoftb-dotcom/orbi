@@ -5940,6 +5940,26 @@ function PropostaPreview({ data, onVoltar }) {
       </span>
     );
   }
+
+  // Helper: textarea sempre visível com state local
+  // Evita re-render do pai a cada tecla (que causava scroll da página)
+  // Commita o valor apenas no blur.
+  function TextareaControlado({ valor, onCommit, placeholder="", style={}, minHeight=60 }) {
+    const [local, setLocal] = useState(valor || "");
+    // Se o valor externo mudar (ex: carregamento de dados), sincroniza
+    useEffect(() => { setLocal(valor || ""); }, [valor]);
+    return (
+      <textarea
+        value={local}
+        onChange={e => setLocal(e.target.value)}
+        onBlur={() => { if (local !== (valor || "")) onCommit(local); }}
+        placeholder={placeholder}
+        style={{ width:"100%", fontSize:13, color:"#6b7280", fontFamily:"inherit", lineHeight:1.7,
+          border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
+          resize:"vertical", minHeight, boxSizing:"border-box", background:"#f5f6f8", ...style }}
+      />
+    );
+  }
   const [logoPreview, setLogoPreview]       = useState(null);
 
   // Carrega logo do storage ao abrir a proposta
@@ -6450,36 +6470,30 @@ function PropostaPreview({ data, onVoltar }) {
                 <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                   <div>
                     <div style={tag}>Objetivo</div>
-                    <textarea
-                      value={bloco.objetivo}
-                      onChange={e => setEscopoBloco(bloco.etapaId, "objetivo", e.target.value)}
+                    <TextareaControlado
+                      valor={bloco.objetivo}
+                      onCommit={v => setEscopoBloco(bloco.etapaId, "objetivo", v)}
                       placeholder="Descreva o objetivo desta etapa..."
-                      style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
-                        border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
-                        resize:"vertical", minHeight:60, boxSizing:"border-box", background:"#f5f6f8" }}
+                      minHeight={60}
                     />
                   </div>
                   <div>
                     <div style={tag}>Descrição / Serviços inclusos</div>
-                    <textarea
-                      value={(bloco.itens||[]).join("\n")}
-                      onChange={e => setEscopoBloco(bloco.etapaId, "itens", e.target.value.split("\n").filter(s=>s.trim()))}
-                      placeholder={"Um item por linha..."}
-                      style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
-                        border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
-                        resize:"vertical", minHeight:80, boxSizing:"border-box", background:"#f5f6f8" }}
+                    <TextareaControlado
+                      valor={(bloco.itens||[]).join("\n")}
+                      onCommit={v => setEscopoBloco(bloco.etapaId, "itens", v.split("\n").filter(s=>s.trim()))}
+                      placeholder="Um item por linha..."
+                      minHeight={80}
                     />
                     <div style={{ fontSize:11, color:LT, marginTop:3 }}>Um item por linha</div>
                   </div>
                   <div>
                     <div style={tag}>Observação</div>
-                    <textarea
-                      value={bloco.obs}
-                      onChange={e => setEscopoBloco(bloco.etapaId, "obs", e.target.value)}
+                    <TextareaControlado
+                      valor={bloco.obs}
+                      onCommit={v => setEscopoBloco(bloco.etapaId, "obs", v)}
                       placeholder="Observação opcional..."
-                      style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
-                        border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
-                        resize:"vertical", minHeight:40, boxSizing:"border-box", background:"#f5f6f8" }}
+                      minHeight={40}
                     />
                   </div>
                 </div>
