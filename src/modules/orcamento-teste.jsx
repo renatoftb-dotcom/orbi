@@ -975,6 +975,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     { id:4, nome:"Projeto Executivo",      pct:38 },
   ]);
   const [qtdRep, setQtdRep] = useState(orcBase?.repeticao ? (orcBase?.nUnidades || 2) : 0);
+  const [editandoRep, setEditandoRep] = useState(false);
   const [etapasIsoladas, setEtapasIsoladas] = useState(new Set(orcBase?.etapasIsoladas || []));
   const [incluiArq,        setIncluiArq]        = useState(orcBase?.incluiArq        !== false);
   const [incluiEng,        setIncluiEng]        = useState(orcBase?.incluiEng        !== false);
@@ -1568,38 +1569,34 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 </label>
               ))}
               {tipoProjeto !== "Conj. Comercial" && (
-                <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}
-                  onClick={() => setQtdRep(qtdRep > 0 ? 0 : 2)}>
-                  <span style={{
-                    position:"relative", display:"inline-block",
-                    width:36, height:20, borderRadius:10, flexShrink:0,
-                    background: qtdRep > 0 ? "#111" : "#d1d5db",
-                    transition:"background 0.2s", cursor:"pointer",
-                  }}>
-                    <span style={{
-                      position:"absolute", top:3, left: qtdRep > 0 ? 19 : 3,
-                      width:14, height:14, borderRadius:"50%",
-                      background:"#fff", transition:"left 0.2s",
-                      boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
-                    }} />
-                  </span>
-                  <span style={{ fontSize:13, color: qtdRep > 0 ? "#111" : "#828a98", fontWeight: qtdRep > 0 ? 600 : 400, transition:"color 0.2s" }}>
-                    Repetição{qtdRep > 0 ? ` ${qtdRep}×` : ""}
-                  </span>
-                </label>
+                <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:8, borderLeft:"1px solid #e5e7eb" }}>
+                  <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
+                  <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+                    onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
+                  {editandoRep ? (
+                    <input
+                      autoFocus
+                      type="number" min="0"
+                      defaultValue={qtdRep}
+                      onBlur={e => { const v = parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); }}
+                      onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); } }}
+                      style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit" }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => setEditandoRep(true)}
+                      title="Clique para digitar"
+                      style={{ fontSize:13, fontWeight: qtdRep > 0 ? 700 : 400, minWidth:16, textAlign:"center", color: qtdRep > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
+                      {qtdRep}
+                    </span>
+                  )}
+                  <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+                    onClick={() => setQtdRep(n => n + 1)}>+</button>
+                </div>
               )}
             </div>
 
-            {qtdRep > 0 && tipoProjeto !== "Conj. Comercial" && (
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                <span style={{ fontSize:12, color:"#374151", fontWeight:600 }}>Unidades:</span>
-                <button style={{ width:24, height:24, borderRadius:5, border:"1px solid #888", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
-                  onClick={() => setQtdRep(n => Math.max(2, n - 1))}>−</button>
-                <span style={{ minWidth:24, textAlign:"center", fontSize:14, fontWeight:700, color:"#111" }}>{qtdRep}</span>
-                <button style={{ width:24, height:24, borderRadius:5, border:"1px solid #888", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
-                  onClick={() => setQtdRep(n => n + 1)}>+</button>
-              </div>
-            )}
+
 
             {Object.entries(configAtual.grupos).filter(([grupo]) => {
                 const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
