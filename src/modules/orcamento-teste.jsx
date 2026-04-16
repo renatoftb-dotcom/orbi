@@ -1345,29 +1345,29 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const C = {
     wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", minHeight:"100vh", padding:"24px 20px", position:"relative" },
-    fieldBox:   { background:"#eceef2", border:"2px solid #8a929f", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
+    fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
-    input:      { width:"100%", border:"2px solid #8a929f", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
+    input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
     dropWrap:   { position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:6 },
     dropLbl:    { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center" },
-    dropBtn:    (open) => ({ display:"flex", alignItems:"center", gap:6, background:"#fff", border:`2px solid ${open?"#111":"#8a929f"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, }),
+    dropBtn:    (open) => ({ display:"flex", alignItems:"center", gap:6, background:"#fff", border:`1px solid ${open?"#111":"#333"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, }),
     dropBtnTxt: (val) => ({ flex:1, textAlign:"center", color: val ? "#111" : "#828a98" }),
     chevron:    (open) => ({ transition:"transform 0.15s", transform: open ? "rotate(180deg)" : "none", display:"flex", alignItems:"center" }),
-    dropPanel:  { position:"fixed", zIndex:9999, background:"#fff", border:"2px solid #8a929f", borderRadius:10, boxShadow:"0 4px 20px rgba(0,0,0,0.15)", minWidth:160, overflow:"hidden" },
+    dropPanel:  { position:"fixed", zIndex:9999, background:"#fff", border:"1px solid #333", borderRadius:10, boxShadow:"0 4px 16px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden" },
     dropItem:   (sel) => ({ padding:"10px 16px", fontSize:14, cursor:"pointer", color:"#374151", background: sel ? "#eceef2" : "#fff", fontWeight: sel ? 600 : 400, borderBottom:"1px solid #c8cdd6" }),
     groupHdr:   { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12 },
     sep:        { width:1, background:"#c8cdd6", alignSelf:"stretch", marginTop:22 },
-    btnDefinir: { width:"100%", maxWidth:380, background:"#fff", border:"2px solid #8a929f", borderRadius:10, padding:"13px 0", fontSize:14, color:"#374151", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
+    btnDefinir: { width:"100%", maxWidth:380, background:"#fff", border:"1px solid #333", borderRadius:10, padding:"13px 0", fontSize:14, color:"#374151", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
     aviso:      { fontSize:12, color:"#ef4444", textAlign:"center", marginTop:8 },
     comodoGrupoHdr: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:8, marginTop:20, background:"#f4f5f7", border:"1px solid #dde0e5", borderRadius:6, padding:"6px 10px", display:"inline-block" },
     comodoRow:  (ativo) => ({ display:"flex", alignItems:"center", gap:4, padding:"3px 0", borderBottom:"1px solid #c8cdd6", opacity: ativo ? 1 : 0.55 }),
     comodoNome: { flex:1, fontSize:14, color:"#374151" },
     comodoM2:   { fontSize:12, color:"#828a98", width:70, textAlign:"right", whiteSpace:"nowrap" },
     qtdWrap:    { display:"flex", alignItems:"center", gap:8 },
-    qtdBtn:     { width:26, height:26, borderRadius:6, border:"2px solid #8a929f", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
+    qtdBtn:     { width:26, height:26, borderRadius:6, border:"1px solid #333", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
     qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#828a98" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
-    resumoBox:  { background:"#fff", border:"2px solid #8a929f", borderRadius:12, padding:"20px 20px" },
+    resumoBox:  { background:"#fff", border:"1px solid #333", borderRadius:12, padding:"20px 20px" },
     resumoHdr:  { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:16, paddingBottom:12, borderBottom:"1px solid #c8cdd6" },
     resumoSec:  { fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
     resumoVal:  { fontSize:18, fontWeight:700, color:"#111" },
@@ -1462,8 +1462,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       {/* ── Identificação ── */}
       <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:32 }}>
         <div>
-          <span style={C.fieldLabel}>Cliente</span>
-          <div style={C.fieldBox}>{clienteNome || "—"}</div>
+          <div style={{ fontSize:20, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
         </div>
         <div>
           <span style={C.fieldLabel}>Referência</span>
@@ -1563,7 +1562,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             </div>
 
             {tipoProjeto !== "Conj. Comercial" && (
-              <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#f4f5f7", border:"2px solid #8a929f", borderRadius:8, marginBottom:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#f4f5f7", border:"1px solid #333", borderRadius:8, marginBottom:12 }}>
                 <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", flex:1 }}>
                   <input type="checkbox" checked={!!qtdRep} onChange={e => setQtdRep(e.target.checked ? 2 : 0)} />
                   <span style={{ fontSize:13, color:"#374151", fontWeight:600 }}>Repetição de unidades</span>
@@ -1571,10 +1570,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 </label>
                 {!!qtdRep && (
                   <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <button style={{ width:28, height:28, borderRadius:6, border:"2px solid #8a929f", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
+                    <button style={{ width:28, height:28, borderRadius:6, border:"1px solid #333", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
                       onClick={() => setQtdRep(n => Math.max(2, n - 1))}>−</button>
                     <span style={{ minWidth:28, textAlign:"center", fontSize:14, fontWeight:700, color:"#111" }}>{qtdRep}</span>
-                    <button style={{ width:28, height:28, borderRadius:6, border:"2px solid #8a929f", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
+                    <button style={{ width:28, height:28, borderRadius:6, border:"1px solid #333", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
                       onClick={() => setQtdRep(n => n + 1)}>+</button>
                   </div>
                 )}
