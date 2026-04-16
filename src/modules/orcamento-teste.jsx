@@ -1350,7 +1350,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
     dropWrap:   { position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:6 },
     dropLbl:    { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center" },
-    dropBtn:    (open) => ({ display:"flex", alignItems:"center", gap:6, background:"#fff", border:`1px solid ${open?"#111":"#333"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, }),
+    dropBtn:    (open, hasVal) => ({ display:"flex", alignItems:"center", gap:6, background: hasVal&&!open?"#fff":"#fff", border:`1px solid ${open?"#111": hasVal?"#c0c5cf":"#333"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, }),
     dropBtnTxt: (val) => ({ flex:1, textAlign:"center", color: val ? "#111" : "#828a98" }),
     chevron:    (open) => ({ transition:"transform 0.15s", transform: open ? "rotate(180deg)" : "none", display:"flex", alignItems:"center" }),
     dropPanel:  { position:"fixed", zIndex:9999, background:"#fff", border:"1px solid #333", borderRadius:10, boxShadow:"0 4px 16px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden" },
@@ -1385,7 +1385,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       <div style={{ position:"relative" }} key={id}>
         <button
           ref={el => { btnRef.current = el; }}
-          style={{ ...C.dropBtn(open), background: val ? "#f4f5f7" : "#fff" }}
+          style={{ ...C.dropBtn(open, !!val), background: val ? "#f4f5f7" : "#fff" }}
           onClick={(e) => {
             if (open) { setAberto(null); return; }
             const r = e.currentTarget.getBoundingClientRect();
@@ -1458,6 +1458,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   return (
     <div style={C.wrap} ref={wrapRef}>
+
+      {/* ── Botão Voltar ── */}
+      <div style={{ marginBottom:16 }}>
+        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:"0", fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:4 }}>
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          Voltar
+        </button>
+      </div>
 
       {/* ── Identificação ── */}
       <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:32 }}>
@@ -1559,24 +1567,37 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   </span>
                 </label>
               ))}
+              {tipoProjeto !== "Conj. Comercial" && (
+                <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}
+                  onClick={() => setQtdRep(qtdRep > 0 ? 0 : 2)}>
+                  <span style={{
+                    position:"relative", display:"inline-block",
+                    width:36, height:20, borderRadius:10, flexShrink:0,
+                    background: qtdRep > 0 ? "#111" : "#d1d5db",
+                    transition:"background 0.2s", cursor:"pointer",
+                  }}>
+                    <span style={{
+                      position:"absolute", top:3, left: qtdRep > 0 ? 19 : 3,
+                      width:14, height:14, borderRadius:"50%",
+                      background:"#fff", transition:"left 0.2s",
+                      boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
+                    }} />
+                  </span>
+                  <span style={{ fontSize:13, color: qtdRep > 0 ? "#111" : "#828a98", fontWeight: qtdRep > 0 ? 600 : 400, transition:"color 0.2s" }}>
+                    Repetição{qtdRep > 0 ? ` ${qtdRep}×` : ""}
+                  </span>
+                </label>
+              )}
             </div>
 
-            {tipoProjeto !== "Conj. Comercial" && (
-              <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#f4f5f7", border:"1px solid #333", borderRadius:8, marginBottom:12 }}>
-                <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", flex:1 }}>
-                  <input type="checkbox" checked={!!qtdRep} onChange={e => setQtdRep(e.target.checked ? 2 : 0)} />
-                  <span style={{ fontSize:13, color:"#374151", fontWeight:600 }}>Repetição de unidades</span>
-                  {!!qtdRep && <span style={{ fontSize:12, color:"#7c3aed", marginLeft:4 }}>{qtdRep}×</span>}
-                </label>
-                {!!qtdRep && (
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <button style={{ width:28, height:28, borderRadius:6, border:"1px solid #333", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
-                      onClick={() => setQtdRep(n => Math.max(2, n - 1))}>−</button>
-                    <span style={{ minWidth:28, textAlign:"center", fontSize:14, fontWeight:700, color:"#111" }}>{qtdRep}</span>
-                    <button style={{ width:28, height:28, borderRadius:6, border:"1px solid #333", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
-                      onClick={() => setQtdRep(n => n + 1)}>+</button>
-                  </div>
-                )}
+            {qtdRep > 0 && tipoProjeto !== "Conj. Comercial" && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <span style={{ fontSize:12, color:"#374151", fontWeight:600 }}>Unidades:</span>
+                <button style={{ width:24, height:24, borderRadius:5, border:"1px solid #888", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
+                  onClick={() => setQtdRep(n => Math.max(2, n - 1))}>−</button>
+                <span style={{ minWidth:24, textAlign:"center", fontSize:14, fontWeight:700, color:"#111" }}>{qtdRep}</span>
+                <button style={{ width:24, height:24, borderRadius:5, border:"1px solid #888", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
+                  onClick={() => setQtdRep(n => n + 1)}>+</button>
               </div>
             )}
 
@@ -1611,7 +1632,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         return (
                           <div key={key} style={{ position:"relative" }}>
                             <button
-                              style={{ ...C.dropBtn(open), minWidth:80, background: val ? "#f4f5f7" : "#fff", padding:"5px 10px" }}
+                              style={{ ...C.dropBtn(open, !!val), minWidth:80, background: val ? "#f4f5f7" : "#fff", padding:"5px 10px" }}
                               onClick={e => {
                                 e.stopPropagation();
                                 setAbertoGrupo(open ? null : { key: aKey, grupo, param: key });
@@ -1655,23 +1676,25 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     </>
                   ) : null}
                 </div>
-                {isGrupoAberto(grupo) && nomes.map(nome => {
-                  const q    = qtds[nome] || 0;
-                  const area = getArea(nome);
-                  const tot  = area * q;
-                  return (
-                    <div key={nome} style={C.comodoRow(q > 0)}>
-                      <span style={C.comodoNome}>{nome}</span>
-                      <span style={C.comodoM2}>{area > 0 ? fmtNum(area)+" m²" : "—"}</span>
-                      <div style={C.qtdWrap}>
-                        <button style={C.qtdBtn} onClick={() => setQtd(nome, -1)}>−</button>
-                        <span style={C.qtdNum(q)}>{q}</span>
-                        <button style={C.qtdBtn} onClick={() => setQtd(nome, +1)}>+</button>
-                      </div>
-                      <span style={C.qtdM2Tot}>{tot > 0 ? fmtNum(tot)+" m²" : ""}</span>
-                    </div>
-                  );
-                })}
+                {isGrupoAberto(grupo) && (
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 16px" }}>
+                    {nomes.map(nome => {
+                      const q    = qtds[nome] || 0;
+                      const area = getArea(nome);
+                      return (
+                        <div key={nome} style={{ ...C.comodoRow(q > 0), gap:6 }}>
+                          <span style={{ ...C.comodoNome, fontSize:13 }}>{nome}</span>
+                          <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+                            <button style={{ ...C.qtdBtn, width:22, height:22, fontSize:14 }} onClick={() => setQtd(nome, -1)}>−</button>
+                            <span style={{ ...C.qtdNum(q), width:18, fontSize:13 }}>{q}</span>
+                            <button style={{ ...C.qtdBtn, width:22, height:22, fontSize:14 }} onClick={() => setQtd(nome, +1)}>+</button>
+                          </div>
+                          <span style={{ ...C.comodoM2, width:56, fontSize:11 }}>{q > 0 ? fmtNum(area*q)+" m²" : area > 0 ? fmtNum(area)+" m²" : "—"}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))}
           </div>
