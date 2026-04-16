@@ -5904,6 +5904,7 @@ function TextoEditavel({ valor, onChange, style={}, multiline=false, placeholder
 // (não quando recebe de volta o próprio valor commitado).
 function TextareaControlado({ valor, onCommit, placeholder="", style={}, minHeight=60 }) {
   const [local, setLocal] = useState(valor || "");
+  const [focado, setFocado] = useState(false);
   const ultimoExterno = useRef(valor || "");
   useEffect(() => {
     const externo = valor || "";
@@ -5916,13 +5917,15 @@ function TextareaControlado({ valor, onCommit, placeholder="", style={}, minHeig
     <textarea
       value={local}
       onChange={e => setLocal(e.target.value)}
+      onFocus={() => setFocado(true)}
       onBlur={() => {
+        setFocado(false);
         if (local !== (valor || "")) {
           ultimoExterno.current = local;
           onCommit(local);
         }
       }}
-      placeholder={placeholder}
+      placeholder={focado ? "" : placeholder}
       style={{ width:"100%", fontSize:13, color:"#6b7280", fontFamily:"inherit", lineHeight:1.7,
         border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
         resize:"vertical", minHeight, boxSizing:"border-box", background:"#f5f6f8", ...style }}
@@ -5933,6 +5936,7 @@ function TextareaControlado({ valor, onCommit, placeholder="", style={}, minHeig
 // Input single-line com mesmo visual/comportamento do TextareaControlado
 function InputControlado({ valor, onCommit, placeholder="", style={} }) {
   const [local, setLocal] = useState(valor || "");
+  const [focado, setFocado] = useState(false);
   const ultimoExterno = useRef(valor || "");
   useEffect(() => {
     const externo = valor || "";
@@ -5946,14 +5950,16 @@ function InputControlado({ valor, onCommit, placeholder="", style={} }) {
       type="text"
       value={local}
       onChange={e => setLocal(e.target.value)}
+      onFocus={() => setFocado(true)}
       onBlur={() => {
+        setFocado(false);
         if (local !== (valor || "")) {
           ultimoExterno.current = local;
           onCommit(local);
         }
       }}
       onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
-      placeholder={placeholder}
+      placeholder={focado ? "" : placeholder}
       style={{ fontSize:13, color:"#111", fontFamily:"inherit", fontWeight:600,
         border:"1px solid #c8cdd6", borderRadius:6, padding:"4px 10px", outline:"none",
         boxSizing:"border-box", background:"#f5f6f8", ...style }}
