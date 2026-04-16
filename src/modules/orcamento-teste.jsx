@@ -1203,6 +1203,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     return () => document.removeEventListener("mousedown", h);
   }, [aberto, abertoGrupo]);
 
+  // Reposiciona o painel dropdown ao fazer scroll/resize (para grudar no botão)
+  useEffect(() => {
+    if (!aberto) return;
+    const reposicionar = () => {
+      const btn = document.querySelector(`[data-drop-btn="${aberto}"]`);
+      if (btn) {
+        const r = btn.getBoundingClientRect();
+        setPanelPos({ top: r.bottom + 6, left: r.left });
+      }
+    };
+    window.addEventListener("scroll", reposicionar, true);
+    window.addEventListener("resize", reposicionar);
+    return () => {
+      window.removeEventListener("scroll", reposicionar, true);
+      window.removeEventListener("resize", reposicionar);
+    };
+  }, [aberto]);
+
   const OPCOES = {
     tipoObra:    ["Construção nova", "Reforma"],
     tipoProjeto: ["Residencial", "Clínica", "Conj. Comercial", "Galpão", "Empreendimento"],
@@ -1498,11 +1516,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       <div style={{ position:"relative" }} key={id}>
         <button
           ref={el => { btnRef.current = el; }}
+          data-drop-btn={id}
           style={{ ...C.dropBtn(open, !!val), background: val ? "#f4f5f7" : "#fff" }}
           onClick={(e) => {
             if (open) { setAberto(null); return; }
             const r = e.currentTarget.getBoundingClientRect();
-            setPanelPos({ top: r.bottom + window.scrollY + 6, left: r.left + window.scrollX });
+            setPanelPos({ top: r.bottom + 6, left: r.left });
             setAberto(id);
           }}>
           <span style={C.dropBtnTxt(val)}>
