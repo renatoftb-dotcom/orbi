@@ -921,7 +921,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   ];
 
   const naoInclDefault = [
-    ...(!incluiEng || (temIsoladasPdf && !idsIsoladosPdf.has(5)) ? ["Projetos de Engenharia (Estrutural · Elétrico · Hidrossanitário)"] : []),
+    ...(!incluiEng ? ["Projetos de Engenharia (Estrutural · Elétrico · Hidrossanitário)"] : []),
     "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
     "Projetos de climatização","Projeto de prevenção de incêndio","Projeto de automação",
     "Projeto de paisagismo","Projeto de interiores","Projeto de Marcenaria (Móveis internos)",
@@ -933,7 +933,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   ];
 
   const isPadrao = (orc.tipoPagamento || "padrao") !== "etapas";
-  const mostrarPrazoEng = incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5));
+  const mostrarPrazoEng = incluiEng;
   const prazoDefault = isPadrao
     ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar.",
        ...(mostrarPrazoEng ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : [])]
@@ -954,7 +954,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     const blocos = escopoBase.filter((bloco, i) => {
       const etId = bloco.etapaId || (i + 1);
       const isEng = bloco.isEng || (i === 4 && !orc.escopoEditado);
-      if (isEng) return incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5));
+      if (isEng) return incluiEng;
       if (!incluiArq) return false;
       if (temIsoladasPdf && !idsIsoladosPdf.has(etId) && !bloco.custom) return false;
       if (!etapasAtivas.has(etId) && !bloco.custom) return false;

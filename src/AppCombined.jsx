@@ -4023,7 +4023,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   ];
 
   const naoInclDefault = [
-    ...(!incluiEng || (temIsoladasPdf && !idsIsoladosPdf.has(5)) ? ["Projetos de Engenharia (Estrutural · Elétrico · Hidrossanitário)"] : []),
+    ...(!incluiEng ? ["Projetos de Engenharia (Estrutural · Elétrico · Hidrossanitário)"] : []),
     "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
     "Projetos de climatização","Projeto de prevenção de incêndio","Projeto de automação",
     "Projeto de paisagismo","Projeto de interiores","Projeto de Marcenaria (Móveis internos)",
@@ -4035,7 +4035,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   ];
 
   const isPadrao = (orc.tipoPagamento || "padrao") !== "etapas";
-  const mostrarPrazoEng = incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5));
+  const mostrarPrazoEng = incluiEng;
   const prazoDefault = isPadrao
     ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar.",
        ...(mostrarPrazoEng ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : [])]
@@ -4056,7 +4056,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     const blocos = escopoBase.filter((bloco, i) => {
       const etId = bloco.etapaId || (i + 1);
       const isEng = bloco.isEng || (i === 4 && !orc.escopoEditado);
-      if (isEng) return incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5));
+      if (isEng) return incluiEng;
       if (!incluiArq) return false;
       if (temIsoladasPdf && !idsIsoladosPdf.has(etId) && !bloco.custom) return false;
       if (!etapasAtivas.has(etId) && !bloco.custom) return false;
@@ -6066,10 +6066,12 @@ function PropostaPreview({ data, onVoltar }) {
   // Compatibilidade com código que usa etapaIsoladaObj (single)
   const etapaIsoladaObj = temIsoladas ? etapasIsoladasObjs[0] : null;
   const etapasVisiveis  = (temIsoladas ? etapasPct.filter(e => idsIsolados.has(e.id)) : etapasPct).filter(e => incluiEng || e.id !== 5);
-  // totSIBase = soma dos valores proporcionais sem imposto
+  // totSIBase = % da arq das etapas isoladas + 100% da eng (se incluiEng)
   const pctTotalIsolado = etapasIsoladasObjs.reduce((s,e) => s + (e.id !== 5 ? e.pct : 0), 0);
+  const arqIsoladaSI    = temIsoladas ? Math.round(arqCI * (pctTotalIsolado / 100) * 100) / 100 : 0;
+  const engSI           = incluiEng ? engCI : 0;
   const totSIBase       = temIsoladas
-    ? Math.round(arqCI * (pctTotalIsolado / 100) * 100) / 100
+    ? Math.round((arqIsoladaSI + engSI) * 100) / 100
     : totSIEdit;
   // totCIBase = com imposto
   const totCIBase       = temIsoladas
@@ -6132,7 +6134,7 @@ function PropostaPreview({ data, onVoltar }) {
   // Escopo filtrado e renumerado
   const escopoDefault = (() => {
     const blocos = escopoState.filter(b => {
-      if (b.isEng) return incluiEng && (!temIsoladas || idsIsolados.has(5));
+      if (b.isEng) return incluiEng;
       if (!incluiArq) return false;
       if (b.etapaId === 1 && isPadrao) return false;
       if (temIsoladas && !b.isEng && !idsIsolados.has(b.etapaId) && !b.custom) return false;
@@ -6175,7 +6177,7 @@ function PropostaPreview({ data, onVoltar }) {
   ];
   // Itens dinâmicos baseados nos toggles — com sublabel menor
   const naoInclDinamicos = [
-    ...(!incluiEng || (temIsoladas && !idsIsolados.has(5)) ? [{ label:"Projetos de Engenharia", sub:"(Estrutural, Elétrico e Hidrossanitário)" }] : []),
+    ...(!incluiEng ? [{ label:"Projetos de Engenharia", sub:"(Estrutural, Elétrico e Hidrossanitário)" }] : []),
     ...(!incluiArq ? [{ label:"Projetos de Arquitetura", sub:null }] : []),
   ];
   // Normaliza tudo para { label, sub }
@@ -6224,9 +6226,9 @@ function PropostaPreview({ data, onVoltar }) {
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
-      // Quando etapa isolada, usar valores proporcionais
-      const arqTotal = temIsoladas ? totSIBase : arqEdit;
-      const engTotal = temIsoladas && !idsIsolados.has(5) ? 0 : engEdit;
+      // Quando etapa isolada, arq é proporcional, eng entra integral se incluiEng
+      const arqTotal = temIsoladas ? arqIsoladaSI : arqEdit;
+      const engTotal = incluiEng ? engEdit : 0;
       const grandTotal = temIsoladas ? totCIBase : totCIEdit;
       const engUnit = engTotal;
       const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
@@ -6244,7 +6246,7 @@ function PropostaPreview({ data, onVoltar }) {
       };
       const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
       if (resumoEdit && modelo.cliente) modelo.cliente.resumo = resumoEdit;
-      await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng && (!temIsoladas || idsIsolados.has(5)));
+      await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng);
     } catch(e) { console.error(e); alert("Erro ao gerar PDF: "+e.message); }
   };
 
@@ -6346,28 +6348,28 @@ function PropostaPreview({ data, onVoltar }) {
         </div>
         <div>
 
-          <div style={{ display:"grid", gridTemplateColumns: incluiArq && incluiEng && !temIsoladas ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns: incluiArq && incluiEng ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoArq ? (
                   <input autoFocus type="text"
                     key={arqCI}
-                    defaultValue={(temIsoladas ? totSIBase : arqCI).toFixed(2).replace(".",",")}
+                    defaultValue={(temIsoladas ? arqIsoladaSI : arqCI).toFixed(2).replace(".",",")}
                     onBlur={e => { const v = parseValorBR(e.target.value); if(v>0){ if(temIsoladas && pctTotalIsolado>0){ setArqEdit(Math.round(v/(pctTotalIsolado/100)*100)/100); } else { setArqEdit(Math.round(v*100)/100); } } setEditandoArq(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
                   <span onClick={() => setEditandoArq(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
-                    {fmtV(temIsoladas ? totSIBase : arqCI)}
+                    {fmtV(temIsoladas ? arqIsoladaSI : arqCI)}
                   </span>
                 )}
               </div>
-              <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round((temIsoladas ? totSIBase : arqCI)/areaTot*100)/100)}/m²` : ""}</div>
+              <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²` : ""}</div>
             </div>}
-            {incluiArq && incluiEng && !temIsoladas && <div style={{ background:LN }} />}
-            {incluiEng && !temIsoladas && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
+            {incluiArq && incluiEng && <div style={{ background:LN }} />}
+            {incluiEng && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}>(Opcional)</span></div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
@@ -6647,7 +6649,6 @@ function PropostaPreview({ data, onVoltar }) {
           {(prazoEdit || prazoDefault).filter(p => {
               if (p.toLowerCase().includes("engenharia")) {
                 if (!incluiEng) return false; // toggle desligado
-                if (temIsoladas && !idsIsolados.has(5)) return false; // etapas isoladas não incluem eng
               }
               return true;
             }).map((p, i) => (
