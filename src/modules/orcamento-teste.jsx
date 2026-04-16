@@ -211,6 +211,98 @@ function ResumoDetalhes({ calculo, fmtNum, C }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────
+// Helpers de edição inline — top-level para preservar identidade
+// entre re-renders e manter o foco ao clicar
+// ─────────────────────────────────────────────────────────────
+function TextoEditavel({ valor, onChange, style={}, multiline=false, placeholder="" }) {
+  const [editando, setEditando] = useState(false);
+  const [tmp, setTmp] = useState(valor);
+  if (editando) {
+    const baseStyle = { fontSize:"inherit", fontWeight:"inherit", color:"inherit", fontFamily:"inherit",
+      lineHeight:"inherit", letterSpacing:"inherit", background:"#fffde7",
+      border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none",
+      width:"100%", resize: multiline ? "vertical" : "none", boxSizing:"border-box" };
+    return multiline
+      ? <textarea autoFocus value={tmp} onChange={e=>setTmp(e.target.value)}
+          onBlur={()=>{ onChange(tmp); setEditando(false); }}
+          style={{ ...baseStyle, minHeight:60, display:"block" }} />
+      : <input autoFocus value={tmp} onChange={e=>setTmp(e.target.value)}
+          onBlur={()=>{ onChange(tmp); setEditando(false); }}
+          onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditando(false); }}
+          style={baseStyle} />;
+  }
+  return (
+    <span onClick={()=>{ setTmp(valor); setEditando(true); }}
+      title="Clique para editar"
+      style={{ cursor:"pointer", ...style }}>
+      {valor || placeholder}
+    </span>
+  );
+}
+
+// Textarea sempre visível com state local — commit apenas no blur.
+// Só sincroniza com valor externo quando ele MUDA de fora
+// (não quando recebe de volta o próprio valor commitado).
+function TextareaControlado({ valor, onCommit, placeholder="", style={}, minHeight=60 }) {
+  const [local, setLocal] = useState(valor || "");
+  const ultimoExterno = useRef(valor || "");
+  useEffect(() => {
+    const externo = valor || "";
+    if (externo !== ultimoExterno.current) {
+      ultimoExterno.current = externo;
+      setLocal(externo);
+    }
+  }, [valor]);
+  return (
+    <textarea
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => {
+        if (local !== (valor || "")) {
+          ultimoExterno.current = local;
+          onCommit(local);
+        }
+      }}
+      placeholder={placeholder}
+      style={{ width:"100%", fontSize:13, color:"#6b7280", fontFamily:"inherit", lineHeight:1.7,
+        border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
+        resize:"vertical", minHeight, boxSizing:"border-box", background:"#f5f6f8", ...style }}
+    />
+  );
+}
+
+// Input single-line com mesmo visual/comportamento do TextareaControlado
+function InputControlado({ valor, onCommit, placeholder="", style={} }) {
+  const [local, setLocal] = useState(valor || "");
+  const ultimoExterno = useRef(valor || "");
+  useEffect(() => {
+    const externo = valor || "";
+    if (externo !== ultimoExterno.current) {
+      ultimoExterno.current = externo;
+      setLocal(externo);
+    }
+  }, [valor]);
+  return (
+    <input
+      type="text"
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => {
+        if (local !== (valor || "")) {
+          ultimoExterno.current = local;
+          onCommit(local);
+        }
+      }}
+      onKeyDown={e => { if (e.key === "Enter") e.target.blur(); }}
+      placeholder={placeholder}
+      style={{ fontSize:13, color:"#111", fontFamily:"inherit", fontWeight:600,
+        border:"1px solid #c8cdd6", borderRadius:6, padding:"4px 10px", outline:"none",
+        boxSizing:"border-box", background:"#f5f6f8", ...style }}
+    />
+  );
+}
+
 function PropostaPreview({ data, onVoltar }) {
   if (!data) return null;
   const { tipoProjeto, tipoObra, padrao, tipologia, tamanho, clienteNome,
@@ -256,52 +348,6 @@ function PropostaPreview({ data, onVoltar }) {
   const [pixEdit, setPixEdit]               = useState("PIX · Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções · Banco Sicoob");
   const [labelApenasEdit, setLabelApenasEdit] = useState(null); // null = usar dinâmico
 
-  // Helper: campo de texto editável inline
-  function TextoEditavel({ valor, onChange, style={}, multiline=false, placeholder="" }) {
-    const [editando, setEditando] = useState(false);
-    const [tmp, setTmp] = useState(valor);
-    if (editando) {
-      const baseStyle = { fontSize:"inherit", fontWeight:"inherit", color:"inherit", fontFamily:"inherit",
-        lineHeight:"inherit", letterSpacing:"inherit", background:"#fffde7",
-        border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none",
-        width:"100%", resize: multiline ? "vertical" : "none", boxSizing:"border-box" };
-      return multiline
-        ? <textarea autoFocus value={tmp} onChange={e=>setTmp(e.target.value)}
-            onBlur={()=>{ onChange(tmp); setEditando(false); }}
-            style={{ ...baseStyle, minHeight:60, display:"block" }} />
-        : <input autoFocus value={tmp} onChange={e=>setTmp(e.target.value)}
-            onBlur={()=>{ onChange(tmp); setEditando(false); }}
-            onKeyDown={e=>{ if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditando(false); }}
-            style={baseStyle} />;
-    }
-    return (
-      <span onClick={()=>{ setTmp(valor); setEditando(true); }}
-        title="Clique para editar"
-        style={{ cursor:"pointer", ...style }}>
-        {valor || placeholder}
-      </span>
-    );
-  }
-
-  // Helper: textarea sempre visível com state local
-  // Evita re-render do pai a cada tecla (que causava scroll da página)
-  // Commita o valor apenas no blur.
-  function TextareaControlado({ valor, onCommit, placeholder="", style={}, minHeight=60 }) {
-    const [local, setLocal] = useState(valor || "");
-    // Se o valor externo mudar (ex: carregamento de dados), sincroniza
-    useEffect(() => { setLocal(valor || ""); }, [valor]);
-    return (
-      <textarea
-        value={local}
-        onChange={e => setLocal(e.target.value)}
-        onBlur={() => { if (local !== (valor || "")) onCommit(local); }}
-        placeholder={placeholder}
-        style={{ width:"100%", fontSize:13, color:"#6b7280", fontFamily:"inherit", lineHeight:1.7,
-          border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
-          resize:"vertical", minHeight, boxSizing:"border-box", background:"#f5f6f8", ...style }}
-      />
-    );
-  }
   const [logoPreview, setLogoPreview]       = useState(null);
 
   // Carrega logo do storage ao abrir a proposta
@@ -772,12 +818,11 @@ function PropostaPreview({ data, onVoltar }) {
         <Sec title="Escopo dos serviços" action={
           <span
             onClick={() => {
-              const num = escopoDefault.filter(b => !b.isEng).length + 1;
               const newId = Date.now();
               setEscopoState(prev => {
                 const semEng = prev.filter(b => !b.isEng);
                 const eng = prev.filter(b => b.isEng);
-                return [...semEng, { etapaId:newId, titulo:`Etapa ${num}`, objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true }, ...eng];
+                return [...semEng, { etapaId:newId, titulo:"", objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true }, ...eng];
               });
             }}
             style={{ fontSize:10, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
@@ -790,14 +835,14 @@ function PropostaPreview({ data, onVoltar }) {
             const tituloTexto = numMatch ? numMatch[2] : bloco.tituloNum;
             return (
             <div key={bloco.etapaId} style={{ marginBottom:18 }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:C, display:"flex", alignItems:"baseline", gap:0 }}>
-                  <span>{numPrefix}</span>
-                  <TextoEditavel
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6, gap:8 }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:4, flex:1, minWidth:0 }}>
+                  <span style={{ fontSize:13, fontWeight:600, color:C, whiteSpace:"nowrap" }}>{numPrefix}</span>
+                  <InputControlado
                     valor={tituloTexto}
-                    onChange={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
-                    style={{ fontSize:13, fontWeight:600, color:C }}
-                    placeholder="Nome da etapa"
+                    onCommit={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
+                    placeholder="Inserir novo escopo"
+                    style={{ flex:1, minWidth:0 }}
                   />
                 </div>
                 <span
