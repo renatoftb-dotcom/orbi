@@ -763,10 +763,23 @@ function PropostaPreview({ data, onVoltar }) {
             style={{ fontSize:10, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
               border:`1px solid ${LN}`, background:"#f3f4f6", whiteSpace:"nowrap", userSelect:"none" }}>+ bloco</span>
         }>
-          {escopoDefault.map((bloco, i) => (
+          {escopoDefault.map((bloco, i) => {
+            // Separa número (fixo) do texto (editável)
+            const numMatch = bloco.tituloNum.match(/^(\d+\.\s*)(.*)$/);
+            const numPrefix = numMatch ? numMatch[1] : "";
+            const tituloTexto = numMatch ? numMatch[2] : bloco.tituloNum;
+            return (
             <div key={bloco.etapaId} style={{ marginBottom:18 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:C }}>{bloco.tituloNum}</div>
+                <div style={{ fontSize:13, fontWeight:600, color:C, display:"flex", alignItems:"baseline", gap:0 }}>
+                  <span>{numPrefix}</span>
+                  <TextoEditavel
+                    valor={tituloTexto}
+                    onChange={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
+                    style={{ fontSize:13, fontWeight:600, color:C }}
+                    placeholder="Nome da etapa"
+                  />
+                </div>
                 <span
                   onClick={() => setEscopoState(prev => prev.filter(b => b.etapaId !== bloco.etapaId))}
                   title="Remover bloco"
@@ -868,7 +881,8 @@ function PropostaPreview({ data, onVoltar }) {
               )}
               {i < escopoDefault.length-1 && <div style={{ borderBottom:`0.5px solid ${LN}`, marginTop:14 }} />}
             </div>
-          ))}
+            );
+          })}
 
         </Sec>
 

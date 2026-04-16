@@ -70,6 +70,7 @@ export default function ModuloClientesFornecedores() {
   const [escritorioKey, setEscritorioKey]     = useState(0);
   const [sidebarAberta, setSidebarAberta]     = useState(true);
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
+  const [backendOffline, setBackendOffline]   = useState(false);
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
 
@@ -83,8 +84,16 @@ export default function ModuloClientesFornecedores() {
   function handleLogout() { clearAuth(); setUsuario(null); setToken(null); setAutenticado(false); setData(null); }
 
   async function loadData() {
-    try { const saved = await loadAllData(); setData(saved); }
-    catch(e) { console.error("Erro:", e); setData(SEED); }
+    try {
+      const saved = await loadAllData();
+      setData(saved);
+      setBackendOffline(false);
+    }
+    catch(e) {
+      console.error("Erro ao carregar dados do servidor:", e);
+      setData(SEED);
+      setBackendOffline(true);
+    }
     setLoading(false);
   }
 
@@ -93,12 +102,16 @@ export default function ModuloClientesFornecedores() {
     setData(newData);
     try {
       await saveAllData(newData, oldData);
+      setBackendOffline(false);
       if (!opts.skipReload) {
         const fresh = await loadAllData();
         setData(fresh);
       }
     }
-    catch(e) { console.error("Erro ao salvar:", e); }
+    catch(e) {
+      console.error("Erro ao salvar:", e);
+      setBackendOffline(true);
+    }
   }
 
   function exportarDados() {
@@ -217,6 +230,17 @@ export default function ModuloClientesFornecedores() {
             </button>
           </div>
         </div>
+        {backendOffline && (
+          <div style={{ background:"#fef2f2", borderBottom:"1px solid #fecaca", padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+            <div style={{ fontSize:12, color:"#991b1b" }}>
+              <span style={{ fontWeight:600 }}>⚠ Servidor indisponível</span>
+              <span style={{ marginLeft:8, color:"#b91c1c" }}>— trabalhando no modo offline. Alterações não serão salvas até o servidor voltar.</span>
+            </div>
+            <button onClick={loadData} style={{ background:"#fff", color:"#991b1b", border:"1px solid #fca5a5", borderRadius:6, padding:"4px 12px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+              Tentar reconectar
+            </button>
+          </div>
+        )}
         <div style={{ flex:1, overflowY:"auto" }}>
           <>
           {orcamentoTelaCheia ? (

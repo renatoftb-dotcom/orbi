@@ -331,75 +331,18 @@ var fmtA  = (v, dec=2) => (v||0).toLocaleString("pt-BR",{minimumFractionDigits:d
 
 // ═══════════════════════════════════════════════════════════════
 // SEED DATA
+// Fallback vazio usado apenas quando o backend está offline.
+// Dados reais vêm exclusivamente do banco via loadAllData().
 // ═══════════════════════════════════════════════════════════════
 var SEED = {
-  "clientes": [
-    {"id":"c1","tipo":"PF","nome":"Ricardo Almeida","cpfCnpj":"123.456.789-00","email":"ricardo@email.com","cep":"01310-100","logradouro":"Av. Paulista","numero":"1000","complemento":"Apto 52","bairro":"Bela Vista","cidade":"São Paulo","estado":"SP","contatos":[{"id":"ct1","nome":"Ricardo","telefone":"(11) 99234-5678","cargo":"Proprietário","whatsapp":true}],"observacoes":"Cliente VIP, obras de alto padrão.","ativo":true,"desde":"2023-05-10","servicos":{"projeto":true,"acompanhamentoObra":true,"gestaoObra":false,"empreendimento":false}},
-    {"id":"c2","tipo":"PJ","nome":"Construtora Horizonte Ltda","cpfCnpj":"12.345.678/0001-90","email":"contato@horizonte.com","cep":"01310-200","logradouro":"Av. Paulista","numero":"1200","complemento":"Sala 301","bairro":"Bela Vista","cidade":"São Paulo","estado":"SP","contatos":[{"id":"ct2","nome":"Ana Souza","telefone":"(11) 3456-7890","cargo":"Diretora","whatsapp":false},{"id":"ct3","nome":"Carlos Lima","telefone":"(11) 98765-4321","cargo":"Engenheiro","whatsapp":true}],"observacoes":"Incorporadora com foco em alto padrão comercial.","ativo":true,"desde":"2022-01-15","servicos":{"projeto":true,"acompanhamentoObra":false,"gestaoObra":false,"empreendimento":false}},
-    {"id":"0dqq9g5","tipo":"PF","nome":"Renato Fernandes Teixeira de Barros","cpfCnpj":"29796602806","email":"renatoftb@gmail.com","cep":"19910090","logradouro":"Rua Sebastião Simeão de Souza","numero":"205","complemento":"Casa 06","bairro":"Jardim Santa Fé","cidade":"Ourinhos","estado":"SP","contatos":[{"id":"llu6djh","nome":"Renato Fernandes Teixeira de Barros","telefone":"14998528593","cargo":"Marido","whatsapp":true}],"observacoes":"","ativo":true,"desde":"2026-03-09","servicos":{"projeto":true,"acompanhamentoObra":false,"gestaoObra":false,"empreendimento":false}},
-    {"id":"2wbid3d","tipo":"PF","nome":"Rodrigo Redondo","cpfCnpj":"29796602806","email":"renatoftb@gmail.com","cep":"19910090","logradouro":"Rua Sebastião Simeão de Souza","numero":"205","complemento":"Casa 06","bairro":"Jardim Santa Fé","cidade":"Ourinhos","estado":"SP","contatos":[{"id":"2ublk9f","nome":"Renato Barros","telefone":"14998528593","cargo":"Prestador de serviços","whatsapp":true}],"observacoes":"Médico","ativo":true,"desde":"2026-03-11","servicos":{"projeto":true,"acompanhamentoObra":false,"gestaoObra":false,"empreendimento":false}},
-    {"id":"0lfdgf0","tipo":"PF","nome":"Talita Melo","cpfCnpj":"29796602806","email":"","cep":"","logradouro":"","numero":"","complemento":"","bairro":"","cidade":"","estado":"SP","contatos":[{"id":"v8l4y2h","nome":"Talita Melo","telefone":"14998528593","cargo":"Clinete","whatsapp":false}],"observacoes":"","ativo":true,"desde":"2026-03-27","servicos":{"projeto":true,"acompanhamentoObra":false,"gestaoObra":false,"empreendimento":false}},
-    {"id":"h6d5p5e","tipo":"PF","nome":"Rodrigo Macedo","cpfCnpj":"29796602806","email":"","cep":"","logradouro":"","numero":"","complemento":"","bairro":"","cidade":"","estado":"SP","contatos":[{"id":"4ifddtz","nome":"Rodrigo Macedo","telefone":"14998528593","cargo":"Cliente","whatsapp":true}],"observacoes":"","ativo":true,"desde":"2026-03-28","servicos":{"projeto":false,"acompanhamentoObra":false,"gestaoObra":false,"empreendimento":false}}
-  ],
-  "fornecedores": [
-    {"id":"f1","nome":"Leroy Merlin","cnpj":"00.000.001/0001-00","email":"compras@leroy.com","telefone":"(11) 3000-1000","categorias":["Geral","Ferramentas","Acabamento"],"prazoEntrega":3,"condicoesPagamento":"30/60/90 dias","rating":4,"contatos":[{"id":"cf1","nome":"Vendas","telefone":"(11) 3000-1001","cargo":"Vendas","whatsapp":false}],"observacoes":"Bom para material de acabamento e ferramentas.","ativo":true,"historicoPrecosIds":["m1","m3"]},
-    {"id":"f2","nome":"Votorantim Cimentos","cnpj":"00.000.002/0001-00","email":"vendas@votorantim.com","telefone":"(11) 3000-2000","categorias":["Cimento","Concreto","Agregados"],"prazoEntrega":5,"condicoesPagamento":"28 dias","rating":5,"contatos":[{"id":"cf2","nome":"João Pedro","telefone":"(11) 99000-1111","cargo":"Representante","whatsapp":true}],"observacoes":"Melhor fornecedor de cimento.","ativo":true,"historicoPrecosIds":["m1"]},
-    {"id":"f3","nome":"Elgin Materiais","cnpj":"00.000.003/0001-00","email":"elgin@email.com","telefone":"(11) 3000-3000","categorias":["Elétrico","Hidráulico"],"prazoEntrega":2,"condicoesPagamento":"À vista 5% desconto / 30 dias","rating":3,"contatos":[{"id":"cf3","nome":"Suporte","telefone":"(11) 3000-3001","cargo":"Atendimento","whatsapp":false}],"observacoes":"Entrega rápida.","ativo":true,"historicoPrecosIds":["m5"]}
-  ],
-  "materiais": [
-    {"id":"m1","nome":"Cimento CP-II 50kg","unidade":"sc","categoria":"Cimento","ultimoPreco":42.9,"fornecedorId":"f2"},
-    {"id":"m2","nome":"Areia média","unidade":"m³","categoria":"Agregados","ultimoPreco":180,"fornecedorId":"f1"},
-    {"id":"m3","nome":"Tijolo cerâmico 9furos","unidade":"un","categoria":"Alvenaria","ultimoPreco":1.2,"fornecedorId":"f1"},
-    {"id":"m4","nome":"Ferro CA-50 10mm","unidade":"kg","categoria":"Estrutura","ultimoPreco":8.5,"fornecedorId":"f1"},
-    {"id":"m5","nome":"Fio elétrico 2,5mm","unidade":"m","categoria":"Elétrico","ultimoPreco":3.8,"fornecedorId":"f3"}
-  ],
-  "lancamentos": [
-    {"id":"l1","obraId":"o1","materialId":"m1","fornecedorId":"f2","quantidade":200,"valorUnit":42.9,"total":8580,"data":"2024-11-05","etapa":"Fundação","nf":"NF-00123","pago":true},
-    {"id":"l2","obraId":"o1","materialId":"m2","fornecedorId":"f1","quantidade":30,"valorUnit":180,"total":5400,"data":"2024-11-12","etapa":"Fundação","nf":"NF-00156","pago":true},
-    {"id":"l3","obraId":"o2","materialId":"m1","fornecedorId":"f2","quantidade":800,"valorUnit":42.9,"total":34320,"data":"2024-11-20","etapa":"Fundação","nf":"NF-00178","pago":true}
-  ],
-  "obras": [
-    {"id":"o1","nome":"Residência Almeida","clienteId":"c1","status":"Em andamento","orcamento":450000},
-    {"id":"o2","nome":"Ed. Horizonte Tower","clienteId":"c2","status":"Em andamento","orcamento":2800000}
-  ],
-  "orcamentosProjeto": [
-    {"id":"rosxc12","clienteId":"0dqq9g5","cliente":"Renato Fernandes Teixeira de Barros","whatsapp":"14998528593","tipo":"Residencial","subtipo":"Construção nova","padrao":"Alto","tipologia":"Térrea","tamanho":"Grande","precoBase":"45","repeticao":true,"nUnidades":"10","estacCoberto":true,"comodos":[{"nome":"Garagem","qtd":2},{"nome":"Hall de entrada","qtd":2},{"nome":"Sala TV","qtd":1},{"nome":"Living","qtd":1},{"nome":"Cozinha","qtd":1},{"nome":"Piscina","qtd":1},{"nome":"Suíte","qtd":2},{"nome":"Closet Suíte","qtd":2},{"nome":"Suíte Master","qtd":1}],"resultado":{"areaBruta":442.39,"areaPiscina":21,"areaTotal":552.99,"precoFinal":51342.53,"precoTotal":130923.44,"nUnidades":10,"engTotal":24623.43},"criadoEm":"2026-03-13T13:27:51.479Z"},
-    {"id":"2q5j4k4","clienteId":"c1","cliente":"Ricardo Almeida","whatsapp":"(11) 99234-5678","tipo":"Residencial","subtipo":"Construção nova","padrao":"Alto","tipologia":"Térreo","tamanho":"Médio","precoBase":45,"repeticao":false,"nUnidades":1,"comodos":[{"nome":"Garagem","qtd":2},{"nome":"Living","qtd":1},{"nome":"Piscina","qtd":1},{"nome":"Suíte","qtd":3},{"nome":"Suíte Master","qtd":1}],"resultado":{"areaBruta":240.95,"areaPiscina":15,"areaTotal":301.19,"precoFinal":26319.03,"precoTotal":26319.03,"nUnidades":1,"engTotal":14650.26},"criadoEm":"2026-03-10T22:48:27.174Z"},
-    {"id":"gozge26","clienteId":"2wbid3d","cliente":"Rodrigo Redondo","whatsapp":"14998528593","tipo":"Clínica","subtipo":"Construção nova","padrao":"Alto","tipologia":"Térreo","tamanho":"Médio","precoBase":45,"repeticao":false,"nUnidades":1,"comodos":[{"nome":"Estacionamento","qtd":2},{"nome":"Recepção","qtd":1},{"nome":"Consultórios","qtd":3},{"nome":"Salas de Procedimento","qtd":2}],"resultado":{"areaBruta":184.45,"areaPiscina":31.2,"areaTotal":230.56,"precoFinal":27872.04,"precoTotal":27872.04,"nUnidades":1,"engTotal":11405.88},"criadoEm":"2026-03-13T13:37:56.131Z","status":"ganho"},
-    {"id":"zo6bgop","clienteId":"c2","cliente":"Construtora Horizonte Ltda","whatsapp":"(11) 98765-4321","tipo":"Clínica","subtipo":"Construção nova","padrao":"Baixo","tipologia":"Térreo","tamanho":"Médio","precoBase":32,"repeticao":false,"nUnidades":1,"comodos":[{"nome":"Estacionamento","qtd":2},{"nome":"Recepção","qtd":1},{"nome":"Consultórios","qtd":3}],"resultado":{"areaBruta":181.05,"areaPiscina":31.2,"areaTotal":226.31,"precoFinal":14661.20,"precoTotal":14661.20,"nUnidades":1,"engTotal":11210.38},"criadoEm":"2026-03-12T19:00:19.912Z"},
-    {"id":"nkxbmoe","clienteId":"0dqq9g5","cliente":"Renato Fernandes Teixeira de Barros","whatsapp":"14998528593","tipo":"Galeria","subtipo":"Construção nova","padrao":"Médio","tipologia":"Térreo","tamanho":"Médio","precoBase":45,"nLojas":15,"nAncoras":3,"nApartamentos":2,"repeticao":false,"nUnidades":1,"estacCoberto":true,"comodos":[{"nome":"Área de vendas (térrea)","qtd":1},{"nome":"Mezanino","qtd":1}],"resultado":{"tipo":"Galeria","areaBruta":3285.07,"areaTotal":4106.34,"nLojas":15,"nAncoras":3,"nApartamentos":2,"precoFinal":116431.84,"precoTotal":116431.84,"engTotal":115390.75},"criadoEm":"2026-03-27T15:09:32.526Z"},
-    {"id":"hrjrq63","clienteId":"0lfdgf0","cliente":"Talita Melo","whatsapp":"","tipo":"Residencial","subtipo":"Construção nova","padrao":"Médio","tipologia":"Sobrado","tamanho":"Médio","precoBase":45,"repeticao":false,"nUnidades":1,"comodos":[{"nome":"Hall de entrada","qtd":1},{"nome":"Sala TV","qtd":1},{"nome":"Living","qtd":1},{"nome":"Escada","qtd":1}],"resultado":{"areaBruta":59.05,"areaPiscina":0,"areaTotal":73.81,"precoFinal":4683.40,"precoTotal":4683.40,"nUnidades":1,"engTotal":3690.63},"criadoEm":"2026-03-27T21:36:29.489Z","status":null},
-    {"id":"14b7hqs","clienteId":"0lfdgf0","cliente":"Talita Melo","whatsapp":"","tipo":"Clínica","subtipo":"Construção nova","padrao":"Médio","tipologia":"Sobrado","tamanho":"Médio","precoBase":32,"repeticao":false,"nUnidades":1,"comodos":[{"nome":"Estacionamento","qtd":1},{"nome":"Recepção","qtd":1},{"nome":"Wcs","qtd":1},{"nome":"Escada","qtd":1}],"resultado":{"areaBruta":92.99,"areaPiscina":0,"areaTotal":116.24,"precoFinal":6271.33,"precoTotal":6271.33,"nUnidades":1,"engTotal":5811.88},"criadoEm":"2026-03-27T22:55:11.105Z"},
-    {"id":"s9o0oai","clienteId":"0lfdgf0","cliente":"Talita Melo","whatsapp":"","tipo":"Galeria","subtipo":"Construção nova","padrao":"Médio","tipologia":"Sobrado","tamanho":"Médio","precoBase":45,"nLojas":9,"nAncoras":0,"nApartamentos":0,"repeticao":false,"nUnidades":1,"estacCoberto":true,"comodos":[{"nome":"Área de vendas (térrea)","qtd":1},{"nome":"Mezanino","qtd":1},{"nome":"Banheiro","qtd":1},{"nome":"Copa","qtd":1}],"resultado":{"tipo":"Galeria","areaBruta":709.56,"areaTotal":886.95,"nLojas":9,"nAncoras":0,"nApartamentos":0,"precoFinal":20731.35,"precoTotal":20731.35,"engTotal":36189.21},"criadoEm":"2026-03-27T22:40:49.651Z"}
-  ],
-  "escritorio": {
-    "nome": "Padovan Arquitetos",
-    "cnpj": "36.122.417/0001-74",
-    "email": "Leopadovan.arq@gmail.com",
-    "telefone": "14 99767-4200",
-    "endereco": "Rua Augusto Fernandes Alonso, 344, Jardim Paulista",
-    "cidade": "Ourinhos",
-    "estado": "SP",
-    "responsavel": "",
-    "cau": "",
-    "cpfResponsavel": "",
-    "site": "www.padovanarquitetos.com.br",
-    "instagram": "@padovan_arquitetos",
-    "banco": "Sicoob",
-    "agencia": "4399",
-    "conta": "3893-8",
-    "tipoConta": "Corrente",
-    "pixTipo": "CNPJ",
-    "pixChave": "36.122.417/0001-74",
-    "equipe": [
-      {"id":"otrfpw8","nome":"Leonardo Diba Gonçalves Padovan","cargo":"Arquiteto","email":"Leopadovan.arq@gmail.com","telefone":"14910058050","cau":"A30278-3","cpf":"25264255814","rg":"18346127","nascimento":"1975-06-17","admissao":"2010-06-22","endereco":"Rua Augusto Fernandes Alonso 344 Jardim Paulista","cidade":"Ourinhos","estado":"SP","cep":"19910090"},
-      {"id":"ixq3jhj","nome":"Victor Minucci","cargo":"Arquiteto","email":"renatoftb@gmail.com","telefone":"14998528593","cau":"452587","cpf":"29796602806","rg":"305937704","nascimento":"2026-03-05","admissao":"2026-03-12","endereco":"Rua vicente oropallo 52","cidade":"Ourinhos","estado":"SP","cep":"19910090"}
-    ],
-    "responsaveis": [
-      {"id":"iqkvj7i","nome":"Leonardo Diba Gonçalves Padovan","cau":"A30278-3","cpf":"25264255814"}
-    ]
-  },
-  "receitasFinanceiro": []
+  clientes:           [],
+  fornecedores:       [],
+  materiais:          [],
+  lancamentos:        [],
+  obras:              [],
+  orcamentosProjeto:  [],
+  escritorio:         {},
+  receitasFinanceiro: [],
 };
 
 var ESTADOS_BR = ["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"];
@@ -6478,10 +6421,23 @@ function PropostaPreview({ data, onVoltar }) {
             style={{ fontSize:10, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
               border:`1px solid ${LN}`, background:"#f3f4f6", whiteSpace:"nowrap", userSelect:"none" }}>+ bloco</span>
         }>
-          {escopoDefault.map((bloco, i) => (
+          {escopoDefault.map((bloco, i) => {
+            // Separa número (fixo) do texto (editável)
+            const numMatch = bloco.tituloNum.match(/^(\d+\.\s*)(.*)$/);
+            const numPrefix = numMatch ? numMatch[1] : "";
+            const tituloTexto = numMatch ? numMatch[2] : bloco.tituloNum;
+            return (
             <div key={bloco.etapaId} style={{ marginBottom:18 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:C }}>{bloco.tituloNum}</div>
+                <div style={{ fontSize:13, fontWeight:600, color:C, display:"flex", alignItems:"baseline", gap:0 }}>
+                  <span>{numPrefix}</span>
+                  <TextoEditavel
+                    valor={tituloTexto}
+                    onChange={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
+                    style={{ fontSize:13, fontWeight:600, color:C }}
+                    placeholder="Nome da etapa"
+                  />
+                </div>
                 <span
                   onClick={() => setEscopoState(prev => prev.filter(b => b.etapaId !== bloco.etapaId))}
                   title="Remover bloco"
@@ -6583,7 +6539,8 @@ function PropostaPreview({ data, onVoltar }) {
               )}
               {i < escopoDefault.length-1 && <div style={{ borderBottom:`0.5px solid ${LN}`, marginTop:14 }} />}
             </div>
-          ))}
+            );
+          })}
 
         </Sec>
 
@@ -8417,6 +8374,7 @@ export default function ModuloClientesFornecedores() {
   const [escritorioKey, setEscritorioKey]     = useState(0);
   const [sidebarAberta, setSidebarAberta]     = useState(true);
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
+  const [backendOffline, setBackendOffline]   = useState(false);
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
 
@@ -8430,8 +8388,16 @@ export default function ModuloClientesFornecedores() {
   function handleLogout() { clearAuth(); setUsuario(null); setToken(null); setAutenticado(false); setData(null); }
 
   async function loadData() {
-    try { const saved = await loadAllData(); setData(saved); }
-    catch(e) { console.error("Erro:", e); setData(SEED); }
+    try {
+      const saved = await loadAllData();
+      setData(saved);
+      setBackendOffline(false);
+    }
+    catch(e) {
+      console.error("Erro ao carregar dados do servidor:", e);
+      setData(SEED);
+      setBackendOffline(true);
+    }
     setLoading(false);
   }
 
@@ -8440,12 +8406,16 @@ export default function ModuloClientesFornecedores() {
     setData(newData);
     try {
       await saveAllData(newData, oldData);
+      setBackendOffline(false);
       if (!opts.skipReload) {
         const fresh = await loadAllData();
         setData(fresh);
       }
     }
-    catch(e) { console.error("Erro ao salvar:", e); }
+    catch(e) {
+      console.error("Erro ao salvar:", e);
+      setBackendOffline(true);
+    }
   }
 
   function exportarDados() {
@@ -8564,6 +8534,17 @@ export default function ModuloClientesFornecedores() {
             </button>
           </div>
         </div>
+        {backendOffline && (
+          <div style={{ background:"#fef2f2", borderBottom:"1px solid #fecaca", padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+            <div style={{ fontSize:12, color:"#991b1b" }}>
+              <span style={{ fontWeight:600 }}>⚠ Servidor indisponível</span>
+              <span style={{ marginLeft:8, color:"#b91c1c" }}>— trabalhando no modo offline. Alterações não serão salvas até o servidor voltar.</span>
+            </div>
+            <button onClick={loadData} style={{ background:"#fff", color:"#991b1b", border:"1px solid #fca5a5", borderRadius:6, padding:"4px 12px", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+              Tentar reconectar
+            </button>
+          </div>
+        )}
         <div style={{ flex:1, overflowY:"auto" }}>
           <>
           {orcamentoTelaCheia ? (
