@@ -1079,8 +1079,8 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Nome cliente + Arq à direita (label inline + valor)
   y += 10;
   sf("bold",18); stc(INK); tx(orc.cliente||"—", M, y);
-  // Valor e label "Apenas Arquitetura" só aparecem quando ambos (arq+eng) incluídos
-  if (incluiArq && incluiEng && !temIsoladasPdf) {
+  // Valor e label "Apenas Arquitetura" aparecem sempre que arq+eng estão incluídos
+  if (incluiArq && incluiEng) {
     sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
     const wArqVal = doc.getTextWidth(fmtB(arqCI));
     sf("normal",6.5); stc(INK_LT); tx("Apenas Arquitetura", W-M-wArqVal-3, y+1, {align:"right"});

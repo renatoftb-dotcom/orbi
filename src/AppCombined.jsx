@@ -4181,8 +4181,8 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Nome cliente + Arq à direita (label inline + valor)
   y += 10;
   sf("bold",18); stc(INK); tx(orc.cliente||"—", M, y);
-  // Valor e label "Apenas Arquitetura" só aparecem quando ambos (arq+eng) incluídos
-  if (incluiArq && incluiEng && !temIsoladasPdf) {
+  // Valor e label "Apenas Arquitetura" aparecem sempre que arq+eng estão incluídos
+  if (incluiArq && incluiEng) {
     sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
     const wArqVal = doc.getTextWidth(fmtB(arqCI));
     sf("normal",6.5); stc(INK_LT); tx("Apenas Arquitetura", W-M-wArqVal-3, y+1, {align:"right"});
@@ -6293,13 +6293,13 @@ function PropostaPreview({ data, onVoltar }) {
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloEdit} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
           </div>
           <div style={{ textAlign:"right" }}>
-            {incluiArq && incluiEng && !temIsoladas && (
+            {incluiArq && incluiEng && (
               <>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
                   <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
-                  <span style={{ fontSize:22, fontWeight:600, color:C }}>{fmtV(arqEdit)}</span>
+                  <span style={{ fontSize:22, fontWeight:600, color:C }}>{fmtV(temIsoladas ? arqIsoladaSI : arqEdit)}</span>
                 </div>
-                <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round(arqCI/areaTot*100)/100)}/m²` : ""}</div>
+                <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²` : ""}</div>
               </>
             )}
           </div>
