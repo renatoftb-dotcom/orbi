@@ -830,6 +830,16 @@ function PropostaPreview({ data, onVoltar }) {
                     <div style={{ fontSize:11, color:LT, marginTop:3 }}>Um item por linha</div>
                   </div>
                   <div>
+                    <div style={tag}>Entregáveis</div>
+                    <TextareaControlado
+                      valor={(bloco.entregaveis||[]).join("\n")}
+                      onCommit={v => setEscopoBloco(bloco.etapaId, "entregaveis", v.split("\n").filter(s=>s.trim()))}
+                      placeholder="Um entregável por linha..."
+                      minHeight={60}
+                    />
+                    <div style={{ fontSize:11, color:LT, marginTop:3 }}>Um entregável por linha</div>
+                  </div>
+                  <div>
                     <div style={tag}>Observação</div>
                     <TextareaControlado
                       valor={bloco.obs}
