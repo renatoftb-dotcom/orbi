@@ -5764,29 +5764,29 @@ function AreaDetalhe({ calculo, fmtNum }) {
     </div>
   );
   return (
-    <div style={{ background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" }}>
+    <div style={{ background:"#f4f5f7", border:"1px solid #dde0e5", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" }}>
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-        <span style={{ fontSize:12, color:"#9ca3af" }}>Área útil</span>
+        <span style={{ fontSize:12, color:"#828a98" }}>Área útil</span>
         <span style={{ fontSize:13, color:"#374151" }}>{fmt2(calculo.areaBruta)} m²</span>
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ fontSize:12, color:"#9ca3af" }}>Área total (+circ.)</span>
+        <span style={{ fontSize:12, color:"#828a98" }}>Área total (+circ.)</span>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{fmt2(calculo.areaTotal)} m²</span>
           <span onClick={() => setAberto(v => !v)}
-            style={{ cursor:"pointer", fontSize:11, color:"#9ca3af", userSelect:"none", lineHeight:1 }}>
+            style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none", lineHeight:1 }}>
             {aberto ? "▲" : "▼"}
           </span>
         </div>
       </div>
 
       {aberto && (
-        <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid #e5e7eb", display:"flex", flexDirection:"column", gap:5 }}>
+        <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid #c8cdd6", display:"flex", flexDirection:"column", gap:5 }}>
           {calculo.isComercial ? (<>
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
             {row(`+ ${pct(calculo.acrescimoCirk)} Circulação`, `+${fmt2(Math.round(calculo.areaBruta*calculo.acrescimoCirk*100)/100)} m²`)}
             {(calculo.blocosCom||[]).map((b,i) => (
-              <div key={i} style={{ borderTop:"1px solid #e5e7eb", marginTop:6, paddingTop:6 }}>
+              <div key={i} style={{ borderTop:"1px solid #c8cdd6", marginTop:6, paddingTop:6 }}>
                 {b.label === "Área Comum" ? (<>
                   <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, fontWeight:700, color:"#374151", marginBottom:3 }}>
                     <span>Área Comum · {fmt2(b.area1)} m²</span>
@@ -5802,14 +5802,14 @@ function AreaDetalhe({ calculo, fmtNum }) {
               </div>
             ))}
             {calculo.precoFachada > 0 && (
-              <div style={{ borderTop:"1px solid #e5e7eb", marginTop:6, paddingTop:6 }}>
+              <div style={{ borderTop:"1px solid #c8cdd6", marginTop:6, paddingTop:6 }}>
                 {row("+15% Fachada", brl(calculo.precoFachada), { bold:false })}
               </div>
             )}
-            <div style={{ borderTop:"1px solid #e5e7eb", marginTop:6, paddingTop:6 }}>
+            <div style={{ borderTop:"1px solid #c8cdd6", marginTop:6, paddingTop:6 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Engenharia <span style={{ fontSize:8, fontWeight:400, letterSpacing:0, textTransform:"none" }}>(Faixas de desconto)</span></div>
-                <span onClick={() => setEngAberto(v => !v)} style={{ cursor:"pointer", fontSize:11, color:"#9ca3af", userSelect:"none" }}>{engAberto ? "▲" : "▼"}</span>
+                <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1 }}>Engenharia <span style={{ fontSize:8, fontWeight:400, letterSpacing:0, textTransform:"none" }}>(Faixas de desconto)</span></div>
+                <span onClick={() => setEngAberto(v => !v)} style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none" }}>{engAberto ? "▲" : "▼"}</span>
               </div>
               {engAberto && calculo.faixasEng.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
@@ -5831,18 +5831,18 @@ function AreaDetalhe({ calculo, fmtNum }) {
               const vCirk = Math.round(base*(cirkReal/100)*100)/100;
               return row(`+ ${cirkReal}% Circulação e paredes`, `+${fmt2(vCirk)} m²`);
             })()}
-            <div style={{ borderTop:"1px solid #e5e7eb", marginTop:4, paddingTop:6 }}>
-              <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Índice multiplicador</div>
+            <div style={{ borderTop:"1px solid #c8cdd6", marginTop:4, paddingTop:6 }}>
+              <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Índice multiplicador</div>
               {row("Qtd de cômodos", calculo.indiceComodos.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3}))}
               {row("Padrão", calculo.indicePadrao.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1}))}
               {row("Fator multiplicar", `x${calculo.fatorMult.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3})}`, { bold:true, valColor:"#111" })}
             </div>
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, borderTop:"1px solid #e5e7eb", paddingTop:6, marginTop:2 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, borderTop:"1px solid #c8cdd6", paddingTop:6, marginTop:2 }}>
               <span style={{ color:"#6b7280" }}>Preço base</span>
               <span style={{ color:"#374151" }}>{fmt2(calculo.precoBaseVal)} × {calculo.fatorMult.toLocaleString("pt-BR",{minimumFractionDigits:3,maximumFractionDigits:3})} = {fmt2(Math.round(calculo.precoBaseVal*calculo.fatorMult*100)/100)} R$/m²</span>
             </div>
-            <div style={{ borderTop:"1px solid #e5e7eb", marginTop:4, paddingTop:6 }}>
-              <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Faixa de Desconto — Arquitetura (1ª Unidade)</div>
+            <div style={{ borderTop:"1px solid #c8cdd6", marginTop:4, paddingTop:6 }}>
+              <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>Faixa de Desconto — Arquitetura (1ª Unidade)</div>
               {calculo.faixasArqDet.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
                   <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${pct(f.desconto)} · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.precoM2*100)/100)}/m²</span>
@@ -5850,10 +5850,10 @@ function AreaDetalhe({ calculo, fmtNum }) {
                 </div>
               ))}
             </div>
-            <div style={{ borderTop:"1px solid #e5e7eb", marginTop:4, paddingTop:6 }}>
+            <div style={{ borderTop:"1px solid #c8cdd6", marginTop:4, paddingTop:6 }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:4 }}>
-                <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Engenharia <span style={{ fontSize:8, fontWeight:400, letterSpacing:0 }}>(Faixas de desconto)</span></div>
-                <span onClick={() => setEngAberto(v => !v)} style={{ cursor:"pointer", fontSize:11, color:"#9ca3af", userSelect:"none" }}>{engAberto ? "▲" : "▼"}</span>
+                <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1 }}>Engenharia <span style={{ fontSize:8, fontWeight:400, letterSpacing:0 }}>(Faixas de desconto)</span></div>
+                <span onClick={() => setEngAberto(v => !v)} style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none" }}>{engAberto ? "▲" : "▼"}</span>
               </div>
               {engAberto && calculo.faixasEng.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
@@ -5879,7 +5879,7 @@ function ResumoDetalhes({ calculo, fmtNum, C }) {
       <div style={{ ...C.resumoSec, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <span>Arquitetura</span>
         {hasRep && (
-          <span onClick={() => setRepAberto(v => !v)} style={{ cursor:"pointer", fontSize:13, color:"#9ca3af", userSelect:"none" }}>
+          <span onClick={() => setRepAberto(v => !v)} style={{ cursor:"pointer", fontSize:13, color:"#828a98", userSelect:"none" }}>
             {repAberto ? "▲" : "▼"}
           </span>
         )}
@@ -5915,8 +5915,8 @@ function ResumoDetalhes({ calculo, fmtNum, C }) {
           ))}
         </div>
       )}
-      <div style={{ marginTop:20, paddingTop:14, borderTop:"1px solid #f3f4f6" }}>
-        <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Total Geral</div>
+      <div style={{ marginTop:20, paddingTop:14, borderTop:"1px solid #dde0e5" }}>
+        <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Total Geral</div>
         <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
           <span style={{ fontSize:20, fontWeight:800, color:"#111" }}>{fmt2(calculo.precoArq + calculo.precoEng)}</span>
           <span style={C.resumoM2}>R$ {fmtNum(calculo.areaTot > 0 ? Math.round((calculo.precoArq + calculo.precoEng) / calculo.areaTot * 100) / 100 : 0)}/m²</span>
@@ -5978,7 +5978,7 @@ function PropostaPreview({ data, onVoltar }) {
     if (editando) {
       const baseStyle = { fontSize:"inherit", fontWeight:"inherit", color:"inherit", fontFamily:"inherit",
         lineHeight:"inherit", letterSpacing:"inherit", background:"#fffde7",
-        border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none",
+        border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none",
         width:"100%", resize: multiline ? "vertical" : "none", boxSizing:"border-box" };
       return multiline
         ? <textarea autoFocus value={tmp} onChange={e=>setTmp(e.target.value)}
@@ -6181,7 +6181,7 @@ function PropostaPreview({ data, onVoltar }) {
       ];
 
   const C = "#111827";
-  const LT = "#9ca3af";
+  const LT = "#828a98";
   const MD = "#6b7280";
   const LN = "#e5e7eb";
   const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
@@ -6259,7 +6259,7 @@ function PropostaPreview({ data, onVoltar }) {
             ) : (
               <button onClick={() => inputLogoRef.current?.click()}
                 style={{ height:44, padding:"0 12px", border:"1.5px dashed #d1d5db", borderRadius:6,
-                  background:"#fafafa", cursor:"pointer", fontSize:11, color:"#9ca3af", fontFamily:"inherit",
+                  background:"#f5f6f8", cursor:"pointer", fontSize:11, color:"#828a98", fontFamily:"inherit",
                   display:"flex", alignItems:"center", gap:5, whiteSpace:"nowrap" }}>
                 + Logo
               </button>
@@ -6318,7 +6318,7 @@ function PropostaPreview({ data, onVoltar }) {
         )}
 
         <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 14px" }}>
-          <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#9ca3af", fontWeight:600, whiteSpace:"nowrap" }}>Valores dos projetos</span>
+          <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#828a98", fontWeight:600, whiteSpace:"nowrap" }}>Valores dos projetos</span>
           <div style={{ flex:1, height:1, background:"#e5e7eb" }} />
           {valorEditado && (
             <button className="no-print" onClick={() => { setArqEdit(arqOriginal); setEngEdit(engOriginal); }}
@@ -6341,7 +6341,7 @@ function PropostaPreview({ data, onVoltar }) {
                     onBlur={e => { const v = parseValorBR(e.target.value); if(v>0){ if(temIsoladas && pctTotalIsolado>0){ setArqEdit(Math.round(v/(pctTotalIsolado/100)*100)/100); } else { setArqEdit(Math.round(v*100)/100); } } setEditandoArq(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoArq(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
-                      border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
+                      border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
                   <span onClick={() => setEditandoArq(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
                     {fmtV(temIsoladas ? totSIBase : arqCI)}
@@ -6361,7 +6361,7 @@ function PropostaPreview({ data, onVoltar }) {
                     onBlur={e => { const v = parseValorBR(e.target.value); setEngEdit(v>0 ? Math.round(v*100)/100 : engCI); setEditandoEng(false); }}
                     onKeyDown={e => { if(e.key==="Enter") e.target.blur(); if(e.key==="Escape") setEditandoEng(false); }}
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
-                      border:"1px solid #d1d5db", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
+                      border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
                   <span onClick={() => setEditandoEng(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
                     {fmtV(engCI)}
@@ -6477,8 +6477,8 @@ function PropostaPreview({ data, onVoltar }) {
                       onChange={e => setEscopoBloco(bloco.etapaId, "objetivo", e.target.value)}
                       placeholder="Descreva o objetivo desta etapa..."
                       style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
-                        border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", outline:"none",
-                        resize:"vertical", minHeight:60, boxSizing:"border-box", background:"#fafafa" }}
+                        border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
+                        resize:"vertical", minHeight:60, boxSizing:"border-box", background:"#f5f6f8" }}
                     />
                   </div>
                   <div>
@@ -6488,8 +6488,8 @@ function PropostaPreview({ data, onVoltar }) {
                       onChange={e => setEscopoBloco(bloco.etapaId, "itens", e.target.value.split("\n").filter(s=>s.trim()))}
                       placeholder={"Um item por linha..."}
                       style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
-                        border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", outline:"none",
-                        resize:"vertical", minHeight:80, boxSizing:"border-box", background:"#fafafa" }}
+                        border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
+                        resize:"vertical", minHeight:80, boxSizing:"border-box", background:"#f5f6f8" }}
                     />
                     <div style={{ fontSize:11, color:LT, marginTop:3 }}>Um item por linha</div>
                   </div>
@@ -6500,8 +6500,8 @@ function PropostaPreview({ data, onVoltar }) {
                       onChange={e => setEscopoBloco(bloco.etapaId, "obs", e.target.value)}
                       placeholder="Observação opcional..."
                       style={{ width:"100%", fontSize:13, color:MD, fontFamily:"inherit", lineHeight:1.7,
-                        border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", outline:"none",
-                        resize:"vertical", minHeight:40, boxSizing:"border-box", background:"#fafafa" }}
+                        border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 10px", outline:"none",
+                        resize:"vertical", minHeight:40, boxSizing:"border-box", background:"#f5f6f8" }}
                     />
                   </div>
                 </div>
@@ -6519,7 +6519,7 @@ function PropostaPreview({ data, onVoltar }) {
                       <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", [...(bloco.itens||[]), "Novo item"])}
                         title="Adicionar item"
                         style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
-                          background:"#f3f4f6", border:"1px solid #e5e7eb", lineHeight:"16px" }}>+ item</span>
+                          background:"#f3f4f6", border:"1px solid #c8cdd6", lineHeight:"16px" }}>+ item</span>
                     </div>
                     {(bloco.itens||[]).map((it,j) => (
                       <div key={j} style={{ ...bl, alignItems:"flex-start" }}>
@@ -6539,7 +6539,7 @@ function PropostaPreview({ data, onVoltar }) {
                       <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", [...(bloco.entregaveis||[]), "Novo entregável"])}
                         title="Adicionar entregável"
                         style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
-                          background:"#f3f4f6", border:"1px solid #e5e7eb", lineHeight:"16px" }}>+ item</span>
+                          background:"#f3f4f6", border:"1px solid #c8cdd6", lineHeight:"16px" }}>+ item</span>
                     </div>
                     {(bloco.entregaveis||[]).map((it,j) => (
                       <div key={j} style={{ ...bl, alignItems:"flex-start" }}>
@@ -6583,7 +6583,7 @@ function PropostaPreview({ data, onVoltar }) {
           <div style={{ marginBottom:8 }}>
             <span onClick={() => setNaoInclEdit([...(naoInclEdit||naoInclDefault), { label:"Novo item", sub:null }])}
               style={{ fontSize:11, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
-                background:"#f3f4f6", border:"1px solid #e5e7eb" }}>+ item</span>
+                background:"#f3f4f6", border:"1px solid #c8cdd6" }}>+ item</span>
           </div>
           <div style={{ fontSize:12, color:LT, fontStyle:"italic" }}>Todos os serviços não inclusos podem ser contratados como serviços adicionais.</div>
         </Sec>
@@ -7060,35 +7060,35 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const C = {
     wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", minHeight:"100vh", padding:"24px 20px", position:"relative" },
-    fieldBox:   { background:"#f5f5f5", border:"1px solid #d1d5db", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
-    fieldLabel: { fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
-    input:      { width:"100%", border:"1px solid #d1d5db", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
+    fieldBox:   { background:"#f0f1f3", border:"1.5px solid #b0b7c3", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
+    fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
+    input:      { width:"100%", border:"1.5px solid #b0b7c3", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
     dropWrap:   { position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:6 },
-    dropLbl:    { fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center" },
-    dropBtn:    (open) => ({ display:"flex", alignItems:"center", gap:6, background:"#fff", border:`1px solid ${open?"#111":"#d1d5db"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, }),
-    dropBtnTxt: (val) => ({ flex:1, textAlign:"center", color: val ? "#111" : "#9ca3af" }),
+    dropLbl:    { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center" },
+    dropBtn:    (open) => ({ display:"flex", alignItems:"center", gap:6, background:"#fff", border:`1.5px solid ${open?"#111":"#b0b7c3"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, }),
+    dropBtnTxt: (val) => ({ flex:1, textAlign:"center", color: val ? "#111" : "#828a98" }),
     chevron:    (open) => ({ transition:"transform 0.15s", transform: open ? "rotate(180deg)" : "none", display:"flex", alignItems:"center" }),
-    dropPanel:  { position:"fixed", zIndex:9999, background:"#fff", border:"1px solid #d1d5db", borderRadius:10, boxShadow:"0 4px 16px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden" },
-    dropItem:   (sel) => ({ padding:"10px 16px", fontSize:14, cursor:"pointer", color:"#374151", background: sel ? "#f5f5f5" : "#fff", fontWeight: sel ? 600 : 400, borderBottom:"1px solid #f3f4f6" }),
-    groupHdr:   { fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12 },
-    sep:        { width:1, background:"#e5e7eb", alignSelf:"stretch", marginTop:22 },
-    btnDefinir: { width:"100%", maxWidth:380, background:"#fff", border:"1px solid #d1d5db", borderRadius:10, padding:"13px 0", fontSize:14, color:"#374151", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
+    dropPanel:  { position:"fixed", zIndex:9999, background:"#fff", border:"1.5px solid #b0b7c3", borderRadius:10, boxShadow:"0 4px 20px rgba(0,0,0,0.14)", minWidth:160, overflow:"hidden" },
+    dropItem:   (sel) => ({ padding:"10px 16px", fontSize:14, cursor:"pointer", color:"#374151", background: sel ? "#efefef" : "#fff", fontWeight: sel ? 600 : 400, borderBottom:"1px solid #dde0e5" }),
+    groupHdr:   { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12 },
+    sep:        { width:1, background:"#c8cdd6", alignSelf:"stretch", marginTop:22 },
+    btnDefinir: { width:"100%", maxWidth:380, background:"#fff", border:"1.5px solid #b0b7c3", borderRadius:10, padding:"13px 0", fontSize:14, color:"#374151", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
     aviso:      { fontSize:12, color:"#ef4444", textAlign:"center", marginTop:8 },
-    comodoGrupoHdr: { fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8, marginTop:20, background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:6, padding:"6px 10px", display:"inline-block" },
-    comodoRow:  (ativo) => ({ display:"flex", alignItems:"center", gap:4, padding:"3px 0", borderBottom:"1px solid #f3f4f6", opacity: ativo ? 1 : 0.55 }),
+    comodoGrupoHdr: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:8, marginTop:20, background:"#f4f5f7", border:"1px solid #dde0e5", borderRadius:6, padding:"6px 10px", display:"inline-block" },
+    comodoRow:  (ativo) => ({ display:"flex", alignItems:"center", gap:4, padding:"3px 0", borderBottom:"1px solid #dde0e5", opacity: ativo ? 1 : 0.55 }),
     comodoNome: { flex:1, fontSize:14, color:"#374151" },
-    comodoM2:   { fontSize:12, color:"#9ca3af", width:70, textAlign:"right", whiteSpace:"nowrap" },
+    comodoM2:   { fontSize:12, color:"#828a98", width:70, textAlign:"right", whiteSpace:"nowrap" },
     qtdWrap:    { display:"flex", alignItems:"center", gap:8 },
-    qtdBtn:     { width:26, height:26, borderRadius:6, border:"1px solid #d1d5db", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
-    qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#9ca3af" }),
+    qtdBtn:     { width:26, height:26, borderRadius:6, border:"1.5px solid #a8adb8", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
+    qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#828a98" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
-    resumoBox:  { background:"#fff", border:"1px solid #d1d5db", borderRadius:12, padding:"20px 20px" },
-    resumoHdr:  { fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:16, paddingBottom:12, borderBottom:"1px solid #f3f4f6" },
+    resumoBox:  { background:"#fff", border:"1.5px solid #b0b7c3", borderRadius:12, padding:"20px 20px" },
+    resumoHdr:  { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:16, paddingBottom:12, borderBottom:"1px solid #dde0e5" },
     resumoSec:  { fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
     resumoVal:  { fontSize:18, fontWeight:700, color:"#111" },
-    resumoM2:   { fontSize:12, color:"#9ca3af", marginTop:2 },
+    resumoM2:   { fontSize:12, color:"#828a98", marginTop:2 },
     resumoLinha:{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:4 },
-    resumoArea: { background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" },
+    resumoArea: { background:"#f4f5f7", border:"1px solid #dde0e5", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" },
   };
 
   function renderStep(id) {
@@ -7100,7 +7100,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       <div style={{ position:"relative" }} key={id}>
         <button
           ref={el => { btnRef.current = el; }}
-          style={{ ...C.dropBtn(open), background: val ? "#f9fafb" : "#fff" }}
+          style={{ ...C.dropBtn(open), background: val ? "#f4f5f7" : "#fff" }}
           onClick={(e) => {
             if (open) { setAberto(null); return; }
             const r = e.currentTarget.getBoundingClientRect();
@@ -7109,13 +7109,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           }}>
           <span style={C.dropBtnTxt(val)}>
             {val
-              ? <><span style={{ color:"#9ca3af", fontWeight:400 }}>{lbl}: </span><span style={{ fontWeight:600, color:"#111" }}>{val}</span></>
-              : <span style={{ color:"#9ca3af" }}>{lbl}</span>
+              ? <><span style={{ color:"#828a98", fontWeight:400 }}>{lbl}: </span><span style={{ fontWeight:600, color:"#111" }}>{val}</span></>
+              : <span style={{ color:"#828a98" }}>{lbl}</span>
             }
           </span>
           <span style={C.chevron(open)}>
             <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-              <path d="M2 4l4 4 4-4" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              <path d="M2 4l4 4 4-4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </span>
         </button>
@@ -7270,7 +7270,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
                     }} />
                   </span>
-                  <span style={{ fontSize:13, color: val ? "#111" : "#9ca3af", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
+                  <span style={{ fontSize:13, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
                     {label}
                   </span>
                 </label>
@@ -7278,7 +7278,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             </div>
 
             {tipoProjeto !== "Conj. Comercial" && (
-              <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#f9fafb", border:"1px solid #d1d5db", borderRadius:8, marginBottom:12 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", background:"#f4f5f7", border:"1px solid #b0b7c3", borderRadius:8, marginBottom:12 }}>
                 <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", flex:1 }}>
                   <input type="checkbox" checked={!!qtdRep} onChange={e => setQtdRep(e.target.checked ? 2 : 0)} />
                   <span style={{ fontSize:13, color:"#374151", fontWeight:600 }}>Repetição de unidades</span>
@@ -7286,10 +7286,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 </label>
                 {!!qtdRep && (
                   <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <button style={{ width:28, height:28, borderRadius:6, border:"1px solid #d1d5db", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
+                    <button style={{ width:28, height:28, borderRadius:6, border:"1px solid #b0b7c3", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
                       onClick={() => setQtdRep(n => Math.max(2, n - 1))}>−</button>
                     <span style={{ minWidth:28, textAlign:"center", fontSize:14, fontWeight:700, color:"#111" }}>{qtdRep}</span>
-                    <button style={{ width:28, height:28, borderRadius:6, border:"1px solid #d1d5db", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
+                    <button style={{ width:28, height:28, borderRadius:6, border:"1px solid #b0b7c3", background:"#fff", color:"#374151", fontSize:18, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 }}
                       onClick={() => setQtdRep(n => n + 1)}>+</button>
                   </div>
                 )}
@@ -7304,8 +7304,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               <div key={grupo}>
                 <div style={{
                   display:"flex", alignItems:"center", gap:12,
-                  background: "#f9fafb",
-                  border: "1px solid #f3f4f6",
+                  background: "#f4f5f7",
+                  border: "1px solid #dde0e5",
                   borderRadius: 8,
                   padding: "8px 12px",
                   marginTop: 20, marginBottom: 10,
@@ -7313,7 +7313,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   <span onClick={() => toggleGrupo(grupo)} style={{ flex:1, fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, cursor:"pointer" }}>
                     {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                   </span>
-                  <span onClick={() => toggleGrupo(grupo)} style={{ fontSize:10, color:"#9ca3af", cursor:"pointer", userSelect:"none" }}>
+                  <span onClick={() => toggleGrupo(grupo)} style={{ fontSize:10, color:"#828a98", cursor:"pointer", userSelect:"none" }}>
                     {isGrupoAberto(grupo) ? "▲" : "▼"}
                   </span>
                   {isComercial ? (
@@ -7327,31 +7327,31 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         return (
                           <div key={key} style={{ position:"relative" }}>
                             <button
-                              style={{ ...C.dropBtn(open), minWidth:80, background: val ? "#f9fafb" : "#fff", padding:"5px 10px" }}
+                              style={{ ...C.dropBtn(open), minWidth:80, background: val ? "#f4f5f7" : "#fff", padding:"5px 10px" }}
                               onClick={e => {
                                 e.stopPropagation();
                                 setAbertoGrupo(open ? null : { key: aKey, grupo, param: key });
                               }}>
                               <span style={{ ...C.dropBtnTxt(val), fontSize:10 }}>
                                 {val
-                                  ? <><span style={{ color:"#9ca3af", fontWeight:400 }}>{labels[key]}: </span><span style={{ fontWeight:600, color:"#111" }}>{val}</span></>
-                                  : <span style={{ color:"#9ca3af" }}>{labels[key]}</span>}
+                                  ? <><span style={{ color:"#828a98", fontWeight:400 }}>{labels[key]}: </span><span style={{ fontWeight:600, color:"#111" }}>{val}</span></>
+                                  : <span style={{ color:"#828a98" }}>{labels[key]}</span>}
                               </span>
                               <span style={C.chevron(open)}>
-                                <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                                <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
                               </span>
                             </button>
                             {open && (
                               <div style={{ position:"absolute", top:"100%", left:0, zIndex:9999,
-                                background:"#fff", border:"1px solid #d1d5db", borderRadius:10,
+                                background:"#fff", border:"1px solid #b0b7c3", borderRadius:10,
                                 boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:130, overflow:"hidden", marginTop:4 }}>
                                 {(["padrao","tipologia","tamanho"].includes(key) ? { padrao:["Alto","Médio","Baixo"], tipologia:["Térreo","Sobrado"], tamanho:["Grande","Médio","Pequeno","Compacta"] }[key] : []).map(op => {
                                   const cur = (grupoParams[grupo] || {})[key];
                                   return (
                                     <div key={op}
                                       style={C.dropItem(cur === op)}
-                                      onMouseEnter={e => { if (cur !== op) e.currentTarget.style.background = "#f9fafb"; }}
-                                      onMouseLeave={e => { if (cur !== op) e.currentTarget.style.background = cur === op ? "#f5f5f5" : "#fff"; }}
+                                      onMouseEnter={e => { if (cur !== op) e.currentTarget.style.background = "#f4f5f7"; }}
+                                      onMouseLeave={e => { if (cur !== op) e.currentTarget.style.background = cur === op ? "#efefef" : "#fff"; }}
                                       onClick={e => { e.stopPropagation(); setGrupoParam(grupo, key, op); }}>
                                       {op}
                                     </div>
@@ -7408,7 +7408,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   }} fmtNum={fmtNum} C={C} />
                 </div>
                 <button
-                  style={{ width:"100%", marginTop:12, background:"#f3f4f6", color:"#111", border:"1px solid #e5e7eb", borderRadius:10, padding:"13px 0", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
+                  style={{ width:"100%", marginTop:12, background:"#f3f4f6", color:"#111", border:"1px solid #c8cdd6", borderRadius:10, padding:"13px 0", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#e5e7eb"; e.currentTarget.style.borderColor="#d1d5db"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.borderColor="#e5e7eb"; }}
                   onClick={() => setShowModal(true)}>
@@ -7450,9 +7450,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         const isPadrao = tipoPgto === "padrao";
         const arqComDesc  = Math.round(arqV*(1-descArq/100)*100)/100;
         const totComDesc  = Math.round(totCI*(1-descPacote/100)*100)/100;
-        const inpS = { width:44, textAlign:"center", border:"1px solid #e5e7eb", borderRadius:6, padding:"3px 4px", fontSize:12, fontWeight:600, outline:"none", fontFamily:"inherit", background:"#fff", color:"#111" };
+        const inpS = { width:44, textAlign:"center", border:"1px solid #c8cdd6", borderRadius:6, padding:"3px 4px", fontSize:12, fontWeight:600, outline:"none", fontFamily:"inherit", background:"#fff", color:"#111" };
         const cardSty = (sel) => ({ border:`1.5px solid ${sel?"#111":"#e5e7eb"}`, borderRadius:12, padding:"14px 16px", marginBottom:10, cursor:"pointer", background:"#fff", transition:"border-color 0.15s" });
-        const radioCircle = (sel) => ({ width:18, height:18, borderRadius:9, border:`1.5px solid ${sel?"#111":"#d1d5db"}`, background:sel?"#111":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 });
+        const radioCircle = (sel) => ({ width:18, height:18, borderRadius:9, border:`1.5px solid ${sel?"#111":"#9aa0ab"}`, background:sel?"#111":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 });
         return (
           <>
             <style>{`
@@ -7467,11 +7467,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               }}>
                 <div style={{ width:36, height:4, background:"#e5e7eb", borderRadius:2, margin:"0 auto 18px" }} />
                 <div style={{ fontSize:17, fontWeight:700, color:"#111", marginBottom:4 }}>Gerar Orçamento</div>
-                <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
+                <div style={{ fontSize:12, color:"#828a98", marginBottom:20 }}>
                   {tipoProjeto} · {tipoObra} · Padrão {padrao} · {tipologia} · Ambientes {tamanho}s
                 </div>
 
-                <div style={{ background:"#f9fafb", borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
+                <div style={{ background:"#f4f5f7", borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                     <span style={{ fontSize:12, color:"#6b7280" }}>Arquitetura</span>
                     <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{fmtV(arqV)}</span>
@@ -7490,13 +7490,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       <span style={{ fontSize:12, color:"#ef4444" }}>+{fmtV(impostoV)}</span>
                     </div>
                   </>}
-                  <div style={{ display:"flex", justifyContent:"space-between", paddingTop:10, borderTop:"1px solid #e5e7eb" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", paddingTop:10, borderTop:"1px solid #c8cdd6" }}>
                     <span style={{ fontSize:14, fontWeight:700, color:"#111" }}>Total Geral</span>
                     <span style={{ fontSize:16, fontWeight:800, color:"#111" }}>{fmtV(totCI)}</span>
                   </div>
                 </div>
 
-                <div style={{ background:"#fafafa", border:"1px solid #f0f0f0", borderRadius:12, padding:"12px 14px", marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ background:"#f5f6f8", border:"1px solid #f0f0f0", borderRadius:12, padding:"12px 14px", marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
                   <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", flex:1 }}>
                     <input type="checkbox" checked={temImposto} onChange={e=>setTemImposto(e.target.checked)} />
                     <span style={{ fontSize:13, color:"#374151", fontWeight:500 }}>Incluir Impostos</span>
@@ -7504,12 +7504,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   {temImposto && (
                     <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                       <input type="number" min="0" max="50" step="0.5" style={inpS} value={aliqImp} onChange={e=>setAliqImp(parseFloat(e.target.value)||0)} />
-                      <span style={{ fontSize:12, color:"#9ca3af" }}>%</span>
+                      <span style={{ fontSize:12, color:"#828a98" }}>%</span>
                     </div>
                   )}
                 </div>
 
-                <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:10, fontWeight:600 }}>Forma de pagamento</div>
+                <div style={{ fontSize:11, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:10, fontWeight:600 }}>Forma de pagamento</div>
 
                 <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, alignItems:"start" }}>
 
@@ -7517,13 +7517,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: isPadrao ? 12 : 0 }}>
                       <div>
                         <div style={{ fontSize:13, fontWeight:700, color:"#111" }}>Pagamento Padrão</div>
-                        <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>Antecipado ou parcelado</div>
+                        <div style={{ fontSize:11, color:"#828a98", marginTop:2 }}>Antecipado ou parcelado</div>
                       </div>
                       <div style={radioCircle(isPadrao)}>{isPadrao && <span style={{ color:"#fff", fontSize:10, fontWeight:900 }}>✓</span>}</div>
                     </div>
                     {isPadrao && (
                       <div style={{ paddingTop:12, borderTop:"1px solid #f0f0f0" }} onClick={e=>e.stopPropagation()}>
-                        <div style={{ background:"#fafafa", borderRadius:8, padding:"8px 10px", marginBottom:8 }}>
+                        <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px", marginBottom:8 }}>
                           <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Apenas Arquitetura</div>
                           <div style={{ marginBottom:5, paddingBottom:5, borderBottom:"1px solid #f0f0f0" }}>
                             <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Antecipado</div>
@@ -7540,7 +7540,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             </div>
                           </div>
                         </div>
-                        <div style={{ background:"#fafafa", borderRadius:8, padding:"8px 10px" }}>
+                        <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px" }}>
                           <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Pacote (Arq. + Eng.)</div>
                           <div style={{ marginBottom:5, paddingBottom:5, borderBottom:"1px solid #f0f0f0" }}>
                             <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Antecipado</div>
@@ -7565,14 +7565,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: !isPadrao ? 12 : 0 }}>
                       <div>
                         <div style={{ fontSize:13, fontWeight:700, color:"#111" }}>Pagamento por Etapas</div>
-                        <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>Desconto por etapa</div>
+                        <div style={{ fontSize:11, color:"#828a98", marginTop:2 }}>Desconto por etapa</div>
                       </div>
                       <div style={radioCircle(!isPadrao)}>{!isPadrao && <span style={{ color:"#fff", fontSize:10, fontWeight:900 }}>✓</span>}</div>
                     </div>
                     {!isPadrao && (
                       <div style={{ paddingTop:12, borderTop:"1px solid #f0f0f0", display:"grid", gridTemplateColumns:"1fr 1.5fr", gap:8 }} onClick={e=>e.stopPropagation()}>
                         <div>
-                          <div style={{ background:"#fafafa", borderRadius:8, padding:"8px 10px", marginBottom:8 }}>
+                          <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px", marginBottom:8 }}>
                             <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Etapa a Etapa</div>
                             <div style={{ marginBottom:5, paddingBottom:5, borderBottom:"1px solid #f0f0f0" }}>
                               <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Antecipado</div>
@@ -7589,7 +7589,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                               </div>
                             </div>
                           </div>
-                          <div style={{ background:"#fafafa", borderRadius:8, padding:"8px 10px" }}>
+                          <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px" }}>
                             <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Pacote Completo</div>
                             <div style={{ marginBottom:5, paddingBottom:5, borderBottom:"1px solid #f0f0f0" }}>
                               <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Antecipado</div>
@@ -7608,8 +7608,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           </div>
                         </div>
 
-                        <div style={{ background:"#fafafa", borderRadius:8, padding:"8px 10px" }}>
-                          <div style={{ fontSize:10, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8, fontWeight:600 }}>Etapas</div>
+                        <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px" }}>
+                          <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:8, fontWeight:600 }}>Etapas</div>
                           {(() => {
                             const totalPct = etapasPct.reduce((s,e)=>s+e.pct,0);
                             return (<>
@@ -7619,24 +7619,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                 return (
                                   <div key={et.id} style={{ display:"flex", alignItems:"center", gap:5, marginBottom:5 }}>
                                     <input
-                                      style={{ flex:1, border:"none", borderBottom:"1px solid #e5e7eb", background:"transparent", fontSize:11, color:"#374151", outline:"none", fontFamily:"inherit", padding:"1px 0", minWidth:0 }}
+                                      style={{ flex:1, border:"none", borderBottom:"1px solid #c8cdd6", background:"transparent", fontSize:11, color:"#374151", outline:"none", fontFamily:"inherit", padding:"1px 0", minWidth:0 }}
                                       value={et.nome}
                                       onChange={e=>setEtapasPct(prev=>prev.map((p,j)=>j===i?{...p,nome:e.target.value}:p))}
                                     />
                                     <div style={{ display:"flex", alignItems:"center", gap:2, flexShrink:0 }}>
                                       <input type="number" min="0" max="100"
-                                        style={{ width:40, textAlign:"center", border:"1px solid #e5e7eb", borderRadius:5, padding:"1px 4px", fontSize:11, fontWeight:600, outline:"none", fontFamily:"inherit", background:"#fff" }}
+                                        style={{ width:40, textAlign:"center", border:"1px solid #c8cdd6", borderRadius:5, padding:"1px 4px", fontSize:11, fontWeight:600, outline:"none", fontFamily:"inherit", background:"#fff" }}
                                         value={et.pct}
                                         onChange={e=>setEtapasPct(prev=>prev.map((p,j)=>j===i?{...p,pct:parseFloat(e.target.value)||0}:p))}
                                       />
-                                      <span style={{ color:"#9ca3af", fontSize:10 }}>%</span>
+                                      <span style={{ color:"#828a98", fontSize:10 }}>%</span>
                                     </div>
                                     <span style={{ color:"#374151", fontWeight:600, fontSize:10, whiteSpace:"nowrap", minWidth:72, textAlign:"right" }}>{fmtV(val)}</span>
                                     <span
                                       onClick={()=>setEtapasIsoladas(prev => { const s=new Set(prev); s.has(et.id)?s.delete(et.id):s.add(et.id); return s; })}
                                       title={etapasIsoladas.has(et.id) ? "Cancelar orçamento isolado" : "Incluir neste orçamento isolado"}
                                       style={{ cursor:"pointer", fontSize:10, flexShrink:0, width:16, height:16, borderRadius:"50%",
-                                        border:`1.5px solid ${etapasIsoladas.has(et.id)?"#111":"#d1d5db"}`,
+                                        border:`1.5px solid ${etapasIsoladas.has(et.id)?"#111":"#9aa0ab"}`,
                                         background: etapasIsoladas.has(et.id)?"#111":"transparent",
                                         display:"flex", alignItems:"center", justifyContent:"center",
                                         color: etapasIsoladas.has(et.id)?"#fff":"#d1d5db", lineHeight:1 }}>
@@ -7648,8 +7648,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                   </div>
                                 );
                               })}
-                              <div style={{ display:"flex", justifyContent:"space-between", paddingTop:5, borderTop:"1px solid #e5e7eb", marginTop:2 }}>
-                                <span style={{ fontSize:10, color: totalPct===100?"#9ca3af":"#ef4444", fontWeight:600 }}>{totalPct}%</span>
+                              <div style={{ display:"flex", justifyContent:"space-between", paddingTop:5, borderTop:"1px solid #c8cdd6", marginTop:2 }}>
+                                <span style={{ fontSize:10, color: totalPct===100?"#828a98":"#ef4444", fontWeight:600 }}>{totalPct}%</span>
                                 <span style={{ fontSize:10, fontWeight:700, color:"#111" }}>{fmtV(Math.round((temImposto&&arqV>0?Math.round(arqV/(1-aliqImp/100)*100)/100:arqV)*totalPct/100*100)/100)}</span>
                               </div>
                               {etapasIsoladas.size > 0 && (
@@ -7658,7 +7658,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                 </div>
                               )}
                               <button onClick={()=>setEtapasPct(prev=>[...prev,{id:Date.now(),nome:`Etapa ${prev.length+1}`,pct:0}])}
-                                style={{ marginTop:5, fontSize:10, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 6px", cursor:"pointer", fontFamily:"inherit", width:"100%" }}>
+                                style={{ marginTop:5, fontSize:10, color:"#374151", background:"#fff", border:"1px solid #c8cdd6", borderRadius:5, padding:"2px 6px", cursor:"pointer", fontFamily:"inherit", width:"100%" }}>
                                 + Etapa
                               </button>
                             </>);
@@ -7741,7 +7741,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   Confirmar e Gerar Orçamento
                 </button>
                 <button
-                  style={{ width:"100%", marginTop:8, background:"transparent", color:"#9ca3af", border:"none", padding:"12px 0", fontSize:14, cursor:"pointer", fontFamily:"inherit" }}
+                  style={{ width:"100%", marginTop:8, background:"transparent", color:"#828a98", border:"none", padding:"12px 0", fontSize:14, cursor:"pointer", fontFamily:"inherit" }}
                   onClick={() => setShowModal(false)}>
                   Cancelar
                 </button>
@@ -7756,7 +7756,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           position:"fixed",
           top: panelPos.top, left: panelPos.left,
           zIndex:9999,
-          background:"#fff", border:"1px solid #d1d5db", borderRadius:10,
+          background:"#fff", border:"1px solid #b0b7c3", borderRadius:10,
           boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden",
         }}>
           {(OPCOES[aberto] || []).map(op => {
@@ -7764,8 +7764,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             return (
               <div key={op}
                 style={C.dropItem(val === op)}
-                onMouseEnter={e => { if (val !== op) e.currentTarget.style.background = "#f9fafb"; }}
-                onMouseLeave={e => { if (val !== op) e.currentTarget.style.background = val === op ? "#f5f5f5" : "#fff"; }}
+                onMouseEnter={e => { if (val !== op) e.currentTarget.style.background = "#f4f5f7"; }}
+                onMouseLeave={e => { if (val !== op) e.currentTarget.style.background = val === op ? "#efefef" : "#fff"; }}
                 onClick={() => selecionar(aberto, op)}>
                 {op}
               </div>
