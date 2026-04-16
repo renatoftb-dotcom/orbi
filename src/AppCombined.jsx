@@ -6466,7 +6466,15 @@ function PropostaPreview({ data, onVoltar }) {
         <Sec title="Escopo dos serviços">
           {escopoDefault.map((bloco, i) => (
             <div key={bloco.etapaId} style={{ marginBottom:18 }}>
-              <div style={{ fontSize:13, fontWeight:600, color:C, marginBottom:6 }}>{bloco.tituloNum}</div>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:C }}>{bloco.tituloNum}</div>
+                <span
+                  onClick={() => setEscopoState(prev => prev.filter(b => b.etapaId !== bloco.etapaId))}
+                  title="Remover bloco"
+                  style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"2px 6px", borderRadius:4,
+                    border:"1px solid #e5e7eb", background:"#fafafa", lineHeight:1.4,
+                    userSelect:"none" }}>✕ remover</span>
+              </div>
               {bloco.custom ? (
                 // Bloco customizado — totalmente editável
                 <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -6562,6 +6570,17 @@ function PropostaPreview({ data, onVoltar }) {
               {i < escopoDefault.length-1 && <div style={{ borderBottom:`0.5px solid ${LN}`, marginTop:14 }} />}
             </div>
           ))}
+          <div style={{ marginTop:8 }}>
+            <span
+              onClick={() => {
+                const newId = Date.now();
+                setEscopoState(prev => [...prev, {
+                  etapaId: newId, titulo:"Novo bloco", objetivo:"", itens:[], entregaveis:[], obs:"", isEng:false, custom:true
+                }]);
+              }}
+              style={{ fontSize:11, color:LT, cursor:"pointer", padding:"4px 10px", borderRadius:6,
+                border:"1px solid #e5e7eb", background:"#f3f4f6", userSelect:"none" }}>+ adicionar bloco</span>
+          </div>
         </Sec>
 
         <Sec title="Serviços não inclusos">
