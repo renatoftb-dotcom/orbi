@@ -1213,10 +1213,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         setPanelPos({ top: r.bottom + 6, left: r.left });
       }
     };
-    window.addEventListener("scroll", reposicionar, true);
+    // capture: true captura scroll de qualquer elemento descendente
+    // (inclui containers internos com overflow:auto)
+    document.addEventListener("scroll", reposicionar, true);
     window.addEventListener("resize", reposicionar);
     return () => {
-      window.removeEventListener("scroll", reposicionar, true);
+      document.removeEventListener("scroll", reposicionar, true);
       window.removeEventListener("resize", reposicionar);
     };
   }, [aberto]);
