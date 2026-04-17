@@ -4346,51 +4346,107 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       const dPac=orc.descontoPacoteCtrt??15, pPac=orc.parcelasPacoteCtrt??8;
       const tDescP=Math.round(totCI*(1-dPac/100)*100)/100;
       nv(30);
-      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=7;
-      // Linha "De R$ X por apenas: R$ Y" — mesma linha
-      sf("normal",8.5); stc(INK_MD); tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
-      sf("bold",9); stc(INK); tx(fmtB(tDescP),W-M,y,{align:"right"});
-      y+=7;
-      // Linha de detalhes
-      sf("normal",7.5); stc(INK_LT);
+      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=9;
+
+      // Opção 1 — Antecipado com desconto
+      sf("normal",7); stc(INK_LT); tx(`Opção 1 · Pagamento antecipado com ${dPac}% de desconto`, M+2, y); y+=5;
+      const yOp1Et = y;
+      const labelOp1Et = `De ${fmtB(totCI)} por apenas:`;
+      sf("normal",8.5); stc(INK_MD); tx(labelOp1Et, M+2, yOp1Et);
+      const wLabelOp1Et = doc.getTextWidth(labelOp1Et);
+      sf("bold",10); stc(INK); tx(fmtB(tDescP), M+2+wLabelOp1Et+4, yOp1Et);
+      y = yOp1Et + 7;
+
+      // Divisória fina
+      sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F");
+      y += 4;
+
+      // Opção 2 — Parcelado (sem desconto)
+      sf("normal",7); stc(INK_LT);
+      if (pPac > 1) {
+        tx(`Opção 2 · Parcelado em ${pPac}× sem desconto`, M+2, y);
+      } else {
+        tx(`Opção 2 · À vista`, M+2, y);
+      }
+      y+=5;
+      sf("normal",8.5); stc(INK_MD);
       if (pPac > 1) {
         const parcValPac = Math.round(totCI/pPac*100)/100;
-        tx(`Desconto de ${fmtB(Math.round(totCI*dPac/100*100)/100)} (${dPac}%)  ·  Parcelado: entrada de ${fmtB(parcValPac)} + ${pPac-1}× de ${fmtB(parcValPac)}`,M+2,y);
+        tx(`Entrada de ${fmtB(parcValPac)} + ${pPac-1}× de ${fmtB(parcValPac)}`, M+2, y);
       } else {
-        tx(`Desconto de ${fmtB(Math.round(totCI*dPac/100*100)/100)} (${dPac}%) à vista`,M+2,y);
+        tx(`${fmtB(totCI)}`, M+2, y);
       }
       hr(y+3); y+=9;
     }
 
   } else {
     const dA=orc.descontoEtapa??5, pA=orc.parcelasEtapa??3;
+    const tDescA=Math.round(arqCIcom*(1-dA/100)*100)/100;
     nv(25);
-    sf("bold",8.5); stc(INK); tx("Apenas Arquitetura",M,y); y+=6;
+    sf("bold",8.5); stc(INK); tx("Apenas Arquitetura",M,y); y+=9;
+
+    // Opção 1 — Antecipado com desconto
+    sf("normal",7); stc(INK_LT); tx(`Opção 1 · Pagamento antecipado com ${dA}% de desconto`, M+2, y); y+=5;
+    const yOp1A = y;
+    const labelOp1A = `De ${fmtB(arqCIcom)} por apenas:`;
+    sf("normal",8.5); stc(INK_MD); tx(labelOp1A, M+2, yOp1A);
+    const wLabelOp1A = doc.getTextWidth(labelOp1A);
+    sf("bold",10); stc(INK); tx(fmtB(tDescA), M+2+wLabelOp1A+4, yOp1A);
+    y = yOp1A + 7;
+
+    // Divisória fina
+    sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F");
+    y += 4;
+
+    // Opção 2 — Parcelado (sem desconto)
+    sf("normal",7); stc(INK_LT);
+    if (pA > 1) {
+      tx(`Opção 2 · Parcelado em ${pA}× sem desconto`, M+2, y);
+    } else {
+      tx(`Opção 2 · À vista`, M+2, y);
+    }
+    y+=5;
     sf("normal",8.5); stc(INK_MD);
-    tx(`Antecipado (${dA}% de desconto) — ${fmtB(Math.round(arqCIcom*(1-dA/100)*100)/100)}`,M+2,y); hr(y+3); y+=8;
     if (pA > 1) {
       const parcValA = Math.round(arqCIcom/pA*100)/100;
-      tx(`Parcelado: entrada de ${fmtB(parcValA)} + ${pA-1}× de ${fmtB(parcValA)}`,M+2,y);
+      tx(`Entrada de ${fmtB(parcValA)} + ${pA-1}× de ${fmtB(parcValA)}`, M+2, y);
     } else {
-      tx(`À vista — ${fmtB(arqCIcom)}`,M+2,y);
+      tx(`${fmtB(arqCIcom)}`, M+2, y);
     }
     hr(y+3); y+=10;
 
     if (incluiArq && incluiEng) {
       const dP=orc.descontoPacote??10, pP=orc.parcelasPacote??4;
       const tDescPad=Math.round(totCI*(1-dP/100)*100)/100;
-      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=7;
-      // Linha "De R$ X por apenas: R$ Y" — texto e valor na mesma linha
-      sf("normal",8.5); stc(INK_MD); tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
-      sf("bold",9); stc(INK); tx(fmtB(tDescPad),W-M,y,{align:"right"});
-      y+=7;
-      // Linha de detalhes (parcelamento)
-      sf("normal",7.5); stc(INK_LT);
+      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=9;
+
+      // Opção 1 — Antecipado com desconto
+      sf("normal",7); stc(INK_LT); tx(`Opção 1 · Pagamento antecipado com ${dP}% de desconto`, M+2, y); y+=5;
+      const yOp1P = y;
+      const labelOp1P = `De ${fmtB(totCI)} por apenas:`;
+      sf("normal",8.5); stc(INK_MD); tx(labelOp1P, M+2, yOp1P);
+      const wLabelOp1P = doc.getTextWidth(labelOp1P);
+      sf("bold",10); stc(INK); tx(fmtB(tDescPad), M+2+wLabelOp1P+4, yOp1P);
+      y = yOp1P + 7;
+
+      // Divisória fina
+      sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F");
+      y += 4;
+
+      // Opção 2 — Parcelado (sem desconto)
+      sf("normal",7); stc(INK_LT);
+      if (pP > 1) {
+        tx(`Opção 2 · Parcelado em ${pP}× sem desconto`, M+2, y);
+      } else {
+        tx(`Opção 2 · À vista`, M+2, y);
+      }
+      y+=5;
+      sf("normal",8.5); stc(INK_MD);
       if (pP > 1) {
         const parcValP = Math.round(totCI/pP*100)/100;
-        tx(`Desconto de ${fmtB(Math.round(totCI*dP/100*100)/100)} (${dP}%)  ·  Parcelado: entrada de ${fmtB(parcValP)} + ${pP-1}× de ${fmtB(parcValP)}`,M+2,y);
+        tx(`Entrada de ${fmtB(parcValP)} + ${pP-1}× de ${fmtB(parcValP)}`, M+2, y);
       } else {
-        tx(`Desconto de ${fmtB(Math.round(totCI*dP/100*100)/100)} (${dP}%) à vista`,M+2,y);
+        tx(`${fmtB(totCI)}`, M+2, y);
       }
       hr(y+3); y+=9;
     }
