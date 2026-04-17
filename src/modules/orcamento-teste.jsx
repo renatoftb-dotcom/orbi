@@ -309,20 +309,67 @@ function InputControlado({ valor, onCommit, placeholder="", style={} }) {
   );
 }
 
+// Input de valor monetário com commit no blur
+function EtapaValorInput({ valorAtual, fmtN, onCommit, borderColor, color }) {
+  const [local, setLocal] = useState(fmtN(valorAtual));
+  const [focado, setFocado] = useState(false);
+  const ultimoExterno = useRef(valorAtual);
+  useEffect(() => {
+    if (!focado && valorAtual !== ultimoExterno.current) {
+      ultimoExterno.current = valorAtual;
+      setLocal(fmtN(valorAtual));
+    }
+  }, [valorAtual, focado, fmtN]);
+  return (
+    <input type="text"
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onFocus={e => { setFocado(true); e.target.select(); }}
+      onBlur={() => {
+        setFocado(false);
+        const raw = local.replace(/\./g, "").replace(",", ".");
+        const num = parseFloat(raw);
+        if (!isNaN(num) && num >= 0) {
+          ultimoExterno.current = num;
+          onCommit(num);
+        } else {
+          setLocal(fmtN(valorAtual));
+        }
+      }}
+      onKeyDown={e => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setLocal(fmtN(valorAtual)); e.target.blur(); } }}
+      style={{ width:"100%", fontSize:12, padding:"3px 6px", border:`1px solid ${borderColor}`, borderRadius:4, textAlign:"right", fontFamily:"inherit", outline:"none", fontWeight:500, color, background:"transparent" }} />
+  );
+}
+
 function PropostaPreview({ data, onVoltar }) {
   if (!data) return null;
   const { tipoProjeto, tipoObra, padrao, tipologia, tamanho, clienteNome,
           calculo,
-          descArq, parcArq, descPacote, parcPacote,
-          descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
-          etapasPct, totSI, totCI, impostoV,
-          incluiArq = true, incluiEng = true, incluiMarcenaria = false,
-          etapasIsoladas = [] } = data;
+          totSI, totCI, impostoV,
+          incluiArq = true, incluiEng = true, incluiMarcenaria = false } = data;
 
   // Estados locais (antes eram props read-only) — editáveis inline
   const [tipoPgto, setTipoPgtoLocal]     = useState(data.tipoPgto || "padrao");
   const [temImposto, setTemImpostoLocal] = useState(data.temImposto || false);
   const [aliqImp, setAliqImpLocal]       = useState(data.aliqImp || 16);
+  const [etapasPct, setEtapasPctLocal]   = useState(data.etapasPct || [
+    { id:1, nome:"Estudo de Viabilidade",  pct:10 },
+    { id:2, nome:"Estudo Preliminar",      pct:40 },
+    { id:3, nome:"Aprovação na Prefeitura",pct:12 },
+    { id:4, nome:"Projeto Executivo",      pct:38 },
+    { id:5, nome:"Engenharia",             pct:0  },
+  ]);
+  const [etapasIsoladasLocal, setEtapasIsoladasLocal] = useState(new Set(data.etapasIsoladas || []));
+  const etapasIsoladas = Array.from(etapasIsoladasLocal);
+  // Descontos/parcelas — locais também
+  const [descArqLocal,     setDescArqLocal]     = useState(data.descArq     ?? 5);
+  const [parcArqLocal,     setParcArqLocal]     = useState(data.parcArq     ?? 3);
+  const [descPacoteLocal,  setDescPacoteLocal]  = useState(data.descPacote  ?? 10);
+  const [parcPacoteLocal,  setParcPacoteLocal]  = useState(data.parcPacote  ?? 4);
+  const [descEtCtrtLocal,  setDescEtCtrtLocal]  = useState(data.descEtCtrt  ?? 5);
+  const [parcEtCtrtLocal,  setParcEtCtrtLocal]  = useState(data.parcEtCtrt  ?? 2);
+  const [descPacCtrtLocal, setDescPacCtrtLocal] = useState(data.descPacCtrt ?? 15);
+  const [parcPacCtrtLocal, setParcPacCtrtLocal] = useState(data.parcPacCtrt ?? 8);
 
   const fmtV = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const fmtN = v => v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -393,8 +440,8 @@ function PropostaPreview({ data, onVoltar }) {
   const engOriginal  = incluiEng ? (calculo.precoEng || 0) : 0;
   const valorEditado = arqEdit !== arqOriginal || engEdit !== engOriginal;
 
-  const arqCI = arqEdit;
-  const engCI = engEdit;
+  const arqCI = incluiArq ? arqEdit : 0;
+  const engCI = incluiEng ? engEdit : 0;
 
   // Recalcula totais com valores editados
   const totSIEdit   = arqCI + engCI;
@@ -406,8 +453,8 @@ function PropostaPreview({ data, onVoltar }) {
   const engCIEdit   = temImposto && engCI > 0 ? Math.round(engCI / (1 - aliqImp/100) * 100) / 100 : engCI;
 
   // Etapa isolada — valor proporcional do total
-  // Etapas isoladas — múltipla seleção
-  const idsIsolados     = new Set(etapasIsoladas || []);
+  // Etapas isoladas — múltipla seleção (state local, manipulável inline)
+  const idsIsolados     = etapasIsoladasLocal;
   const temIsoladas     = idsIsolados.size > 0;
   const etapasIsoladasObjs = temIsoladas ? etapasPct.filter(e => idsIsolados.has(e.id)) : [];
   // Compatibilidade com código que usa etapaIsoladaObj (single)
@@ -420,6 +467,50 @@ function PropostaPreview({ data, onVoltar }) {
   const totSIBase       = temIsoladas
     ? Math.round((arqIsoladaSI + engSI) * 100) / 100
     : totSIEdit;
+
+  // Manipuladores de etapas (isolar, adicionar, remover, editar %)
+  function toggleIsolarEtapa(id) {
+    setEtapasIsoladasLocal(prev => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id); else novo.add(id);
+      return novo;
+    });
+  }
+  function removerEtapa(id) {
+    if (id === 5) { alert("A etapa de Engenharia não pode ser removida. Use o toggle de Engenharia na Tela 1 para excluir."); return; }
+    setEtapasPctLocal(prev => prev.filter(e => e.id !== id));
+    setEtapasIsoladasLocal(prev => { const n = new Set(prev); n.delete(id); return n; });
+  }
+  function adicionarEtapa() {
+    // Garante ID >= 10 para não colidir com ID=5 (Engenharia) nem com IDs padrão (1-4)
+    const maxId = Math.max(9, ...etapasPct.map(e => e.id));
+    const nextId = maxId + 1;
+    setEtapasPctLocal(prev => {
+      const engIdx = prev.findIndex(e => e.id === 5);
+      const nova = { id: nextId, nome: "Nova etapa", pct: 0 };
+      if (engIdx >= 0) {
+        // Insere antes da engenharia
+        const semEng = prev.filter(e => e.id !== 5);
+        return [...semEng, nova, prev[engIdx]];
+      }
+      return [...prev, nova];
+    });
+  }
+  function atualizarEtapaPct(id, novoPct) {
+    setEtapasPctLocal(prev => prev.map(e => e.id === id ? { ...e, pct: Math.max(0, Math.min(100, novoPct)) } : e));
+  }
+  function atualizarEtapaValor(id, novoValor) {
+    // Converte valor R$ → % da arq base
+    // (arqCIEdit é a arq total com imposto; se não tiver imposto, é arqCI mesmo)
+    const base = arqCIEdit;
+    if (!base || base <= 0) return;
+    const novoPct = Math.round((novoValor / base) * 100 * 100) / 100; // 2 decimais
+    setEtapasPctLocal(prev => prev.map(e => e.id === id ? { ...e, pct: Math.max(0, Math.min(100, novoPct)) } : e));
+  }
+  function atualizarEtapaNome(id, novoNome) {
+    setEtapasPctLocal(prev => prev.map(e => e.id === id ? { ...e, nome: novoNome } : e));
+  }
+
   // totCIBase = com imposto
   const totCIBase       = temIsoladas
     ? (temImposto ? Math.round(totSIBase / (1 - aliqImp/100) * 100) / 100 : totSIBase)
@@ -584,8 +675,8 @@ function PropostaPreview({ data, onVoltar }) {
       // etapasPct no PDF: quando isolada, só a etapa selecionada com 100%
       const etapasPdfFinal = temIsoladas
         ? etapasIsoladasObjs.map(e => ({ ...e }))
-        : data.etapasPct;
-      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:data.tipoPgto, descontoEtapa:data.descArq, parcelasEtapa:data.parcArq, descontoPacote:data.descPacote, parcelasPacote:data.parcPacote, descontoEtapaCtrt:data.descEtCtrt, parcelasEtapaCtrt:data.parcEtCtrt, descontoPacoteCtrt:data.descPacCtrt, parcelasPacoteCtrt:data.parcPacCtrt, etapasPct:etapasPdfFinal, incluiImposto:data.temImposto, aliquotaImposto:data.aliqImp, etapasIsoladas:Array.from(idsIsolados), totSI:0, criadoEm:new Date().toISOString(), resultado:r,
+        : etapasPct;
+      const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:tipoPgto, descontoEtapa:descArqLocal, parcelasEtapa:parcArqLocal, descontoPacote:descPacoteLocal, parcelasPacote:parcPacoteLocal, descontoEtapaCtrt:descEtCtrtLocal, parcelasEtapaCtrt:parcEtCtrtLocal, descontoPacoteCtrt:descPacCtrtLocal, parcelasPacoteCtrt:parcPacCtrtLocal, etapasPct:etapasPdfFinal, incluiImposto:temImposto, aliquotaImposto:aliqImp, etapasIsoladas:Array.from(idsIsolados), totSI:0, criadoEm:new Date().toISOString(), resultado:r,
         // Textos editáveis
         cidade: cidadeEdit, validadeStr: validadeEdit, pixTexto: pixEdit,
         // Escopo editado na preview
@@ -779,77 +870,189 @@ function PropostaPreview({ data, onVoltar }) {
         <Sec title={isPadrao ? "Formas de pagamento" : "Contratação por etapa"}>
           {isPadrao ? (<>
             <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:6 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>
                 <TextoEditavel
                   valor={labelApenasEdit || (incluiArq && incluiEng ? "Apenas Arquitetura" : incluiEng ? "Apenas Engenharia" : "Apenas Arquitetura")}
                   onChange={setLabelApenasEdit}
                   style={{ fontSize:12, fontWeight:600 }} />
               </div>
-              <TextoEditavel valor={`Antecipado (${descArq}% de desconto) — ${fmtV(Math.round(totSIEdit*(1-descArq/100)*100)/100)}`}
-                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block", marginBottom:3 }} />
-              <TextoEditavel valor={`Parcelado ${parcArq}× — ${fmtV(Math.round(totSIEdit/parcArq*100)/100)}/mês`}
-                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block" }} />
+              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
+                  <input type="text" value={descArqLocal}
+                    onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setDescArqLocal(Math.max(0, Math.min(100, n))); }}
+                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <span style={{ fontSize:11, color:LT }}>%</span>
+                </div>
+                <span style={{ color:LN }}>·</span>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:MD }}>Parcelado</span>
+                  <input type="text" value={parcArqLocal}
+                    onChange={e => { const n = parseInt(e.target.value) || 0; setParcArqLocal(Math.max(1, n)); }}
+                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <span style={{ fontSize:11, color:LT }}>×</span>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:LT, marginTop:6, lineHeight:1.5 }}>
+                De {fmtV(arqCIEdit)} por {fmtV(Math.round(arqCIEdit*(1-descArqLocal/100)*100)/100)} à vista &nbsp;·&nbsp;
+                ou entrada de {fmtV(Math.round(arqCIEdit/parcArqLocal*100)/100)}
+                {parcArqLocal > 1 && <> + {parcArqLocal-1}× de {fmtV(Math.round(arqCIEdit/parcArqLocal*100)/100)}</>}
+              </div>
             </div>
             {incluiArq && incluiEng && (
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:12, marginBottom:12 }}>
-              <TextoEditavel valor="Pacote Completo (Arq. + Eng.)" onChange={v=>{}} style={{ fontSize:12, fontWeight:600, display:"block", marginBottom:6 }} />
-              <TextoEditavel valor={`De ${fmtV(totCIEdit)} por apenas: ${fmtV(Math.round(totCIEdit*(1-descPacote/100)*100)/100)}`}
-                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block", marginBottom:3 }} />
-              <TextoEditavel valor={`Desconto de ${fmtV(Math.round(totCIEdit*descPacote/100*100)/100)} (${descPacote}%) · Parcelado ${parcPacote}× de ${fmtV(Math.round(totCIEdit*(1-descPacote/100)/parcPacote*100)/100)} c/ desconto`}
-                onChange={v=>{}} style={{ fontSize:11, color:LT, display:"block" }} />
+              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>Pacote Completo (Arq. + Eng.)</div>
+              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
+                  <input type="text" value={descPacoteLocal}
+                    onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setDescPacoteLocal(Math.max(0, Math.min(100, n))); }}
+                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <span style={{ fontSize:11, color:LT }}>%</span>
+                </div>
+                <span style={{ color:LN }}>·</span>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:MD }}>Parcelado</span>
+                  <input type="text" value={parcPacoteLocal}
+                    onChange={e => { const n = parseInt(e.target.value) || 0; setParcPacoteLocal(Math.max(1, n)); }}
+                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <span style={{ fontSize:11, color:LT }}>×</span>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:LT, marginTop:6, lineHeight:1.5 }}>
+                De {fmtV(totCIEdit)} por {fmtV(Math.round(totCIEdit*(1-descPacoteLocal/100)*100)/100)} à vista &nbsp;·&nbsp;
+                ou entrada de {fmtV(Math.round(totCIEdit/parcPacoteLocal*100)/100)}
+                {parcPacoteLocal > 1 && <> + {parcPacoteLocal-1}× de {fmtV(Math.round(totCIEdit/parcPacoteLocal*100)/100)}</>}
+              </div>
             </div>
             )}
           </>) : (<>
             <div style={{ marginBottom:16 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", paddingBottom:6, borderBottom:`1.5px solid ${C}` }}>
+              <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, alignItems:"center", paddingBottom:6, borderBottom:`1.5px solid ${C}` }}>
+                <span></span>
                 <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em" }}>Etapa</span>
+                <span></span>
                 <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em", textAlign:"center" }}>%</span>
                 <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em", textAlign:"right" }}>Valor</span>
+                <span></span>
               </div>
-              {etapasVisiveis.map((et,i) => (
-                <div key={et.id} style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
-                  <span style={{ color:C }}>{et.nome}</span>
-                  <span style={{ color:LT, textAlign:"center" }}>
-                    {et.id === 5 ? "—" : `${et.pct}%`}
+              {etapasPct.filter(e => incluiEng || e.id !== 5).map((et, i) => {
+                const isIsolada = idsIsolados.has(et.id);
+                const visivel = !temIsoladas || isIsolada || et.id === 5;
+                const isEng = et.id === 5;
+                const bgRow = isIsolada ? "#e0f2fe" : "transparent";
+                const corRow = isIsolada ? "#0369a1" : C;
+                const fontWt = isIsolada ? 600 : 400;
+                const valorEtapa = isEng ? engCIEdit
+                  : temIsoladas
+                    ? Math.round(totCIBase * (et.pct / pctTotalIsolado) * 100) / 100
+                    : Math.round(arqCIEdit*(et.pct/100)*100)/100;
+                return (
+                <div key={et.id} style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"7px 4px", borderBottom:`0.5px solid ${LN}`, alignItems:"center", background: bgRow, opacity: visivel ? 1 : 0.3 }}>
+                  {!isEng ? (
+                    <span
+                      onClick={() => toggleIsolarEtapa(et.id)}
+                      title={isIsolada ? "Desmarcar isolamento" : "Orçar apenas esta etapa"}
+                      style={{ cursor:"pointer", textAlign:"center", fontSize:14, color: isIsolada ? "#0369a1" : LT, fontWeight:500, userSelect:"none" }}>
+                      {isIsolada ? "◉" : "◎"}
+                    </span>
+                  ) : <span></span>}
+                  <span style={{ color:corRow, fontWeight:fontWt }}>
+                    {isEng ? (<>
+                      <div>Projetos de Engenharia</div>
+                      <div style={{ fontSize:11, color:LT, fontWeight:400 }}>Estrutural · Elétrico · Hidrossanitário</div>
+                    </>) : (
+                      <TextoEditavel valor={et.nome} onChange={v => atualizarEtapaNome(et.id, v)} style={{ fontSize:13, color:corRow, fontWeight:fontWt }} />
+                    )}
                   </span>
-                  <span style={{ fontWeight:500, textAlign:"right" }}>
-                    {fmtV(et.id === 5 ? engCIEdit
-                      : temIsoladas
-                        ? Math.round(totCIBase * (et.pct / pctTotalIsolado) * 100) / 100
-                        : Math.round(arqCIEdit*(et.pct/100)*100)/100)}
-                  </span>
+                  <span></span>
+                  {!isEng ? (
+                    <input type="text" value={et.pct}
+                      onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; atualizarEtapaPct(et.id, n); }}
+                      style={{ width:50, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  ) : (
+                    <span style={{ color:LT, textAlign:"center" }}>—</span>
+                  )}
+                  {!isEng ? (
+                    <EtapaValorInput
+                      valorAtual={valorEtapa}
+                      fmtN={fmtN}
+                      onCommit={novo => atualizarEtapaValor(et.id, novo)}
+                      borderColor={LN}
+                      color={corRow}
+                    />
+                  ) : (
+                    <span style={{ fontWeight:500, textAlign:"right", color: corRow }}>{fmtV(valorEtapa)}</span>
+                  )}
+                  {!isEng ? (
+                    <span onClick={() => removerEtapa(et.id)} title="Remover etapa"
+                      style={{ cursor:"pointer", textAlign:"center", color:"#d1d5db", userSelect:"none", fontSize:14 }}>×</span>
+                  ) : <span></span>}
                 </div>
-              ))}
-              {incluiEng && !temIsoladas && (
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"7px 0", borderBottom:`0.5px solid ${LN}` }}>
-                <div>
-                  <div style={{ color:C }}>Projetos de Engenharia</div>
-                  <div style={{ fontSize:11, color:LT }}>Estrutural · Elétrico · Hidrossanitário</div>
-                </div>
-                <span style={{ color:LT, textAlign:"center" }}>—</span>
-                <span style={{ fontWeight:500, textAlign:"right" }}>{fmtV(engCIEdit)}</span>
+                );
+              })}
+              <div style={{ padding:"8px 0" }}>
+                <button
+                  onClick={adicionarEtapa}
+                  style={{ width:"100%", fontSize:11, color:LT, background:"transparent",
+                    border:`1px dashed ${LN}`, borderRadius:6, padding:"6px", cursor:"pointer", fontFamily:"inherit" }}>
+                  + Adicionar etapa
+                </button>
               </div>
-              )}
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 70px 140px", padding:"8px 0", borderTop:`1.5px solid ${C}`, marginTop:2 }}>
+              <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"8px 4px", borderTop:`1.5px solid ${C}`, marginTop:2, alignItems:"center" }}>
+                <span></span>
                 <span style={{ fontWeight:600, color:C }}>Total</span>
-                <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{etapasVisiveis.filter(e=>e.id!==5).reduce((s,e)=>s+e.pct,0)}%</span>
+                <span></span>
+                <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{etapasPct.filter(e=>e.id!==5 && (!temIsoladas || idsIsolados.has(e.id))).reduce((s,e)=>s+e.pct,0)}%</span>
                 <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(temIsoladas ? totCIBase : Math.round((arqCIEdit*(etapasPct.reduce((s,e)=>s+e.pct,0)/100) + (incluiEng?engCIEdit:0))*100)/100)}</span>
+                <span></span>
               </div>
             </div>
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-              <TextoEditavel valor="Etapa a Etapa" onChange={v=>{}} style={{ fontSize:12, fontWeight:600, display:"block", marginBottom:5 }} />
-              <TextoEditavel valor={`Opção 1: Antecipado por etapa (${descEtCtrt}% de desconto)`}
-                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block", marginBottom:5 }} />
-              <TextoEditavel valor={`Opção 2: Parcelado ${parcEtCtrt}× por etapa`}
-                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block" }} />
+              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>Etapa a Etapa</div>
+              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:MD }}>Antecipado por etapa — desconto</span>
+                  <input type="text" value={descEtCtrtLocal}
+                    onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setDescEtCtrtLocal(Math.max(0, Math.min(100, n))); }}
+                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <span style={{ fontSize:11, color:LT }}>%</span>
+                </div>
+                <span style={{ color:LN }}>·</span>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:MD }}>Parcelado por etapa</span>
+                  <input type="text" value={parcEtCtrtLocal}
+                    onChange={e => { const n = parseInt(e.target.value) || 0; setParcEtCtrtLocal(Math.max(1, n)); }}
+                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <span style={{ fontSize:11, color:LT }}>×</span>
+                </div>
+              </div>
             </div>
             {incluiArq && incluiEng && !temIsoladas && (
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-              <TextoEditavel valor="Pacote Completo (Arq. + Eng.)" onChange={v=>{}} style={{ fontSize:12, fontWeight:600, display:"block", marginBottom:5 }} />
-              <TextoEditavel valor={`De ${fmtV(totCIEdit)} por apenas: ${fmtV(Math.round(totCIEdit*(1-descPacCtrt/100)*100)/100)}`}
-                onChange={v=>{}} style={{ fontSize:13, color:MD, display:"block", marginBottom:3 }} />
-              <TextoEditavel valor={`Desconto de ${fmtV(Math.round(totCIEdit*descPacCtrt/100*100)/100)} (${descPacCtrt}%) · Parcelado ${parcPacCtrt}× de ${fmtV(Math.round(totCIEdit*(1-descPacCtrt/100)/parcPacCtrt*100)/100)}`}
-                onChange={v=>{}} style={{ fontSize:11, color:LT, display:"block" }} />
+              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>Pacote Completo (Arq. + Eng.)</div>
+              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
+                  <input type="text" value={descPacCtrtLocal}
+                    onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setDescPacCtrtLocal(Math.max(0, Math.min(100, n))); }}
+                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <span style={{ fontSize:11, color:LT }}>%</span>
+                </div>
+                <span style={{ color:LN }}>·</span>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ fontSize:12, color:MD }}>Parcelado</span>
+                  <input type="text" value={parcPacCtrtLocal}
+                    onChange={e => { const n = parseInt(e.target.value) || 0; setParcPacCtrtLocal(Math.max(1, n)); }}
+                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <span style={{ fontSize:11, color:LT }}>×</span>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:LT, marginTop:6, lineHeight:1.5 }}>
+                De {fmtV(totCIEdit)} por {fmtV(Math.round(totCIEdit*(1-descPacCtrtLocal/100)*100)/100)} à vista &nbsp;·&nbsp;
+                ou entrada de {fmtV(Math.round(totCIEdit/parcPacCtrtLocal*100)/100)}
+                {parcPacCtrtLocal > 1 && <> + {parcPacCtrtLocal-1}× de {fmtV(Math.round(totCIEdit/parcPacCtrtLocal*100)/100)}</>}
+              </div>
             </div>
             )}
           </>)}

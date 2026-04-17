@@ -1209,7 +1209,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     sf("normal",8.5); stc(INK_MD); y+=6;
     sf("normal",8.5); stc(INK_MD);
     tx(`Opção 1: Antecipado por etapa (${dEt}% de desconto)`,M+2,y); y+=7;
-    tx(`Opção 2: Parcelado ${pEt}× por etapa`,M+2,y); hr(y+3); y+=10;
+    if (pEt > 1) {
+      tx(`Opção 2: Parcelado por etapa — entrada + ${pEt-1}× por etapa`,M+2,y);
+    } else {
+      tx(`Opção 2: À vista por etapa`,M+2,y);
+    }
+    hr(y+3); y+=10;
 
     // Pacote completo etapas — só quando incluiArq && incluiEng && sem isoladas
     if (incluiArq && incluiEng && !temIsoladasPdf) {
@@ -1221,7 +1226,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
       sf("bold",9); stc(INK); tx(fmtB(tDescP),W-M,y,{align:"right"}); y+=5;
       sf("normal",7.5); stc(INK_LT);
-      tx(`Desconto de ${fmtB(Math.round(totCI*dPac/100*100)/100)} (${dPac}%)  ·  Parcelado ${pPac}× de ${fmtB(Math.round(tDescP/pPac*100)/100)} c/ desconto`,M+2,y);
+      if (pPac > 1) {
+        const parcValPac = Math.round(totCI/pPac*100)/100;
+        tx(`Desconto de ${fmtB(Math.round(totCI*dPac/100*100)/100)} (${dPac}%)  ·  Parcelado: entrada de ${fmtB(parcValPac)} + ${pPac-1}× de ${fmtB(parcValPac)}`,M+2,y);
+      } else {
+        tx(`Desconto de ${fmtB(Math.round(totCI*dPac/100*100)/100)} (${dPac}%) à vista`,M+2,y);
+      }
       hr(y+3); y+=9;
     }
 
@@ -1231,7 +1241,13 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     sf("bold",8.5); stc(INK); tx("Apenas Arquitetura",M,y); y+=6;
     sf("normal",8.5); stc(INK_MD);
     tx(`Antecipado (${dA}% de desconto) — ${fmtB(Math.round(arqCI*(1-dA/100)*100)/100)}`,M+2,y); hr(y+3); y+=8;
-    tx(`Parcelado ${pA}× — ${fmtB(Math.round(arqCI/pA*100)/100)}/mês`,M+2,y); hr(y+3); y+=10;
+    if (pA > 1) {
+      const parcValA = Math.round(arqCI/pA*100)/100;
+      tx(`Parcelado: entrada de ${fmtB(parcValA)} + ${pA-1}× de ${fmtB(parcValA)}`,M+2,y);
+    } else {
+      tx(`À vista — ${fmtB(arqCI)}`,M+2,y);
+    }
+    hr(y+3); y+=10;
 
     if (incluiArq && incluiEng) {
       const dP=orc.descontoPacote??10, pP=orc.parcelasPacote??4;
@@ -1241,7 +1257,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
       sf("bold",9); stc(INK); tx(fmtB(tDescPad),W-M,y,{align:"right"}); y+=5;
       sf("normal",7.5); stc(INK_LT);
-      tx(`Desconto de ${fmtB(Math.round(totCI*dP/100*100)/100)} (${dP}%)  ·  Parcelado ${pP}× de ${fmtB(Math.round(tDescPad/pP*100)/100)} c/ desconto`,M+2,y);
+      if (pP > 1) {
+        const parcValP = Math.round(totCI/pP*100)/100;
+        tx(`Desconto de ${fmtB(Math.round(totCI*dP/100*100)/100)} (${dP}%)  ·  Parcelado: entrada de ${fmtB(parcValP)} + ${pP-1}× de ${fmtB(parcValP)}`,M+2,y);
+      } else {
+        tx(`Desconto de ${fmtB(Math.round(totCI*dP/100*100)/100)} (${dP}%) à vista`,M+2,y);
+      }
       hr(y+3); y+=9;
     }
   }
