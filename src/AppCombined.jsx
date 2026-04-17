@@ -4284,21 +4284,19 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     tx("ETAPA",cE,y); tx("%",cP,y,{align:"right"}); tx("VALOR",cV,y,{align:"right"});
     y+=2; sc(INK); doc.rect(M,y,TW,0.5,"F"); y+=rH-1;
 
-    etapasPdf.filter(e => e.id !== 5).forEach(et => {
-      nv(rH+3);
-      // Em modo isolado, etapas não-isoladas aparecem acinzentadas
-      const isIsolada = idsIsoladosPdf.has(et.id);
-      const visivel = !temIsoladasPdf || isIsolada;
-      const corTxt = visivel ? INK_MD : INK_LT;
-      const corVal = visivel ? INK : INK_LT;
-      sf("normal",8.5); stc(corTxt); tx(et.nome||"",cE,y);
-      const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-      // Valor SEMPRE = arq × pct/100 (linear, não proporcional ao isolamento)
-      const valEtapa = Math.round(arqCIBase*(et.pct/100)*100)/100;
-      sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
-      sf("normal",8.5); stc(corVal); tx(fmtB(valEtapa),cV,y,{align:"right"});
-      y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
-    });
+    etapasPdf
+      .filter(e => e.id !== 5)
+      .filter(e => !temIsoladasPdf || idsIsoladosPdf.has(e.id))
+      .forEach(et => {
+        nv(rH+3);
+        sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
+        const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+        // Valor SEMPRE = arq × pct/100 (com imposto)
+        const valEtapa = Math.round(arqCIBase*(et.pct/100)*100)/100;
+        sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
+        sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
+        y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
+      });
 
     // Linha Engenharia — só quando incluiEng
     if (incluiEng) {
@@ -4306,7 +4304,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       sf("normal",8.5); stc(INK_MD); tx("Projetos de Engenharia",cE,y);
       sf("normal",6.5); stc(INK_LT); tx("Estrutural  ·  Elétrico  ·  Hidrossanitário",cE,y+4);
       sf("normal",8.5); stc(INK_LT); tx("—",cP,y+2,{align:"right"});
-      sf("normal",8.5); stc(INK); tx(fmtB(engCI),cV,y+2,{align:"right"});
+      sf("normal",8.5); stc(INK); tx(fmtB(engCIcom),cV,y+2,{align:"right"});
       y+=6; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     }
 
@@ -6426,10 +6424,10 @@ function PropostaPreview({ data, onVoltar }) {
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
-      // Quando etapa isolada, arq é proporcional, eng entra integral se incluiEng
-      const arqTotal = temIsoladas ? arqIsoladaSI : arqEdit;
+      // Sempre envia arq/eng totais ao PDF. O PDF aplica isolamento através de orc.etapasIsoladas
+      const arqTotal = arqEdit;
       const engTotal = incluiEng ? engEdit : 0;
-      const grandTotal = temIsoladas ? totCIBase : totCIEdit;
+      const grandTotal = totCIEdit;
       const engUnit = engTotal;
       const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
       const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -6763,9 +6761,13 @@ function PropostaPreview({ data, onVoltar }) {
               {(() => {
                 // Total = apenas linhas ativas (isoladas + eng se incluiEng)
                 // Sem isolamento: todas as arq + eng
-                const pctAtivo = etapasPct
-                  .filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)))
-                  .reduce((s,e)=>s+e.pct,0);
+                const etapasAtivas = etapasPct.filter(e => {
+                  if (e.id === 5) return false; // eng vai separado
+                  if (!temIsoladas) return true; // sem isolamento: todas contam
+                  // Com isolamento: só as isoladas
+                  return idsIsolados.has(e.id);
+                });
+                const pctAtivo = etapasAtivas.reduce((s,e)=>s+Number(e.pct),0);
                 const valorAtivo = Math.round((arqCIEdit * pctAtivo / 100 + (incluiEng ? engCIEdit : 0)) * 100) / 100;
                 return (
                   <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"8px 4px", borderTop:`1.5px solid ${C}`, marginTop:2, alignItems:"center" }}>

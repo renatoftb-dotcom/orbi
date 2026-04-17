@@ -664,10 +664,10 @@ function PropostaPreview({ data, onVoltar }) {
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
-      // Quando etapa isolada, arq é proporcional, eng entra integral se incluiEng
-      const arqTotal = temIsoladas ? arqIsoladaSI : arqEdit;
+      // Sempre envia arq/eng totais ao PDF. O PDF aplica isolamento através de orc.etapasIsoladas
+      const arqTotal = arqEdit;
       const engTotal = incluiEng ? engEdit : 0;
-      const grandTotal = temIsoladas ? totCIBase : totCIEdit;
+      const grandTotal = totCIEdit;
       const engUnit = engTotal;
       const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
       const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -1001,9 +1001,13 @@ function PropostaPreview({ data, onVoltar }) {
               {(() => {
                 // Total = apenas linhas ativas (isoladas + eng se incluiEng)
                 // Sem isolamento: todas as arq + eng
-                const pctAtivo = etapasPct
-                  .filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)))
-                  .reduce((s,e)=>s+e.pct,0);
+                const etapasAtivas = etapasPct.filter(e => {
+                  if (e.id === 5) return false; // eng vai separado
+                  if (!temIsoladas) return true; // sem isolamento: todas contam
+                  // Com isolamento: só as isoladas
+                  return idsIsolados.has(e.id);
+                });
+                const pctAtivo = etapasAtivas.reduce((s,e)=>s+Number(e.pct),0);
                 const valorAtivo = Math.round((arqCIEdit * pctAtivo / 100 + (incluiEng ? engCIEdit : 0)) * 100) / 100;
                 return (
                   <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"8px 4px", borderTop:`1.5px solid ${C}`, marginTop:2, alignItems:"center" }}>
