@@ -1995,7 +1995,7 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   );
 }
 
-function Clientes({ data, save, onAbrirOrcamento }) {
+function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto }) {
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
   if (abrindoOrcamento) return null;
   const [view, setView]               = useState("kanban");
@@ -2011,6 +2011,18 @@ function Clientes({ data, save, onAbrirOrcamento }) {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  // Ao retornar do orçamento, re-abre o detail do cliente que estava aberto
+  useEffect(() => {
+    if (abrirClienteDetail) {
+      // Pega a versão mais recente do cliente (em data) para não usar objeto stale
+      const atualizado = data.clientes.find(c => c.id === abrirClienteDetail.id) || abrirClienteDetail;
+      setSel(atualizado);
+      setView("detail");
+      if (onClienteDetailAberto) onClienteDetailAberto();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirClienteDetail]);
 
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
@@ -2917,6 +2929,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const fmt = v => "R$ " + (v||0).toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
 
   const STATUS_ORC = {
+    rascunho:{ label:"Rascunho",cor:"#6b7280", bg:"#f9fafb" },
     ganho:   { label:"Ganho",   cor:"#16a34a", bg:"#f0fdf4" },
     perdido: { label:"Perdido", cor:"#dc2626", bg:"#fef2f2" },
   };
@@ -2992,7 +3005,9 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                 const arqTotal = Math.round((r.precoArq || r.precoTotal || r.precoFinal || 0) * 100) / 100;
                 const engTotal = Math.round((r.precoEng || r.engTotal || 0) * 100) / 100;
                 const grandTotal = Math.round((arqTotal + engTotal) * 100) / 100;
-                const st = o.status ? STATUS_ORC[o.status] : null;
+                const isRascunho = o.rascunho || o.status === "rascunho";
+                const stKey = isRascunho ? "rascunho" : o.status;
+                const st = stKey ? STATUS_ORC[stKey] : null;
                 const enviado = o.criadoEm ? new Date(o.criadoEm).toLocaleDateString("pt-BR") : "—";
                 const fetchOrc = async (modo) => {
                   const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
@@ -3000,7 +3015,13 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                   onAbrirOrcamento(cliente, orcCompleto, modo);
                 };
                 return (
-                  <div key={o.id} style={{ border:"1px solid #e5e7eb", borderRadius:10, padding:"12px 14px", background:"#fafafa", borderLeft: st ? `3px solid ${st.cor}` : "1px solid #e5e7eb" }}>
+                  <div key={o.id} style={{
+                    border: isRascunho ? "1px dashed #d1d5db" : "1px solid #e5e7eb",
+                    borderRadius:10,
+                    padding:"12px 14px",
+                    background: isRascunho ? "#fcfcfc" : "#fafafa",
+                    borderLeft: st ? `3px ${isRascunho ? "dashed" : "solid"} ${st.cor}` : "1px solid #e5e7eb"
+                  }}>
 
                     {/* Linha 1: título + botões */}
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:6 }}>
@@ -6849,6 +6870,49 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setQtds({});
   }, [tipoProjeto]);
 
+  // ── Salvar como rascunho ao voltar ─────────────────────────
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  function temDadosPreenchidos() {
+    // Qualquer coisa além do estado inicial conta como "iniciado"
+    if (referencia?.trim()) return true;
+    if (tipoObra || tipoProjeto || padrao || tipologia || tamanho) return true;
+    if (Object.values(qtds).some(q => q > 0)) return true;
+    return false;
+  }
+  function handleVoltar() {
+    // Em modo "ver", nunca pergunta — só volta
+    if (modoVer) { onVoltar(); return; }
+    // Se já existe orcBase (edição), deixa voltar direto sem perguntar
+    if (orcBase?.id) { onVoltar(); return; }
+    // Novo orçamento: pergunta se tem algo preenchido
+    if (temDadosPreenchidos()) {
+      setShowSaveDialog(true);
+    } else {
+      onVoltar();
+    }
+  }
+  async function salvarRascunhoEVoltar() {
+    const orcRascunho = {
+      ...(orcBase || {}),
+      referencia,
+      tipo: tipoProjeto, subtipo: tipoObra,
+      padrao, tipologia, tamanho,
+      comodos: Object.entries(qtds).filter(([,q]) => q > 0).map(([nome, qtd]) => ({ nome, qtd })),
+      incluiArq, incluiEng,
+      tipoPgto, temImposto, aliqImp,
+      descArq, parcArq, descPacote, parcPacote,
+      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
+      etapasPct,
+      rascunho: true,
+      status: "rascunho",
+    };
+    setShowSaveDialog(false);
+    if (onSalvar) {
+      try { await onSalvar(orcRascunho); } catch(e) { console.error("Erro ao salvar rascunho:", e); }
+    }
+    onVoltar();
+  }
+
   const wrapRef = useRef(null);
   useEffect(() => {
     if (!aberto && !abertoGrupo) return;
@@ -7254,7 +7318,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Botão Voltar ── */}
       <div style={{ marginBottom:16 }}>
-        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:"0", fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:4 }}>
+        <button onClick={handleVoltar} style={{ background:"none", border:"none", padding:"0", fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:4 }}>
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 11L5 7l4-4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
           Voltar
         </button>
@@ -7870,7 +7934,32 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         </div>
       )}
 
-
+      {/* Modal "Deseja salvar?" ao voltar com dados preenchidos */}
+      {showSaveDialog && (
+        <div
+          onClick={() => setShowSaveDialog(false)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:"#fff", borderRadius:12, padding:"28px 28px 20px", maxWidth:380, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.2)" }}>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>Salvar este orçamento?</div>
+            <div style={{ fontSize:13, color:"#6b7280", marginBottom:22, lineHeight:1.5 }}>
+              Você iniciou um orçamento mas ainda não finalizou. Deseja salvá-lo como rascunho para continuar depois?
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button
+                onClick={() => { setShowSaveDialog(false); onVoltar(); }}
+                style={{ background:"#fff", color:"#6b7280", border:"1px solid #d1d5db", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                Não
+              </button>
+              <button
+                onClick={salvarRascunhoEVoltar}
+                style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                Sim, salvar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
@@ -8471,6 +8560,7 @@ export default function ModuloClientesFornecedores() {
   const [escritorioKey, setEscritorioKey]     = useState(0);
   const [sidebarAberta, setSidebarAberta]     = useState(true);
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
+  const [clienteRetorno, setClienteRetorno] = useState(null); // cliente pra abrir detail ao fechar orçamento
   const [backendOffline, setBackendOffline]   = useState(false);
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
@@ -8663,11 +8753,18 @@ export default function ModuloClientesFornecedores() {
                 // Não fecha a tela — apenas atualiza o orcBase para o PDF continuar aberto
                 setOrcamentoTelaCheia(prev => ({ ...prev, orcBase: novo2 }));
               }}
-              onVoltar={() => { setOrcamentoTelaCheia(null); setClientesKey(n=>n+1); loadData(); }}
+              onVoltar={() => {
+                // Lembra cliente para Clientes abrir direto no detail
+                setClienteRetorno(orcamentoTelaCheia.clienteOrc);
+                setOrcamentoTelaCheia(null);
+                setAba("clientes");
+                setClientesKey(n=>n+1);
+                loadData();
+              }}
             />
           ) : (<>
           {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} />}
+          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
           {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
           {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}

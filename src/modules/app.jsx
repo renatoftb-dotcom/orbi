@@ -70,6 +70,7 @@ export default function ModuloClientesFornecedores() {
   const [escritorioKey, setEscritorioKey]     = useState(0);
   const [sidebarAberta, setSidebarAberta]     = useState(true);
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
+  const [clienteRetorno, setClienteRetorno] = useState(null); // cliente pra abrir detail ao fechar orçamento
   const [backendOffline, setBackendOffline]   = useState(false);
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
@@ -262,11 +263,18 @@ export default function ModuloClientesFornecedores() {
                 // Não fecha a tela — apenas atualiza o orcBase para o PDF continuar aberto
                 setOrcamentoTelaCheia(prev => ({ ...prev, orcBase: novo2 }));
               }}
-              onVoltar={() => { setOrcamentoTelaCheia(null); setClientesKey(n=>n+1); loadData(); }}
+              onVoltar={() => {
+                // Lembra cliente para Clientes abrir direto no detail
+                setClienteRetorno(orcamentoTelaCheia.clienteOrc);
+                setOrcamentoTelaCheia(null);
+                setAba("clientes");
+                setClientesKey(n=>n+1);
+                loadData();
+              }}
             />
           ) : (<>
           {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} />}
+          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
           {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
           {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}

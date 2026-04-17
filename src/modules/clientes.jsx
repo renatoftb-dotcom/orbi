@@ -88,7 +88,7 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   );
 }
 
-function Clientes({ data, save, onAbrirOrcamento }) {
+function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto }) {
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
   if (abrindoOrcamento) return null;
   const [view, setView]               = useState("kanban");
@@ -104,6 +104,18 @@ function Clientes({ data, save, onAbrirOrcamento }) {
     window.addEventListener("resize", handler);
     return () => window.removeEventListener("resize", handler);
   }, []);
+
+  // Ao retornar do orçamento, re-abre o detail do cliente que estava aberto
+  useEffect(() => {
+    if (abrirClienteDetail) {
+      // Pega a versão mais recente do cliente (em data) para não usar objeto stale
+      const atualizado = data.clientes.find(c => c.id === abrirClienteDetail.id) || abrirClienteDetail;
+      setSel(atualizado);
+      setView("detail");
+      if (onClienteDetailAberto) onClienteDetailAberto();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirClienteDetail]);
 
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
@@ -1010,6 +1022,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const fmt = v => "R$ " + (v||0).toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
 
   const STATUS_ORC = {
+    rascunho:{ label:"Rascunho",cor:"#6b7280", bg:"#f9fafb" },
     ganho:   { label:"Ganho",   cor:"#16a34a", bg:"#f0fdf4" },
     perdido: { label:"Perdido", cor:"#dc2626", bg:"#fef2f2" },
   };
@@ -1085,7 +1098,9 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                 const arqTotal = Math.round((r.precoArq || r.precoTotal || r.precoFinal || 0) * 100) / 100;
                 const engTotal = Math.round((r.precoEng || r.engTotal || 0) * 100) / 100;
                 const grandTotal = Math.round((arqTotal + engTotal) * 100) / 100;
-                const st = o.status ? STATUS_ORC[o.status] : null;
+                const isRascunho = o.rascunho || o.status === "rascunho";
+                const stKey = isRascunho ? "rascunho" : o.status;
+                const st = stKey ? STATUS_ORC[stKey] : null;
                 const enviado = o.criadoEm ? new Date(o.criadoEm).toLocaleDateString("pt-BR") : "—";
                 const fetchOrc = async (modo) => {
                   const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
@@ -1093,7 +1108,13 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                   onAbrirOrcamento(cliente, orcCompleto, modo);
                 };
                 return (
-                  <div key={o.id} style={{ border:"1px solid #e5e7eb", borderRadius:10, padding:"12px 14px", background:"#fafafa", borderLeft: st ? `3px solid ${st.cor}` : "1px solid #e5e7eb" }}>
+                  <div key={o.id} style={{
+                    border: isRascunho ? "1px dashed #d1d5db" : "1px solid #e5e7eb",
+                    borderRadius:10,
+                    padding:"12px 14px",
+                    background: isRascunho ? "#fcfcfc" : "#fafafa",
+                    borderLeft: st ? `3px ${isRascunho ? "dashed" : "solid"} ${st.cor}` : "1px solid #e5e7eb"
+                  }}>
 
                     {/* Linha 1: título + botões */}
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:6 }}>
