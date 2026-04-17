@@ -312,12 +312,17 @@ function InputControlado({ valor, onCommit, placeholder="", style={} }) {
 function PropostaPreview({ data, onVoltar }) {
   if (!data) return null;
   const { tipoProjeto, tipoObra, padrao, tipologia, tamanho, clienteNome,
-          calculo, tipoPgto, temImposto, aliqImp,
+          calculo,
           descArq, parcArq, descPacote, parcPacote,
           descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
           etapasPct, totSI, totCI, impostoV,
           incluiArq = true, incluiEng = true, incluiMarcenaria = false,
           etapasIsoladas = [] } = data;
+
+  // Estados locais (antes eram props read-only) — editáveis inline
+  const [tipoPgto, setTipoPgtoLocal]     = useState(data.tipoPgto || "padrao");
+  const [temImposto, setTemImpostoLocal] = useState(data.temImposto || false);
+  const [aliqImp, setAliqImpLocal]       = useState(data.aliqImp || 16);
 
   const fmtV = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const fmtN = v => v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -731,13 +736,43 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round(engCI/areaTot*100)/100)}/m²` : ""}</div>
             </div>}
           </div>
-          <div style={{ border:`0.5px solid ${LN}`, borderRadius:8, padding:"8px 14px", fontSize:12, color:LT, marginBottom:4 }}>
+          <div style={{ border:`0.5px solid ${LN}`, borderRadius:8, padding:"10px 14px", fontSize:12, color:LT, marginBottom:4,
+              display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+            <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
+              <input type="checkbox" checked={temImposto} onChange={e => setTemImpostoLocal(e.target.checked)} style={{ cursor:"pointer" }} />
+              <span>Incluir impostos</span>
+            </label>
+            {temImposto && (
+              <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+                <input type="text" value={aliqImp}
+                  onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setAliqImpLocal(n); }}
+                  style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"right", fontFamily:"inherit", outline:"none" }} />
+                <span style={{ color:LT }}>%</span>
+              </span>
+            )}
+            <span style={{ color:LN }}>·</span>
             {temImposto ? (<>
               + Impostos — <span style={{ color:MD, fontWeight:500 }}>{fmtV(temIsoladas ? Math.round((totCIBase - totSIBase)*100)/100 : impostoEdit)}</span>
               &nbsp;·&nbsp; Total com impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIBase)}</span>
             </>) : (<>
               Total sem impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIBase)}</span>
             </>)}
+          </div>
+          <div style={{ display:"flex", gap:6, marginTop:6, marginBottom:4 }}>
+            <button
+              onClick={() => setTipoPgtoLocal("padrao")}
+              style={{ flex:1, padding:"8px 10px", fontSize:12, fontWeight:isPadrao?600:400,
+                border: isPadrao ? `1px solid ${C}` : `0.5px solid ${LN}`,
+                background:"transparent", borderRadius:6, cursor:"pointer", color:C, fontFamily:"inherit" }}>
+              Pagamento padrão
+            </button>
+            <button
+              onClick={() => setTipoPgtoLocal("etapas")}
+              style={{ flex:1, padding:"8px 10px", fontSize:12, fontWeight:!isPadrao?600:400,
+                border: !isPadrao ? `1px solid ${C}` : `0.5px solid ${LN}`,
+                background:"transparent", borderRadius:6, cursor:"pointer", color:C, fontFamily:"inherit" }}>
+              Por etapas
+            </button>
           </div>
         </div>
 
@@ -1621,6 +1656,76 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const modalTotCI   = temImposto && modalTotSI > 0 ? Math.round(modalTotSI/(1-aliqImp/100)*100)/100 : modalTotSI;
   const modalImposto = temImposto ? Math.round((modalTotCI - modalTotSI)*100)/100 : 0;
 
+  // Geração da proposta (antes estava no onClick do modal, agora extraída)
+  function gerarProposta() {
+    if (!calculo) return;
+    const resumoDescritivo = (() => {
+      const fmtN2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+      const fmtArea = v => v > 0 ? fmtN2(v)+"m²" : null;
+      if (isComercial && calculo?.isComercial) {
+        const c = calculo;
+        const partes = [];
+        const nL = grupoQtds["Por Loja"]||0, nA = grupoQtds["Espaço Âncora"]||0;
+        const nAp = grupoQtds["Por Apartamento"]||0, nG = grupoQtds["Galpao"]||0;
+        if (nL>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Loja"); if(b) partes.push(`${nL} loja${nL!==1?"s":""} (${fmtArea(b.area1*nL)})`); }
+        if (nA>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Âncora"); if(b) partes.push(`${nA} ${nA===1?"Espaço Âncora":"Espaços Âncoras"} (${fmtArea(b.area1*nA)})`); }
+        if (nAp>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Apartamento"); if(b) partes.push(`${nAp} apartamento${nAp!==1?"s":""} (${fmtArea(b.area1*nAp)})`); }
+        if (nG>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Galpão"); if(b) partes.push(`${nG} ${nG!==1?"galpões":"galpão"} (${fmtArea(b.area1*nG)})`); }
+        if (c.blocosCom) { const bc=c.blocosCom.find(x=>x.label==="Área Comum"); if(bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`); }
+        const lista = partes.length>1 ? partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1] : partes[0]||"";
+        return `Conjunto comercial, contendo ${lista}, totalizando ${fmtArea(c.areaTot||c.areaTotal)}.`;
+      }
+      const nUnid = calculo?.nRep || 1;
+      const areaUni = calculo?.areaTotal || calculo?.areaTot || 0;
+      const areaTotR = Math.round(areaUni * nUnid * 100)/100;
+      const comAtivos = Object.entries(qtds).filter(([,q])=>q>0).map(([n])=>n.toLowerCase());
+      const totalAmb = Object.entries(qtds).filter(([,q])=>q>0).reduce((s,[,q])=>s+q,0);
+      const listaStr = comAtivos.length>1 ? comAtivos.slice(0,-1).join(", ")+" e "+comAtivos[comAtivos.length-1] : comAtivos[0]||"";
+      const tipDesc = (tipologia||"").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
+      const numFem = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
+      if (nUnid>1) {
+        const nExt = nUnid>=1&&nUnid<=10 ? numFem[nUnid] : String(nUnid);
+        return `${nExt.charAt(0).toUpperCase()+nExt.slice(1)} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+      }
+      return `Uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+    })();
+    setPropostaData({
+      tipoProjeto, tipoObra, padrao, tipologia, tamanho,
+      clienteNome, referencia,
+      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
+      resumoDescritivo,
+      grupoQtds: isComercial ? grupoQtds : null,
+      calculo,
+      incluiArq, incluiEng, incluiMarcenaria,
+      etapasIsoladas: Array.from(etapasIsoladas),
+      tipoPgto, temImposto, aliqImp,
+      descArq, parcArq, descPacote, parcPacote,
+      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
+      etapasPct,
+      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+    });
+    const orcParaSalvar = {
+      ...(orcBase || {}),
+      tipo: tipoProjeto, subtipo: tipoObra, tipologia, tamanho, padrao,
+      cliente: clienteNome, referencia,
+      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
+      repeticao: qtdRep > 0, nUnidades: qtdRep > 0 ? qtdRep : 1,
+      grupoQtds: isComercial ? grupoQtds : null,
+      grupoParams: isComercial ? grupoParams : null,
+      incluiArq, incluiEng, incluiMarcenaria,
+      etapasIsoladas: Array.from(etapasIsoladas),
+      resultado: { ...calculo, precoArq: calculo?.precoArq || 0, precoEng: calculo?.precoEng || 0, areaTotal: calculo?.areaTotal || 0 },
+      tipoPgto, temImposto, aliqImp,
+      descArq, parcArq, descPacote, parcPacote,
+      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
+      etapasPct,
+      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+    };
+    if (onSalvar) onSalvar(orcParaSalvar);
+    setOrcPendente(null);
+    setShowModal(false);
+  }
+
   if (propostaData) {
     const liveData = {
       ...propostaData,
@@ -1892,7 +1997,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   style={{ width:"100%", marginTop:12, background:"#f3f4f6", color:"#111", border:"1px solid #c8cdd6", borderRadius:10, padding:"13px 0", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#e5e7eb"; e.currentTarget.style.borderColor="#d1d5db"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.borderColor="#e5e7eb"; }}
-                  onClick={() => setShowModal(true)}>
+                  onClick={gerarProposta}>
                   Gerar Orçamento
                 </button>
               </div>
