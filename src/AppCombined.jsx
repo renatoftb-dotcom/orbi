@@ -4025,6 +4025,8 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const impostoV= temImp ? Math.round((totCI - totSI)*100)/100 : 0;
   // Engenharia com imposto para linha separada na tabela
   const engCIcom = temImp && engCI>0 ? Math.round(engCI/(1-aliqImp/100)*100)/100 : engCI;
+  // Arquitetura com imposto (para cálculos de forma de pagamento "Apenas Arquitetura")
+  const arqCIcom = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
   // Etapas isoladas
   const idsIsoladosPdf = new Set(orc.etapasIsoladas || []);
   const temIsoladasPdf = idsIsoladosPdf.size > 0;
@@ -4344,10 +4346,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       const dPac=orc.descontoPacoteCtrt??15, pPac=orc.parcelasPacoteCtrt??8;
       const tDescP=Math.round(totCI*(1-dPac/100)*100)/100;
       nv(30);
-      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=6;
-      sf("normal",8.5); stc(INK_MD);
-      tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
-      sf("bold",9); stc(INK); tx(fmtB(tDescP),W-M,y,{align:"right"}); y+=5;
+      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=7;
+      // Linha "De R$ X por apenas: R$ Y" — mesma linha
+      sf("normal",8.5); stc(INK_MD); tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
+      sf("bold",9); stc(INK); tx(fmtB(tDescP),W-M,y,{align:"right"});
+      y+=7;
+      // Linha de detalhes
       sf("normal",7.5); stc(INK_LT);
       if (pPac > 1) {
         const parcValPac = Math.round(totCI/pPac*100)/100;
@@ -4363,22 +4367,24 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     nv(25);
     sf("bold",8.5); stc(INK); tx("Apenas Arquitetura",M,y); y+=6;
     sf("normal",8.5); stc(INK_MD);
-    tx(`Antecipado (${dA}% de desconto) — ${fmtB(Math.round(arqCI*(1-dA/100)*100)/100)}`,M+2,y); hr(y+3); y+=8;
+    tx(`Antecipado (${dA}% de desconto) — ${fmtB(Math.round(arqCIcom*(1-dA/100)*100)/100)}`,M+2,y); hr(y+3); y+=8;
     if (pA > 1) {
-      const parcValA = Math.round(arqCI/pA*100)/100;
+      const parcValA = Math.round(arqCIcom/pA*100)/100;
       tx(`Parcelado: entrada de ${fmtB(parcValA)} + ${pA-1}× de ${fmtB(parcValA)}`,M+2,y);
     } else {
-      tx(`À vista — ${fmtB(arqCI)}`,M+2,y);
+      tx(`À vista — ${fmtB(arqCIcom)}`,M+2,y);
     }
     hr(y+3); y+=10;
 
     if (incluiArq && incluiEng) {
       const dP=orc.descontoPacote??10, pP=orc.parcelasPacote??4;
       const tDescPad=Math.round(totCI*(1-dP/100)*100)/100;
-      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=6;
-      sf("normal",8.5); stc(INK_MD);
-      tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
-      sf("bold",9); stc(INK); tx(fmtB(tDescPad),W-M,y,{align:"right"}); y+=5;
+      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=7;
+      // Linha "De R$ X por apenas: R$ Y" — texto e valor na mesma linha
+      sf("normal",8.5); stc(INK_MD); tx(`De ${fmtB(totCI)} por apenas:`,M+2,y);
+      sf("bold",9); stc(INK); tx(fmtB(tDescPad),W-M,y,{align:"right"});
+      y+=7;
+      // Linha de detalhes (parcelamento)
       sf("normal",7.5); stc(INK_LT);
       if (pP > 1) {
         const parcValP = Math.round(totCI/pP*100)/100;
