@@ -4034,7 +4034,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const pctTotalIsoladoPdf = (orc.etapasPct||[]).filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
   // Quando isolado, arqCI já é o valor correto — totCI já reflete o total do orçamento isolado
   const totCIBasePdf = totCI;
-  console.log("[PDF DEBUG] arqCI="+arqCI+" totCI="+totCI+" temIsoladasPdf="+temIsoladasPdf+" pctTotalIsoladoPdf="+pctTotalIsoladoPdf);
 
   // Escopo (igual preview)
   const escopoDefault = [
@@ -4285,16 +4284,19 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     tx("ETAPA",cE,y); tx("%",cP,y,{align:"right"}); tx("VALOR",cV,y,{align:"right"});
     y+=2; sc(INK); doc.rect(M,y,TW,0.5,"F"); y+=rH-1;
 
-    etapasPdf.forEach(et => {
+    etapasPdf.filter(e => e.id !== 5).forEach(et => {
       nv(rH+3);
-      sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
+      // Em modo isolado, etapas não-isoladas aparecem acinzentadas
+      const isIsolada = idsIsoladosPdf.has(et.id);
+      const visivel = !temIsoladasPdf || isIsolada;
+      const corTxt = visivel ? INK_MD : INK_LT;
+      const corVal = visivel ? INK : INK_LT;
+      sf("normal",8.5); stc(corTxt); tx(et.nome||"",cE,y);
       const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-      const valEtapa = et.id===5 ? engCIcom
-        : temIsoladasPdf && pctTotalIsoladoPdf>0
-          ? Math.round(totCI * (et.pct / pctTotalIsoladoPdf) * 100) / 100
-          : Math.round(arqCIBase*(et.pct/100)*100)/100;
-      sf("normal",8.5); stc(INK_LT); tx(et.id===5||temIsoladasPdf?"—":`${et.pct}%`,cP,y,{align:"right"});
-      sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
+      // Valor SEMPRE = arq × pct/100 (linear, não proporcional ao isolamento)
+      const valEtapa = Math.round(arqCIBase*(et.pct/100)*100)/100;
+      sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
+      sf("normal",8.5); stc(corVal); tx(fmtB(valEtapa),cV,y,{align:"right"});
       y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     });
 
@@ -4309,19 +4311,17 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     }
 
     // Total
-    const engCIpdf = incluiEng ? engCI : 0;
-    const totCIpdf = incluiEng ? totCI : (temImp ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI);
-    const arqCIpdf = temImp && arqCI > 0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
     nv(10);
     y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
     sf("bold",8.5); stc(INK);
     tx("Total",cE,y);
-    const pctArqTotal = etapasPdf.filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
     const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-    const totalPdfBase = temIsoladasPdf
-      ? totCI
-      : Math.round((arqCIBasePdf2*(pctArqTotal/100) + (incluiEng?engCIcom:0))*100)/100;
-    tx(temIsoladasPdf?"—":`${pctArqTotal}%`,cP,y,{align:"right"});
+    // Total = soma dos % ATIVOS (isolados quando temIsoladas, todos quando não) × arq + eng integral (se incluiEng)
+    const pctArqAtivo = etapasPdf
+      .filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)))
+      .reduce((s,e) => s + Number(e.pct), 0);
+    const totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (incluiEng?engCIcom:0))*100)/100;
+    tx(`${pctArqAtivo}%`, cP, y, {align:"right"});
     tx(fmtB(totalPdfBase),cV,y,{align:"right"});
     y+=10;
 
@@ -6434,10 +6434,8 @@ function PropostaPreview({ data, onVoltar }) {
       const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
       const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
       const fmtM2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m²";
-      // etapasPct no PDF: quando isolada, só a etapa selecionada com 100%
-      const etapasPdfFinal = temIsoladas
-        ? etapasIsoladasObjs.map(e => ({ ...e }))
-        : etapasPct;
+      // etapasPct no PDF: passa todas as etapas; o PDF destaca as isoladas via idsIsolados
+      const etapasPdfFinal = etapasPct;
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:tipoPgto, descontoEtapa:descArqLocal, parcelasEtapa:parcArqLocal, descontoPacote:descPacoteLocal, parcelasPacote:parcPacoteLocal, descontoEtapaCtrt:descEtCtrtLocal, parcelasEtapaCtrt:parcEtCtrtLocal, descontoPacoteCtrt:descPacCtrtLocal, parcelasPacoteCtrt:parcPacCtrtLocal, etapasPct:etapasPdfFinal, incluiImposto:temImposto, aliquotaImposto:aliqImp, etapasIsoladas:Array.from(idsIsolados), totSI:0, criadoEm:new Date().toISOString(), resultado:r,
         // Textos editáveis
         cidade: cidadeEdit, validadeStr: validadeEdit, pixTexto: pixEdit,
@@ -6705,12 +6703,13 @@ function PropostaPreview({ data, onVoltar }) {
                 const bgRow = isIsolada ? "#e0f2fe" : "transparent";
                 const corRow = isIsolada ? "#0369a1" : C;
                 const fontWt = isIsolada ? 600 : 400;
-                const valorEtapa = isEng ? engCIEdit
-                  : temIsoladas
-                    ? Math.round(totCIBase * (et.pct / pctTotalIsolado) * 100) / 100
-                    : Math.round(arqCIEdit*(et.pct/100)*100)/100;
+                // Valor da etapa SEMPRE baseado no % da arq total (não proporcional ao isolamento)
+                // Engenharia: sempre integral (quando incluiEng)
+                const valorEtapa = isEng
+                  ? engCIEdit
+                  : Math.round(arqCIEdit*(et.pct/100)*100)/100;
                 return (
-                <div key={et.id} style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"7px 4px", borderBottom:`0.5px solid ${LN}`, alignItems:"center", background: bgRow, opacity: visivel ? 1 : 0.3 }}>
+                <div key={et.id} style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"7px 4px", borderBottom:`0.5px solid ${LN}`, alignItems:"center", background: bgRow, opacity: visivel ? 1 : 0.35 }}>
                   {!isEng ? (
                     <span
                       onClick={() => toggleIsolarEtapa(et.id)}
@@ -6761,14 +6760,24 @@ function PropostaPreview({ data, onVoltar }) {
                   + Adicionar etapa
                 </button>
               </div>
-              <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"8px 4px", borderTop:`1.5px solid ${C}`, marginTop:2, alignItems:"center" }}>
-                <span></span>
-                <span style={{ fontWeight:600, color:C }}>Total</span>
-                <span></span>
-                <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{etapasPct.filter(e=>e.id!==5 && (!temIsoladas || idsIsolados.has(e.id))).reduce((s,e)=>s+e.pct,0)}%</span>
-                <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(temIsoladas ? totCIBase : Math.round((arqCIEdit*(etapasPct.reduce((s,e)=>s+e.pct,0)/100) + (incluiEng?engCIEdit:0))*100)/100)}</span>
-                <span></span>
-              </div>
+              {(() => {
+                // Total = apenas linhas ativas (isoladas + eng se incluiEng)
+                // Sem isolamento: todas as arq + eng
+                const pctAtivo = etapasPct
+                  .filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)))
+                  .reduce((s,e)=>s+e.pct,0);
+                const valorAtivo = Math.round((arqCIEdit * pctAtivo / 100 + (incluiEng ? engCIEdit : 0)) * 100) / 100;
+                return (
+                  <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"8px 4px", borderTop:`1.5px solid ${C}`, marginTop:2, alignItems:"center" }}>
+                    <span></span>
+                    <span style={{ fontWeight:600, color:C }}>Total</span>
+                    <span></span>
+                    <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{pctAtivo}%</span>
+                    <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(valorAtivo)}</span>
+                    <span></span>
+                  </div>
+                );
+              })()}
             </div>
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
               <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>Etapa a Etapa</div>

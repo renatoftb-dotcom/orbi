@@ -911,7 +911,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const pctTotalIsoladoPdf = (orc.etapasPct||[]).filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
   // Quando isolado, arqCI já é o valor correto — totCI já reflete o total do orçamento isolado
   const totCIBasePdf = totCI;
-  console.log("[PDF DEBUG] arqCI="+arqCI+" totCI="+totCI+" temIsoladasPdf="+temIsoladasPdf+" pctTotalIsoladoPdf="+pctTotalIsoladoPdf);
 
   // Escopo (igual preview)
   const escopoDefault = [
@@ -1162,16 +1161,19 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     tx("ETAPA",cE,y); tx("%",cP,y,{align:"right"}); tx("VALOR",cV,y,{align:"right"});
     y+=2; sc(INK); doc.rect(M,y,TW,0.5,"F"); y+=rH-1;
 
-    etapasPdf.forEach(et => {
+    etapasPdf.filter(e => e.id !== 5).forEach(et => {
       nv(rH+3);
-      sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
+      // Em modo isolado, etapas não-isoladas aparecem acinzentadas
+      const isIsolada = idsIsoladosPdf.has(et.id);
+      const visivel = !temIsoladasPdf || isIsolada;
+      const corTxt = visivel ? INK_MD : INK_LT;
+      const corVal = visivel ? INK : INK_LT;
+      sf("normal",8.5); stc(corTxt); tx(et.nome||"",cE,y);
       const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-      const valEtapa = et.id===5 ? engCIcom
-        : temIsoladasPdf && pctTotalIsoladoPdf>0
-          ? Math.round(totCI * (et.pct / pctTotalIsoladoPdf) * 100) / 100
-          : Math.round(arqCIBase*(et.pct/100)*100)/100;
-      sf("normal",8.5); stc(INK_LT); tx(et.id===5||temIsoladasPdf?"—":`${et.pct}%`,cP,y,{align:"right"});
-      sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
+      // Valor SEMPRE = arq × pct/100 (linear, não proporcional ao isolamento)
+      const valEtapa = Math.round(arqCIBase*(et.pct/100)*100)/100;
+      sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
+      sf("normal",8.5); stc(corVal); tx(fmtB(valEtapa),cV,y,{align:"right"});
       y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     });
 
@@ -1186,19 +1188,17 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     }
 
     // Total
-    const engCIpdf = incluiEng ? engCI : 0;
-    const totCIpdf = incluiEng ? totCI : (temImp ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI);
-    const arqCIpdf = temImp && arqCI > 0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
     nv(10);
     y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
     sf("bold",8.5); stc(INK);
     tx("Total",cE,y);
-    const pctArqTotal = etapasPdf.filter(e=>e.id!==5).reduce((s,e)=>s+Number(e.pct),0);
     const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-    const totalPdfBase = temIsoladasPdf
-      ? totCI
-      : Math.round((arqCIBasePdf2*(pctArqTotal/100) + (incluiEng?engCIcom:0))*100)/100;
-    tx(temIsoladasPdf?"—":`${pctArqTotal}%`,cP,y,{align:"right"});
+    // Total = soma dos % ATIVOS (isolados quando temIsoladas, todos quando não) × arq + eng integral (se incluiEng)
+    const pctArqAtivo = etapasPdf
+      .filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)))
+      .reduce((s,e) => s + Number(e.pct), 0);
+    const totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (incluiEng?engCIcom:0))*100)/100;
+    tx(`${pctArqAtivo}%`, cP, y, {align:"right"});
     tx(fmtB(totalPdfBase),cV,y,{align:"right"});
     y+=10;
 
