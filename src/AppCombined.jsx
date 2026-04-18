@@ -3532,9 +3532,9 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     const multiPre = etArqAtivasPre.length > 1;
     const arqEngPre = incluiArq && engAtivaPre && etArqAtivasPre.length > 0;
     const mostraPacotePre = mostrarTabelaPdf ? (multiPre || arqEngPre) : arqEngPre;
-    // Etapa a Etapa: título(7) + op1(5+4) + op2(5) + hr(7) = 25 (COMPACTO)
+    // Etapa a Etapa: título(7) + op1(5+4) + op2(5) + hr(11) = 29 (COMPACTO com respiro antes do Pacote)
     // Apenas Arq (toggle off): título(8) + op1 arejado(5+6+4) + op2(5+5) + hr(8) = 36 (AREJADO)
-    const alturaPrimeiro = mostrarTabelaPdf ? 25 : 36;
+    const alturaPrimeiro = mostrarTabelaPdf ? 29 : 36;
     // Pacote Completo: compacto(28) quando tem tabela, arejado(36) quando não
     const alturaPacote = mostraPacotePre ? (mostrarTabelaPdf ? 28 : 36) : 0;
     const alturaTotalFormaPgto = alturaPrimeiro + alturaPacote + 6;
@@ -3564,7 +3564,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       } else {
         tx(`Cada etapa paga à vista no início.`, M+2+wOp2Et, y);
       }
-      hr(y+3); y+=7;
+      hr(y+3); y+=11;
     } else {
       // Toggle DESLIGADO: renderiza "Apenas Arquitetura" igual Pagamento Padrão
       // Valor: subTotalArqEtapas (só arq selecionada, sem eng)
