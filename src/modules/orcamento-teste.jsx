@@ -341,6 +341,86 @@ function EtapaValorInput({ valorAtual, fmtN, onCommit, borderColor, color }) {
   );
 }
 
+// Input numérico genérico (inteiro ou decimal) com commit no blur.
+// Mantém estado LOCAL durante a digitação pra evitar perda de foco quando
+// o estado externo desencadeia re-renders (ex: redistribuição de percentuais).
+function NumInput({ valor, onCommit, decimais = 2, min = 0, max = 100, width = 50, style = {} }) {
+  const [local, setLocal] = useState(String(valor).replace(".",","));
+  const [focado, setFocado] = useState(false);
+  const ultimoExterno = useRef(valor);
+  useEffect(() => {
+    if (!focado && valor !== ultimoExterno.current) {
+      ultimoExterno.current = valor;
+      setLocal(String(valor).replace(".",","));
+    }
+  }, [valor, focado]);
+  return (
+    <input type="text"
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onFocus={e => { setFocado(true); e.target.select(); }}
+      onBlur={() => {
+        setFocado(false);
+        const raw = local.replace(",", ".");
+        let num = parseFloat(raw);
+        if (isNaN(num)) { setLocal(String(valor).replace(".",",")); return; }
+        num = Math.max(min, Math.min(max, num));
+        if (decimais === 0) num = Math.round(num);
+        ultimoExterno.current = num;
+        onCommit(num);
+      }}
+      onKeyDown={e => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setLocal(String(valor).replace(".",",")); e.target.blur(); } }}
+      style={{ width, fontSize:12, padding:"3px 6px", border:"1px solid #e5e7eb", borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none", ...style }} />
+  );
+}
+
+// Helper: bloco de opções de pagamento (espelha o PDF)
+// tipo: "pacote" (mostra valores) ou "etapaAEtapa" (só descreve)
+// Para "pacote": valor, desc%, parcelas
+// Para "etapaAEtapa": só desc% e parcelas
+function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
+  const MD = "#6b7280";
+  const INK = "#111827";
+  const styleContainer = { fontSize:12, color:MD, marginTop:8, lineHeight:1.6 };
+  const styleLabel = { fontWeight:600, color:INK };
+  const styleValor = { color:INK, fontWeight:600 };
+  if (tipo === "etapaAEtapa") {
+    return (
+      <div style={styleContainer}>
+        <div style={{ marginBottom:3 }}>
+          <span style={styleLabel}>Opção 1: </span>
+          Cada etapa paga antecipadamente com {desc}% de desconto.
+        </div>
+        <div>
+          <span style={styleLabel}>Opção 2: </span>
+          {parcelas > 1
+            ? <>Cada etapa parcelada em {parcelas}× (entrada + {parcelas-1}× ao longo da etapa). <span style={{ fontSize:10, color:"#9ca3af" }}>sem desconto</span></>
+            : <>Cada etapa paga à vista no início.</>}
+        </div>
+      </div>
+    );
+  }
+  // pacote — mantém layout com valores literais
+  const valorComDesc = Math.round(valor * (1 - desc/100) * 100) / 100;
+  const parcVal = Math.round(valor / parcelas * 100) / 100;
+  return (
+    <div style={styleContainer}>
+      <div style={{ marginBottom:3 }}>
+        <span style={styleLabel}>Opção 1 — Pagamento antecipado ({desc}% de desconto):</span>{" "}
+        De {fmtV(valor)} por <span style={styleValor}>{fmtV(valorComDesc)}</span>
+      </div>
+      <div>
+        <span style={styleLabel}>
+          Opção 2 — {parcelas > 1 ? `Parcelado em ${parcelas}× sem desconto` : "À vista"}:
+        </span>{" "}
+        {parcelas > 1
+          ? <>Entrada de <span style={styleValor}>{fmtV(parcVal)}</span> + {parcelas-1}× de <span style={styleValor}>{fmtV(parcVal)}</span></>
+          : <span style={styleValor}>{fmtV(valor)}</span>}
+      </div>
+    </div>
+  );
+}
+
 function PropostaPreview({ data, onVoltar }) {
   if (!data) return null;
   const { tipoProjeto, tipoObra, padrao, tipologia, tamanho, clienteNome,
@@ -352,15 +432,22 @@ function PropostaPreview({ data, onVoltar }) {
   const [tipoPgto, setTipoPgtoLocal]     = useState(data.tipoPgto || "padrao");
   const [temImposto, setTemImpostoLocal] = useState(data.temImposto || false);
   const [aliqImp, setAliqImpLocal]       = useState(data.aliqImp || 16);
-  const [etapasPct, setEtapasPctLocal]   = useState(data.etapasPct || [
-    { id:1, nome:"Estudo de Viabilidade",  pct:10 },
-    { id:2, nome:"Estudo Preliminar",      pct:40 },
-    { id:3, nome:"Aprovação na Prefeitura",pct:12 },
-    { id:4, nome:"Projeto Executivo",      pct:38 },
-    { id:5, nome:"Engenharia",             pct:0  },
-  ]);
+  const [etapasPct, setEtapasPctLocal]   = useState(() => {
+    const base = data.etapasPct || [
+      { id:1, nome:"Estudo de Viabilidade",  pct:10 },
+      { id:2, nome:"Estudo Preliminar",      pct:40 },
+      { id:3, nome:"Aprovação na Prefeitura",pct:12 },
+      { id:4, nome:"Projeto Executivo",      pct:38 },
+    ];
+    // Garante que a etapa 5 (Engenharia) sempre exista
+    if (!base.some(e => e.id === 5)) {
+      return [...base, { id:5, nome:"Engenharia", pct:0 }];
+    }
+    return base;
+  });
   const [etapasIsoladasLocal, setEtapasIsoladasLocal] = useState(new Set(data.etapasIsoladas || []));
   const etapasIsoladas = Array.from(etapasIsoladasLocal);
+  const [mostrarTabelaEtapas, setMostrarTabelaEtapas] = useState(data.mostrarTabelaEtapas ?? true);
   // Descontos/parcelas — locais também
   const [descArqLocal,     setDescArqLocal]     = useState(data.descArq     ?? 5);
   const [parcArqLocal,     setParcArqLocal]     = useState(data.parcArq     ?? 3);
@@ -384,7 +471,7 @@ function PropostaPreview({ data, onVoltar }) {
   // ── Estados editáveis ──────────────────────────────────────
   const [arqEdit, setArqEdit]               = useState(incluiArq ? (calculo.precoArq || 0) : 0);
   const [engEdit, setEngEdit]               = useState(incluiEng ? (calculo.precoEng || 0) : 0);
-  const [resumoEdit, setResumoEdit]         = useState(data.resumoDescritivo || "");
+  const [resumoEdit, setResumoEdit]         = useState(null); // null = usar dinâmico
   const [editandoArq, setEditandoArq]       = useState(false);
   const [editandoEng, setEditandoEng]       = useState(false);
   const [editandoResumo, setEditandoResumo] = useState(false);
@@ -393,7 +480,7 @@ function PropostaPreview({ data, onVoltar }) {
   const tmpEngRef = useRef("");
   const [tmpEng, setTmpEng]                 = useState("");
   // Textos editáveis da proposta
-  const [subTituloEdit, setSubTituloEdit]   = useState("Proposta Comercial de Projetos de Arquitetura e Engenharia");
+  const [subTituloEdit, setSubTituloEdit]   = useState(null); // null = usar default dinâmico
   const [validadeEdit, setValidadeEdit]     = useState(new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR"));
   const [naoInclEdit, setNaoInclEdit]       = useState(null); // null = usar default
   const [prazoEdit, setPrazoEdit]           = useState(null); // null = usar default
@@ -460,13 +547,141 @@ function PropostaPreview({ data, onVoltar }) {
   // Compatibilidade com código que usa etapaIsoladaObj (single)
   const etapaIsoladaObj = temIsoladas ? etapasIsoladasObjs[0] : null;
   const etapasVisiveis  = (temIsoladas ? etapasPct.filter(e => idsIsolados.has(e.id)) : etapasPct).filter(e => incluiEng || e.id !== 5);
-  // totSIBase = % da arq das etapas isoladas + 100% da eng (se incluiEng)
+  // totSIBase = % da arq das etapas isoladas + 100% da eng (se ativa)
   const pctTotalIsolado = etapasIsoladasObjs.reduce((s,e) => s + (e.id !== 5 ? e.pct : 0), 0);
+  const engIsolada      = idsIsolados.has(5);
+  // Engenharia ATIVA: incluiEng ligado E (sem isolamento OU eng isolada)
+  const engAtiva        = incluiEng && (!temIsoladas || engIsolada);
   const arqIsoladaSI    = temIsoladas ? Math.round(arqCI * (pctTotalIsolado / 100) * 100) / 100 : 0;
-  const engSI           = incluiEng ? engCI : 0;
+  // Com isolamento: eng entra apenas se eng estiver isolada
+  const engSI           = engAtiva ? engCI : 0;
   const totSIBase       = temIsoladas
     ? Math.round((arqIsoladaSI + engSI) * 100) / 100
     : totSIEdit;
+
+  // Total do pacote em modo etapas — usado tanto no preview quanto no pagamento
+  // Valor com imposto das etapas arq selecionadas + eng (se ativa)
+  const totalPacoteEtapas = (() => {
+    // Soma dos valores das etapas arq selecionadas (ou todas se sem isolamento)
+    const etapasArqAtivas = etapasPct.filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)));
+    const pctAtivo = etapasArqAtivas.reduce((s,e)=>s+Number(e.pct),0);
+    // arqCIEdit = arq TOTAL com imposto (base dos cálculos por etapa no preview)
+    return Math.round((arqCIEdit * pctAtivo / 100 + (engAtiva ? engCIEdit : 0)) * 100) / 100;
+  })();
+  // Subtotal apenas das etapas de arquitetura (sem eng) — para oferecer opção "Apenas Arquitetura"
+  const subTotalArqEtapas = (() => {
+    const etapasArqAtivas = etapasPct.filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)));
+    const pctAtivo = etapasArqAtivas.reduce((s,e)=>s+Number(e.pct),0);
+    return Math.round(arqCIEdit * pctAtivo / 100 * 100) / 100;
+  })();
+
+  // Subtítulo dinâmico — usa engAtiva (não só o toggle, mas também considera isolamento)
+  const subTituloDefault = (incluiArq && engAtiva)
+    ? "Proposta Comercial de Projetos de Arquitetura e Engenharia"
+    : (incluiArq && !engAtiva)
+      ? "Proposta Comercial de Projetos de Arquitetura"
+      : (!incluiArq && engAtiva)
+        ? "Proposta Comercial de Projetos de Engenharia"
+        : "Proposta Comercial";
+  // Valor final (edição manual ou default)
+  const subTituloFinal = subTituloEdit !== null ? subTituloEdit : subTituloDefault;
+
+  // Resumo descritivo dinâmico (prefixo "Construção nova de" / "Reforma de")
+  // Recalcula sempre que tipoObra mudar, a partir dos dados originais do projeto
+  const resumoDinamico = (() => {
+    const fmtN2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
+    const fmtArea = v => v > 0 ? fmtN2(v)+"m²" : null;
+    const tipoObraLower = (data.tipoObra || "").toLowerCase();
+    const prefixo = tipoObraLower.includes("reforma") ? "Reforma de " : "Construção nova de ";
+    const calc = data.calculo || {};
+    // Caso comercial (conjunto comercial com grupoQtds)
+    if (data.grupoQtds && calc.blocosCom) {
+      const partes = [];
+      const nL = data.grupoQtds["Por Loja"]||0, nA = data.grupoQtds["Espaço Âncora"]||0;
+      const nAp = data.grupoQtds["Por Apartamento"]||0, nG = data.grupoQtds["Galpao"]||0;
+      if (nL>0) { const b=calc.blocosCom.find(x=>x.label==="Loja"); if(b) partes.push(`${nL} loja${nL!==1?"s":""} (${fmtArea(b.area1*nL)})`); }
+      if (nA>0) { const b=calc.blocosCom.find(x=>x.label==="Âncora"); if(b) partes.push(`${nA} ${nA===1?"Espaço Âncora":"Espaços Âncoras"} (${fmtArea(b.area1*nA)})`); }
+      if (nAp>0) { const b=calc.blocosCom.find(x=>x.label==="Apartamento"); if(b) partes.push(`${nAp} apartamento${nAp!==1?"s":""} (${fmtArea(b.area1*nAp)})`); }
+      if (nG>0) { const b=calc.blocosCom.find(x=>x.label==="Galpão"); if(b) partes.push(`${nG} ${nG!==1?"galpões":"galpão"} (${fmtArea(b.area1*nG)})`); }
+      const bc = calc.blocosCom.find(x=>x.label==="Área Comum"); if(bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`);
+      const lista = partes.length>1 ? partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1] : partes[0]||"";
+      return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(calc.areaTot||calc.areaTotal)}.`;
+    }
+    // Caso residencial
+    const nUnid = calc.nRep || 1;
+    const areaUni = calc.areaTotal || calc.areaTot || 0;
+    const areaTotR = Math.round(areaUni * nUnid * 100)/100;
+    const comodos = data.comodos || [];
+    const totalAmb = comodos.reduce((s,c)=>s+(c.qtd||0),0);
+
+    // Pluralização + extenso para nomes de cômodos
+    // Palavras principais já vão pro plural; palavras de apoio (de, da, do, TV, master, etc) não mudam
+    const pluraisIrreg = {
+      "Sala TV": "salas TV",
+      "Sala de jantar": "salas de jantar",
+      "Hall de entrada": "halls de entrada",
+      "Área de lazer": "áreas de lazer",
+      "Lavabo Lazer": "lavabos lazer",
+      "Closet Suíte": "closets suíte",
+      "Suíte Master": "suítes master",
+      "Suíte": "suítes",
+      "WC": "WCs",
+      "Dormitório": "dormitórios",
+      "Escritório": "escritórios",
+      "Depósito": "depósitos",
+      "Lavabo": "lavabos",
+      "Garagem": "garagens",
+      "Cozinha": "cozinhas",
+      "Lavanderia": "lavanderias",
+      "Piscina": "piscinas",
+      "Sauna": "saunas",
+      "Academia": "academias",
+      "Brinquedoteca": "brinquedotecas",
+      "Louceiro": "louceiros",
+      "Living": "livings",
+      "Closet": "closets",
+      "Escada": "escadas",
+    };
+    // Gênero para artigo (usado quando qtd=1)
+    const generoAmb = {
+      "Garagem":"f","Hall de entrada":"m","Sala TV":"f","Sala de jantar":"f","Living":"m",
+      "Cozinha":"f","Lavanderia":"f","Depósito":"m","Lavabo":"m","Escritório":"m",
+      "Área de lazer":"f","Piscina":"f","Lavabo Lazer":"m","Sauna":"f","Academia":"f",
+      "Brinquedoteca":"f","Louceiro":"m","Dormitório":"m","Closet":"m","WC":"m",
+      "Suíte":"f","Closet Suíte":"m","Suíte Master":"f","Escada":"f",
+    };
+    // Números por extenso (masc/fem) 1-10
+    const numExtMasc = ["","um","dois","três","quatro","cinco","seis","sete","oito","nove","dez"];
+    const numExtFem  = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
+    // Formata "N nome" — número por extenso até 10, algarismo acima; pluraliza nome
+    // Casos especiais: "Garagem" vira "vaga de garagem" / "vagas de garagem"
+    const formatComodo = (nome, qtd) => {
+      const plural = qtd > 1;
+      if (nome === "Garagem") {
+        const ext = qtd <= 10 ? numExtFem[qtd] : String(qtd);
+        return `${ext} ${plural ? "vagas de garagem" : "vaga de garagem"}`;
+      }
+      const nomeStr = plural ? (pluraisIrreg[nome] || (nome.toLowerCase() + "s")) : nome.toLowerCase();
+      const genero = generoAmb[nome] || "m";
+      const ext = genero === "f" ? numExtFem : numExtMasc;
+      const qtdStr = qtd <= 10 ? ext[qtd] : String(qtd);
+      return `${qtdStr} ${nomeStr}`;
+    };
+    // Lista composta (ex: "duas garagens, três dormitórios e uma suíte")
+    const itensFmt = comodos.filter(c=>(c.qtd||0)>0).map(c => formatComodo(c.nome, c.qtd));
+    const listaStr = itensFmt.length>1
+      ? itensFmt.slice(0,-1).join(", ")+" e "+itensFmt[itensFmt.length-1]
+      : itensFmt[0]||"";
+    const tipDesc = (data.tipologia||"").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
+    const numFem = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
+    if (nUnid>1) {
+      const nExt = nUnid>=1&&nUnid<=10 ? numFem[nUnid] : String(nUnid);
+      return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+    }
+    return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+  })();
+  // Valor final (edição manual preserva, senão usa dinâmico)
+  const resumoFinal = resumoEdit !== null ? resumoEdit : resumoDinamico;
 
   // Manipuladores de etapas (isolar, adicionar, remover, editar %)
   function toggleIsolarEtapa(id) {
@@ -497,7 +712,42 @@ function PropostaPreview({ data, onVoltar }) {
     });
   }
   function atualizarEtapaPct(id, novoPct) {
-    setEtapasPctLocal(prev => prev.map(e => e.id === id ? { ...e, pct: Math.max(0, Math.min(100, novoPct)) } : e));
+    // Arredonda pra inteiro (sem casas decimais)
+    const clampedInt = Math.round(Math.max(0, Math.min(100, novoPct)));
+    setEtapasPctLocal(prev => {
+      // Sem isolamento: só atualiza
+      if (!temIsoladas) {
+        return prev.map(e => e.id === id ? { ...e, pct: clampedInt } : e);
+      }
+      const etapaAtual = prev.find(e => e.id === id);
+      if (!etapaAtual) return prev;
+      // Eng ou etapa não isolada: atualização simples
+      if (id === 5 || !idsIsolados.has(id)) {
+        return prev.map(e => e.id === id ? { ...e, pct: clampedInt } : e);
+      }
+      // CASCATA CIRCULAR: ajusta só a PRÓXIMA etapa na ordem.
+      // Se a editada é a última da lista de isoladas, volta pra primeira.
+      // Assim o total das isoladas se mantém sempre constante.
+      const arqIsoladasOrdem = prev.filter(e => e.id !== 5 && idsIsolados.has(e.id));
+      const idxEditada = arqIsoladasOrdem.findIndex(e => e.id === id);
+      const alvo = arqIsoladasOrdem[(idxEditada + 1) % arqIsoladasOrdem.length];
+      const pctAntigoEditada = Math.round(Number(etapaAtual.pct));
+      const pctAntigoAlvo = Math.round(Number(alvo.pct));
+      // O total a manter é: pctAntigoEditada + pctAntigoAlvo
+      const totalPar = pctAntigoEditada + pctAntigoAlvo;
+      // Limita o valor editado ao máximo possível (não pode passar do totalPar, senão alvo ficaria negativo)
+      const pctFinalEditada = Math.min(clampedInt, totalPar);
+      const pctFinalAlvo = totalPar - pctFinalEditada;
+      // Só tem a editada (1 única etapa isolada): ajusta só ela
+      if (arqIsoladasOrdem.length === 1) {
+        return prev.map(e => e.id === id ? { ...e, pct: clampedInt } : e);
+      }
+      return prev.map(e => {
+        if (e.id === id)    return { ...e, pct: pctFinalEditada };
+        if (e.id === alvo.id) return { ...e, pct: pctFinalAlvo };
+        return e;
+      });
+    });
   }
   function atualizarEtapaValor(id, novoValor) {
     // Converte valor R$ → % da arq base
@@ -572,7 +822,7 @@ function PropostaPreview({ data, onVoltar }) {
   // Escopo filtrado e renumerado
   const escopoDefault = (() => {
     const blocos = escopoState.filter(b => {
-      if (b.isEng) return incluiEng;
+      if (b.isEng) return engAtiva;
       if (!incluiArq) return false;
       if (b.etapaId === 1 && isPadrao) return false;
       if (temIsoladas && !b.isEng && !idsIsolados.has(b.etapaId) && !b.custom) return false;
@@ -597,7 +847,7 @@ function PropostaPreview({ data, onVoltar }) {
 
     // Itens fixos — simples string ou { label, sub } para texto menor
   const naoInclFixos = [
-    "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
+    // Grupo: Projetos (agrupados em sequência)
     "Projetos de climatização",
     "Projeto de prevenção de incêndio",
     "Projeto de automação",
@@ -605,17 +855,26 @@ function PropostaPreview({ data, onVoltar }) {
     "Projeto de interiores",
     ...(!incluiMarcenaria ? ["Projeto de Marcenaria (Móveis internos)"] : []),
     "Projeto estrutural de estruturas metálicas",
-    "Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura",
+    "Projeto estrutural de muros de contenção (>1m)",
+    // Grupo: Serviços
     "Sondagem e Planialtimétrico do terreno",
     "Acompanhamento semanal de obra",
     "Gestão e execução de obra",
     "Vistoria para Caixa Econômica Federal",
     "RRT de Execução de obra",
+    // Outros
+    "Taxas municipais e emolumentos (CAU/Prefeitura)",
     ...(!temImposto ? ["Impostos"] : []),
   ];
-  // Itens dinâmicos baseados nos toggles — com sublabel menor
+  // Itens dinâmicos baseados nos toggles + isolamento — com sublabel menor
+  // Etapas não isoladas (quando em modo isolamento) aparecem primeiro
+  const etapasNaoSelecionadas = temIsoladas
+    ? etapasPct.filter(e => e.id !== 5 && !idsIsolados.has(e.id)).map(e => ({ label: e.nome, sub: null }))
+    : [];
   const naoInclDinamicos = [
-    ...(!incluiEng ? [{ label:"Projetos de Engenharia", sub:"(Estrutural, Elétrico e Hidrossanitário)" }] : []),
+    ...etapasNaoSelecionadas,
+    // Eng aparece em "não inclusos" quando não ativa (sem eng no toggle OU com isolamento e eng não isolada)
+    ...(!engAtiva ? [{ label:"Projetos de Engenharia", sub:"(Estrutural/Elétrico/Hidrossanitário)" }] : []),
     ...(!incluiArq ? [{ label:"Projetos de Arquitetura", sub:null }] : []),
   ];
   // Normaliza tudo para { label, sub }
@@ -627,12 +886,12 @@ function PropostaPreview({ data, onVoltar }) {
   const prazoDefault = isPadrao
     ? [
        ...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar."] : []),
-       ...(incluiEng ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : []),
+       ...(engAtiva ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : []),
       ]
     : [
-       ...(incluiArq || incluiEng ? ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente."] : []),
-       ...(incluiArq || incluiEng ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
-       ...(incluiEng ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
+       ...(incluiArq || engAtiva ? ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente."] : []),
+       ...(incluiArq || engAtiva ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
+       ...(engAtiva ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
       ];
 
   const C = "#111827";
@@ -665,26 +924,52 @@ function PropostaPreview({ data, onVoltar }) {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
       // ESPELHO do preview: calcular aqui os valores exatos exibidos e passar prontos ao PDF
+      // engAtiva: com isolamento, só conta se eng estiver isolada
+      const engAtiva = incluiEng && (!temIsoladas || idsIsolados.has(5));
       // arq/eng exibidos no header (sem imposto)
       const arqExibidoSI = temIsoladas ? arqIsoladaSI : arqCI;
-      const engExibidoSI = incluiEng ? engCI : 0;
+      const engExibidoSI = engAtiva ? engCI : 0;
       // com imposto
       const arqExibidoCI = temImposto && arqExibidoSI > 0 ? Math.round(arqExibidoSI / (1 - aliqImp/100) * 100) / 100 : arqExibidoSI;
       const engExibidoCI = temImposto && engExibidoSI > 0 ? Math.round(engExibidoSI / (1 - aliqImp/100) * 100) / 100 : engExibidoSI;
       // total com imposto (exatamente como o preview mostra)
       const totalExibidoSI = Math.round((arqExibidoSI + engExibidoSI) * 100) / 100;
       const totalExibidoCI = temImposto && totalExibidoSI > 0 ? Math.round(totalExibidoSI / (1 - aliqImp/100) * 100) / 100 : totalExibidoSI;
-      // etapas que aparecem no preview (só isoladas quando tem isolamento)
-      // Já com os valores calculados exatamente como no preview
+      // etapas que aparecem no preview (só isoladas quando tem isolamento; sem eng - eng vai separado)
       const etapasExibidas = (temIsoladas
         ? etapasPct.filter(e => e.id !== 5 && idsIsolados.has(e.id))
         : etapasPct.filter(e => e.id !== 5)
       ).map(e => ({
         ...e,
-        // Valor calculado exatamente como o preview mostra:
-        // valorEtapa = arqCIEdit × pct/100 (onde arqCIEdit é arq TOTAL com imposto)
+        // Valor calculado exatamente como o preview mostra
         valorCalculado: Math.round(arqCIEdit * (e.pct/100) * 100) / 100,
       }));
+      // Etapas NÃO selecionadas (pra entrar em "serviços não inclusos")
+      const etapasNaoIncluidas = temIsoladas
+        ? etapasPct.filter(e => e.id !== 5 && !idsIsolados.has(e.id)).map(e => e.nome)
+        : [];
+      // Engenharia também desconsiderada quando não isolada em modo isolamento
+      if (incluiEng && temIsoladas && !idsIsolados.has(5)) {
+        etapasNaoIncluidas.push("Projetos de Engenharia (Estrutural/Elétrico/Hidrossanitário)");
+      }
+
+      // Frase descritiva — só aparece quando tem etapa arq ISOLADA E nem todas estão isoladas
+      // (se todas as arq estão isoladas, já está óbvio no escopo — não redundar)
+      let avisoIsolado = null;
+      if (temIsoladas) {
+        const etapasArqTotal = etapasPct.filter(e => e.id !== 5).length;
+        const etapasArqIsoladas = etapasPct.filter(e => e.id !== 5 && idsIsolados.has(e.id));
+        if (etapasArqIsoladas.length > 0 && etapasArqIsoladas.length < etapasArqTotal) {
+          // Lista das etapas isoladas com "e" antes da última
+          const nomes = etapasArqIsoladas.map(e => e.nome);
+          let lista;
+          if (nomes.length === 1) lista = nomes[0];
+          else if (nomes.length === 2) lista = `${nomes[0]} e ${nomes[1]}`;
+          else lista = `${nomes.slice(0,-1).join(", ")} e ${nomes[nomes.length-1]}`;
+          const verboEtapa = nomes.length === 1 ? "à etapa de" : "às etapas de";
+          avisoIsolado = `Referente ${verboEtapa} ${lista}:`;
+        }
+      }
 
       // Legado (mantido por compat do defaultModelo)
       const arqTotal = arqExibidoSI;
@@ -703,12 +988,25 @@ function PropostaPreview({ data, onVoltar }) {
       // etapasPct no PDF: passa só as que aparecem no preview
       const etapasPdfFinal = etapasExibidas;
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:tipoPgto, descontoEtapa:descArqLocal, parcelasEtapa:parcArqLocal, descontoPacote:descPacoteLocal, parcelasPacote:parcPacoteLocal, descontoEtapaCtrt:descEtCtrtLocal, parcelasEtapaCtrt:parcEtCtrtLocal, descontoPacoteCtrt:descPacCtrtLocal, parcelasPacoteCtrt:parcPacCtrtLocal, etapasPct:etapasPdfFinal, incluiImposto:temImposto, aliquotaImposto:aliqImp, etapasIsoladas:Array.from(idsIsolados), totSI:0, criadoEm:new Date().toISOString(), resultado:r,
+        // Controle de exibição
+        mostrarTabelaEtapas: mostrarTabelaEtapas,
         // ESPELHO do preview: valores exatos pré-calculados (PDF usa esses em vez de recalcular)
         _preview: {
           arqSI: arqExibidoSI, arqCI: arqExibidoCI,
           engSI: engExibidoSI, engCI: engExibidoCI,
           totalSI: totalExibidoSI, totalCI: totalExibidoCI,
           impostoV: Math.round((totalExibidoCI - totalExibidoSI) * 100) / 100,
+          engAtiva, mostrarTabelaEtapas,
+          etapasNaoIncluidas,
+          // Valores do pacote em modo etapas (igual ao que o preview mostra)
+          totalPacoteEtapas,
+          subTotalArqEtapas,
+          // Textos editáveis da preview
+          subTitulo: subTituloFinal,
+          labelApenas: labelApenasEdit || (incluiArq && incluiEng ? "Apenas Arquitetura" : incluiEng && !incluiArq ? "Apenas Engenharia" : "Apenas Arquitetura"),
+          avisoIsolado: avisoIsolado, // frase "Referente às etapas..." quando isolamento parcial
+          prazoCustom: prazoEdit, // pode ser null (usa default do PDF)
+          naoInclCustom: naoInclEdit, // pode ser null
         },
         // Textos editáveis
         cidade: cidadeEdit, validadeStr: validadeEdit, pixTexto: pixEdit,
@@ -716,7 +1014,9 @@ function PropostaPreview({ data, onVoltar }) {
         escopoEditado: escopoState,
       };
       const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
-      if (resumoEdit && modelo.cliente) modelo.cliente.resumo = resumoEdit;
+      if (resumoFinal && modelo.cliente) modelo.cliente.resumo = resumoFinal;
+      // Sobrescreve subtítulo no modelo (modo estilo C do PDF usa modelo.subtitulo)
+      if (modelo && subTituloFinal) modelo.subtitulo = subTituloFinal;
       await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng);
     } catch(e) { console.error(e); alert("Erro ao gerar PDF: "+e.message); }
   };
@@ -761,34 +1061,46 @@ function PropostaPreview({ data, onVoltar }) {
         <div style={{ borderTop:`1.5px solid ${C}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
           <div>
             <div style={{ fontSize:24, fontWeight:600, color:C }}>{clienteNome || "Cliente"}</div>
-            <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloEdit} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
+            <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloFinal} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
           </div>
           <div style={{ textAlign:"right" }}>
-            {incluiArq && incluiEng && (
+            {incluiArq && engAtiva && (
               <>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
                   <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
                   <span style={{ fontSize:22, fontWeight:600, color:C }}>{fmtV(temIsoladas ? arqIsoladaSI : arqEdit)}</span>
                 </div>
-                <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²` : ""}</div>
+                {areaTot > 0 && (
+                  <div style={{ fontSize:11, color:LT }}>R$ {fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²</div>
+                )}
               </>
             )}
           </div>
         </div>
 
-        {/* Texto descritivo editável */}
-        {temIsoladas && (
-          <div className="no-print" style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12,
-            background:"#f0f9ff", border:"1px solid #bae6fd", borderRadius:6, padding:"6px 12px" }}>
-            <span style={{ fontSize:12, color:"#0369a1", fontWeight:600 }}>◎ Orçamento isolado: {etapasIsoladasObjs.map(e=>e.nome).join(", ")}</span>
-          </div>
-        )}
-        {(resumoEdit || data.resumoDescritivo) && (
+        {/* Aviso de isolamento parcial (só quando tem arq isolada E nem todas estão) */}
+        {(() => {
+          const etArqTotal = etapasPct.filter(e => e.id !== 5).length;
+          const etArqIsoladas = etapasIsoladasObjs.filter(e => e.id !== 5);
+          if (!temIsoladas || etArqIsoladas.length === 0 || etArqIsoladas.length >= etArqTotal) return null;
+          const nomes = etArqIsoladas.map(e => e.nome);
+          let lista;
+          if (nomes.length === 1) lista = nomes[0];
+          else if (nomes.length === 2) lista = `${nomes[0]} e ${nomes[1]}`;
+          else lista = `${nomes.slice(0,-1).join(", ")} e ${nomes[nomes.length-1]}`;
+          const verboEtapa = nomes.length === 1 ? "à etapa de" : "às etapas de";
+          return (
+            <div style={{ marginBottom:12, fontSize:13, color:C, fontWeight:600, lineHeight:1.5 }}>
+              Referente {verboEtapa} {lista}:
+            </div>
+          );
+        })()}
+        {resumoFinal && (
           <div style={{ marginBottom:20, position:"relative" }}>
             {editandoResumo ? (
               <textarea
                 autoFocus
-                value={resumoEdit}
+                value={resumoFinal}
                 onChange={e => setResumoEdit(e.target.value)}
                 onBlur={() => setEditandoResumo(false)}
                 style={{ width:"100%", fontSize:13, color:MD, lineHeight:1.7, fontFamily:"inherit",
@@ -800,7 +1112,7 @@ function PropostaPreview({ data, onVoltar }) {
                 onClick={() => setEditandoResumo(true)}
                 title="Clique para editar"
                 style={{ fontSize:13, color:MD, lineHeight:1.7, cursor:"pointer" }}>
-                {resumoEdit || data.resumoDescritivo}
+                {resumoFinal}
               </div>
             )}
           </div>
@@ -819,7 +1131,7 @@ function PropostaPreview({ data, onVoltar }) {
         </div>
         <div>
 
-          <div style={{ display:"grid", gridTemplateColumns: incluiArq && incluiEng ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
@@ -837,10 +1149,12 @@ function PropostaPreview({ data, onVoltar }) {
                   </span>
                 )}
               </div>
-              <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²` : ""}</div>
+              {areaTot > 0 && (
+                <div style={{ fontSize:11, color:LT }}>R$ {fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²</div>
+              )}
             </div>}
-            {incluiArq && incluiEng && <div style={{ background:LN }} />}
-            {incluiEng && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
+            {incluiArq && engAtiva && <div style={{ background:LN }} />}
+            {engAtiva && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}>(Opcional)</span></div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
@@ -857,20 +1171,33 @@ function PropostaPreview({ data, onVoltar }) {
                   </span>
                 )}
               </div>
-              <div style={{ fontSize:11, color:LT }}>{areaTot > 0 ? `R$ ${fmtN(Math.round(engCI/areaTot*100)/100)}/m²` : ""}</div>
+              {areaTot > 0 && (
+                <div style={{ fontSize:11, color:LT }}>R$ {fmtN(Math.round(engCI/areaTot*100)/100)}/m²</div>
+              )}
             </div>}
           </div>
           <div style={{ border:`0.5px solid ${LN}`, borderRadius:8, padding:"10px 14px", fontSize:12, color:LT, marginBottom:4,
               display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
             <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
-              <input type="checkbox" checked={temImposto} onChange={e => setTemImpostoLocal(e.target.checked)} style={{ cursor:"pointer" }} />
+              <span style={{
+                position:"relative", display:"inline-block", width:26, height:14,
+                background: temImposto ? "#0369a1" : "#d1d5db",
+                borderRadius:7, transition:"background 0.15s",
+              }}>
+                <span style={{
+                  position:"absolute", top:2, left: temImposto ? 14 : 2,
+                  width:10, height:10, background:"#fff", borderRadius:"50%",
+                  transition:"left 0.15s", boxShadow:"0 1px 2px rgba(0,0,0,0.2)",
+                }} />
+              </span>
+              <input type="checkbox" checked={temImposto} onChange={e => setTemImpostoLocal(e.target.checked)} style={{ display:"none" }} />
               <span>Incluir impostos</span>
             </label>
             {temImposto && (
               <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                <input type="text" value={aliqImp}
-                  onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setAliqImpLocal(n); }}
-                  style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"right", fontFamily:"inherit", outline:"none" }} />
+                <NumInput valor={aliqImp} onCommit={n => setAliqImpLocal(n)}
+                  decimais={2} min={0} max={100} width={42}
+                  style={{ textAlign:"right" }} />
                 <span style={{ color:LT }}>%</span>
               </span>
             )}
@@ -884,7 +1211,12 @@ function PropostaPreview({ data, onVoltar }) {
           </div>
           <div style={{ display:"flex", gap:6, marginTop:6, marginBottom:4 }}>
             <button
-              onClick={() => setTipoPgtoLocal("padrao")}
+              onClick={() => {
+                setTipoPgtoLocal("padrao");
+                // Limpa etapas isoladas ao trocar pra Pagamento padrão
+                // (pagamento padrão = orça tudo; isolamento é exclusivo do modo "Por etapas")
+                setEtapasIsoladasLocal(new Set());
+              }}
               style={{ flex:1, padding:"8px 10px", fontSize:12, fontWeight:isPadrao?600:400,
                 border: isPadrao ? `1px solid ${C}` : `0.5px solid ${LN}`,
                 background:"transparent", borderRadius:6, cursor:"pointer", color:C, fontFamily:"inherit" }}>
@@ -912,25 +1244,17 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
-                  <input type="text" value={descArqLocal}
-                    onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setDescArqLocal(Math.max(0, Math.min(100, n))); }}
-                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <NumInput valor={descArqLocal} onCommit={n => setDescArqLocal(n)} decimais={2} min={0} max={100} width={42} />
                   <span style={{ fontSize:11, color:LT }}>%</span>
                 </div>
                 <span style={{ color:LN }}>·</span>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:MD }}>Parcelado</span>
-                  <input type="text" value={parcArqLocal}
-                    onChange={e => { const n = parseInt(e.target.value) || 0; setParcArqLocal(Math.max(1, n)); }}
-                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <NumInput valor={parcArqLocal} onCommit={n => setParcArqLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
                   <span style={{ fontSize:11, color:LT }}>×</span>
                 </div>
               </div>
-              <div style={{ fontSize:11, color:LT, marginTop:6, lineHeight:1.5 }}>
-                De {fmtV(arqCIEdit)} por {fmtV(Math.round(arqCIEdit*(1-descArqLocal/100)*100)/100)} à vista &nbsp;·&nbsp;
-                ou entrada de {fmtV(Math.round(arqCIEdit/parcArqLocal*100)/100)}
-                {parcArqLocal > 1 && <> + {parcArqLocal-1}× de {fmtV(Math.round(arqCIEdit/parcArqLocal*100)/100)}</>}
-              </div>
+              <OpcoesPagamento tipo="pacote" valor={arqCIEdit} desc={descArqLocal} parcelas={parcArqLocal} fmtV={fmtV} />
             </div>
             {incluiArq && incluiEng && (
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:12, marginBottom:12 }}>
@@ -938,59 +1262,74 @@ function PropostaPreview({ data, onVoltar }) {
               <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
-                  <input type="text" value={descPacoteLocal}
-                    onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setDescPacoteLocal(Math.max(0, Math.min(100, n))); }}
-                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <NumInput valor={descPacoteLocal} onCommit={n => setDescPacoteLocal(n)} decimais={2} min={0} max={100} width={42} />
                   <span style={{ fontSize:11, color:LT }}>%</span>
                 </div>
                 <span style={{ color:LN }}>·</span>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:MD }}>Parcelado</span>
-                  <input type="text" value={parcPacoteLocal}
-                    onChange={e => { const n = parseInt(e.target.value) || 0; setParcPacoteLocal(Math.max(1, n)); }}
-                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <NumInput valor={parcPacoteLocal} onCommit={n => setParcPacoteLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
                   <span style={{ fontSize:11, color:LT }}>×</span>
                 </div>
               </div>
-              <div style={{ fontSize:11, color:LT, marginTop:6, lineHeight:1.5 }}>
-                De {fmtV(totCIEdit)} por {fmtV(Math.round(totCIEdit*(1-descPacoteLocal/100)*100)/100)} à vista &nbsp;·&nbsp;
-                ou entrada de {fmtV(Math.round(totCIEdit/parcPacoteLocal*100)/100)}
-                {parcPacoteLocal > 1 && <> + {parcPacoteLocal-1}× de {fmtV(Math.round(totCIEdit/parcPacoteLocal*100)/100)}</>}
-              </div>
+              <OpcoesPagamento tipo="pacote" valor={totCIEdit} desc={descPacoteLocal} parcelas={parcPacoteLocal} fmtV={fmtV} />
             </div>
             )}
           </>) : (<>
             <div style={{ marginBottom:16 }}>
               <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, alignItems:"center", paddingBottom:6, borderBottom:`1.5px solid ${C}` }}>
                 <span></span>
-                <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em" }}>Etapa</span>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em" }}>Etapa</span>
+                  <label style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer", fontSize:10, color:LT, textTransform:"none", letterSpacing:0, fontWeight:400 }}>
+                    <span style={{
+                      position:"relative", display:"inline-block", width:26, height:14,
+                      background: mostrarTabelaEtapas ? "#0369a1" : "#d1d5db",
+                      borderRadius:7, transition:"background 0.15s",
+                    }}>
+                      <span style={{
+                        position:"absolute", top:2, left: mostrarTabelaEtapas ? 14 : 2,
+                        width:10, height:10, background:"#fff", borderRadius:"50%",
+                        transition:"left 0.15s", boxShadow:"0 1px 2px rgba(0,0,0,0.2)",
+                      }} />
+                    </span>
+                    <input type="checkbox"
+                      checked={mostrarTabelaEtapas}
+                      onChange={e => setMostrarTabelaEtapas(e.target.checked)}
+                      style={{ display:"none" }} />
+                    <span>Mostrar no PDF</span>
+                  </label>
+                </div>
                 <span></span>
-                <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em", textAlign:"center" }}>%</span>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:4 }}>
+                  <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em" }}>%</span>
+                  <span
+                    title="Para alterar valores das etapas de arquitetura, edite o total de arquitetura no topo ou ajuste os percentuais"
+                    style={{ fontSize:11, color:LT, cursor:"help", userSelect:"none", lineHeight:1 }}>ⓘ</span>
+                </div>
                 <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em", textAlign:"right" }}>Valor</span>
                 <span></span>
               </div>
               {etapasPct.filter(e => incluiEng || e.id !== 5).map((et, i) => {
                 const isIsolada = idsIsolados.has(et.id);
-                const visivel = !temIsoladas || isIsolada || et.id === 5;
                 const isEng = et.id === 5;
+                // visivel: sem isolamento, tudo visível. Com isolamento, só isoladas
+                const visivel = !temIsoladas || isIsolada;
                 const bgRow = isIsolada ? "#e0f2fe" : "transparent";
                 const corRow = isIsolada ? "#0369a1" : C;
                 const fontWt = isIsolada ? 600 : 400;
-                // Valor da etapa SEMPRE baseado no % da arq total (não proporcional ao isolamento)
-                // Engenharia: sempre integral (quando incluiEng)
+                // Valor da etapa: arq × pct/100 (com imp). Engenharia: integral (com imp)
                 const valorEtapa = isEng
                   ? engCIEdit
                   : Math.round(arqCIEdit*(et.pct/100)*100)/100;
                 return (
                 <div key={et.id} style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"7px 4px", borderBottom:`0.5px solid ${LN}`, alignItems:"center", background: bgRow, opacity: visivel ? 1 : 0.35 }}>
-                  {!isEng ? (
-                    <span
-                      onClick={() => toggleIsolarEtapa(et.id)}
-                      title={isIsolada ? "Desmarcar isolamento" : "Orçar apenas esta etapa"}
-                      style={{ cursor:"pointer", textAlign:"center", fontSize:14, color: isIsolada ? "#0369a1" : LT, fontWeight:500, userSelect:"none" }}>
-                      {isIsolada ? "◉" : "◎"}
-                    </span>
-                  ) : <span></span>}
+                  <span
+                    onClick={() => toggleIsolarEtapa(et.id)}
+                    title={isIsolada ? "Desmarcar isolamento" : "Orçar apenas esta etapa"}
+                    style={{ cursor:"pointer", textAlign:"center", fontSize:14, color: isIsolada ? "#0369a1" : LT, fontWeight:500, userSelect:"none" }}>
+                    {isIsolada ? "◉" : "◎"}
+                  </span>
                   <span style={{ color:corRow, fontWeight:fontWt }}>
                     {isEng ? (<>
                       <div>Projetos de Engenharia</div>
@@ -1001,22 +1340,29 @@ function PropostaPreview({ data, onVoltar }) {
                   </span>
                   <span></span>
                   {!isEng ? (
-                    <input type="text" value={et.pct}
-                      onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; atualizarEtapaPct(et.id, n); }}
-                      style={{ width:50, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                    <NumInput valor={et.pct} onCommit={n => atualizarEtapaPct(et.id, n)}
+                      decimais={0} min={0} max={100} width={50} />
                   ) : (
                     <span style={{ color:LT, textAlign:"center" }}>—</span>
                   )}
                   {!isEng ? (
+                    <span style={{ fontSize:12, color:corRow, fontWeight:isIsolada?600:500, textAlign:"right", padding:"3px 6px" }}>
+                      {fmtN(valorEtapa)}
+                    </span>
+                  ) : (
                     <EtapaValorInput
                       valorAtual={valorEtapa}
                       fmtN={fmtN}
-                      onCommit={novo => atualizarEtapaValor(et.id, novo)}
+                      onCommit={novo => {
+                        // Converte valor com imposto de volta para sem imposto antes de setar engEdit
+                        const semImp = temImposto && novo > 0
+                          ? Math.round(novo * (1 - aliqImp/100) * 100) / 100
+                          : novo;
+                        setEngEdit(semImp);
+                      }}
                       borderColor={LN}
                       color={corRow}
                     />
-                  ) : (
-                    <span style={{ fontWeight:500, textAlign:"right", color: corRow }}>{fmtV(valorEtapa)}</span>
                   )}
                   {!isEng ? (
                     <span onClick={() => removerEtapa(et.id)} title="Remover etapa"
@@ -1034,16 +1380,17 @@ function PropostaPreview({ data, onVoltar }) {
                 </button>
               </div>
               {(() => {
-                // Total = apenas linhas ativas (isoladas + eng se incluiEng)
-                // Sem isolamento: todas as arq + eng
+                // Total = apenas linhas ativas
+                // - Etapas arq: ativas se (sem isolamento) OU (isolada)
+                // - Engenharia: ativa se incluiEng && ((sem isolamento) OU (eng isolada))
                 const etapasAtivas = etapasPct.filter(e => {
                   if (e.id === 5) return false; // eng vai separado
-                  if (!temIsoladas) return true; // sem isolamento: todas contam
-                  // Com isolamento: só as isoladas
+                  if (!temIsoladas) return true;
                   return idsIsolados.has(e.id);
                 });
                 const pctAtivo = etapasAtivas.reduce((s,e)=>s+Number(e.pct),0);
-                const valorAtivo = Math.round((arqCIEdit * pctAtivo / 100 + (incluiEng ? engCIEdit : 0)) * 100) / 100;
+                const engAtiva = incluiEng && (!temIsoladas || idsIsolados.has(5));
+                const valorAtivo = Math.round((arqCIEdit * pctAtivo / 100 + (engAtiva ? engCIEdit : 0)) * 100) / 100;
                 return (
                   <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"8px 4px", borderTop:`1.5px solid ${C}`, marginTop:2, alignItems:"center" }}>
                     <span></span>
@@ -1056,53 +1403,86 @@ function PropostaPreview({ data, onVoltar }) {
                 );
               })()}
             </div>
+            {mostrarTabelaEtapas ? (
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
               <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>Etapa a Etapa</div>
               <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:MD }}>Antecipado por etapa — desconto</span>
-                  <input type="text" value={descEtCtrtLocal}
-                    onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setDescEtCtrtLocal(Math.max(0, Math.min(100, n))); }}
-                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <NumInput valor={descEtCtrtLocal} onCommit={n => setDescEtCtrtLocal(n)} decimais={2} min={0} max={100} width={42} />
                   <span style={{ fontSize:11, color:LT }}>%</span>
                 </div>
                 <span style={{ color:LN }}>·</span>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:MD }}>Parcelado por etapa</span>
-                  <input type="text" value={parcEtCtrtLocal}
-                    onChange={e => { const n = parseInt(e.target.value) || 0; setParcEtCtrtLocal(Math.max(1, n)); }}
-                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <NumInput valor={parcEtCtrtLocal} onCommit={n => setParcEtCtrtLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
                   <span style={{ fontSize:11, color:LT }}>×</span>
                 </div>
               </div>
+              <OpcoesPagamento tipo="etapaAEtapa" desc={descEtCtrtLocal} parcelas={parcEtCtrtLocal} fmtV={fmtV} />
             </div>
-            {incluiArq && incluiEng && !temIsoladas && (
+            ) : (
+            /* Toggle "Mostrar no PDF" DESLIGADO: espelha pagamento padrão —
+               "Apenas Arquitetura" (valor arq selecionada) + "Pacote Completo" se eng ativa */
             <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>Pacote Completo (Arq. + Eng.)</div>
+              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>
+                Apenas Arquitetura
+              </div>
               <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
-                  <input type="text" value={descPacCtrtLocal}
-                    onChange={e => { const n = parseFloat(e.target.value.replace(",",".")) || 0; setDescPacCtrtLocal(Math.max(0, Math.min(100, n))); }}
-                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <NumInput valor={descArqLocal} onCommit={n => setDescArqLocal(n)} decimais={2} min={0} max={100} width={42} />
                   <span style={{ fontSize:11, color:LT }}>%</span>
                 </div>
                 <span style={{ color:LN }}>·</span>
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ fontSize:12, color:MD }}>Parcelado</span>
-                  <input type="text" value={parcPacCtrtLocal}
-                    onChange={e => { const n = parseInt(e.target.value) || 0; setParcPacCtrtLocal(Math.max(1, n)); }}
-                    style={{ width:42, fontSize:12, padding:"3px 6px", border:`1px solid ${LN}`, borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none" }} />
+                  <NumInput valor={parcArqLocal} onCommit={n => setParcArqLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
                   <span style={{ fontSize:11, color:LT }}>×</span>
                 </div>
               </div>
-              <div style={{ fontSize:11, color:LT, marginTop:6, lineHeight:1.5 }}>
-                De {fmtV(totCIEdit)} por {fmtV(Math.round(totCIEdit*(1-descPacCtrtLocal/100)*100)/100)} à vista &nbsp;·&nbsp;
-                ou entrada de {fmtV(Math.round(totCIEdit/parcPacCtrtLocal*100)/100)}
-                {parcPacCtrtLocal > 1 && <> + {parcPacCtrtLocal-1}× de {fmtV(Math.round(totCIEdit/parcPacCtrtLocal*100)/100)}</>}
-              </div>
+              <OpcoesPagamento tipo="pacote" valor={subTotalArqEtapas} desc={descArqLocal} parcelas={parcArqLocal} fmtV={fmtV} />
             </div>
             )}
+            {/* Pacote Completo — sempre aparece quando tem mais de 1 etapa selecionada
+                 OU quando eng + arq estão selecionadas (oferece contratação total)
+                 Não aparece se só 1 etapa sem eng (pacote = etapa única, não faz sentido) */}
+            {(() => {
+              const etArqAtivas = etapasPct.filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)));
+              const multiEtapas = etArqAtivas.length > 1;
+              const temArqEEng = incluiArq && engAtiva && etArqAtivas.length > 0;
+              // Pacote Completo só aparece em 2 cenários:
+              // 1) Toggle LIGADO + (várias etapas OU arq+eng) — permite contratação total vs etapa a etapa
+              // 2) Toggle DESLIGADO + arq+eng ambos ativos — oferece "Apenas Arq" + "Pacote Completo"
+              // Quando toggle desligado E sem eng, fica só o bloco único "Apenas Arq" (sem pacote)
+              const mostraPacote = mostrarTabelaEtapas
+                ? (multiEtapas || temArqEEng)
+                : temArqEEng; // toggle off: só mostra pacote se tem arq+eng
+              if (!mostraPacote) return null;
+              // Label dinâmico
+              const labelPacote = (incluiArq && engAtiva)
+                ? "Pacote Completo (Arq. + Eng.)"
+                : "Pacote Completo";
+              return (
+                <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>{labelPacote}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
+                      <NumInput valor={descPacCtrtLocal} onCommit={n => setDescPacCtrtLocal(n)} decimais={2} min={0} max={100} width={42} />
+                      <span style={{ fontSize:11, color:LT }}>%</span>
+                    </div>
+                    <span style={{ color:LN }}>·</span>
+                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                      <span style={{ fontSize:12, color:MD }}>Parcelado</span>
+                      <NumInput valor={parcPacCtrtLocal} onCommit={n => setParcPacCtrtLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
+                      <span style={{ fontSize:11, color:LT }}>×</span>
+                    </div>
+                  </div>
+                  <OpcoesPagamento tipo="pacote" valor={totalPacoteEtapas} desc={descPacCtrtLocal} parcelas={parcPacCtrtLocal} fmtV={fmtV} />
+                </div>
+              );
+            })()}
           </>)}
           <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, fontSize:11, color:LT }}>
             <TextoEditavel valor={pixEdit} onChange={setPixEdit} style={{ fontSize:11, color:LT }} />
@@ -1276,7 +1656,7 @@ function PropostaPreview({ data, onVoltar }) {
         <Sec title="Prazo de execução">
           {(prazoEdit || prazoDefault).filter(p => {
               if (p.toLowerCase().includes("engenharia")) {
-                if (!incluiEng) return false; // toggle desligado
+                if (!engAtiva) return false; // toggle desligado OU eng não isolada
               }
               return true;
             }).map((p, i) => (
@@ -1913,6 +2293,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const resumoDescritivo = (() => {
       const fmtN2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
       const fmtArea = v => v > 0 ? fmtN2(v)+"m²" : null;
+      // Prefixo "Construção nova de" ou "Reforma de"
+      const tipoObraLower = (tipoObra || "").toLowerCase();
+      const prefixo = tipoObraLower.includes("reforma") ? "Reforma de " : "Construção nova de ";
+      // Helper: minúscula na primeira letra (para encaixar após "de ")
+      const toLowerFirst = s => s.length > 0 ? s.charAt(0).toLowerCase() + s.slice(1) : s;
       if (isComercial && calculo?.isComercial) {
         const c = calculo;
         const partes = [];
@@ -1924,21 +2309,55 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         if (nG>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Galpão"); if(b) partes.push(`${nG} ${nG!==1?"galpões":"galpão"} (${fmtArea(b.area1*nG)})`); }
         if (c.blocosCom) { const bc=c.blocosCom.find(x=>x.label==="Área Comum"); if(bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`); }
         const lista = partes.length>1 ? partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1] : partes[0]||"";
-        return `Conjunto comercial, contendo ${lista}, totalizando ${fmtArea(c.areaTot||c.areaTotal)}.`;
+        return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(c.areaTot||c.areaTotal)}.`;
       }
       const nUnid = calculo?.nRep || 1;
       const areaUni = calculo?.areaTotal || calculo?.areaTot || 0;
       const areaTotR = Math.round(areaUni * nUnid * 100)/100;
-      const comAtivos = Object.entries(qtds).filter(([,q])=>q>0).map(([n])=>n.toLowerCase());
       const totalAmb = Object.entries(qtds).filter(([,q])=>q>0).reduce((s,[,q])=>s+q,0);
-      const listaStr = comAtivos.length>1 ? comAtivos.slice(0,-1).join(", ")+" e "+comAtivos[comAtivos.length-1] : comAtivos[0]||"";
+      // Pluralização + extenso
+      const pluraisIrreg = {
+        "Sala TV": "salas TV", "Sala de jantar": "salas de jantar",
+        "Hall de entrada": "halls de entrada", "Área de lazer": "áreas de lazer",
+        "Lavabo Lazer": "lavabos lazer", "Closet Suíte": "closets suíte",
+        "Suíte Master": "suítes master", "Suíte": "suítes", "WC": "WCs",
+        "Dormitório": "dormitórios", "Escritório": "escritórios",
+        "Depósito": "depósitos", "Lavabo": "lavabos", "Garagem": "garagens",
+        "Cozinha": "cozinhas", "Lavanderia": "lavanderias", "Piscina": "piscinas",
+        "Sauna": "saunas", "Academia": "academias", "Brinquedoteca": "brinquedotecas",
+        "Louceiro": "louceiros", "Living": "livings", "Closet": "closets",
+        "Escada": "escadas",
+      };
+      const generoAmb = {
+        "Garagem":"f","Hall de entrada":"m","Sala TV":"f","Sala de jantar":"f","Living":"m",
+        "Cozinha":"f","Lavanderia":"f","Depósito":"m","Lavabo":"m","Escritório":"m",
+        "Área de lazer":"f","Piscina":"f","Lavabo Lazer":"m","Sauna":"f","Academia":"f",
+        "Brinquedoteca":"f","Louceiro":"m","Dormitório":"m","Closet":"m","WC":"m",
+        "Suíte":"f","Closet Suíte":"m","Suíte Master":"f","Escada":"f",
+      };
+      const numExtMasc = ["","um","dois","três","quatro","cinco","seis","sete","oito","nove","dez"];
+      const numExtFem  = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
+      const formatComodo = (nome, qtd) => {
+        const plural = qtd > 1;
+        if (nome === "Garagem") {
+          const ext = qtd <= 10 ? numExtFem[qtd] : String(qtd);
+          return `${ext} ${plural ? "vagas de garagem" : "vaga de garagem"}`;
+        }
+        const nomeStr = plural ? (pluraisIrreg[nome] || (nome.toLowerCase() + "s")) : nome.toLowerCase();
+        const genero = generoAmb[nome] || "m";
+        const ext = genero === "f" ? numExtFem : numExtMasc;
+        const qtdStr = qtd <= 10 ? ext[qtd] : String(qtd);
+        return `${qtdStr} ${nomeStr}`;
+      };
+      const itensFmt = Object.entries(qtds).filter(([,q])=>q>0).map(([nome,q]) => formatComodo(nome, q));
+      const listaStr = itensFmt.length>1 ? itensFmt.slice(0,-1).join(", ")+" e "+itensFmt[itensFmt.length-1] : itensFmt[0]||"";
       const tipDesc = (tipologia||"").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
       const numFem = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
       if (nUnid>1) {
         const nExt = nUnid>=1&&nUnid<=10 ? numFem[nUnid] : String(nUnid);
-        return `${nExt.charAt(0).toUpperCase()+nExt.slice(1)} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+        return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
       }
-      return `Uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+      return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
     })();
     setPropostaData({
       tipoProjeto, tipoObra, padrao, tipologia, tamanho,
