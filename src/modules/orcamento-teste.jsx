@@ -601,14 +601,24 @@ function PropostaPreview({ data, onVoltar }) {
   const arqCI = incluiArq ? arqEdit : 0;
   const engCI = incluiEng ? engEdit : 0;
 
+  // Helper: converte valor SEM imposto -> COM imposto (inside calculation)
+  // valor_bruto = liquido / (1 - aliq/100). Se temImposto=false, retorna o valor direto.
+  const comImposto = (v) => (temImposto && v > 0)
+    ? Math.round(v / (1 - aliqImp/100) * 100) / 100
+    : v;
+  // Inverso: converte valor COM imposto -> SEM imposto.
+  const semImposto = (v) => (temImposto && v > 0)
+    ? Math.round(v * (1 - aliqImp/100) * 100) / 100
+    : v;
+
   // Recalcula totais com valores editados
   const totSIEdit   = arqCI + engCI;
-  const totCIEdit   = temImposto && totSIEdit > 0 ? Math.round(totSIEdit / (1 - aliqImp/100) * 100) / 100 : totSIEdit;
+  const totCIEdit   = comImposto(totSIEdit);
   const impostoEdit = temImposto ? Math.round((totCIEdit - totSIEdit) * 100) / 100 : 0;
   // Base das etapas = só arquitetura com imposto
-  const arqCIEdit   = temImposto && arqCI > 0 ? Math.round(arqCI / (1 - aliqImp/100) * 100) / 100 : arqCI;
+  const arqCIEdit   = comImposto(arqCI);
   // Engenharia com imposto (para linha separada na tabela de etapas)
-  const engCIEdit   = temImposto && engCI > 0 ? Math.round(engCI / (1 - aliqImp/100) * 100) / 100 : engCI;
+  const engCIEdit   = comImposto(engCI);
 
   // Etapa isolada — valor proporcional do total
   // Etapas isoladas — múltipla seleção (state local, manipulável inline)
@@ -782,7 +792,7 @@ function PropostaPreview({ data, onVoltar }) {
 
   // totCIBase = com imposto
   const totCIBase       = temIsoladas
-    ? (temImposto ? Math.round(totSIBase / (1 - aliqImp/100) * 100) / 100 : totSIBase)
+    ? comImposto(totSIBase)
     : totCIEdit;
 
   function parseValorBR(str) {
@@ -948,12 +958,12 @@ function PropostaPreview({ data, onVoltar }) {
       // arq/eng exibidos no header (sem imposto)
       const arqExibidoSI = temIsoladas ? arqIsoladaSI : arqCI;
       const engExibidoSI = engAtiva ? engCI : 0;
-      // com imposto
-      const arqExibidoCI = temImposto && arqExibidoSI > 0 ? Math.round(arqExibidoSI / (1 - aliqImp/100) * 100) / 100 : arqExibidoSI;
-      const engExibidoCI = temImposto && engExibidoSI > 0 ? Math.round(engExibidoSI / (1 - aliqImp/100) * 100) / 100 : engExibidoSI;
+      // com imposto (usa helper comImposto definido no escopo do componente)
+      const arqExibidoCI = comImposto(arqExibidoSI);
+      const engExibidoCI = comImposto(engExibidoSI);
       // total com imposto (exatamente como o preview mostra)
       const totalExibidoSI = Math.round((arqExibidoSI + engExibidoSI) * 100) / 100;
-      const totalExibidoCI = temImposto && totalExibidoSI > 0 ? Math.round(totalExibidoSI / (1 - aliqImp/100) * 100) / 100 : totalExibidoSI;
+      const totalExibidoCI = comImposto(totalExibidoSI);
       // etapas que aparecem no preview (só isoladas quando tem isolamento; sem eng - eng vai separado)
       const etapasExibidas = (temIsoladas
         ? etapasPct.filter(e => e.id !== 5 && idsIsolados.has(e.id))
@@ -1374,9 +1384,7 @@ function PropostaPreview({ data, onVoltar }) {
                       fmtN={fmtN}
                       onCommit={novo => {
                         // Converte valor com imposto de volta para sem imposto antes de setar engEdit
-                        const semImp = temImposto && novo > 0
-                          ? Math.round(novo * (1 - aliqImp/100) * 100) / 100
-                          : novo;
+                        const semImp = semImposto(novo);
                         setEngEdit(semImp);
                       }}
                       borderColor={LN}
