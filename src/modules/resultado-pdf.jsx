@@ -1,5 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // RESULTADO DO ORÇAMENTO
+// ⚠️  LEGACY: componente não referenciado em lugar algum conhecido do app.
+//     O fluxo ativo é FormOrcamentoProjetoTeste → PropostaPreview → buildPdf.
+//     Candidato a remoção após confirmação de que nenhuma tela usa.
 // ═══════════════════════════════════════════════════════════════
 function ResultadoOrcamentoProjeto({ orc, onEditar, onVerProposta, fmt, fmtM2 }) {
   const r = orc.resultado || {};
@@ -886,17 +889,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // ESPELHO do preview: quando orc._preview existe, usa valores exatos pré-calculados
   const P = orc._preview || null;
-  // DEBUG: log pra investigar por que o PDF não reflete o preview em alguns cenários
-  // Remova essas linhas após debug
-  console.log("[buildPdf DEBUG]", {
-    tem_preview: !!P,
-    _preview_engAtiva: P?.engAtiva,
-    incluiEng_arg: incluiEng,
-    incluiArq_arg: incluiArq,
-    etapasIsoladas: orc.etapasIsoladas,
-    mostrarTabelaEtapas: P?.mostrarTabelaEtapas,
-    subTitulo_preview: P?.subTitulo,
-  });
 
   // Arq e Eng SEM imposto — usa valores editados passados pelo handlePdf
   const arqCI   = P ? P.arqSI : Math.round((r.precoArq||r.precoTotal||r.precoFinal||0)*100)/100;

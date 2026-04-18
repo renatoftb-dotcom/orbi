@@ -1,3 +1,78 @@
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO ORÇAMENTO VICKE
+// ═══════════════════════════════════════════════════════════════
+// Fluxo de componentes:
+//   TesteOrcamento           (aba de testes do app)
+//   └─ FormOrcamentoProjetoTeste   (form principal: define params, etapas, pagamento)
+//      └─ PropostaPreview          (preview interativo da proposta)
+//         └─ buildPdf() [resultado-pdf.jsx]  (gera PDF com _preview como espelho)
+//
+// Convenções importantes:
+//  - engAtiva = incluiEng && (!temIsoladas || idsIsolados.has(5))
+//    ↳ reflete toggle de engenharia + isolamento de etapas
+//  - _preview: objeto passado do preview pro PDF com valores já calculados
+//    ↳ PDF sempre prioriza P.xxx antes de recalcular (evita divergências)
+//  - Cascata circular de %: ao editar uma etapa isolada, ajusta a PRÓXIMA
+//    na ordem circular; se é a última, ajusta a primeira.
+//  - Inputs numéricos usam o helper NumInput (estado local, commit no blur)
+//    para evitar perda de foco durante redistribuição de percentuais.
+// ═══════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// Helpers top-level de pluralização de cômodos (usados em múltiplos lugares)
+// Constantes fora dos componentes: não recriam a cada render
+// ═══════════════════════════════════════════════════════════════
+const PLURAIS_IRREG = {
+  "Sala TV": "salas TV",
+  "Sala de jantar": "salas de jantar",
+  "Hall de entrada": "halls de entrada",
+  "Área de lazer": "áreas de lazer",
+  "Lavabo Lazer": "lavabos lazer",
+  "Closet Suíte": "closets suíte",
+  "Suíte Master": "suítes master",
+  "Suíte": "suítes",
+  "WC": "WCs",
+  "Dormitório": "dormitórios",
+  "Escritório": "escritórios",
+  "Depósito": "depósitos",
+  "Lavabo": "lavabos",
+  "Garagem": "garagens",
+  "Cozinha": "cozinhas",
+  "Lavanderia": "lavanderias",
+  "Piscina": "piscinas",
+  "Sauna": "saunas",
+  "Academia": "academias",
+  "Brinquedoteca": "brinquedotecas",
+  "Louceiro": "louceiros",
+  "Living": "livings",
+  "Closet": "closets",
+  "Escada": "escadas",
+};
+const GENERO_AMB = {
+  "Garagem":"f","Hall de entrada":"m","Sala TV":"f","Sala de jantar":"f","Living":"m",
+  "Cozinha":"f","Lavanderia":"f","Depósito":"m","Lavabo":"m","Escritório":"m",
+  "Área de lazer":"f","Piscina":"f","Lavabo Lazer":"m","Sauna":"f","Academia":"f",
+  "Brinquedoteca":"f","Louceiro":"m","Dormitório":"m","Closet":"m","WC":"m",
+  "Suíte":"f","Closet Suíte":"m","Suíte Master":"f","Escada":"f",
+};
+const NUM_EXT_MASC = ["","um","dois","três","quatro","cinco","seis","sete","oito","nove","dez"];
+const NUM_EXT_FEM  = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
+
+// Formata "N nome" — número por extenso até 10, algarismo acima; pluraliza nome
+// Casos especiais: "Garagem" vira "vaga de garagem" / "vagas de garagem"
+function formatComodo(nome, qtd) {
+  const plural = qtd > 1;
+  if (nome === "Garagem") {
+    const ext = qtd <= 10 ? NUM_EXT_FEM[qtd] : String(qtd);
+    return `${ext} ${plural ? "vagas de garagem" : "vaga de garagem"}`;
+  }
+  const nomeStr = plural ? (PLURAIS_IRREG[nome] || (nome.toLowerCase() + "s")) : nome.toLowerCase();
+  const genero = GENERO_AMB[nome] || "m";
+  const ext = genero === "f" ? NUM_EXT_FEM : NUM_EXT_MASC;
+  const qtdStr = qtd <= 10 ? ext[qtd] : String(qtd);
+  return `${qtdStr} ${nomeStr}`;
+}
+
 function TesteOrcamento({ data, save }) {
   const [orcBase, setOrcBase] = useState(null);
 
@@ -475,10 +550,6 @@ function PropostaPreview({ data, onVoltar }) {
   const [editandoArq, setEditandoArq]       = useState(false);
   const [editandoEng, setEditandoEng]       = useState(false);
   const [editandoResumo, setEditandoResumo] = useState(false);
-  const [tmpArq, setTmpArq]                 = useState("");
-  const tmpArqRef = useRef("");
-  const tmpEngRef = useRef("");
-  const [tmpEng, setTmpEng]                 = useState("");
   // Textos editáveis da proposta
   const [subTituloEdit, setSubTituloEdit]   = useState(null); // null = usar default dinâmico
   const [validadeEdit, setValidadeEdit]     = useState(new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR"));
@@ -614,60 +685,8 @@ function PropostaPreview({ data, onVoltar }) {
     const comodos = data.comodos || [];
     const totalAmb = comodos.reduce((s,c)=>s+(c.qtd||0),0);
 
-    // Pluralização + extenso para nomes de cômodos
-    // Palavras principais já vão pro plural; palavras de apoio (de, da, do, TV, master, etc) não mudam
-    const pluraisIrreg = {
-      "Sala TV": "salas TV",
-      "Sala de jantar": "salas de jantar",
-      "Hall de entrada": "halls de entrada",
-      "Área de lazer": "áreas de lazer",
-      "Lavabo Lazer": "lavabos lazer",
-      "Closet Suíte": "closets suíte",
-      "Suíte Master": "suítes master",
-      "Suíte": "suítes",
-      "WC": "WCs",
-      "Dormitório": "dormitórios",
-      "Escritório": "escritórios",
-      "Depósito": "depósitos",
-      "Lavabo": "lavabos",
-      "Garagem": "garagens",
-      "Cozinha": "cozinhas",
-      "Lavanderia": "lavanderias",
-      "Piscina": "piscinas",
-      "Sauna": "saunas",
-      "Academia": "academias",
-      "Brinquedoteca": "brinquedotecas",
-      "Louceiro": "louceiros",
-      "Living": "livings",
-      "Closet": "closets",
-      "Escada": "escadas",
-    };
-    // Gênero para artigo (usado quando qtd=1)
-    const generoAmb = {
-      "Garagem":"f","Hall de entrada":"m","Sala TV":"f","Sala de jantar":"f","Living":"m",
-      "Cozinha":"f","Lavanderia":"f","Depósito":"m","Lavabo":"m","Escritório":"m",
-      "Área de lazer":"f","Piscina":"f","Lavabo Lazer":"m","Sauna":"f","Academia":"f",
-      "Brinquedoteca":"f","Louceiro":"m","Dormitório":"m","Closet":"m","WC":"m",
-      "Suíte":"f","Closet Suíte":"m","Suíte Master":"f","Escada":"f",
-    };
-    // Números por extenso (masc/fem) 1-10
-    const numExtMasc = ["","um","dois","três","quatro","cinco","seis","sete","oito","nove","dez"];
-    const numExtFem  = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
-    // Formata "N nome" — número por extenso até 10, algarismo acima; pluraliza nome
-    // Casos especiais: "Garagem" vira "vaga de garagem" / "vagas de garagem"
-    const formatComodo = (nome, qtd) => {
-      const plural = qtd > 1;
-      if (nome === "Garagem") {
-        const ext = qtd <= 10 ? numExtFem[qtd] : String(qtd);
-        return `${ext} ${plural ? "vagas de garagem" : "vaga de garagem"}`;
-      }
-      const nomeStr = plural ? (pluraisIrreg[nome] || (nome.toLowerCase() + "s")) : nome.toLowerCase();
-      const genero = generoAmb[nome] || "m";
-      const ext = genero === "f" ? numExtFem : numExtMasc;
-      const qtdStr = qtd <= 10 ? ext[qtd] : String(qtd);
-      return `${qtdStr} ${nomeStr}`;
-    };
     // Lista composta (ex: "duas garagens, três dormitórios e uma suíte")
+    // Usa formatComodo top-level (helpers PLURAIS_IRREG, GENERO_AMB, NUM_EXT_*)
     const itensFmt = comodos.filter(c=>(c.qtd||0)>0).map(c => formatComodo(c.nome, c.qtd));
     const listaStr = itensFmt.length>1
       ? itensFmt.slice(0,-1).join(", ")+" e "+itensFmt[itensFmt.length-1]
@@ -1196,7 +1215,7 @@ function PropostaPreview({ data, onVoltar }) {
             {temImposto && (
               <span style={{ display:"flex", alignItems:"center", gap:4 }}>
                 <NumInput valor={aliqImp} onCommit={n => setAliqImpLocal(n)}
-                  decimais={2} min={0} max={100} width={42}
+                  decimais={2} min={0} max={99} width={42}
                   style={{ textAlign:"right" }} />
                 <span style={{ color:LT }}>%</span>
               </span>
@@ -1713,7 +1732,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [tamanho,      setTamanho]      = useState(orcBase?.tamanho     || null);
   const [aberto,       setAberto]       = useState(null);
   const [panelPos,     setPanelPos]     = useState({ top:0, left:0 });
-  const [showModal,     setShowModal]     = useState(false);
   const [propostaData,  setPropostaData]  = useState(modoVer && orcBase ? {
     tipoProjeto: orcBase.tipo, tipoObra: orcBase.subtipo, padrao: orcBase.padrao,
     tipologia: orcBase.tipologia, tamanho: orcBase.tamanho,
@@ -1735,7 +1753,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     grupoQtds: orcBase.grupoQtds || null,
     resumoDescritivo: orcBase.resumoDescritivo || "",
   } : null);
-  const [orcPendente,   setOrcPendente]   = useState(null);
   const [tipoPgto,      setTipoPgto]      = useState(orcBase?.tipoPgto    || "padrao");
   const [temImposto,    setTemImposto]    = useState(orcBase?.temImposto  || false);
   const [aliqImp,       setAliqImp]       = useState(orcBase?.aliqImp     || 16);
@@ -2315,46 +2332,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const areaUni = calculo?.areaTotal || calculo?.areaTot || 0;
       const areaTotR = Math.round(areaUni * nUnid * 100)/100;
       const totalAmb = Object.entries(qtds).filter(([,q])=>q>0).reduce((s,[,q])=>s+q,0);
-      // Pluralização + extenso
-      const pluraisIrreg = {
-        "Sala TV": "salas TV", "Sala de jantar": "salas de jantar",
-        "Hall de entrada": "halls de entrada", "Área de lazer": "áreas de lazer",
-        "Lavabo Lazer": "lavabos lazer", "Closet Suíte": "closets suíte",
-        "Suíte Master": "suítes master", "Suíte": "suítes", "WC": "WCs",
-        "Dormitório": "dormitórios", "Escritório": "escritórios",
-        "Depósito": "depósitos", "Lavabo": "lavabos", "Garagem": "garagens",
-        "Cozinha": "cozinhas", "Lavanderia": "lavanderias", "Piscina": "piscinas",
-        "Sauna": "saunas", "Academia": "academias", "Brinquedoteca": "brinquedotecas",
-        "Louceiro": "louceiros", "Living": "livings", "Closet": "closets",
-        "Escada": "escadas",
-      };
-      const generoAmb = {
-        "Garagem":"f","Hall de entrada":"m","Sala TV":"f","Sala de jantar":"f","Living":"m",
-        "Cozinha":"f","Lavanderia":"f","Depósito":"m","Lavabo":"m","Escritório":"m",
-        "Área de lazer":"f","Piscina":"f","Lavabo Lazer":"m","Sauna":"f","Academia":"f",
-        "Brinquedoteca":"f","Louceiro":"m","Dormitório":"m","Closet":"m","WC":"m",
-        "Suíte":"f","Closet Suíte":"m","Suíte Master":"f","Escada":"f",
-      };
-      const numExtMasc = ["","um","dois","três","quatro","cinco","seis","sete","oito","nove","dez"];
-      const numExtFem  = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
-      const formatComodo = (nome, qtd) => {
-        const plural = qtd > 1;
-        if (nome === "Garagem") {
-          const ext = qtd <= 10 ? numExtFem[qtd] : String(qtd);
-          return `${ext} ${plural ? "vagas de garagem" : "vaga de garagem"}`;
-        }
-        const nomeStr = plural ? (pluraisIrreg[nome] || (nome.toLowerCase() + "s")) : nome.toLowerCase();
-        const genero = generoAmb[nome] || "m";
-        const ext = genero === "f" ? numExtFem : numExtMasc;
-        const qtdStr = qtd <= 10 ? ext[qtd] : String(qtd);
-        return `${qtdStr} ${nomeStr}`;
-      };
+      // Usa formatComodo top-level (helpers PLURAIS_IRREG, GENERO_AMB, NUM_EXT_*)
       const itensFmt = Object.entries(qtds).filter(([,q])=>q>0).map(([nome,q]) => formatComodo(nome, q));
       const listaStr = itensFmt.length>1 ? itensFmt.slice(0,-1).join(", ")+" e "+itensFmt[itensFmt.length-1] : itensFmt[0]||"";
       const tipDesc = (tipologia||"").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
-      const numFem = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
       if (nUnid>1) {
-        const nExt = nUnid>=1&&nUnid<=10 ? numFem[nUnid] : String(nUnid);
+        const nExt = nUnid>=1&&nUnid<=10 ? NUM_EXT_FEM[nUnid] : String(nUnid);
         return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
       }
       return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
@@ -2392,8 +2375,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
     };
     if (onSalvar) onSalvar(orcParaSalvar);
-    setOrcPendente(null);
-    setShowModal(false);
   }
 
   if (propostaData) {
@@ -2694,318 +2675,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         return null;
       })()}
 
-      {/* Modal Gerar Orçamento */}
-      {showModal && calculo && (() => {
-        const fmtV = (v) => v.toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-        const arqV  = incluiArq ? calculo.precoArq : 0;
-        const engV  = incluiEng ? calculo.precoEng : 0;
-        const totSI = arqV + engV;
-        const semImpFator = 1 - aliqImp/100;
-        const totCI = temImposto ? Math.round(totSI/semImpFator*100)/100 : totSI;
-        const impostoV = temImposto ? Math.round((totCI-totSI)*100)/100 : 0;
-        const isPadrao = tipoPgto === "padrao";
-        const arqComDesc  = Math.round(arqV*(1-descArq/100)*100)/100;
-        const totComDesc  = Math.round(totCI*(1-descPacote/100)*100)/100;
-        const inpS = { width:44, textAlign:"center", border:"1px solid #c8cdd6", borderRadius:6, padding:"3px 4px", fontSize:12, fontWeight:600, outline:"none", fontFamily:"inherit", background:"#fff", color:"#111" };
-        const cardSty = (sel) => ({ border:`1.5px solid ${sel?"#111":"#e5e7eb"}`, borderRadius:12, padding:"14px 16px", marginBottom:10, cursor:"pointer", background:"#fff", transition:"border-color 0.15s" });
-        const radioCircle = (sel) => ({ width:18, height:18, borderRadius:9, border:`1.5px solid ${sel?"#111":"#9aa0ab"}`, background:sel?"#111":"transparent", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 });
-        return (
-          <>
-            <style>{`
-              @keyframes fadeInOvr { from{opacity:0} to{opacity:1} }
-              @keyframes slideUpSht { from{transform:translateY(100%);opacity:0} to{transform:translateY(0);opacity:1} }
-            `}</style>
-            <div onClick={() => setShowModal(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9000, animation:"fadeInOvr 0.25s ease" }}>
-              <div onClick={e=>e.stopPropagation()} style={{
-                position:"fixed", bottom:0, left:0, right:0, maxHeight:"90vh", overflowY:"auto",
-                background:"#fff", borderRadius:"20px 20px 0 0", padding:"24px 20px 36px",
-                animation:"slideUpSht 0.35s cubic-bezier(0.32,0.72,0,1)", zIndex:9001,
-              }}>
-                <div style={{ width:36, height:4, background:"#e5e7eb", borderRadius:2, margin:"0 auto 18px" }} />
-                <div style={{ fontSize:17, fontWeight:700, color:"#111", marginBottom:4 }}>Gerar Orçamento</div>
-                <div style={{ fontSize:12, color:"#828a98", marginBottom:20 }}>
-                  {tipoProjeto} · {tipoObra} · Padrão {padrao} · {tipologia} · Ambientes {tamanho}s
-                </div>
-
-                <div style={{ background:"#f4f5f7", borderRadius:12, padding:"14px 16px", marginBottom:20 }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                    <span style={{ fontSize:12, color:"#6b7280" }}>Arquitetura</span>
-                    <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{fmtV(arqV)}</span>
-                  </div>
-                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                    <span style={{ fontSize:12, color:"#6b7280" }}>Engenharia</span>
-                    <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{fmtV(engV)}</span>
-                  </div>
-                  {temImposto && <>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                      <span style={{ fontSize:12, color:"#6b7280" }}>Subtotal sem impostos</span>
-                      <span style={{ fontSize:12, color:"#6b7280" }}>{fmtV(totSI)}</span>
-                    </div>
-                    <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
-                      <span style={{ fontSize:12, color:"#ef4444" }}>+ Impostos ({aliqImp}%)</span>
-                      <span style={{ fontSize:12, color:"#ef4444" }}>+{fmtV(impostoV)}</span>
-                    </div>
-                  </>}
-                  <div style={{ display:"flex", justifyContent:"space-between", paddingTop:10, borderTop:"1px solid #c8cdd6" }}>
-                    <span style={{ fontSize:14, fontWeight:700, color:"#111" }}>Total Geral</span>
-                    <span style={{ fontSize:16, fontWeight:800, color:"#111" }}>{fmtV(totCI)}</span>
-                  </div>
-                </div>
-
-                <div style={{ background:"#f5f6f8", border:"1px solid #f0f0f0", borderRadius:12, padding:"12px 14px", marginBottom:16, display:"flex", alignItems:"center", gap:10 }}>
-                  <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", flex:1 }}>
-                    <input type="checkbox" checked={temImposto} onChange={e=>setTemImposto(e.target.checked)} />
-                    <span style={{ fontSize:13, color:"#374151", fontWeight:500 }}>Incluir Impostos</span>
-                  </label>
-                  {temImposto && (
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <input type="number" min="0" max="50" step="0.5" style={inpS} value={aliqImp} onChange={e=>setAliqImp(parseFloat(e.target.value)||0)} />
-                      <span style={{ fontSize:12, color:"#828a98" }}>%</span>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ fontSize:11, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:10, fontWeight:600 }}>Forma de pagamento</div>
-
-                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, alignItems:"start" }}>
-
-                  <div style={cardSty(isPadrao)} onClick={()=>setTipoPgto("padrao")}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: isPadrao ? 12 : 0 }}>
-                      <div>
-                        <div style={{ fontSize:13, fontWeight:700, color:"#111" }}>Pagamento Padrão</div>
-                        <div style={{ fontSize:11, color:"#828a98", marginTop:2 }}>Antecipado ou parcelado</div>
-                      </div>
-                      <div style={radioCircle(isPadrao)}>{isPadrao && <span style={{ color:"#fff", fontSize:10, fontWeight:900 }}>✓</span>}</div>
-                    </div>
-                    {isPadrao && (
-                      <div style={{ paddingTop:12, borderTop:"1px solid #f0f0f0" }} onClick={e=>e.stopPropagation()}>
-                        <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px", marginBottom:8 }}>
-                          <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Apenas Arquitetura</div>
-                          <div style={{ marginBottom:5, paddingBottom:5, borderBottom:"1px solid #f0f0f0" }}>
-                            <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Antecipado</div>
-                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                              <input type="number" min="0" max="50" style={inpS} value={descArq} onChange={e=>setDescArq(parseFloat(e.target.value)||0)} />
-                              <span style={{ fontSize:10, color:"#8e8e93" }}>% OFF → {fmtV(arqComDesc)}</span>
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Parcelado</div>
-                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                              <input type="number" min="1" max="24" style={inpS} value={parcArq} onChange={e=>setParcArq(parseInt(e.target.value)||3)} />
-                              <span style={{ fontSize:10, color:"#8e8e93" }}>× → {fmtV(arqV/(parcArq||3))}/mês</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px" }}>
-                          <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Pacote (Arq. + Eng.)</div>
-                          <div style={{ marginBottom:5, paddingBottom:5, borderBottom:"1px solid #f0f0f0" }}>
-                            <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Antecipado</div>
-                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                              <input type="number" min="0" max="50" style={inpS} value={descPacote} onChange={e=>setDescPacote(parseFloat(e.target.value)||0)} />
-                              <span style={{ fontSize:10, color:"#8e8e93" }}>% OFF → {fmtV(totComDesc)}</span>
-                            </div>
-                          </div>
-                          <div>
-                            <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Parcelado</div>
-                            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                              <input type="number" min="1" max="24" style={inpS} value={parcPacote} onChange={e=>setParcPacote(parseInt(e.target.value)||4)} />
-                              <span style={{ fontSize:10, color:"#8e8e93" }}>× → {fmtV(totCI/(parcPacote||4))}/mês</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={cardSty(!isPadrao)} onClick={()=>setTipoPgto("etapas")}>
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: !isPadrao ? 12 : 0 }}>
-                      <div>
-                        <div style={{ fontSize:13, fontWeight:700, color:"#111" }}>Pagamento por Etapas</div>
-                        <div style={{ fontSize:11, color:"#828a98", marginTop:2 }}>Desconto por etapa</div>
-                      </div>
-                      <div style={radioCircle(!isPadrao)}>{!isPadrao && <span style={{ color:"#fff", fontSize:10, fontWeight:900 }}>✓</span>}</div>
-                    </div>
-                    {!isPadrao && (
-                      <div style={{ paddingTop:12, borderTop:"1px solid #f0f0f0", display:"grid", gridTemplateColumns:"1fr 1.5fr", gap:8 }} onClick={e=>e.stopPropagation()}>
-                        <div>
-                          <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px", marginBottom:8 }}>
-                            <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Etapa a Etapa</div>
-                            <div style={{ marginBottom:5, paddingBottom:5, borderBottom:"1px solid #f0f0f0" }}>
-                              <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Antecipado</div>
-                              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                                <input type="number" min="0" max="50" style={inpS} value={descEtCtrt} onChange={e=>setDescEtCtrt(parseFloat(e.target.value)||0)} />
-                                <span style={{ fontSize:10, color:"#8e8e93" }}>% OFF/etapa</span>
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Parcelado</div>
-                              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                                <input type="number" min="1" max="12" style={inpS} value={parcEtCtrt} onChange={e=>setParcEtCtrt(parseInt(e.target.value)||2)} />
-                                <span style={{ fontSize:10, color:"#8e8e93" }}>×/etapa</span>
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px" }}>
-                            <div style={{ fontSize:11, color:"#374151", fontWeight:700, marginBottom:6 }}>Pacote Completo</div>
-                            <div style={{ marginBottom:5, paddingBottom:5, borderBottom:"1px solid #f0f0f0" }}>
-                              <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Antecipado</div>
-                              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                                <input type="number" min="0" max="50" style={inpS} value={descPacCtrt} onChange={e=>setDescPacCtrt(parseFloat(e.target.value)||0)} />
-                                <span style={{ fontSize:10, color:"#8e8e93" }}>% OFF → {fmtV(Math.round(totCI*(1-descPacCtrt/100)*100)/100)}</span>
-                              </div>
-                            </div>
-                            <div>
-                              <div style={{ fontSize:10, color:"#8e8e93", marginBottom:3, fontWeight:600 }}>Parcelado</div>
-                              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                                <input type="number" min="1" max="24" style={inpS} value={parcPacCtrt} onChange={e=>setParcPacCtrt(parseInt(e.target.value)||8)} />
-                                <span style={{ fontSize:10, color:"#8e8e93" }}>× → {fmtV(Math.round(totCI*(1-descPacCtrt/100)/parcPacCtrt*100)/100)}/mês</span>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-
-                        <div style={{ background:"#f5f6f8", borderRadius:8, padding:"8px 10px" }}>
-                          <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:8, fontWeight:600 }}>Etapas</div>
-                          {(() => {
-                            const totalPct = etapasPct.reduce((s,e)=>s+e.pct,0);
-                            return (<>
-                              {etapasPct.filter(et => et.id !== 5).map((et, i) => {
-                                const arqCIModal = temImposto && arqV > 0 ? Math.round(arqV / (1 - aliqImp/100) * 100) / 100 : arqV;
-                                const val = Math.round(arqCIModal * et.pct/100 * 100)/100;
-                                return (
-                                  <div key={et.id} style={{ display:"flex", alignItems:"center", gap:5, marginBottom:5 }}>
-                                    <input
-                                      style={{ flex:1, border:"none", borderBottom:"1px solid #c8cdd6", background:"transparent", fontSize:11, color:"#374151", outline:"none", fontFamily:"inherit", padding:"1px 0", minWidth:0 }}
-                                      value={et.nome}
-                                      onChange={e=>setEtapasPct(prev=>prev.map((p,j)=>j===i?{...p,nome:e.target.value}:p))}
-                                    />
-                                    <div style={{ display:"flex", alignItems:"center", gap:2, flexShrink:0 }}>
-                                      <input type="number" min="0" max="100"
-                                        style={{ width:40, textAlign:"center", border:"1px solid #c8cdd6", borderRadius:5, padding:"1px 4px", fontSize:11, fontWeight:600, outline:"none", fontFamily:"inherit", background:"#fff" }}
-                                        value={et.pct}
-                                        onChange={e=>setEtapasPct(prev=>prev.map((p,j)=>j===i?{...p,pct:parseFloat(e.target.value)||0}:p))}
-                                      />
-                                      <span style={{ color:"#828a98", fontSize:10 }}>%</span>
-                                    </div>
-                                    <span style={{ color:"#374151", fontWeight:600, fontSize:10, whiteSpace:"nowrap", minWidth:72, textAlign:"right" }}>{fmtV(val)}</span>
-                                    <span
-                                      onClick={()=>setEtapasIsoladas(prev => { const s=new Set(prev); s.has(et.id)?s.delete(et.id):s.add(et.id); return s; })}
-                                      title={etapasIsoladas.has(et.id) ? "Cancelar orçamento isolado" : "Incluir neste orçamento isolado"}
-                                      style={{ cursor:"pointer", fontSize:10, flexShrink:0, width:16, height:16, borderRadius:"50%",
-                                        border:`1.5px solid ${etapasIsoladas.has(et.id)?"#111":"#9aa0ab"}`,
-                                        background: etapasIsoladas.has(et.id)?"#111":"transparent",
-                                        display:"flex", alignItems:"center", justifyContent:"center",
-                                        color: etapasIsoladas.has(et.id)?"#fff":"#d1d5db", lineHeight:1 }}>
-                                      ◎
-                                    </span>
-                                    {etapasPct.length > 1 && (
-                                      <span onClick={()=>{ setEtapasPct(prev=>prev.filter((_,j)=>j!==i)); setEtapasIsoladas(prev=>{const s=new Set(prev);s.delete(et.id);return s;}); }} style={{ color:"#d1d5db", cursor:"pointer", fontSize:11, flexShrink:0 }}>✕</span>
-                                    )}
-                                  </div>
-                                );
-                              })}
-                              <div style={{ display:"flex", justifyContent:"space-between", paddingTop:5, borderTop:"1px solid #c8cdd6", marginTop:2 }}>
-                                <span style={{ fontSize:10, color: totalPct===100?"#828a98":"#ef4444", fontWeight:600 }}>{totalPct}%</span>
-                                <span style={{ fontSize:10, fontWeight:700, color:"#111" }}>{fmtV(Math.round((temImposto&&arqV>0?Math.round(arqV/(1-aliqImp/100)*100)/100:arqV)*totalPct/100*100)/100)}</span>
-                              </div>
-                              {etapasIsoladas.size > 0 && (
-                                <div style={{ marginTop:5, padding:"4px 8px", background:"#f0f9ff", border:"1px solid #bae6fd", borderRadius:5, fontSize:10, color:"#0369a1" }}>
-                                  ◎ Orçamento isolado: {etapasPct.filter(e=>etapasIsoladas.has(e.id)).map(e=>e.nome).join(", ")}
-                                </div>
-                              )}
-                              <button onClick={()=>setEtapasPct(prev=>[...prev,{id:Date.now(),nome:`Etapa ${prev.length+1}`,pct:0}])}
-                                style={{ marginTop:5, fontSize:10, color:"#374151", background:"#fff", border:"1px solid #c8cdd6", borderRadius:5, padding:"2px 6px", cursor:"pointer", fontFamily:"inherit", width:"100%" }}>
-                                + Etapa
-                              </button>
-                            </>);
-                          })()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                </div>
-
-                <button
-                  style={{ width:"100%", marginTop:8, background:"#111", color:"#fff", border:"none", borderRadius:12, padding:"15px 0", fontSize:15, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}
-                  onClick={() => {
-                    setPropostaData({
-                      tipoProjeto, tipoObra, padrao, tipologia, tamanho,
-                      clienteNome, referencia,
-                      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
-                      resumoDescritivo: (() => {
-                        const fmtN2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
-                        const fmtArea = v => v > 0 ? fmtN2(v)+"m²" : null;
-                        if (isComercial && calculo?.isComercial) {
-                          const c = calculo;
-                          const partes = [];
-                          const nL = grupoQtds["Por Loja"]||0, nA = grupoQtds["Espaço Âncora"]||0;
-                          const nAp = grupoQtds["Por Apartamento"]||0, nG = grupoQtds["Galpao"]||0;
-                          if (nL>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Loja"); if(b) partes.push(`${nL} loja${nL!==1?"s":""} (${fmtArea(b.area1*nL)})`); }
-                          if (nA>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Âncora"); if(b) partes.push(`${nA} ${nA===1?"Espaço Âncora":"Espaços Âncoras"} (${fmtArea(b.area1*nA)})`); }
-                          if (nAp>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Apartamento"); if(b) partes.push(`${nAp} apartamento${nAp!==1?"s":""} (${fmtArea(b.area1*nAp)})`); }
-                          if (nG>0 && c.blocosCom) { const b=c.blocosCom.find(x=>x.label==="Galpão"); if(b) partes.push(`${nG} ${nG!==1?"galpões":"galpão"} (${fmtArea(b.area1*nG)})`); }
-                          if (c.blocosCom) { const bc=c.blocosCom.find(x=>x.label==="Área Comum"); if(bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`); }
-                          const lista = partes.length>1 ? partes.slice(0,-1).join(", ")+" e "+partes[partes.length-1] : partes[0]||"";
-                          return `Conjunto comercial, contendo ${lista}, totalizando ${fmtArea(c.areaTot||c.areaTotal)}.`;
-                        }
-                        const nUnid = calculo?.nRep || 1;
-                        const areaUni = calculo?.areaTotal || calculo?.areaTot || 0;
-                        const areaTotR = Math.round(areaUni * nUnid * 100)/100;
-                        const comAtivos = Object.entries(qtds).filter(([,q])=>q>0).map(([n])=>n.toLowerCase());
-                        const totalAmb = Object.entries(qtds).filter(([,q])=>q>0).reduce((s,[,q])=>s+q,0);
-                        const listaStr = comAtivos.length>1 ? comAtivos.slice(0,-1).join(", ")+" e "+comAtivos[comAtivos.length-1] : comAtivos[0]||"";
-                        const tipDesc = (tipologia||"").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
-                        const numFem = ["","uma","duas","três","quatro","cinco","seis","sete","oito","nove","dez"];
-                        if (nUnid>1) {
-                          const nExt = nUnid>=1&&nUnid<=10 ? numFem[nUnid] : String(nUnid);
-                          return `${nExt.charAt(0).toUpperCase()+nExt.slice(1)} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
-                        }
-                        return `Uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
-                      })(),
-                      grupoQtds: isComercial ? grupoQtds : null,
-                      calculo,
-                      incluiArq, incluiEng, incluiMarcenaria,
-                      etapasIsoladas: Array.from(etapasIsoladas),
-                      tipoPgto, temImposto, aliqImp,
-                      descArq, parcArq, descPacote, parcPacote,
-                      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
-                      etapasPct,
-                      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
-                    });
-                    const orcParaSalvar = {
-                      ...(orcBase || {}),
-                      tipo: tipoProjeto, subtipo: tipoObra, tipologia, tamanho, padrao,
-                      cliente: clienteNome, referencia,
-                      comodos: Object.entries(qtds).filter(([,q])=>q>0).map(([nome,qtd])=>({nome,qtd})),
-                      repeticao: qtdRep > 0, nUnidades: qtdRep > 0 ? qtdRep : 1,
-                      grupoQtds: isComercial ? grupoQtds : null,
-                      grupoParams: isComercial ? grupoParams : null,
-                      incluiArq, incluiEng, incluiMarcenaria,
-                      etapasIsoladas: Array.from(etapasIsoladas),
-                      resultado: { ...calculo, precoArq: calculo?.precoArq || 0, precoEng: calculo?.precoEng || 0, areaTotal: calculo?.areaTotal || 0 },
-                      tipoPgto, temImposto, aliqImp,
-                      descArq, parcArq, descPacote, parcPacote,
-                      descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
-                      etapasPct,
-                      totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
-                    };
-                    if (onSalvar) onSalvar(orcParaSalvar);
-                    setOrcPendente(null);
-                    setShowModal(false);
-                  }}>
-                  Confirmar e Gerar Orçamento
-                </button>
-                <button
-                  style={{ width:"100%", marginTop:8, background:"transparent", color:"#828a98", border:"none", padding:"12px 0", fontSize:14, cursor:"pointer", fontFamily:"inherit" }}
-                  onClick={() => setShowModal(false)}>
-                  Cancelar
-                </button>
-              </div>
-            </div>
-          </>
-        );
-      })()}
 
       {aberto && (
         <div style={{
