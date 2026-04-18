@@ -4007,8 +4007,11 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const aliqImp = orc.aliqImp ?? r.aliquotaImposto ?? 0;
   const semFat  = temImp ? (1 - aliqImp/100) : 1;
 
+  // ESPELHO do preview: quando orc._preview existe, usa valores exatos pré-calculados
+  const P = orc._preview || null;
+
   // Arq e Eng SEM imposto — usa valores editados passados pelo handlePdf
-  const arqCI   = Math.round((r.precoArq||r.precoTotal||r.precoFinal||0)*100)/100;
+  const arqCI   = P ? P.arqSI : Math.round((r.precoArq||r.precoTotal||r.precoFinal||0)*100)/100;
   const engRaw  = Math.round((r.engTotal ?? calcularEngenharia(area).totalEng)*100)/100;
   let engRepet  = 0;
   if (nUnid > 1) {
@@ -4019,14 +4022,14 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     }
   }
   const engBase = Math.round((engRaw + engRepet)*100)/100;
-  const engCI   = Math.round((r.precoEng||engBase)*100)/100;
-  const totSI   = Math.round((arqCI + (incluiEng?engCI:0))*100)/100;
-  const totCI   = temImp ? Math.round(totSI/(1-aliqImp/100)*100)/100 : totSI;
-  const impostoV= temImp ? Math.round((totCI - totSI)*100)/100 : 0;
-  // Engenharia com imposto para linha separada na tabela
-  const engCIcom = temImp && engCI>0 ? Math.round(engCI/(1-aliqImp/100)*100)/100 : engCI;
-  // Arquitetura com imposto (para cálculos de forma de pagamento "Apenas Arquitetura")
-  const arqCIcom = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+  const engCI   = P ? P.engSI : Math.round((r.precoEng||engBase)*100)/100;
+  const totSI   = P ? P.totalSI : Math.round((arqCI + (incluiEng?engCI:0))*100)/100;
+  const totCI   = P ? P.totalCI : (temImp ? Math.round(totSI/(1-aliqImp/100)*100)/100 : totSI);
+  const impostoV= P ? P.impostoV : (temImp ? Math.round((totCI - totSI)*100)/100 : 0);
+  // Engenharia com imposto (usado na linha da tabela)
+  const engCIcom = P ? P.engCI : (temImp && engCI>0 ? Math.round(engCI/(1-aliqImp/100)*100)/100 : engCI);
+  // Arquitetura com imposto (usado em formas de pagamento "Apenas Arquitetura")
+  const arqCIcom = P ? P.arqCI : (temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI);
   // Etapas isoladas
   const idsIsoladosPdf = new Set(orc.etapasIsoladas || []);
   const temIsoladasPdf = idsIsoladosPdf.size > 0;
@@ -4291,8 +4294,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
         nv(rH+3);
         sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
         const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-        // Valor SEMPRE = arq × pct/100 (com imposto)
-        const valEtapa = Math.round(arqCIBase*(et.pct/100)*100)/100;
+        // Valor: se preview mandou pré-calculado, usa; senão calcula
+        const valEtapa = (et.valorCalculado !== undefined)
+          ? et.valorCalculado
+          : Math.round(arqCIBase*(et.pct/100)*100)/100;
         sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
         sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
         y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
@@ -4308,17 +4313,23 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       y+=6; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     }
 
-    // Total
+    // Total — ESPELHO do preview
     nv(10);
     y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
     sf("bold",8.5); stc(INK);
     tx("Total",cE,y);
-    const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-    // Total = soma dos % ATIVOS (isolados quando temIsoladas, todos quando não) × arq + eng integral (se incluiEng)
-    const pctArqAtivo = etapasPdf
-      .filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)))
-      .reduce((s,e) => s + Number(e.pct), 0);
-    const totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (incluiEng?engCIcom:0))*100)/100;
+    // Soma dos % ativos (só isolados quando há isolamento)
+    const etapasAtivasPdf = etapasPdf.filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
+    const pctArqAtivo = etapasAtivasPdf.reduce((s,e) => s + Number(e.pct), 0);
+    // Valor total: se temos valores pré-calculados, soma eles + eng com imposto
+    let totalPdfBase;
+    if (etapasAtivasPdf.length > 0 && etapasAtivasPdf[0].valorCalculado !== undefined) {
+      const somaEtapas = etapasAtivasPdf.reduce((s,e) => s + Number(e.valorCalculado || 0), 0);
+      totalPdfBase = Math.round((somaEtapas + (incluiEng ? engCIcom : 0)) * 100) / 100;
+    } else {
+      const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+      totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (incluiEng?engCIcom:0))*100)/100;
+    }
     tx(`${pctArqAtivo}%`, cP, y, {align:"right"});
     tx(fmtB(totalPdfBase),cV,y,{align:"right"});
     y+=10;
@@ -6424,17 +6435,52 @@ function PropostaPreview({ data, onVoltar }) {
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
-      // Sempre envia arq/eng totais ao PDF. O PDF aplica isolamento através de orc.etapasIsoladas
-      const arqTotal = arqEdit;
-      const engTotal = incluiEng ? engEdit : 0;
-      const grandTotal = totCIEdit;
+      // ESPELHO do preview: calcular aqui os valores exatos exibidos e passar prontos ao PDF
+      // arq/eng exibidos no header (sem imposto)
+      const arqExibidoSI = temIsoladas ? arqIsoladaSI : arqCI;
+      const engExibidoSI = incluiEng ? engCI : 0;
+      // com imposto
+      const arqExibidoCI = temImposto && arqExibidoSI > 0 ? Math.round(arqExibidoSI / (1 - aliqImp/100) * 100) / 100 : arqExibidoSI;
+      const engExibidoCI = temImposto && engExibidoSI > 0 ? Math.round(engExibidoSI / (1 - aliqImp/100) * 100) / 100 : engExibidoSI;
+      // total com imposto (exatamente como o preview mostra)
+      const totalExibidoSI = Math.round((arqExibidoSI + engExibidoSI) * 100) / 100;
+      const totalExibidoCI = temImposto && totalExibidoSI > 0 ? Math.round(totalExibidoSI / (1 - aliqImp/100) * 100) / 100 : totalExibidoSI;
+      // etapas que aparecem no preview (só isoladas quando tem isolamento)
+      // Já com os valores calculados exatamente como no preview
+      const etapasExibidas = (temIsoladas
+        ? etapasPct.filter(e => e.id !== 5 && idsIsolados.has(e.id))
+        : etapasPct.filter(e => e.id !== 5)
+      ).map(e => ({
+        ...e,
+        // Valor calculado exatamente como o preview mostra:
+        // valorEtapa = arqCIEdit × pct/100 (onde arqCIEdit é arq TOTAL com imposto)
+        valorCalculado: Math.round(arqCIEdit * (e.pct/100) * 100) / 100,
+      }));
+
+      // Legado (mantido por compat do defaultModelo)
+      const arqTotal = arqExibidoSI;
+      const engTotal = engExibidoSI;
+      const grandTotal = totalExibidoCI;
       const engUnit = engTotal;
-      const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
+
+      const r = {
+        areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid,
+        precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal,
+        precoEng: engTotal, engTotal,
+        impostoAplicado: temImposto, aliquotaImposto: aliqImp,
+      };
       const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
       const fmtM2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m²";
-      // etapasPct no PDF: passa todas as etapas; o PDF destaca as isoladas via idsIsolados
-      const etapasPdfFinal = etapasPct;
+      // etapasPct no PDF: passa só as que aparecem no preview
+      const etapasPdfFinal = etapasExibidas;
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:tipoPgto, descontoEtapa:descArqLocal, parcelasEtapa:parcArqLocal, descontoPacote:descPacoteLocal, parcelasPacote:parcPacoteLocal, descontoEtapaCtrt:descEtCtrtLocal, parcelasEtapaCtrt:parcEtCtrtLocal, descontoPacoteCtrt:descPacCtrtLocal, parcelasPacoteCtrt:parcPacCtrtLocal, etapasPct:etapasPdfFinal, incluiImposto:temImposto, aliquotaImposto:aliqImp, etapasIsoladas:Array.from(idsIsolados), totSI:0, criadoEm:new Date().toISOString(), resultado:r,
+        // ESPELHO do preview: valores exatos pré-calculados (PDF usa esses em vez de recalcular)
+        _preview: {
+          arqSI: arqExibidoSI, arqCI: arqExibidoCI,
+          engSI: engExibidoSI, engCI: engExibidoCI,
+          totalSI: totalExibidoSI, totalCI: totalExibidoCI,
+          impostoV: Math.round((totalExibidoCI - totalExibidoSI) * 100) / 100,
+        },
         // Textos editáveis
         cidade: cidadeEdit, validadeStr: validadeEdit, pixTexto: pixEdit,
         // Escopo editado na preview

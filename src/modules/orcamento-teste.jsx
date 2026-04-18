@@ -664,17 +664,52 @@ function PropostaPreview({ data, onVoltar }) {
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
-      // Sempre envia arq/eng totais ao PDF. O PDF aplica isolamento através de orc.etapasIsoladas
-      const arqTotal = arqEdit;
-      const engTotal = incluiEng ? engEdit : 0;
-      const grandTotal = totCIEdit;
+      // ESPELHO do preview: calcular aqui os valores exatos exibidos e passar prontos ao PDF
+      // arq/eng exibidos no header (sem imposto)
+      const arqExibidoSI = temIsoladas ? arqIsoladaSI : arqCI;
+      const engExibidoSI = incluiEng ? engCI : 0;
+      // com imposto
+      const arqExibidoCI = temImposto && arqExibidoSI > 0 ? Math.round(arqExibidoSI / (1 - aliqImp/100) * 100) / 100 : arqExibidoSI;
+      const engExibidoCI = temImposto && engExibidoSI > 0 ? Math.round(engExibidoSI / (1 - aliqImp/100) * 100) / 100 : engExibidoSI;
+      // total com imposto (exatamente como o preview mostra)
+      const totalExibidoSI = Math.round((arqExibidoSI + engExibidoSI) * 100) / 100;
+      const totalExibidoCI = temImposto && totalExibidoSI > 0 ? Math.round(totalExibidoSI / (1 - aliqImp/100) * 100) / 100 : totalExibidoSI;
+      // etapas que aparecem no preview (só isoladas quando tem isolamento)
+      // Já com os valores calculados exatamente como no preview
+      const etapasExibidas = (temIsoladas
+        ? etapasPct.filter(e => e.id !== 5 && idsIsolados.has(e.id))
+        : etapasPct.filter(e => e.id !== 5)
+      ).map(e => ({
+        ...e,
+        // Valor calculado exatamente como o preview mostra:
+        // valorEtapa = arqCIEdit × pct/100 (onde arqCIEdit é arq TOTAL com imposto)
+        valorCalculado: Math.round(arqCIEdit * (e.pct/100) * 100) / 100,
+      }));
+
+      // Legado (mantido por compat do defaultModelo)
+      const arqTotal = arqExibidoSI;
+      const engTotal = engExibidoSI;
+      const grandTotal = totalExibidoCI;
       const engUnit = engTotal;
-      const r = { areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid, precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal, precoEng: engTotal, engTotal, impostoAplicado: temImposto, aliquotaImposto: aliqImp };
+
+      const r = {
+        areaTotal: areaTot, areaBruta: c.areaBruta||0, nUnidades: nUnid,
+        precoArq: arqTotal, precoFinal: arqTotal, precoTotal: arqTotal,
+        precoEng: engTotal, engTotal,
+        impostoAplicado: temImposto, aliquotaImposto: aliqImp,
+      };
       const fmt   = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
       const fmtM2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m²";
-      // etapasPct no PDF: passa todas as etapas; o PDF destaca as isoladas via idsIsolados
-      const etapasPdfFinal = etapasPct;
+      // etapasPct no PDF: passa só as que aparecem no preview
+      const etapasPdfFinal = etapasExibidas;
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:tipoPgto, descontoEtapa:descArqLocal, parcelasEtapa:parcArqLocal, descontoPacote:descPacoteLocal, parcelasPacote:parcPacoteLocal, descontoEtapaCtrt:descEtCtrtLocal, parcelasEtapaCtrt:parcEtCtrtLocal, descontoPacoteCtrt:descPacCtrtLocal, parcelasPacoteCtrt:parcPacCtrtLocal, etapasPct:etapasPdfFinal, incluiImposto:temImposto, aliquotaImposto:aliqImp, etapasIsoladas:Array.from(idsIsolados), totSI:0, criadoEm:new Date().toISOString(), resultado:r,
+        // ESPELHO do preview: valores exatos pré-calculados (PDF usa esses em vez de recalcular)
+        _preview: {
+          arqSI: arqExibidoSI, arqCI: arqExibidoCI,
+          engSI: engExibidoSI, engCI: engExibidoCI,
+          totalSI: totalExibidoSI, totalCI: totalExibidoCI,
+          impostoV: Math.round((totalExibidoCI - totalExibidoSI) * 100) / 100,
+        },
         // Textos editáveis
         cidade: cidadeEdit, validadeStr: validadeEdit, pixTexto: pixEdit,
         // Escopo editado na preview

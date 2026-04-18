@@ -884,8 +884,11 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const aliqImp = orc.aliqImp ?? r.aliquotaImposto ?? 0;
   const semFat  = temImp ? (1 - aliqImp/100) : 1;
 
+  // ESPELHO do preview: quando orc._preview existe, usa valores exatos pré-calculados
+  const P = orc._preview || null;
+
   // Arq e Eng SEM imposto — usa valores editados passados pelo handlePdf
-  const arqCI   = Math.round((r.precoArq||r.precoTotal||r.precoFinal||0)*100)/100;
+  const arqCI   = P ? P.arqSI : Math.round((r.precoArq||r.precoTotal||r.precoFinal||0)*100)/100;
   const engRaw  = Math.round((r.engTotal ?? calcularEngenharia(area).totalEng)*100)/100;
   let engRepet  = 0;
   if (nUnid > 1) {
@@ -896,14 +899,14 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     }
   }
   const engBase = Math.round((engRaw + engRepet)*100)/100;
-  const engCI   = Math.round((r.precoEng||engBase)*100)/100;
-  const totSI   = Math.round((arqCI + (incluiEng?engCI:0))*100)/100;
-  const totCI   = temImp ? Math.round(totSI/(1-aliqImp/100)*100)/100 : totSI;
-  const impostoV= temImp ? Math.round((totCI - totSI)*100)/100 : 0;
-  // Engenharia com imposto para linha separada na tabela
-  const engCIcom = temImp && engCI>0 ? Math.round(engCI/(1-aliqImp/100)*100)/100 : engCI;
-  // Arquitetura com imposto (para cálculos de forma de pagamento "Apenas Arquitetura")
-  const arqCIcom = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+  const engCI   = P ? P.engSI : Math.round((r.precoEng||engBase)*100)/100;
+  const totSI   = P ? P.totalSI : Math.round((arqCI + (incluiEng?engCI:0))*100)/100;
+  const totCI   = P ? P.totalCI : (temImp ? Math.round(totSI/(1-aliqImp/100)*100)/100 : totSI);
+  const impostoV= P ? P.impostoV : (temImp ? Math.round((totCI - totSI)*100)/100 : 0);
+  // Engenharia com imposto (usado na linha da tabela)
+  const engCIcom = P ? P.engCI : (temImp && engCI>0 ? Math.round(engCI/(1-aliqImp/100)*100)/100 : engCI);
+  // Arquitetura com imposto (usado em formas de pagamento "Apenas Arquitetura")
+  const arqCIcom = P ? P.arqCI : (temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI);
   // Etapas isoladas
   const idsIsoladosPdf = new Set(orc.etapasIsoladas || []);
   const temIsoladasPdf = idsIsoladosPdf.size > 0;
@@ -1168,8 +1171,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
         nv(rH+3);
         sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
         const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-        // Valor SEMPRE = arq × pct/100 (com imposto)
-        const valEtapa = Math.round(arqCIBase*(et.pct/100)*100)/100;
+        // Valor: se preview mandou pré-calculado, usa; senão calcula
+        const valEtapa = (et.valorCalculado !== undefined)
+          ? et.valorCalculado
+          : Math.round(arqCIBase*(et.pct/100)*100)/100;
         sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
         sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
         y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
@@ -1185,17 +1190,23 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       y+=6; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
     }
 
-    // Total
+    // Total — ESPELHO do preview
     nv(10);
     y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
     sf("bold",8.5); stc(INK);
     tx("Total",cE,y);
-    const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-    // Total = soma dos % ATIVOS (isolados quando temIsoladas, todos quando não) × arq + eng integral (se incluiEng)
-    const pctArqAtivo = etapasPdf
-      .filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)))
-      .reduce((s,e) => s + Number(e.pct), 0);
-    const totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (incluiEng?engCIcom:0))*100)/100;
+    // Soma dos % ativos (só isolados quando há isolamento)
+    const etapasAtivasPdf = etapasPdf.filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
+    const pctArqAtivo = etapasAtivasPdf.reduce((s,e) => s + Number(e.pct), 0);
+    // Valor total: se temos valores pré-calculados, soma eles + eng com imposto
+    let totalPdfBase;
+    if (etapasAtivasPdf.length > 0 && etapasAtivasPdf[0].valorCalculado !== undefined) {
+      const somaEtapas = etapasAtivasPdf.reduce((s,e) => s + Number(e.valorCalculado || 0), 0);
+      totalPdfBase = Math.round((somaEtapas + (incluiEng ? engCIcom : 0)) * 100) / 100;
+    } else {
+      const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+      totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (incluiEng?engCIcom:0))*100)/100;
+    }
     tx(`${pctArqAtivo}%`, cP, y, {align:"right"});
     tx(fmtB(totalPdfBase),cV,y,{align:"right"});
     y+=10;
