@@ -3635,10 +3635,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
         const op1LabelPac = `Opção 1: `;
         sf("bold",8.5); stc(INK_MD); tx(op1LabelPac, M+2, y);
         const wOp1LabPac = doc.getTextWidth(op1LabelPac);
-        const fraseOp1Pac = `Pagamento antecipado com ${dPac}% de desconto — de ${fmtB(totalPacote)} por `;
+        const fraseOp1Pac = `Pagamento antecipado com ${dPac}% de desconto — de ${fmtB(totalPacote)} por`;
         sf("normal",8.5); stc(INK_MD); tx(fraseOp1Pac, M+2+wOp1LabPac, y);
         const wFraseOp1Pac = doc.getTextWidth(fraseOp1Pac);
-        sf("bold",9.5); stc(INK); tx(fmtB(tDescP), M+2+wOp1LabPac+wFraseOp1Pac, y);
+        sf("bold",9.5); stc(INK); tx(fmtB(tDescP), M+2+wOp1LabPac+wFraseOp1Pac+2, y);
         y+=5; sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F"); y+=4;
         // Opção 2 em uma linha
         const op2LabelPac = `Opção 2: `;
