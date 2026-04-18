@@ -914,7 +914,7 @@ function PropostaPreview({ data, onVoltar }) {
 
   const prazoDefault = isPadrao
     ? [
-       ...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar."] : []),
+       ...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação."] : []),
        ...(engAtiva ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : []),
       ]
     : [
