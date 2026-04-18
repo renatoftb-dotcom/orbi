@@ -171,8 +171,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Título de seção (label uppercase + linha horizontal — igual preview)
   // minContent: altura mínima do conteúdo que DEVE acompanhar o título (se não couber, quebra antes)
   const secTitle = (txt, mt=8, minContent=20) => {
+    const yAntes = y;
     nv(10 + mt + minContent);
-    y += mt;
+    // Se nv quebrou a página, y foi resetado pra 22 (topo).
+    // Nesse caso, reduzir o margin-top pra evitar espaço vazio excessivo no topo.
+    const quebrou = y < yAntes;
+    y += quebrou ? 2 : mt;
     sf("bold",7); stc(INK_LT);
     // Calcular largura SEM charSpace primeiro, depois aplicar charSpace ao desenhar
     const tw = doc.getTextWidth(txt.toUpperCase()) + txt.length * 0.6 + 4;
