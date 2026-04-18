@@ -886,6 +886,17 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // ESPELHO do preview: quando orc._preview existe, usa valores exatos pré-calculados
   const P = orc._preview || null;
+  // DEBUG: log pra investigar por que o PDF não reflete o preview em alguns cenários
+  // Remova essas linhas após debug
+  console.log("[buildPdf DEBUG]", {
+    tem_preview: !!P,
+    _preview_engAtiva: P?.engAtiva,
+    incluiEng_arg: incluiEng,
+    incluiArq_arg: incluiArq,
+    etapasIsoladas: orc.etapasIsoladas,
+    mostrarTabelaEtapas: P?.mostrarTabelaEtapas,
+    subTitulo_preview: P?.subTitulo,
+  });
 
   // Arq e Eng SEM imposto — usa valores editados passados pelo handlePdf
   const arqCI   = P ? P.arqSI : Math.round((r.precoArq||r.precoTotal||r.precoFinal||0)*100)/100;
@@ -925,24 +936,38 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   ];
 
   const naoInclDefault = [
-    ...(!incluiEng ? ["Projetos de Engenharia (Estrutural · Elétrico · Hidrossanitário)"] : []),
-    "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
-    "Projetos de climatização","Projeto de prevenção de incêndio","Projeto de automação",
-    "Projeto de paisagismo","Projeto de interiores","Projeto de Marcenaria (Móveis internos)",
+    // Etapas não selecionadas no isolamento (do preview) entram primeiro
+    ...(P && P.etapasNaoIncluidas ? P.etapasNaoIncluidas : []),
+    // "Projetos de Engenharia" — só quando não está em etapasNaoIncluidas
+    ...(!incluiEng && !(P && P.etapasNaoIncluidas && P.etapasNaoIncluidas.some(n => n.includes("Engenharia"))) ? ["Projetos de Engenharia (Estrutural/Elétrico/Hidrossanitário)"] : []),
+    // Grupo: Projetos (todos agrupados em sequência)
+    "Projetos de climatização",
+    "Projeto de prevenção de incêndio",
+    "Projeto de automação",
+    "Projeto de paisagismo",
+    "Projeto de interiores",
+    "Projeto de Marcenaria (Móveis internos)",
     "Projeto estrutural de estruturas metálicas",
-    "Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura",
-    "Sondagem e Planialtimétrico do terreno","Acompanhamento semanal de obra",
-    "Gestão e execução de obra","Vistoria para Caixa Econômica Federal","RRT de Execução de obra",
+    "Projeto estrutural de muros de contenção (>1m)",
+    // Grupo: Serviços
+    "Sondagem e Planialtimétrico do terreno",
+    "Acompanhamento semanal de obra",
+    "Gestão e execução de obra",
+    "Vistoria para Caixa Econômica Federal",
+    "RRT de Execução de obra",
+    // Outros
+    "Taxas municipais e emolumentos (CAU/Prefeitura)",
     ...(!temImp ? ["Impostos"] : []),
   ];
 
   const isPadrao = (orc.tipoPagamento || "padrao") !== "etapas";
-  const mostrarPrazoEng = incluiEng;
+  // engAtiva: considera toggle + isolamento (quando há isolamento, eng só se ela estiver isolada)
+  const mostrarPrazoEng = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
   const prazoDefault = isPadrao
-    ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar.",
+    ? [...(incluiArq ? ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após aprovação do estudo preliminar."] : []),
        ...(mostrarPrazoEng ? ["Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."] : [])]
-    : ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente.",
-       "Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte.",
+    : [...(incluiArq || mostrarPrazoEng ? ["Prazo de 30 dias úteis por etapa, contados após conclusão e aprovação de cada etapa pelo cliente."] : []),
+       ...(incluiArq || mostrarPrazoEng ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
        ...(mostrarPrazoEng ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : [])];
 
   const etapasPdf = orc.etapasPct || [];
@@ -952,13 +977,16 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Mapa etapaId -> nome personalizado (para etapas customizadas)
   const etapaNomeMap = Object.fromEntries(etapasPdf.map(e => [e.id, e.nome]));
 
+  // Engenharia ativa? (preview manda via _preview.engAtiva; senão calcula)
+  const engAtivaEscopo = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
   // Filtra e renumera escopo — usa editado da preview se disponível
   const escopoBase = (orc.escopoEditado && orc.escopoEditado.length > 0) ? orc.escopoEditado : escopoDefault;
   const escopoFiltradoPdf = (() => {
     const blocos = escopoBase.filter((bloco, i) => {
       const etId = bloco.etapaId || (i + 1);
       const isEng = bloco.isEng || (i === 4 && !orc.escopoEditado);
-      if (isEng) return incluiEng;
+      // Eng só aparece se ativa (incluiEng && [sem isolamento OU eng isolada])
+      if (isEng) return engAtivaEscopo;
       if (!incluiArq) return false;
       if (temIsoladasPdf && !idsIsoladosPdf.has(etId) && !bloco.custom) return false;
       if (!etapasAtivas.has(etId) && !bloco.custom) return false;
@@ -969,7 +997,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     if (!orc.escopoEditado) {
       etapasPdf.forEach(et => {
         if (et.id > 5) {
-          blocos.splice(blocos.length - (incluiEng ? 1 : 0), 0, {
+          blocos.splice(blocos.length - (engAtivaEscopo ? 1 : 0), 0, {
             titulo: et.nome, objetivo:"", itens:[], entregaveis:[], obs:""
           });
         }
@@ -1022,8 +1050,9 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const nv = (h) => { if (y+h > H-18) novaPg(); };
 
   // Título de seção (label uppercase + linha horizontal — igual preview)
-  const secTitle = (txt, mt=8) => {
-    nv(10);
+  // minContent: altura mínima do conteúdo que DEVE acompanhar o título (se não couber, quebra antes)
+  const secTitle = (txt, mt=8, minContent=20) => {
+    nv(10 + mt + minContent);
     y += mt;
     sf("bold",7); stc(INK_LT);
     // Calcular largura SEM charSpace primeiro, depois aplicar charSpace ao desenhar
@@ -1083,24 +1112,43 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Nome cliente + Arq à direita (label inline + valor)
   y += 10;
   sf("bold",18); stc(INK); tx(orc.cliente||"—", M, y);
-  // Valor e label "Apenas Arquitetura" aparecem sempre que arq+eng estão incluídos
-  if (incluiArq && incluiEng) {
+  // Valor "Apenas Arquitetura" no canto superior direito só aparece quando eng está ATIVA
+  // (senão é redundante — o valor arq já aparece logo abaixo em "ARQUITETURA")
+  const engAtivaHeaderCalc = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
+  if (incluiArq && engAtivaHeaderCalc) {
     sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
     const wArqVal = doc.getTextWidth(fmtB(arqCI));
-    sf("normal",6.5); stc(INK_LT); tx("Apenas Arquitetura", W-M-wArqVal-3, y+1, {align:"right"});
-    if (area>0) { sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, W-M, y+6, {align:"right"}); }
+    const labelApenas = P && P.labelApenas ? P.labelApenas : "Apenas Arquitetura";
+    sf("normal",6.5); stc(INK_LT); tx(labelApenas, W-M-wArqVal-3, y+1, {align:"right"});
   }
 
   // "Proposta Comercial..." abaixo do nome
   y += 7;
   sf("normal",7); stc(INK_LT);
-  tx("Proposta Comercial de Projetos de Arquitetura e Engenharia", M, y);
+  // Subtítulo: vem do preview ou calcula dinamicamente baseado em incluiArq/engAtiva
+  // (engAtivaHeaderCalc já calculado acima respeita toggle + isolamento)
+  const subTit = (P && P.subTitulo)
+    ? P.subTitulo
+    : (incluiArq && engAtivaHeaderCalc)
+      ? "Proposta Comercial de Projetos de Arquitetura e Engenharia"
+      : (incluiArq && !engAtivaHeaderCalc)
+        ? "Proposta Comercial de Projetos de Arquitetura"
+        : (!incluiArq && engAtivaHeaderCalc)
+          ? "Proposta Comercial de Projetos de Engenharia"
+          : "Proposta Comercial";
+  tx(subTit, M, y);
 
   // Linha dupla separadora
   y += 6;
   sc(INK); doc.rect(M,y,TW,0.5,"F");
   y += 5;
 
+  // Aviso de isolamento parcial — só quando tem arq isolada e nem todas estão (ANTES do resumo)
+  if (P && P.avisoIsolado) {
+    sf("bold",8.5); stc(INK);
+    const ls = doc.splitTextToSize(P.avisoIsolado, TW);
+    ls.forEach(ln => { nv(5); tx(ln,M,y); y+=4.5; }); y+=3;
+  }
   // Resumo descritivo (gerado pelo defaultModelo)
   const resumoPdf = modeloPdf?.cliente?.resumo || "";
   if (resumoPdf) {
@@ -1113,16 +1161,19 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   secTitle("Valores dos projetos", 4);
 
   const midX = M + TW/2;
-  const colH = 22;
+  // Altura dinâmica: com eng precisa de mais espaço (subtítulo "Estrutural · Elétrico · Hidrossanitário")
+  // Sem eng, compacta pra não deixar gap vazio acima do "Total sem impostos"
+  // engAtiva: considera toggle + isolamento
+  const engAtivaPdfVal = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
+  const colH = engAtivaPdfVal ? 22 : 14;
   nv(colH+4);
 
   // Coluna ARQ — sempre mostra valor total de arquitetura
   sf("bold",6.5); stc(INK_LT); tx("ARQUITETURA", M, y);
   sf("bold",12); stc(INK); tx(fmtB(arqCI), M, y+8);
-  if(area>0){ sf("normal",6.5); stc(INK_LT); tx(`R$ ${fmtN(Math.round(arqCI/area*100)/100)}/m²`, M, y+14); }
 
-  // Divisor vertical e coluna Engenharia — só quando incluiEng
-  if (incluiEng) {
+  // Divisor vertical e coluna Engenharia — só quando engenharia está ATIVA (toggle + isolamento)
+  if (engAtivaPdfVal) {
     sc(LINE,"draw"); doc.setLineWidth(0.3); doc.line(midX, y-1, midX, y+colH);
     sf("bold",6.5); stc(INK_LT); tx("ENGENHARIA", midX+4, y);
     const wEng = doc.getTextWidth("ENGENHARIA");
@@ -1130,7 +1181,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     sf("bold",12); stc(INK); tx(fmtB(engCI), midX+4, y+8);
     sf("normal",6.5); stc(INK_LT);
     tx("Estrutural · Elétrico · Hidrossanitário", midX+4, y+14);
-    if(area>0) tx(`R$ ${fmtN(Math.round(engCI/area*100)/100)}/m²`, midX+4, y+18);
   }
 
   y += colH+2;
@@ -1154,90 +1204,185 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   y += 12;
 
   // ── CONTRATAÇÃO / FORMAS DE PAGAMENTO ─────────────────────
-  secTitle(isPadrao ? "Formas de pagamento" : "Contratação por etapa");
+  // Determina se vai mostrar a tabela de etapas (para decidir o título)
+  const _mostrarTabela = P ? P.mostrarTabelaEtapas !== false : (orc.mostrarTabelaEtapas !== false);
+  // Se padrão, sempre "Formas de pagamento"
+  // Se etapas + tabela ligada: "Contratação por etapa" (depois outro "Forma de Pagamento" abaixo)
+  // Se etapas + tabela desligada: "Forma de Pagamento" direto (sem título de "Contratação por etapa")
+  if (isPadrao) {
+    secTitle("Formas de pagamento", 8, 40);
+  } else if (_mostrarTabela) {
+    secTitle("Contratação por etapa", 8, 40);
+  }
+  // Se !isPadrao && !_mostrarTabela, o título "Forma de Pagamento" virá abaixo (em outro secTitle)
 
   if (!isPadrao && etapasPdf.length > 0) {
-    // Tabela de etapas
-    nv(14);
-    const cE=M, cP=W-M-45, cV=W-M, rH=8;
-    sf("bold",7.5); stc(INK);
-    tx("ETAPA",cE,y); tx("%",cP,y,{align:"right"}); tx("VALOR",cV,y,{align:"right"});
-    y+=2; sc(INK); doc.rect(M,y,TW,0.5,"F"); y+=rH-1;
+    // Engenharia ativa? (preview manda via _preview.engAtiva; senão recalcula com isolamento)
+    const engAtiva = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
+    const mostrarTabela = _mostrarTabela;
 
-    etapasPdf
-      .filter(e => e.id !== 5)
-      .filter(e => !temIsoladasPdf || idsIsoladosPdf.has(e.id))
-      .forEach(et => {
-        nv(rH+3);
-        sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
-        const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-        // Valor: se preview mandou pré-calculado, usa; senão calcula
-        const valEtapa = (et.valorCalculado !== undefined)
-          ? et.valorCalculado
-          : Math.round(arqCIBase*(et.pct/100)*100)/100;
-        sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
-        sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
-        y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
-      });
+    if (mostrarTabela) {
+      // Tabela de etapas
+      nv(14);
+      const cE=M, cP=W-M-45, cV=W-M, rH=8;
+      sf("bold",7.5); stc(INK);
+      tx("ETAPA",cE,y); tx("%",cP,y,{align:"right"}); tx("VALOR",cV,y,{align:"right"});
+      y+=2; sc(INK); doc.rect(M,y,TW,0.5,"F"); y+=rH-1;
 
-    // Linha Engenharia — só quando incluiEng
-    if (incluiEng) {
-      nv(rH+5);
-      sf("normal",8.5); stc(INK_MD); tx("Projetos de Engenharia",cE,y);
-      sf("normal",6.5); stc(INK_LT); tx("Estrutural  ·  Elétrico  ·  Hidrossanitário",cE,y+4);
-      sf("normal",8.5); stc(INK_LT); tx("—",cP,y+2,{align:"right"});
-      sf("normal",8.5); stc(INK); tx(fmtB(engCIcom),cV,y+2,{align:"right"});
-      y+=6; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
+      etapasPdf
+        .filter(e => e.id !== 5)
+        .filter(e => !temIsoladasPdf || idsIsoladosPdf.has(e.id))
+        .forEach(et => {
+          nv(rH+3);
+          sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
+          const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+          // Valor: se preview mandou pré-calculado, usa; senão calcula
+          const valEtapa = (et.valorCalculado !== undefined)
+            ? et.valorCalculado
+            : Math.round(arqCIBase*(et.pct/100)*100)/100;
+          sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
+          sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
+          y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
+        });
+
+      // Linha Engenharia — só quando eng ativa (engAtiva = incluiEng && [sem isolamento OU eng isolada])
+      if (engAtiva) {
+        nv(rH+5);
+        sf("normal",8.5); stc(INK_MD); tx("Projetos de Engenharia",cE,y);
+        sf("normal",6.5); stc(INK_LT); tx("Estrutural  ·  Elétrico  ·  Hidrossanitário",cE,y+4);
+        sf("normal",8.5); stc(INK_LT); tx("—",cP,y+2,{align:"right"});
+        sf("normal",8.5); stc(INK); tx(fmtB(engCIcom),cV,y+2,{align:"right"});
+        y+=6; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
+      }
+
+      // Total — ESPELHO do preview
+      nv(10);
+      y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
+      sf("bold",8.5); stc(INK);
+      tx("Total",cE,y);
+      const etapasAtivasPdf = etapasPdf.filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
+      const pctArqAtivo = etapasAtivasPdf.reduce((s,e) => s + Number(e.pct), 0);
+      // Total: preview já calcula tudo - usa totalCI direto
+      let totalPdfBase;
+      if (P) {
+        totalPdfBase = P.totalCI;
+      } else if (etapasAtivasPdf.length > 0 && etapasAtivasPdf[0].valorCalculado !== undefined) {
+        const somaEtapas = etapasAtivasPdf.reduce((s,e) => s + Number(e.valorCalculado || 0), 0);
+        totalPdfBase = Math.round((somaEtapas + (engAtiva ? engCIcom : 0)) * 100) / 100;
+      } else {
+        const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
+        totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (engAtiva?engCIcom:0))*100)/100;
+      }
+      tx(`${pctArqAtivo}%`, cP, y, {align:"right"});
+      tx(fmtB(totalPdfBase),cV,y,{align:"right"});
+      y+=10;
     }
-
-    // Total — ESPELHO do preview
-    nv(10);
-    y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
-    sf("bold",8.5); stc(INK);
-    tx("Total",cE,y);
-    // Soma dos % ativos (só isolados quando há isolamento)
-    const etapasAtivasPdf = etapasPdf.filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
-    const pctArqAtivo = etapasAtivasPdf.reduce((s,e) => s + Number(e.pct), 0);
-    // Valor total: se temos valores pré-calculados, soma eles + eng com imposto
-    let totalPdfBase;
-    if (etapasAtivasPdf.length > 0 && etapasAtivasPdf[0].valorCalculado !== undefined) {
-      const somaEtapas = etapasAtivasPdf.reduce((s,e) => s + Number(e.valorCalculado || 0), 0);
-      totalPdfBase = Math.round((somaEtapas + (incluiEng ? engCIcom : 0)) * 100) / 100;
-    } else {
-      const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-      totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (incluiEng?engCIcom:0))*100)/100;
-    }
-    tx(`${pctArqAtivo}%`, cP, y, {align:"right"});
-    tx(fmtB(totalPdfBase),cV,y,{align:"right"});
-    y+=10;
 
     // Condições etapa a etapa
     const dEt = orc.descontoEtapaCtrt??5, pEt = orc.parcelasEtapaCtrt??2;
     y+=4;
-    secTitle("Forma de Pagamento");
-    sf("bold",8.5); stc(INK); tx("Etapa a Etapa",M,y);
-    sf("normal",6.5); stc(INK_LT); tx("Obs.: Nesta opção valores de etapas futuras podem ser reajustados.",W-M,y,{align:"right"});
-    sf("normal",8.5); stc(INK_MD); y+=6;
-    sf("normal",8.5); stc(INK_MD);
-    tx(`Opção 1: Antecipado por etapa (${dEt}% de desconto)`,M+2,y); y+=7;
-    if (pEt > 1) {
-      tx(`Opção 2: Parcelado por etapa — entrada + ${pEt-1}× por etapa`,M+2,y);
-    } else {
-      tx(`Opção 2: À vista por etapa`,M+2,y);
-    }
-    hr(y+3); y+=10;
+    // Calcula altura TOTAL da seção (Etapa a Etapa/Apenas Arq + Pacote Completo) para manter tudo junto
+    const etArqAtivasPre = (orc.etapasPct || []).filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
+    const engAtivaPre = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
+    const mostrarTabelaPdf = P ? P.mostrarTabelaEtapas !== false : (orc.mostrarTabelaEtapas !== false);
+    // Pacote: toggle ligado → (multi OU arq+eng); toggle desligado → só arq+eng
+    const multiPre = etArqAtivasPre.length > 1;
+    const arqEngPre = incluiArq && engAtivaPre && etArqAtivasPre.length > 0;
+    const mostraPacotePre = mostrarTabelaPdf ? (multiPre || arqEngPre) : arqEngPre;
+    // Etapa a Etapa: título(9) + 2 opções(6+4+6) + hr(10) = 35
+    // Apenas Arq (quando toggle off): título(9) + 2 opções com valores(5+7+4+5+5) + hr(9) = 44
+    const alturaPrimeiro = mostrarTabelaPdf ? 35 : 44;
+    // Pacote Completo: título(9) + 2 opções(5+7+4+5+5) + hr(9) = 44
+    const alturaPacote = mostraPacotePre ? 44 : 0;
+    const alturaTotalFormaPgto = alturaPrimeiro + alturaPacote + 6;
+    secTitle("Forma de Pagamento", 8, alturaTotalFormaPgto);
 
-    // Pacote completo etapas — só quando incluiArq && incluiEng && sem isoladas
-    if (incluiArq && incluiEng && !temIsoladasPdf) {
+    if (mostrarTabelaPdf) {
+      // Bloco "Etapa a Etapa" (toggle LIGADO)
+      sf("bold",8.5); stc(INK); tx("Etapa a Etapa",M,y);
+      sf("normal",6.5); stc(INK_LT); tx("Obs.: Nesta opção valores de etapas futuras podem ser reajustados.",W-M,y,{align:"right"});
+      y+=8;
+      // Opção 1 — Antecipado por etapa (uma linha)
+      const op1LabelEt = `Opção 1: `;
+      sf("bold",8.5); stc(INK_MD); tx(op1LabelEt, M+2, y);
+      const wOp1Et = doc.getTextWidth(op1LabelEt);
+      sf("normal",8.5); stc(INK_MD); tx(`Cada etapa paga antecipadamente com ${dEt}% de desconto.`, M+2+wOp1Et, y);
+      y+=6; sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F"); y+=4;
+      // Opção 2 — Parcelado por etapa (uma linha)
+      const op2LabelEt = `Opção 2: `;
+      sf("bold",8.5); stc(INK_MD); tx(op2LabelEt, M+2, y);
+      const wOp2Et = doc.getTextWidth(op2LabelEt);
+      sf("normal",8.5); stc(INK_MD);
+      if (pEt > 1) {
+        const fraseOp2 = `Cada etapa parcelada em ${pEt}× (entrada + ${pEt-1}× ao longo da etapa).`;
+        tx(fraseOp2, M+2+wOp2Et, y);
+        const wFraseOp2 = doc.getTextWidth(fraseOp2);
+        sf("normal",6.5); stc(INK_LT); tx("sem desconto", M+2+wOp2Et+wFraseOp2+3, y);
+      } else {
+        tx(`Cada etapa paga à vista no início.`, M+2+wOp2Et, y);
+      }
+      hr(y+3); y+=10;
+    } else {
+      // Toggle DESLIGADO: renderiza "Apenas Arquitetura" igual Pagamento Padrão
+      // Valor: subTotalArqEtapas (só arq selecionada, sem eng)
+      const valorApenasArq = P && P.subTotalArqEtapas !== undefined ? P.subTotalArqEtapas : arqCIcom;
+      const dArq = orc.descontoEtapa??5, pArq = orc.parcelasEtapa??3;
+      const tDescArq = Math.round(valorApenasArq*(1-dArq/100)*100)/100;
+      const labelApenasPgto = P && P.labelApenas ? P.labelApenas : "Apenas Arquitetura";
+      sf("bold",8.5); stc(INK); tx(labelApenasPgto,M,y); y+=9;
+      // Opção 1
+      sf("normal",7); stc(INK_LT); tx(`Opção 1 · Pagamento antecipado com ${dArq}% de desconto`, M+2, y); y+=5;
+      const yOp1 = y;
+      const labelOp1 = `De ${fmtB(valorApenasArq)} por apenas:`;
+      sf("normal",8.5); stc(INK_MD); tx(labelOp1, M+2, yOp1);
+      const wLabelOp1 = doc.getTextWidth(labelOp1);
+      sf("bold",10); stc(INK); tx(fmtB(tDescArq), M+2+wLabelOp1+4, yOp1);
+      y = yOp1 + 7;
+      sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F"); y += 4;
+      // Opção 2
+      sf("normal",7); stc(INK_LT);
+      if (pArq > 1) {
+        tx(`Opção 2 · Parcelado em ${pArq}× sem desconto`, M+2, y);
+      } else {
+        tx(`Opção 2 · À vista`, M+2, y);
+      }
+      y+=5;
+      sf("normal",8.5); stc(INK_MD);
+      if (pArq > 1) {
+        const parcValArq = Math.round(valorApenasArq/pArq*100)/100;
+        tx(`Entrada de ${fmtB(parcValArq)} + ${pArq-1}× de ${fmtB(parcValArq)}`, M+2, y);
+      } else {
+        tx(`${fmtB(valorApenasArq)}`, M+2, y);
+      }
+      hr(y+3); y+=10;
+    }
+
+    // Pacote completo etapas — mesma lógica do preview:
+    // Toggle LIGADO: pacote aparece se (multiEtapas OU arq+eng)
+    // Toggle DESLIGADO: pacote aparece SÓ se arq+eng (senão fica só o bloco "Apenas Arq")
+    const etArqAtivas = (orc.etapasPct || []).filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
+    const engAtivaPdf = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
+    const multiEtapasPdf = etArqAtivas.length > 1;
+    const temArqEEngPdf = incluiArq && engAtivaPdf && etArqAtivas.length > 0;
+    const mostraPacote = mostrarTabelaPdf
+      ? (multiEtapasPdf || temArqEEngPdf)
+      : temArqEEngPdf;
+    if (mostraPacote) {
+      // Valor do pacote vem do preview (espelho) ou recalcula
+      const totalPacote = P && P.totalPacoteEtapas !== undefined ? P.totalPacoteEtapas : totCI;
       const dPac=orc.descontoPacoteCtrt??15, pPac=orc.parcelasPacoteCtrt??8;
-      const tDescP=Math.round(totCI*(1-dPac/100)*100)/100;
-      nv(30);
-      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=9;
+      const tDescP=Math.round(totalPacote*(1-dPac/100)*100)/100;
+      // nv removido — secTitle já reservou altura pra Etapa a Etapa + Pacote juntos
+      // Label dinâmico igual preview
+      const labelPacotePdf = (incluiArq && engAtivaPdf)
+        ? "Pacote Completo (Arq. + Eng.)"
+        : "Pacote Completo";
+      sf("bold",8.5); stc(INK); tx(labelPacotePdf,M,y); y+=9;
 
       // Opção 1 — Antecipado com desconto
       sf("normal",7); stc(INK_LT); tx(`Opção 1 · Pagamento antecipado com ${dPac}% de desconto`, M+2, y); y+=5;
       const yOp1Et = y;
-      const labelOp1Et = `De ${fmtB(totCI)} por apenas:`;
+      const labelOp1Et = `De ${fmtB(totalPacote)} por apenas:`;
       sf("normal",8.5); stc(INK_MD); tx(labelOp1Et, M+2, yOp1Et);
       const wLabelOp1Et = doc.getTextWidth(labelOp1Et);
       sf("bold",10); stc(INK); tx(fmtB(tDescP), M+2+wLabelOp1Et+4, yOp1Et);
@@ -1257,10 +1402,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       y+=5;
       sf("normal",8.5); stc(INK_MD);
       if (pPac > 1) {
-        const parcValPac = Math.round(totCI/pPac*100)/100;
+        const parcValPac = Math.round(totalPacote/pPac*100)/100;
         tx(`Entrada de ${fmtB(parcValPac)} + ${pPac-1}× de ${fmtB(parcValPac)}`, M+2, y);
       } else {
-        tx(`${fmtB(totCI)}`, M+2, y);
+        tx(`${fmtB(totalPacote)}`, M+2, y);
       }
       hr(y+3); y+=9;
     }
@@ -1269,7 +1414,8 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     const dA=orc.descontoEtapa??5, pA=orc.parcelasEtapa??3;
     const tDescA=Math.round(arqCIcom*(1-dA/100)*100)/100;
     nv(25);
-    sf("bold",8.5); stc(INK); tx("Apenas Arquitetura",M,y); y+=9;
+    const labelApenasPgto = P && P.labelApenas ? P.labelApenas : "Apenas Arquitetura";
+    sf("bold",8.5); stc(INK); tx(labelApenasPgto,M,y); y+=9;
 
     // Opção 1 — Antecipado com desconto
     sf("normal",7); stc(INK_LT); tx(`Opção 1 · Pagamento antecipado com ${dA}% de desconto`, M+2, y); y+=5;
@@ -1344,7 +1490,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   y+=8;
 
   // ── ESCOPO DOS SERVIÇOS ───────────────────────────────────
-  secTitle("Escopo dos serviços");
+  secTitle("Escopo dos serviços", 8, 30);
 
   escopoFiltradoPdf.forEach((bloco,bi) => {
     nv(16);
@@ -1386,33 +1532,47 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   });
 
   // ── SERVIÇOS NÃO INCLUSOS — 2 colunas independentes ──────
-  secTitle("Serviços não inclusos");
   const halfW = TW/2-8;
-  const col1 = naoInclDefault.filter((_,i) => i%2===0);
-  const col2 = naoInclDefault.filter((_,i) => i%2===1);
-  sf("normal",8.5);
-  // Calcula alturas de cada item individualmente
-  const heights1 = col1.map(t => doc.splitTextToSize(t, halfW-6).length * 4.5 + 2);
-  const heights2 = col2.map(t => doc.splitTextToSize(t, halfW-6).length * 4.5 + 2);
-  const totalH = Math.max(
+  // Se preview mandou custom, usa ele (converte {label,sub} → string); senão usa default do PDF
+  const naoInclFinal = (P && P.naoInclCustom && P.naoInclCustom.length > 0)
+    ? P.naoInclCustom.map(it => it.sub ? `${it.label} ${it.sub}` : it.label)
+    : naoInclDefault;
+  const col1 = naoInclFinal.filter((_,i) => i%2===0);
+  const col2 = naoInclFinal.filter((_,i) => i%2===1);
+  // IMPORTANTE: setar fonte normal ANTES do splitTextToSize pra cálculo de altura bater com renderização
+  // Fonte reduzida (7.5) pra caber itens longos em 1 linha
+  sf("normal",7.5);
+  const heights1 = col1.map(t => doc.splitTextToSize(t, halfW-6).length * 4 + 2);
+  const heights2 = col2.map(t => doc.splitTextToSize(t, halfW-6).length * 4 + 2);
+  // Altura TOTAL de toda a lista — passa ao secTitle pra garantir que título + lista completa
+  // fiquem na MESMA PÁGINA. Se não couber, quebra página ANTES do título.
+  const alturaListaTotal = Math.max(
     heights1.reduce((s,h)=>s+h,0),
     heights2.reduce((s,h)=>s+h,0)
   );
+  // +10 pra margem/obs final
+  secTitle("Serviços não inclusos", 8, alturaListaTotal + 10);
+  // Re-aplica fonte normal (secTitle usou bold)
+  sf("normal",7.5);
+  const totalH = alturaListaTotal;
   nv(totalH);
   const yStart = y;
   let y1 = yStart, y2 = yStart;
   stc(INK_MD);
   col1.forEach((txt, i) => {
+    sf("normal",7.5); // garante normal antes de splitar e desenhar
     const ls = doc.splitTextToSize(txt, halfW-6);
     nv(heights1[i]);
+    sf("normal",7.5); // re-seta após possível nova página
     tx("•", M+1, y1);
-    ls.forEach((ln, li) => tx(ln, M+5, y1+li*4.5));
+    ls.forEach((ln, li) => tx(ln, M+5, y1+li*4));
     y1 += heights1[i];
   });
   col2.forEach((txt, i) => {
+    sf("normal",7.5); // garante normal
     const ls = doc.splitTextToSize(txt, halfW-6);
     tx("•", midX+1, y2);
-    ls.forEach((ln, li) => tx(ln, midX+5, y2+li*4.5));
+    ls.forEach((ln, li) => tx(ln, midX+5, y2+li*4));
     y2 += heights2[i];
   });
   y = Math.max(y1, y2);
@@ -1421,13 +1581,19 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   tx("Obs: Todos os serviços não inclusos podem ser contratados como serviços adicionais.",M,y); y+=8;
 
   // ── PRAZO DE EXECUÇÃO ─────────────────────────────────────
-  secTitle("Prazo de execução");
-  prazoDefault.forEach(p => bullet(p));
+  secTitle("Prazo de execução", 8, 20);
+  const prazoFinal = ((P && P.prazoCustom && P.prazoCustom.length > 0) ? P.prazoCustom : prazoDefault)
+    .filter(p => {
+      // Remove linhas que mencionam engenharia quando engenharia não está ativa
+      if (p.toLowerCase().includes("engenharia") && !mostrarPrazoEng) return false;
+      return true;
+    });
+  prazoFinal.forEach(p => bullet(p));
   y+=4;
 
   // ── ACEITE DA PROPOSTA ────────────────────────────────────
   nv(55);
-  secTitle("Aceite da proposta");
+  secTitle("Aceite da proposta", 8, 40);
 
   const halfAc = TW/2-10;
   // Cliente
