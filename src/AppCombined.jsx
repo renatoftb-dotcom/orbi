@@ -4309,7 +4309,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
               {engAberto && calculo.faixasEng.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
                   <span style={{ color:"#6b7280" }}>
-                    {f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*50*100)/100)}/m²
+                    {f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*(calculo.precoEngM2||50)*100)/100)}/m²
                   </span>
                   <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt2(Math.round(f.preco*100)/100)}</span>
                 </div>
@@ -4321,7 +4321,9 @@ function AreaDetalhe({ calculo, fmtNum }) {
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
             {calculo.areaPiscina > 0 && row("Piscina (Excluído)", fmt2(calculo.areaPiscina)+" m²")}
             {(() => {
-              const base = (calculo.areaBruta||0) + (calculo.areaPiscina||0);
+              // Piscina não computa na área construída, então o cálculo do % de circulação
+              // usa só a areaBruta (sem piscina).
+              const base = calculo.areaBruta || 0;
               const cirkReal = base > 0 ? Math.round((calculo.areaTotal/base - 1)*100) : 0;
               const vCirk = Math.round(base*(cirkReal/100)*100)/100;
               return row(`+ ${cirkReal}% Circulação e paredes`, `+${fmt2(vCirk)} m²`);
@@ -4352,7 +4354,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
               </div>
               {engAberto && calculo.faixasEng.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
-                  <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*50*100)/100)}/m²</span>
+                  <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*(calculo.precoEngM2||50)*100)/100)}/m²</span>
                   <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt2(Math.round(f.preco*100)/100)}</span>
                 </div>
               ))}
@@ -6033,6 +6035,30 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     });
   }, [tipoProjeto]);
 
+  // Escada automática: Sobrado adiciona 1 escada; Térreo remove
+  // Só aplica em modo não-comercial (residencial/clínica) e se "Escada" existe na config atual
+  useEffect(() => {
+    if (isComercial) return;
+    if (!tipologia) return;
+    if (!configAtual?.comodos?.["Escada"]) return; // nem tenta se não existe
+    const isTerreo = tipologia === "Térreo" || tipologia === "Térrea";
+    const isSobrado = tipologia === "Sobrado";
+    setQtds(prev => {
+      const temEscada = (prev["Escada"] || 0) > 0;
+      if (isTerreo && temEscada) {
+        // Remove escada quando vira térreo
+        const next = { ...prev };
+        delete next["Escada"];
+        return next;
+      }
+      if (isSobrado && !temEscada) {
+        // Adiciona 1 escada quando vira sobrado
+        return { ...prev, "Escada": 1 };
+      }
+      return prev;
+    });
+  }, [tipologia, isComercial, configAtual]);
+
   // ── Salvar como rascunho ao voltar ─────────────────────────
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   function temDadosPreenchidos() {
@@ -6274,6 +6300,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         indiceComodos:0, indicePadrao:0, fatorMult:1, precoBaseVal:pb, precoM2Ef:pb,
         faixasArqDet:[], faixasEng:engCalc.faixas, totalAmbientes:0, acrescimoCirk:ACRESCIMO_AREA,
         areaCircTotal,
+        precoEngM2: 50,
         blocosCom, precoFachada,
       };
     }
@@ -6289,7 +6316,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       else areaBruta += area;
     });
 
-    const areaTotal = Math.round((areaBruta + areaPiscina) * (1 + tcfg.acrescimoCirk) * 100) / 100;
+    // Piscina entra no indiceComodos (aumenta multiplicador) mas NÃO entra na área total construída
+    const areaTotal = Math.round(areaBruta * (1 + tcfg.acrescimoCirk) * 100) / 100;
     if (areaTotal === 0) return null;
 
     const indiceComodos = (() => {
@@ -6302,7 +6330,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       return Math.round(idx * 1000) / 1000;
     })();
     const indicePadrao = INDICE_PADRAO[padrao] || 0;
-    const fatorMult    = Math.round((1 + indiceComodos + indicePadrao) * 1000) / 1000;
+    // Fatores de tipologia residencial/clínica:
+    // - Arquitetura: Térreo é 10% mais caro (espalha no terreno, mais fundação/cobertura).
+    //   Sobrado é neutro (1.0). Aplica só em modo não-comercial.
+    // - Engenharia: Sobrado é 5% mais caro (estrutura/lajes). Térreo é neutro.
+    const isTerreoResi  = !isComercial && (tipologia === "Térreo" || tipologia === "Térrea");
+    const isSobradoResi = !isComercial && tipologia === "Sobrado";
+    const fatorTipArq = isTerreoResi  ? 1.10 : 1.0;
+    const fatorTipEng = isSobradoResi ? 1.05 : 1.0;
+    const fatorMult    = Math.round((1 + indiceComodos + indicePadrao) * fatorTipArq * 1000) / 1000;
     const precoBaseVal = pb;
     const precoM2Ef    = pb * fatorMult;
 
@@ -6333,7 +6369,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const totalAmbientes = Object.entries(qtds).filter(([,q])=>q>0).reduce((s,[,q])=>s+q,0);
 
     const precoArq1 = calcArqFaixas(areaTotal);
-    const engCalc   = calcularEngenharia(areaTotal);
+    // Piscina aumenta 5% o preço base da engenharia (R$ 50 → R$ 52,50)
+    // Sobrado também aumenta 5% (fatorTipEng). Efeitos combinam multiplicativamente.
+    const temPiscina = areaPiscina > 0;
+    const precoEngM2 = 50 * (temPiscina ? 1.05 : 1) * fatorTipEng;
+    const engCalc   = calcularEngenharia(areaTotal, precoEngM2);
     const precoEng1 = Math.round(engCalc.totalEng * 100) / 100;
 
     const nRep   = qtdRep > 1 ? qtdRep : 1;
@@ -6365,6 +6405,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       totalAmbientes,
       acrescimoCirk: tcfg.acrescimoCirk,
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
+      precoEngM2,
     };
   }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo]);
 
