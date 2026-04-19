@@ -5916,6 +5916,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   ]);
   const [qtdRep, setQtdRep] = useState(orcBase?.repeticao ? (orcBase?.nUnidades || 2) : 0);
   const [editandoRep, setEditandoRep] = useState(false);
+  const [editandoGrupoQtd, setEditandoGrupoQtd] = useState(null); // guarda o nome do grupo que está com input aberto
   const [etapasIsoladas, setEtapasIsoladas] = useState(new Set(orcBase?.etapasIsoladas || []));
   const [incluiArq,        setIncluiArq]        = useState(orcBase?.incluiArq        !== false);
   const [incluiEng,        setIncluiEng]        = useState(orcBase?.incluiEng        !== false);
@@ -6805,7 +6806,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   </span>
                 </label>
               ))}
-              {tipoProjeto !== "Conj. Comercial" && (
+              {!isComercial && (
                 <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:8, borderLeft:"1px solid #e5e7eb" }}>
                   <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
                   <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
@@ -6831,6 +6832,45 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
                     onClick={() => setQtdRep(n => n + 1)}>+</button>
                 </div>
+              )}
+
+              {/* Botão Resetar — empurrado pra direita na linha dos toggles */}
+              {Object.keys(qtds).some(n => qtds[n] > 0) && (
+                <button
+                  type="button"
+                  onClick={e => {
+                    e.stopPropagation();
+                    setQtds({});
+                    setGruposAbertos({});
+                    if (isComercial) {
+                      setGrupoQtds({ "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
+                      setGrupoParams(prev => {
+                        const next = {};
+                        Object.keys(prev).forEach(k => { next[k] = {}; });
+                        return next;
+                      });
+                    }
+                  }}
+                  style={{
+                    marginLeft:"auto",
+                    background:"transparent", border:"1px solid #d0d4db",
+                    color:"#6b7280", fontSize:11, fontFamily:"inherit",
+                    cursor:"pointer", padding:"4px 10px", borderRadius:6,
+                    transition:"all 0.15s", fontWeight:500, lineHeight:1,
+                    flexShrink:0,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = "#dc2626";
+                    e.currentTarget.style.color = "#dc2626";
+                    e.currentTarget.style.background = "#fef2f2";
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = "#d0d4db";
+                    e.currentTarget.style.color = "#6b7280";
+                    e.currentTarget.style.background = "transparent";
+                  }}>
+                  Resetar cômodos
+                </button>
               )}
             </div>
 
@@ -6955,39 +6995,118 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     <span style={{ fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
-                    {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
-                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setQtds({});
-                          setGruposAbertos({});
-                        }}
-                        style={{
-                          background:"transparent", border:"1px solid #d0d4db",
-                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
-                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
-                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
-                          flexShrink:0,
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.borderColor = "#dc2626";
-                          e.currentTarget.style.color = "#dc2626";
-                          e.currentTarget.style.background = "#fef2f2";
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.borderColor = "#d0d4db";
-                          e.currentTarget.style.color = "#6b7280";
-                          e.currentTarget.style.background = "transparent";
-                        }}>
-                        Resetar
-                      </button>
-                    )}
                     <span style={{ flex:1 }} />
-                    {qtdGrupo > 0 && (
+
+                    {/* Controles específicos de grupos comerciais: Padrão/Tipologia/Tamanho + Quantidade de unidades */}
+                    {isComercial && (
+                      <>
+                        {["padrao","tipologia","tamanho"].map(key => {
+                          const labels = { padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
+                          const opcoes = { padrao:["Alto","Médio","Baixo"], tipologia:["Térreo","Sobrado"], tamanho:["Grande","Médio","Pequeno","Compacta"] };
+                          const gp = grupoParams[grupo] || {};
+                          const val = gp[key] || "";
+                          const aKey = `${grupo}__${key}`;
+                          const open = abertoGrupo?.key === aKey;
+                          return (
+                            <div key={key} style={{ position:"relative", flexShrink:0 }}
+                              onMouseEnter={() => {
+                                if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
+                                setAbertoGrupo({ key: aKey, grupo, param: key });
+                              }}
+                              onMouseLeave={() => {
+                                if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
+                                hoverCloseRef.current = setTimeout(() => setAbertoGrupo(null), 120);
+                              }}>
+                              <button
+                                onClick={e => { e.stopPropagation(); setAbertoGrupo(open ? null : { key: aKey, grupo, param: key }); }}
+                                style={{
+                                  display:"flex", alignItems:"center", gap:4,
+                                  background: open ? "#eceef2" : (val ? "#fff" : "transparent"),
+                                  border: `1px solid ${open ? "#828a98" : (val ? "#d0d4db" : "#d0d4db")}`,
+                                  borderRadius:4, padding:"2px 8px",
+                                  fontSize:10, fontFamily:"inherit", cursor:"pointer",
+                                  color:"#111", lineHeight:1.4, transition:"all 0.15s",
+                                }}>
+                                {val
+                                  ? <><span style={{ color:"#828a98", fontWeight:400 }}>{labels[key]}:</span><span style={{ fontWeight:600, color:"#111" }}>{val}</span></>
+                                  : <span style={{ color:"#6b7280" }}>{labels[key]}</span>}
+                                <svg width="8" height="8" viewBox="0 0 12 12" fill="none" style={{ transform: open ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>
+                                  <path d="M2 4l4 4 4-4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                </svg>
+                              </button>
+                              {open && (
+                                <div style={{ position:"absolute", top:"100%", left:0, zIndex:9999,
+                                  background:"#fff", border:"1px solid #b0b7c3", borderRadius:8,
+                                  boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:110, overflow:"hidden", marginTop:4 }}>
+                                  {opcoes[key].map(op => {
+                                    const selecionado = val === op;
+                                    return (
+                                      <div key={op}
+                                        onClick={e => { e.stopPropagation(); setGrupoParam(grupo, key, op); }}
+                                        onMouseEnter={e => { if (!selecionado) e.currentTarget.style.background = "#f4f5f7"; }}
+                                        onMouseLeave={e => { if (!selecionado) e.currentTarget.style.background = "#fff"; }}
+                                        style={{
+                                          padding:"6px 12px", fontSize:12, cursor:"pointer",
+                                          background: selecionado ? "#eceef2" : "#fff",
+                                          color:"#374151", fontWeight: selecionado ? 600 : 400,
+                                        }}>
+                                        {op}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {/* Controle de quantidade de unidades do grupo (− N +) */}
+                        <div style={{ display:"flex", alignItems:"center", gap:3, flexShrink:0, paddingLeft:6, borderLeft:"1px solid #d0d4db" }}>
+                          <button
+                            onClick={() => setGrupoQtd(grupo, -1)}
+                            style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
+                            −
+                          </button>
+                          {editandoGrupoQtd === grupo ? (
+                            <input
+                              autoFocus
+                              type="number" min="0"
+                              defaultValue={grupoQtds[grupo]||0}
+                              onBlur={e => {
+                                const v = Math.max(0, parseInt(e.target.value)||0);
+                                setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
+                                setEditandoGrupoQtd(null);
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === "Enter" || e.key === "Escape") {
+                                  const v = Math.max(0, parseInt(e.target.value)||0);
+                                  setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
+                                  setEditandoGrupoQtd(null);
+                                }
+                              }}
+                              className="no-spin"
+                              style={{ width:36, textAlign:"center", fontSize:11, fontWeight:600, border:"1px solid #333", borderRadius:4, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
+                            />
+                          ) : (
+                            <span
+                              onClick={() => setEditandoGrupoQtd(grupo)}
+                              title="Clique para digitar"
+                              style={{ fontSize:11, fontWeight: (grupoQtds[grupo]||0) > 0 ? 700 : 400, minWidth:18, textAlign:"center", color: (grupoQtds[grupo]||0) > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
+                              {grupoQtds[grupo]||0}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => setGrupoQtd(grupo, +1)}
+                            style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
+                            +
+                          </button>
+                        </div>
+                      </>
+                    )}
+
+                    {qtdGrupo > 0 && (!isComercial || (grupoQtds[grupo]||0) > 0) && (
                       <span style={{ fontSize:10, color:"#9ca3af" }}>
-                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo)}</strong> m²
+                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||0) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||0) : 1))}</strong> m²
                       </span>
                     )}
                     <button
