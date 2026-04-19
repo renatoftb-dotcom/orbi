@@ -4279,7 +4279,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
         <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid #c8cdd6", display:"flex", flexDirection:"column", gap:5 }}>
           {calculo.isComercial ? (<>
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
-            {row(`+ ${pct(calculo.acrescimoCirk)} Circulação`, `+${fmt2(Math.round(calculo.areaBruta*calculo.acrescimoCirk*100)/100)} m²`)}
+            {row("+ Circulação", `+${fmt2(calculo.areaCircTotal || 0)} m²`)}
             {(calculo.blocosCom||[]).map((b,i) => (
               <div key={i} style={{ borderTop:"1px solid #c8cdd6", marginTop:6, paddingTop:6 }}>
                 {b.label === "Área Comum" ? (<>
@@ -6242,6 +6242,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const precoSemFach = pLojas+pAncoras+p1Comum+pAptos+pGalpoes;
       const precoArq1 = Math.round((precoSemFach*(1+INDICE_FACHADA_GALERIA))*100)/100;
       const areaTot   = atLoja1*nLojas + atAnc1*nAncoras + atComum + atApto1*nAptos + atGalpao1*nGalpoes;
+      // Soma das circulações de cada grupo (cada um com sua própria %: 25% pra Loja/Âncora/Comum/Apto, 10% pra Galpão)
+      const areaCircTotal = Math.round(
+        ( bLoja.ab   * ACRESCIMO_AREA * nLojas
+        + bAnc.ab    * ACRESCIMO_AREA * nAncoras
+        + bComum.ab  * ACRESCIMO_AREA
+        + bApto.ab   * ACRESCIMO_AREA * nAptos
+        + bGalpao.ab * 0.10          * nGalpoes
+        ) * 100
+      ) / 100;
       const engCalc   = calcularEngenharia(areaTot);
       const precoEng1 = Math.round(engCalc.totalEng*100)/100;
       const nRep=1, pctRep=0.25;
@@ -6264,6 +6273,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         nRep, pctRep, unidades,
         indiceComodos:0, indicePadrao:0, fatorMult:1, precoBaseVal:pb, precoM2Ef:pb,
         faixasArqDet:[], faixasEng:engCalc.faixas, totalAmbientes:0, acrescimoCirk:ACRESCIMO_AREA,
+        areaCircTotal,
         blocosCom, precoFachada,
       };
     }
@@ -7020,21 +7030,73 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
 
-                    {/* Contador com setas: ambientes → m² por unidade × N → total */}
-                    {qtdGrupo > 0 && (!isComercial || (grupoQtds[grupo]||0) > 0) && (
-                      <span style={{ fontSize:10, color:"#9ca3af", flexShrink:0 }}>
-                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo}</strong> amb
-                        {isComercial ? (
-                          <>
-                            {" → "}<strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo)}</strong> m² × <strong style={{ color:"#111", fontWeight:600 }}>{grupoQtds[grupo]||0}</strong>{" → "}<strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (grupoQtds[grupo]||0))}</strong> m²
-                          </>
+                    {/* Controle de quantidade de unidades do grupo (− N +) — logo ao lado do título */}
+                    {isComercial && (
+                      <div style={{ display:"flex", alignItems:"center", gap:3, flexShrink:0 }}>
+                        <button
+                          onClick={() => setGrupoQtd(grupo, -1)}
+                          style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
+                          −
+                        </button>
+                        {editandoGrupoQtd === grupo ? (
+                          <input
+                            autoFocus
+                            type="number" min="0"
+                            defaultValue={grupoQtds[grupo]||0}
+                            onBlur={e => {
+                              const v = Math.max(0, parseInt(e.target.value)||0);
+                              setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
+                              setEditandoGrupoQtd(null);
+                            }}
+                            onKeyDown={e => {
+                              if (e.key === "Enter" || e.key === "Escape") {
+                                const v = Math.max(0, parseInt(e.target.value)||0);
+                                setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
+                                setEditandoGrupoQtd(null);
+                              }
+                            }}
+                            className="no-spin"
+                            style={{ width:36, textAlign:"center", fontSize:11, fontWeight:600, border:"1px solid #333", borderRadius:4, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
+                          />
                         ) : (
-                          <>
-                            {" · "}<strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo)}</strong> m²
-                          </>
+                          <span
+                            onClick={() => setEditandoGrupoQtd(grupo)}
+                            title="Clique para digitar"
+                            style={{ fontSize:11, fontWeight: (grupoQtds[grupo]||0) > 0 ? 700 : 400, minWidth:18, textAlign:"center", color: (grupoQtds[grupo]||0) > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
+                            {grupoQtds[grupo]||0}
+                          </span>
                         )}
-                      </span>
+                        <button
+                          onClick={() => setGrupoQtd(grupo, +1)}
+                          style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
+                          +
+                        </button>
+                      </div>
                     )}
+
+                    {/* Contador: × (N amb Y m² por unidade c/ circulação) → total m² */}
+                    {qtdGrupo > 0 && (!isComercial || (grupoQtds[grupo]||0) > 0) && (() => {
+                      // Acréscimo de circulação: 10% pra Galpão, 25% pros demais grupos comerciais;
+                      // no modo não-comercial usa o acrescimoCirk do TIPO_CONFIG (residencial/clínica = 25%).
+                      const cirkGrupo = isComercial
+                        ? (grupo === "Galpao" ? 0.10 : 0.25)
+                        : (getTipoConfig(tipoParaConfig(tipoProjeto)).acrescimoCirk || 0);
+                      const m2GrupoCirk = m2Grupo * (1 + cirkGrupo);
+                      const nUnid = grupoQtds[grupo]||0;
+                      return (
+                        <span style={{ fontSize:10, color:"#9ca3af", flexShrink:0 }}>
+                          {isComercial ? (
+                            <>
+                              × (<strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo}</strong> amb <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2GrupoCirk)}</strong> m²){" → "}<strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2GrupoCirk * nUnid)}</strong> m²
+                            </>
+                          ) : (
+                            <>
+                              <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2GrupoCirk)}</strong> m²
+                            </>
+                          )}
+                        </span>
+                      );
+                    })()}
 
                     <span style={{ flex:1 }} />
 
@@ -7100,48 +7162,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             </div>
                           );
                         })}
-
-                        {/* Controle de quantidade de unidades do grupo (− N +) */}
-                        <div style={{ display:"flex", alignItems:"center", gap:3, flexShrink:0, paddingLeft:6, borderLeft:"1px solid #d0d4db" }}>
-                          <button
-                            onClick={() => setGrupoQtd(grupo, -1)}
-                            style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
-                            −
-                          </button>
-                          {editandoGrupoQtd === grupo ? (
-                            <input
-                              autoFocus
-                              type="number" min="0"
-                              defaultValue={grupoQtds[grupo]||0}
-                              onBlur={e => {
-                                const v = Math.max(0, parseInt(e.target.value)||0);
-                                setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
-                                setEditandoGrupoQtd(null);
-                              }}
-                              onKeyDown={e => {
-                                if (e.key === "Enter" || e.key === "Escape") {
-                                  const v = Math.max(0, parseInt(e.target.value)||0);
-                                  setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
-                                  setEditandoGrupoQtd(null);
-                                }
-                              }}
-                              className="no-spin"
-                              style={{ width:36, textAlign:"center", fontSize:11, fontWeight:600, border:"1px solid #333", borderRadius:4, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
-                            />
-                          ) : (
-                            <span
-                              onClick={() => setEditandoGrupoQtd(grupo)}
-                              title="Clique para digitar"
-                              style={{ fontSize:11, fontWeight: (grupoQtds[grupo]||0) > 0 ? 700 : 400, minWidth:18, textAlign:"center", color: (grupoQtds[grupo]||0) > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
-                              {grupoQtds[grupo]||0}
-                            </span>
-                          )}
-                          <button
-                            onClick={() => setGrupoQtd(grupo, +1)}
-                            style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
-                            +
-                          </button>
-                        </div>
                       </>
                     )}
 
