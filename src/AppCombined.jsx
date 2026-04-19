@@ -6019,6 +6019,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   useEffect(() => {
     if (isEdicao.current) { isEdicao.current = false; return; }
     setQtds({});
+    setEditandoGrupoQtd(null);
+    setAbertoGrupo(null);
+    setGrupoQtds({ "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
+    // Reset para defaults (Médio/Térreo/Médio) — igual à inicialização de grupoParams
+    const defaults = { padrao: "Médio", tipologia: "Térreo", tamanho: "Médio" };
+    setGrupoParams({
+      "Por Loja":         { ...defaults },
+      "Espaço Âncora":    { ...defaults },
+      "Áreas Comuns":     { ...defaults },
+      "Por Apartamento":  { ...defaults },
+      "Galpao":           { ...defaults },
+    });
   }, [tipoProjeto]);
 
   // ── Salvar como rascunho ao voltar ─────────────────────────
@@ -6524,6 +6536,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // - hover em outros cômodos é ignorado
   const [travado, setTravado] = useState(false);
   const comodoCloseRef = useRef(null);
+
+  // Reset dos estados de seleção ao trocar tipoProjeto (complemento do primeiro useEffect)
+  // Separado porque esses setters estão declarados depois do primeiro useEffect [tipoProjeto].
+  useEffect(() => {
+    if (isEdicao.current) return; // já tratado no primeiro effect
+    setComodoAberto(null);
+    setTravado(false);
+    setGruposAbertos({});
+  }, [tipoProjeto]);
+
   // Rastreia última posição do mouse para reabrir popup após a lista reorganizar
   const mousePosRef = useRef({ x: 0, y: 0 });
   useEffect(() => {
@@ -6844,15 +6866,17 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     setGruposAbertos({});
                     if (isComercial) {
                       setGrupoQtds({ "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
-                      setGrupoParams(prev => {
-                        const next = {};
-                        Object.keys(prev).forEach(k => { next[k] = {}; });
-                        return next;
+                      const defaults = { padrao: "Médio", tipologia: "Térreo", tamanho: "Médio" };
+                      setGrupoParams({
+                        "Por Loja":         { ...defaults },
+                        "Espaço Âncora":    { ...defaults },
+                        "Áreas Comuns":     { ...defaults },
+                        "Por Apartamento":  { ...defaults },
+                        "Galpao":           { ...defaults },
                       });
                     }
                   }}
                   style={{
-                    marginLeft:"auto",
                     background:"transparent", border:"1px solid #d0d4db",
                     color:"#6b7280", fontSize:11, fontFamily:"inherit",
                     cursor:"pointer", padding:"4px 10px", borderRadius:6,
@@ -6995,6 +7019,23 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     <span style={{ fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
+
+                    {/* Contador com setas: ambientes → m² por unidade × N → total */}
+                    {qtdGrupo > 0 && (!isComercial || (grupoQtds[grupo]||0) > 0) && (
+                      <span style={{ fontSize:10, color:"#9ca3af", flexShrink:0 }}>
+                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo}</strong> amb
+                        {isComercial ? (
+                          <>
+                            {" → "}<strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo)}</strong> m² × <strong style={{ color:"#111", fontWeight:600 }}>{grupoQtds[grupo]||0}</strong>{" → "}<strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (grupoQtds[grupo]||0))}</strong> m²
+                          </>
+                        ) : (
+                          <>
+                            {" · "}<strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo)}</strong> m²
+                          </>
+                        )}
+                      </span>
+                    )}
+
                     <span style={{ flex:1 }} />
 
                     {/* Controles específicos de grupos comerciais: Padrão/Tipologia/Tamanho + Quantidade de unidades */}
@@ -7104,11 +7145,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       </>
                     )}
 
-                    {qtdGrupo > 0 && (!isComercial || (grupoQtds[grupo]||0) > 0) && (
-                      <span style={{ fontSize:10, color:"#9ca3af" }}>
-                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||0) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||0) : 1))}</strong> m²
-                      </span>
-                    )}
                     <button
                       onClick={() => toggleGrupo(grupo)}
                       title={recolhido ? "Expandir" : "Recolher"}
