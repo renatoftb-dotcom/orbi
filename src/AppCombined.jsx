@@ -136,7 +136,7 @@ var COMODOS = {
   "Escada":         { indice:0.08, medidas:{ Grande:[2.5,4.5], Médio:[2.2,4],   Pequeno:[2,3.8],    Compacta:[1,3.7]   }},
 };
 var GRUPOS_COMODOS = {
-  "Áreas Sociais": ["Garagem","Hall de entrada","Sala TV","Living","Sala de jantar","Escritório","Lavabo"],
+  "Áreas Sociais": ["Garagem","Hall de entrada","Lavabo","Sala TV","Living","Sala de jantar","Escritório"],
   "Serviço":       ["Cozinha","Lavanderia","Depósito"],
   "Lazer":         ["Área de lazer","Piscina","Lavabo Lazer","Sauna","Academia","Brinquedoteca","Louceiro"],
   "Dormitórios":   ["Dormitório","Closet","WC","Suíte","Closet Suíte","Suíte Master"],
@@ -4234,12 +4234,6 @@ function TesteOrcamento({ data, save }) {
 
   return (
     <div style={{ margin:"-24px -28px" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
-        <div style={{ background:"#78350f", border:"1px solid #92400e", borderRadius:8, padding:"6px 14px" }}>
-          <span style={{ color:"#fcd34d", fontWeight:800, fontSize:13 }}>🧪 Modo Teste</span>
-        </div>
-        <div style={{ color:"#475569", fontSize:13 }}>Alterações aqui não afetam o formulário de produção</div>
-      </div>
       <FormOrcamentoProjetoTeste
         clienteNome="Teste"
         clienteWA=""
@@ -5880,6 +5874,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [tipologia,    setTipologia]    = useState(orcBase?.tipologia   || null);
   const [tamanho,      setTamanho]      = useState(orcBase?.tamanho     || null);
   const [aberto,       setAberto]       = useState(null);
+  const [hoverDrop,    setHoverDrop]    = useState(null);
   const [panelPos,     setPanelPos]     = useState({ top:0, left:0 });
   const [propostaData,  setPropostaData]  = useState(modoVer && orcBase ? {
     tipoProjeto: orcBase.tipo, tipoObra: orcBase.subtipo, padrao: orcBase.padrao,
@@ -5970,6 +5965,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   // Ref para evitar que a sincronização do orcBase dispare o useEffect de grupoParams
   const sincronizandoOrcBase = useRef(false);
+  // Ref para controlar timeout de fechamento do dropdown por hover
+  const hoverCloseRef = useRef(null);
 
   useEffect(() => {
     if (!padrao && !tipologia && !tamanho) return;
@@ -6107,11 +6104,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     tamanho:     ["Grande", "Médio", "Pequeno", "Compacta"],
   };
 
+  // Mapa de display: valor interno → label exibido APENAS após seleção (no fluxo horizontal).
+  // Na lista de opções do dropdown, o valor interno é mantido ("Alto", "Médio", "Baixo").
+  // Preserva compatibilidade com orçamentos salvos no DB que usam valores internos.
+  const DISPLAY_OPCAO = {
+    padrao: { "Alto":"Alto Padrão", "Médio":"Médio Padrão", "Baixo":"Baixo Padrão" },
+  };
+  const displayOpcao = (key, val) => (DISPLAY_OPCAO[key] && DISPLAY_OPCAO[key][val]) || val;
+
   const VALS   = { tipoObra, tipoProjeto, padrao, tipologia, tamanho };
   const LABELS = { tipoObra:"Tipo Obra", tipoProjeto:"Tipo Projeto", padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
   const SETS   = { tipoObra:setTipoObra, tipoProjeto:setTipoProjeto, padrao:setPadrao, tipologia:setTipologia, tamanho:setTamanho };
 
-  function selecionar(key, val) { SETS[key](val); setAberto(null); }
+  function selecionar(key, val) { SETS[key](val); setAberto(null); setHoverDrop(null); }
 
   const grupoDeComodo = useMemo(() => {
     const map = {};
@@ -6348,7 +6353,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (document.getElementById("slide-up-style")) return;
     const s = document.createElement("style");
     s.id = "slide-up-style";
-    s.textContent = `@keyframes slideUp { from { opacity:0; transform:translateY(32px); } to { opacity:1; transform:translateY(0); } }`;
+    s.textContent = `
+      @keyframes slideUp { from { opacity:0; transform:translateY(32px); } to { opacity:1; transform:translateY(0); } }
+      @keyframes surgeHoriz { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
+      input.no-spin::-webkit-outer-spin-button,
+      input.no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      input.no-spin { -moz-appearance: textfield; }
+      .comodo-escolhido:hover { color: #dc2626 !important; text-decoration: line-through; text-decoration-color: #dc2626; }
+      .comodo-escolhido:hover .comodo-m2 { color: #dc2626 !important; }
+      .comodo-escolhido:hover strong { color: #dc2626 !important; }
+    `;
     document.head.appendChild(s);
   }, []);
 
@@ -6359,11 +6373,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
     dropWrap:   { position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:6 },
     dropLbl:    { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center" },
-    dropBtn:    (open, hasVal) => ({ display:"flex", alignItems:"center", gap:6, background: hasVal&&!open?"#fff":"#fff", border:`1px solid ${open?"#111": hasVal?"#c0c5cf":"#333"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, }),
+    dropBtn:    (open, hasVal) => ({ display:"flex", alignItems:"center", gap:6, background: hasVal&&!open?"#fff":"#fff", border:`1px solid ${open?"#111": hasVal?"#c0c5cf":"#333"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, userSelect:"none", WebkitUserSelect:"none" }),
     dropBtnTxt: (val) => ({ flex:1, textAlign:"center", color: val ? "#111" : "#828a98" }),
     chevron:    (open) => ({ transition:"transform 0.15s", transform: open ? "rotate(180deg)" : "none", display:"flex", alignItems:"center" }),
     dropPanel:  { position:"fixed", zIndex:9999, background:"#fff", border:"1px solid #333", borderRadius:10, boxShadow:"0 4px 16px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden" },
-    dropItem:   (sel) => ({ padding:"10px 16px", fontSize:14, cursor:"pointer", color:"#374151", background: sel ? "#eceef2" : "#fff", fontWeight: sel ? 600 : 400, borderBottom:"1px solid #c8cdd6" }),
+    dropItem:   (sel) => ({ padding:"10px 16px", fontSize:14, cursor:"pointer", color:"#374151", background: sel ? "#eceef2" : "#fff", fontWeight: sel ? 600 : 400 }),
     groupHdr:   { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12 },
     sep:        { width:1, background:"#c8cdd6", alignSelf:"stretch", marginTop:22 },
     btnDefinir: { width:"100%", maxWidth:380, background:"#111", border:"1px solid #111", borderRadius:10, padding:"13px 0", fontSize:14, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
@@ -6390,13 +6404,39 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const val  = VALS[id];
     const lbl  = LABELS[id];
     const btnRef = { current: null };
+    const hovered = hoverDrop === id;
+    const ativo = open || hovered;
     return (
       <div style={{ position:"relative" }} key={id}>
         <button
           ref={el => { btnRef.current = el; }}
           data-drop-btn={id}
-          style={{ ...C.dropBtn(open, !!val), background: val ? "#f4f5f7" : "#fff" }}
+          onMouseEnter={(e) => {
+            // Cancela qualquer fechamento pendente
+            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
+            setHoverDrop(id);
+            // Abre o dropdown automaticamente no hover
+            if (!open) {
+              const r = e.currentTarget.getBoundingClientRect();
+              setPanelPos({ top: r.bottom + 6, left: r.left });
+              setAberto(id);
+            }
+          }}
+          onMouseLeave={() => {
+            // Fecha com pequeno delay pra permitir mover o mouse pro painel
+            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
+            hoverCloseRef.current = setTimeout(() => {
+              setHoverDrop(null);
+              setAberto(null);
+            }, 120);
+          }}
+          style={{
+            ...C.dropBtn(open, !!val),
+            background: ativo ? "#eceef2" : (val ? "#f4f5f7" : "#fff"),
+          }}
           onClick={(e) => {
+            // Tira o focus pra evitar highlight azul ao clicar
+            e.currentTarget.blur();
             if (open) { setAberto(null); return; }
             const r = e.currentTarget.getBoundingClientRect();
             setPanelPos({ top: r.bottom + 6, left: r.left });
@@ -6418,6 +6458,55 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     );
   }
 
+  // Renderiza um valor já escolhido como texto editável — hover reabre dropdown
+  function renderValor(id) {
+    const open = aberto === id;
+    const val  = VALS[id];
+    if (!val) return null;
+    const hovered = hoverDrop === id;
+    const ativo = open || hovered;
+    return (
+      <div style={{ position:"relative" }} key={id+"-valor"}>
+        <span
+          data-drop-btn={id}
+          onMouseEnter={(e) => {
+            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
+            setHoverDrop(id);
+            if (!open) {
+              const r = e.currentTarget.getBoundingClientRect();
+              setPanelPos({ top: r.bottom + 6, left: r.left });
+              setAberto(id);
+            }
+          }}
+          onMouseLeave={() => {
+            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
+            hoverCloseRef.current = setTimeout(() => {
+              setHoverDrop(null);
+              setAberto(null);
+            }, 120);
+          }}
+          onClick={(e) => {
+            if (open) { setAberto(null); return; }
+            const r = e.currentTarget.getBoundingClientRect();
+            setPanelPos({ top: r.bottom + 6, left: r.left });
+            setAberto(id);
+          }}
+          style={{
+            display:"inline-block",
+            fontSize:14, color:"#111", fontWeight:500,
+            cursor:"pointer", userSelect:"none", WebkitUserSelect:"none",
+            padding:"4px 10px", borderRadius:6,
+            background: ativo ? "#eceef2" : "transparent",
+            borderBottom: ativo ? "1px solid #c8cdd6" : "1px solid transparent",
+            transition: "background 0.2s ease, border-color 0.2s ease",
+            animation: "surgeHoriz 0.35s ease both",
+          }}>
+          {displayOpcao(id, val)}
+        </span>
+      </div>
+    );
+  }
+
   const GRUPO_DISPLAY = {
     "Por Loja":        "Loja",
     "Espaço Âncora":   "Espaço Âncora",
@@ -6427,6 +6516,87 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   };
 
   const [gruposAbertos, setGruposAbertos] = useState({});
+  // Cômodo com popup visível (via hover OU via click no input)
+  const [comodoAberto, setComodoAberto] = useState(null);
+  // Quando true, o popup está "travado" pelo clique no input:
+  // - mouseLeave não fecha
+  // - hover em outros cômodos é ignorado
+  const [travado, setTravado] = useState(false);
+  const comodoCloseRef = useRef(null);
+  // Rastreia última posição do mouse para reabrir popup após a lista reorganizar
+  const mousePosRef = useRef({ x: 0, y: 0 });
+  useEffect(() => {
+    const tracker = (e) => { mousePosRef.current = { x: e.clientX, y: e.clientY }; };
+    document.addEventListener("mousemove", tracker, { passive: true });
+    return () => document.removeEventListener("mousemove", tracker);
+  }, []);
+
+  // Hover: passou em cima
+  function abrirComodo(nome) {
+    if (travado) return; // travado → ignora hover
+    if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
+    setComodoAberto(nome);
+  }
+  // Hover: saiu
+  function agendarFecharComodo() {
+    if (travado) return; // travado → não fecha
+    if (comodoCloseRef.current) clearTimeout(comodoCloseRef.current);
+    comodoCloseRef.current = setTimeout(() => setComodoAberto(null), 80);
+  }
+
+  // Após qtds mudar (cômodo selecionado → lista reorganiza), o browser não dispara
+  // mouseenter/leave porque o cursor não se moveu. Detecta qual cômodo está sob o
+  // cursor via elementFromPoint e abre ele. Usa requestAnimationFrame pra rodar
+  // após o React commitar o DOM reorganizado.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      if (travado) return;
+      const { x, y } = mousePosRef.current;
+      if (x === 0 && y === 0) return;
+      const el = document.elementFromPoint(x, y);
+      if (!el) return;
+      const wrap = el.closest && el.closest("[data-comodo-wrap]");
+      const nome = wrap ? wrap.getAttribute("data-comodo-nome") : null;
+      if (nome) {
+        if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
+        setComodoAberto(nome);
+      } else {
+        setComodoAberto(null);
+      }
+    });
+    return () => cancelAnimationFrame(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qtds]);
+
+  // Listener global: mousedown em qualquer lugar enquanto travado
+  useEffect(() => {
+    if (!travado) return;
+    const handler = (e) => {
+      // Clique dentro do próprio cômodo travado (input, números, ✕) → deixa o onClick deles decidir
+      const wrap = e.target.closest && e.target.closest("[data-comodo-wrap]");
+      const nomeClicado = wrap ? wrap.getAttribute("data-comodo-nome") : null;
+      if (nomeClicado && nomeClicado === comodoAberto) return;
+
+      // Clicou fora do cômodo travado → aplica valor digitado (se houver) e destrava
+      const inputAtivo = document.activeElement;
+      if (inputAtivo && inputAtivo.tagName === "INPUT" && comodoAberto) {
+        const v = parseInt(inputAtivo.value) || 0;
+        const qAtual = qtds[comodoAberto] || 0;
+        if (v > 0 && v !== qAtual) setQtdAbs(comodoAberto, v);
+      }
+
+      setTravado(false);
+      if (nomeClicado) {
+        // Se caiu em outro cômodo, abre ele imediatamente
+        setComodoAberto(nomeClicado);
+      } else {
+        setComodoAberto(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [travado, comodoAberto, qtds]);
+
   function toggleGrupo(grupo) {
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
@@ -6434,6 +6604,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
+  }
+
+  // Define quantidade absoluta (não delta) — usado no hover com atalhos 1-6 e input livre
+  function setQtdAbs(nome, val) {
+    const v = Math.max(0, parseInt(val) || 0);
+    setQtds(prev => {
+      const next = { ...prev };
+      if (v === 0) delete next[nome]; else next[nome] = v;
+      return next;
+    });
   }
 
   function getArea(nome) {
@@ -6562,57 +6742,32 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         </div>
       </div>
 
-      {/* ── Fluxo sequencial de parâmetros ── */}
-      {!(tamanho || isComercial) ? (
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-start" }}>
-
-          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-            {renderStep("tipoObra")}
-            {tipoObra && <span onClick={() => { setAberto(null); setTipoObra(null); setTipoProjeto(null); setPadrao(null); setTipologia(null); setTamanho(null); }} style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"0 4px" }}>✕</span>}
+      {/* ── Fluxo sequencial de parâmetros (horizontal: botão ativo à esquerda + valores editáveis à direita) ── */}
+      {(() => {
+        // Determina qual é a próxima etapa pendente (ordem: tipoObra → tipoProjeto → padrao → tipologia → tamanho)
+        // Pula etapas condicionais (padrao/tipologia/tamanho só se !isComercial)
+        const ordem = ["tipoObra", "tipoProjeto"];
+        if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
+        const proxima = ordem.find(k => !VALS[k]);
+        const concluido = !proxima;
+        return (
+          <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", minHeight:42 }}>
+            {/* Botão ativo à esquerda (ou "Concluído" quando tudo preenchido) */}
+            {proxima ? renderStep(proxima) : (
+              <div style={{
+                display:"inline-flex", alignItems:"center",
+                padding:"9px 18px", border:"1px solid #c0c5cf", borderRadius:10,
+                fontSize:11, background:"#f4f5f7", color:"#828a98",
+                minWidth:110, justifyContent:"center", userSelect:"none",
+              }}>
+                Concluído ✓
+              </div>
+            )}
+            {/* Valores escolhidos em ordem — cada um editável via hover */}
+            {ordem.map(k => VALS[k] ? renderValor(k) : null)}
           </div>
-
-          {tipoObra && <>
-            <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              {renderStep("tipoProjeto")}
-              {tipoProjeto && !isComercial && <span onClick={() => { setAberto(null); setTipoProjeto(null); setPadrao(null); setTipologia(null); setTamanho(null); }} style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"0 4px" }}>✕</span>}
-            </div>
-          </>}
-
-          {tipoProjeto && !isComercial && <>
-            <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              {renderStep("padrao")}
-              {padrao && <span onClick={() => { setAberto(null); setPadrao(null); setTipologia(null); setTamanho(null); }} style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"0 4px" }}>✕</span>}
-            </div>
-          </>}
-
-          {padrao && <>
-            <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              {renderStep("tipologia")}
-              {tipologia && <span onClick={() => { setAberto(null); setTipologia(null); setTamanho(null); }} style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"0 4px" }}>✕</span>}
-            </div>
-          </>}
-
-          {tipologia && <>
-            <div style={{ width:1, background:"#d1d5db", height:24, marginLeft:20, transition:"height 0.45s ease" }} />
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              {renderStep("tamanho")}
-              {tamanho && <span onClick={() => { setAberto(null); setTamanho(null); }} style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"0 4px" }}>✕</span>}
-            </div>
-          </>}
-
-        </div>
-      ) : (
-        <div style={{ display:"flex", flexWrap:"wrap", gap:8, alignItems:"center", animation:"slideUp 0.4s ease forwards" }}>
-          {renderStep("tipoObra")}
-          {renderStep("tipoProjeto")}
-          {!isComercial && renderStep("padrao")}
-          {!isComercial && renderStep("tipologia")}
-          {!isComercial && renderStep("tamanho")}
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
@@ -6662,7 +6817,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       defaultValue={qtdRep}
                       onBlur={e => { const v = parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); }}
                       onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); } }}
-                      style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit" }}
+                      className="no-spin"
+                      style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
                     />
                   ) : (
                     <span
@@ -6680,102 +6836,294 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
 
 
+            {/* Container 1 coluna */}
+            <div>
             {Object.entries(configAtual.grupos).filter(([grupo]) => {
                 const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                 if (isTerrea && grupo === "Outros") return false;
                 return true;
-              }).map(([grupo, nomes]) => (
-              <div key={grupo}>
-                <div style={{
-                  display:"flex", alignItems:"center", gap:12,
-                  background: "#f4f5f7",
-                  border: "1px solid #dde0e5",
-                  borderRadius: 8,
-                  padding: "8px 12px",
-                  marginTop: 20, marginBottom: 10,
-                }}>
-                  <span onClick={() => toggleGrupo(grupo)} style={{ flex:1, fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, cursor:"pointer" }}>
-                    {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
+              }).map(([grupo, nomes]) => {
+              // Split: escolhidos vs disponíveis
+              const escolhidos  = nomes.filter(n => (qtds[n] || 0) > 0);
+              const disponiveis = nomes.filter(n => (qtds[n] || 0) === 0);
+              const m2Grupo  = escolhidos.reduce((s,n) => s + getArea(n) * (qtds[n]||0), 0);
+              const qtdGrupo = escolhidos.reduce((s,n) => s + (qtds[n]||0), 0);
+
+              // Renderiza controles: input + 1-6 + ✕ (se escolhido)
+              // Função plana (não componente) pra evitar unmount/remount a cada re-render
+              const renderControles = (nome, sempreVisivel) => {
+                const q = qtds[nome] || 0;
+                const isOpen = comodoAberto === nome;
+                const visivel = sempreVisivel || isOpen;
+                // Só renderiza quando visível — quando fechado, não ocupa espaço no layout
+                if (!visivel) return null;
+                return (
+                  <span key={nome+"-ctrls"}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 1,
+                      transition: "opacity 0.15s ease",
+                      flexShrink: 0,
+                      whiteSpace: "nowrap",
+                      background: "transparent",
+                      padding: 0,
+                      borderRadius: 4,
+                      border: "none",
+                      zIndex: 100,
+                      position: "relative",
+                    }}>
+                    {/* Input em primeiro lugar */}
+                    <input
+                      type="number" min="0"
+                      defaultValue={q > 6 ? q : ""}
+                      className="no-spin"
+                      onMouseDown={e => e.stopPropagation()}
+                      onClick={e => e.stopPropagation()}
+                      onFocus={e => {
+                        setComodoAberto(nome);
+                        setTravado(true);
+                        if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
+                      }}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") {
+                          const v = parseInt(e.currentTarget.value) || 0;
+                          if (v > 0) setQtdAbs(nome, v);
+                          setTravado(false);
+                          setComodoAberto(null);
+                          e.currentTarget.blur();
+                        } else if (e.key === "Escape") {
+                          setTravado(false);
+                          setComodoAberto(null);
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      style={{
+                        width:28, height:22, border:"1px solid #d1d5db", borderRadius:4,
+                        background:"#fff", fontSize:11, fontWeight:500, color:"#111",
+                        padding:"0 2px", textAlign:"center", outline:"none", fontFamily:"inherit",
+                        flexShrink:0, marginRight:2,
+                        MozAppearance:"textfield",
+                      }}
+                    />
+                    {[1,2,3,4,5,6].map(n => (
+                      <button key={n}
+                        onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); }}
+                        style={{
+                          width:22, height:22, border:"1px solid transparent", borderRadius:4,
+                          background: q===n ? "#111" : "transparent",
+                          color: q===n ? "#fff" : "#6b7280",
+                          fontSize:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+                          display:"inline-flex", alignItems:"center", justifyContent:"center",
+                          flexShrink:0, padding:0,
+                          transition:"all 0.1s",
+                        }}
+                        onMouseEnter={e => { if (q !== n) { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#fff"; } }}
+                        onMouseLeave={e => { if (q !== n) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#6b7280"; } }}>
+                        {n}
+                      </button>
+                    ))}
+                    {q > 0 && (
+                      <>
+                        <span style={{ width:1, height:14, background:"#d1d5db", margin:"0 3px", alignSelf:"center" }} />
+                        <button
+                          onClick={e => { e.stopPropagation(); setQtdAbs(nome, 0); setTravado(false); setComodoAberto(null); }}
+                          title="Remover"
+                          style={{
+                            width:22, height:22, border:"1px solid transparent", borderRadius:4,
+                            background:"transparent", color:"#dc2626", fontSize:12,
+                            display:"inline-flex", alignItems:"center", justifyContent:"center",
+                            cursor:"pointer", fontFamily:"inherit", flexShrink:0, padding:0,
+                          }}>
+                          ✕
+                        </button>
+                      </>
+                    )}
                   </span>
-                  <span onClick={() => toggleGrupo(grupo)} style={{ fontSize:10, color:"#828a98", cursor:"pointer", userSelect:"none" }}>
-                    {isGrupoAberto(grupo) ? "▲" : "▼"}
-                  </span>
-                  {isComercial ? (
+                );
+              };
+
+              const recolhido = !isGrupoAberto(grupo);
+
+              return (
+                <div key={grupo} style={{ marginBottom:14 }}>
+                  {/* Header: retângulo cinza com bordas arredondadas */}
+                  <div style={{
+                    display:"flex", alignItems:"center", gap:10,
+                    background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
+                    padding:"5px 10px",
+                    marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
+                  }}>
+                    <span style={{ fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
+                      {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
+                    </span>
+                    {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
+                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setQtds({});
+                          setGruposAbertos({});
+                        }}
+                        style={{
+                          background:"transparent", border:"1px solid #d0d4db",
+                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
+                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
+                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
+                          flexShrink:0,
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = "#dc2626";
+                          e.currentTarget.style.color = "#dc2626";
+                          e.currentTarget.style.background = "#fef2f2";
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = "#d0d4db";
+                          e.currentTarget.style.color = "#6b7280";
+                          e.currentTarget.style.background = "transparent";
+                        }}>
+                        Resetar
+                      </button>
+                    )}
+                    <span style={{ flex:1 }} />
+                    {qtdGrupo > 0 && (
+                      <span style={{ fontSize:10, color:"#9ca3af" }}>
+                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo)}</strong> m²
+                      </span>
+                    )}
+                    <button
+                      onClick={() => toggleGrupo(grupo)}
+                      title={recolhido ? "Expandir" : "Recolher"}
+                      style={{
+                        width:18, height:18, border:"none", background:"transparent",
+                        cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                        padding:0, fontFamily:"inherit", flexShrink:0,
+                      }}>
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ transform: recolhido ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s" }}>
+                        <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  {!recolhido && disponiveis.length > 0 && (
                     <>
-                      {["padrao","tipologia","tamanho"].map(key => {
-                        const labels = { padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
-                        const gp = grupoParams[grupo] || {};
-                        const val = gp[key] || "";
-                        const aKey = `${grupo}__${key}`;
-                        const open = abertoGrupo?.key === aKey;
-                        return (
-                          <div key={key} style={{ position:"relative" }}>
-                            <button
-                              style={{ ...C.dropBtn(open, !!val), minWidth:80, background: val ? "#f4f5f7" : "#fff", padding:"5px 10px" }}
-                              onClick={e => {
-                                e.stopPropagation();
-                                setAbertoGrupo(open ? null : { key: aKey, grupo, param: key });
-                              }}>
-                              <span style={{ ...C.dropBtnTxt(val), fontSize:10 }}>
-                                {val
-                                  ? <><span style={{ color:"#828a98", fontWeight:400 }}>{labels[key]}: </span><span style={{ fontWeight:600, color:"#111" }}>{val}</span></>
-                                  : <span style={{ color:"#828a98" }}>{labels[key]}</span>}
-                              </span>
-                              <span style={C.chevron(open)}>
-                                <svg width="9" height="9" viewBox="0 0 12 12" fill="none"><path d="M2 4l4 4 4-4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              </span>
-                            </button>
-                            {open && (
-                              <div style={{ position:"absolute", top:"100%", left:0, zIndex:9999,
-                                background:"#fff", border:"1px solid #b0b7c3", borderRadius:10,
-                                boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:130, overflow:"hidden", marginTop:4 }}>
-                                {(["padrao","tipologia","tamanho"].includes(key) ? { padrao:["Alto","Médio","Baixo"], tipologia:["Térreo","Sobrado"], tamanho:["Grande","Médio","Pequeno","Compacta"] }[key] : []).map(op => {
-                                  const cur = (grupoParams[grupo] || {})[key];
-                                  return (
-                                    <div key={op}
-                                      style={C.dropItem(cur === op)}
-                                      onMouseEnter={e => { if (cur !== op) e.currentTarget.style.background = "#f4f5f7"; }}
-                                      onMouseLeave={e => { if (cur !== op) e.currentTarget.style.background = cur === op ? "#efefef" : "#fff"; }}
-                                      onClick={e => { e.stopPropagation(); setGrupoParam(grupo, key, op); }}>
-                                      {op}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
+                      {/* Disponíveis — layout em 2 colunas padronizado: nome (fixo) + quantidades (fundo cinza) */}
+                      <div style={{ position:"relative", marginTop:4, maxWidth:380 }}>
+                        {/* Faixa de fundo da coluna de quantidades + título */}
+                        <div style={{
+                          position:"absolute", top:0, right:0, bottom:0,
+                          width:180,
+                          background:"#f4f5f7",
+                          borderRadius:6,
+                          zIndex:0,
+                        }}>
+                          <div style={{
+                            fontSize:9, color:"#6b7280",
+                            textTransform:"uppercase", letterSpacing:1, fontWeight:600,
+                            padding:"4px 10px", textAlign:"center",
+                            borderBottom:"1px solid #e5e7eb",
+                          }}>
+                            Quantidades
                           </div>
+                        </div>
+                        {/* Lista */}
+                        <div style={{ display:"flex", flexDirection:"column", gap:2, position:"relative", zIndex:1, paddingTop:22 }}>
+                          {disponiveis.map(nome => {
+                            const isOpen = comodoAberto === nome;
+                            return (
+                              <div key={nome}
+                                data-comodo-wrap
+                                data-comodo-nome={nome}
+                                onMouseEnter={() => abrirComodo(nome)}
+                                onMouseLeave={agendarFecharComodo}
+                                style={{
+                                  position:"relative",
+                                  display:"flex", alignItems:"center",
+                                  padding:"4px 8px", fontSize:13,
+                                  color: isOpen ? "#111" : "#6b7280",
+                                  background: isOpen ? "#e5e7eb" : "transparent",
+                                  borderRadius:6,
+                                  userSelect:"none",
+                                  transition:"color 0.15s, background 0.15s",
+                                  minHeight:28,
+                                }}>
+                                <span style={{ flex:1, fontWeight: isOpen ? 500 : 400, minWidth:0, whiteSpace:"nowrap" }}>
+                                  {nome}
+                                  {(nome === "Suíte" || nome === "Dormitório") && (
+                                    <span style={{ fontSize:10, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
+                                  )}
+                                </span>
+                                <span style={{ width:180, flexShrink:0, display:"flex", justifyContent:"center", alignItems:"center" }}>
+                                  {renderControles(nome, false)}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Escolhidos — SEMPRE visíveis, mesmo com grupo recolhido */}
+                  {escolhidos.length > 0 && (
+                    <div style={{
+                      display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
+                      gap:"6px 14px",
+                      paddingTop: (!recolhido && disponiveis.length > 0) ? 10 : 0,
+                      marginTop:  (!recolhido && disponiveis.length > 0) ? 10 : 4,
+                      borderTop:  (!recolhido && disponiveis.length > 0) ? "1px dashed #e5e7eb" : "none",
+                      width:"100%",
+                    }}>
+                      {escolhidos.map(nome => {
+                        const q = qtds[nome] || 0;
+                        const m2Total = getArea(nome) * q;
+                        return (
+                          <span key={nome}
+                            onClick={() => setQtdAbs(nome, 0)}
+                            title="Clique para remover"
+                            className="comodo-escolhido"
+                            style={{
+                              display:"inline-flex", alignItems:"center", gap:4,
+                              fontSize:13, color:"#111",
+                              userSelect:"none",
+                              whiteSpace:"nowrap",
+                              flex:"0 0 auto",
+                              cursor:"pointer",
+                              transition:"color 0.15s",
+                            }}>
+                            <span>
+                              {nome}
+                              {(nome === "Suíte" || nome === "Dormitório") && (
+                                <span style={{ fontSize:10, color:"#9ca3af", marginLeft:4, fontWeight:400 }}>(Sem Closet)</span>
+                              )}
+                              {" "}<strong style={{ fontWeight:600 }}>{q}</strong>
+                              <span className="comodo-m2" style={{ fontSize:11, color:"#9ca3af", marginLeft:6, transition:"color 0.15s" }}>{fmtNum(m2Total)} m²</span>
+                            </span>
+                          </span>
                         );
                       })}
-                      <div style={C.qtdWrap}>
-                        <button style={C.qtdBtn} onClick={() => setGrupoQtd(grupo, -1)}>−</button>
-                        <span style={C.qtdNum(grupoQtds[grupo]||0)}>{grupoQtds[grupo]||0}</span>
-                        <button style={C.qtdBtn} onClick={() => setGrupoQtd(grupo, +1)}>+</button>
-                      </div>
-                      <span style={{ width:52 }} />
-                    </>
-                  ) : null}
+                    </div>
+                  )}
                 </div>
-                {isGrupoAberto(grupo) && (
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"0 16px" }}>
-                    {nomes.map(nome => {
-                      const q    = qtds[nome] || 0;
-                      const area = getArea(nome);
-                      return (
-                        <div key={nome} style={{ ...C.comodoRow(q > 0), gap:6 }}>
-                          <span style={{ ...C.comodoNome, fontSize:13 }}>{nome}</span>
-                          <div style={{ display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
-                            <button style={{ ...C.qtdBtn, width:22, height:22, fontSize:14 }} onClick={() => setQtd(nome, -1)}>−</button>
-                            <span style={{ ...C.qtdNum(q), width:18, fontSize:13 }}>{q}</span>
-                            <button style={{ ...C.qtdBtn, width:22, height:22, fontSize:14 }} onClick={() => setQtd(nome, +1)}>+</button>
-                          </div>
-                          <span style={{ ...C.comodoM2, width:56, fontSize:11 }}>{q > 0 ? fmtNum(area*q)+" m²" : area > 0 ? fmtNum(area)+" m²" : "—"}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
+              );
+              })}
+              {/* Folga no final — compensa a altura que as linhas selecionadas deixam
+                  de ocupar na lista de disponíveis. Mantém altura total constante pra
+                  que o scroll não seja reajustado ao selecionar (o próximo cômodo
+                  sobe exatamente pra posição do cursor). */}
+              {(() => {
+                const gruposVisiveis = Object.entries(configAtual.grupos).filter(([g]) => {
+                  const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
+                  if (isTerrea && g === "Outros") return false;
+                  return isGrupoAberto(g);
+                });
+                // Conta cômodos selecionados dentro dos grupos visíveis/expandidos
+                const selecionadosVisiveis = gruposVisiveis.reduce((acc, [, nomes]) =>
+                  acc + nomes.filter(n => (qtds[n]||0) > 0).length, 0);
+                // 30px = minHeight 28 + gap 2 (uma linha da lista de disponíveis)
+                const folga = selecionadosVisiveis * 30;
+                return folga > 0 ? <div style={{ height: folga, flexShrink: 0 }} aria-hidden="true" /> : null;
+              })()}
+            </div>
           </div>
 
           {/* Resumo Cálculo */}
@@ -6826,7 +7174,20 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
 
       {aberto && (
-        <div style={{
+        <div
+          onMouseEnter={() => {
+            // Mantém aberto quando mouse entra no painel
+            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
+          }}
+          onMouseLeave={() => {
+            // Fecha ao sair do painel (sem delay pois já saiu do botão também)
+            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
+            hoverCloseRef.current = setTimeout(() => {
+              setHoverDrop(null);
+              setAberto(null);
+            }, 80);
+          }}
+          style={{
           position:"fixed",
           top: panelPos.top, left: panelPos.left,
           zIndex:9999,

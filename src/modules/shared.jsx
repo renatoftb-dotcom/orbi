@@ -132,7 +132,7 @@ var COMODOS = {
   "Escada":         { indice:0.08, medidas:{ Grande:[2.5,4.5], Médio:[2.2,4],   Pequeno:[2,3.8],    Compacta:[1,3.7]   }},
 };
 var GRUPOS_COMODOS = {
-  "Áreas Sociais": ["Garagem","Hall de entrada","Sala TV","Living","Sala de jantar","Escritório","Lavabo"],
+  "Áreas Sociais": ["Garagem","Hall de entrada","Lavabo","Sala TV","Living","Sala de jantar","Escritório"],
   "Serviço":       ["Cozinha","Lavanderia","Depósito"],
   "Lazer":         ["Área de lazer","Piscina","Lavabo Lazer","Sauna","Academia","Brinquedoteca","Louceiro"],
   "Dormitórios":   ["Dormitório","Closet","WC","Suíte","Closet Suíte","Suíte Master"],
