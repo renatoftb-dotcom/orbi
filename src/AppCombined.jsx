@@ -4584,15 +4584,19 @@ function TesteOrcamento({ data, save }) {
     setBuscaCliente("");
   }
 
-  function abrirOrcamentoExistente(orc) {
+  const [modoAbertura, setModoAbertura] = useState(null); // "ver" | "editar" | null
+
+  function abrirOrcamentoExistente(orc, modo = "ver") {
     const cli = clientes.find(c => c.id === orc.clienteId) || { nome: orc.cliente || "Cliente" };
     setClienteAtivo(cli);
     setOrcBase(orc);
+    setModoAbertura(modo);
   }
 
   function voltarParaLista() {
     setOrcBase(null);
     setClienteAtivo(null);
+    setModoAbertura(null);
   }
 
   // Se um orçamento está aberto (novo ou editando), mostra o formulário
@@ -4604,6 +4608,7 @@ function TesteOrcamento({ data, save }) {
         orcBase={orcBase}
         onSalvar={salvarOrcamento}
         onVoltar={voltarParaLista}
+        modoAbertura={modoAbertura}
       />
     );
   }
@@ -4698,7 +4703,7 @@ function TesteOrcamento({ data, save }) {
               : "Nenhum orçamento corresponde aos filtros."}
           </div>
         ) : orcFiltrados.map(orc => (
-          <OrcCard key={orc.id} orc={orc} clientes={clientes} onAbrir={() => abrirOrcamentoExistente(orc)} />
+          <OrcCard key={orc.id} orc={orc} clientes={clientes} onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)} />
         ))}
       </div>
 
@@ -4747,9 +4752,23 @@ function OrcCard({ orc, clientes, onAbrir }) {
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
   const area = orc.resultado?.areaTotal || 0;
-  const precoArq = orc.resultado?.precoArq || 0;
-  const precoEng = orc.resultado?.precoEng || 0;
+
+  // Se tem proposta salva, usa os valores dela (edições manuais do usuário)
+  // Senão, usa o cálculo original do orçamento base.
+  const ultimaProposta = orc.propostas && orc.propostas.length > 0
+    ? orc.propostas[orc.propostas.length - 1]
+    : null;
+  let precoArq, precoEng;
+  if (ultimaProposta) {
+    // Valores editados pelo usuário na proposta
+    precoArq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
+    precoEng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
+  } else {
+    precoArq = orc.resultado?.precoArq || 0;
+    precoEng = orc.resultado?.precoEng || 0;
+  }
   const valorTotal = precoArq + precoEng;
+
   const tipo = orc.tipo || "—";
   const ref = orc.referencia || "(sem referência)";
   const dataCriado = orc.criadoEm ? new Date(orc.criadoEm) : null;
@@ -4765,7 +4784,7 @@ function OrcCard({ orc, clientes, onAbrir }) {
 
   return (
     <div
-      onClick={onAbrir}
+      onClick={() => onAbrir("ver")}
       style={{
         background:"#fff", border:"1px solid #e5e7eb", borderRadius:9,
         padding:"14px 16px",
@@ -4789,7 +4808,16 @@ function OrcCard({ orc, clientes, onAbrir }) {
           <span style={{ color:"#9ca3af" }}> · {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""} · {orc.id}{dataFmt ? ` · ${dataFmt}` : ""}</span>
         </div>
         {orc.propostas && orc.propostas.length > 0 && (
-          <div style={{ fontSize:11.5, color:"#16a34a", marginTop:4, fontWeight:500 }}>
+          <div
+            onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
+            style={{
+              fontSize:11.5, color:"#16a34a", marginTop:4, fontWeight:500,
+              cursor:"pointer", display:"inline-block",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
+            onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
+            title="Ver a última proposta enviada (somente leitura)"
+          >
             📄 {orc.propostas.length} proposta{orc.propostas.length > 1 ? "s" : ""} enviada{orc.propostas.length > 1 ? "s" : ""}
             {orc.ultimaPropostaEm && (
               <span style={{ color:"#6b7280", fontWeight:400 }}>
@@ -4806,8 +4834,8 @@ function OrcCard({ orc, clientes, onAbrir }) {
           </div>
         )}
         <div style={{ display:"flex", gap:4 }} onClick={e => e.stopPropagation()}>
-          <button onClick={onAbrir} style={btnIconStyle}>Ver</button>
-          <button onClick={onAbrir} style={btnIconStyle}>Editar</button>
+          <button onClick={() => onAbrir("ver")} style={btnIconStyle}>Ver</button>
+          <button onClick={() => onAbrir("editar")} style={btnIconStyle}>Editar</button>
           <button onClick={() => alert("Ações em breve: Marcar Ganho / Perdido / Excluir")} style={btnIconStyle}>Ações</button>
         </div>
       </div>
@@ -5296,7 +5324,7 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
   );
 }
 
-function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly }) {
+function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -5306,16 +5334,20 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly })
           totSI, totCI, impostoV,
           incluiArq = true, incluiEng = true, incluiMarcenaria = false } = safeData;
 
+  // Se tem snapshot de proposta salva, usamos valores dela como initial state.
+  // Senão, valores calculados do orçamento base.
+  const snap = propostaSnapshot || null;
+
   // Estado do modal de confirmação de salvar + aviso de proposta salva
   const [confirmSalvar, setConfirmSalvar] = useState(false);
   const [propostaInfo, setPropostaInfo] = useState(propostaReadOnly || null);
 
   // Estados locais (antes eram props read-only) — editáveis inline
-  const [tipoPgto, setTipoPgtoLocal]     = useState(data.tipoPgto || "padrao");
-  const [temImposto, setTemImpostoLocal] = useState(data.temImposto || false);
-  const [aliqImp, setAliqImpLocal]       = useState(data.aliqImp || 16);
+  const [tipoPgto, setTipoPgtoLocal]     = useState(snap?.tipoPgto || data.tipoPgto || "padrao");
+  const [temImposto, setTemImpostoLocal] = useState(snap?.temImposto ?? data.temImposto ?? false);
+  const [aliqImp, setAliqImpLocal]       = useState(snap?.aliqImp ?? data.aliqImp ?? 16);
   const [etapasPct, setEtapasPctLocal]   = useState(() => {
-    const base = data.etapasPct || [
+    const base = snap?.etapasPct || data.etapasPct || [
       { id:1, nome:"Estudo de Viabilidade",  pct:10 },
       { id:2, nome:"Estudo Preliminar",      pct:40 },
       { id:3, nome:"Aprovação na Prefeitura",pct:12 },
@@ -5327,18 +5359,18 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly })
     }
     return base;
   });
-  const [etapasIsoladasLocal, setEtapasIsoladasLocal] = useState(new Set(data.etapasIsoladas || []));
+  const [etapasIsoladasLocal, setEtapasIsoladasLocal] = useState(new Set(snap?.etapasIsoladas || data.etapasIsoladas || []));
   const etapasIsoladas = Array.from(etapasIsoladasLocal);
-  const [mostrarTabelaEtapas, setMostrarTabelaEtapas] = useState(data.mostrarTabelaEtapas ?? true);
+  const [mostrarTabelaEtapas, setMostrarTabelaEtapas] = useState(snap?.mostrarTabelaEtapas ?? data.mostrarTabelaEtapas ?? true);
   // Descontos/parcelas — locais também
-  const [descArqLocal,     setDescArqLocal]     = useState(data.descArq     ?? 5);
-  const [parcArqLocal,     setParcArqLocal]     = useState(data.parcArq     ?? 3);
-  const [descPacoteLocal,  setDescPacoteLocal]  = useState(data.descPacote  ?? 10);
-  const [parcPacoteLocal,  setParcPacoteLocal]  = useState(data.parcPacote  ?? 4);
-  const [descEtCtrtLocal,  setDescEtCtrtLocal]  = useState(data.descEtCtrt  ?? 5);
-  const [parcEtCtrtLocal,  setParcEtCtrtLocal]  = useState(data.parcEtCtrt  ?? 2);
-  const [descPacCtrtLocal, setDescPacCtrtLocal] = useState(data.descPacCtrt ?? 15);
-  const [parcPacCtrtLocal, setParcPacCtrtLocal] = useState(data.parcPacCtrt ?? 8);
+  const [descArqLocal,     setDescArqLocal]     = useState(snap?.descArq     ?? data.descArq     ?? 5);
+  const [parcArqLocal,     setParcArqLocal]     = useState(snap?.parcArq     ?? data.parcArq     ?? 3);
+  const [descPacoteLocal,  setDescPacoteLocal]  = useState(snap?.descPacote  ?? data.descPacote  ?? 10);
+  const [parcPacoteLocal,  setParcPacoteLocal]  = useState(snap?.parcPacote  ?? data.parcPacote  ?? 4);
+  const [descEtCtrtLocal,  setDescEtCtrtLocal]  = useState(snap?.descEtCtrt  ?? data.descEtCtrt  ?? 5);
+  const [parcEtCtrtLocal,  setParcEtCtrtLocal]  = useState(snap?.parcEtCtrt  ?? data.parcEtCtrt  ?? 2);
+  const [descPacCtrtLocal, setDescPacCtrtLocal] = useState(snap?.descPacCtrt ?? data.descPacCtrt ?? 15);
+  const [parcPacCtrtLocal, setParcPacCtrtLocal] = useState(snap?.parcPacCtrt ?? data.parcPacCtrt ?? 8);
 
   const fmtV = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const fmtN = v => v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
@@ -5351,30 +5383,37 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly })
   const areaTot = calculo.areaTot || calculo.areaTotal || 0;
 
   // ── Estados editáveis ──────────────────────────────────────
-  const [arqEdit, setArqEdit]               = useState(incluiArq ? (calculo.precoArq || 0) : 0);
-  const [engEdit, setEngEdit]               = useState(incluiEng ? (calculo.precoEng || 0) : 0);
-  const [resumoEdit, setResumoEdit]         = useState(null); // null = usar dinâmico
+  const [arqEdit, setArqEdit]               = useState(() => {
+    if (snap?.arqEdit != null) return snap.arqEdit;
+    return incluiArq ? (calculo.precoArq || 0) : 0;
+  });
+  const [engEdit, setEngEdit]               = useState(() => {
+    if (snap?.engEdit != null) return snap.engEdit;
+    return incluiEng ? (calculo.precoEng || 0) : 0;
+  });
+  const [resumoEdit, setResumoEdit]         = useState(snap?.resumoEdit ?? null);
   const [editandoArq, setEditandoArq]       = useState(false);
   const [editandoEng, setEditandoEng]       = useState(false);
   const [editandoResumo, setEditandoResumo] = useState(false);
   // Textos editáveis da proposta
-  const [subTituloEdit, setSubTituloEdit]   = useState(null); // null = usar default dinâmico
-  const [validadeEdit, setValidadeEdit]     = useState(new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR"));
-  const [naoInclEdit, setNaoInclEdit]       = useState(null); // null = usar default
-  const [prazoEdit, setPrazoEdit]           = useState(null); // null = usar default
-  const [responsavelEdit, setResponsavelEdit] = useState("Arq. Leonardo Padovan");
-  const [cauEdit, setCauEdit]               = useState("CAU A30278-3 · Ourinhos");
-  const [emailEdit, setEmailEdit]           = useState("leopadovan.arq@gmail.com");
-  const [telefoneEdit, setTelefoneEdit]     = useState("(14) 99767-4200");
-  const [instagramEdit, setInstagramEdit]   = useState("@padovan_arquitetos");
-  const [cidadeEdit, setCidadeEdit]         = useState("Ourinhos");
-  const [pixEdit, setPixEdit]               = useState("PIX · Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções · Banco Sicoob");
-  const [labelApenasEdit, setLabelApenasEdit] = useState(null); // null = usar dinâmico
+  const [subTituloEdit, setSubTituloEdit]   = useState(snap?.subTituloEdit ?? null);
+  const [validadeEdit, setValidadeEdit]     = useState(snap?.validadeEdit || new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR"));
+  const [naoInclEdit, setNaoInclEdit]       = useState(snap?.naoInclEdit ?? null);
+  const [prazoEdit, setPrazoEdit]           = useState(snap?.prazoEdit ?? null);
+  const [responsavelEdit, setResponsavelEdit] = useState(snap?.responsavelEdit || "Arq. Leonardo Padovan");
+  const [cauEdit, setCauEdit]               = useState(snap?.cauEdit || "CAU A30278-3 · Ourinhos");
+  const [emailEdit, setEmailEdit]           = useState(snap?.emailEdit || "leopadovan.arq@gmail.com");
+  const [telefoneEdit, setTelefoneEdit]     = useState(snap?.telefoneEdit || "(14) 99767-4200");
+  const [instagramEdit, setInstagramEdit]   = useState(snap?.instagramEdit || "@padovan_arquitetos");
+  const [cidadeEdit, setCidadeEdit]         = useState(snap?.cidadeEdit || "Ourinhos");
+  const [pixEdit, setPixEdit]               = useState(snap?.pixEdit || "PIX · Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções · Banco Sicoob");
+  const [labelApenasEdit, setLabelApenasEdit] = useState(snap?.labelApenasEdit ?? null);
 
-  const [logoPreview, setLogoPreview]       = useState(null);
+  const [logoPreview, setLogoPreview]       = useState(snap?.logoPreview || null);
 
-  // Carrega logo do storage ao abrir a proposta
+  // Carrega logo do storage ao abrir a proposta (só se não veio do snapshot)
   useEffect(() => {
+    if (snap?.logoPreview) return; // já tem do snapshot
     try {
       window.storage.get("escritorio-logo").then(lr => {
         if (lr?.value) setLogoPreview(lr.value);
@@ -5632,7 +5671,11 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly })
 
   // Estado do escopo — sincronizado com etapasPct
   const [escopoState, setEscopoState] = useState(() => {
-    // IDs das etapas ativas (excluindo Engenharia que é controlada pelo toggle)
+    // Se tem snapshot com escopo salvo, usa ele
+    if (snap?.escopoState && snap.escopoState.length > 0) {
+      return snap.escopoState;
+    }
+    // Senão, constrói do zero com base nas etapas ativas
     const idsAtivos = new Set(etapasPct.map(e => e.id));
     return ESCOPO_BASE.filter(b => b.isEng || idsAtivos.has(b.etapaId));
   });
@@ -5917,9 +5960,53 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly })
 
   return (
     <div style={wrap}>
-      <div style={page}>
-        {/* Aviso de proposta salva (modo read-only) */}
-        {propostaInfo && (
+      {/* Quando em modo somente-leitura (visualização de proposta enviada),
+          desabilita todos os inputs e impede interações de edição. */}
+      {lockEdicao && (
+        <style>{`
+          .proposta-locked input,
+          .proposta-locked textarea,
+          .proposta-locked select,
+          .proposta-locked [contenteditable] {
+            pointer-events: none !important;
+            user-select: text !important;
+            background: transparent !important;
+          }
+          .proposta-locked [data-editable-click] {
+            pointer-events: none !important;
+            cursor: default !important;
+          }
+          .proposta-locked button[data-edicao] {
+            display: none !important;
+          }
+        `}</style>
+      )}
+      <div style={page} className={lockEdicao ? "proposta-locked" : ""}>
+        {/* Badge de "Visualização de proposta enviada" */}
+        {lockEdicao && (
+          <div style={{
+            background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8,
+            padding:"10px 14px", marginBottom:16,
+            display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
+            fontSize:12.5,
+          }}>
+            <div>
+              <strong style={{ color:"#166534" }}>📄 Visualização da proposta enviada</strong>
+              {propostaReadOnly?.versao && (
+                <span style={{ color:"#15803d", marginLeft:6 }}>
+                  {propostaReadOnly.versao}
+                  {propostaReadOnly.enviadaEm && ` · ${new Date(propostaReadOnly.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
+                </span>
+              )}
+              <div style={{ color:"#166534", marginTop:2, fontSize:11.5 }}>
+                Este documento é um registro imutável do que foi enviado ao cliente.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Aviso de proposta salva (após salvar) — não mostrar se já tem lockEdicao */}
+        {!lockEdicao && propostaInfo && (
           <div style={{
             background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8,
             padding:"10px 14px", marginBottom:16,
@@ -5942,9 +6029,9 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly })
           <button onClick={onVoltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             ← Voltar
           </button>
-          {propostaInfo ? (
+          {(propostaInfo || lockEdicao) ? (
             <button onClick={handlePdf} style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
-              Gerar PDF novamente
+              Gerar PDF
             </button>
           ) : (
             <button onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
@@ -6661,7 +6748,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly })
   );
 }
 
-function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer }) {
+function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura }) {
   const [referencia,   setReferencia]   = useState(orcBase?.referencia  || "");
   const [tipoObra,     setTipoObra]     = useState(orcBase?.subtipo     || null);
   const [tipoProjeto,  setTipoProjeto]  = useState(orcBase?.tipo        || null);
@@ -6671,7 +6758,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [aberto,       setAberto]       = useState(null);
   const [hoverDrop,    setHoverDrop]    = useState(null);
   const [panelPos,     setPanelPos]     = useState({ top:0, left:0 });
-  const [propostaData,  setPropostaData]  = useState(modoVer && orcBase ? {
+  // Abre preview automaticamente quando:
+  // - modoVer é true (legado)
+  // - modoAbertura === "ver" ou "verProposta" (novo fluxo) E tem orçamento existente
+  const temPropostaSalva = orcBase?.propostas && orcBase.propostas.length > 0;
+  const abrirDiretoNoPreview = (modoVer || modoAbertura === "ver" || modoAbertura === "verProposta") && orcBase;
+  const propostaReadOnlyForce = modoAbertura === "verProposta";
+  const [propostaData,  setPropostaData]  = useState(abrirDiretoNoPreview ? {
     tipoProjeto: orcBase.tipo, tipoObra: orcBase.subtipo, padrao: orcBase.padrao,
     tipologia: orcBase.tipologia, tamanho: orcBase.tamanho,
     clienteNome, referencia: orcBase.referencia || "",
@@ -7514,26 +7607,40 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     };
     // Callback: salva snapshot da proposta no orçamento (cria v1, v2, ...)
     async function handleSalvarPropostaSnapshot(snapshot) {
-      if (!onSalvar || !orcBase) throw new Error("Orçamento base não encontrado");
-      const propostasAtuais = orcBase.propostas || [];
+      if (!onSalvar) throw new Error("Função de salvar não disponível");
+      // Orçamento base pode ser null se é um novo orçamento — usa propostaData como fallback
+      const base = orcBase || propostaData;
+      const propostasAtuais = base.propostas || [];
       const nextVersao = "v" + (propostasAtuais.length + 1);
       const novaProposta = { ...snapshot, versao: nextVersao };
+      // Se ainda é rascunho, promove automaticamente pra "aberto" ao enviar primeira proposta
+      const novoStatus = (!base.status || base.status === "rascunho") ? "aberto" : base.status;
       // Salva no orçamento (inclui todos os campos atuais do form + nova proposta)
       const orcAtualizado = {
-        ...orcBase,
+        ...base,
         propostas: [...propostasAtuais, novaProposta],
         ultimaPropostaEm: snapshot.enviadaEm,
+        status: novoStatus,
       };
       await onSalvar(orcAtualizado);
       return novaProposta;
     }
+    // Se já existe proposta salva no orçamento, passa a última pra pre-popular estados
+    const ultimaProposta = (orcBase?.propostas && orcBase.propostas.length > 0)
+      ? orcBase.propostas[orcBase.propostas.length - 1]
+      : null;
     // Se já existe proposta salva da versão aberta, passa info pra read-only
-    const propostaAbertaReadOnly = propostaData.propostaReadOnly || null;
+    const propostaAbertaReadOnly = propostaData.propostaReadOnly || (ultimaProposta && modoVer ? {
+      versao: ultimaProposta.versao,
+      enviadaEm: ultimaProposta.enviadaEm,
+    } : null);
     return <PropostaPreview
       data={liveData}
       onVoltar={() => { setPropostaData(null); }}
       onSalvarProposta={handleSalvarPropostaSnapshot}
       propostaReadOnly={propostaAbertaReadOnly}
+      propostaSnapshot={ultimaProposta}
+      lockEdicao={propostaReadOnlyForce}
     />;
   }
 
