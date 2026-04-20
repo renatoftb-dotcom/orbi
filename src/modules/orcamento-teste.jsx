@@ -138,7 +138,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
         <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid #c8cdd6", display:"flex", flexDirection:"column", gap:5 }}>
           {calculo.isComercial ? (<>
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
-            {row("+ Circulação", `+${fmt2(calculo.areaCircTotal || 0)} m²`)}
+            {row(`+ ${pct(calculo.acrescimoCirk)} Circulação`, `+${fmt2(Math.round(calculo.areaBruta*calculo.acrescimoCirk*100)/100)} m²`)}
             {(calculo.blocosCom||[]).map((b,i) => (
               <div key={i} style={{ borderTop:"1px solid #c8cdd6", marginTop:6, paddingTop:6 }}>
                 {b.label === "Área Comum" ? (<>
@@ -168,7 +168,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
               {engAberto && calculo.faixasEng.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
                   <span style={{ color:"#6b7280" }}>
-                    {f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*(calculo.precoEngM2||50)*100)/100)}/m²
+                    {f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*50*100)/100)}/m²
                   </span>
                   <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt2(Math.round(f.preco*100)/100)}</span>
                 </div>
@@ -180,9 +180,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
             {calculo.areaPiscina > 0 && row("Piscina (Excluído)", fmt2(calculo.areaPiscina)+" m²")}
             {(() => {
-              // Piscina não computa na área construída, então o cálculo do % de circulação
-              // usa só a areaBruta (sem piscina).
-              const base = calculo.areaBruta || 0;
+              const base = (calculo.areaBruta||0) + (calculo.areaPiscina||0);
               const cirkReal = base > 0 ? Math.round((calculo.areaTotal/base - 1)*100) : 0;
               const vCirk = Math.round(base*(cirkReal/100)*100)/100;
               return row(`+ ${cirkReal}% Circulação e paredes`, `+${fmt2(vCirk)} m²`);
@@ -213,7 +211,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
               </div>
               {engAberto && calculo.faixasEng.map((f, i) => (
                 <div key={i} style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:3 }}>
-                  <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*(calculo.precoEngM2||50)*100)/100)}/m²</span>
+                  <span style={{ color:"#6b7280" }}>{f.desconto > 0 ? `−${f.desconto.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}% · ` : ""}{fmt2(f.area)} m² × R$ {fmt2(Math.round(f.fator*50*100)/100)}/m²</span>
                   <span style={{ color:"#374151", fontWeight:500 }}>R$ {fmt2(Math.round(f.preco*100)/100)}</span>
                 </div>
               ))}
@@ -493,11 +491,14 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
 }
 
 function PropostaPreview({ data, onVoltar }) {
-  if (!data) return null;
+  // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
+  // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
+  // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
+  const safeData = data || {};
   const { tipoProjeto, tipoObra, padrao, tipologia, tamanho, clienteNome,
           calculo,
           totSI, totCI, impostoV,
-          incluiArq = true, incluiEng = true, incluiMarcenaria = false } = data;
+          incluiArq = true, incluiEng = true, incluiMarcenaria = false } = safeData;
 
   // Estados locais (antes eram props read-only) — editáveis inline
   const [tipoPgto, setTipoPgtoLocal]     = useState(data.tipoPgto || "padrao");
@@ -843,6 +844,10 @@ function PropostaPreview({ data, onVoltar }) {
       return filtrado;
     });
   }, [etapasPct]);
+
+  // Guard defensivo: se data não veio, retorna null (APÓS todos os hooks)
+  if (!data) return null;
+
 
   // Escopo filtrado e renumerado
   const escopoDefault = (() => {
@@ -1880,43 +1885,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   useEffect(() => {
     if (isEdicao.current) { isEdicao.current = false; return; }
     setQtds({});
-    setEditandoGrupoQtd(null);
-    setAbertoGrupo(null);
-    setGrupoQtds({ "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
-    // Reset para defaults (Médio/Térreo/Médio) — igual à inicialização de grupoParams
-    const defaults = { padrao: "Médio", tipologia: "Térreo", tamanho: "Médio" };
-    setGrupoParams({
-      "Por Loja":         { ...defaults },
-      "Espaço Âncora":    { ...defaults },
-      "Áreas Comuns":     { ...defaults },
-      "Por Apartamento":  { ...defaults },
-      "Galpao":           { ...defaults },
-    });
   }, [tipoProjeto]);
-
-  // Escada automática: Sobrado adiciona 1 escada; Térreo remove
-  // Só aplica em modo não-comercial (residencial/clínica) e se "Escada" existe na config atual
-  useEffect(() => {
-    if (isComercial) return;
-    if (!tipologia) return;
-    if (!configAtual?.comodos?.["Escada"]) return; // nem tenta se não existe
-    const isTerreo = tipologia === "Térreo" || tipologia === "Térrea";
-    const isSobrado = tipologia === "Sobrado";
-    setQtds(prev => {
-      const temEscada = (prev["Escada"] || 0) > 0;
-      if (isTerreo && temEscada) {
-        // Remove escada quando vira térreo
-        const next = { ...prev };
-        delete next["Escada"];
-        return next;
-      }
-      if (isSobrado && !temEscada) {
-        // Adiciona 1 escada quando vira sobrado
-        return { ...prev, "Escada": 1 };
-      }
-      return prev;
-    });
-  }, [tipologia, isComercial, configAtual]);
 
   // ── Salvar como rascunho ao voltar ─────────────────────────
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -2127,15 +2096,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const precoSemFach = pLojas+pAncoras+p1Comum+pAptos+pGalpoes;
       const precoArq1 = Math.round((precoSemFach*(1+INDICE_FACHADA_GALERIA))*100)/100;
       const areaTot   = atLoja1*nLojas + atAnc1*nAncoras + atComum + atApto1*nAptos + atGalpao1*nGalpoes;
-      // Soma das circulações de cada grupo (cada um com sua própria %: 25% pra Loja/Âncora/Comum/Apto, 10% pra Galpão)
-      const areaCircTotal = Math.round(
-        ( bLoja.ab   * ACRESCIMO_AREA * nLojas
-        + bAnc.ab    * ACRESCIMO_AREA * nAncoras
-        + bComum.ab  * ACRESCIMO_AREA
-        + bApto.ab   * ACRESCIMO_AREA * nAptos
-        + bGalpao.ab * 0.10          * nGalpoes
-        ) * 100
-      ) / 100;
       const engCalc   = calcularEngenharia(areaTot);
       const precoEng1 = Math.round(engCalc.totalEng*100)/100;
       const nRep=1, pctRep=0.25;
@@ -2158,8 +2118,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         nRep, pctRep, unidades,
         indiceComodos:0, indicePadrao:0, fatorMult:1, precoBaseVal:pb, precoM2Ef:pb,
         faixasArqDet:[], faixasEng:engCalc.faixas, totalAmbientes:0, acrescimoCirk:ACRESCIMO_AREA,
-        areaCircTotal,
-        precoEngM2: 50,
         blocosCom, precoFachada,
       };
     }
@@ -2175,8 +2133,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       else areaBruta += area;
     });
 
-    // Piscina entra no indiceComodos (aumenta multiplicador) mas NÃO entra na área total construída
-    const areaTotal = Math.round(areaBruta * (1 + tcfg.acrescimoCirk) * 100) / 100;
+    const areaTotal = Math.round((areaBruta + areaPiscina) * (1 + tcfg.acrescimoCirk) * 100) / 100;
     if (areaTotal === 0) return null;
 
     const indiceComodos = (() => {
@@ -2189,15 +2146,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       return Math.round(idx * 1000) / 1000;
     })();
     const indicePadrao = INDICE_PADRAO[padrao] || 0;
-    // Fatores de tipologia residencial/clínica:
-    // - Arquitetura: Térreo é 10% mais caro (espalha no terreno, mais fundação/cobertura).
-    //   Sobrado é neutro (1.0). Aplica só em modo não-comercial.
-    // - Engenharia: Sobrado é 5% mais caro (estrutura/lajes). Térreo é neutro.
-    const isTerreoResi  = !isComercial && (tipologia === "Térreo" || tipologia === "Térrea");
-    const isSobradoResi = !isComercial && tipologia === "Sobrado";
-    const fatorTipArq = isTerreoResi  ? 1.10 : 1.0;
-    const fatorTipEng = isSobradoResi ? 1.05 : 1.0;
-    const fatorMult    = Math.round((1 + indiceComodos + indicePadrao) * fatorTipArq * 1000) / 1000;
+    const fatorMult    = Math.round((1 + indiceComodos + indicePadrao) * 1000) / 1000;
     const precoBaseVal = pb;
     const precoM2Ef    = pb * fatorMult;
 
@@ -2228,11 +2177,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const totalAmbientes = Object.entries(qtds).filter(([,q])=>q>0).reduce((s,[,q])=>s+q,0);
 
     const precoArq1 = calcArqFaixas(areaTotal);
-    // Piscina aumenta 5% o preço base da engenharia (R$ 50 → R$ 52,50)
-    // Sobrado também aumenta 5% (fatorTipEng). Efeitos combinam multiplicativamente.
-    const temPiscina = areaPiscina > 0;
-    const precoEngM2 = 50 * (temPiscina ? 1.05 : 1) * fatorTipEng;
-    const engCalc   = calcularEngenharia(areaTotal, precoEngM2);
+    const engCalc   = calcularEngenharia(areaTotal);
     const precoEng1 = Math.round(engCalc.totalEng * 100) / 100;
 
     const nRep   = qtdRep > 1 ? qtdRep : 1;
@@ -2264,7 +2209,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       totalAmbientes,
       acrescimoCirk: tcfg.acrescimoCirk,
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
-      precoEngM2,
     };
   }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo]);
 
@@ -2446,16 +2390,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // - hover em outros cômodos é ignorado
   const [travado, setTravado] = useState(false);
   const comodoCloseRef = useRef(null);
-
-  // Reset dos estados de seleção ao trocar tipoProjeto (complemento do primeiro useEffect)
-  // Separado porque esses setters estão declarados depois do primeiro useEffect [tipoProjeto].
-  useEffect(() => {
-    if (isEdicao.current) return; // já tratado no primeiro effect
-    setComodoAberto(null);
-    setTravado(false);
-    setGruposAbertos({});
-  }, [tipoProjeto]);
-
   // Rastreia última posição do mouse para reabrir popup após a lista reorganizar
   const mousePosRef = useRef({ x: 0, y: 0 });
   useEffect(() => {
@@ -2738,7 +2672,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   </span>
                 </label>
               ))}
-              {!isComercial && (
+              {tipoProjeto !== "Conj. Comercial" && (
                 <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:8, borderLeft:"1px solid #e5e7eb" }}>
                   <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
                   <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
@@ -2764,47 +2698,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
                     onClick={() => setQtdRep(n => n + 1)}>+</button>
                 </div>
-              )}
-
-              {/* Botão Resetar — empurrado pra direita na linha dos toggles */}
-              {Object.keys(qtds).some(n => qtds[n] > 0) && (
-                <button
-                  type="button"
-                  onClick={e => {
-                    e.stopPropagation();
-                    setQtds({});
-                    setGruposAbertos({});
-                    if (isComercial) {
-                      setGrupoQtds({ "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
-                      const defaults = { padrao: "Médio", tipologia: "Térreo", tamanho: "Médio" };
-                      setGrupoParams({
-                        "Por Loja":         { ...defaults },
-                        "Espaço Âncora":    { ...defaults },
-                        "Áreas Comuns":     { ...defaults },
-                        "Por Apartamento":  { ...defaults },
-                        "Galpao":           { ...defaults },
-                      });
-                    }
-                  }}
-                  style={{
-                    background:"transparent", border:"1px solid #d0d4db",
-                    color:"#6b7280", fontSize:11, fontFamily:"inherit",
-                    cursor:"pointer", padding:"4px 10px", borderRadius:6,
-                    transition:"all 0.15s", fontWeight:500, lineHeight:1,
-                    flexShrink:0,
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = "#dc2626";
-                    e.currentTarget.style.color = "#dc2626";
-                    e.currentTarget.style.background = "#fef2f2";
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = "#d0d4db";
-                    e.currentTarget.style.color = "#6b7280";
-                    e.currentTarget.style.background = "transparent";
-                  }}>
-                  Resetar cômodos
-                </button>
               )}
             </div>
 
@@ -2929,75 +2822,35 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     <span style={{ fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
-
-                    {/* Controle de quantidade de unidades do grupo (− N +) — logo ao lado do título */}
-                    {isComercial && (
-                      <div style={{ display:"flex", alignItems:"center", gap:3, flexShrink:0 }}>
-                        <button
-                          onClick={() => setGrupoQtd(grupo, -1)}
-                          style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
-                          −
-                        </button>
-                        {editandoGrupoQtd === grupo ? (
-                          <input
-                            autoFocus
-                            type="number" min="0"
-                            defaultValue={grupoQtds[grupo]||0}
-                            onBlur={e => {
-                              const v = Math.max(0, parseInt(e.target.value)||0);
-                              setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
-                              setEditandoGrupoQtd(null);
-                            }}
-                            onKeyDown={e => {
-                              if (e.key === "Enter" || e.key === "Escape") {
-                                const v = Math.max(0, parseInt(e.target.value)||0);
-                                setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
-                                setEditandoGrupoQtd(null);
-                              }
-                            }}
-                            className="no-spin"
-                            style={{ width:36, textAlign:"center", fontSize:11, fontWeight:600, border:"1px solid #333", borderRadius:4, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
-                          />
-                        ) : (
-                          <span
-                            onClick={() => setEditandoGrupoQtd(grupo)}
-                            title="Clique para digitar"
-                            style={{ fontSize:11, fontWeight: (grupoQtds[grupo]||0) > 0 ? 700 : 400, minWidth:18, textAlign:"center", color: (grupoQtds[grupo]||0) > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
-                            {grupoQtds[grupo]||0}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => setGrupoQtd(grupo, +1)}
-                          style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
-                          +
-                        </button>
-                      </div>
+                    {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
+                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setQtds({});
+                          setGruposAbertos({});
+                        }}
+                        style={{
+                          background:"transparent", border:"1px solid #d0d4db",
+                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
+                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
+                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
+                          flexShrink:0,
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = "#dc2626";
+                          e.currentTarget.style.color = "#dc2626";
+                          e.currentTarget.style.background = "#fef2f2";
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = "#d0d4db";
+                          e.currentTarget.style.color = "#6b7280";
+                          e.currentTarget.style.background = "transparent";
+                        }}>
+                        Resetar
+                      </button>
                     )}
-
-                    {/* Contador: × (N amb Y m² por unidade c/ circulação) → total m² */}
-                    {qtdGrupo > 0 && (!isComercial || (grupoQtds[grupo]||0) > 0) && (() => {
-                      // Acréscimo de circulação: 10% pra Galpão, 25% pros demais grupos comerciais;
-                      // no modo não-comercial usa o acrescimoCirk do TIPO_CONFIG (residencial/clínica = 25%).
-                      const cirkGrupo = isComercial
-                        ? (grupo === "Galpao" ? 0.10 : 0.25)
-                        : (getTipoConfig(tipoParaConfig(tipoProjeto)).acrescimoCirk || 0);
-                      const m2GrupoCirk = m2Grupo * (1 + cirkGrupo);
-                      const nUnid = grupoQtds[grupo]||0;
-                      return (
-                        <span style={{ fontSize:10, color:"#9ca3af", flexShrink:0 }}>
-                          {isComercial ? (
-                            <>
-                              × (<strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo}</strong> amb <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2GrupoCirk)}</strong> m²){" → "}<strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2GrupoCirk * nUnid)}</strong> m²
-                            </>
-                          ) : (
-                            <>
-                              <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2GrupoCirk)}</strong> m²
-                            </>
-                          )}
-                        </span>
-                      );
-                    })()}
-
                     <span style={{ flex:1 }} />
 
                     {/* Controles específicos de grupos comerciais: Padrão/Tipologia/Tamanho + Quantidade de unidades */}
@@ -3062,9 +2915,56 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             </div>
                           );
                         })}
+
+                        {/* Controle de quantidade de unidades do grupo (− N +) */}
+                        <div style={{ display:"flex", alignItems:"center", gap:3, flexShrink:0, paddingLeft:6, borderLeft:"1px solid #d0d4db" }}>
+                          <button
+                            onClick={() => setGrupoQtd(grupo, -1)}
+                            style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
+                            −
+                          </button>
+                          {editandoGrupoQtd === grupo ? (
+                            <input
+                              autoFocus
+                              type="number" min="0"
+                              defaultValue={grupoQtds[grupo]||0}
+                              onBlur={e => {
+                                const v = Math.max(0, parseInt(e.target.value)||0);
+                                setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
+                                setEditandoGrupoQtd(null);
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === "Enter" || e.key === "Escape") {
+                                  const v = Math.max(0, parseInt(e.target.value)||0);
+                                  setGrupoQtds(prev => ({ ...prev, [grupo]: v }));
+                                  setEditandoGrupoQtd(null);
+                                }
+                              }}
+                              className="no-spin"
+                              style={{ width:36, textAlign:"center", fontSize:11, fontWeight:600, border:"1px solid #333", borderRadius:4, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
+                            />
+                          ) : (
+                            <span
+                              onClick={() => setEditandoGrupoQtd(grupo)}
+                              title="Clique para digitar"
+                              style={{ fontSize:11, fontWeight: (grupoQtds[grupo]||0) > 0 ? 700 : 400, minWidth:18, textAlign:"center", color: (grupoQtds[grupo]||0) > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
+                              {grupoQtds[grupo]||0}
+                            </span>
+                          )}
+                          <button
+                            onClick={() => setGrupoQtd(grupo, +1)}
+                            style={{ width:18, height:18, borderRadius:4, border:"1px solid #d0d4db", background:"#fff", fontSize:11, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151", padding:0 }}>
+                            +
+                          </button>
+                        </div>
                       </>
                     )}
 
+                    {qtdGrupo > 0 && (
+                      <span style={{ fontSize:10, color:"#9ca3af" }}>
+                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
+                      </span>
+                    )}
                     <button
                       onClick={() => toggleGrupo(grupo)}
                       title={recolhido ? "Expandir" : "Recolher"}

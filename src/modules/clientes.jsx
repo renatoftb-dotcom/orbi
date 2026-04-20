@@ -89,14 +89,15 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
 }
 
 function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto }) {
+  // IMPORTANTE: Todos os hooks devem ser declarados ANTES de qualquer return condicional.
+  // Ordem dos hooks deve ser constante entre renders (regra do React).
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
-  if (abrindoOrcamento) return null;
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
   const [busca, setBusca]             = useState("");
   const [dragId, setDragId]           = useState(null);
   const [dragOver, setDragOver]       = useState(null);
-  const [isMobile, setIsMobile]       = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile]       = useState(typeof window !== "undefined" && window.innerWidth < 768);
   const [abaKanban, setAbaKanban]     = useState("");
 
   useEffect(() => {
@@ -126,6 +127,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
   };
   const [form, setForm] = useState(emptyCliente);
+
+  // Early return: só DEPOIS de todos os hooks serem declarados (regra do React)
+  if (abrindoOrcamento) return null;
 
   function openNew()     { setForm(emptyCliente); setView("form"); }
   function openEdit(c)   { setForm(c); setView("form"); }

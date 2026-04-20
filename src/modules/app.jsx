@@ -73,6 +73,13 @@ export default function ModuloClientesFornecedores() {
   const [clienteRetorno, setClienteRetorno] = useState(null); // cliente pra abrir detail ao fechar orçamento
   const [backendOffline, setBackendOffline]   = useState(false);
 
+  // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
+  // IMPORTANTE: hooks DEVEM ser chamados antes de qualquer return condicional (regra do React)
+  const [projetosAberto, setProjetosAberto] = useState(() => (typeof aba === "string" && aba.indexOf("projetos") === 0));
+  useEffect(() => {
+    if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
+  }, [aba]);
+
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
 
   // Migração de abas antigas para nova nomenclatura
@@ -172,12 +179,6 @@ export default function ModuloClientesFornecedores() {
     { k:"fornecedores",label:"Fornecedores", count: data?.fornecedores?.length },
     { k:"nf",          label:"Notas Fiscais" },
   ];
-
-  // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
-  const [projetosAberto, setProjetosAberto] = useState(() => (typeof aba === "string" && aba.indexOf("projetos") === 0));
-  useEffect(() => {
-    if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
-  }, [aba]);
 
   const itemStyle = (ativo) => ({
     display:"flex", alignItems:"center", justifyContent:"space-between",
