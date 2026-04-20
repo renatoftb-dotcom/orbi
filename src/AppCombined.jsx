@@ -4531,15 +4531,13 @@ function TesteOrcamento({ data, save }) {
   }
 
   return (
-    <div style={{ margin:"-24px -28px" }}>
-      <FormOrcamentoProjetoTeste
-        clienteNome="Teste"
-        clienteWA=""
-        orcBase={orcBase}
-        onSalvar={salvarOrcamento}
-        onVoltar={() => setOrcBase(null)}
-      />
-    </div>
+    <FormOrcamentoProjetoTeste
+      clienteNome="Teste"
+      clienteWA=""
+      orcBase={orcBase}
+      onSalvar={salvarOrcamento}
+      onVoltar={() => setOrcBase(null)}
+    />
   );
 }
 
@@ -6673,7 +6671,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, []);
 
   const C = {
-    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", minHeight:"100vh", padding:"24px 20px", position:"relative" },
+    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative" },
     fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
     input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
@@ -8344,14 +8342,14 @@ export default function ModuloClientesFornecedores() {
 
   // Itens do menu. "projetos" tem sub-itens que ficam num accordion.
   // Chaves das abas (aba state):
-  //   "projetos:etapas"    → Kanban de etapas
-  //   "projetos:orcamentos"→ módulo Orçamentos (antigamente "teste")
+  //   "projetos:orcamentos" → módulo Orçamentos
+  //   "projetos:etapas"     → Kanban "Em Andamento"
   const MENU = [
     { k:"home",        label:"Início" },
     { k:"clientes",    label:"Clientes",     count: data?.clientes?.length },
     { k:"projetos", label:"Projetos", sub: [
-      { k:"projetos:etapas",     label:"Etapas" },
       { k:"projetos:orcamentos", label:"Orçamentos" },
+      { k:"projetos:etapas",     label:"Em Andamento" },
     ]},
     { k:"obras",       label:"Obras" },
     { k:"financeiro",  label:"Financeiro" },
@@ -8389,6 +8387,9 @@ export default function ModuloClientesFornecedores() {
                     <button
                       style={{
                         ...itemStyle(ativoNeleMesmoOuSubitem),
+                        // Força chevron grudado ao texto (ignora o space-between do itemStyle)
+                        justifyContent: "flex-start",
+                        gap: 6,
                         // Quando algum subitem está ativo, o pai fica "suavemente marcado"
                         background: ativoNeleMesmoOuSubitem && aba !== k ? "transparent" : undefined,
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
@@ -8404,6 +8405,7 @@ export default function ModuloClientesFornecedores() {
                         transition:"transform 0.2s",
                         transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
                         display:"inline-block",
+                        lineHeight: 1,
                       }}>▶</span>
                     </button>
                     {projetosAberto && (

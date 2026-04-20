@@ -165,14 +165,14 @@ export default function ModuloClientesFornecedores() {
 
   // Itens do menu. "projetos" tem sub-itens que ficam num accordion.
   // Chaves das abas (aba state):
-  //   "projetos:etapas"    → Kanban de etapas
-  //   "projetos:orcamentos"→ módulo Orçamentos (antigamente "teste")
+  //   "projetos:orcamentos" → módulo Orçamentos
+  //   "projetos:etapas"     → Kanban "Em Andamento"
   const MENU = [
     { k:"home",        label:"Início" },
     { k:"clientes",    label:"Clientes",     count: data?.clientes?.length },
     { k:"projetos", label:"Projetos", sub: [
-      { k:"projetos:etapas",     label:"Etapas" },
       { k:"projetos:orcamentos", label:"Orçamentos" },
+      { k:"projetos:etapas",     label:"Em Andamento" },
     ]},
     { k:"obras",       label:"Obras" },
     { k:"financeiro",  label:"Financeiro" },
@@ -210,6 +210,9 @@ export default function ModuloClientesFornecedores() {
                     <button
                       style={{
                         ...itemStyle(ativoNeleMesmoOuSubitem),
+                        // Força chevron grudado ao texto (ignora o space-between do itemStyle)
+                        justifyContent: "flex-start",
+                        gap: 6,
                         // Quando algum subitem está ativo, o pai fica "suavemente marcado"
                         background: ativoNeleMesmoOuSubitem && aba !== k ? "transparent" : undefined,
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
@@ -225,6 +228,7 @@ export default function ModuloClientesFornecedores() {
                         transition:"transform 0.2s",
                         transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
                         display:"inline-block",
+                        lineHeight: 1,
                       }}>▶</span>
                     </button>
                     {projetosAberto && (

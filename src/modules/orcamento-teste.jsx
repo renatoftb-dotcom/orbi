@@ -92,15 +92,13 @@ function TesteOrcamento({ data, save }) {
   }
 
   return (
-    <div style={{ margin:"-24px -28px" }}>
-      <FormOrcamentoProjetoTeste
-        clienteNome="Teste"
-        clienteWA=""
-        orcBase={orcBase}
-        onSalvar={salvarOrcamento}
-        onVoltar={() => setOrcBase(null)}
-      />
-    </div>
+    <FormOrcamentoProjetoTeste
+      clienteNome="Teste"
+      clienteWA=""
+      orcBase={orcBase}
+      onSalvar={salvarOrcamento}
+      onVoltar={() => setOrcBase(null)}
+    />
   );
 }
 
@@ -2234,7 +2232,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, []);
 
   const C = {
-    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", minHeight:"100vh", padding:"24px 20px", position:"relative" },
+    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative" },
     fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
     input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
