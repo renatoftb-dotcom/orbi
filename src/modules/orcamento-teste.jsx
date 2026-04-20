@@ -299,7 +299,7 @@ function TesteOrcamento({ data, save }) {
       </div>
 
       {/* Lista */}
-      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+      <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
         {orcFiltrados.length === 0 ? (
           <div style={{
             padding:"48px 24px", textAlign:"center",
@@ -374,16 +374,24 @@ function OrcCard({ orc, clientes, onAbrir }) {
   const ultimaProposta = orc.propostas && orc.propostas.length > 0
     ? orc.propostas[orc.propostas.length - 1]
     : null;
-  let precoArq, precoEng;
+  let precoArq, precoEng, valorTotal;
   if (ultimaProposta) {
-    // Valores editados pelo usuário na proposta
-    precoArq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
-    precoEng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
+    // Prioridade: valorTotalExibido (novo, fonte única da verdade)
+    // Fallback: arqEdit/engEdit somados (versões antigas de snapshot)
+    if (ultimaProposta.valorTotalExibido != null) {
+      precoArq = ultimaProposta.valorArqExibido || 0;
+      precoEng = ultimaProposta.valorEngExibido || 0;
+      valorTotal = ultimaProposta.valorTotalExibido;
+    } else {
+      precoArq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
+      precoEng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
+      valorTotal = precoArq + precoEng;
+    }
   } else {
     precoArq = orc.resultado?.precoArq || 0;
     precoEng = orc.resultado?.precoEng || 0;
+    valorTotal = precoArq + precoEng;
   }
-  const valorTotal = precoArq + precoEng;
 
   const tipo = orc.tipo || "—";
   const ref = orc.referencia || "(sem referência)";
@@ -451,8 +459,16 @@ function OrcCard({ orc, clientes, onAbrir }) {
       </div>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
         {valorTotal > 0 && (
-          <div style={{ fontSize:14, fontWeight:600, color:"#111", whiteSpace:"nowrap" }}>
-            R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:2 }}>
+            {precoArq > 0 && precoEng > 0 && (
+              <div style={{ display:"flex", gap:10, fontSize:11, color:"#6b7280", whiteSpace:"nowrap" }}>
+                <span>Arq: <strong style={{ color:"#374151", fontWeight:600 }}>R$ {precoArq.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}</strong></span>
+                <span>Eng: <strong style={{ color:"#374151", fontWeight:600 }}>R$ {precoEng.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}</strong></span>
+              </div>
+            )}
+            <div style={{ fontSize:14, fontWeight:600, color:"#111", whiteSpace:"nowrap" }}>
+              {precoArq > 0 && precoEng > 0 ? "Total: " : ""}R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
+            </div>
           </div>
         )}
         <div style={{ display:"flex", gap:4 }} onClick={e => e.stopPropagation()}>
@@ -1650,6 +1666,14 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       instagramEdit, cidadeEdit, pixEdit, labelApenasEdit,
       logoPreview,
       escopoState: escopoState ? JSON.parse(JSON.stringify(escopoState)) : [],
+      // ── VALORES EXIBIDOS (fonte única da verdade pro que o cliente viu) ──
+      // No modo "padrao": arqCIEdit + engCIEdit (100% de cada)
+      // No modo "etapas": totalPacoteEtapas (soma das etapas ativas + eng se ativa)
+      valorArqExibido: incluiArq ? (isPadrao ? arqCIEdit : subTotalArqEtapas) : 0,
+      valorEngExibido: engAtiva ? engCIEdit : 0,
+      valorTotalExibido: isPadrao
+        ? (totCIEdit)
+        : totalPacoteEtapas,
     };
   }
 

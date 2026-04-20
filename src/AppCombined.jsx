@@ -3353,99 +3353,23 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
             </button>
           </div>
 
-          {/* Lista de orçamentos */}
+          {/* Lista de orçamentos — usa mesmo OrcCard da página de Orçamentos */}
           {orcamentos.length > 0 && (
             <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
               <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>Orçamentos</div>
               {orcamentos.map(o => {
-                const r = o.resultado || {};
-                const arqTotal = Math.round((r.precoArq || r.precoTotal || r.precoFinal || 0) * 100) / 100;
-                const engTotal = Math.round((r.precoEng || r.engTotal || 0) * 100) / 100;
-                const grandTotal = Math.round((arqTotal + engTotal) * 100) / 100;
-                const isRascunho = o.rascunho || o.status === "rascunho";
-                const stKey = isRascunho ? "rascunho" : o.status;
-                const st = stKey ? STATUS_ORC[stKey] : null;
-                const enviado = o.criadoEm ? new Date(o.criadoEm).toLocaleDateString("pt-BR") : "—";
                 const fetchOrc = async (modo) => {
                   const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
                   const orcCompleto = res?.ok ? res.data : o;
                   onAbrirOrcamento(cliente, orcCompleto, modo);
                 };
                 return (
-                  <div key={o.id} style={{
-                    border: isRascunho ? "1px dashed #d1d5db" : "1px solid #e5e7eb",
-                    borderRadius:10,
-                    padding:"12px 14px",
-                    background: isRascunho ? "#fcfcfc" : "#fafafa",
-                    borderLeft: st ? `3px ${isRascunho ? "dashed" : "solid"} ${st.cor}` : "1px solid #e5e7eb"
-                  }}>
-
-                    {/* Linha 1: título + botões */}
-                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8, marginBottom:6 }}>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:2 }}>
-                          <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{o.tipo} — {o.subtipo}</span>
-                          {st && <span style={{ fontSize:11, fontWeight:600, color:st.cor, background:st.bg, borderRadius:4, padding:"1px 7px" }}>{st.label}</span>}
-                        </div>
-                        <div style={{ fontSize:11, color:"#9ca3af", fontFamily:"monospace" }}>{o.id} · {enviado}</div>
-                      </div>
-                      {/* Botões sempre à direita, compactos */}
-                      <div style={{ display:"flex", alignItems:"center", gap:4, flexShrink:0 }}>
-                        <button onClick={() => fetchOrc("ver")}
-                          style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
-                          Ver
-                        </button>
-                        <button onClick={() => fetchOrc("editar")}
-                          style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
-                          Editar
-                        </button>
-                        <div style={{ position:"relative" }}>
-                          <button onClick={() => setOpenMenu(openMenu===o.id ? null : o.id)}
-                            style={{ fontSize:12, color:"#374151", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>
-                            Ações
-                          </button>
-                          {openMenu === o.id && (
-                            <div ref={menuRef} style={{ position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999, background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:180, overflow:"hidden" }}>
-                              <button disabled={o.status==="ganho"} onClick={() => { setStatusOrc(o.id, "ganho"); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="ganho"?"#f0fdf4":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="ganho"?"#16a34a":"#374151", padding:"10px 14px", fontSize:13, cursor: o.status==="ganho"?"not-allowed":"pointer", fontFamily:"inherit", fontWeight: o.status==="ganho"?600:400, whiteSpace:"nowrap" }}>
-                                {o.status==="ganho" ? "✓ Ganho" : "Marcar como Ganho"}
-                              </button>
-                              <button onClick={() => { setStatusOrc(o.id, o.status==="perdido" ? null : "perdido"); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background: o.status==="perdido"?"#fef2f2":"transparent", border:"none", borderBottom:"1px solid #f3f4f6", color: o.status==="perdido"?"#dc2626":"#374151", padding:"10px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", fontWeight: o.status==="perdido"?600:400, whiteSpace:"nowrap" }}>
-                                {o.status==="perdido" ? "✓ Perdido" : "Marcar como Perdido"}
-                              </button>
-                              <button onClick={() => { setConfirmDelete(o.id); setOpenMenu(null); }}
-                                style={{ display:"block", width:"100%", textAlign:"left", background:"transparent", border:"none", color:"#dc2626", padding:"10px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap" }}>
-                                Excluir
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Linha 2: padrão · tamanho · área */}
-                    <div style={{ fontSize:12, color:"#6b7280", marginBottom:8 }}>
-                      {o.padrao} · {o.tamanho} · {r.areaTotal ? Math.round(r.areaTotal) : 0}m²
-                    </div>
-
-                    {/* Linha 3: valores em grid 3 colunas no mobile */}
-                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6 }}>
-                      <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, padding:"7px 8px" }}>
-                        <div style={{ fontSize:10, color:"#9ca3af", marginBottom:2 }}>Arq.</div>
-                        <div style={{ fontSize:12, fontWeight:700, color:"#2563eb" }}>{fmt(arqTotal)}</div>
-                      </div>
-                      <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, padding:"7px 8px" }}>
-                        <div style={{ fontSize:10, color:"#9ca3af", marginBottom:2 }}>Eng.</div>
-                        <div style={{ fontSize:12, fontWeight:700, color:"#7c3aed" }}>{fmt(engTotal)}</div>
-                      </div>
-                      <div style={{ background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:7, padding:"7px 8px" }}>
-                        <div style={{ fontSize:10, color:"#9ca3af", marginBottom:2 }}>Total</div>
-                        <div style={{ fontSize:12, fontWeight:800, color:"#111" }}>{fmt(grandTotal)}</div>
-                      </div>
-                    </div>
-
-                  </div>
+                  <OrcCard
+                    key={o.id}
+                    orc={o}
+                    clientes={[cliente]}
+                    onAbrir={(modo) => fetchOrc(modo || "ver")}
+                  />
                 );
               })}
             </div>
@@ -4800,7 +4724,7 @@ function TesteOrcamento({ data, save }) {
       </div>
 
       {/* Lista */}
-      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+      <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
         {orcFiltrados.length === 0 ? (
           <div style={{
             padding:"48px 24px", textAlign:"center",
@@ -4875,16 +4799,24 @@ function OrcCard({ orc, clientes, onAbrir }) {
   const ultimaProposta = orc.propostas && orc.propostas.length > 0
     ? orc.propostas[orc.propostas.length - 1]
     : null;
-  let precoArq, precoEng;
+  let precoArq, precoEng, valorTotal;
   if (ultimaProposta) {
-    // Valores editados pelo usuário na proposta
-    precoArq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
-    precoEng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
+    // Prioridade: valorTotalExibido (novo, fonte única da verdade)
+    // Fallback: arqEdit/engEdit somados (versões antigas de snapshot)
+    if (ultimaProposta.valorTotalExibido != null) {
+      precoArq = ultimaProposta.valorArqExibido || 0;
+      precoEng = ultimaProposta.valorEngExibido || 0;
+      valorTotal = ultimaProposta.valorTotalExibido;
+    } else {
+      precoArq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
+      precoEng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
+      valorTotal = precoArq + precoEng;
+    }
   } else {
     precoArq = orc.resultado?.precoArq || 0;
     precoEng = orc.resultado?.precoEng || 0;
+    valorTotal = precoArq + precoEng;
   }
-  const valorTotal = precoArq + precoEng;
 
   const tipo = orc.tipo || "—";
   const ref = orc.referencia || "(sem referência)";
@@ -4952,8 +4884,16 @@ function OrcCard({ orc, clientes, onAbrir }) {
       </div>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
         {valorTotal > 0 && (
-          <div style={{ fontSize:14, fontWeight:600, color:"#111", whiteSpace:"nowrap" }}>
-            R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:2 }}>
+            {precoArq > 0 && precoEng > 0 && (
+              <div style={{ display:"flex", gap:10, fontSize:11, color:"#6b7280", whiteSpace:"nowrap" }}>
+                <span>Arq: <strong style={{ color:"#374151", fontWeight:600 }}>R$ {precoArq.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}</strong></span>
+                <span>Eng: <strong style={{ color:"#374151", fontWeight:600 }}>R$ {precoEng.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}</strong></span>
+              </div>
+            )}
+            <div style={{ fontSize:14, fontWeight:600, color:"#111", whiteSpace:"nowrap" }}>
+              {precoArq > 0 && precoEng > 0 ? "Total: " : ""}R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
+            </div>
           </div>
         )}
         <div style={{ display:"flex", gap:4 }} onClick={e => e.stopPropagation()}>
@@ -6151,6 +6091,14 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       instagramEdit, cidadeEdit, pixEdit, labelApenasEdit,
       logoPreview,
       escopoState: escopoState ? JSON.parse(JSON.stringify(escopoState)) : [],
+      // ── VALORES EXIBIDOS (fonte única da verdade pro que o cliente viu) ──
+      // No modo "padrao": arqCIEdit + engCIEdit (100% de cada)
+      // No modo "etapas": totalPacoteEtapas (soma das etapas ativas + eng se ativa)
+      valorArqExibido: incluiArq ? (isPadrao ? arqCIEdit : subTotalArqEtapas) : 0,
+      valorEngExibido: engAtiva ? engCIEdit : 0,
+      valorTotalExibido: isPadrao
+        ? (totCIEdit)
+        : totalPacoteEtapas,
     };
   }
 
