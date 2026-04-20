@@ -65,6 +65,7 @@ export default function ModuloClientesFornecedores() {
   const [clientesKey, setClientesKey]         = useState(0);
   const [fornecedoresKey, setFornecedoresKey] = useState(0);
   const [projetosKey, setProjetosKey]         = useState(0);
+  const [orcamentosKey, setOrcamentosKey]     = useState(0);
   const [obrasKey, setObrasKey]               = useState(0);
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
@@ -254,6 +255,7 @@ export default function ModuloClientesFornecedores() {
                                 setAba(s.k);
                                 setOrcamentoTelaCheia(null);
                                 if (s.k === "projetos:etapas") setProjetosKey(n=>n+1);
+                                if (s.k === "projetos:orcamentos") setOrcamentosKey(n=>n+1);
                               }}
                             >
                               {s.label}
@@ -277,6 +279,7 @@ export default function ModuloClientesFornecedores() {
                     if(k==="obras")       setObrasKey(n=>n+1);
                     if(k==="financeiro")  setFinanceiroKey(n=>n+1);
                     if(k==="fornecedores")setFornecedoresKey(n=>n+1);
+                    if(k==="projetos:orcamentos") setOrcamentosKey(n=>n+1);
                   }}>
                   <span>{label}</span>
                   {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
@@ -335,6 +338,7 @@ export default function ModuloClientesFornecedores() {
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
               modoVer={orcamentoTelaCheia.modo === "ver"}
+              modoAbertura={orcamentoTelaCheia.modo}
               onSalvar={async (orc) => {
                 const todos = data.orcamentosProjeto || [];
                 const maxSeq = todos.reduce((mx2, o2) => {
@@ -361,7 +365,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "home"                   && <HomeMenu setAba={setAba} data={data} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
-          {aba === "projetos:orcamentos"    && <TesteOrcamento data={data} save={save} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}

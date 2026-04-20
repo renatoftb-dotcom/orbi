@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // BOTÃO GERAR PDF
 // ═══════════════════════════════════════════════════════════════
-async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#ffffff", incluiArq=true, incluiEng=true) {
+async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#ffffff", incluiArq=true, incluiEng=true, opts={}) {
   const { jsPDF } = window.jspdf;
 
   // ── Dados base ─────────────────────────────────────────────
@@ -805,8 +805,11 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     }
   }
 
-  // Download
+  // Download (ou retorna blob se opts.returnBlob)
   const blob = doc.output("blob");
+  if (opts && opts.returnBlob) {
+    return blob;
+  }
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href = url; a.download = `proposta-${(orc.cliente||"projeto").replace(/\s+/g,"-").toLowerCase()}.pdf`;

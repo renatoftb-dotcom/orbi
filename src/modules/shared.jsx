@@ -27,8 +27,44 @@ if (typeof window !== "undefined" && !document.getElementById("jspdf-script")) {
 if (typeof window !== "undefined" && !document.getElementById("h2c-script")) {
   const s2 = document.createElement("script");
   s2.id  = "h2c-script";
-  s2.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-  document.head.appendChild(s2);
+  s2.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";  document.head.appendChild(s2);
+}
+// pdf.js — pra rasterizar PDF em imagem (snapshot de proposta)
+if (typeof window !== "undefined" && !document.getElementById("pdfjs-script")) {
+  const s3 = document.createElement("script");
+  s3.id  = "pdfjs-script";
+  s3.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+  s3.onload = () => {
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+  };
+  document.head.appendChild(s3);
+}
+
+// Utilitário: renderiza PDF (blob) como array de imagens JPEG base64
+// Usado pra gerar snapshot visual de propostas enviadas
+async function rasterizarPdfParaImagens(pdfBlob, { maxWidth = 1200, quality = 0.7 } = {}) {
+  if (!window.pdfjsLib) throw new Error("pdf.js ainda não carregou — tente novamente em 1s");
+  const arrayBuffer = await pdfBlob.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const imagens = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    // Calcula escala pra atingir maxWidth
+    const viewport0 = page.getViewport({ scale: 1 });
+    const scale = maxWidth / viewport0.width;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    // JPEG com qualidade configurável
+    imagens.push(canvas.toDataURL("image/jpeg", quality));
+  }
+  return imagens;
 }
 
 

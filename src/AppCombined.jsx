@@ -31,8 +31,44 @@ if (typeof window !== "undefined" && !document.getElementById("jspdf-script")) {
 if (typeof window !== "undefined" && !document.getElementById("h2c-script")) {
   const s2 = document.createElement("script");
   s2.id  = "h2c-script";
-  s2.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
-  document.head.appendChild(s2);
+  s2.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";  document.head.appendChild(s2);
+}
+// pdf.js — pra rasterizar PDF em imagem (snapshot de proposta)
+if (typeof window !== "undefined" && !document.getElementById("pdfjs-script")) {
+  const s3 = document.createElement("script");
+  s3.id  = "pdfjs-script";
+  s3.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+  s3.onload = () => {
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+  };
+  document.head.appendChild(s3);
+}
+
+// Utilitário: renderiza PDF (blob) como array de imagens JPEG base64
+// Usado pra gerar snapshot visual de propostas enviadas
+async function rasterizarPdfParaImagens(pdfBlob, { maxWidth = 1200, quality = 0.7 } = {}) {
+  if (!window.pdfjsLib) throw new Error("pdf.js ainda não carregou — tente novamente em 1s");
+  const arrayBuffer = await pdfBlob.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const imagens = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    // Calcula escala pra atingir maxWidth
+    const viewport0 = page.getViewport({ scale: 1 });
+    const scale = maxWidth / viewport0.width;
+    const viewport = page.getViewport({ scale });
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: ctx, viewport }).promise;
+    // JPEG com qualidade configurável
+    imagens.push(canvas.toDataURL("image/jpeg", quality));
+  }
+  return imagens;
 }
 
 
@@ -3445,7 +3481,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
 // ═══════════════════════════════════════════════════════════════
 // BOTÃO GERAR PDF
 // ═══════════════════════════════════════════════════════════════
-async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#ffffff", incluiArq=true, incluiEng=true) {
+async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#ffffff", incluiArq=true, incluiEng=true, opts={}) {
   const { jsPDF } = window.jspdf;
 
   // ── Dados base ─────────────────────────────────────────────
@@ -4249,8 +4285,11 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     }
   }
 
-  // Download
+  // Download (ou retorna blob se opts.returnBlob)
   const blob = doc.output("blob");
+  if (opts && opts.returnBlob) {
+    return blob;
+  }
   const url  = URL.createObjectURL(blob);
   const a    = document.createElement("a");
   a.href = url; a.download = `proposta-${(orc.cliente||"projeto").replace(/\s+/g,"-").toLowerCase()}.pdf`;
@@ -4552,6 +4591,8 @@ function TesteOrcamento({ data, save }) {
   const [busca, setBusca] = useState("");
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState("");
+  // Proposta sendo visualizada (modal visualizer de snapshot)
+  const [propostaVisualizada, setPropostaVisualizada] = useState(null);
 
   const orcamentos = data?.orcamentosProjeto || [];
   const clientes = data?.clientes || [];
@@ -4587,6 +4628,19 @@ function TesteOrcamento({ data, save }) {
   const [modoAbertura, setModoAbertura] = useState(null); // "ver" | "editar" | null
 
   function abrirOrcamentoExistente(orc, modo = "ver") {
+    // Modo "verProposta": abre o visualizador de snapshot (modal com imagens)
+    if (modo === "verProposta") {
+      const ultima = orc.propostas && orc.propostas.length > 0
+        ? orc.propostas[orc.propostas.length - 1]
+        : null;
+      if (ultima) {
+        const cli = clientes.find(c => c.id === orc.clienteId);
+        setPropostaVisualizada({ ...ultima, clienteNome: cli?.nome || orc.cliente || "Cliente" });
+        return;
+      }
+      // Se não tem proposta, cai no fluxo normal de "ver"
+      modo = "ver";
+    }
     const cli = clientes.find(c => c.id === orc.clienteId) || { nome: orc.cliente || "Cliente" };
     setClienteAtivo(cli);
     setOrcBase(orc);
@@ -4719,6 +4773,14 @@ function TesteOrcamento({ data, save }) {
             // TODO: abrir tela de cadastro de cliente (ainda não integrado)
             alert("Cadastre o cliente no módulo Clientes e volte aqui.");
           }}
+        />
+      )}
+
+      {/* Visualizador de proposta enviada (snapshot de imagens) */}
+      {propostaVisualizada && (
+        <PropostaVisualizer
+          proposta={propostaVisualizada}
+          onFechar={() => setPropostaVisualizada(null)}
         />
       )}
     </PageContainer>
@@ -5324,6 +5386,100 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// VISUALIZADOR DE PROPOSTA (snapshot de imagens do PDF)
+// ═══════════════════════════════════════════════════════════════
+// Modal overlay que mostra as páginas da proposta como imagens.
+// É um registro imutável — literalmente as imagens renderizadas
+// do PDF no momento em que a proposta foi enviada ao cliente.
+function PropostaVisualizer({ proposta, onFechar }) {
+  // Fecha com ESC
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onFechar(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onFechar]);
+
+  if (!proposta) return null;
+  const imagens = proposta.imagensPdf || [];
+  const temImagens = imagens.length > 0;
+  const dataFmt = proposta.enviadaEm
+    ? new Date(proposta.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })
+    : "";
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onFechar(); }}
+      style={{
+        position:"fixed", inset:0, background:"rgba(17,24,39,0.85)",
+        zIndex:300, display:"flex", flexDirection:"column",
+        backdropFilter:"blur(4px)",
+      }}
+    >
+      {/* Header fixo */}
+      <div style={{
+        background:"rgba(255,255,255,0.05)", borderBottom:"1px solid rgba(255,255,255,0.1)",
+        padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between",
+        color:"#fff", flexShrink:0,
+      }}>
+        <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+          <div style={{ fontSize:14, fontWeight:600 }}>📄 Proposta {proposta.versao}</div>
+          {dataFmt && <div style={{ fontSize:12, color:"rgba(255,255,255,0.6)" }}>enviada em {dataFmt}</div>}
+          {proposta.clienteNome && (
+            <div style={{ fontSize:12, color:"rgba(255,255,255,0.6)" }}>· {proposta.clienteNome}</div>
+          )}
+        </div>
+        <button
+          onClick={onFechar}
+          style={{
+            background:"transparent", border:"1px solid rgba(255,255,255,0.2)",
+            color:"#fff", borderRadius:6, padding:"6px 12px",
+            cursor:"pointer", fontSize:13, fontFamily:"inherit",
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+        >
+          ✕ Fechar
+        </button>
+      </div>
+
+      {/* Área de scroll com páginas */}
+      <div style={{
+        flex:1, overflowY:"auto", padding:"24px 20px",
+        display:"flex", flexDirection:"column", alignItems:"center", gap:16,
+      }}>
+        {temImagens ? (
+          imagens.map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt={`Página ${i+1}`}
+              style={{
+                maxWidth:"min(900px, 100%)", width:"100%",
+                boxShadow:"0 8px 32px rgba(0,0,0,0.4)",
+                borderRadius:4, background:"#fff",
+                display:"block",
+              }}
+            />
+          ))
+        ) : (
+          <div style={{
+            background:"#fff", borderRadius:8, padding:"48px 32px",
+            maxWidth:480, textAlign:"center",
+          }}>
+            <div style={{ fontSize:15, fontWeight:600, color:"#111", marginBottom:8 }}>
+              Snapshot de imagens não disponível
+            </div>
+            <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
+              Esta proposta foi salva antes da funcionalidade de snapshot visual. Os dados estão preservados — você pode reimprimir o PDF a partir da edição do orçamento.
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
@@ -5838,12 +5994,41 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       return;
     }
     try {
+      // 1. Monta snapshot base (sem imagens ainda)
       const snapshot = buildPropostaSnapshot();
-      // Chama callback do parent pra persistir no orçamento
+
+      // 2. Gera o PDF como blob (sem baixar)
+      const blob = await handlePdf({ returnBlob: true });
+
+      // 3. Rasteriza as páginas em imagens JPEG base64 (1200px, 70% qualidade)
+      //    Rasterizar ANTES de baixar pra garantir fidelidade ao que vai ser salvo
+      let imagens = [];
+      try {
+        if (blob && typeof rasterizarPdfParaImagens === "function") {
+          imagens = await rasterizarPdfParaImagens(blob, { maxWidth: 1200, quality: 0.7 });
+        }
+      } catch (errImg) {
+        console.warn("Não foi possível gerar snapshot de imagens do PDF:", errImg);
+        // Continua mesmo sem imagens — proposta salva sem snapshot visual
+      }
+
+      // 4. Adiciona imagens ao snapshot
+      snapshot.imagensPdf = imagens;
+
+      // 5. Persiste no orçamento
       const propostaSalva = await onSalvarProposta(snapshot);
-      // Gera PDF
-      await handlePdf();
-      // Marca como salva e bloqueia edições
+
+      // 6. Baixa o PDF pro usuário enviar ao cliente
+      if (blob) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `proposta-${(clienteNome || "projeto").replace(/\s+/g, "-").toLowerCase()}.pdf`;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      // 7. Marca como salva e bloqueia edições
       setPropostaInfo({
         versao: propostaSalva?.versao || snapshot.versao || "v1",
         enviadaEm: snapshot.enviadaEm,
@@ -5855,7 +6040,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
     }
   }
 
-  const handlePdf = async () => {
+  const handlePdf = async (opts = {}) => {
     if (!window.jspdf) { alert("Aguarde 2s e tente novamente."); return; }
     try {
       const c = data.calculo;
@@ -5954,7 +6139,8 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       if (resumoFinal && modelo.cliente) modelo.cliente.resumo = resumoFinal;
       // Sobrescreve subtítulo no modelo (modo estilo C do PDF usa modelo.subtitulo)
       if (modelo && subTituloFinal) modelo.subtitulo = subTituloFinal;
-      await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng);
+      const blob = await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng, { returnBlob: opts.returnBlob });
+      if (opts.returnBlob) return blob;
     } catch(e) { console.error(e); alert("Erro ao gerar PDF: "+e.message); }
   };
 
@@ -8863,6 +9049,7 @@ export default function ModuloClientesFornecedores() {
   const [clientesKey, setClientesKey]         = useState(0);
   const [fornecedoresKey, setFornecedoresKey] = useState(0);
   const [projetosKey, setProjetosKey]         = useState(0);
+  const [orcamentosKey, setOrcamentosKey]     = useState(0);
   const [obrasKey, setObrasKey]               = useState(0);
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
@@ -9052,6 +9239,7 @@ export default function ModuloClientesFornecedores() {
                                 setAba(s.k);
                                 setOrcamentoTelaCheia(null);
                                 if (s.k === "projetos:etapas") setProjetosKey(n=>n+1);
+                                if (s.k === "projetos:orcamentos") setOrcamentosKey(n=>n+1);
                               }}
                             >
                               {s.label}
@@ -9075,6 +9263,7 @@ export default function ModuloClientesFornecedores() {
                     if(k==="obras")       setObrasKey(n=>n+1);
                     if(k==="financeiro")  setFinanceiroKey(n=>n+1);
                     if(k==="fornecedores")setFornecedoresKey(n=>n+1);
+                    if(k==="projetos:orcamentos") setOrcamentosKey(n=>n+1);
                   }}>
                   <span>{label}</span>
                   {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
@@ -9133,6 +9322,7 @@ export default function ModuloClientesFornecedores() {
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
               modoVer={orcamentoTelaCheia.modo === "ver"}
+              modoAbertura={orcamentoTelaCheia.modo}
               onSalvar={async (orc) => {
                 const todos = data.orcamentosProjeto || [];
                 const maxSeq = todos.reduce((mx2, o2) => {
@@ -9159,7 +9349,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "home"                   && <HomeMenu setAba={setAba} data={data} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
-          {aba === "projetos:orcamentos"    && <TesteOrcamento data={data} save={save} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
