@@ -18,12 +18,12 @@ function HomeMenu({ data, setAba }) {
   const transform = fase === "saindo" ? "translateY(-8px)" : "translateY(0)";
 
   const modulos = [
-    { k:"clientes",    label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
-    { k:"projetos",    label:"Projetos",     desc:"Etapas e prazos" },
-    { k:"obras",       label:"Obras",        desc:"Acompanhamento e execução" },
-    { k:"financeiro",  label:"Financeiro",   desc:"Receitas e lançamentos" },
-    { k:"fornecedores",label:"Fornecedores", desc:"Cadastro e histórico",      count: data?.fornecedores?.length },
-    { k:"escritorio",  label:"Escritório",   desc:"Dados e equipe" },
+    { k:"clientes",         label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
+    { k:"projetos:etapas",  label:"Projetos",     desc:"Etapas e prazos" },
+    { k:"obras",            label:"Obras",        desc:"Acompanhamento e execução" },
+    { k:"financeiro",       label:"Financeiro",   desc:"Receitas e lançamentos" },
+    { k:"fornecedores",     label:"Fornecedores", desc:"Cadastro e histórico",      count: data?.fornecedores?.length },
+    { k:"escritorio",       label:"Escritório",   desc:"Dados e equipe" },
   ];
 
   return (
@@ -74,6 +74,12 @@ export default function ModuloClientesFornecedores() {
   const [backendOffline, setBackendOffline]   = useState(false);
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
+
+  // Migração de abas antigas para nova nomenclatura
+  useEffect(() => {
+    if (aba === "projetos") setAba("projetos:etapas");
+    else if (aba === "teste") setAba("projetos:orcamentos");
+  }, [aba]);
 
   useEffect(() => {
     const handler = e => { e.preventDefault(); e.returnValue = "Deseja sair?"; return e.returnValue; };
@@ -150,16 +156,28 @@ export default function ModuloClientesFornecedores() {
 
   const nomeEscritorio = data?.escritorio?.nome || "Vicke";
 
+  // Itens do menu. "projetos" tem sub-itens que ficam num accordion.
+  // Chaves das abas (aba state):
+  //   "projetos:etapas"    → Kanban de etapas
+  //   "projetos:orcamentos"→ módulo Orçamentos (antigamente "teste")
   const MENU = [
     { k:"home",        label:"Início" },
     { k:"clientes",    label:"Clientes",     count: data?.clientes?.length },
-    { k:"projetos",    label:"Projetos" },
+    { k:"projetos", label:"Projetos", sub: [
+      { k:"projetos:etapas",     label:"Etapas" },
+      { k:"projetos:orcamentos", label:"Orçamentos" },
+    ]},
     { k:"obras",       label:"Obras" },
     { k:"financeiro",  label:"Financeiro" },
     { k:"fornecedores",label:"Fornecedores", count: data?.fornecedores?.length },
     { k:"nf",          label:"Notas Fiscais" },
-    { k:"teste",       label:"Orçamento" },
   ];
+
+  // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
+  const [projetosAberto, setProjetosAberto] = useState(() => aba.startsWith?.("projetos") || false);
+  useEffect(() => {
+    if (aba.startsWith?.("projetos")) setProjetosAberto(true);
+  }, [aba]);
 
   const itemStyle = (ativo) => ({
     display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -181,23 +199,85 @@ export default function ModuloClientesFornecedores() {
             <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>Vicke</div>
           </div>
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {MENU.map(({k, label, count}) => (
-              <button key={k} style={itemStyle(aba===k)}
-                onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
-                onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
-                onClick={() => {
-                  setAba(k);
-                  setOrcamentoTelaCheia(null);
-                  if(k==="clientes")    setClientesKey(n=>n+1);
-                  if(k==="projetos")    setProjetosKey(n=>n+1);
-                  if(k==="obras")       setObrasKey(n=>n+1);
-                  if(k==="financeiro")  setFinanceiroKey(n=>n+1);
-                  if(k==="fornecedores")setFornecedoresKey(n=>n+1);
-                }}>
-                <span>{label}</span>
-                {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
-              </button>
-            ))}
+            {MENU.map(item => {
+              const {k, label, count, sub} = item;
+              // Item com sub-menu (accordion)
+              if (sub && sub.length) {
+                const ativoNeleMesmoOuSubitem = aba === k || aba.startsWith?.(k + ":");
+                return (
+                  <div key={k} style={{ display:"flex", flexDirection:"column" }}>
+                    <button
+                      style={{
+                        ...itemStyle(ativoNeleMesmoOuSubitem),
+                        // Quando algum subitem está ativo, o pai fica "suavemente marcado"
+                        background: ativoNeleMesmoOuSubitem && aba !== k ? "transparent" : undefined,
+                        fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
+                        color: ativoNeleMesmoOuSubitem ? "#111" : "#6b7280",
+                      }}
+                      onMouseEnter={e => { if (!ativoNeleMesmoOuSubitem) e.currentTarget.style.background="#f9fafb"; }}
+                      onMouseLeave={e => { if (!ativoNeleMesmoOuSubitem) e.currentTarget.style.background="transparent"; }}
+                      onClick={() => setProjetosAberto(o => !o)}
+                    >
+                      <span>{label}</span>
+                      <span style={{
+                        color:"#9ca3af", fontSize:9,
+                        transition:"transform 0.2s",
+                        transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
+                        display:"inline-block",
+                      }}>▶</span>
+                    </button>
+                    {projetosAberto && (
+                      <div style={{ display:"flex", flexDirection:"column", gap:1, marginLeft:14, paddingLeft:8, borderLeft:"1px solid #f3f4f6", marginTop:2 }}>
+                        {sub.map(s => {
+                          const ativoSub = aba === s.k;
+                          return (
+                            <button
+                              key={s.k}
+                              style={{
+                                padding:"6px 10px", borderRadius:6,
+                                fontSize:12.5,
+                                color: ativoSub ? "#111" : "#9ca3af",
+                                fontWeight: ativoSub ? 600 : 400,
+                                background: ativoSub ? "#f3f4f6" : "transparent",
+                                cursor:"pointer", border:"none",
+                                fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+                                textAlign:"left", transition:"all 0.12s",
+                              }}
+                              onMouseEnter={e => { if (!ativoSub) { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#6b7280"; } }}
+                              onMouseLeave={e => { if (!ativoSub) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}
+                              onClick={() => {
+                                setAba(s.k);
+                                setOrcamentoTelaCheia(null);
+                                if (s.k === "projetos:etapas") setProjetosKey(n=>n+1);
+                              }}
+                            >
+                              {s.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              // Item simples
+              return (
+                <button key={k} style={itemStyle(aba===k)}
+                  onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
+                  onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
+                  onClick={() => {
+                    setAba(k);
+                    setOrcamentoTelaCheia(null);
+                    if(k==="clientes")    setClientesKey(n=>n+1);
+                    if(k==="obras")       setObrasKey(n=>n+1);
+                    if(k==="financeiro")  setFinanceiroKey(n=>n+1);
+                    if(k==="fornecedores")setFornecedoresKey(n=>n+1);
+                  }}>
+                  <span>{label}</span>
+                  {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
+                </button>
+              );
+            })}
           </nav>
           <div style={{ padding:"8px 8px 12px", borderTop:"1px solid #f3f4f6", display:"flex", flexDirection:"column", gap:2 }}>
             <button style={itemStyle(aba==="escritorio")}
@@ -273,15 +353,15 @@ export default function ModuloClientesFornecedores() {
               }}
             />
           ) : (<>
-          {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
-          {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
-          {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
-          {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}
-          {aba === "fornecedores" && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
-          {aba === "nf"           && <ImportarNF data={data} save={save} />}
-          {aba === "escritorio"   && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "teste"        && <TesteOrcamento data={data} save={save} />}
+          {aba === "home"                   && <HomeMenu setAba={setAba} data={data} />}
+          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
+          {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento data={data} save={save} />}
+          {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
+          {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
+          {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
+          {aba === "nf"                     && <ImportarNF data={data} save={save} />}
+          {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
           </>)}
           </>
         </div>

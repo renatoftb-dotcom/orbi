@@ -567,118 +567,402 @@ async function saveAllData(newData, oldData = {}) {
 // ════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
-// FORNECEDORES
+// MÓDULO ETAPAS (Kanban de Projetos)
 // ═══════════════════════════════════════════════════════════════
+// Kanban com 6 colunas fixas:
+//   Briefing → Estudo Preliminar → Aprovação Cliente → Prefeitura → Executivo → Engenharia
+//
+// Colunas de ESPERA (dependem de terceiros): Briefing, Aprovação Cliente, Prefeitura
+//   → visual com borda pontilhada + fundo levemente bege
+// Colunas de TRABALHO (escritório): Estudo Preliminar, Executivo, Engenharia
+//   → visual padrão
+//
+// Card: cliente · referência · tipo · área · valor · executor · revisor · prazo
+// Projeto nasce automaticamente quando orçamento é marcado como "Ganho"
 // ═══════════════════════════════════════════════════════════════
-// MÓDULO PROJETOS
-// ═══════════════════════════════════════════════════════════════
-function Projetos({ data, save }) {
+
+const ETAPAS_COLS = [
+  { key:"briefing",     label:"Briefing",           wait:true  },
+  { key:"preliminar",   label:"Estudo Preliminar",  wait:false },
+  { key:"aprov_cliente",label:"Aprovação Cliente",  wait:true  },
+  { key:"prefeitura",   label:"Prefeitura",         wait:true  },
+  { key:"executivo",    label:"Executivo",          wait:false },
+  { key:"engenharia",   label:"Engenharia",         wait:false },
+];
+
+const TIPO_TAGS = {
+  "Residencial":     { label:"Residencial",     bg:"#eff6ff", color:"#2563eb" },
+  "Clínica":         { label:"Clínica",         bg:"#f0fdf4", color:"#16a34a" },
+  "Conj. Comercial": { label:"Conj. Comercial", bg:"#fef3c7", color:"#b45309" },
+  "Galpão":          { label:"Galpão",          bg:"#f3e8ff", color:"#7c3aed" },
+  "Empreendimento":  { label:"Empreendimento",  bg:"#fef3c7", color:"#b45309" },
+};
+
+// Funções utilitárias
+function fmtDataBR(d) {
+  if (!d) return "";
+  const date = new Date(d);
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "");
+}
+function diasRestantes(dtAlvo) {
+  if (!dtAlvo) return null;
+  const alvo = new Date(dtAlvo);
+  const hoje = new Date(); hoje.setHours(0,0,0,0);
+  const diff = Math.ceil((alvo - hoje) / (1000*60*60*24));
+  return diff;
+}
+function brlCurto(v) {
+  if (v == null || v === 0) return "—";
+  if (v >= 1000000) return (v/1000000).toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1}) + "M";
+  if (v >= 1000) return Math.round(v/1000) + "k";
+  return Math.round(v).toString();
+}
+
+function Etapas({ data, save }) {
   const projetos = data.projetos || [];
   const clientes = data.clientes || [];
+  const [filtro, setFiltro] = useState("todos"); // "todos" | "meus" | "atrasados"
+  const [busca, setBusca] = useState("");
 
-  const ETAPAS = [
-    { key:"estudo",     label:"Estudo Preliminar",    cor:"#f59e0b" },
-    { key:"aprovacao",  label:"Aprovação Prefeitura", cor:"#ef4444" },
-    { key:"executivo",  label:"Projeto Executivo",    cor:"#10b981" },
-    { key:"reuniao",    label:"Reunião de Obra",      cor:"#7c3aed" },
-  ];
+  // Filtra projetos conforme filtro + busca
+  const projetosFiltrados = projetos.filter(p => {
+    if (filtro === "atrasados") {
+      const dias = diasRestantes(p.prazoEtapa);
+      if (dias == null || dias >= 0) return false;
+    }
+    if (busca) {
+      const cli = clientes.find(c => c.id === p.clienteId);
+      const nomeCli = cli?.nome || "";
+      const ref = p.referencia || "";
+      const q = busca.toLowerCase();
+      if (!nomeCli.toLowerCase().includes(q) && !ref.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
 
-  const STATUS = [
-    { key:"nao_iniciada", label:"Não Iniciada", cor:"#475569" },
-    { key:"em_andamento", label:"Em Andamento", cor:"#3b82f6" },
-    { key:"concluida",    label:"Concluída",    cor:"#10b981" },
-  ];
+  const qtdAtrasados = projetos.filter(p => {
+    const d = diasRestantes(p.prazoEtapa);
+    return d != null && d < 0;
+  }).length;
+
+  function projetosDaColuna(colKey) {
+    return projetosFiltrados.filter(p => (p.colunaEtapa || "briefing") === colKey);
+  }
 
   return (
-    <div style={{ padding:"32px 28px" }}>
+    <div style={{ padding:"24px 28px", display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
       {/* Cabeçalho */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
-        <div>
-          <h2 style={{ color:"#f1f5f9", fontWeight:900, fontSize:22, margin:0 }}>📐 Projetos</h2>
-          <p style={{ color:"#64748b", fontSize:13, marginTop:4 }}>Gestão de projetos e etapas</p>
-        </div>
-        <div style={{ display:"flex", gap:10 }}>
-          <button style={{ background:"#1e3a5f", color:"#60a5fa", border:"1px solid #2563eb", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-            + Novo Projeto
-          </button>
-        </div>
+      <div style={{ marginBottom:16 }}>
+        <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Acompanhamento dos projetos em andamento</div>
       </div>
 
-      {/* Em construção */}
-      <div style={{ background:"#0d1526", border:"1px solid #1e293b", borderRadius:12, padding:"60px 32px", textAlign:"center" }}>
-        <div style={{ fontSize:48, marginBottom:16 }}>📐</div>
-        <div style={{ color:"#f1f5f9", fontWeight:700, fontSize:18, marginBottom:8 }}>Módulo Projetos</div>
-        <div style={{ color:"#64748b", fontSize:14, marginBottom:32, maxWidth:480, margin:"0 auto 32px" }}>
-          Este módulo está sendo estruturado. Em breve você poderá gerenciar projetos por colaborador ou cliente, com controle de etapas, prazos e status.
-        </div>
+      {/* Toolbar: filtros + busca */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16, flexWrap:"wrap" }}>
+        <FilterPill label="Todos" count={projetos.length} active={filtro==="todos"} onClick={()=>setFiltro("todos")} />
+        <FilterPill label="Atrasados" count={qtdAtrasados} active={filtro==="atrasados"} onClick={()=>setFiltro("atrasados")} countColor="#dc2626" />
+        <input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar cliente ou referência…"
+          style={{
+            flex:1, maxWidth:240, padding:"6px 12px",
+            border:"1px solid #e5e7eb", borderRadius:6,
+            fontSize:12.5, color:"#111", background:"#fff",
+            fontFamily:"inherit", outline:"none",
+          }}
+        />
+      </div>
 
-        {/* Preview das funcionalidades */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:16, maxWidth:700, margin:"0 auto" }}>
-          {[
-            { icon:"👥", label:"Por Colaborador", desc:"Visualize projetos agrupados por responsável" },
-            { icon:"🗂", label:"Por Cliente", desc:"Visualize projetos agrupados por cliente" },
-            { icon:"📋", label:"Etapas", desc:"Estudo Preliminar · Aprovação · Executivo · Obra" },
-          ].map(f => (
-            <div key={f.label} style={{ background:"#0f172a", border:"1px solid #1e293b", borderRadius:10, padding:"20px 16px" }}>
-              <div style={{ fontSize:28, marginBottom:10 }}>{f.icon}</div>
-              <div style={{ color:"#e2e8f0", fontWeight:700, fontSize:13, marginBottom:6 }}>{f.label}</div>
-              <div style={{ color:"#475569", fontSize:12 }}>{f.desc}</div>
-            </div>
-          ))}
-        </div>
+      {/* Kanban */}
+      <div style={{ flex:1, display:"flex", gap:12, overflowX:"auto", overflowY:"hidden", paddingBottom:8 }}>
+        {ETAPAS_COLS.map(col => {
+          const cards = projetosDaColuna(col.key);
+          return (
+            <KanbanColumn key={col.key} col={col} cards={cards} clientes={clientes} />
+          );
+        })}
+      </div>
 
-        {/* Etapas disponíveis */}
-        <div style={{ marginTop:32, display:"flex", gap:10, justifyContent:"center", flexWrap:"wrap" }}>
-          {ETAPAS.map(e => (
-            <div key={e.key} style={{ background:e.cor+"22", border:`1px solid ${e.cor}`, borderRadius:6, padding:"5px 14px", color:e.cor, fontSize:12, fontWeight:600 }}>
-              {e.label}
-            </div>
-          ))}
+      {/* Estado vazio global */}
+      {projetos.length === 0 && (
+        <div style={{
+          position:"absolute", top:"50%", left:"50%", transform:"translate(-50%, -50%)",
+          textAlign:"center", color:"#9ca3af", fontSize:13, pointerEvents:"none",
+        }}>
+          <div style={{ fontSize:14, color:"#6b7280", marginBottom:4 }}>Nenhum projeto em andamento</div>
+          <div>Projetos são criados automaticamente quando um orçamento é marcado como <strong>Ganho</strong>.</div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Filter pill (botão de filtro) ──────────────────────────
+function FilterPill({ label, count, active, onClick, countColor }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        fontSize:12, color: active ? "#111" : "#6b7280",
+        border:"1px solid " + (active ? "#111" : "#e5e7eb"),
+        borderRadius:20, padding:"5px 12px",
+        background: active ? "#f9fafb" : "#fff",
+        cursor:"pointer", fontFamily:"inherit",
+        display:"flex", alignItems:"center", gap:5,
+      }}>
+      {label}
+      {count != null && count > 0 && (
+        <strong style={{ marginLeft:4, color: countColor || "#111" }}>{count}</strong>
+      )}
+    </button>
+  );
+}
+
+// ─── Coluna do Kanban ──────────────────────────────────────
+function KanbanColumn({ col, cards, clientes }) {
+  const wait = col.wait;
+  return (
+    <div style={{
+      flex:"0 0 280px", display:"flex", flexDirection:"column",
+      background: wait ? "#fbfaf6" : "#fafafa",
+      border: wait ? "1px dashed #e5e7eb" : "1px solid #f0f0f0",
+      borderRadius:10, maxHeight:"100%",
+    }}>
+      <div style={{
+        padding:"14px 14px 10px",
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        borderBottom: wait ? "1px dashed #e5e7eb" : "1px solid #f3f4f6",
+      }}>
+        <span style={{
+          fontSize:11, fontWeight:600, color:"#374151",
+          textTransform:"uppercase", letterSpacing:0.8,
+        }}>{col.label}</span>
+        <span style={{
+          background: wait ? "#f3efe0" : "#f3f4f6",
+          color: wait ? "#a88a3f" : "#9ca3af",
+          fontSize:10, fontWeight:600, padding:"2px 7px", borderRadius:10,
+          minWidth:20, textAlign:"center",
+        }}>{cards.length}</span>
+      </div>
+      <div style={{ flex:1, padding:10, display:"flex", flexDirection:"column", gap:8, overflowY:"auto" }}>
+        {cards.length === 0 ? (
+          <div style={{ fontSize:11, color:"#d1d5db", textAlign:"center", padding:"20px 0", fontStyle:"italic" }}>
+            Nenhum projeto
+          </div>
+        ) : cards.map(card => (
+          <ProjetoCard key={card.id} projeto={card} clientes={clientes} col={col} />
+        ))}
       </div>
     </div>
   );
 }
 
+// ─── Card de projeto ───────────────────────────────────────
+function ProjetoCard({ projeto, clientes, col }) {
+  const cliente = clientes.find(c => c.id === projeto.clienteId);
+  const nomeCli = cliente?.nome || projeto.clienteNome || "—";
+  const ref = projeto.referencia || "";
+  const tipo = projeto.tipo || "Residencial";
+  const tag = TIPO_TAGS[tipo] || TIPO_TAGS["Residencial"];
+  const area = projeto.area || 0;
+  const valor = projeto.valor || 0;
+
+  const dias = diasRestantes(projeto.prazoEtapa);
+  const atrasado = dias != null && dias < 0;
+
+  return (
+    <div style={{
+      background:"#fff",
+      border: atrasado ? "1px solid #fecaca" : "1px solid #e5e7eb",
+      borderRadius:8, padding:12,
+      cursor:"pointer", transition:"all 0.15s",
+      display:"flex", flexDirection:"column", gap:8,
+      ...(atrasado ? { background:"#fffbfb" } : {}),
+    }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#d1d5db"; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = atrasado ? "#fecaca" : "#e5e7eb"; }}>
+      {/* Tag de tipo */}
+      <span style={{
+        display:"inline-flex", alignItems:"center",
+        fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.6,
+        padding:"2px 7px", borderRadius:4,
+        width:"fit-content",
+        background: tag.bg, color: tag.color,
+      }}>{tag.label}</span>
+
+      {/* Nome cliente */}
+      <div style={{ fontSize:13.5, fontWeight:600, color:"#111", lineHeight:1.3 }}>{nomeCli}</div>
+      {ref && (
+        <div style={{ fontSize:11.5, color:"#9ca3af", lineHeight:1.3 }}>{ref}</div>
+      )}
+
+      {/* Meta: área + valor */}
+      {(area > 0 || valor > 0) && (
+        <div style={{ display:"flex", gap:10, fontSize:11, color:"#6b7280", marginTop:2 }}>
+          {area > 0 && <span><strong style={{ color:"#111", fontWeight:600 }}>{area}</strong> m²</span>}
+          {valor > 0 && <span>R$ <strong style={{ color:"#111", fontWeight:600 }}>{brlCurto(valor)}</strong></span>}
+        </div>
+      )}
+
+      {/* Footer: responsável(is) + prazo */}
+      <CardFooter projeto={projeto} col={col} dias={dias} atrasado={atrasado} />
+    </div>
+  );
+}
+
+// ─── Footer do card (responsável + prazo) ──────────────────
+function CardFooter({ projeto, col, dias, atrasado }) {
+  if (col.wait) {
+    // Colunas de espera: motivo do bloqueio + responsável do escritório
+    const motivo = projeto.motivoBloqueio || motivoPadrao(col.key);
+    return (
+      <div style={{ paddingTop:8, borderTop:"1px solid #f3f4f6", marginTop:2, display:"flex", flexDirection:"column", gap:4 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+          <div style={{
+            fontSize:11.5, fontWeight:600, lineHeight:1.3,
+            color: atrasado ? "#991b1b" : "#92400e",
+          }}>{motivo}</div>
+          <span style={{
+            fontSize:11, whiteSpace:"nowrap",
+            color: atrasado ? "#dc2626" : (dias != null && dias <= 3 ? "#d97706" : "#6b7280"),
+            fontWeight: (atrasado || (dias != null && dias <= 3)) ? 600 : 400,
+          }}>
+            {dias == null ? "" : atrasado ? `atrasado ${Math.abs(dias)} dias` : dias === 0 ? "vence hoje" : `faltam ${dias} dias`}
+          </span>
+        </div>
+        {projeto.responsavelAcompanha && (
+          <div style={{ fontSize:11.5, color:"#374151", lineHeight:1.3 }}>
+            <strong style={{ fontWeight:600, color:"#111" }}>{projeto.responsavelAcompanha}</strong>
+            <span style={{ color:"#9ca3af", fontWeight:400 }}> — Acompanhamento</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Colunas de trabalho: executor + revisor
+  const executor = projeto.executor || "—";
+  const revisor = projeto.revisor || "—";
+  const mesmapessoa = executor === revisor;
+  const estado = projeto.estadoTrabalho || "execucao"; // "execucao" | "revisao" | "ajustes"
+
+  return (
+    <div style={{ paddingTop:8, borderTop:"1px solid #f3f4f6", marginTop:2 }}>
+      {mesmapessoa ? (
+        // Executor = Revisor → linha única
+        <PessoaRow
+          icon={estado === "revisao" ? "🔍" : "✏️"}
+          nome={executor}
+          funcao={estado === "revisao" ? "Revisão" : "Execução"}
+          prazo={projeto.prazoEtapa}
+          ativa
+          dias={dias}
+          atrasado={atrasado}
+        />
+      ) : (<>
+        {/* Executor */}
+        <PessoaRow
+          icon={estado === "execucao" ? "✏️" : estado === "ajustes" ? "⚠️" : "✓"}
+          nome={executor}
+          funcao={estado === "ajustes" ? "Ajustes" : "Execução"}
+          prazo={projeto.prazoExecutor}
+          ativa={estado === "execucao" || estado === "ajustes"}
+          concluida={estado === "revisao"}
+          rejeitada={estado === "ajustes"}
+          dias={diasRestantes(projeto.prazoExecutor)}
+        />
+        {/* Revisor */}
+        <PessoaRow
+          icon={estado === "revisao" ? "🔍" : "·"}
+          nome={revisor}
+          funcao={estado === "ajustes" ? "Aguardando correção" : "Revisão"}
+          prazo={estado !== "ajustes" ? projeto.prazoRevisor : null}
+          ativa={estado === "revisao"}
+          inativa={estado !== "revisao"}
+          topBorder
+          dias={diasRestantes(projeto.prazoRevisor)}
+        />
+      </>)}
+    </div>
+  );
+}
+
+// ─── Linha de pessoa (executor ou revisor) ─────────────────
+function PessoaRow({ icon, nome, funcao, prazo, ativa, concluida, inativa, rejeitada, topBorder, dias }) {
+  let corNome = "#111", corFuncao = "#6b7280", corPrazo = "#6b7280", fontWeightPrazo = 400;
+  if (concluida || inativa) { corNome = "#6b7280"; corFuncao = "#9ca3af"; corPrazo = "#9ca3af"; }
+  if (rejeitada) { corNome = "#92400e"; corFuncao = "#b45309"; corPrazo = "#b45309"; fontWeightPrazo = 600; }
+  if (ativa && dias != null) {
+    if (dias < 0) { corPrazo = "#dc2626"; fontWeightPrazo = 600; }
+    else if (dias <= 3) { corPrazo = "#d97706"; fontWeightPrazo = 600; }
+  }
+
+  const prazoTxt = (() => {
+    if (!prazo) return "";
+    if (dias == null) return "prazo " + fmtDataBR(prazo);
+    if (dias < 0) return `atrasado ${Math.abs(dias)} dias`;
+    if (dias === 0) return "vence hoje";
+    if (dias <= 5) return `faltam ${dias} dias`;
+    return "prazo " + fmtDataBR(prazo);
+  })();
+
+  return (
+    <div style={{
+      display:"flex", flexDirection:"column", gap:1,
+      ...(topBorder ? { marginTop:6, paddingTop:6, borderTop:"1px dashed #f3f4f6" } : {}),
+    }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <span style={{ fontSize:11.5, lineHeight:1.3, color: corNome }}>
+          <span style={{ display:"inline-block", width:14, fontSize:10, textAlign:"center", marginRight:4 }}>{icon}</span>
+          <strong style={{ fontWeight:600 }}>{nome}</strong>
+          <span style={{ color: corFuncao, fontWeight:400 }}> — {funcao}</span>
+        </span>
+        {prazoTxt && (
+          <span style={{ fontSize:10.5, whiteSpace:"nowrap", color: corPrazo, fontWeight: fontWeightPrazo }}>
+            {prazoTxt}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function motivoPadrao(colKey) {
+  switch (colKey) {
+    case "briefing":      return "Aguardando cliente preencher";
+    case "aprov_cliente": return "Aguardando aprovação do cliente";
+    case "prefeitura":    return "Aguardando análise da prefeitura";
+    default: return "Aguardando";
+  }
+}
+
 // ═══════════════════════════════════════════════════════════════
-// MÓDULO OBRAS
+// MÓDULO OBRAS (stub — será desenvolvido em fase posterior)
 // ═══════════════════════════════════════════════════════════════
 function Obras({ data, save }) {
   return (
-    <div style={{ padding:"32px 28px" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:28 }}>
-        <div>
-          <h2 style={{ color:"#f1f5f9", fontWeight:900, fontSize:22, margin:0 }}>🏗 Obras</h2>
-          <p style={{ color:"#64748b", fontSize:13, marginTop:4 }}>Gestão, acompanhamento e execução de obras</p>
-        </div>
-        <button style={{ background:"#1e3a5f", color:"#60a5fa", border:"1px solid #2563eb", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-          + Nova Obra
-        </button>
-      </div>
-
-      <div style={{ background:"#0d1526", border:"1px solid #1e293b", borderRadius:12, padding:"60px 32px", textAlign:"center" }}>
-        <div style={{ fontSize:48, marginBottom:16 }}>🏗</div>
-        <div style={{ color:"#f1f5f9", fontWeight:700, fontSize:18, marginBottom:8 }}>Módulo Obras</div>
-        <div style={{ color:"#64748b", fontSize:14, marginBottom:32, maxWidth:480, margin:"0 auto 32px" }}>
-          Módulo em estruturação. Aqui você poderá gerenciar gestão, acompanhamento e execução de obras vinculadas aos clientes.
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:16, maxWidth:700, margin:"0 auto" }}>
-          {[
-            { icon:"📋", label:"Gestão de Obra", desc:"Planejamento e controle geral" },
-            { icon:"🔍", label:"Acompanhamento", desc:"Visitas técnicas e relatórios" },
-            { icon:"⚙", label:"Execução", desc:"Equipes e etapas de execução" },
-          ].map(f => (
-            <div key={f.label} style={{ background:"#0f172a", border:"1px solid #1e293b", borderRadius:10, padding:"20px 16px" }}>
-              <div style={{ fontSize:28, marginBottom:10 }}>{f.icon}</div>
-              <div style={{ color:"#e2e8f0", fontWeight:700, fontSize:13, marginBottom:6 }}>{f.label}</div>
-              <div style={{ color:"#475569", fontSize:12 }}>{f.desc}</div>
-            </div>
-          ))}
+    <div style={{ padding:"24px 28px" }}>
+      <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
+      <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
+      <div style={{
+        marginTop:32, padding:"48px 24px", textAlign:"center",
+        border:"1px dashed #e5e7eb", borderRadius:10, background:"#fafafa",
+      }}>
+        <div style={{ color:"#6b7280", fontSize:14, marginBottom:6, fontWeight:600 }}>Módulo em desenvolvimento</div>
+        <div style={{ color:"#9ca3af", fontSize:12.5, maxWidth:420, margin:"0 auto" }}>
+          Este módulo será ativado em breve. Projetos que concluírem a etapa <strong style={{ color:"#374151" }}>Engenharia</strong> aparecerão aqui automaticamente.
         </div>
       </div>
     </div>
   );
 }
+
+// Alias para compatibilidade com app.jsx (antigo nome "Projetos")
+const Projetos = Etapas;
+
+
 
 // ═══════════════════════════════════════════════════════════════
 // MÓDULO FINANCEIRO
@@ -7999,12 +8283,12 @@ function HomeMenu({ data, setAba }) {
   const transform = fase === "saindo" ? "translateY(-8px)" : "translateY(0)";
 
   const modulos = [
-    { k:"clientes",    label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
-    { k:"projetos",    label:"Projetos",     desc:"Etapas e prazos" },
-    { k:"obras",       label:"Obras",        desc:"Acompanhamento e execução" },
-    { k:"financeiro",  label:"Financeiro",   desc:"Receitas e lançamentos" },
-    { k:"fornecedores",label:"Fornecedores", desc:"Cadastro e histórico",      count: data?.fornecedores?.length },
-    { k:"escritorio",  label:"Escritório",   desc:"Dados e equipe" },
+    { k:"clientes",         label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
+    { k:"projetos:etapas",  label:"Projetos",     desc:"Etapas e prazos" },
+    { k:"obras",            label:"Obras",        desc:"Acompanhamento e execução" },
+    { k:"financeiro",       label:"Financeiro",   desc:"Receitas e lançamentos" },
+    { k:"fornecedores",     label:"Fornecedores", desc:"Cadastro e histórico",      count: data?.fornecedores?.length },
+    { k:"escritorio",       label:"Escritório",   desc:"Dados e equipe" },
   ];
 
   return (
@@ -8055,6 +8339,12 @@ export default function ModuloClientesFornecedores() {
   const [backendOffline, setBackendOffline]   = useState(false);
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
+
+  // Migração de abas antigas para nova nomenclatura
+  useEffect(() => {
+    if (aba === "projetos") setAba("projetos:etapas");
+    else if (aba === "teste") setAba("projetos:orcamentos");
+  }, [aba]);
 
   useEffect(() => {
     const handler = e => { e.preventDefault(); e.returnValue = "Deseja sair?"; return e.returnValue; };
@@ -8131,16 +8421,28 @@ export default function ModuloClientesFornecedores() {
 
   const nomeEscritorio = data?.escritorio?.nome || "Vicke";
 
+  // Itens do menu. "projetos" tem sub-itens que ficam num accordion.
+  // Chaves das abas (aba state):
+  //   "projetos:etapas"    → Kanban de etapas
+  //   "projetos:orcamentos"→ módulo Orçamentos (antigamente "teste")
   const MENU = [
     { k:"home",        label:"Início" },
     { k:"clientes",    label:"Clientes",     count: data?.clientes?.length },
-    { k:"projetos",    label:"Projetos" },
+    { k:"projetos", label:"Projetos", sub: [
+      { k:"projetos:etapas",     label:"Etapas" },
+      { k:"projetos:orcamentos", label:"Orçamentos" },
+    ]},
     { k:"obras",       label:"Obras" },
     { k:"financeiro",  label:"Financeiro" },
     { k:"fornecedores",label:"Fornecedores", count: data?.fornecedores?.length },
     { k:"nf",          label:"Notas Fiscais" },
-    { k:"teste",       label:"Orçamento" },
   ];
+
+  // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
+  const [projetosAberto, setProjetosAberto] = useState(() => aba.startsWith?.("projetos") || false);
+  useEffect(() => {
+    if (aba.startsWith?.("projetos")) setProjetosAberto(true);
+  }, [aba]);
 
   const itemStyle = (ativo) => ({
     display:"flex", alignItems:"center", justifyContent:"space-between",
@@ -8162,23 +8464,85 @@ export default function ModuloClientesFornecedores() {
             <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>Vicke</div>
           </div>
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
-            {MENU.map(({k, label, count}) => (
-              <button key={k} style={itemStyle(aba===k)}
-                onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
-                onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
-                onClick={() => {
-                  setAba(k);
-                  setOrcamentoTelaCheia(null);
-                  if(k==="clientes")    setClientesKey(n=>n+1);
-                  if(k==="projetos")    setProjetosKey(n=>n+1);
-                  if(k==="obras")       setObrasKey(n=>n+1);
-                  if(k==="financeiro")  setFinanceiroKey(n=>n+1);
-                  if(k==="fornecedores")setFornecedoresKey(n=>n+1);
-                }}>
-                <span>{label}</span>
-                {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
-              </button>
-            ))}
+            {MENU.map(item => {
+              const {k, label, count, sub} = item;
+              // Item com sub-menu (accordion)
+              if (sub && sub.length) {
+                const ativoNeleMesmoOuSubitem = aba === k || aba.startsWith?.(k + ":");
+                return (
+                  <div key={k} style={{ display:"flex", flexDirection:"column" }}>
+                    <button
+                      style={{
+                        ...itemStyle(ativoNeleMesmoOuSubitem),
+                        // Quando algum subitem está ativo, o pai fica "suavemente marcado"
+                        background: ativoNeleMesmoOuSubitem && aba !== k ? "transparent" : undefined,
+                        fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
+                        color: ativoNeleMesmoOuSubitem ? "#111" : "#6b7280",
+                      }}
+                      onMouseEnter={e => { if (!ativoNeleMesmoOuSubitem) e.currentTarget.style.background="#f9fafb"; }}
+                      onMouseLeave={e => { if (!ativoNeleMesmoOuSubitem) e.currentTarget.style.background="transparent"; }}
+                      onClick={() => setProjetosAberto(o => !o)}
+                    >
+                      <span>{label}</span>
+                      <span style={{
+                        color:"#9ca3af", fontSize:9,
+                        transition:"transform 0.2s",
+                        transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
+                        display:"inline-block",
+                      }}>▶</span>
+                    </button>
+                    {projetosAberto && (
+                      <div style={{ display:"flex", flexDirection:"column", gap:1, marginLeft:14, paddingLeft:8, borderLeft:"1px solid #f3f4f6", marginTop:2 }}>
+                        {sub.map(s => {
+                          const ativoSub = aba === s.k;
+                          return (
+                            <button
+                              key={s.k}
+                              style={{
+                                padding:"6px 10px", borderRadius:6,
+                                fontSize:12.5,
+                                color: ativoSub ? "#111" : "#9ca3af",
+                                fontWeight: ativoSub ? 600 : 400,
+                                background: ativoSub ? "#f3f4f6" : "transparent",
+                                cursor:"pointer", border:"none",
+                                fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+                                textAlign:"left", transition:"all 0.12s",
+                              }}
+                              onMouseEnter={e => { if (!ativoSub) { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#6b7280"; } }}
+                              onMouseLeave={e => { if (!ativoSub) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}
+                              onClick={() => {
+                                setAba(s.k);
+                                setOrcamentoTelaCheia(null);
+                                if (s.k === "projetos:etapas") setProjetosKey(n=>n+1);
+                              }}
+                            >
+                              {s.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+              // Item simples
+              return (
+                <button key={k} style={itemStyle(aba===k)}
+                  onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
+                  onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
+                  onClick={() => {
+                    setAba(k);
+                    setOrcamentoTelaCheia(null);
+                    if(k==="clientes")    setClientesKey(n=>n+1);
+                    if(k==="obras")       setObrasKey(n=>n+1);
+                    if(k==="financeiro")  setFinanceiroKey(n=>n+1);
+                    if(k==="fornecedores")setFornecedoresKey(n=>n+1);
+                  }}>
+                  <span>{label}</span>
+                  {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
+                </button>
+              );
+            })}
           </nav>
           <div style={{ padding:"8px 8px 12px", borderTop:"1px solid #f3f4f6", display:"flex", flexDirection:"column", gap:2 }}>
             <button style={itemStyle(aba==="escritorio")}
@@ -8254,15 +8618,15 @@ export default function ModuloClientesFornecedores() {
               }}
             />
           ) : (<>
-          {aba === "home"         && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"     && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
-          {aba === "projetos"     && <Projetos key={projetosKey} data={data} save={save} />}
-          {aba === "obras"        && <Obras key={obrasKey} data={data} save={save} />}
-          {aba === "financeiro"   && <Financeiro key={financeiroKey} data={data} save={save} />}
-          {aba === "fornecedores" && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
-          {aba === "nf"           && <ImportarNF data={data} save={save} />}
-          {aba === "escritorio"   && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "teste"        && <TesteOrcamento data={data} save={save} />}
+          {aba === "home"                   && <HomeMenu setAba={setAba} data={data} />}
+          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
+          {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento data={data} save={save} />}
+          {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
+          {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
+          {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
+          {aba === "nf"                     && <ImportarNF data={data} save={save} />}
+          {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
           </>)}
           </>
         </div>
