@@ -4518,8 +4518,26 @@ function formatComodo(nome, qtd) {
   return `${qtdStr} ${nomeStr}`;
 }
 
+// ═══════════════════════════════════════════════════════════════
+// MÓDULO ORÇAMENTOS (lista centralizada de todos os orçamentos)
+// ═══════════════════════════════════════════════════════════════
+// Tela inicial: lista com filtros (Ativos/Todos/Rascunho/Em aberto/Ganhos/Perdidos)
+// + Novo Orçamento (abre modal pra escolher cliente antes de abrir formulário)
+// Status de orçamento: "rascunho" | "aberto" | "ganho" | "perdido"
+//
+// Quando clica em Ver/Editar ou Novo (após escolher cliente), abre o FormOrcamentoProjetoTeste
+// já existente passando os dados do cliente selecionado.
+// ═══════════════════════════════════════════════════════════════
 function TesteOrcamento({ data, save }) {
   const [orcBase, setOrcBase] = useState(null);
+  const [clienteAtivo, setClienteAtivo] = useState(null); // cliente do orçamento aberto
+  const [filtro, setFiltro] = useState("ativos");
+  const [busca, setBusca] = useState("");
+  const [modalNovoAberto, setModalNovoAberto] = useState(false);
+  const [buscaCliente, setBuscaCliente] = useState("");
+
+  const orcamentos = data?.orcamentosProjeto || [];
+  const clientes = data?.clientes || [];
 
   async function salvarOrcamento(orc) {
     const todos = data.orcamentosProjeto || [];
@@ -4530,20 +4548,338 @@ function TesteOrcamento({ data, save }) {
       }, 0);
       return "ORC-" + String(max + 1).padStart(4, "0");
     };
-    const novo = { ...orc, id: orc.id || nextId(), criadoEm: orc.criadoEm || new Date().toISOString() };
+    const novo = {
+      ...orc,
+      id: orc.id || nextId(),
+      criadoEm: orc.criadoEm || new Date().toISOString(),
+      clienteId: orc.clienteId || clienteAtivo?.id || null,
+      status: orc.status || "rascunho",
+    };
     setOrcBase(novo);
     const novos = orc.id ? todos.map(o => o.id === orc.id ? novo : o) : [...todos, novo];
     save({ ...data, orcamentosProjeto: novos }).catch(console.error);
   }
 
+  function abrirNovoOrcamento(cliente) {
+    setClienteAtivo(cliente);
+    setOrcBase(null);
+    setModalNovoAberto(false);
+    setBuscaCliente("");
+  }
+
+  function abrirOrcamentoExistente(orc) {
+    const cli = clientes.find(c => c.id === orc.clienteId) || { nome: orc.cliente || "Cliente" };
+    setClienteAtivo(cli);
+    setOrcBase(orc);
+  }
+
+  function voltarParaLista() {
+    setOrcBase(null);
+    setClienteAtivo(null);
+  }
+
+  // Se um orçamento está aberto (novo ou editando), mostra o formulário
+  if (clienteAtivo) {
+    return (
+      <FormOrcamentoProjetoTeste
+        clienteNome={clienteAtivo.nome || "Cliente"}
+        clienteWA={clienteAtivo.whatsapp || clienteAtivo.telefone || ""}
+        orcBase={orcBase}
+        onSalvar={salvarOrcamento}
+        onVoltar={voltarParaLista}
+      />
+    );
+  }
+
+  // ─── Lista principal ───
+  const totalContadores = {
+    rascunho: orcamentos.filter(o => (o.status || "rascunho") === "rascunho").length,
+    aberto:   orcamentos.filter(o => o.status === "aberto").length,
+    ganho:    orcamentos.filter(o => o.status === "ganho").length,
+    perdido:  orcamentos.filter(o => o.status === "perdido").length,
+  };
+  const totalTodos = orcamentos.length;
+  const totalAtivos = totalTodos - totalContadores.perdido;
+
+  const orcFiltrados = orcamentos.filter(o => {
+    const st = o.status || "rascunho";
+    if (filtro === "ativos"   && st === "perdido") return false;
+    if (filtro === "rascunho" && st !== "rascunho") return false;
+    if (filtro === "aberto"   && st !== "aberto") return false;
+    if (filtro === "ganho"    && st !== "ganho") return false;
+    if (filtro === "perdido"  && st !== "perdido") return false;
+    if (busca) {
+      const cli = clientes.find(c => c.id === o.clienteId);
+      const nomeCli = (cli?.nome || o.cliente || "").toLowerCase();
+      const ref = (o.referencia || "").toLowerCase();
+      const q = busca.toLowerCase();
+      if (!nomeCli.includes(q) && !ref.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Clientes filtrados no modal de novo
+  const clientesFiltrados = buscaCliente.trim()
+    ? clientes.filter(c => {
+        const q = buscaCliente.toLowerCase();
+        return (c.nome || "").toLowerCase().includes(q) ||
+               (c.telefone || "").includes(q) ||
+               (c.whatsapp || "").includes(q);
+      })
+    : clientes.slice(0, 20);
+
   return (
-    <FormOrcamentoProjetoTeste
-      clienteNome="Teste"
-      clienteWA=""
-      orcBase={orcBase}
-      onSalvar={salvarOrcamento}
-      onVoltar={() => setOrcBase(null)}
-    />
+    <div style={{ padding:"24px 28px" }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, marginBottom:20 }}>
+        <div>
+          <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Orçamentos</h2>
+          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Lista de todos os orçamentos do escritório</div>
+        </div>
+        <button
+          onClick={() => setModalNovoAberto(true)}
+          style={{
+            background:"#111", color:"#fff", border:"1px solid #111",
+            borderRadius:7, padding:"8px 14px", fontSize:13, fontWeight:500,
+            cursor:"pointer", fontFamily:"inherit",
+          }}>
+          + Novo Orçamento
+        </button>
+      </div>
+
+      {/* Toolbar: filtros + busca */}
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+        <OrcFilterPill label="Ativos"    count={totalAtivos}              active={filtro==="ativos"}   onClick={()=>setFiltro("ativos")} />
+        <OrcFilterPill label="Todos"     count={totalTodos}               active={filtro==="todos"}    onClick={()=>setFiltro("todos")} countColor="#9ca3af" />
+        <OrcFilterPill label="Rascunho"  count={totalContadores.rascunho} active={filtro==="rascunho"} onClick={()=>setFiltro("rascunho")} countColor="#6b7280" />
+        <OrcFilterPill label="Em aberto" count={totalContadores.aberto}   active={filtro==="aberto"}   onClick={()=>setFiltro("aberto")}   countColor="#2563eb" />
+        <OrcFilterPill label="Ganhos"    count={totalContadores.ganho}    active={filtro==="ganho"}    onClick={()=>setFiltro("ganho")}    countColor="#16a34a" />
+        <OrcFilterPill label="Perdidos"  count={totalContadores.perdido}  active={filtro==="perdido"}  onClick={()=>setFiltro("perdido")}  countColor="#b91c1c" />
+        <input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar cliente ou referência…"
+          style={{
+            flex:1, maxWidth:280, padding:"6px 12px",
+            border:"1px solid #e5e7eb", borderRadius:6,
+            fontSize:12.5, color:"#111", background:"#fff",
+            fontFamily:"inherit", outline:"none",
+          }}
+        />
+      </div>
+
+      {/* Lista */}
+      <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
+        {orcFiltrados.length === 0 ? (
+          <div style={{
+            padding:"48px 24px", textAlign:"center",
+            border:"1px dashed #e5e7eb", borderRadius:9, background:"#fafafa",
+            color:"#9ca3af", fontSize:13,
+          }}>
+            {orcamentos.length === 0
+              ? "Nenhum orçamento cadastrado ainda. Clique em + Novo Orçamento para começar."
+              : "Nenhum orçamento corresponde aos filtros."}
+          </div>
+        ) : orcFiltrados.map(orc => (
+          <OrcCard key={orc.id} orc={orc} clientes={clientes} onAbrir={() => abrirOrcamentoExistente(orc)} />
+        ))}
+      </div>
+
+      {/* Modal Novo Orçamento */}
+      {modalNovoAberto && (
+        <ModalNovoOrcamento
+          clientes={clientesFiltrados}
+          busca={buscaCliente}
+          setBusca={setBuscaCliente}
+          onSelecionar={abrirNovoOrcamento}
+          onFechar={() => { setModalNovoAberto(false); setBuscaCliente(""); }}
+          onCadastrarNovo={() => {
+            // TODO: abrir tela de cadastro de cliente (ainda não integrado)
+            alert("Cadastre o cliente no módulo Clientes e volte aqui.");
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Pill de filtro ──────────────────────────────
+function OrcFilterPill({ label, count, active, onClick, countColor }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        fontSize:12, color: active ? "#111" : "#6b7280",
+        border:"1px solid " + (active ? "#111" : "#e5e7eb"),
+        borderRadius:20, padding:"5px 12px",
+        background: active ? "#f9fafb" : "#fff",
+        cursor:"pointer", fontFamily:"inherit",
+        display:"flex", alignItems:"center", gap:5,
+      }}>
+      {label}
+      {count > 0 && (
+        <strong style={{ marginLeft:4, color: countColor || "#111", fontWeight:600 }}>{count}</strong>
+      )}
+    </button>
+  );
+}
+
+// ─── Card de orçamento na lista ──────────────────
+function OrcCard({ orc, clientes, onAbrir }) {
+  const cliente = clientes.find(c => c.id === orc.clienteId);
+  const nomeCliente = cliente?.nome || orc.cliente || "—";
+  const status = orc.status || "rascunho";
+  const area = orc.resultado?.areaTotal || 0;
+  const precoArq = orc.resultado?.precoArq || 0;
+  const precoEng = orc.resultado?.precoEng || 0;
+  const valorTotal = precoArq + precoEng;
+  const tipo = orc.tipo || "—";
+  const ref = orc.referencia || "(sem referência)";
+  const dataCriado = orc.criadoEm ? new Date(orc.criadoEm) : null;
+  const dataFmt = dataCriado ? dataCriado.toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "") : "";
+
+  const STATUS_TAGS = {
+    rascunho: { label:"Rascunho",  bg:"#f3f4f6", color:"#6b7280" },
+    aberto:   { label:"Em aberto", bg:"#eff6ff", color:"#2563eb" },
+    ganho:    { label:"Ganho",     bg:"#f0fdf4", color:"#16a34a" },
+    perdido:  { label:"Perdido",   bg:"#fef2f2", color:"#b91c1c" },
+  };
+  const tag = STATUS_TAGS[status] || STATUS_TAGS.rascunho;
+
+  return (
+    <div
+      onClick={onAbrir}
+      style={{
+        background:"#fff", border:"1px solid #e5e7eb", borderRadius:9,
+        padding:"14px 16px",
+        display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
+        transition:"all 0.12s", cursor:"pointer",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; }}
+    >
+      <div style={{ minWidth:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+          <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>{nomeCliente}</div>
+          <span style={{
+            fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
+            padding:"2px 7px", borderRadius:4,
+            background: tag.bg, color: tag.color,
+          }}>{tag.label}</span>
+        </div>
+        <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
+          <span style={{ color:"#374151" }}>{ref}</span>
+          <span style={{ color:"#9ca3af" }}> · {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""} · {orc.id}{dataFmt ? ` · ${dataFmt}` : ""}</span>
+        </div>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
+        {valorTotal > 0 && (
+          <div style={{ fontSize:14, fontWeight:600, color:"#111", whiteSpace:"nowrap" }}>
+            R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
+          </div>
+        )}
+        <div style={{ display:"flex", gap:4 }} onClick={e => e.stopPropagation()}>
+          <button onClick={onAbrir} style={btnIconStyle}>Ver</button>
+          <button onClick={onAbrir} style={btnIconStyle}>Editar</button>
+          <button onClick={() => alert("Ações em breve: Marcar Ganho / Perdido / Excluir")} style={btnIconStyle}>Ações</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const btnIconStyle = {
+  fontSize:11.5, color:"#6b7280",
+  border:"1px solid #e5e7eb", borderRadius:5,
+  padding:"3px 9px", background:"#fff",
+  cursor:"pointer", fontFamily:"inherit",
+};
+
+// ─── Modal de Novo Orçamento (escolha de cliente) ──
+function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar, onCadastrarNovo }) {
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onFechar(); }}
+      style={{
+        position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        zIndex:100, padding:20,
+      }}>
+      <div style={{
+        background:"#fff", borderRadius:12, width:"100%", maxWidth:480, maxHeight:"90vh",
+        display:"flex", flexDirection:"column", boxShadow:"0 20px 40px rgba(0,0,0,0.15)", overflow:"hidden",
+      }}>
+        <div style={{ padding:"20px 24px 12px", borderBottom:"1px solid #f3f4f6", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ fontSize:17, fontWeight:700, color:"#111", letterSpacing:-0.3 }}>Novo Orçamento</div>
+          <button onClick={onFechar} style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", fontFamily:"inherit", padding:"2px 6px", lineHeight:1 }}>✕</button>
+        </div>
+        <div style={{ padding:"16px 24px 20px", overflowY:"auto" }}>
+          <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:8, fontWeight:600 }}>
+            Para qual cliente?
+          </div>
+          <input
+            value={busca}
+            onChange={e => setBusca(e.target.value)}
+            placeholder="Buscar cliente por nome ou telefone…"
+            autoFocus
+            style={{
+              width:"100%", padding:"9px 12px",
+              border:"1px solid #e5e7eb", borderRadius:7,
+              fontSize:13, color:"#111", fontFamily:"inherit",
+              outline:"none", background:"#fff",
+            }}
+          />
+          <div style={{
+            marginTop:12, maxHeight:280, overflowY:"auto",
+            border:"1px solid #f3f4f6", borderRadius:7,
+          }}>
+            {clientes.length === 0 ? (
+              <div style={{ padding:"24px 16px", textAlign:"center", color:"#9ca3af", fontSize:12.5 }}>
+                {busca ? "Nenhum cliente encontrado." : "Nenhum cliente cadastrado."}
+              </div>
+            ) : clientes.map((c, i) => (
+              <div
+                key={c.id || i}
+                onClick={() => onSelecionar(c)}
+                style={{
+                  padding:"10px 14px",
+                  display:"flex", alignItems:"center", justifyContent:"space-between",
+                  cursor:"pointer", borderBottom: i < clientes.length - 1 ? "1px solid #f9fafb" : "none",
+                  transition:"background 0.1s",
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = "#f9fafb"}
+                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+              >
+                <div style={{ fontSize:13, color:"#111", fontWeight:500 }}>{c.nome || "(sem nome)"}</div>
+                <div style={{ fontSize:11.5, color:"#9ca3af" }}>{c.telefone || c.whatsapp || ""}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{
+            display:"flex", alignItems:"center", gap:12, margin:"16px 0",
+            color:"#d1d5db", fontSize:11, textTransform:"uppercase", letterSpacing:0.8,
+          }}>
+            <div style={{ flex:1, height:1, background:"#f3f4f6" }} />
+            ou
+            <div style={{ flex:1, height:1, background:"#f3f4f6" }} />
+          </div>
+          <button
+            onClick={onCadastrarNovo}
+            style={{
+              width:"100%", padding:"10px 14px",
+              border:"1px dashed #d1d5db", borderRadius:7, background:"#fff",
+              fontSize:13, color:"#374151", fontWeight:500,
+              fontFamily:"inherit", cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; e.currentTarget.style.color="#111"; e.currentTarget.style.background="#fafafa"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="#d1d5db"; e.currentTarget.style.color="#374151"; e.currentTarget.style.background="#fff"; }}
+          >
+            + Cadastrar novo cliente
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
