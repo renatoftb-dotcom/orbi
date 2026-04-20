@@ -96,6 +96,61 @@ function TesteOrcamento({ data, save }) {
   const orcamentos = data?.orcamentosProjeto || [];
   const clientes = data?.clientes || [];
 
+  // ── Auto-expiração de propostas ─────────────────────────────
+  // Roda 1x ao montar o módulo. Orçamentos com proposta enviada há mais
+  // de 30 dias e que NÃO foram marcados como "ganho" são automaticamente
+  // marcados como "perdido" por expiração e têm suas imagens removidas
+  // (libera storage — ~1MB por proposta).
+  // Dados textuais são preservados pra histórico.
+  useEffect(() => {
+    if (!data || !Array.isArray(data.orcamentosProjeto)) return;
+    const agora = Date.now();
+    const LIMITE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
+    let houveMudanca = false;
+
+    const orcamentosAtualizados = data.orcamentosProjeto.map(orc => {
+      // Orçamentos ganhos ficam intocados (histórico importante)
+      if (orc.status === "ganho") return orc;
+      // Já marcado como perdido? Mas ainda tem imagens — limpa.
+      // Sem propostas? Nada a fazer.
+      if (!orc.propostas || orc.propostas.length === 0) return orc;
+
+      // Última proposta
+      const ultimaProp = orc.propostas[orc.propostas.length - 1];
+      const enviadaEm = ultimaProp.enviadaEm ? new Date(ultimaProp.enviadaEm).getTime() : null;
+      if (!enviadaEm) return orc;
+
+      const vencido = (agora - enviadaEm) > LIMITE_MS;
+      if (!vencido) return orc;
+
+      // Expirou: remove imagens de todas as propostas + marca perdido
+      const propostasLimpas = orc.propostas.map(p => {
+        if (!p.imagensPdf || p.imagensPdf.length === 0) return p;
+        // Remove imagens mas marca a flag de expirada
+        const { imagensPdf, ...resto } = p;
+        return { ...resto, expirouEm: new Date(agora).toISOString() };
+      });
+
+      // Só conta como mudança se algo foi alterado
+      const mudouStatus = orc.status !== "perdido";
+      const mudouImagens = propostasLimpas.some((p, i) => p !== orc.propostas[i]);
+      if (!mudouStatus && !mudouImagens) return orc;
+
+      houveMudanca = true;
+      return {
+        ...orc,
+        status: "perdido",
+        expirouEm: orc.expirouEm || new Date(agora).toISOString(),
+        propostas: propostasLimpas,
+      };
+    });
+
+    if (houveMudanca) {
+      save({ ...data, orcamentosProjeto: orcamentosAtualizados }).catch(console.error);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function salvarOrcamento(orc) {
     const todos = data.orcamentosProjeto || [];
     const nextId = () => {
@@ -372,17 +427,23 @@ function OrcCard({ orc, clientes, onAbrir }) {
           <div
             onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
             style={{
-              fontSize:11.5, color:"#16a34a", marginTop:4, fontWeight:500,
+              fontSize:11.5, marginTop:4, fontWeight:500,
+              color: orc.expirouEm ? "#b91c1c" : "#16a34a",
               cursor:"pointer", display:"inline-block",
             }}
             onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
             onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
-            title="Ver a última proposta enviada (somente leitura)"
+            title={orc.expirouEm ? "Ver registro da proposta expirada" : "Ver a última proposta enviada (somente leitura)"}
           >
-            📄 {orc.propostas.length} proposta{orc.propostas.length > 1 ? "s" : ""} enviada{orc.propostas.length > 1 ? "s" : ""}
-            {orc.ultimaPropostaEm && (
+            {orc.expirouEm ? "⚠️" : "📄"} {orc.propostas.length} proposta{orc.propostas.length > 1 ? "s" : ""} {orc.expirouEm ? "expirou" : "enviada" + (orc.propostas.length > 1 ? "s" : "")}
+            {!orc.expirouEm && orc.ultimaPropostaEm && (
               <span style={{ color:"#6b7280", fontWeight:400 }}>
                 {" "}· última em {new Date(orc.ultimaPropostaEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
+              </span>
+            )}
+            {orc.expirouEm && (
+              <span style={{ color:"#6b7280", fontWeight:400 }}>
+                {" "}· expirou em {new Date(orc.expirouEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
               </span>
             )}
           </div>
@@ -1025,15 +1086,59 @@ function PropostaVisualizer({ proposta, onFechar }) {
           ))
         ) : (
           <div style={{
-            background:"#fff", borderRadius:8, padding:"48px 32px",
-            maxWidth:480, textAlign:"center",
+            background:"#fff", borderRadius:10, padding:"40px 32px",
+            maxWidth:520, textAlign:"center",
+            border: proposta.expirouEm ? "1px solid #fecaca" : "none",
           }}>
-            <div style={{ fontSize:15, fontWeight:600, color:"#111", marginBottom:8 }}>
-              Snapshot de imagens não disponível
-            </div>
-            <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
-              Esta proposta foi salva antes da funcionalidade de snapshot visual. Os dados estão preservados — você pode reimprimir o PDF a partir da edição do orçamento.
-            </div>
+            {proposta.expirouEm ? (
+              <>
+                <div style={{ fontSize:32, marginBottom:12 }}>⚠️</div>
+                <div style={{ fontSize:16, fontWeight:700, color:"#991b1b", marginBottom:8 }}>
+                  Proposta expirada
+                </div>
+                <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.55, marginBottom:20 }}>
+                  As imagens desta proposta foram removidas automaticamente após 30 dias sem fechamento pra liberar espaço. Os dados numéricos e textos foram preservados no histórico.
+                </div>
+                <div style={{
+                  background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:8,
+                  padding:"14px 18px", textAlign:"left", fontSize:12.5, color:"#374151",
+                }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0" }}>
+                    <span style={{ color:"#6b7280" }}>Cliente</span>
+                    <strong>{proposta.clienteNome || "—"}</strong>
+                  </div>
+                  <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0" }}>
+                    <span style={{ color:"#6b7280" }}>Versão</span>
+                    <strong>{proposta.versao || "—"}</strong>
+                  </div>
+                  {proposta.enviadaEm && (
+                    <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0" }}>
+                      <span style={{ color:"#6b7280" }}>Enviada em</span>
+                      <strong>{new Date(proposta.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}</strong>
+                    </div>
+                  )}
+                  <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0" }}>
+                    <span style={{ color:"#6b7280" }}>Expirou em</span>
+                    <strong style={{ color:"#b91c1c" }}>{new Date(proposta.expirouEm).toLocaleDateString("pt-BR")}</strong>
+                  </div>
+                  {(proposta.arqEdit != null || proposta.engEdit != null) && (
+                    <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0", borderTop:"1px solid #f3f4f6", marginTop:6, paddingTop:8 }}>
+                      <span style={{ color:"#6b7280" }}>Valor total</span>
+                      <strong>R$ {(((proposta.arqEdit || 0) + (proposta.engEdit || 0))).toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 })}</strong>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize:15, fontWeight:600, color:"#111", marginBottom:8 }}>
+                  Snapshot de imagens não disponível
+                </div>
+                <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
+                  Esta proposta foi salva antes da funcionalidade de snapshot visual. Os dados estão preservados — você pode reimprimir o PDF a partir da edição do orçamento.
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1566,7 +1671,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       let imagens = [];
       try {
         if (blob && typeof rasterizarPdfParaImagens === "function") {
-          imagens = await rasterizarPdfParaImagens(blob, { maxWidth: 1200, quality: 0.7 });
+          imagens = await rasterizarPdfParaImagens(blob, { maxWidth: 1000, quality: 0.6 });
         }
       } catch (errImg) {
         console.warn("Não foi possível gerar snapshot de imagens do PDF:", errImg);
