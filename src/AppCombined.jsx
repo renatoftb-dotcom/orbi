@@ -4788,6 +4788,16 @@ function OrcCard({ orc, clientes, onAbrir }) {
           <span style={{ color:"#374151" }}>{ref}</span>
           <span style={{ color:"#9ca3af" }}> · {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""} · {orc.id}{dataFmt ? ` · ${dataFmt}` : ""}</span>
         </div>
+        {orc.propostas && orc.propostas.length > 0 && (
+          <div style={{ fontSize:11.5, color:"#16a34a", marginTop:4, fontWeight:500 }}>
+            📄 {orc.propostas.length} proposta{orc.propostas.length > 1 ? "s" : ""} enviada{orc.propostas.length > 1 ? "s" : ""}
+            {orc.ultimaPropostaEm && (
+              <span style={{ color:"#6b7280", fontWeight:400 }}>
+                {" "}· última em {new Date(orc.ultimaPropostaEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
+              </span>
+            )}
+          </div>
+        )}
       </div>
       <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
         {valorTotal > 0 && (
@@ -5286,7 +5296,7 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
   );
 }
 
-function PropostaPreview({ data, onVoltar }) {
+function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -5295,6 +5305,10 @@ function PropostaPreview({ data, onVoltar }) {
           calculo,
           totSI, totCI, impostoV,
           incluiArq = true, incluiEng = true, incluiMarcenaria = false } = safeData;
+
+  // Estado do modal de confirmação de salvar + aviso de proposta salva
+  const [confirmSalvar, setConfirmSalvar] = useState(false);
+  const [propostaInfo, setPropostaInfo] = useState(propostaReadOnly || null);
 
   // Estados locais (antes eram props read-only) — editáveis inline
   const [tipoPgto, setTipoPgtoLocal]     = useState(data.tipoPgto || "padrao");
@@ -5744,6 +5758,60 @@ function PropostaPreview({ data, onVoltar }) {
     </div>
   );
 
+  // Constrói snapshot completo de todos os dados editáveis da proposta
+  function buildPropostaSnapshot() {
+    return {
+      versao: null, // definido pelo caller
+      enviadaEm: new Date().toISOString(),
+      // Dados base do cálculo (para recriar preview idêntico)
+      tipoProjeto, tipoObra, padrao, tipologia, tamanho,
+      clienteNome, referencia: data.referencia || "",
+      comodos: data.comodos || [],
+      calculo: data.calculo,
+      grupoQtds: data.grupoQtds || null,
+      incluiArq, incluiEng, incluiMarcenaria,
+      // Estados locais editáveis do preview
+      tipoPgto, temImposto, aliqImp, etapasPct: [...etapasPct],
+      etapasIsoladas: Array.from(idsIsolados),
+      mostrarTabelaEtapas,
+      descArq: descArqLocal, parcArq: parcArqLocal,
+      descPacote: descPacoteLocal, parcPacote: parcPacoteLocal,
+      descEtCtrt: descEtCtrtLocal, parcEtCtrt: parcEtCtrtLocal,
+      descPacCtrt: descPacCtrtLocal, parcPacCtrt: parcPacCtrtLocal,
+      // Edições manuais
+      arqEdit, engEdit, resumoEdit,
+      subTituloEdit, validadeEdit, naoInclEdit, prazoEdit,
+      responsavelEdit, cauEdit, emailEdit, telefoneEdit,
+      instagramEdit, cidadeEdit, pixEdit, labelApenasEdit,
+      logoPreview,
+      escopoState: escopoState ? JSON.parse(JSON.stringify(escopoState)) : [],
+    };
+  }
+
+  async function handleSalvarProposta() {
+    if (!onSalvarProposta) {
+      // Fallback: se não tiver callback, só gera PDF como antes
+      await handlePdf();
+      return;
+    }
+    try {
+      const snapshot = buildPropostaSnapshot();
+      // Chama callback do parent pra persistir no orçamento
+      const propostaSalva = await onSalvarProposta(snapshot);
+      // Gera PDF
+      await handlePdf();
+      // Marca como salva e bloqueia edições
+      setPropostaInfo({
+        versao: propostaSalva?.versao || snapshot.versao || "v1",
+        enviadaEm: snapshot.enviadaEm,
+      });
+      setConfirmSalvar(false);
+    } catch(e) {
+      console.error(e);
+      alert("Erro ao salvar proposta: " + e.message);
+    }
+  }
+
   const handlePdf = async () => {
     if (!window.jspdf) { alert("Aguarde 2s e tente novamente."); return; }
     try {
@@ -5850,14 +5918,79 @@ function PropostaPreview({ data, onVoltar }) {
   return (
     <div style={wrap}>
       <div style={page}>
+        {/* Aviso de proposta salva (modo read-only) */}
+        {propostaInfo && (
+          <div style={{
+            background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8,
+            padding:"10px 14px", marginBottom:16,
+            display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
+            fontSize:12.5,
+          }}>
+            <div>
+              <strong style={{ color:"#166534" }}>✓ Proposta {propostaInfo.versao} salva</strong>
+              <span style={{ color:"#15803d", marginLeft:6 }}>
+                em {new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}
+              </span>
+              <div style={{ color:"#166534", marginTop:2, fontSize:11.5 }}>
+                Esta versão está congelada. Para alterar, crie uma nova proposta a partir do orçamento.
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
           <button onClick={onVoltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             ← Voltar
           </button>
-          <button onClick={handlePdf} style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
-            Gerar PDF
-          </button>
+          {propostaInfo ? (
+            <button onClick={handlePdf} style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+              Gerar PDF novamente
+            </button>
+          ) : (
+            <button onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
+              style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+              {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
+            </button>
+          )}
         </div>
+
+        {/* Modal de confirmação */}
+        {confirmSalvar && (
+          <div
+            onClick={e => { if (e.target === e.currentTarget) setConfirmSalvar(false); }}
+            style={{
+              position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              zIndex:200, padding:20,
+            }}>
+            <div style={{
+              background:"#fff", borderRadius:12, width:"100%", maxWidth:440,
+              boxShadow:"0 20px 40px rgba(0,0,0,0.15)", overflow:"hidden",
+            }}>
+              <div style={{ padding:"20px 24px 12px", borderBottom:"1px solid #f3f4f6" }}>
+                <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>Salvar proposta e gerar PDF</div>
+              </div>
+              <div style={{ padding:"16px 24px 20px" }}>
+                <p style={{ fontSize:13, color:"#374151", lineHeight:1.5, margin:0 }}>
+                  Esta proposta será <strong>congelada</strong> com os valores e textos atuais. Ela ficará salva no histórico do orçamento e não poderá mais ser editada.
+                </p>
+                <p style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginTop:10 }}>
+                  Para alterar depois, você pode criar uma nova proposta (v2, v3…) a partir do orçamento.
+                </p>
+                <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
+                  <button onClick={() => setConfirmSalvar(false)}
+                    style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#374151" }}>
+                    Cancelar
+                  </button>
+                  <button onClick={handleSalvarProposta}
+                    style={{ background:"#111", border:"1px solid #111", borderRadius:7, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+                    Salvar e gerar PDF
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -7379,7 +7512,29 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       etapasPct,
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
     };
-    return <PropostaPreview data={liveData} onVoltar={() => { setPropostaData(null); }} />;
+    // Callback: salva snapshot da proposta no orçamento (cria v1, v2, ...)
+    async function handleSalvarPropostaSnapshot(snapshot) {
+      if (!onSalvar || !orcBase) throw new Error("Orçamento base não encontrado");
+      const propostasAtuais = orcBase.propostas || [];
+      const nextVersao = "v" + (propostasAtuais.length + 1);
+      const novaProposta = { ...snapshot, versao: nextVersao };
+      // Salva no orçamento (inclui todos os campos atuais do form + nova proposta)
+      const orcAtualizado = {
+        ...orcBase,
+        propostas: [...propostasAtuais, novaProposta],
+        ultimaPropostaEm: snapshot.enviadaEm,
+      };
+      await onSalvar(orcAtualizado);
+      return novaProposta;
+    }
+    // Se já existe proposta salva da versão aberta, passa info pra read-only
+    const propostaAbertaReadOnly = propostaData.propostaReadOnly || null;
+    return <PropostaPreview
+      data={liveData}
+      onVoltar={() => { setPropostaData(null); }}
+      onSalvarProposta={handleSalvarPropostaSnapshot}
+      propostaReadOnly={propostaAbertaReadOnly}
+    />;
   }
 
   return (
