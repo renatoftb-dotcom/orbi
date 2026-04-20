@@ -620,10 +620,23 @@ function brlCurto(v) {
 }
 
 function Etapas({ data, save }) {
-  const projetos = data.projetos || [];
-  const clientes = data.clientes || [];
+  // IMPORTANTE: hooks DEVEM ser chamados antes de qualquer return condicional
+  // (regra do React: ordem dos hooks deve ser constante entre renders)
   const [filtro, setFiltro] = useState("todos"); // "todos" | "meus" | "atrasados"
   const [busca, setBusca] = useState("");
+
+  // Defensive: guard pra quando data ainda não carregou
+  if (!data) {
+    return (
+      <div style={{ padding:"24px 28px" }}>
+        <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
+      </div>
+    );
+  }
+
+  const projetos = data.projetos || [];
+  const clientes = data.clientes || [];
 
   // Filtra projetos conforme filtro + busca
   const projetosFiltrados = projetos.filter(p => {
@@ -958,9 +971,6 @@ function Obras({ data, save }) {
     </div>
   );
 }
-
-// Alias para compatibilidade com app.jsx (antigo nome "Projetos")
-const Projetos = Etapas;
 
 
 
@@ -8439,9 +8449,9 @@ export default function ModuloClientesFornecedores() {
   ];
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
-  const [projetosAberto, setProjetosAberto] = useState(() => aba.startsWith?.("projetos") || false);
+  const [projetosAberto, setProjetosAberto] = useState(() => (typeof aba === "string" && aba.indexOf("projetos") === 0));
   useEffect(() => {
-    if (aba.startsWith?.("projetos")) setProjetosAberto(true);
+    if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
   const itemStyle = (ativo) => ({
@@ -8468,7 +8478,7 @@ export default function ModuloClientesFornecedores() {
               const {k, label, count, sub} = item;
               // Item com sub-menu (accordion)
               if (sub && sub.length) {
-                const ativoNeleMesmoOuSubitem = aba === k || aba.startsWith?.(k + ":");
+                const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
                 return (
                   <div key={k} style={{ display:"flex", flexDirection:"column" }}>
                     <button

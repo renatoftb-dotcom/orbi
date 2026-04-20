@@ -174,9 +174,9 @@ export default function ModuloClientesFornecedores() {
   ];
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
-  const [projetosAberto, setProjetosAberto] = useState(() => aba.startsWith?.("projetos") || false);
+  const [projetosAberto, setProjetosAberto] = useState(() => (typeof aba === "string" && aba.indexOf("projetos") === 0));
   useEffect(() => {
-    if (aba.startsWith?.("projetos")) setProjetosAberto(true);
+    if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
   const itemStyle = (ativo) => ({
@@ -203,7 +203,7 @@ export default function ModuloClientesFornecedores() {
               const {k, label, count, sub} = item;
               // Item com sub-menu (accordion)
               if (sub && sub.length) {
-                const ativoNeleMesmoOuSubitem = aba === k || aba.startsWith?.(k + ":");
+                const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
                 return (
                   <div key={k} style={{ display:"flex", flexDirection:"column" }}>
                     <button

@@ -52,10 +52,23 @@ function brlCurto(v) {
 }
 
 function Etapas({ data, save }) {
-  const projetos = data.projetos || [];
-  const clientes = data.clientes || [];
+  // IMPORTANTE: hooks DEVEM ser chamados antes de qualquer return condicional
+  // (regra do React: ordem dos hooks deve ser constante entre renders)
   const [filtro, setFiltro] = useState("todos"); // "todos" | "meus" | "atrasados"
   const [busca, setBusca] = useState("");
+
+  // Defensive: guard pra quando data ainda não carregou
+  if (!data) {
+    return (
+      <div style={{ padding:"24px 28px" }}>
+        <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
+      </div>
+    );
+  }
+
+  const projetos = data.projetos || [];
+  const clientes = data.clientes || [];
 
   // Filtra projetos conforme filtro + busca
   const projetosFiltrados = projetos.filter(p => {
@@ -390,9 +403,6 @@ function Obras({ data, save }) {
     </div>
   );
 }
-
-// Alias para compatibilidade com app.jsx (antigo nome "Projetos")
-const Projetos = Etapas;
 
 
 
