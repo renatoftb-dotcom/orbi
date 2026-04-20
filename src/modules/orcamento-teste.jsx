@@ -892,6 +892,8 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
 // É um registro imutável — literalmente as imagens renderizadas
 // do PDF no momento em que a proposta foi enviada ao cliente.
 function PropostaVisualizer({ proposta, onFechar }) {
+  const [baixando, setBaixando] = useState(false);
+
   // Fecha com ESC
   useEffect(() => {
     const onKey = (e) => { if (e.key === "Escape") onFechar(); };
@@ -905,6 +907,47 @@ function PropostaVisualizer({ proposta, onFechar }) {
   const dataFmt = proposta.enviadaEm
     ? new Date(proposta.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })
     : "";
+
+  // Gera PDF a partir das imagens salvas — garante fidelidade visual 100% ao que foi enviado
+  async function baixarPdf() {
+    if (!temImagens) { alert("Esta proposta não tem imagens salvas."); return; }
+    if (!window.jspdf) { alert("Aguarde 2 segundos e tente novamente."); return; }
+    try {
+      setBaixando(true);
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit:"mm", format:"a4", orientation:"portrait" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const pageH = doc.internal.pageSize.getHeight();
+
+      for (let i = 0; i < imagens.length; i++) {
+        const src = imagens[i];
+        // Descobre dimensões da imagem pra calcular aspect ratio correto
+        const dims = await new Promise((resolve) => {
+          const img = new Image();
+          img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+          img.onerror = () => resolve({ w: pageW, h: pageH });
+          img.src = src;
+        });
+        // Encaixa na página A4 mantendo proporção
+        const ratio = Math.min(pageW / dims.w, pageH / dims.h);
+        const w = dims.w * ratio;
+        const h = dims.h * ratio;
+        const x = (pageW - w) / 2;
+        const y = (pageH - h) / 2;
+        if (i > 0) doc.addPage();
+        doc.addImage(src, "JPEG", x, y, w, h, undefined, "FAST");
+      }
+
+      const nome = (proposta.clienteNome || "proposta").replace(/\s+/g, "-").toLowerCase();
+      const versao = proposta.versao || "v1";
+      doc.save(`proposta-${nome}-${versao}.pdf`);
+    } catch(e) {
+      console.error(e);
+      alert("Erro ao gerar PDF: " + e.message);
+    } finally {
+      setBaixando(false);
+    }
+  }
 
   return (
     <div
@@ -928,18 +971,37 @@ function PropostaVisualizer({ proposta, onFechar }) {
             <div style={{ fontSize:12, color:"rgba(255,255,255,0.6)" }}>· {proposta.clienteNome}</div>
           )}
         </div>
-        <button
-          onClick={onFechar}
-          style={{
-            background:"transparent", border:"1px solid rgba(255,255,255,0.2)",
-            color:"#fff", borderRadius:6, padding:"6px 12px",
-            cursor:"pointer", fontSize:13, fontFamily:"inherit",
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
-          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
-        >
-          ✕ Fechar
-        </button>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {temImagens && (
+            <button
+              onClick={baixarPdf}
+              disabled={baixando}
+              style={{
+                background: baixando ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.12)",
+                border:"1px solid rgba(255,255,255,0.2)",
+                color:"#fff", borderRadius:6, padding:"6px 12px",
+                cursor: baixando ? "not-allowed" : "pointer", fontSize:13, fontFamily:"inherit",
+                opacity: baixando ? 0.6 : 1,
+              }}
+              onMouseEnter={e => { if (!baixando) e.currentTarget.style.background = "rgba(255,255,255,0.2)"; }}
+              onMouseLeave={e => { if (!baixando) e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
+            >
+              {baixando ? "Gerando…" : "⬇ Baixar PDF"}
+            </button>
+          )}
+          <button
+            onClick={onFechar}
+            style={{
+              background:"transparent", border:"1px solid rgba(255,255,255,0.2)",
+              color:"#fff", borderRadius:6, padding:"6px 12px",
+              cursor:"pointer", fontSize:13, fontFamily:"inherit",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.1)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+          >
+            ✕ Fechar
+          </button>
+        </div>
       </div>
 
       {/* Área de scroll com páginas */}
