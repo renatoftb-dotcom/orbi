@@ -184,7 +184,7 @@ function TesteOrcamento({ data, save }) {
     : clientes.slice(0, 20);
 
   return (
-    <div style={{ padding:"24px 28px" }}>
+    <PageContainer>
       {/* Header */}
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, marginBottom:20 }}>
         <div>
@@ -224,7 +224,7 @@ function TesteOrcamento({ data, save }) {
       </div>
 
       {/* Lista */}
-      <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
+      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
         {orcFiltrados.length === 0 ? (
           <div style={{
             padding:"48px 24px", textAlign:"center",
@@ -254,7 +254,7 @@ function TesteOrcamento({ data, save }) {
           }}
         />
       )}
-    </div>
+    </PageContainer>
   );
 }
 
@@ -2568,7 +2568,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, []);
 
   const C = {
-    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative" },
+    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative", maxWidth:1200, margin:"0 auto" },
     fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
     input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },

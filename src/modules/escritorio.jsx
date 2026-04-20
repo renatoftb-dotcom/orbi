@@ -51,7 +51,7 @@ function Escritorio({ data, save }) {
   }
 
   const E = {
-    wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
+    wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header: { borderBottom:"1px solid #e5e7eb", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
     titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },

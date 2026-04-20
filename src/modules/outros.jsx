@@ -394,7 +394,7 @@ function motivoPadrao(colKey) {
 // ═══════════════════════════════════════════════════════════════
 function Obras({ data, save }) {
   return (
-    <div style={{ padding:"24px 28px" }}>
+    <PageContainer>
       <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
       <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
       <div style={{
@@ -406,7 +406,7 @@ function Obras({ data, save }) {
           Este módulo será ativado em breve. Projetos que concluírem a etapa <strong style={{ color:"#374151" }}>Engenharia</strong> aparecerão aqui automaticamente.
         </div>
       </div>
-    </div>
+    </PageContainer>
   );
 }
 
@@ -508,7 +508,7 @@ function Financeiro({ data, save }) {
   ];
 
   return (
-    <div style={{ padding:"24px 20px" }}>
+    <PageContainer>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
         <div>
           <h2 style={{ color:"#f1f5f9", fontWeight:900, fontSize:22, margin:0 }}>Financeiro</h2>
@@ -763,7 +763,7 @@ function Financeiro({ data, save }) {
           </table>
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
 
@@ -1503,7 +1503,7 @@ var S = {
   tabBtnActive: { color:"#60a5fa", borderBottom:"2px solid #3b82f6" },
   tabCount: { background:"#1e293b", color:"#94a3b8", borderRadius:12, padding:"2px 8px", fontSize:11 },
   content: { padding:"24px 28px", animation:"fadeIn 0.3s ease", flex:1 },
-  moduleWrap: { display:"flex", flexDirection:"column", gap:20 },
+  moduleWrap: { display:"flex", flexDirection:"column", gap:20, maxWidth:1200, margin:"0 auto", padding:"24px 28px", width:"100%" },
   toolbar: { display:"flex", justifyContent:"space-between", alignItems:"center", gap:16, flexWrap:"wrap" },
   toolbarLeft: { display:"flex", alignItems:"center", gap:12, flex:1 },
   searchWrap: { position:"relative", display:"flex", alignItems:"center" },
