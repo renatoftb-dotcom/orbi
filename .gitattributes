@@ -1,0 +1,23 @@
+# Força CRLF em todos os arquivos de texto.
+# Garante que arquivos editados em ambientes Linux/Mac (como quando recebidos
+# de um assistente remoto) sejam normalizados para CRLF no check-in, evitando
+# que o git "não detecte mudanças" por causa de diferenças só nos finais de linha.
+
+* text=auto eol=crlf
+
+# Arquivos binários — git trata como está, sem conversão
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.db binary
+
+# Shell scripts e .sh devem ficar em LF mesmo no Windows (se houver)
+*.sh text eol=lf
