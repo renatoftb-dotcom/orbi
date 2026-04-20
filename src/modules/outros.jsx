@@ -16,7 +16,6 @@
 const ETAPAS_COLS = [
   { key:"briefing",     label:"Briefing",           wait:true  },
   { key:"preliminar",   label:"Estudo Preliminar",  wait:false },
-  { key:"aprov_cliente",label:"Aprovação Cliente",  wait:true  },
   { key:"prefeitura",   label:"Prefeitura",         wait:true  },
   { key:"executivo",    label:"Executivo",          wait:false },
   { key:"engenharia",   label:"Engenharia",         wait:false },
@@ -259,9 +258,17 @@ function ProjetoCard({ projeto, clientes, col }) {
 
 // ─── Footer do card (responsável + prazo) ──────────────────
 function CardFooter({ projeto, col, dias, atrasado }) {
-  if (col.wait) {
-    // Colunas de espera: motivo do bloqueio + responsável do escritório
-    const motivo = projeto.motivoBloqueio || motivoPadrao(col.key);
+  // Estado transversal "aguardando aprovação do cliente" se sobrepõe ao layout normal
+  const aguardandoAprovacao = projeto.aprovacaoStatus === "pendente";
+
+  if (col.wait || aguardandoAprovacao) {
+    // Layout de espera: motivo do bloqueio + responsável do escritório
+    let motivo;
+    if (aguardandoAprovacao) {
+      motivo = "Aguardando aprovação do cliente";
+    } else {
+      motivo = projeto.motivoBloqueio || motivoPadrao(col.key);
+    }
     return (
       <div style={{ paddingTop:8, borderTop:"1px solid #f3f4f6", marginTop:2, display:"flex", flexDirection:"column", gap:4 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
@@ -377,7 +384,6 @@ function PessoaRow({ icon, nome, funcao, prazo, ativa, concluida, inativa, rejei
 function motivoPadrao(colKey) {
   switch (colKey) {
     case "briefing":      return "Aguardando cliente preencher";
-    case "aprov_cliente": return "Aguardando aprovação do cliente";
     case "prefeitura":    return "Aguardando análise da prefeitura";
     default: return "Aguardando";
   }
