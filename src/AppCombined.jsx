@@ -5614,6 +5614,18 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   return (
     <div
       style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"flex-start", justifyContent:"center", zIndex:100, padding:"30px 20px 20px" }}>
+      <style>{`
+        .modal-ganho-date::-webkit-calendar-picker-indicator {
+          padding: 0;
+          margin-left: -2px;
+          margin-right: 0;
+          opacity: 0.5;
+          cursor: pointer;
+        }
+        .modal-ganho-date::-webkit-calendar-picker-indicator:hover {
+          opacity: 1;
+        }
+      `}</style>
       <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:540, maxHeight:"calc(100vh - 60px)", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
 
         {/* Head */}
@@ -5804,7 +5816,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                   return (
                   <div key={i} style={{
                     display:"grid",
-                    gridTemplateColumns: modoEtapas ? "1fr 56px 90px 118px 18px" : "100px 100px 118px 18px",
+                    gridTemplateColumns: modoEtapas ? "1fr 56px 90px 105px 18px" : "100px 100px 105px 18px",
                     gap:5, alignItems:"center", marginBottom:6,
                   }}>
                     {modoEtapas ? (
@@ -5825,8 +5837,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                     <NumBR valor={p.valor} onChange={n => mudarParcelaCampo(i, "valor", n)} min={0} decimais={2}
                       style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", textAlign:"right" }} />
                     <input type="date" value={p.data}
+                      className="modal-ganho-date"
                       onChange={e => mudarParcelaCampo(i, "data", e.target.value)}
-                      style={{ ...INPUT_STYLE, fontSize:11.5, padding:"5px 4px", boxSizing:"border-box", width:"100%", minWidth:0 }} />
+                      style={{ ...INPUT_STYLE, fontSize:11.5, padding:"5px 2px 5px 4px", boxSizing:"border-box", width:"100%", minWidth:0 }} />
                     {parcelas.length > 1 ? (
                       <button onClick={() => removerParcela(i)}
                         style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
