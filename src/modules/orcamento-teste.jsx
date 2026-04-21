@@ -724,7 +724,9 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
 function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, max, decimais = 2, style = {}, ...rest }) {
   const fmt = (n) => {
     if (n == null || isNaN(n)) return "";
-    return n.toLocaleString("pt-BR", {
+    // Normaliza -0 para 0 pra nunca aparecer "-0,00"
+    const v = (n === 0 || Object.is(n, -0)) ? 0 : n;
+    return v.toLocaleString("pt-BR", {
       minimumFractionDigits: decimais,
       maximumFractionDigits: decimais,
     });
@@ -820,6 +822,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const [parcelas, setParcelas]           = useState([]);
   const [editandoTotal, setEditandoTotal] = useState(false);
   const [editandoDesconto, setEditandoDesconto] = useState(false);
+  const [editandoImposto, setEditandoImposto] = useState(false);
 
   // Função dinâmica: aplica imposto conforme o state atual
   const comImp = (v) => (incluirImposto && aliqImp > 0 && v > 0)
@@ -912,8 +915,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   }
 
   // Desconto é derivado do totalFechado (fonte única da verdade: totalFechado)
+  // `|| 0` no final evita -0 (negative zero) aparecer ao digitar 0% ou em arredondamentos
   const descontoPct = propTotal > 0
-    ? Math.round(((propTotal - totalFechado) / propTotal) * 10000) / 100
+    ? (Math.round(((propTotal - totalFechado) / propTotal) * 10000) / 100) || 0
     : 0;
 
   // Distribui proporcional (Arq/Eng do total fechado)
@@ -979,19 +983,37 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   }, [etapas]);
 
   // Quando totalFechado muda, redistribui o valor das parcelas (mantém quantidade e datas)
-  // Usa a mesma lógica de distribuição em centavos para garantir soma exata.
+  // • Modo normal: divide igualmente em centavos (soma exata)
+  // • Modo etapas: mantém os PERCENTUAIS de cada etapa e recalcula os valores proporcionais
   useEffect(() => {
     setParcelas(atuais => {
       if (atuais.length === 0) return atuais;
-      if (modoEtapas) return atuais; // etapas: usuário controla valores manualmente
       const n = atuais.length;
       const totalCentavos = Math.round(totalFechado * 100);
+
+      if (modoEtapas) {
+        // Preserva percentual de cada etapa (calculado sobre a soma ATUAL das parcelas)
+        const somaAtualCentavos = atuais.reduce((s, p) => s + Math.round((parseFloat(p.valor) || 0) * 100), 0);
+        if (somaAtualCentavos === 0 || somaAtualCentavos === totalCentavos) return atuais;
+        // Distribui em centavos baseado no percentual de cada
+        let novosCentavos = atuais.map(p => {
+          const vCentavos = Math.round((parseFloat(p.valor) || 0) * 100);
+          return Math.floor((vCentavos / somaAtualCentavos) * totalCentavos);
+        });
+        // Sobra de arredondamento vai pra primeira parcela
+        const sobra = totalCentavos - novosCentavos.reduce((s, c) => s + c, 0);
+        novosCentavos[0] = novosCentavos[0] + sobra;
+        const novosValores = novosCentavos.map(c => c / 100);
+        if (atuais.every((p, i) => p.valor === novosValores[i])) return atuais;
+        return atuais.map((p, i) => ({ ...p, valor: novosValores[i] }));
+      }
+
+      // Modo normal: distribui igualmente
       const vpCentavos = Math.floor(totalCentavos / n);
       const sobra = totalCentavos - (vpCentavos * n);
       const novosValores = Array.from({ length: n }, (_, i) =>
         (vpCentavos + (i < sobra ? 1 : 0)) / 100
       );
-      // Evita re-render desnecessário
       if (atuais.every((p, i) => p.valor === novosValores[i])) return atuais;
       return atuais.map((p, i) => ({ ...p, valor: novosValores[i] }));
     });
@@ -1232,6 +1254,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
               {temImpostoOrc && aliqImp > 0 && (
                 <div
                   onClick={() => {
+                    // Suprime o alerta vermelho durante a transição (evita piscar)
+                    setEditandoImposto(true);
                     // Guarda desconto ANTES de mudar o imposto (será aplicado no novo total)
                     const descAtual = descontoPct;
                     const novoIncl = !incluirImposto;
@@ -1250,6 +1274,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                     }
                     const novoTotal = Math.round(novoProp * (1 - descAtual/100) * 100) / 100;
                     setTotalFechado(novoTotal);
+                    // Libera o alerta depois que os useEffects propagaram
+                    setTimeout(() => setEditandoImposto(false), 300);
                   }}
                   style={{
                     display:"flex", alignItems:"center", gap:6,
@@ -1397,8 +1423,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                   return (
                   <div key={i} style={{
                     display:"grid",
-                    gridTemplateColumns: modoEtapas ? "1fr 64px 100px 120px 18px" : "100px 110px 120px 18px",
-                    gap:6, alignItems:"center", marginBottom:6,
+                    gridTemplateColumns: modoEtapas ? "1fr 56px 90px 118px 18px" : "100px 100px 118px 18px",
+                    gap:5, alignItems:"center", marginBottom:6,
                   }}>
                     {modoEtapas ? (
                       <input type="text" value={p.nome}
@@ -1419,7 +1445,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                       style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", textAlign:"right" }} />
                     <input type="date" value={p.data}
                       onChange={e => mudarParcelaCampo(i, "data", e.target.value)}
-                      style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
+                      style={{ ...INPUT_STYLE, fontSize:11.5, padding:"5px 4px", boxSizing:"border-box", width:"100%", minWidth:0 }} />
                     {parcelas.length > 1 ? (
                       <button onClick={() => removerParcela(i)}
                         style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
@@ -1436,7 +1462,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
               </div>
 
               {/* Alerta de diferença entre soma e total fechado */}
-              {temDiferenca && parcelas.length > 1 && !editandoTotal && !editandoDesconto && (
+              {temDiferenca && parcelas.length > 1 && !editandoTotal && !editandoDesconto && !editandoImposto && (
                 <div style={{
                   marginTop:10, padding:"8px 10px",
                   background:"#fef2f2", border:"1px solid #fecaca",
