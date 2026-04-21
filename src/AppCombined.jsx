@@ -5162,16 +5162,61 @@ function NumBR({ valor, onChange, min, max, decimais = 2, style = {}, ...rest })
 }
 
 function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
-  // ── Escopo original (o que veio no orçamento) ──
-  const orcArq = orc.resultado?.precoArq || 0;
-  const orcEng = orc.resultado?.precoEng || 0;
+  // ── Detecta tipo do orçamento ──
+  const tipoPgtoOrc = orc.tipoPagamento || orc.tipoPgto || "padrao";
+  const ehTipoEtapas = tipoPgtoOrc === "etapas";
+
+  // ── Valores base do orçamento (com/sem imposto conforme orçamento) ──
+  const aliqImp = orc.aliquotaImposto || 0;
+  const temImpostoOrc = !!orc.incluiImposto;
+  const comImp = (v) => (temImpostoOrc && v > 0)
+    ? Math.round(v / (1 - aliqImp/100) * 100) / 100
+    : v;
+
+  // Valores efetivos (já com imposto se tiver)
+  const orcArq = comImp(orc.resultado?.precoArq || 0);
+  const orcEng = comImp(orc.resultado?.precoEng || 0);
   const temArq = orcArq > 0;
   const temEng = orcEng > 0;
+
+  // ── Etapas do orçamento (só para tipo "etapas") ──
+  // Estrutura: [{ id, nome, pct, valor, marcado }]
+  // Pelo código do orçamento: etapa id=5 é sempre Engenharia
+  const etapasBase = (() => {
+    if (!ehTipoEtapas) return [];
+    const ultProp = orc.propostas && orc.propostas.length > 0
+      ? orc.propostas[orc.propostas.length - 1]
+      : null;
+    const etapasOrc = ultProp?.etapasPct || orc.etapasPct || [];
+    if (etapasOrc.length === 0) return [];
+
+    // Total proposto (Arq + Eng) com imposto
+    const totalArqCI = orcArq;
+    const totalEngCI = orcEng;
+
+    return etapasOrc
+      .filter(e => temEng || e.id !== 5) // se não tem Eng no orçamento, ignora etapa 5
+      .map(e => {
+        const pct = parseFloat(e.pct) || 0;
+        // Etapa 5 = Engenharia (valor total de Eng). Outras = pct de Arq.
+        const valor = e.id === 5
+          ? totalEngCI
+          : Math.round(totalArqCI * pct / 100 * 100) / 100;
+        return {
+          id: e.id,
+          nome: e.nome,
+          pct,
+          valor,
+          marcado: true,
+        };
+      });
+  })();
 
   // ── Estados principais ──
   const [inclArq, setInclArq]             = useState(temArq);
   const [inclEng, setInclEng]             = useState(temEng);
-  const [pgtoSel, setPgtoSel]             = useState("antecipado"); // "antecipado" | "parcelado" | "personalizado"
+  const [etapas, setEtapas]               = useState(etapasBase);  // só usado se ehTipoEtapas
+  const [modoEtapas, setModoEtapas]       = useState(false);        // modo "livre" de parcelas na seção 2
   const [totalFechado, setTotalFechado]   = useState(0);            // fonte única da verdade (desconto é derivado)
   const [parcelas, setParcelas]           = useState([]);            // [{ nome, valor, data }]
 
@@ -5205,16 +5250,27 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   })();
 
   // ── Cálculos derivados ──
-  const propArq = inclArq ? orcArq : 0;
-  const propEng = inclEng ? orcEng : 0;
-  const propTotal = propArq + propEng;
+  // No tipo "etapas": propTotal = soma das etapas MARCADAS (valor editável)
+  // No tipo "padrão": propTotal = Arq (se marcado) + Eng (se marcado)
+  let propArq, propEng, propTotal;
+  if (ehTipoEtapas) {
+    // Soma das etapas marcadas
+    propTotal = Math.round(etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0) * 100) / 100;
+    // Para distribuir no resumo: Arq = soma etapas marcadas exceto id=5 (Eng) ; Eng = etapa id=5 se marcada
+    propArq = Math.round(etapas.filter(e => e.marcado && e.id !== 5).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0) * 100) / 100;
+    propEng = Math.round((propTotal - propArq) * 100) / 100;
+  } else {
+    propArq = inclArq ? orcArq : 0;
+    propEng = inclEng ? orcEng : 0;
+    propTotal = propArq + propEng;
+  }
 
   // Desconto é derivado do totalFechado (fonte única da verdade: totalFechado)
   const descontoPct = propTotal > 0
     ? Math.round(((propTotal - totalFechado) / propTotal) * 10000) / 100
     : 0;
 
-  // Distribui proporcional
+  // Distribui proporcional (Arq/Eng do total fechado)
   let fecArq = 0, fecEng = 0;
   if (propTotal > 0) {
     fecArq = Math.round(totalFechado * (propArq / propTotal) * 100) / 100;
@@ -5241,54 +5297,42 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     });
   }
 
-  function gerarParcelasPersonalizadas(total) {
-    const hoje = new Date();
-    const d2 = new Date(hoje.getFullYear(), hoje.getMonth() + 1, hoje.getDate());
-    const metade = Math.round((total / 2) * 100) / 100;
-    return [
-      { nome: "Entrada",    valor: metade,         data: hoje.toISOString().slice(0, 10) },
-      { nome: "Na entrega", valor: total - metade, data: d2.toISOString().slice(0, 10) },
-    ];
-  }
-
-  // ── Inicialização e resincronização quando escopo/opção mudam ──
+  // ── Inicialização e resincronização quando escopo/etapas mudam ──
   useEffect(() => {
-    // Define totalFechado padrão baseado na opção selecionada
-    let descBase = 0;
-    if (pgtoSel === "antecipado") descBase = opcoesOrcamento.descAntecipado;
-    else if (pgtoSel === "parcelado") descBase = 0;
-    else if (pgtoSel === "personalizado") descBase = 0;
-    const propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
+    // Calcula total proposto atual
+    let propAtual;
+    if (ehTipoEtapas) {
+      propAtual = etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
+    } else {
+      propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
+    }
+    const descBase = opcoesOrcamento.descAntecipado;
     const novoTotal = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
     setTotalFechado(novoTotal);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pgtoSel, inclArq, inclEng]);
+  }, [inclArq, inclEng, etapas]);
 
   useEffect(() => {
-    // Regenera parcelas quando opção ou escopo muda
-    const propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
-    let descBase = 0;
-    if (pgtoSel === "antecipado") descBase = opcoesOrcamento.descAntecipado;
-    const totalCalc = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
-    let novasParc;
-    if (pgtoSel === "antecipado") {
-      novasParc = gerarParcelasIguais(1, totalCalc, "Pagamento");
-    } else if (pgtoSel === "parcelado") {
-      novasParc = gerarParcelasIguais(opcoesOrcamento.qtdParcelado, totalCalc, "Parcela");
+    // Regenera parcelas quando escopo muda (1 parcela única por padrão)
+    let propAtual;
+    if (ehTipoEtapas) {
+      propAtual = etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
     } else {
-      novasParc = gerarParcelasPersonalizadas(totalCalc);
+      propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
     }
-    setParcelas(novasParc);
+    const descBase = opcoesOrcamento.descAntecipado;
+    const totalCalc = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
+    setParcelas(gerarParcelasIguais(1, totalCalc, "Pagamento"));
+    setModoEtapas(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pgtoSel, inclArq, inclEng]);
+  }, [inclArq, inclEng]); // Não dispara quando edita etapas (só quando muda escopo)
 
   // Quando totalFechado muda, redistribui o valor das parcelas (mantém quantidade e datas)
   useEffect(() => {
     setParcelas(atuais => {
       if (atuais.length === 0) return atuais;
-      if (pgtoSel === "personalizado") return atuais; // personalizado: usuário controla valores manualmente
+      if (modoEtapas) return atuais; // etapas: usuário controla valores manualmente
       const vp = Math.round((totalFechado / atuais.length) * 100) / 100;
-      // Não atualiza se o valor já está igual (evita re-render infinito)
       if (atuais.every(p => p.valor === vp)) return atuais;
       return atuais.map(p => ({ ...p, valor: vp }));
     });
@@ -5305,6 +5349,45 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
       if (!inclEng) setInclEng(true);
       else if (inclArq) setInclEng(false);
     }
+  }
+
+  function toggleEtapa(etapaId) {
+    setEtapas(atuais => {
+      const novas = atuais.map(e => e.id === etapaId ? { ...e, marcado: !e.marcado } : e);
+      // Garante que sempre tem pelo menos 1 etapa marcada
+      if (novas.every(e => !e.marcado)) {
+        return novas.map(e => e.id === etapaId ? { ...e, marcado: true } : e);
+      }
+      return novas;
+    });
+  }
+
+  function mudarValorEtapa(i, novoValor) {
+    setEtapas(atuais => {
+      if (atuais.length === 0) return atuais;
+      // Só aplica cascata entre etapas MARCADAS (desmarcadas não entram)
+      const marcadasIdx = atuais.map((e, idx) => e.marcado ? idx : -1).filter(x => x !== -1);
+      const iMarcada = marcadasIdx.indexOf(i);
+      if (iMarcada === -1 || marcadasIdx.length < 2) {
+        // Etapa não marcada ou só tem 1: só atualiza ela
+        return atuais.map((e, idx) => idx === i ? { ...e, valor: Math.round((parseFloat(novoValor) || 0) * 100) / 100 } : e);
+      }
+      const novoV = parseFloat(novoValor) || 0;
+      const valorAnterior = parseFloat(atuais[i].valor) || 0;
+      const delta = novoV - valorAnterior;
+      // Índice (dentro das marcadas) que compensa: próxima, se última volta pra primeira
+      const jMarcada = iMarcada === marcadasIdx.length - 1 ? 0 : iMarcada + 1;
+      const jCompensar = marcadasIdx[jMarcada];
+
+      return atuais.map((e, idx) => {
+        if (idx === i) return { ...e, valor: Math.round(novoV * 100) / 100 };
+        if (idx === jCompensar) {
+          const compensado = (parseFloat(e.valor) || 0) - delta;
+          return { ...e, valor: Math.round(compensado * 100) / 100 };
+        }
+        return e;
+      });
+    });
   }
 
   function mudarQtdParcelas(n) {
@@ -5346,13 +5429,39 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     const ult = parcelas[parcelas.length - 1];
     const d = ult ? new Date(ult.data) : new Date();
     d.setMonth(d.getMonth() + 1);
-    const nome = pgtoSel === "personalizado" ? "Nova etapa" : `${parcelas.length + 1}ª Parcela`;
-    setParcelas([...parcelas, { nome, valor: 0, data: d.toISOString().slice(0, 10) }]);
+    const nome = modoEtapas ? "Nova etapa" : `${parcelas.length + 1}ª Parcela`;
+    const novaParcela = { nome, valor: 0, data: d.toISOString().slice(0, 10) };
+    if (modoEtapas) {
+      // Modo etapas: só adiciona, usuário preenche o valor
+      setParcelas([...parcelas, novaParcela]);
+    } else {
+      // Modo parcelas iguais: redistribui
+      setParcelas(gerarParcelasIguais(parcelas.length + 1, totalFechado, "Parcela"));
+    }
   }
 
   function removerParcela(i) {
     if (parcelas.length <= 1) return;
-    setParcelas(parcelas.filter((_, idx) => idx !== i));
+    if (modoEtapas) {
+      setParcelas(parcelas.filter((_, idx) => idx !== i));
+    } else {
+      setParcelas(gerarParcelasIguais(parcelas.length - 1, totalFechado, "Parcela"));
+    }
+  }
+
+  function trocarModoEtapas() {
+    if (modoEtapas) {
+      // Voltando para modo parcelas normais: divide total pelo número atual de etapas
+      setParcelas(gerarParcelasIguais(parcelas.length || 1, totalFechado, "Parcela"));
+      setModoEtapas(false);
+    } else {
+      // Indo para modo etapas: mantém parcelas atuais mas converte nomes
+      setParcelas(atuais => atuais.map((p, i) => ({
+        ...p,
+        nome: i === 0 ? "Entrada" : (i === atuais.length - 1 ? "Na entrega" : `Etapa ${i + 1}`),
+      })));
+      setModoEtapas(true);
+    }
   }
 
   // ── Desconto ⇄ Valor fechado (sincronia via totalFechado) ──
@@ -5381,6 +5490,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     }
 
     const ganhoData = {
+      tipoPagamentoOrc: tipoPgtoOrc,  // "padrao" ou "etapas"
       inclArq,
       inclEng,
       valorArqFechado: fecArq,
@@ -5388,11 +5498,18 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
       valorTotalFechado: totalFechado,
       descontoPct,
       descontoRs,
+      // No tipo "etapas", registra quais etapas foram fechadas com seus valores
+      etapasFechadas: ehTipoEtapas
+        ? etapas.filter(e => e.marcado).map(e => ({
+            id: e.id,
+            nome: e.nome,
+            pct: e.pct,
+            valor: Math.round((parseFloat(e.valor) || 0) * 100) / 100,
+          }))
+        : null,
       condicao: {
-        tipo: pgtoSel,
-        label: pgtoSel === "antecipado" ? "Antecipado"
-             : pgtoSel === "parcelado" ? "Parcelado"
-             : "Personalizada",
+        tipo: modoEtapas ? "etapas" : (parcelas.length === 1 ? "antecipado" : "parcelado"),
+        label: modoEtapas ? "Por etapas" : (parcelas.length === 1 ? "Antecipado" : `Parcelado ${parcelas.length}x`),
         parcelas: parcelas.map((p, i) => ({
           numero: i + 1,
           nome: p.nome,
@@ -5417,31 +5534,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const ROW_LABEL     = { fontSize:11.5, color:"#6b7280", minWidth:60 };
   const INPUT_STYLE   = { fontSize:12.5, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, fontFamily:"inherit", color:"#111", background:"#fff", outline:"none" };
 
-  // ── Lista de opções (3 fixas) ──
-  const opcoes = [
-    {
-      key:"antecipado",
-      label:"Antecipado",
-      sublabel:`${opcoesOrcamento.blocoLabel} · À vista com desconto`,
-      descBase: opcoesOrcamento.descAntecipado,
-    },
-    {
-      key:"parcelado",
-      label:"Parcelado",
-      sublabel:`${opcoesOrcamento.blocoLabel} · Em ${opcoesOrcamento.qtdParcelado}x sem desconto`,
-      descBase: 0,
-    },
-    {
-      key:"personalizado",
-      label:"Personalizada",
-      sublabel:"Entrada e etapas com valores e datas livres",
-      descBase: 0,
-    },
-  ];
-
   return (
     <div
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:20 }}>
       <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:540, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
 
@@ -5460,161 +5554,184 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
           {/* Seção 1: Escopo */}
           <div style={{ marginBottom:22 }}>
             <div style={SECTION_TITLE}>1. O que foi fechado</div>
-            {[
-              { key:"arq", label:"Arquitetura", valor:orcArq, marcado:inclArq, disponivel:temArq },
-              { key:"eng", label:"Engenharia",  valor:orcEng, marcado:inclEng, disponivel:temEng },
-            ].map(item => {
-              const bord = !item.disponivel ? "#e5e7eb" : (item.marcado ? "#111" : "#e5e7eb");
-              return (
-                <div key={item.key}
-                  onClick={() => item.disponivel && toggleEscopo(item.key)}
-                  style={{
-                    display:"flex", alignItems:"center", justifyContent:"space-between",
-                    padding:"10px 12px", border:`1px solid ${bord}`, borderRadius:7, marginBottom:6,
-                    cursor: item.disponivel ? "pointer" : "not-allowed",
-                    opacity: item.disponivel ? 1 : 0.4,
-                    background: item.disponivel ? "#fff" : "#fafafa",
-                    transition:"border-color 0.12s",
-                  }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    <div style={{
-                      width:15, height:15, borderRadius:3,
-                      border:`1.5px solid ${item.marcado ? "#111" : "#d1d5db"}`,
-                      background: item.marcado ? "#111" : "#fff",
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      color:"#fff", fontSize:10, fontWeight:700,
-                    }}>{item.marcado ? "✓" : ""}</div>
-                    <span style={{ fontSize:13, color:"#111" }}>{item.label}</span>
+
+            {ehTipoEtapas ? (
+              // ── Tipo "etapas": lista de etapas com checkbox + valor editável ──
+              <>
+                {etapas.map((e, i) => {
+                  const bord = e.marcado ? "#111" : "#e5e7eb";
+                  return (
+                    <div key={e.id}
+                      style={{
+                        display:"flex", alignItems:"center", gap:8,
+                        padding:"10px 12px", border:`1px solid ${bord}`, borderRadius:7, marginBottom:6,
+                        background: "#fff", transition:"border-color 0.12s",
+                      }}>
+                      <div onClick={() => toggleEtapa(e.id)} style={{ cursor:"pointer", display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0 }}>
+                        <div style={{
+                          width:15, height:15, borderRadius:3,
+                          border:`1.5px solid ${e.marcado ? "#111" : "#d1d5db"}`,
+                          background: e.marcado ? "#111" : "#fff",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          color:"#fff", fontSize:10, fontWeight:700, flexShrink:0,
+                        }}>{e.marcado ? "✓" : ""}</div>
+                        <span style={{ fontSize:13, color: e.marcado ? "#111" : "#9ca3af", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {e.nome}{e.pct > 0 ? ` · ${e.pct}%` : ""}
+                        </span>
+                      </div>
+                      <NumBR
+                        valor={e.valor}
+                        onChange={n => mudarValorEtapa(i, n)}
+                        min={0}
+                        decimais={2}
+                        style={{
+                          ...INPUT_STYLE, fontSize:12, padding:"5px 8px",
+                          textAlign:"right", width:120,
+                          opacity: e.marcado ? 1 : 0.4,
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+                {temImpostoOrc && (
+                  <div style={{ fontSize:11, color:"#9ca3af", marginTop:4, paddingLeft:4 }}>
+                    Valores já incluem imposto ({aliqImp}%)
                   </div>
-                  <span style={{ fontSize:12.5, color: item.disponivel ? "#6b7280" : "#9ca3af" }}>
-                    {item.valor > 0 ? fmtBRL(item.valor) : (item.disponivel ? "—" : "não incluso")}
-                  </span>
-                </div>
-              );
-            })}
+                )}
+              </>
+            ) : (
+              // ── Tipo "padrão": Arq / Eng ──
+              <>
+                {[
+                  { key:"arq", label:"Arquitetura", valor:orcArq, marcado:inclArq, disponivel:temArq },
+                  { key:"eng", label:"Engenharia",  valor:orcEng, marcado:inclEng, disponivel:temEng },
+                ].map(item => {
+                  const bord = !item.disponivel ? "#e5e7eb" : (item.marcado ? "#111" : "#e5e7eb");
+                  return (
+                    <div key={item.key}
+                      onClick={() => item.disponivel && toggleEscopo(item.key)}
+                      style={{
+                        display:"flex", alignItems:"center", justifyContent:"space-between",
+                        padding:"10px 12px", border:`1px solid ${bord}`, borderRadius:7, marginBottom:6,
+                        cursor: item.disponivel ? "pointer" : "not-allowed",
+                        opacity: item.disponivel ? 1 : 0.4,
+                        background: item.disponivel ? "#fff" : "#fafafa",
+                        transition:"border-color 0.12s",
+                      }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                        <div style={{
+                          width:15, height:15, borderRadius:3,
+                          border:`1.5px solid ${item.marcado ? "#111" : "#d1d5db"}`,
+                          background: item.marcado ? "#111" : "#fff",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          color:"#fff", fontSize:10, fontWeight:700,
+                        }}>{item.marcado ? "✓" : ""}</div>
+                        <span style={{ fontSize:13, color:"#111" }}>{item.label}</span>
+                      </div>
+                      <span style={{ fontSize:12.5, color: item.disponivel ? "#6b7280" : "#9ca3af" }}>
+                        {item.valor > 0 ? fmtBRL(item.valor) : (item.disponivel ? "—" : "não incluso")}
+                      </span>
+                    </div>
+                  );
+                })}
+                {temImpostoOrc && (
+                  <div style={{ fontSize:11, color:"#9ca3af", marginTop:4, paddingLeft:4 }}>
+                    Valores já incluem imposto ({aliqImp}%)
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* Seção 2: Forma de pagamento */}
           <div style={{ marginBottom:22 }}>
-            <div style={SECTION_TITLE}>2. Forma de pagamento</div>
-            {opcoes.map(opc => {
-              const selected = pgtoSel === opc.key;
-              return (
-                <div key={opc.key}
-                  onClick={e => { if (!e.target.closest("[data-stop]")) setPgtoSel(opc.key); }}
-                  style={{
-                    padding:"12px 14px", border:`1px solid ${selected ? "#111" : "#e5e7eb"}`,
-                    borderRadius:7, marginBottom:6, cursor:"pointer", transition:"border-color 0.12s",
-                    background:"#fff",
-                  }}>
-                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <div style={{ fontSize:13, color:"#111", display:"flex", alignItems:"center", gap:10, fontWeight:500 }}>
-                      <div style={{ width:15, height:15, border:`1.5px solid ${selected ? "#111" : "#d1d5db"}`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                        {selected && <div style={{ width:7, height:7, borderRadius:"50%", background:"#111" }} />}
-                      </div>
-                      {opc.label}
-                    </div>
-                    {opc.descBase > 0 && !selected && (
-                      <span style={{
-                        fontSize:11, color:"#111", fontWeight:600,
-                        background:"#f3f4f6", padding:"3px 8px", borderRadius:10,
-                        border:"1px solid #e5e7eb",
-                      }}>
-                        {opc.descBase}% de desconto
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, marginLeft:25 }}>{opc.sublabel}</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div style={SECTION_TITLE}>2. Forma de pagamento</div>
+              <button onClick={trocarModoEtapas}
+                style={{
+                  fontSize:11, color: modoEtapas ? "#111" : "#6b7280",
+                  background: modoEtapas ? "#fafafa" : "transparent",
+                  border:`1px ${modoEtapas ? "solid #111" : "solid #e5e7eb"}`,
+                  borderRadius:5, padding:"4px 10px", cursor:"pointer",
+                  fontFamily:"inherit", fontWeight:500,
+                }}>
+                {modoEtapas ? "✓ Por etapas" : "Trocar por etapas"}
+              </button>
+            </div>
 
-                  {selected && (
-                    <div style={{ marginTop:12, marginLeft:25 }} data-stop="1">
-                      {/* Campos editáveis por tipo */}
-                      {opc.key === "antecipado" && (
-                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                          <label style={ROW_LABEL}>Desconto</label>
-                          <NumBR valor={descontoPct} onChange={mudarDesconto} min={0} max={100} decimais={2}
-                            style={{ ...INPUT_STYLE, width:80 }} />
-                          <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
-                        </div>
-                      )}
-                      {opc.key === "parcelado" && (
-                        <>
-                          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8, flexWrap:"wrap" }}>
-                            <label style={ROW_LABEL}>Parcelas</label>
-                            <input type="number" min="1" max="24" value={parcelas.length}
-                              onChange={e => mudarQtdParcelas(e.target.value)}
-                              style={{ ...INPUT_STYLE, width:70 }} />
-                            <label style={{ ...ROW_LABEL, marginLeft:8 }}>Desconto</label>
-                            <NumBR valor={descontoPct} onChange={mudarDesconto} min={0} max={100} decimais={2}
-                              style={{ ...INPUT_STYLE, width:80 }} />
-                            <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
-                          </div>
-                        </>
-                      )}
-                      {opc.key === "personalizado" && (
-                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                          <label style={ROW_LABEL}>Desconto</label>
-                          <NumBR valor={descontoPct} onChange={mudarDesconto} min={0} max={100} decimais={2}
-                            style={{ ...INPUT_STYLE, width:80 }} />
-                          <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
-                        </div>
-                      )}
-
-                      {/* Lista de parcelas/etapas */}
-                      <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:7, padding:10, marginTop:8 }}>
-                        {parcelas.map((p, i) => (
-                          <div key={i} style={{
-                            display:"grid",
-                            gridTemplateColumns: opc.key === "personalizado" ? "1fr 110px 120px 20px" : "100px 110px 120px 20px",
-                            gap:6, alignItems:"center", marginBottom:6,
-                          }}>
-                            {opc.key === "personalizado" ? (
-                              <input type="text" value={p.nome}
-                                onChange={e => mudarParcelaCampo(i, "nome", e.target.value)}
-                                placeholder="Descrição"
-                                style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
-                            ) : (
-                              <span style={{ fontSize:11.5, color:"#6b7280", fontWeight:500 }}>{p.nome}</span>
-                            )}
-                            <NumBR valor={p.valor} onChange={n => mudarParcelaCampo(i, "valor", n)} min={0} decimais={2}
-                              style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", textAlign:"right" }} />
-                            <input type="date" value={p.data}
-                              onChange={e => mudarParcelaCampo(i, "data", e.target.value)}
-                              style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
-                            {parcelas.length > 1 ? (
-                              <button onClick={() => removerParcela(i)}
-                                style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
-                            ) : <span/>}
-                          </div>
-                        ))}
-                        {(opc.key === "parcelado" || opc.key === "personalizado") && (
-                          <button onClick={adicionarParcela}
-                            style={{ fontSize:11.5, background:"transparent", border:"1px dashed #d1d5db", borderRadius:5, padding:"5px 10px", cursor:"pointer", color:"#6b7280", fontFamily:"inherit", marginTop:4 }}>
-                            + Adicionar {opc.key === "personalizado" ? "etapa" : "parcela"}
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Alerta de diferença entre soma das parcelas e total fechado */}
-                      {temDiferenca && parcelas.length > 1 && (
-                        <div style={{
-                          marginTop:8, padding:"8px 10px",
-                          background:"#fef2f2", border:"1px solid #fecaca",
-                          borderRadius:6, fontSize:11.5, color:"#b91c1c",
-                          display:"flex", alignItems:"center", gap:6,
-                        }}>
-                          <span style={{ fontSize:13, fontWeight:700 }}>⚠</span>
-                          <div>
-                            Soma das parcelas ({fmtBRL(somaParcelas)}) não bate com o total fechado ({fmtBRL(totalFechado)}).
-                            Diferença: <strong>{diferencaParcelas > 0 ? "+" : ""}{fmtBRL(diferencaParcelas)}</strong>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
+            <div style={{
+              padding:"14px 16px", border:"1px solid #e5e7eb",
+              borderRadius:7, background:"#fff",
+            }}>
+              {/* Linha de controles: Desconto e Parcelas */}
+              <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:12, flexWrap:"wrap" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <label style={ROW_LABEL}>Desconto</label>
+                  <NumBR valor={descontoPct} onChange={mudarDesconto} min={0} max={100} decimais={2}
+                    style={{ ...INPUT_STYLE, width:80 }} />
+                  <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
                 </div>
-              );
-            })}
+                {!modoEtapas && (
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <label style={ROW_LABEL}>Parcelas</label>
+                    <input type="number" min="1" max="24" value={parcelas.length}
+                      onChange={e => mudarQtdParcelas(e.target.value)}
+                      style={{ ...INPUT_STYLE, width:70 }} />
+                  </div>
+                )}
+              </div>
+
+              {/* Lista de parcelas/etapas */}
+              <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:7, padding:10 }}>
+                {parcelas.map((p, i) => (
+                  <div key={i} style={{
+                    display:"grid",
+                    gridTemplateColumns: modoEtapas ? "1fr 110px 130px 20px" : "100px 110px 130px 20px",
+                    gap:6, alignItems:"center", marginBottom:6,
+                  }}>
+                    {modoEtapas ? (
+                      <input type="text" value={p.nome}
+                        onChange={e => mudarParcelaCampo(i, "nome", e.target.value)}
+                        placeholder="Descrição"
+                        style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
+                    ) : (
+                      <span style={{ fontSize:11.5, color:"#6b7280", fontWeight:500 }}>{p.nome}</span>
+                    )}
+                    <NumBR valor={p.valor} onChange={n => mudarParcelaCampo(i, "valor", n)} min={0} decimais={2}
+                      style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", textAlign:"right" }} />
+                    <input type="date" value={p.data}
+                      onChange={e => mudarParcelaCampo(i, "data", e.target.value)}
+                      style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
+                    {parcelas.length > 1 ? (
+                      <button onClick={() => removerParcela(i)}
+                        style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
+                    ) : <span/>}
+                  </div>
+                ))}
+                {modoEtapas && (
+                  <button onClick={adicionarParcela}
+                    style={{ fontSize:11.5, background:"transparent", border:"1px dashed #d1d5db", borderRadius:5, padding:"5px 10px", cursor:"pointer", color:"#6b7280", fontFamily:"inherit", marginTop:4 }}>
+                    + Adicionar etapa
+                  </button>
+                )}
+              </div>
+
+              {/* Alerta de diferença entre soma e total fechado */}
+              {temDiferenca && parcelas.length > 1 && (
+                <div style={{
+                  marginTop:10, padding:"8px 10px",
+                  background:"#fef2f2", border:"1px solid #fecaca",
+                  borderRadius:6, fontSize:11.5, color:"#b91c1c",
+                  display:"flex", alignItems:"center", gap:6,
+                }}>
+                  <span style={{ fontSize:13, fontWeight:700 }}>⚠</span>
+                  <div>
+                    Soma das parcelas ({fmtBRL(somaParcelas)}) não bate com o total fechado ({fmtBRL(totalFechado)}).
+                    Diferença: <strong>{diferencaParcelas > 0 ? "+" : ""}{fmtBRL(diferencaParcelas)}</strong>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Valor fechado */}
