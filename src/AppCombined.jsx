@@ -3176,494 +3176,6 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     </div>
   );
 }
-function ModalConfirmarGanho({ orc, arqTotal, engTotal, grandTotal, data, save, onClose }) {
-  function addDias(dateStr, dias) {
-    if (!dateStr) return "";
-    const d = new Date(dateStr + "T00:00:00");
-    d.setDate(d.getDate() + dias);
-    return d.toISOString().slice(0, 10);
-  }
-
-  const [inclArq, setInclArq]     = useState(true);
-  const [inclEng, setInclEng]     = useState(engTotal > 0);
-  const [vArq, setVArq]           = useState(Math.round(arqTotal * 100) / 100);
-  const [vEng, setVEng]           = useState(Math.round(engTotal * 100) / 100);
-  const [forma, setForma]         = useState("PIX");
-  const nParcInicial = engTotal > 0 ? 4 : 3;
-  const [nParc, setNParc]         = useState(nParcInicial);
-  const [vEntrada, setVEntrada]   = useState(Math.round(grandTotal / nParcInicial * 100) / 100);
-  const [dtEntrada, setDtEntrada] = useState("");
-  const [parcelas, setParcelas]   = useState([]);
-  const [aviso, setAviso]               = useState("");
-  const [confirmarFuturo, setConfirmarFuturo] = useState(false);
-  const dtEntradaRef = useRef(null);
-
-  // Desconto antecipado: só arq = 5% / 3x, pacote completo = 10% / 4x
-  const descAntec  = inclArq && inclEng ? 10 : 5;
-  const nParcPadrao = inclArq && inclEng ? 4 : 3;
-
-  const totalBase  = (inclArq ? vArq : 0) + (inclEng ? vEng : 0);
-  const total      = totalBase;
-  const nRest      = Math.max(nParc - 1, 1);
-  const vParc      = Math.round((total - vEntrada) / nRest * 100) / 100;
-
-  function gerarParcelas(dtEnt, n, vEnt, tot) {
-    const qtd = Math.max(n - 1, 1);
-    const vp  = Math.round((tot - vEnt) / qtd * 100) / 100;
-    return Array.from({ length: qtd }, (_, i) => ({
-      label: (i + 1) + "ª Parcela",
-      valor: vp,
-      data:  dtEnt ? addDias(dtEnt, (i + 1) * 30) : "",
-    }));
-  }
-
-  useEffect(() => {
-    // Quando muda inclArq/inclEng, ajusta nParc automaticamente
-    const novoNParc = inclArq && inclEng ? 4 : 3;
-    setNParc(novoNParc);
-  }, [inclArq, inclEng]);
-
-  useEffect(() => {
-    const descAtual = inclArq && inclEng ? 10 : 5;
-    if (forma === "Antecipado") {
-      const novaEntrada = Math.round(total * (1 - descAtual/100) * 100) / 100;
-      setVEntrada(novaEntrada);
-      setParcelas([]);
-    } else {
-      const novaEntrada = Math.round(total / Math.max(nParc, 1) * 100) / 100;
-      setVEntrada(novaEntrada);
-      setParcelas(gerarParcelas(dtEntrada, nParc, novaEntrada, total));
-    }
-  }, [nParc, dtEntrada, vArq, vEng, inclArq, inclEng, forma]);
-
-  function atualizarParcela(idx, campo, valor) {
-    setParcelas(p => p.map((x, i) => i === idx ? { ...x, [campo]: valor } : x));
-  }
-
-  function confirmar(forcarFuturo) {
-    const hoje = new Date().toISOString().slice(0, 10);
-    setAviso("");
-
-    // Validacao: datas obrigatorias
-    if (!dtEntrada) {
-      setAviso(forma === "Antecipado"
-        ? "Defina a data do pagamento antes de confirmar."
-        : "Defina a data da entrada antes de confirmar.");
-      setTimeout(() => { if (dtEntradaRef.current) dtEntradaRef.current.focus(); }, 50);
-      return;
-    }
-    if (forma !== "Antecipado") {
-      const semData = parcelas.filter(p => p.valor > 0 && !p.data);
-      if (semData.length > 0) {
-        setAviso("Defina as datas de vencimento de todas as parcelas.");
-        return;
-      }
-    }
-
-    // Aviso: data futura — pede confirmacao inline
-    const entradaFutura = dtEntrada > hoje;
-    if (entradaFutura && !forcarFuturo) {
-      setConfirmarFuturo(true);
-      return;
-    }
-    setConfirmarFuturo(false);
-
-    // ── Helper: define competencia e recebimento pela data ───────
-    function tipoRecebimento(data) {
-      if (!data) return { competencia:"Caixa a prazo", recebimento:"A Receber" };
-      return data <= hoje
-        ? { competencia:"Caixa a vista", recebimento:"Recebido" }
-        : { competencia:"Caixa a prazo", recebimento:"A Receber" };
-    }
-
-    const vArqFinal  = inclArq ? vArq : 0;
-    const vEngFinal  = inclEng ? vEng : 0;
-    const totalFinal = Math.round((vArqFinal + vEngFinal) * 100) / 100;
-    const descAtual  = inclArq && inclEng ? 10 : 5;
-    const pgto       = { forma, nParcelas:nParc, entrada:vEntrada, dtEntrada, parcelas, valorArq:vArqFinal, valorEng:vEngFinal, total:totalFinal };
-    const clienteCad  = (data.clientes||[]).find(c => c.id === orc.clienteId);
-    const clienteCpf  = clienteCad?.cpfCnpj || orc.clienteId;
-    const nomeEsc     = data.escritorio?.nome || "Padovan Arquitetos";
-    const existentes = data.receitasFinanceiro || [];
-    let seq = existentes.length + 1;
-    const nextCod  = () => "LNC-" + String(seq++).padStart(4, "0");
-    const compBase = "CMP-" + Math.floor(1000 + Math.random() * 9000);
-    const lancs    = [];
-
-    // ── Helpers ──────────────────────────────────────────────────
-    // subConta1 = "Receita de Projetos" | "Caixa"
-    // subConta2 = "Arquitetura" | "Engenharia"
-    // competencia = "Contábil" | "Caixa a vista" | "Caixa a prazo"
-    // recebimento = "Conta contábil" | "Recebido" | "A Receber"
-    // periodoCaixa = data efetiva do recebimento (ou null)
-    function mkLanc(sub2, valor, descricao, contabil1, subConta1, competencia, recebimento, periodoContabil, periodoCaixa) {
-      return {
-        id:              Math.random().toString(36).slice(2, 9),
-        codigo:          nextCod(),
-        nComprovante:    compBase,
-        nNota:           compBase,
-        orcId:           orc.id,
-        clienteId:       clienteCpf,
-        cliente:         orc.cliente,
-        categoria:       "Projeto",
-        produto:         orc.tipo || "",
-        fornecedor:      nomeEsc,
-        descricao,
-        tipoConta:       subConta1 === "Desconto" ? "Conta Redutora" : "Conta Acrescimo",
-        contabil1,
-        subContabil1:    subConta1,      // "Receita de Projetos" | "Desconto"
-        subContabil2:    sub2,           // "Arquitetura" | "Engenharia" | ""
-        subContabil3:    "",
-        subContabil4:    "",
-        subContabil5:    "",
-        competencia,
-        recebimento,
-        valor:           Math.round(valor * 100) / 100,
-        dataLancamento:  hoje,
-        periodoContabil: contabil1 === "Caixa" ? "" : (periodoContabil || hoje),
-        periodoCaixa:    periodoCaixa || "",
-        forma,
-      };
-    }
-
-    // ── Lançamentos contábeis (Receita Total) — 1 por serviço ───
-    // Registra o valor TOTAL do serviço na competência contábil
-    if (inclArq) lancs.push(mkLanc("Arquitetura", vArqFinal,
-      "Receita de Projetos", "Receita Total", "Receita de Projetos",
-      "Contábil", "Conta contábil", hoje, null));
-
-    if (inclEng) lancs.push(mkLanc("Engenharia", vEngFinal,
-      "Receita de Projetos", "Receita Total", "Receita de Projetos",
-      "Contábil", "Conta contábil", hoje, null));
-
-    // ── Lançamentos de Caixa — 1 por parcela por serviço ────────
-    const todasParcelas = [];
-
-    if (forma === "Antecipado") {
-      // Pagamento antecipado — 4 linhas conforme Excel:
-      // 1. Receita Total > Receita de Projetos > Arquitetura (valor bruto)
-      // 2. Receita Total > Receita de Projetos > Engenharia (valor bruto)
-      // 3. Receita Total > Desconto (conta redutora, valor do desconto)
-      // 4. Caixa > Receita de Projetos (valor liquido = bruto - desconto)
-      const dataReceb    = dtEntrada || hoje;
-      const descAtualPct = inclArq && inclEng ? 10 : 5;
-      const valorBruto   = Math.round((vArqFinal + vEngFinal) * 100) / 100;
-      const valorDesc    = Math.round(valorBruto * descAtualPct / 100 * 100) / 100;
-      const valorLiquido = Math.round((valorBruto - valorDesc) * 100) / 100;
-
-      // Linha 3: conta redutora de desconto
-      lancs.push(mkLanc("", valorDesc,
-        "Receita de Projetos", "Receita Total", "Desconto",
-        "Contabil", "Conta contabil", hoje, null));
-
-      // Linha 4: caixa a vista com valor liquido (sem sub conta 2)
-      const trAntec = tipoRecebimento(dataReceb);
-      lancs.push(mkLanc("", valorLiquido,
-        "Fluxo de caixa projetos", "Caixa", "Receita de Projetos",
-        trAntec.competencia, trAntec.recebimento, hoje, dataReceb));
-
-    } else {
-      // Parcelado — entrada + parcelas (valor total sem desmembrar)
-      if (vEntrada > 0 && dtEntrada) {
-        const trEnt = tipoRecebimento(dtEntrada);
-        lancs.push(mkLanc("Arquitetura", vEntrada,
-          "Fluxo de caixa projetos", "Caixa", "Receita de Projetos",
-          trEnt.competencia, trEnt.recebimento, hoje, dtEntrada));
-      }
-      parcelas.forEach(p => {
-        if (p.valor > 0 && p.data) {
-          const trParc = tipoRecebimento(p.data);
-          lancs.push(mkLanc("", p.valor,
-            "Fluxo de caixa projetos", "Caixa", "Receita de Projetos",
-            trParc.competencia, trParc.recebimento, hoje, p.data));
-        }
-      });
-    }
-
-    // Marca orçamento como ganho + adiciona data de conclusão
-    const agora = new Date().toISOString();
-    const novosOrc  = (data.orcamentosProjeto || []).map(o =>
-      o.id === orc.id
-        ? { ...o, status:"ganho", pagamento:pgto, concluidoEm: agora, ganhoEm: agora }
-        : o
-    );
-
-    // Cria projeto automaticamente no Kanban Etapas
-    const projetosAtuais = data.projetos || [];
-    const projetoJaExiste = projetosAtuais.some(p => p.orcId === orc.id);
-    const novosProjetos = projetoJaExiste
-      ? projetosAtuais
-      : [
-          ...projetosAtuais,
-          {
-            id: "PRJ-" + Date.now(),
-            orcId: orc.id,
-            clienteId: orc.clienteId,
-            tipo: orc.tipo,
-            subtipo: orc.subtipo,
-            padrao: orc.padrao,
-            tamanho: orc.tamanho,
-            referencia: orc.referencia || "",
-            areaTotal: orc.resultado?.areaTotal || 0,
-            colunaEtapa: "briefing",
-            criadoEm: agora,
-          },
-        ];
-
-    const novosLanc = [...existentes, ...lancs];
-    onClose();
-    save({
-      ...data,
-      orcamentosProjeto: novosOrc,
-      receitasFinanceiro: novosLanc,
-      projetos: novosProjetos,
-    }).catch(console.error);
-  }
-
-  const inp = { background:"#0a1122", border:"1px solid #1e293b", borderRadius:6, color:"#f1f5f9", padding:"7px 10px", fontSize:13, outline:"none", fontFamily:"inherit", width:"100%", boxSizing:"border-box" };
-  const lbl = { color:"#64748b", fontSize:11, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5 };
-  const sec = { color:"#94a3b8", fontSize:11, fontWeight:700, textTransform:"uppercase", letterSpacing:1, marginBottom:10 };
-  const fmtV = v => "R$ " + (v||0).toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.8)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
-      <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:14, padding:"28px 32px", width:"100%", maxWidth:580, boxShadow:"0 24px 48px rgba(0,0,0,0.7)", maxHeight:"90vh", overflowY:"auto" }}>
-
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
-          <div>
-            <div style={{ color:"#10b981", fontWeight:700, fontSize:16 }}>Confirmar Ganho</div>
-            <div style={{ color:"#64748b", fontSize:12, marginTop:3 }}>{orc.cliente} — {orc.tipo}</div>
-          </div>
-          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", fontSize:20, cursor:"pointer" }}>X</button>
-        </div>
-
-        <div style={sec}>Valores do Contrato</div>
-        <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:16 }}>
-          {/* Arquitetura */}
-          <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:12, alignItems:"center",
-            background: inclArq ? "#0a1526" : "#080e1a", border:"1px solid " + (inclArq ? "#1e293b" : "#0f172a"),
-            borderRadius:8, padding:"10px 14px", opacity: inclArq ? 1 : 0.5 }}>
-            <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
-              <input type="checkbox" checked={inclArq} onChange={e => setInclArq(e.target.checked)}
-                style={{ width:16, height:16, accentColor:"#3b82f6", cursor:"pointer" }} />
-              <span style={{ ...lbl, margin:0 }}>Arquitetura (R$)</span>
-            </label>
-            <input
-              defaultValue={vArq.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 })}
-              disabled={!inclArq}
-              onBlur={e => {
-                const v = parseFloat(e.target.value.replace(/\./g,"").replace(",",".")) || arqTotal;
-                setVArq(v);
-                e.target.value = v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
-              }}
-              style={{ ...inp, opacity: inclArq ? 1 : 0.4 }} />
-          </div>
-          {/* Engenharia */}
-          {engTotal > 0 && (
-            <div style={{ display:"grid", gridTemplateColumns:"auto 1fr", gap:12, alignItems:"center",
-              background: inclEng ? "#0a1526" : "#080e1a", border:"1px solid " + (inclEng ? "#1e293b" : "#0f172a"),
-              borderRadius:8, padding:"10px 14px", opacity: inclEng ? 1 : 0.5 }}>
-              <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
-                <input type="checkbox" checked={inclEng} onChange={e => setInclEng(e.target.checked)}
-                  style={{ width:16, height:16, accentColor:"#a78bfa", cursor:"pointer" }} />
-                <span style={{ ...lbl, margin:0 }}>Engenharia (R$)</span>
-              </label>
-              <input
-                defaultValue={vEng.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 })}
-                disabled={!inclEng}
-                onBlur={e => {
-                  const v = parseFloat(e.target.value.replace(/\./g,"").replace(",",".")) || engTotal;
-                  setVEng(v);
-                  e.target.value = v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
-                }}
-                style={{ ...inp, opacity: inclEng ? 1 : 0.4 }} />
-            </div>
-          )}
-          {/* Total */}
-          <div style={{ background:"#0d1526", border:"1px solid #10b981", borderRadius:8, padding:"10px 14px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <span style={{ color:"#64748b", fontSize:13 }}>Total contratado</span>
-            <span style={{ color:"#10b981", fontWeight:800, fontSize:16 }}>{fmtV(total)}</span>
-          </div>
-        </div>
-
-        <div style={sec}>Forma de Pagamento</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-          <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-            <label style={lbl}>Forma de Pagamento</label>
-            <select value={forma} onChange={e => {
-              const f = e.target.value;
-              setForma(f);
-              if (f === "Antecipado") {
-                const descAtual = inclArq && inclEng ? 10 : 5;
-                setVEntrada(Math.round(total * (1 - descAtual/100) * 100) / 100);
-                setNParc(1);
-                setParcelas([]);
-              } else {
-                const novoNParc = inclArq && inclEng ? 4 : 3;
-                setVEntrada(Math.round(total / novoNParc * 100) / 100);
-                setNParc(novoNParc);
-              }
-            }} style={{ ...inp, cursor:"pointer" }}>
-              <option>Antecipado</option>
-              <option>PIX</option><option>Transferencia</option><option>Boleto</option><option>Cheque</option><option>Dinheiro</option>
-            </select>
-            {forma === "Antecipado" && (
-              <div style={{ color:"#10b981", fontSize:11, marginTop:3 }}>
-                {inclArq && inclEng ? 10 : 5}% de desconto — {inclArq && inclEng ? "Pacote Completo" : inclArq ? "Apenas Arquitetura" : "Apenas Engenharia"} · {fmtV(Math.round(total*(1-(inclArq && inclEng ? 0.10 : 0.05))*100)/100)} à vista
-              </div>
-            )}
-          </div>
-          {forma !== "Antecipado" && (
-            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={lbl}>Parcelas (inclui entrada)</label>
-              <input type="number" min="1" max="60" value={nParc}
-                onChange={e => setNParc(parseInt(e.target.value) || 1)}
-                style={inp} />
-              <div style={{ color:"#64748b", fontSize:11, marginTop:3 }}>
-                Sugerido: {nParcPadrao}x ({inclArq && inclEng ? "Pacote" : "Apenas Arq."})
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div style={{ background:"#0a1526", border:"1px solid #1e293b", borderRadius:8, padding:14, marginBottom:12 }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:8 }}>
-            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={lbl}>{forma === "Antecipado" ? "Valor Total com Desconto (R$)" : "Valor da Entrada (R$)"}</label>
-              <input
-                key={vEntrada}
-                defaultValue={vEntrada.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 })}
-                onBlur={e => {
-                  const v = parseFloat(e.target.value.replace(/\./g,"").replace(",",".")) || 0;
-                  setVEntrada(v);
-                  e.target.value = v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
-                }}
-                style={inp} />
-            </div>
-            <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-              <label style={lbl}>Data da Entrada</label>
-              <input ref={dtEntradaRef} type="date" value={dtEntrada}
-                onChange={e=>{ setDtEntrada(e.target.value); setAviso(""); setConfirmarFuturo(false); }}
-                style={{ ...inp, colorScheme:"dark", cursor:"pointer", borderColor: aviso&&!dtEntrada?"#f87171":"" }} />
-            </div>
-          </div>
-          {forma !== "Antecipado" && nRest > 0 && (
-            <div style={{ color:"#64748b", fontSize:11 }}>
-              Restante: <span style={{ color:"#f1f5f9", fontWeight:600 }}>{fmtV(total - vEntrada)}</span> em {nRest} {nRest === 1 ? "parcela" : "parcelas"} de <span style={{ color:"#f1f5f9", fontWeight:600 }}>{fmtV(vParc)}</span>
-            </div>
-          )}
-        </div>
-
-        {forma !== "Antecipado" && parcelas.length > 0 && (
-          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
-            {parcelas.map((p, i) => (
-              <div key={i} style={{ display:"grid", gridTemplateColumns:"80px 1fr 1fr", gap:12, alignItems:"center", background:"#0a1122", borderRadius:7, padding:"10px 12px", border:"1px solid #1e293b" }}>
-                <div style={{ color:"#94a3b8", fontSize:12, fontWeight:600 }}>{p.label}</div>
-                <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                  <label style={{ ...lbl, fontSize:10 }}>Valor (R$)</label>
-                  <input
-                    key={p.valor + "-" + i}
-                    defaultValue={p.valor.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 })}
-                    onBlur={e => {
-                      const v = parseFloat(e.target.value.replace(/\./g,"").replace(",",".")) || 0;
-                      atualizarParcela(i, "valor", v);
-                      e.target.value = v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
-                    }}
-                    style={inp} />
-                </div>
-                <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-                  <label style={{ ...lbl, fontSize:10 }}>Vencimento</label>
-                  <input type="date" value={p.data}
-                    onChange={e => {
-                      if (!dtEntrada) {
-                        setAviso("Defina primeiro a data da entrada antes de definir as parcelas.");
-                        setTimeout(() => { if (dtEntradaRef.current) dtEntradaRef.current.focus(); }, 50);
-                        return;
-                      }
-                      atualizarParcela(i, "data", e.target.value);
-                    }}
-                    style={{ ...inp, colorScheme:"dark", cursor:"pointer" }} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div style={{ background:"#0d1526", border:"1px solid #1e293b", borderRadius:8, padding:"12px 14px", marginBottom:20 }}>
-          <div style={{ color:"#64748b", fontSize:11, fontWeight:700, textTransform:"uppercase", marginBottom:8 }}>Receitas que serão lançadas</div>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginBottom:4 }}>
-            <span style={{ color: inclArq ? "#94a3b8" : "#334155" }}>Arquitetura</span>
-            <span style={{ color: inclArq ? "#3b82f6" : "#334155", fontWeight:600 }}>{inclArq ? fmtV(vArq) : "—"}</span>
-          </div>
-          <div style={{ display:"flex", justifyContent:"space-between", fontSize:12 }}>
-            <span style={{ color: inclEng ? "#94a3b8" : "#334155" }}>Engenharia</span>
-            <span style={{ color: inclEng ? "#a78bfa" : "#334155", fontWeight:600 }}>{inclEng ? fmtV(vEng) : "—"}</span>
-          </div>
-          {forma === "Antecipado" && (() => {
-            const descPct  = inclArq && inclEng ? 10 : 5;
-            const vArqR    = Math.round((inclArq ? vArq : 0) * 100) / 100;
-            const vEngR    = Math.round((inclEng ? vEng : 0) * 100) / 100;
-            const totalR   = Math.round((vArqR + vEngR) * 100) / 100;
-            const liquidoR = Math.round(totalR * (1 - descPct/100) * 100) / 100;
-            const descR    = Math.round((totalR - liquidoR) * 100) / 100;
-            return (
-              <>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginTop:6, color:"#f87171" }}>
-                  <span>(-) Desconto Concedido ({descPct}%)</span>
-                  <span style={{ fontWeight:600 }}>− {fmtV(descR)}</span>
-                </div>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginTop:8, paddingTop:8, borderTop:"1px solid #1e293b" }}>
-                  <span style={{ color:"#64748b", fontWeight:700 }}>Líquido recebido</span>
-                  <span style={{ color:"#10b981", fontWeight:800 }}>{fmtV(liquidoR)}</span>
-                </div>
-              </>
-            );
-          })()}
-          {forma !== "Antecipado" && (
-            <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, marginTop:8, paddingTop:8, borderTop:"1px solid #1e293b" }}>
-              <span style={{ color:"#64748b", fontWeight:700 }}>Total contratado</span>
-              <span style={{ color:"#10b981", fontWeight:800 }}>{fmtV(Math.round(total * 100) / 100)}</span>
-            </div>
-          )}
-        </div>
-
-        {aviso && (
-          <div style={{ background:"rgba(248,113,113,0.12)", border:"1px solid #f87171", borderRadius:7,
-            padding:"10px 14px", marginBottom:12, color:"#f87171", fontSize:12, fontWeight:600 }}>
-            {aviso}
-          </div>
-        )}
-
-        {confirmarFuturo && (
-          <div style={{ background:"rgba(245,158,11,0.12)", border:"1px solid #f59e0b", borderRadius:7,
-            padding:"12px 14px", marginBottom:12 }}>
-            <div style={{ color:"#fbbf24", fontSize:12, fontWeight:600, marginBottom:10 }}>
-              A data {forma === "Antecipado" ? "do pagamento" : "da entrada"} ({new Date(dtEntrada+"T00:00:00").toLocaleDateString("pt-BR")}) e futura. O lancamento sera contabilizado como A Receber. Confirmar assim mesmo?
-            </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={()=>setConfirmarFuturo(false)}
-                style={{ background:"#1e293b", color:"#94a3b8", border:"1px solid #334155", borderRadius:6, padding:"6px 16px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
-                Nao, corrigir data
-              </button>
-              <button onClick={()=>confirmar(true)}
-                style={{ background:"#f59e0b", color:"#000", border:"none", borderRadius:6, padding:"6px 16px", fontSize:12, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
-                Sim, confirmar assim
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-          <button onClick={onClose} style={{ background:"#1e293b", color:"#94a3b8", border:"1px solid #334155", borderRadius:7, padding:"9px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-          {!confirmarFuturo && (
-            <button onClick={()=>confirmar(false)} style={{ background:"#10b981", color:"#fff", border:"none", borderRadius:7, padding:"9px 20px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Confirmar Ganho</button>
-          )}
-        </div>
-
-      </div>
-    </div>
-  );
-}
 
 function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -3808,6 +3320,11 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                     orc={o}
                     clientes={[cliente]}
                     onAbrir={(modo) => fetchOrc(modo || "ver")}
+                    onAction={(acao, orc) => {
+                      if (acao === "ganho")   setStatusOrc(orc.id, "ganho");
+                      if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
+                      if (acao === "excluir") setConfirmDelete(orc.id);
+                    }}
                   />
                 );
               })}
@@ -4956,12 +4473,99 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [buscaCliente, setBuscaCliente] = useState("");
   // Proposta sendo visualizada (modal visualizer de snapshot)
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
+  // Orçamento selecionado para marcar como ganho (abre ModalConfirmarGanho)
+  const [orcGanho, setOrcGanho] = useState(null);
 
   const orcamentos = data?.orcamentosProjeto || [];
   const clientes = data?.clientes || [];
 
   // Nota: expiração automática de propostas (30 dias) é feita pelo backend
   // via cron job (endpoint POST /admin/manutencao), todo dia às 3h da manhã.
+
+  // Ações do dropdown do card
+  async function handleOrcAction(acao, orc) {
+    const todos = data.orcamentosProjeto || [];
+    const agora = new Date().toISOString();
+
+    if (acao === "excluir") {
+      if (!confirm(`Excluir orçamento ${orc.id}?\n\nEsta ação não pode ser desfeita.`)) return;
+      const novos = todos.filter(o => o.id !== orc.id);
+      save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+      return;
+    }
+
+    if (acao === "perdido") {
+      if (orc.status === "perdido") {
+        // Se já está perdido, reabre pra rascunho
+        if (!confirm("Reabrir este orçamento?")) return;
+        const novos = todos.map(o => o.id === orc.id ? { ...o, status: "rascunho", concluidoEm: null } : o);
+        save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+        return;
+      }
+      if (!confirm(`Marcar orçamento ${orc.id} como Perdido?`)) return;
+      const novos = todos.map(o =>
+        o.id === orc.id
+          ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora }
+          : o
+      );
+      save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+      return;
+    }
+
+    if (acao === "ganho") {
+      if (orc.status === "ganho") return; // já ganho
+      // Abre modal de confirmação com escopo, valores e condição de pagamento
+      setOrcGanho(orc);
+      return;
+    }
+  }
+
+  // Chamado quando o usuário confirma o modal de ganho com os dados fechados
+  async function confirmarGanho(ganhoData) {
+    const orc = orcGanho;
+    if (!orc) return;
+    const todos = data.orcamentosProjeto || [];
+    const agora = new Date().toISOString();
+
+    // Cria projeto automaticamente (se ainda não existir)
+    const projetosAtuais = data.projetos || [];
+    const jaExiste = projetosAtuais.some(p => p.orcId === orc.id);
+    const novosProjetos = jaExiste ? projetosAtuais : [
+      ...projetosAtuais,
+      {
+        id: "PRJ-" + Date.now(),
+        orcId: orc.id,
+        clienteId: orc.clienteId,
+        tipo: orc.tipo,
+        subtipo: orc.subtipo,
+        padrao: orc.padrao,
+        tamanho: orc.tamanho,
+        referencia: orc.referencia || "",
+        areaTotal: orc.resultado?.areaTotal || 0,
+        colunaEtapa: "briefing",
+        criadoEm: agora,
+      },
+    ];
+
+    // Atualiza o orçamento: status ganho + fechamento
+    const novosOrc = todos.map(o =>
+      o.id === orc.id
+        ? {
+            ...o,
+            status: "ganho",
+            concluidoEm: o.concluidoEm || agora,
+            ganhoEm: o.ganhoEm || agora,
+            fechamento: {
+              ...ganhoData,
+              fechadoEm: agora,
+            },
+          }
+        : o
+    );
+
+    await save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos }).catch(console.error);
+    setOrcGanho(null);
+  }
 
   async function salvarOrcamento(orc) {
     const todos = data.orcamentosProjeto || [];
@@ -5144,7 +4748,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               : "Nenhum orçamento corresponde aos filtros."}
           </div>
         ) : orcFiltrados.map(orc => (
-          <OrcCard key={orc.id} orc={orc} clientes={clientes} onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)} />
+          <OrcCard key={orc.id} orc={orc} clientes={clientes} onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)} onAction={handleOrcAction} />
         ))}
       </div>
 
@@ -5169,6 +4773,15 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         <PropostaVisualizer
           proposta={propostaVisualizada}
           onFechar={() => setPropostaVisualizada(null)}
+        />
+      )}
+
+      {/* Modal de confirmação de ganho */}
+      {orcGanho && (
+        <ModalConfirmarGanho
+          orc={orcGanho}
+          onClose={() => setOrcGanho(null)}
+          onConfirmar={confirmarGanho}
         />
       )}
     </PageContainer>
@@ -5197,11 +4810,22 @@ function OrcFilterPill({ label, count, active, onClick, countColor }) {
 }
 
 // ─── Card de orçamento na lista ──────────────────
-function OrcCard({ orc, clientes, onAbrir }) {
+function OrcCard({ orc, clientes, onAbrir, onAction }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
   const area = orc.resultado?.areaTotal || 0;
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Fecha menu ao clicar fora
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest(`[data-orc-menu="${orc.id}"]`)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen, orc.id]);
 
   // Se tem proposta salva, usa os valores dela (edições manuais do usuário)
   // Senão, usa o cálculo original do orçamento base.
@@ -5308,7 +4932,58 @@ function OrcCard({ orc, clientes, onAbrir }) {
         <div style={{ display:"flex", gap:4 }} onClick={e => e.stopPropagation()}>
           <button onClick={() => onAbrir("ver")} style={btnIconStyle}>Ver</button>
           <button onClick={() => onAbrir("editar")} style={btnIconStyle}>Editar</button>
-          <button onClick={() => alert("Ações em breve: Marcar Ganho / Perdido / Excluir")} style={btnIconStyle}>Ações</button>
+          <div style={{ position:"relative" }} data-orc-menu={orc.id}>
+            <button onClick={() => setMenuOpen(v => !v)} style={btnIconStyle}>Ações</button>
+            {menuOpen && (
+              <div style={{
+                position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
+                background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+                boxShadow:"0 4px 16px rgba(0,0,0,0.1)",
+                overflow:"hidden",
+              }}>
+                <button
+                  disabled={status === "ganho"}
+                  onClick={() => { setMenuOpen(false); onAction && onAction("ganho", orc); }}
+                  style={{
+                    display:"block", width:"100%", textAlign:"left",
+                    background: status === "ganho" ? "#f0fdf4" : "transparent",
+                    border:"none",
+                    color: status === "ganho" ? "#16a34a" : "#374151",
+                    padding:"7px 14px 7px 12px", fontSize:12.5,
+                    cursor: status === "ganho" ? "not-allowed" : "pointer",
+                    fontFamily:"inherit",
+                    fontWeight: status === "ganho" ? 600 : 400,
+                    whiteSpace:"nowrap",
+                  }}>
+                  {status === "ganho" ? "✓ Ganho" : "Ganho"}
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); onAction && onAction("perdido", orc); }}
+                  style={{
+                    display:"block", width:"100%", textAlign:"left",
+                    background: status === "perdido" ? "#fef2f2" : "transparent",
+                    border:"none",
+                    color: status === "perdido" ? "#dc2626" : "#374151",
+                    padding:"7px 14px 7px 12px", fontSize:12.5, cursor:"pointer",
+                    fontFamily:"inherit",
+                    fontWeight: status === "perdido" ? 600 : 400,
+                    whiteSpace:"nowrap",
+                  }}>
+                  {status === "perdido" ? "✓ Perdido" : "Perdido"}
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
+                  style={{
+                    display:"block", width:"100%", textAlign:"left",
+                    background:"transparent", border:"none",
+                    color:"#dc2626", padding:"7px 14px 7px 12px", fontSize:12.5,
+                    cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+                  }}>
+                  Excluir
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -5405,6 +5080,371 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
             + Cadastrar novo cliente
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Modal Confirmar Ganho
+// ═══════════════════════════════════════════════════════════════
+// Espelha a estrutura do orçamento (tipo de pagamento, parcelas, etc.)
+// Deixa o usuário escolher:
+//   1. O que foi fechado (Arq / Eng — só o que estava no orçamento)
+//   2. Forma de pagamento (opções que existiam no orçamento)
+//   3. Valor fechado total (≤ proposto; distribui proporcional)
+//   4. Parcelas (quantidade + datas editáveis)
+//
+// Ao confirmar:
+//   - Marca orçamento como ganho + valorFechado + condicaoFechada
+//   - Cria projeto no Kanban Etapas (coluna Briefing)
+//   - onConfirmar(ganhoData) — o pai decide como gravar (lançamentos etc.)
+function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
+  // ── Deriva opções de pagamento a partir do orçamento ──
+  const opcoes = (() => {
+    const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
+    if (tipoPgto === "padrao") {
+      return [
+        { key:"antecipado", label:"Antecipado", desc:"À vista com desconto",
+          descontoPct: orc.descontoEtapa || 0,
+          parcelas: orc.parcelasEtapa || 1 },
+        { key:"parcelado", label:"Parcelado",
+          desc:`Em ${orc.parcelasPacote || 3}x sem desconto`,
+          descontoPct: orc.descontoPacote || 0,
+          parcelas: orc.parcelasPacote || 3 },
+      ];
+    }
+    // etapas
+    return [
+      { key:"etapa", label:"Por Etapa", desc:"Paga cada etapa quando conclui",
+        descontoPct: orc.descontoEtapaCtrt || 0,
+        parcelas: orc.parcelasEtapaCtrt || 2 },
+      { key:"pacoteEtapas", label:"Pacote das Etapas", desc:"Paga o pacote antecipado",
+        descontoPct: orc.descontoPacoteCtrt || 0,
+        parcelas: orc.parcelasPacoteCtrt || 1 },
+    ];
+  })();
+
+  // ── Escopo original (o que veio no orçamento) ──
+  const orcArq = orc.resultado?.precoArq || 0;
+  const orcEng = orc.resultado?.precoEng || 0;
+  const temArq = orcArq > 0;
+  const temEng = orcEng > 0;
+
+  // ── Estados ──
+  const [inclArq, setInclArq] = useState(temArq);
+  const [inclEng, setInclEng] = useState(temEng);
+  const [pgtoSel, setPgtoSel] = useState(opcoes[0].key);
+  const [personalizado, setPersonalizado] = useState(false);
+  const [parcelas, setParcelas] = useState(() => gerarParcelasIniciais(opcoes[0].parcelas));
+  const [valorFechadoManual, setValorFechadoManual] = useState(null);
+
+  function gerarParcelasIniciais(n) {
+    const hoje = new Date();
+    return Array.from({ length: n }, (_, i) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, hoje.getDate());
+      return { data: d.toISOString().slice(0, 10) };
+    });
+  }
+
+  // ── Cálculos derivados ──
+  const propArq = inclArq ? orcArq : 0;
+  const propEng = inclEng ? orcEng : 0;
+  const propTotal = propArq + propEng;
+  const opcAtual = opcoes.find(o => o.key === pgtoSel) || opcoes[0];
+  const descPct = personalizado ? 0 : (opcAtual?.descontoPct || 0);
+  const sugerido = Math.round(propTotal * (1 - descPct/100));
+  const totalFechado = (valorFechadoManual != null) ? valorFechadoManual : sugerido;
+
+  // Distribui proporcional
+  let fecArq = 0, fecEng = 0;
+  if (propTotal > 0) {
+    fecArq = Math.round(totalFechado * (propArq / propTotal));
+    fecEng = totalFechado - fecArq;
+  }
+  const descontoRs = propTotal - totalFechado;
+  const descontoEfetivoPct = propTotal > 0 ? (descontoRs / propTotal * 100) : 0;
+  const valorParcela = totalFechado / (parcelas.length || 1);
+
+  // ── Handlers ──
+  function toggleEscopo(key) {
+    if (key === "arq") {
+      if (!inclArq) setInclArq(true);
+      else if (inclEng) setInclArq(false); // não deixa desmarcar os dois
+    }
+    if (key === "eng") {
+      if (!inclEng) setInclEng(true);
+      else if (inclArq) setInclEng(false);
+    }
+    setValorFechadoManual(null);
+  }
+
+  function selecionarOpcao(key) {
+    setPgtoSel(key);
+    setPersonalizado(false);
+    const opc = opcoes.find(o => o.key === key);
+    setParcelas(gerarParcelasIniciais(opc.parcelas));
+    setValorFechadoManual(null);
+  }
+
+  function togglePersonalizado() {
+    if (personalizado) {
+      setPersonalizado(false);
+    } else {
+      setPersonalizado(true);
+      setParcelas(gerarParcelasIniciais(3));
+      setValorFechadoManual(null);
+    }
+  }
+
+  function mudarQtdParcelas(n) {
+    const qtd = Math.max(1, Math.min(24, parseInt(n) || 1));
+    setParcelas(gerarParcelasIniciais(qtd));
+  }
+
+  function mudarDataParcela(i, nova) {
+    setParcelas(p => p.map((x, idx) => idx === i ? { ...x, data: nova } : x));
+  }
+
+  function adicionarParcela() {
+    const ult = parcelas[parcelas.length - 1];
+    const d = new Date(ult.data);
+    d.setMonth(d.getMonth() + 1);
+    setParcelas([...parcelas, { data: d.toISOString().slice(0, 10) }]);
+  }
+
+  function removerParcela(i) {
+    if (parcelas.length <= 1) return;
+    setParcelas(parcelas.filter((_, idx) => idx !== i));
+  }
+
+  function mudarValorFechado(v) {
+    const n = parseFloat(v) || 0;
+    if (n > propTotal) { setValorFechadoManual(propTotal); return; }
+    if (n < 0) { setValorFechadoManual(0); return; }
+    setValorFechadoManual(n);
+  }
+
+  function confirmar() {
+    const ganhoData = {
+      inclArq,
+      inclEng,
+      valorArqFechado: fecArq,
+      valorEngFechado: fecEng,
+      valorTotalFechado: totalFechado,
+      descontoRs,
+      descontoPct: descontoEfetivoPct,
+      condicao: {
+        tipo: personalizado ? "personalizada" : pgtoSel,
+        label: personalizado ? "Personalizada" : opcAtual.label,
+        parcelas: parcelas.map((p, i) => ({
+          numero: i + 1,
+          valor: Math.round(valorParcela * 100) / 100,
+          data: p.data,
+        })),
+      },
+    };
+    onConfirmar(ganhoData);
+  }
+
+  // ── Helpers de formatação ──
+  const fmtBRL = v => "R$ " + Math.round(v).toLocaleString("pt-BR");
+  const fmtData = iso => {
+    if (!iso) return "";
+    const p = iso.split("-");
+    return `${p[2]}/${p[1]}/${p[0].slice(2)}`;
+  };
+
+  // ── Estilos (inline) ──
+  const SECTION_TITLE = { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 };
+  const ROW_LABEL     = { fontSize:11.5, color:"#6b7280", minWidth:64 };
+  const INPUT_STYLE   = { fontSize:12.5, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, fontFamily:"inherit", color:"#111", background:"#fff", outline:"none" };
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:20 }}>
+      <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:520, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
+
+        {/* Head */}
+        <div style={{ padding:"20px 24px 14px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111", letterSpacing:-0.3 }}>Marcar como Ganho</div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:3 }}>{orc.cliente || "—"} · {orc.id}</div>
+          </div>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", fontSize:20, color:"#9ca3af", cursor:"pointer", padding:"0 4px", lineHeight:1, fontFamily:"inherit" }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding:"18px 24px" }}>
+
+          {/* Seção 1: Escopo */}
+          <div style={{ marginBottom:22 }}>
+            <div style={SECTION_TITLE}>1. O que foi fechado</div>
+            {[
+              { key:"arq", label:"Arquitetura", valor:orcArq, marcado:inclArq, disponivel:temArq },
+              { key:"eng", label:"Engenharia",  valor:orcEng, marcado:inclEng, disponivel:temEng },
+            ].map(item => {
+              const bord = !item.disponivel ? "#e5e7eb" : (item.marcado ? "#111" : "#e5e7eb");
+              return (
+                <div key={item.key}
+                  onClick={() => item.disponivel && toggleEscopo(item.key)}
+                  style={{
+                    display:"flex", alignItems:"center", justifyContent:"space-between",
+                    padding:"10px 12px", border:`1px solid ${bord}`, borderRadius:7, marginBottom:6,
+                    cursor: item.disponivel ? "pointer" : "not-allowed",
+                    opacity: item.disponivel ? 1 : 0.4,
+                    background: item.disponivel ? "#fff" : "#fafafa",
+                    transition:"border-color 0.12s",
+                  }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{
+                      width:15, height:15, borderRadius:3,
+                      border:`1.5px solid ${item.marcado ? "#111" : "#d1d5db"}`,
+                      background: item.marcado ? "#111" : "#fff",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      color:"#fff", fontSize:10, fontWeight:700,
+                    }}>{item.marcado ? "✓" : ""}</div>
+                    <span style={{ fontSize:13, color:"#111" }}>{item.label}</span>
+                  </div>
+                  <span style={{ fontSize:12.5, color: item.disponivel ? "#6b7280" : "#9ca3af" }}>
+                    {item.valor > 0 ? fmtBRL(item.valor) : (item.disponivel ? "—" : "não incluso")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Seção 2: Forma de pagamento */}
+          <div style={{ marginBottom:22 }}>
+            <div style={SECTION_TITLE}>2. Forma de pagamento</div>
+            {opcoes.map(opc => {
+              const selected = pgtoSel === opc.key && !personalizado;
+              const descTxt = opc.descontoPct > 0 ? `${opc.desc} · ${opc.descontoPct}% de desconto` : opc.desc;
+              return (
+                <div key={opc.key}
+                  onClick={e => { if (!e.target.closest("[data-stop]")) selecionarOpcao(opc.key); }}
+                  style={{
+                    padding:"12px 14px", border:`1px solid ${selected ? "#111" : "#e5e7eb"}`,
+                    borderRadius:7, marginBottom:6, cursor:"pointer", transition:"border-color 0.12s",
+                    background:"#fff",
+                  }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div style={{ fontSize:13, color:"#111", display:"flex", alignItems:"center", gap:10, fontWeight:500 }}>
+                      <div style={{ width:15, height:15, border:`1.5px solid ${selected ? "#111" : "#d1d5db"}`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        {selected && <div style={{ width:7, height:7, borderRadius:"50%", background:"#111" }} />}
+                      </div>
+                      {opc.label}
+                    </div>
+                    {opc.descontoPct > 0 && <span style={{ fontSize:11, color:"#6b7280", fontWeight:600 }}>−{opc.descontoPct}%</span>}
+                  </div>
+                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, marginLeft:25 }}>{descTxt}</div>
+
+                  {selected && (
+                    <div style={{ marginTop:12, marginLeft:25 }} data-stop="1">
+                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                        <label style={ROW_LABEL}>Parcelas</label>
+                        <input type="number" min="1" max="24" value={parcelas.length}
+                          onChange={e => mudarQtdParcelas(e.target.value)}
+                          style={{ ...INPUT_STYLE, width:70 }} />
+                        <span style={{ fontSize:11.5, color:"#9ca3af" }}>× {fmtBRL(valorParcela)}</span>
+                      </div>
+                      {parcelas.length > 1 && (
+                        <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:7, padding:10, marginTop:8 }}>
+                          {parcelas.map((p, i) => (
+                            <div key={i} style={{ display:"grid", gridTemplateColumns:"26px 1fr 26px", gap:8, alignItems:"center", marginBottom:6 }}>
+                              <span style={{ fontSize:11, color:"#9ca3af", fontWeight:500 }}>{i+1}</span>
+                              <input type="date" value={p.data}
+                                onChange={e => mudarDataParcela(i, e.target.value)}
+                                style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", width:"100%" }} />
+                              <button onClick={() => removerParcela(i)}
+                                style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
+                            </div>
+                          ))}
+                          <button onClick={adicionarParcela}
+                            style={{ fontSize:11.5, background:"transparent", border:"1px dashed #d1d5db", borderRadius:5, padding:"5px 10px", cursor:"pointer", color:"#6b7280", fontFamily:"inherit", marginTop:4 }}>
+                            + Adicionar parcela
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button onClick={togglePersonalizado}
+              style={{
+                width:"100%", padding:10, background: personalizado ? "#fafafa" : "#fff",
+                border:`1px ${personalizado ? "solid" : "dashed"} ${personalizado ? "#111" : "#d1d5db"}`,
+                borderRadius:7, fontSize:12, color: personalizado ? "#111" : "#6b7280",
+                cursor:"pointer", fontFamily:"inherit", marginTop:6,
+              }}>
+              {personalizado ? "✓ Condição personalizada" : "+ Condição personalizada"}
+            </button>
+          </div>
+
+          {/* Valor fechado */}
+          <div style={{ background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:8, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14 }}>
+            <div>
+              <div style={{ fontSize:12, color:"#111", fontWeight:600 }}>Valor fechado total</div>
+              <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>
+                Proposto {fmtBRL(propTotal)}
+                {descPct > 0 && ` · Sugerido ${fmtBRL(sugerido)} (${descPct}% desc)`}
+              </div>
+            </div>
+            <input type="number" value={totalFechado} max={propTotal} min={0}
+              onChange={e => mudarValorFechado(e.target.value)}
+              style={{ fontSize:15, fontWeight:600, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, background:"#fff", width:140, textAlign:"right", fontFamily:"inherit", color:"#111", outline:"none" }} />
+          </div>
+
+          {/* Resumo */}
+          <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, padding:"14px 16px" }}>
+            <div style={SECTION_TITLE}>Resumo</div>
+            {inclArq && (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, padding:"3px 0", color:"#374151" }}>
+                <span>Arquitetura</span><span>{fmtBRL(fecArq)}</span>
+              </div>
+            )}
+            {inclEng && (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, padding:"3px 0", color:"#374151" }}>
+                <span>Engenharia</span><span>{fmtBRL(fecEng)}</span>
+              </div>
+            )}
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13.5, padding:"8px 0 3px 0", borderTop:"1px solid #f3f4f6", marginTop:6, fontWeight:600, color:"#111" }}>
+              <span>Total fechado</span><span>{fmtBRL(totalFechado)}</span>
+            </div>
+            {descontoRs > 0 && (
+              <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>
+                Desconto de {fmtBRL(descontoRs)} · {descontoEfetivoPct.toFixed(1).replace(".", ",")}%
+              </div>
+            )}
+            <div style={{ fontSize:11.5, color:"#374151", marginTop:8, padding:"8px 10px", background:"#fafafa", borderRadius:6 }}>
+              {parcelas.length <= 1 ? (
+                <><strong>Antecipado</strong> · {fmtData(parcelas[0].data)}</>
+              ) : (
+                <>
+                  <strong>{parcelas.length}x de {fmtBRL(valorParcela)}</strong>
+                  <div style={{ marginTop:3, color:"#9ca3af", fontSize:10.5 }}>
+                    {parcelas.map(p => fmtData(p.data).slice(0,5)).join(" · ")}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <button onClick={onClose}
+            style={{ padding:"8px 16px", background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, fontSize:12.5, cursor:"pointer", color:"#374151", fontFamily:"inherit" }}>
+            Cancelar
+          </button>
+          <button onClick={confirmar}
+            style={{ padding:"8px 18px", background:"#111", color:"#fff", border:"none", borderRadius:7, fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+            Confirmar
+          </button>
+        </div>
+
       </div>
     </div>
   );

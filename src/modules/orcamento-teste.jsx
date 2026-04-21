@@ -92,12 +92,99 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [buscaCliente, setBuscaCliente] = useState("");
   // Proposta sendo visualizada (modal visualizer de snapshot)
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
+  // Orçamento selecionado para marcar como ganho (abre ModalConfirmarGanho)
+  const [orcGanho, setOrcGanho] = useState(null);
 
   const orcamentos = data?.orcamentosProjeto || [];
   const clientes = data?.clientes || [];
 
   // Nota: expiração automática de propostas (30 dias) é feita pelo backend
   // via cron job (endpoint POST /admin/manutencao), todo dia às 3h da manhã.
+
+  // Ações do dropdown do card
+  async function handleOrcAction(acao, orc) {
+    const todos = data.orcamentosProjeto || [];
+    const agora = new Date().toISOString();
+
+    if (acao === "excluir") {
+      if (!confirm(`Excluir orçamento ${orc.id}?\n\nEsta ação não pode ser desfeita.`)) return;
+      const novos = todos.filter(o => o.id !== orc.id);
+      save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+      return;
+    }
+
+    if (acao === "perdido") {
+      if (orc.status === "perdido") {
+        // Se já está perdido, reabre pra rascunho
+        if (!confirm("Reabrir este orçamento?")) return;
+        const novos = todos.map(o => o.id === orc.id ? { ...o, status: "rascunho", concluidoEm: null } : o);
+        save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+        return;
+      }
+      if (!confirm(`Marcar orçamento ${orc.id} como Perdido?`)) return;
+      const novos = todos.map(o =>
+        o.id === orc.id
+          ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora }
+          : o
+      );
+      save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+      return;
+    }
+
+    if (acao === "ganho") {
+      if (orc.status === "ganho") return; // já ganho
+      // Abre modal de confirmação com escopo, valores e condição de pagamento
+      setOrcGanho(orc);
+      return;
+    }
+  }
+
+  // Chamado quando o usuário confirma o modal de ganho com os dados fechados
+  async function confirmarGanho(ganhoData) {
+    const orc = orcGanho;
+    if (!orc) return;
+    const todos = data.orcamentosProjeto || [];
+    const agora = new Date().toISOString();
+
+    // Cria projeto automaticamente (se ainda não existir)
+    const projetosAtuais = data.projetos || [];
+    const jaExiste = projetosAtuais.some(p => p.orcId === orc.id);
+    const novosProjetos = jaExiste ? projetosAtuais : [
+      ...projetosAtuais,
+      {
+        id: "PRJ-" + Date.now(),
+        orcId: orc.id,
+        clienteId: orc.clienteId,
+        tipo: orc.tipo,
+        subtipo: orc.subtipo,
+        padrao: orc.padrao,
+        tamanho: orc.tamanho,
+        referencia: orc.referencia || "",
+        areaTotal: orc.resultado?.areaTotal || 0,
+        colunaEtapa: "briefing",
+        criadoEm: agora,
+      },
+    ];
+
+    // Atualiza o orçamento: status ganho + fechamento
+    const novosOrc = todos.map(o =>
+      o.id === orc.id
+        ? {
+            ...o,
+            status: "ganho",
+            concluidoEm: o.concluidoEm || agora,
+            ganhoEm: o.ganhoEm || agora,
+            fechamento: {
+              ...ganhoData,
+              fechadoEm: agora,
+            },
+          }
+        : o
+    );
+
+    await save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos }).catch(console.error);
+    setOrcGanho(null);
+  }
 
   async function salvarOrcamento(orc) {
     const todos = data.orcamentosProjeto || [];
@@ -280,7 +367,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               : "Nenhum orçamento corresponde aos filtros."}
           </div>
         ) : orcFiltrados.map(orc => (
-          <OrcCard key={orc.id} orc={orc} clientes={clientes} onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)} />
+          <OrcCard key={orc.id} orc={orc} clientes={clientes} onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)} onAction={handleOrcAction} />
         ))}
       </div>
 
@@ -305,6 +392,15 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         <PropostaVisualizer
           proposta={propostaVisualizada}
           onFechar={() => setPropostaVisualizada(null)}
+        />
+      )}
+
+      {/* Modal de confirmação de ganho */}
+      {orcGanho && (
+        <ModalConfirmarGanho
+          orc={orcGanho}
+          onClose={() => setOrcGanho(null)}
+          onConfirmar={confirmarGanho}
         />
       )}
     </PageContainer>
@@ -333,11 +429,22 @@ function OrcFilterPill({ label, count, active, onClick, countColor }) {
 }
 
 // ─── Card de orçamento na lista ──────────────────
-function OrcCard({ orc, clientes, onAbrir }) {
+function OrcCard({ orc, clientes, onAbrir, onAction }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
   const area = orc.resultado?.areaTotal || 0;
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // Fecha menu ao clicar fora
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest(`[data-orc-menu="${orc.id}"]`)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen, orc.id]);
 
   // Se tem proposta salva, usa os valores dela (edições manuais do usuário)
   // Senão, usa o cálculo original do orçamento base.
@@ -444,7 +551,58 @@ function OrcCard({ orc, clientes, onAbrir }) {
         <div style={{ display:"flex", gap:4 }} onClick={e => e.stopPropagation()}>
           <button onClick={() => onAbrir("ver")} style={btnIconStyle}>Ver</button>
           <button onClick={() => onAbrir("editar")} style={btnIconStyle}>Editar</button>
-          <button onClick={() => alert("Ações em breve: Marcar Ganho / Perdido / Excluir")} style={btnIconStyle}>Ações</button>
+          <div style={{ position:"relative" }} data-orc-menu={orc.id}>
+            <button onClick={() => setMenuOpen(v => !v)} style={btnIconStyle}>Ações</button>
+            {menuOpen && (
+              <div style={{
+                position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
+                background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+                boxShadow:"0 4px 16px rgba(0,0,0,0.1)",
+                overflow:"hidden",
+              }}>
+                <button
+                  disabled={status === "ganho"}
+                  onClick={() => { setMenuOpen(false); onAction && onAction("ganho", orc); }}
+                  style={{
+                    display:"block", width:"100%", textAlign:"left",
+                    background: status === "ganho" ? "#f0fdf4" : "transparent",
+                    border:"none",
+                    color: status === "ganho" ? "#16a34a" : "#374151",
+                    padding:"7px 14px 7px 12px", fontSize:12.5,
+                    cursor: status === "ganho" ? "not-allowed" : "pointer",
+                    fontFamily:"inherit",
+                    fontWeight: status === "ganho" ? 600 : 400,
+                    whiteSpace:"nowrap",
+                  }}>
+                  {status === "ganho" ? "✓ Ganho" : "Ganho"}
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); onAction && onAction("perdido", orc); }}
+                  style={{
+                    display:"block", width:"100%", textAlign:"left",
+                    background: status === "perdido" ? "#fef2f2" : "transparent",
+                    border:"none",
+                    color: status === "perdido" ? "#dc2626" : "#374151",
+                    padding:"7px 14px 7px 12px", fontSize:12.5, cursor:"pointer",
+                    fontFamily:"inherit",
+                    fontWeight: status === "perdido" ? 600 : 400,
+                    whiteSpace:"nowrap",
+                  }}>
+                  {status === "perdido" ? "✓ Perdido" : "Perdido"}
+                </button>
+                <button
+                  onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
+                  style={{
+                    display:"block", width:"100%", textAlign:"left",
+                    background:"transparent", border:"none",
+                    color:"#dc2626", padding:"7px 14px 7px 12px", fontSize:12.5,
+                    cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+                  }}>
+                  Excluir
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -541,6 +699,371 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
             + Cadastrar novo cliente
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Modal Confirmar Ganho
+// ═══════════════════════════════════════════════════════════════
+// Espelha a estrutura do orçamento (tipo de pagamento, parcelas, etc.)
+// Deixa o usuário escolher:
+//   1. O que foi fechado (Arq / Eng — só o que estava no orçamento)
+//   2. Forma de pagamento (opções que existiam no orçamento)
+//   3. Valor fechado total (≤ proposto; distribui proporcional)
+//   4. Parcelas (quantidade + datas editáveis)
+//
+// Ao confirmar:
+//   - Marca orçamento como ganho + valorFechado + condicaoFechada
+//   - Cria projeto no Kanban Etapas (coluna Briefing)
+//   - onConfirmar(ganhoData) — o pai decide como gravar (lançamentos etc.)
+function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
+  // ── Deriva opções de pagamento a partir do orçamento ──
+  const opcoes = (() => {
+    const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
+    if (tipoPgto === "padrao") {
+      return [
+        { key:"antecipado", label:"Antecipado", desc:"À vista com desconto",
+          descontoPct: orc.descontoEtapa || 0,
+          parcelas: orc.parcelasEtapa || 1 },
+        { key:"parcelado", label:"Parcelado",
+          desc:`Em ${orc.parcelasPacote || 3}x sem desconto`,
+          descontoPct: orc.descontoPacote || 0,
+          parcelas: orc.parcelasPacote || 3 },
+      ];
+    }
+    // etapas
+    return [
+      { key:"etapa", label:"Por Etapa", desc:"Paga cada etapa quando conclui",
+        descontoPct: orc.descontoEtapaCtrt || 0,
+        parcelas: orc.parcelasEtapaCtrt || 2 },
+      { key:"pacoteEtapas", label:"Pacote das Etapas", desc:"Paga o pacote antecipado",
+        descontoPct: orc.descontoPacoteCtrt || 0,
+        parcelas: orc.parcelasPacoteCtrt || 1 },
+    ];
+  })();
+
+  // ── Escopo original (o que veio no orçamento) ──
+  const orcArq = orc.resultado?.precoArq || 0;
+  const orcEng = orc.resultado?.precoEng || 0;
+  const temArq = orcArq > 0;
+  const temEng = orcEng > 0;
+
+  // ── Estados ──
+  const [inclArq, setInclArq] = useState(temArq);
+  const [inclEng, setInclEng] = useState(temEng);
+  const [pgtoSel, setPgtoSel] = useState(opcoes[0].key);
+  const [personalizado, setPersonalizado] = useState(false);
+  const [parcelas, setParcelas] = useState(() => gerarParcelasIniciais(opcoes[0].parcelas));
+  const [valorFechadoManual, setValorFechadoManual] = useState(null);
+
+  function gerarParcelasIniciais(n) {
+    const hoje = new Date();
+    return Array.from({ length: n }, (_, i) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, hoje.getDate());
+      return { data: d.toISOString().slice(0, 10) };
+    });
+  }
+
+  // ── Cálculos derivados ──
+  const propArq = inclArq ? orcArq : 0;
+  const propEng = inclEng ? orcEng : 0;
+  const propTotal = propArq + propEng;
+  const opcAtual = opcoes.find(o => o.key === pgtoSel) || opcoes[0];
+  const descPct = personalizado ? 0 : (opcAtual?.descontoPct || 0);
+  const sugerido = Math.round(propTotal * (1 - descPct/100));
+  const totalFechado = (valorFechadoManual != null) ? valorFechadoManual : sugerido;
+
+  // Distribui proporcional
+  let fecArq = 0, fecEng = 0;
+  if (propTotal > 0) {
+    fecArq = Math.round(totalFechado * (propArq / propTotal));
+    fecEng = totalFechado - fecArq;
+  }
+  const descontoRs = propTotal - totalFechado;
+  const descontoEfetivoPct = propTotal > 0 ? (descontoRs / propTotal * 100) : 0;
+  const valorParcela = totalFechado / (parcelas.length || 1);
+
+  // ── Handlers ──
+  function toggleEscopo(key) {
+    if (key === "arq") {
+      if (!inclArq) setInclArq(true);
+      else if (inclEng) setInclArq(false); // não deixa desmarcar os dois
+    }
+    if (key === "eng") {
+      if (!inclEng) setInclEng(true);
+      else if (inclArq) setInclEng(false);
+    }
+    setValorFechadoManual(null);
+  }
+
+  function selecionarOpcao(key) {
+    setPgtoSel(key);
+    setPersonalizado(false);
+    const opc = opcoes.find(o => o.key === key);
+    setParcelas(gerarParcelasIniciais(opc.parcelas));
+    setValorFechadoManual(null);
+  }
+
+  function togglePersonalizado() {
+    if (personalizado) {
+      setPersonalizado(false);
+    } else {
+      setPersonalizado(true);
+      setParcelas(gerarParcelasIniciais(3));
+      setValorFechadoManual(null);
+    }
+  }
+
+  function mudarQtdParcelas(n) {
+    const qtd = Math.max(1, Math.min(24, parseInt(n) || 1));
+    setParcelas(gerarParcelasIniciais(qtd));
+  }
+
+  function mudarDataParcela(i, nova) {
+    setParcelas(p => p.map((x, idx) => idx === i ? { ...x, data: nova } : x));
+  }
+
+  function adicionarParcela() {
+    const ult = parcelas[parcelas.length - 1];
+    const d = new Date(ult.data);
+    d.setMonth(d.getMonth() + 1);
+    setParcelas([...parcelas, { data: d.toISOString().slice(0, 10) }]);
+  }
+
+  function removerParcela(i) {
+    if (parcelas.length <= 1) return;
+    setParcelas(parcelas.filter((_, idx) => idx !== i));
+  }
+
+  function mudarValorFechado(v) {
+    const n = parseFloat(v) || 0;
+    if (n > propTotal) { setValorFechadoManual(propTotal); return; }
+    if (n < 0) { setValorFechadoManual(0); return; }
+    setValorFechadoManual(n);
+  }
+
+  function confirmar() {
+    const ganhoData = {
+      inclArq,
+      inclEng,
+      valorArqFechado: fecArq,
+      valorEngFechado: fecEng,
+      valorTotalFechado: totalFechado,
+      descontoRs,
+      descontoPct: descontoEfetivoPct,
+      condicao: {
+        tipo: personalizado ? "personalizada" : pgtoSel,
+        label: personalizado ? "Personalizada" : opcAtual.label,
+        parcelas: parcelas.map((p, i) => ({
+          numero: i + 1,
+          valor: Math.round(valorParcela * 100) / 100,
+          data: p.data,
+        })),
+      },
+    };
+    onConfirmar(ganhoData);
+  }
+
+  // ── Helpers de formatação ──
+  const fmtBRL = v => "R$ " + Math.round(v).toLocaleString("pt-BR");
+  const fmtData = iso => {
+    if (!iso) return "";
+    const p = iso.split("-");
+    return `${p[2]}/${p[1]}/${p[0].slice(2)}`;
+  };
+
+  // ── Estilos (inline) ──
+  const SECTION_TITLE = { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 };
+  const ROW_LABEL     = { fontSize:11.5, color:"#6b7280", minWidth:64 };
+  const INPUT_STYLE   = { fontSize:12.5, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, fontFamily:"inherit", color:"#111", background:"#fff", outline:"none" };
+
+  return (
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:20 }}>
+      <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:520, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
+
+        {/* Head */}
+        <div style={{ padding:"20px 24px 14px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111", letterSpacing:-0.3 }}>Marcar como Ganho</div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:3 }}>{orc.cliente || "—"} · {orc.id}</div>
+          </div>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", fontSize:20, color:"#9ca3af", cursor:"pointer", padding:"0 4px", lineHeight:1, fontFamily:"inherit" }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding:"18px 24px" }}>
+
+          {/* Seção 1: Escopo */}
+          <div style={{ marginBottom:22 }}>
+            <div style={SECTION_TITLE}>1. O que foi fechado</div>
+            {[
+              { key:"arq", label:"Arquitetura", valor:orcArq, marcado:inclArq, disponivel:temArq },
+              { key:"eng", label:"Engenharia",  valor:orcEng, marcado:inclEng, disponivel:temEng },
+            ].map(item => {
+              const bord = !item.disponivel ? "#e5e7eb" : (item.marcado ? "#111" : "#e5e7eb");
+              return (
+                <div key={item.key}
+                  onClick={() => item.disponivel && toggleEscopo(item.key)}
+                  style={{
+                    display:"flex", alignItems:"center", justifyContent:"space-between",
+                    padding:"10px 12px", border:`1px solid ${bord}`, borderRadius:7, marginBottom:6,
+                    cursor: item.disponivel ? "pointer" : "not-allowed",
+                    opacity: item.disponivel ? 1 : 0.4,
+                    background: item.disponivel ? "#fff" : "#fafafa",
+                    transition:"border-color 0.12s",
+                  }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{
+                      width:15, height:15, borderRadius:3,
+                      border:`1.5px solid ${item.marcado ? "#111" : "#d1d5db"}`,
+                      background: item.marcado ? "#111" : "#fff",
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      color:"#fff", fontSize:10, fontWeight:700,
+                    }}>{item.marcado ? "✓" : ""}</div>
+                    <span style={{ fontSize:13, color:"#111" }}>{item.label}</span>
+                  </div>
+                  <span style={{ fontSize:12.5, color: item.disponivel ? "#6b7280" : "#9ca3af" }}>
+                    {item.valor > 0 ? fmtBRL(item.valor) : (item.disponivel ? "—" : "não incluso")}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Seção 2: Forma de pagamento */}
+          <div style={{ marginBottom:22 }}>
+            <div style={SECTION_TITLE}>2. Forma de pagamento</div>
+            {opcoes.map(opc => {
+              const selected = pgtoSel === opc.key && !personalizado;
+              const descTxt = opc.descontoPct > 0 ? `${opc.desc} · ${opc.descontoPct}% de desconto` : opc.desc;
+              return (
+                <div key={opc.key}
+                  onClick={e => { if (!e.target.closest("[data-stop]")) selecionarOpcao(opc.key); }}
+                  style={{
+                    padding:"12px 14px", border:`1px solid ${selected ? "#111" : "#e5e7eb"}`,
+                    borderRadius:7, marginBottom:6, cursor:"pointer", transition:"border-color 0.12s",
+                    background:"#fff",
+                  }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div style={{ fontSize:13, color:"#111", display:"flex", alignItems:"center", gap:10, fontWeight:500 }}>
+                      <div style={{ width:15, height:15, border:`1.5px solid ${selected ? "#111" : "#d1d5db"}`, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                        {selected && <div style={{ width:7, height:7, borderRadius:"50%", background:"#111" }} />}
+                      </div>
+                      {opc.label}
+                    </div>
+                    {opc.descontoPct > 0 && <span style={{ fontSize:11, color:"#6b7280", fontWeight:600 }}>−{opc.descontoPct}%</span>}
+                  </div>
+                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, marginLeft:25 }}>{descTxt}</div>
+
+                  {selected && (
+                    <div style={{ marginTop:12, marginLeft:25 }} data-stop="1">
+                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                        <label style={ROW_LABEL}>Parcelas</label>
+                        <input type="number" min="1" max="24" value={parcelas.length}
+                          onChange={e => mudarQtdParcelas(e.target.value)}
+                          style={{ ...INPUT_STYLE, width:70 }} />
+                        <span style={{ fontSize:11.5, color:"#9ca3af" }}>× {fmtBRL(valorParcela)}</span>
+                      </div>
+                      {parcelas.length > 1 && (
+                        <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:7, padding:10, marginTop:8 }}>
+                          {parcelas.map((p, i) => (
+                            <div key={i} style={{ display:"grid", gridTemplateColumns:"26px 1fr 26px", gap:8, alignItems:"center", marginBottom:6 }}>
+                              <span style={{ fontSize:11, color:"#9ca3af", fontWeight:500 }}>{i+1}</span>
+                              <input type="date" value={p.data}
+                                onChange={e => mudarDataParcela(i, e.target.value)}
+                                style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", width:"100%" }} />
+                              <button onClick={() => removerParcela(i)}
+                                style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
+                            </div>
+                          ))}
+                          <button onClick={adicionarParcela}
+                            style={{ fontSize:11.5, background:"transparent", border:"1px dashed #d1d5db", borderRadius:5, padding:"5px 10px", cursor:"pointer", color:"#6b7280", fontFamily:"inherit", marginTop:4 }}>
+                            + Adicionar parcela
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button onClick={togglePersonalizado}
+              style={{
+                width:"100%", padding:10, background: personalizado ? "#fafafa" : "#fff",
+                border:`1px ${personalizado ? "solid" : "dashed"} ${personalizado ? "#111" : "#d1d5db"}`,
+                borderRadius:7, fontSize:12, color: personalizado ? "#111" : "#6b7280",
+                cursor:"pointer", fontFamily:"inherit", marginTop:6,
+              }}>
+              {personalizado ? "✓ Condição personalizada" : "+ Condição personalizada"}
+            </button>
+          </div>
+
+          {/* Valor fechado */}
+          <div style={{ background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:8, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14 }}>
+            <div>
+              <div style={{ fontSize:12, color:"#111", fontWeight:600 }}>Valor fechado total</div>
+              <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>
+                Proposto {fmtBRL(propTotal)}
+                {descPct > 0 && ` · Sugerido ${fmtBRL(sugerido)} (${descPct}% desc)`}
+              </div>
+            </div>
+            <input type="number" value={totalFechado} max={propTotal} min={0}
+              onChange={e => mudarValorFechado(e.target.value)}
+              style={{ fontSize:15, fontWeight:600, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, background:"#fff", width:140, textAlign:"right", fontFamily:"inherit", color:"#111", outline:"none" }} />
+          </div>
+
+          {/* Resumo */}
+          <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, padding:"14px 16px" }}>
+            <div style={SECTION_TITLE}>Resumo</div>
+            {inclArq && (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, padding:"3px 0", color:"#374151" }}>
+                <span>Arquitetura</span><span>{fmtBRL(fecArq)}</span>
+              </div>
+            )}
+            {inclEng && (
+              <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, padding:"3px 0", color:"#374151" }}>
+                <span>Engenharia</span><span>{fmtBRL(fecEng)}</span>
+              </div>
+            )}
+            <div style={{ display:"flex", justifyContent:"space-between", fontSize:13.5, padding:"8px 0 3px 0", borderTop:"1px solid #f3f4f6", marginTop:6, fontWeight:600, color:"#111" }}>
+              <span>Total fechado</span><span>{fmtBRL(totalFechado)}</span>
+            </div>
+            {descontoRs > 0 && (
+              <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>
+                Desconto de {fmtBRL(descontoRs)} · {descontoEfetivoPct.toFixed(1).replace(".", ",")}%
+              </div>
+            )}
+            <div style={{ fontSize:11.5, color:"#374151", marginTop:8, padding:"8px 10px", background:"#fafafa", borderRadius:6 }}>
+              {parcelas.length <= 1 ? (
+                <><strong>Antecipado</strong> · {fmtData(parcelas[0].data)}</>
+              ) : (
+                <>
+                  <strong>{parcelas.length}x de {fmtBRL(valorParcela)}</strong>
+                  <div style={{ marginTop:3, color:"#9ca3af", fontSize:10.5 }}>
+                    {parcelas.map(p => fmtData(p.data).slice(0,5)).join(" · ")}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:8 }}>
+          <button onClick={onClose}
+            style={{ padding:"8px 16px", background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, fontSize:12.5, cursor:"pointer", color:"#374151", fontFamily:"inherit" }}>
+            Cancelar
+          </button>
+          <button onClick={confirmar}
+            style={{ padding:"8px 18px", background:"#111", color:"#fff", border:"none", borderRadius:7, fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+            Confirmar
+          </button>
+        </div>
+
       </div>
     </div>
   );
