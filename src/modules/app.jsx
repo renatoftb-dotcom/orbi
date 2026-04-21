@@ -72,6 +72,7 @@ export default function ModuloClientesFornecedores() {
   const [sidebarAberta, setSidebarAberta]     = useState(true);
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
   const [clienteRetorno, setClienteRetorno] = useState(null); // cliente pra abrir detail ao fechar orçamento
+  const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false); // sinal pra abrir cadastro de cliente
   const [backendOffline, setBackendOffline]   = useState(false);
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
@@ -363,9 +364,9 @@ export default function ModuloClientesFornecedores() {
             />
           ) : (<>
           {aba === "home"                   && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
+          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
-          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}

@@ -2348,7 +2348,7 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   );
 }
 
-function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto }) {
+function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto, abrirCadastroNovo, onCadastroNovoAberto }) {
   // IMPORTANTE: Todos os hooks devem ser declarados ANTES de qualquer return condicional.
   // Ordem dos hooks deve ser constante entre renders (regra do React).
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
@@ -2377,6 +2377,24 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirClienteDetail]);
+
+  // Ao receber sinal do módulo Orçamentos, abre direto o formulário de novo cliente
+  useEffect(() => {
+    if (abrirCadastroNovo) {
+      // Inline (emptyCliente é declarado mais abaixo, não dá pra referenciar aqui)
+      setForm({
+        tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
+        complemento:"", bairro:"", cidade:"", estado:"SP",
+        contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
+        observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
+        status:"",
+        servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
+      });
+      setView("form");
+      if (onCadastroNovoAberto) onCadastroNovoAberto();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirCadastroNovo]);
 
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
@@ -4508,7 +4526,7 @@ function formatComodo(nome, qtd) {
 // Quando clica em Ver/Editar ou Novo (após escolher cliente), abre o FormOrcamentoProjetoTeste
 // já existente passando os dados do cliente selecionado.
 // ═══════════════════════════════════════════════════════════════
-function TesteOrcamento({ data, save }) {
+function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [orcBase, setOrcBase] = useState(null);
   const [clienteAtivo, setClienteAtivo] = useState(null); // cliente do orçamento aberto
   const [filtro, setFiltro] = useState("ativos");
@@ -4749,8 +4767,9 @@ function TesteOrcamento({ data, save }) {
           onSelecionar={abrirNovoOrcamento}
           onFechar={() => { setModalNovoAberto(false); setBuscaCliente(""); }}
           onCadastrarNovo={() => {
-            // TODO: abrir tela de cadastro de cliente (ainda não integrado)
-            alert("Cadastre o cliente no módulo Clientes e volte aqui.");
+            setModalNovoAberto(false);
+            setBuscaCliente("");
+            if (onCadastrarCliente) onCadastrarCliente();
           }}
         />
       )}
@@ -9171,6 +9190,7 @@ export default function ModuloClientesFornecedores() {
   const [sidebarAberta, setSidebarAberta]     = useState(true);
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
   const [clienteRetorno, setClienteRetorno] = useState(null); // cliente pra abrir detail ao fechar orçamento
+  const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false); // sinal pra abrir cadastro de cliente
   const [backendOffline, setBackendOffline]   = useState(false);
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
@@ -9462,9 +9482,9 @@ export default function ModuloClientesFornecedores() {
             />
           ) : (<>
           {aba === "home"                   && <HomeMenu setAba={setAba} data={data} />}
-          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} />}
+          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
-          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}

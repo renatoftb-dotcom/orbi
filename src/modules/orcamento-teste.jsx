@@ -83,7 +83,7 @@ function formatComodo(nome, qtd) {
 // Quando clica em Ver/Editar ou Novo (após escolher cliente), abre o FormOrcamentoProjetoTeste
 // já existente passando os dados do cliente selecionado.
 // ═══════════════════════════════════════════════════════════════
-function TesteOrcamento({ data, save }) {
+function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [orcBase, setOrcBase] = useState(null);
   const [clienteAtivo, setClienteAtivo] = useState(null); // cliente do orçamento aberto
   const [filtro, setFiltro] = useState("ativos");
@@ -324,8 +324,9 @@ function TesteOrcamento({ data, save }) {
           onSelecionar={abrirNovoOrcamento}
           onFechar={() => { setModalNovoAberto(false); setBuscaCliente(""); }}
           onCadastrarNovo={() => {
-            // TODO: abrir tela de cadastro de cliente (ainda não integrado)
-            alert("Cadastre o cliente no módulo Clientes e volte aqui.");
+            setModalNovoAberto(false);
+            setBuscaCliente("");
+            if (onCadastrarCliente) onCadastrarCliente();
           }}
         />
       )}

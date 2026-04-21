@@ -88,7 +88,7 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   );
 }
 
-function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto }) {
+function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto, abrirCadastroNovo, onCadastroNovoAberto }) {
   // IMPORTANTE: Todos os hooks devem ser declarados ANTES de qualquer return condicional.
   // Ordem dos hooks deve ser constante entre renders (regra do React).
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
@@ -117,6 +117,24 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirClienteDetail]);
+
+  // Ao receber sinal do módulo Orçamentos, abre direto o formulário de novo cliente
+  useEffect(() => {
+    if (abrirCadastroNovo) {
+      // Inline (emptyCliente é declarado mais abaixo, não dá pra referenciar aqui)
+      setForm({
+        tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
+        complemento:"", bairro:"", cidade:"", estado:"SP",
+        contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
+        observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
+        status:"",
+        servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
+      });
+      setView("form");
+      if (onCadastroNovoAberto) onCadastroNovoAberto();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [abrirCadastroNovo]);
 
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
