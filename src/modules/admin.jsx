@@ -25,7 +25,7 @@ function Admin({ usuario }) {
     setManutLoading(true);
     setManutResult(null);
     try {
-      const token = localStorage.getItem("vicke_token");
+      const token = localStorage.getItem("vicke-token");
       if (!token) {
         alert("Sessão expirada. Faça login novamente.");
         setManutLoading(false);

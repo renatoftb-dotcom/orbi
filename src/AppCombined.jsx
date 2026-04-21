@@ -9013,7 +9013,7 @@ function Admin({ usuario }) {
     setManutLoading(true);
     setManutResult(null);
     try {
-      const token = localStorage.getItem("vicke_token");
+      const token = localStorage.getItem("vicke-token");
       if (!token) {
         alert("Sessão expirada. Faça login novamente.");
         setManutLoading(false);
@@ -9405,6 +9405,20 @@ export default function ModuloClientesFornecedores() {
 
   useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
 
+  // Bootstrap: se já tiver token+user no localStorage, restaura sessão
+  // (evita ter que fazer login toda vez que dá F5)
+  useEffect(() => {
+    try {
+      const tok = localStorage.getItem("vicke-token");
+      const usr = localStorage.getItem("vicke-user");
+      if (tok && usr) {
+        setUsuario(JSON.parse(usr));
+        setToken(tok);
+        setAutenticado(true);
+      }
+    } catch {}
+  }, []);
+
   // Migração de abas antigas para nova nomenclatura
   useEffect(() => {
     if (aba === "projetos") setAba("projetos:etapas");
@@ -9616,6 +9630,17 @@ export default function ModuloClientesFornecedores() {
               onClick={() => { setAba("escritorio"); setEscritorioKey(n=>n+1); setOrcamentoTelaCheia(null); }}>
               Escritório
             </button>
+            {usuario?.perfil === "master" && (
+              <button style={itemStyle(aba==="admin")}
+                onMouseEnter={e => { if(aba!=="admin") e.currentTarget.style.background="#f9fafb"; }}
+                onMouseLeave={e => { if(aba!=="admin") e.currentTarget.style.background="transparent"; }}
+                onClick={() => { setAba("admin"); setOrcamentoTelaCheia(null); }}>
+                <span style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  Admin
+                  <span style={{ fontSize:9, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
+                </span>
+              </button>
+            )}
             <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <div>
                 <div style={{ fontSize:12, fontWeight:600, color:"#374151" }}>{usuario?.nome || "—"}</div>
@@ -9693,6 +9718,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
+          {aba === "admin" && usuario?.perfil === "master" && <Admin usuario={usuario} />}
           </>)}
           </>
         </div>
