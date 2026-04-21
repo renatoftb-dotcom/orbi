@@ -718,6 +718,68 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
 //   - Marca orçamento como ganho + valorFechado + condicaoFechada
 //   - Cria projeto no Kanban Etapas (coluna Briefing)
 //   - onConfirmar(ganhoData) — o pai decide como gravar (lançamentos etc.)
+// ─── Input numérico no formato brasileiro (1.234,56) ───
+// Guarda o valor em Number no estado do pai, mas exibe e aceita
+// digitação no padrão pt-BR (ponto separador de milhar, vírgula decimal).
+function NumBR({ valor, onChange, min, max, decimais = 2, style = {}, ...rest }) {
+  const fmt = (n) => {
+    if (n == null || isNaN(n)) return "";
+    return n.toLocaleString("pt-BR", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: decimais,
+    });
+  };
+  const [txt, setTxt] = useState(fmt(valor));
+  const focadoRef = useRef(false);
+
+  // Sincroniza quando o valor muda por fora — MAS SÓ SE NÃO TIVER FOCO.
+  // Evita conflito com digitação em andamento (o cursor pular, valor sobrescrito).
+  useEffect(() => {
+    if (focadoRef.current) return;
+    setTxt(fmt(valor));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valor]);
+
+  function parseBR(s) {
+    if (s == null) return 0;
+    const limpo = String(s).replace(/\./g, "").replace(",", ".").replace(/[^\d.-]/g, "");
+    const n = parseFloat(limpo);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function handleChange(e) {
+    const raw = e.target.value;
+    setTxt(raw);
+    let n = parseBR(raw);
+    if (min != null && n < min) n = min;
+    if (max != null && n > max) n = max;
+    onChange(n);
+  }
+
+  function handleFocus() {
+    focadoRef.current = true;
+  }
+
+  function handleBlur() {
+    focadoRef.current = false;
+    // Ao sair, normaliza o texto pro formato BR
+    setTxt(fmt(valor));
+  }
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={txt}
+      onChange={handleChange}
+      onFocus={handleFocus}
+      onBlur={handleBlur}
+      style={style}
+      {...rest}
+    />
+  );
+}
+
 function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   // ── Escopo original (o que veio no orçamento) ──
   const orcArq = orc.resultado?.precoArq || 0;
@@ -726,11 +788,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const temEng = orcEng > 0;
 
   // ── Estados principais ──
-  const [inclArq, setInclArq]         = useState(temArq);
-  const [inclEng, setInclEng]         = useState(temEng);
-  const [pgtoSel, setPgtoSel]         = useState("antecipado"); // "antecipado" | "parcelado" | "personalizado"
-  const [descontoPct, setDescontoPct] = useState(0);            // % editável
-  const [parcelas, setParcelas]       = useState([]);            // [{ nome, valor, data }]
+  const [inclArq, setInclArq]             = useState(temArq);
+  const [inclEng, setInclEng]             = useState(temEng);
+  const [pgtoSel, setPgtoSel]             = useState("antecipado"); // "antecipado" | "parcelado" | "personalizado"
+  const [totalFechado, setTotalFechado]   = useState(0);            // fonte única da verdade (desconto é derivado)
+  const [parcelas, setParcelas]           = useState([]);            // [{ nome, valor, data }]
 
   // ── Deriva opções padrão do orçamento (desconto e quantidade de parcelas) ──
   // Prioridade: proposta enviada > raiz do orçamento > fallback.
@@ -765,16 +827,24 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const propArq = inclArq ? orcArq : 0;
   const propEng = inclEng ? orcEng : 0;
   const propTotal = propArq + propEng;
-  const sugerido = Math.round(propTotal * (1 - descontoPct/100));
-  const totalFechado = sugerido;
+
+  // Desconto é derivado do totalFechado (fonte única da verdade: totalFechado)
+  const descontoPct = propTotal > 0
+    ? Math.round(((propTotal - totalFechado) / propTotal) * 10000) / 100
+    : 0;
 
   // Distribui proporcional
   let fecArq = 0, fecEng = 0;
   if (propTotal > 0) {
-    fecArq = Math.round(totalFechado * (propArq / propTotal));
-    fecEng = totalFechado - fecArq;
+    fecArq = Math.round(totalFechado * (propArq / propTotal) * 100) / 100;
+    fecEng = Math.round((totalFechado - fecArq) * 100) / 100;
   }
-  const descontoRs = propTotal - totalFechado;
+  const descontoRs = Math.round((propTotal - totalFechado) * 100) / 100;
+
+  // Validação: soma das parcelas deve bater com o total fechado
+  const somaParcelas = Math.round(parcelas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0) * 100) / 100;
+  const diferencaParcelas = Math.round((somaParcelas - totalFechado) * 100) / 100;
+  const temDiferenca = Math.abs(diferencaParcelas) > 0.01;
 
   // ── Helpers ──
   function gerarParcelasIguais(n, total, nomeBase = "Parcela") {
@@ -802,35 +872,43 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
 
   // ── Inicialização e resincronização quando escopo/opção mudam ──
   useEffect(() => {
-    // Define desconto padrão baseado na opção selecionada
-    let novoDesc = 0;
-    if (pgtoSel === "antecipado") novoDesc = opcoesOrcamento.descAntecipado;
-    else if (pgtoSel === "parcelado") novoDesc = 0;
-    else if (pgtoSel === "personalizado") novoDesc = 0;
-    setDescontoPct(novoDesc);
+    // Define totalFechado padrão baseado na opção selecionada
+    let descBase = 0;
+    if (pgtoSel === "antecipado") descBase = opcoesOrcamento.descAntecipado;
+    else if (pgtoSel === "parcelado") descBase = 0;
+    else if (pgtoSel === "personalizado") descBase = 0;
+    const propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
+    const novoTotal = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
+    setTotalFechado(novoTotal);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pgtoSel, inclArq, inclEng]);
 
   useEffect(() => {
-    // Regenera parcelas quando opção ou total muda
+    // Regenera parcelas quando opção ou escopo muda
+    const propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
+    let descBase = 0;
+    if (pgtoSel === "antecipado") descBase = opcoesOrcamento.descAntecipado;
+    const totalCalc = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
     let novasParc;
     if (pgtoSel === "antecipado") {
-      novasParc = gerarParcelasIguais(1, totalFechado, "Pagamento");
+      novasParc = gerarParcelasIguais(1, totalCalc, "Pagamento");
     } else if (pgtoSel === "parcelado") {
-      novasParc = gerarParcelasIguais(opcoesOrcamento.qtdParcelado, totalFechado, "Parcela");
+      novasParc = gerarParcelasIguais(opcoesOrcamento.qtdParcelado, totalCalc, "Parcela");
     } else {
-      novasParc = gerarParcelasPersonalizadas(totalFechado);
+      novasParc = gerarParcelasPersonalizadas(totalCalc);
     }
     setParcelas(novasParc);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pgtoSel, inclArq, inclEng]);
 
-  // Quando desconto ou escopo mudam, redistribui o valor das parcelas (mantém quantidade e datas)
+  // Quando totalFechado muda, redistribui o valor das parcelas (mantém quantidade e datas)
   useEffect(() => {
     setParcelas(atuais => {
       if (atuais.length === 0) return atuais;
       if (pgtoSel === "personalizado") return atuais; // personalizado: usuário controla valores manualmente
       const vp = Math.round((totalFechado / atuais.length) * 100) / 100;
+      // Não atualiza se o valor já está igual (evita re-render infinito)
+      if (atuais.every(p => p.valor === vp)) return atuais;
       return atuais.map(p => ({ ...p, valor: vp }));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -854,7 +932,33 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   }
 
   function mudarParcelaCampo(i, campo, valor) {
-    setParcelas(atuais => atuais.map((p, idx) => idx === i ? { ...p, [campo]: valor } : p));
+    if (campo !== "valor") {
+      // Para nome/data, apenas atualiza a parcela editada
+      setParcelas(atuais => atuais.map((p, idx) => idx === i ? { ...p, [campo]: valor } : p));
+      return;
+    }
+    // Edição de VALOR: aplica cascata (compensa na próxima parcela; última compensa na primeira)
+    setParcelas(atuais => {
+      if (atuais.length === 0) return atuais;
+      if (atuais.length === 1) {
+        // Única parcela: só atualiza
+        return [{ ...atuais[0], valor }];
+      }
+      const novoValor = parseFloat(valor) || 0;
+      const valorAnterior = parseFloat(atuais[i].valor) || 0;
+      const delta = novoValor - valorAnterior; // quanto mudou
+      // Índice da parcela que "absorve" a diferença: próxima (se última, volta pra primeira)
+      const jCompensar = i === atuais.length - 1 ? 0 : i + 1;
+
+      return atuais.map((p, idx) => {
+        if (idx === i) return { ...p, valor: Math.round(novoValor * 100) / 100 };
+        if (idx === jCompensar) {
+          const compensado = (parseFloat(p.valor) || 0) - delta;
+          return { ...p, valor: Math.round(compensado * 100) / 100 };
+        }
+        return p;
+      });
+    });
   }
 
   function adicionarParcela() {
@@ -870,31 +974,29 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     setParcelas(parcelas.filter((_, idx) => idx !== i));
   }
 
-  // ── Desconto ⇄ Valor fechado (sincronia) ──
+  // ── Desconto ⇄ Valor fechado (sincronia via totalFechado) ──
   function mudarDesconto(v) {
     let n = parseFloat(v);
     if (isNaN(n)) n = 0;
     if (n < 0) n = 0;
     if (n > 100) n = 100;
-    setDescontoPct(n);
+    // Converte desconto em totalFechado
+    const novoTotal = Math.round(propTotal * (1 - n/100) * 100) / 100;
+    setTotalFechado(novoTotal);
   }
 
   function mudarTotalFechado(v) {
     let n = parseFloat(v);
     if (isNaN(n) || n < 0) n = 0;
     if (n > propTotal) n = propTotal;
-    // Calcula o desconto implícito pra esse total
-    const novoDesc = propTotal > 0 ? ((propTotal - n) / propTotal) * 100 : 0;
-    setDescontoPct(Math.round(novoDesc * 100) / 100);
+    setTotalFechado(Math.round(n * 100) / 100);
   }
 
   function confirmar() {
-    const somaPersonalizada = parcelas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
-    // Valida total das parcelas no modo personalizado
-    if (pgtoSel === "personalizado") {
-      if (Math.abs(somaPersonalizada - totalFechado) > 0.5) {
-        if (!confirm(`A soma das parcelas (${fmtBRL(somaPersonalizada)}) não bate com o total fechado (${fmtBRL(totalFechado)}).\n\nContinuar mesmo assim?`)) return;
-      }
+    // Bloqueia se houver diferença entre soma das parcelas e total fechado
+    if (temDiferenca) {
+      alert(`Ajuste os valores das parcelas antes de confirmar.\n\nSoma atual: ${fmtBRL(somaParcelas)}\nTotal fechado: ${fmtBRL(totalFechado)}\nDiferença: ${diferencaParcelas > 0 ? "+" : ""}${fmtBRL(diferencaParcelas)}`);
+      return;
     }
 
     const ganhoData = {
@@ -922,7 +1024,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   }
 
   // ── Formatação ──
-  const fmtBRL = v => "R$ " + Math.round(v).toLocaleString("pt-BR");
+  const fmtBRL = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtData = iso => {
     if (!iso) return "";
     const p = iso.split("-");
@@ -1049,8 +1151,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                       {opc.key === "antecipado" && (
                         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
                           <label style={ROW_LABEL}>Desconto</label>
-                          <input type="number" min="0" max="100" step="0.01" value={descontoPct}
-                            onChange={e => mudarDesconto(e.target.value)}
+                          <NumBR valor={descontoPct} onChange={mudarDesconto} min={0} max={100} decimais={2}
                             style={{ ...INPUT_STYLE, width:80 }} />
                           <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
                         </div>
@@ -1063,8 +1164,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                               onChange={e => mudarQtdParcelas(e.target.value)}
                               style={{ ...INPUT_STYLE, width:70 }} />
                             <label style={{ ...ROW_LABEL, marginLeft:8 }}>Desconto</label>
-                            <input type="number" min="0" max="100" step="0.01" value={descontoPct}
-                              onChange={e => mudarDesconto(e.target.value)}
+                            <NumBR valor={descontoPct} onChange={mudarDesconto} min={0} max={100} decimais={2}
                               style={{ ...INPUT_STYLE, width:80 }} />
                             <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
                           </div>
@@ -1073,8 +1173,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                       {opc.key === "personalizado" && (
                         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
                           <label style={ROW_LABEL}>Desconto</label>
-                          <input type="number" min="0" max="100" step="0.01" value={descontoPct}
-                            onChange={e => mudarDesconto(e.target.value)}
+                          <NumBR valor={descontoPct} onChange={mudarDesconto} min={0} max={100} decimais={2}
                             style={{ ...INPUT_STYLE, width:80 }} />
                           <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
                         </div>
@@ -1096,8 +1195,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                             ) : (
                               <span style={{ fontSize:11.5, color:"#6b7280", fontWeight:500 }}>{p.nome}</span>
                             )}
-                            <input type="number" min="0" step="0.01" value={p.valor}
-                              onChange={e => mudarParcelaCampo(i, "valor", parseFloat(e.target.value) || 0)}
+                            <NumBR valor={p.valor} onChange={n => mudarParcelaCampo(i, "valor", n)} min={0} decimais={2}
                               style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", textAlign:"right" }} />
                             <input type="date" value={p.data}
                               onChange={e => mudarParcelaCampo(i, "data", e.target.value)}
@@ -1115,6 +1213,22 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                           </button>
                         )}
                       </div>
+
+                      {/* Alerta de diferença entre soma das parcelas e total fechado */}
+                      {temDiferenca && parcelas.length > 1 && (
+                        <div style={{
+                          marginTop:8, padding:"8px 10px",
+                          background:"#fef2f2", border:"1px solid #fecaca",
+                          borderRadius:6, fontSize:11.5, color:"#b91c1c",
+                          display:"flex", alignItems:"center", gap:6,
+                        }}>
+                          <span style={{ fontSize:13, fontWeight:700 }}>⚠</span>
+                          <div>
+                            Soma das parcelas ({fmtBRL(somaParcelas)}) não bate com o total fechado ({fmtBRL(totalFechado)}).
+                            Diferença: <strong>{diferencaParcelas > 0 ? "+" : ""}{fmtBRL(diferencaParcelas)}</strong>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1131,8 +1245,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                 {descontoPct > 0 && ` · ${descontoPct.toFixed(2).replace(/\.?0+$/, "").replace(".", ",")}% de desconto`}
               </div>
             </div>
-            <input type="number" value={totalFechado} max={propTotal} min={0}
-              onChange={e => mudarTotalFechado(e.target.value)}
+            <NumBR valor={totalFechado} onChange={mudarTotalFechado} min={0} max={propTotal} decimais={2}
               style={{ fontSize:15, fontWeight:600, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, background:"#fff", width:140, textAlign:"right", fontFamily:"inherit", color:"#111", outline:"none" }} />
           </div>
 
@@ -1184,7 +1297,16 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
             Cancelar
           </button>
           <button onClick={confirmar}
-            style={{ padding:"8px 18px", background:"#111", color:"#fff", border:"none", borderRadius:7, fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+            disabled={temDiferenca}
+            title={temDiferenca ? `A soma das parcelas precisa bater com o total fechado (diferença: ${fmtBRL(diferencaParcelas)})` : ""}
+            style={{
+              padding:"8px 18px",
+              background: temDiferenca ? "#d1d5db" : "#111",
+              color:"#fff", border:"none", borderRadius:7,
+              fontSize:12.5, fontWeight:500,
+              cursor: temDiferenca ? "not-allowed" : "pointer",
+              fontFamily:"inherit",
+            }}>
             Confirmar
           </button>
         </div>
