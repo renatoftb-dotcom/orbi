@@ -5116,14 +5116,34 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   //   • Pacote Completo (Arq + Eng)       — descontoPacote / parcelasPacote
   // Tipo "etapas": descontoEtapaCtrt / parcelasEtapaCtrt (etapa individual)
   //                descontoPacoteCtrt / parcelasPacoteCtrt (pacote de etapas)
+  //
+  // Se o orçamento tem proposta salva, os valores vêm do snapshot da proposta
+  // (descArq/parcArq/descPacote/parcPacote), senão dos campos raiz salvos no cadastro.
   const opcoes = (() => {
     const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
     const ehPacote = inclArq && inclEng;
 
+    // Prioridade: última proposta enviada > campos raiz do orçamento
+    const ultProp = orc.propostas && orc.propostas.length > 0
+      ? orc.propostas[orc.propostas.length - 1]
+      : null;
+
+    // Helper: pega o primeiro valor não-nulo entre proposta > raiz > fallback
+    const pick = (...vals) => {
+      for (const v of vals) if (v != null) return v;
+      return 0;
+    };
+
     if (tipoPgto === "padrao") {
-      // Escolhe o bloco de condições conforme o escopo marcado
-      const descAntec = ehPacote ? (orc.descontoPacote || 0) : (orc.descontoEtapa || 0);
-      const parcParc  = ehPacote ? (orc.parcelasPacote || 3) : (orc.parcelasEtapa || 3);
+      // Apenas Arq (ou apenas Eng) — desconto/parcelas de "serviço único"
+      const descArq = pick(ultProp?.descArq, orc.descontoEtapa, orc.descArq, 5);
+      const parcArq = pick(ultProp?.parcArq, orc.parcelasEtapa, orc.parcArq, 3);
+      // Pacote Completo (Arq + Eng) — desconto/parcelas de "pacote"
+      const descPac = pick(ultProp?.descPacote, orc.descontoPacote, orc.descPacote, 10);
+      const parcPac = pick(ultProp?.parcPacote, orc.parcelasPacote, orc.parcPacote, 4);
+
+      const descAntec = ehPacote ? descPac : descArq;
+      const parcParc  = ehPacote ? parcPac : parcArq;
       const blocoLabel = ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia");
       return [
         { key:"antecipado", label:"Antecipado",
@@ -5138,10 +5158,10 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     }
 
     // Tipo "etapas"
-    const descEtapa  = orc.descontoEtapaCtrt || 0;
-    const parcEtapa  = orc.parcelasEtapaCtrt || 2;
-    const descPacEt  = orc.descontoPacoteCtrt || 0;
-    const parcPacEt  = orc.parcelasPacoteCtrt || 1;
+    const descEtapa  = pick(ultProp?.descEtCtrt,  orc.descontoEtapaCtrt,  orc.descEtCtrt,  0);
+    const parcEtapa  = pick(ultProp?.parcEtCtrt,  orc.parcelasEtapaCtrt,  orc.parcEtCtrt,  2);
+    const descPacEt  = pick(ultProp?.descPacCtrt, orc.descontoPacoteCtrt, orc.descPacCtrt, 0);
+    const parcPacEt  = pick(ultProp?.parcPacCtrt, orc.parcelasPacoteCtrt, orc.parcPacCtrt, 1);
     return [
       { key:"etapa", label:"Por Etapa",
         desc:"Paga cada etapa quando conclui",
@@ -5356,7 +5376,6 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
             <div style={SECTION_TITLE}>2. Forma de pagamento</div>
             {opcoes.map(opc => {
               const selected = pgtoSel === opc.key && !personalizado;
-              const descTxt = opc.descontoPct > 0 ? `${opc.desc} · ${opc.descontoPct}% de desconto` : opc.desc;
               return (
                 <div key={opc.key}
                   onClick={e => { if (!e.target.closest("[data-stop]")) selecionarOpcao(opc.key); }}
@@ -5372,9 +5391,17 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                       </div>
                       {opc.label}
                     </div>
-                    {opc.descontoPct > 0 && <span style={{ fontSize:11, color:"#6b7280", fontWeight:600 }}>−{opc.descontoPct}%</span>}
+                    {opc.descontoPct > 0 && (
+                      <span style={{
+                        fontSize:11, color:"#111", fontWeight:600,
+                        background:"#f3f4f6", padding:"3px 8px", borderRadius:10,
+                        border:"1px solid #e5e7eb",
+                      }}>
+                        {opc.descontoPct}% de desconto
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, marginLeft:25 }}>{descTxt}</div>
+                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, marginLeft:25 }}>{opc.desc}</div>
 
                   {selected && (
                     <div style={{ marginTop:12, marginLeft:25 }} data-stop="1">
