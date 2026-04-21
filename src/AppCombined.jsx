@@ -5470,6 +5470,13 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     });
   }
 
+  function mudarParcelaPct(i, novoPct) {
+    // Converte pct → valor e aplica a mesma cascata de mudarParcelaCampo
+    const pctNum = parseFloat(novoPct) || 0;
+    const novoValor = Math.round((totalFechado * pctNum / 100) * 100) / 100;
+    mudarParcelaCampo(i, "valor", novoValor);
+  }
+
   function adicionarParcela() {
     const ult = parcelas[parcelas.length - 1];
     const d = ult ? new Date(ult.data) : new Date();
@@ -5583,8 +5590,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
 
   return (
     <div
-      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:20 }}>
-      <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:540, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"flex-start", justifyContent:"center", zIndex:100, padding:"30px 20px 20px" }}>
+      <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:540, maxHeight:"calc(100vh - 60px)", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
 
         {/* Head */}
         <div style={{ padding:"20px 24px 14px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
@@ -5770,7 +5777,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                   return (
                   <div key={i} style={{
                     display:"grid",
-                    gridTemplateColumns: modoEtapas ? "1fr 70px 110px 130px 20px" : "100px 110px 130px 20px",
+                    gridTemplateColumns: modoEtapas ? "1fr 64px 100px 120px 18px" : "100px 110px 120px 18px",
                     gap:6, alignItems:"center", marginBottom:6,
                   }}>
                     {modoEtapas ? (
@@ -5857,6 +5864,16 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
             <div style={{ display:"flex", justifyContent:"space-between", fontSize:13.5, padding:"8px 0 3px 0", borderTop:"1px solid #f3f4f6", marginTop:6, fontWeight:600, color:"#111" }}>
               <span>Total fechado</span><span>{fmtBRL(totalFechado)}</span>
             </div>
+            {incluirImposto && aliqImp > 0 && (() => {
+              // Valor do imposto embutido no total fechado: total × aliq
+              const valorImposto = Math.round(totalFechado * (aliqImp/100) * 100) / 100;
+              return (
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#9ca3af", marginTop:3 }}>
+                  <span>inclui imposto ({aliqImp}%)</span>
+                  <span>{fmtBRL(valorImposto)}</span>
+                </div>
+              );
+            })()}
             {descontoRs > 0 && (
               <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>
                 Desconto de {fmtBRL(descontoRs)}
