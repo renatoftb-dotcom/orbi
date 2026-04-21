@@ -56,7 +56,9 @@ function statusCliente(cliente, data) {
   const orcsRascunho = orcamentos.filter(o => o.status === "rascunho");
   const orcsAbertos  = orcamentos.filter(o => o.status === "aberto");
 
-  // Agrupa propostas enviadas (se proposta em aberto)
+  // Classifica os abertos: enviados (com proposta em dia) x abertos-sem-proposta
+  const enviados = [];
+  const abertosSemProposta = [];
   for (const orc of orcsAbertos) {
     const propostas = orc.propostas || [];
     if (propostas.length > 0) {
@@ -66,18 +68,31 @@ function statusCliente(cliente, data) {
         const diasPassados = Math.floor((Date.now() - msEnv) / (1000 * 60 * 60 * 24));
         const diasExp = 30 - diasPassados;
         if (diasExp > 0) {
-          chips.push({
-            tipo: "Orçamento",
-            estado: "Enviado",
-            info: `Exp. ${diasExp}d`,
-            alerta: diasExp <= 7 ? "vermelho" : (diasExp <= 15 ? "amarelo" : null),
-          });
+          enviados.push({ orc, diasExp });
           continue;
         }
       }
     }
-    // Aberto sem proposta enviada
-    chips.push({ tipo: "Orçamento", estado: "Aberto" });
+    abertosSemProposta.push(orc);
+  }
+
+  // Agrupa enviados: 1 chip só com contagem e menor prazo
+  if (enviados.length > 0) {
+    const minDias = Math.min(...enviados.map(e => e.diasExp));
+    chips.push({
+      tipo: enviados.length > 1 ? `${enviados.length} Orçamentos` : "1 Orçamento",
+      estado: "Enviado",
+      info: `Exp. ${minDias}d`,
+      alerta: minDias <= 7 ? "vermelho" : (minDias <= 15 ? "amarelo" : null),
+    });
+  }
+
+  // Abertos sem proposta enviada
+  if (abertosSemProposta.length > 0) {
+    chips.push({
+      tipo: abertosSemProposta.length > 1 ? `${abertosSemProposta.length} Orçamentos` : "1 Orçamento",
+      estado: "Aberto",
+    });
   }
 
   // Rascunhos
@@ -547,7 +562,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                       draggable
                       onDragStart={() => setDragId(c.id)}
                       onDragEnd={() => { setDragId(null); setDragOver(null); }}
-                      style={{ opacity: dragId===c.id ? 0.4 : 1, transition:"opacity 0.15s", cursor:"grab" }}>
+                      style={{ opacity: dragId===c.id ? 0.4 : 1, transition:"opacity 0.15s", cursor:"grab", minWidth:0, overflow:"hidden" }}>
                       <ClienteCard c={c} mobile={false} />
                     </div>
                   ))}
