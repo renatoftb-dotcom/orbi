@@ -5199,6 +5199,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const [totalFechado, setTotalFechado]   = useState(0);
   const [parcelas, setParcelas]           = useState([]);
   const [editandoTotal, setEditandoTotal] = useState(false);
+  const [editandoDesconto, setEditandoDesconto] = useState(false);
 
   // Função dinâmica: aplica imposto conforme o state atual
   const comImp = (v) => (incluirImposto && aliqImp > 0 && v > 0)
@@ -5329,23 +5330,9 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     });
   }
 
-  // ── Inicialização e resincronização quando escopo/etapas mudam ──
+  // ── Inicialização: reset total/parcelas quando ESCOPO muda (Arq/Eng) ──
+  // Só reseta qtd de parcelas e desconto quando muda escopo, não quando só muda imposto.
   useEffect(() => {
-    // Calcula total proposto atual
-    let propAtual;
-    if (ehTipoEtapas) {
-      propAtual = etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
-    } else {
-      propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
-    }
-    const descBase = opcoesOrcamento.descAntecipado;
-    const novoTotal = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
-    setTotalFechado(novoTotal);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inclArq, inclEng, etapas, incluirImposto]);
-
-  useEffect(() => {
-    // Regenera parcelas quando escopo muda (1 parcela única por padrão)
     let propAtual;
     if (ehTipoEtapas) {
       propAtual = etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
@@ -5354,10 +5341,22 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     }
     const descBase = opcoesOrcamento.descAntecipado;
     const totalCalc = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
+    setTotalFechado(totalCalc);
     setParcelas(gerarParcelasIguais(1, totalCalc, "Pagamento"));
     setModoEtapas(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inclArq, inclEng, incluirImposto]);
+  }, [inclArq, inclEng]);
+
+  // ── Recalcula total quando etapas marcadas/valores mudam (tipo etapas) ──
+  useEffect(() => {
+    if (!ehTipoEtapas) return;
+    const propAtual = etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
+    // Preserva desconto atual
+    const descAtual = descontoPct;
+    const novoTotal = Math.round(propAtual * (1 - descAtual/100) * 100) / 100;
+    setTotalFechado(novoTotal);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [etapas]);
 
   // Quando totalFechado muda, redistribui o valor das parcelas (mantém quantidade e datas)
   // Usa a mesma lógica de distribuição em centavos para garantir soma exata.
@@ -5605,7 +5604,26 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
               <div style={SECTION_TITLE}>1. O que foi fechado</div>
               {temImpostoOrc && aliqImp > 0 && (
                 <div
-                  onClick={() => setIncluirImposto(v => !v)}
+                  onClick={() => {
+                    // Guarda desconto ANTES de mudar o imposto (será aplicado no novo total)
+                    const descAtual = descontoPct;
+                    const novoIncl = !incluirImposto;
+                    setIncluirImposto(novoIncl);
+                    // Calcula novo propTotal com o novo estado de imposto
+                    const fator = (novoIncl && aliqImp > 0) ? (1 / (1 - aliqImp/100)) : 1;
+                    let novoProp;
+                    if (ehTipoEtapas) {
+                      // As etapas serão recalculadas via useEffect de calcularEtapasBase
+                      // Para o total, aproxima usando a soma das marcadas × fator de ajuste
+                      const somaMarcadas = etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
+                      const fatorAntigo = (incluirImposto && aliqImp > 0) ? (1 / (1 - aliqImp/100)) : 1;
+                      novoProp = Math.round((somaMarcadas / fatorAntigo) * fator * 100) / 100;
+                    } else {
+                      novoProp = ((inclArq ? baseArq : 0) + (inclEng ? baseEng : 0)) * fator;
+                    }
+                    const novoTotal = Math.round(novoProp * (1 - descAtual/100) * 100) / 100;
+                    setTotalFechado(novoTotal);
+                  }}
                   style={{
                     display:"flex", alignItems:"center", gap:6,
                     cursor:"pointer", padding:"4px 10px",
@@ -5730,6 +5748,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                   <label style={ROW_LABEL}>Desconto</label>
                   <NumBR valor={descontoPct} onChange={mudarDesconto} min={0} max={100} decimais={2}
+                    onFocus={() => setEditandoDesconto(true)}
+                    onBlur={() => setEditandoDesconto(false)}
                     style={{ ...INPUT_STYLE, width:80 }} />
                   <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
                 </div>
@@ -5745,10 +5765,12 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
 
               {/* Lista de parcelas/etapas */}
               <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:7, padding:10 }}>
-                {parcelas.map((p, i) => (
+                {parcelas.map((p, i) => {
+                  const pct = totalFechado > 0 ? (p.valor / totalFechado) * 100 : 0;
+                  return (
                   <div key={i} style={{
                     display:"grid",
-                    gridTemplateColumns: modoEtapas ? "1fr 110px 130px 20px" : "100px 110px 130px 20px",
+                    gridTemplateColumns: modoEtapas ? "1fr 70px 110px 130px 20px" : "100px 110px 130px 20px",
                     gap:6, alignItems:"center", marginBottom:6,
                   }}>
                     {modoEtapas ? (
@@ -5758,6 +5780,13 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                         style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
                     ) : (
                       <span style={{ fontSize:11.5, color:"#6b7280", fontWeight:500 }}>{p.nome}</span>
+                    )}
+                    {modoEtapas && (
+                      <div style={{ display:"flex", alignItems:"center", gap:2 }}>
+                        <NumBR valor={pct} onChange={n => mudarParcelaPct(i, n)} min={0} max={100} decimais={2}
+                          style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 6px", textAlign:"right", width:"100%" }} />
+                        <span style={{ fontSize:10, color:"#9ca3af" }}>%</span>
+                      </div>
                     )}
                     <NumBR valor={p.valor} onChange={n => mudarParcelaCampo(i, "valor", n)} min={0} decimais={2}
                       style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", textAlign:"right" }} />
@@ -5769,7 +5798,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                         style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
                     ) : <span/>}
                   </div>
-                ))}
+                  );
+                })}
                 {modoEtapas && (
                   <button onClick={adicionarParcela}
                     style={{ fontSize:11.5, background:"transparent", border:"1px dashed #d1d5db", borderRadius:5, padding:"5px 10px", cursor:"pointer", color:"#6b7280", fontFamily:"inherit", marginTop:4 }}>
@@ -5779,7 +5809,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
               </div>
 
               {/* Alerta de diferença entre soma e total fechado */}
-              {temDiferenca && parcelas.length > 1 && !editandoTotal && (
+              {temDiferenca && parcelas.length > 1 && !editandoTotal && !editandoDesconto && (
                 <div style={{
                   marginTop:10, padding:"8px 10px",
                   background:"#fef2f2", border:"1px solid #fecaca",
