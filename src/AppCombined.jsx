@@ -5100,31 +5100,6 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
 //   - Cria projeto no Kanban Etapas (coluna Briefing)
 //   - onConfirmar(ganhoData) — o pai decide como gravar (lançamentos etc.)
 function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
-  // ── Deriva opções de pagamento a partir do orçamento ──
-  const opcoes = (() => {
-    const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
-    if (tipoPgto === "padrao") {
-      return [
-        { key:"antecipado", label:"Antecipado", desc:"À vista com desconto",
-          descontoPct: orc.descontoEtapa || 0,
-          parcelas: orc.parcelasEtapa || 1 },
-        { key:"parcelado", label:"Parcelado",
-          desc:`Em ${orc.parcelasPacote || 3}x sem desconto`,
-          descontoPct: orc.descontoPacote || 0,
-          parcelas: orc.parcelasPacote || 3 },
-      ];
-    }
-    // etapas
-    return [
-      { key:"etapa", label:"Por Etapa", desc:"Paga cada etapa quando conclui",
-        descontoPct: orc.descontoEtapaCtrt || 0,
-        parcelas: orc.parcelasEtapaCtrt || 2 },
-      { key:"pacoteEtapas", label:"Pacote das Etapas", desc:"Paga o pacote antecipado",
-        descontoPct: orc.descontoPacoteCtrt || 0,
-        parcelas: orc.parcelasPacoteCtrt || 1 },
-    ];
-  })();
-
   // ── Escopo original (o que veio no orçamento) ──
   const orcArq = orc.resultado?.precoArq || 0;
   const orcEng = orc.resultado?.precoEng || 0;
@@ -5134,6 +5109,52 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   // ── Estados ──
   const [inclArq, setInclArq] = useState(temArq);
   const [inclEng, setInclEng] = useState(temEng);
+
+  // ── Deriva opções de pagamento baseado no escopo marcado ──
+  // O orçamento tem 2 conjuntos de condições:
+  //   • Serviço único (só Arq OU só Eng) — descontoEtapa / parcelasEtapa
+  //   • Pacote Completo (Arq + Eng)       — descontoPacote / parcelasPacote
+  // Tipo "etapas": descontoEtapaCtrt / parcelasEtapaCtrt (etapa individual)
+  //                descontoPacoteCtrt / parcelasPacoteCtrt (pacote de etapas)
+  const opcoes = (() => {
+    const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
+    const ehPacote = inclArq && inclEng;
+
+    if (tipoPgto === "padrao") {
+      // Escolhe o bloco de condições conforme o escopo marcado
+      const descAntec = ehPacote ? (orc.descontoPacote || 0) : (orc.descontoEtapa || 0);
+      const parcParc  = ehPacote ? (orc.parcelasPacote || 3) : (orc.parcelasEtapa || 3);
+      const blocoLabel = ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia");
+      return [
+        { key:"antecipado", label:"Antecipado",
+          desc:`${blocoLabel} · À vista com desconto`,
+          descontoPct: descAntec,
+          parcelas: 1 },
+        { key:"parcelado", label:"Parcelado",
+          desc:`${blocoLabel} · Em ${parcParc}x sem desconto`,
+          descontoPct: 0,
+          parcelas: parcParc },
+      ];
+    }
+
+    // Tipo "etapas"
+    const descEtapa  = orc.descontoEtapaCtrt || 0;
+    const parcEtapa  = orc.parcelasEtapaCtrt || 2;
+    const descPacEt  = orc.descontoPacoteCtrt || 0;
+    const parcPacEt  = orc.parcelasPacoteCtrt || 1;
+    return [
+      { key:"etapa", label:"Por Etapa",
+        desc:"Paga cada etapa quando conclui",
+        descontoPct: descEtapa,
+        parcelas: parcEtapa },
+      { key:"pacoteEtapas", label:"Pacote das Etapas",
+        desc:"Paga o pacote antecipado",
+        descontoPct: descPacEt,
+        parcelas: parcPacEt },
+    ];
+  })();
+
+  // Estados restantes (opcoes pronto)
   const [pgtoSel, setPgtoSel] = useState(opcoes[0].key);
   const [personalizado, setPersonalizado] = useState(false);
   const [parcelas, setParcelas] = useState(() => gerarParcelasIniciais(opcoes[0].parcelas));
@@ -5146,6 +5167,21 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
       return { data: d.toISOString().slice(0, 10) };
     });
   }
+
+  // Quando muda o escopo (Arq/Eng), as opções de pagamento mudam.
+  // Resincroniza parcelas e limpa valor manual para refletir o novo bloco.
+  useEffect(() => {
+    if (personalizado) return;
+    const opc = opcoes.find(o => o.key === pgtoSel) || opcoes[0];
+    if (!opc) return;
+    setParcelas(gerarParcelasIniciais(opc.parcelas));
+    setValorFechadoManual(null);
+    // Se pgtoSel não existe mais nas novas opções, usa a primeira
+    if (!opcoes.find(o => o.key === pgtoSel)) {
+      setPgtoSel(opcoes[0].key);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inclArq, inclEng]);
 
   // ── Cálculos derivados ──
   const propArq = inclArq ? orcArq : 0;
