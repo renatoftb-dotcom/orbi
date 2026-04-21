@@ -5176,15 +5176,16 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const temImpostoOrc = ultPropImp?.temImposto ?? !!orc.incluiImposto;
   const aliqImp       = ultPropImp?.aliqImp ?? orc.aliquotaImposto ?? 0;
 
-  // Valores base SEM imposto — prioridade: proposta exibida > edições > cálculo raiz
+  // Valores base SEM imposto — prioridade: edições manuais > cálculo > raiz
+  // IMPORTANTE: NÃO usar valorArqExibido/valorEngExibido da proposta porque esses
+  // já vêm com imposto incluído quando o orçamento tem imposto (arqCIEdit/engCIEdit).
+  // Precisamos dos valores LÍQUIDOS pra aplicar comImp() corretamente.
   const baseArq = (() => {
-    if (ultPropImp?.valorArqExibido != null) return ultPropImp.valorArqExibido;
     if (ultPropImp?.arqEdit != null) return ultPropImp.arqEdit;
     if (ultPropImp?.calculo?.precoArq != null) return ultPropImp.calculo.precoArq;
     return orc.resultado?.precoArq || 0;
   })();
   const baseEng = (() => {
-    if (ultPropImp?.valorEngExibido != null) return ultPropImp.valorEngExibido;
     if (ultPropImp?.engEdit != null) return ultPropImp.engEdit;
     if (ultPropImp?.calculo?.precoEng != null) return ultPropImp.calculo.precoEng;
     return orc.resultado?.precoEng || 0;
