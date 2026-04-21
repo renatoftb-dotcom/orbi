@@ -2944,7 +2944,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         </div>
 
         {/* Kanban 4 colunas */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, flex:1, overflowY:"auto" }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:12, flex:1, overflowY:"auto", maxWidth:960 }}>
           {COLUNAS.map(col => {
             const cards = filtrados.filter(c => colunaDoCliente(c) === col.key);
             const isOver = dragOver === col.key;
@@ -2964,38 +2964,15 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                 </div>
                 {/* Cards */}
                 <div style={{ flex:1, overflowY:"auto", padding:"10px 10px" }}>
-                  {cards.map(c => {
-                    const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
-                    const corAv = c.tipo==="PJ" ? "#7c3aed" : "#2563eb";
-                    const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone || c.contatos?.[0]?.telefone || "";
-                    return (
-                      <div key={c.id}
-                        draggable
-                        onDragStart={() => setDragId(c.id)}
-                        onDragEnd={() => { setDragId(null); setDragOver(null); }}
-                        onClick={() => openDetail(c)}
-                        style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"12px", marginBottom:8, cursor:"grab", transition:"box-shadow 0.15s, opacity 0.15s", opacity: dragId===c.id ? 0.4 : 1, boxShadow: dragId===c.id ? "0 4px 12px rgba(0,0,0,0.1)" : "none" }}
-                        onMouseEnter={e=>e.currentTarget.style.borderColor="#111"}
-                        onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}>
-                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                          <div style={{ width:32, height:32, borderRadius:8, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0 }}>
-                            {iniciais}
-                          </div>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.nome}</div>
-                            <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>{c.cidade||c.cpfCnpj||""}</div>
-                          </div>
-                        </div>
-                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                          <span style={C.tag(corAv)}>{c.tipo}</span>
-                          <div style={{ display:"flex", gap:4 }} onClick={e=>e.stopPropagation()}>
-                            {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 7px" }}>WA</a>}
-                            <button onClick={()=>openEdit(c)} style={{ fontSize:11, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 7px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {cards.map(c => (
+                    <div key={c.id}
+                      draggable
+                      onDragStart={() => setDragId(c.id)}
+                      onDragEnd={() => { setDragId(null); setDragOver(null); }}
+                      style={{ opacity: dragId===c.id ? 0.4 : 1, transition:"opacity 0.15s", cursor:"grab" }}>
+                      <ClienteCard c={c} mobile={false} />
+                    </div>
+                  ))}
                   {cards.length === 0 && (
                     <div style={{ textAlign:"center", padding:"24px 0", color:"#d1d5db", fontSize:12 }}>
                       Arraste um cliente aqui
