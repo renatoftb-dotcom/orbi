@@ -2670,7 +2670,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
   // Ao retornar do orçamento, re-abre o detail do cliente que estava aberto
   useEffect(() => {
-    if (abrirClienteDetail) {
+    if (abrirClienteDetail && data?.clientes) {
       // Pega a versão mais recente do cliente (em data) para não usar objeto stale
       const atualizado = data.clientes.find(c => c.id === abrirClienteDetail.id) || abrirClienteDetail;
       setSel(atualizado);
@@ -2710,6 +2710,16 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
   // Early return: só DEPOIS de todos os hooks serem declarados (regra do React)
   if (abrindoOrcamento) return null;
+
+  // Proteção: se data ainda não carregou, renderiza loading
+  if (!data || !Array.isArray(data.clientes)) {
+    return (
+      <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+        <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Clientes</h2>
+        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
+      </div>
+    );
+  }
 
   function openNew()     { setForm(emptyCliente); setView("form"); }
   function openEdit(c)   { setForm(c); setView("form"); }
