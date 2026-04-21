@@ -43,6 +43,10 @@ function colunaDoCliente(c) {
 // Prioridade de chips: orçamento > projeto > obra
 // "Serviço ativo" = mantém cliente ativo (não conta prazo de inativação)
 function statusCliente(cliente, data) {
+  // Proteção: se data é null/undefined ou cliente é inválido, retorna vazio
+  if (!cliente || !data) {
+    return { chips: [], inativaEm: null, temAtividade: false };
+  }
   const chips = [];
   const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
   const projetos   = (data.projetos || []).filter(p => p.clienteId === cliente.id);
