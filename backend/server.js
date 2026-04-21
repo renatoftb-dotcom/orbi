@@ -10,6 +10,8 @@ const path     = require("path");
 const fs       = require("fs");
 const jwt      = require("jsonwebtoken");
 const bcrypt   = require("bcryptjs");
+const cron     = require("node-cron");
+const { rodarManutencao } = require("./jobs/manutencao");
 
 const JWT_SECRET = process.env.JWT_SECRET || "vicke-secret-dev-2026";
 
@@ -259,6 +261,16 @@ app.put("/admin/usuarios/:id", authMiddleware, masterOnly, async (req, res) => {
         [nome, email, perfil, ativo, req.params.id]);
     }
     ok(res, { id: req.params.id, nome, email, perfil, ativo });
+  } catch(e) { err(res, e.message); }
+});
+
+// ── MANUTENÇÃO (cron/manual) ──────────────────────────────────
+// Endpoint manual pra testar ou forçar rodada fora do horário agendado.
+// Protegido: só master pode chamar.
+app.post("/admin/manutencao", authMiddleware, masterOnly, async (req, res) => {
+  try {
+    const resumo = await rodarManutencao(query);
+    ok(res, resumo);
   } catch(e) { err(res, e.message); }
 });
 
@@ -661,6 +673,18 @@ async function start() {
   try {
     await initDB();
     await seedMaster();
+
+    // Agenda manutenção diária às 3h da manhã (UTC no Railway = 00h Brasília)
+    // Expira propostas > 30 dias e inativa clientes > 3 meses sem serviço
+    cron.schedule("0 3 * * *", async () => {
+      try {
+        await rodarManutencao(query);
+      } catch (e) {
+        console.error("[manutenção] Erro:", e.message);
+      }
+    });
+    console.log("  ✓ Job de manutenção agendado (3h da manhã)");
+
     app.listen(PORT, () => {
       console.log(`\n✓ Vicke rodando em http://localhost:${PORT}`);
       console.log(`  Banco: PostgreSQL`);
