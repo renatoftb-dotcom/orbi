@@ -5102,11 +5102,11 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
 // ─── Input numérico no formato brasileiro (1.234,56) ───
 // Guarda o valor em Number no estado do pai, mas exibe e aceita
 // digitação no padrão pt-BR (ponto separador de milhar, vírgula decimal).
-function NumBR({ valor, onChange, min, max, decimais = 2, style = {}, ...rest }) {
+function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, max, decimais = 2, style = {}, ...rest }) {
   const fmt = (n) => {
     if (n == null || isNaN(n)) return "";
     return n.toLocaleString("pt-BR", {
-      minimumFractionDigits: 0,
+      minimumFractionDigits: decimais,
       maximumFractionDigits: decimais,
     });
   };
@@ -5137,14 +5137,16 @@ function NumBR({ valor, onChange, min, max, decimais = 2, style = {}, ...rest })
     onChange(n);
   }
 
-  function handleFocus() {
+  function handleFocus(e) {
     focadoRef.current = true;
+    if (onFocusExt) onFocusExt(e);
   }
 
-  function handleBlur() {
+  function handleBlur(e) {
     focadoRef.current = false;
     // Ao sair, normaliza o texto pro formato BR
     setTxt(fmt(valor));
+    if (onBlurExt) onBlurExt(e);
   }
 
   return (
@@ -5167,58 +5169,81 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const ehTipoEtapas = tipoPgtoOrc === "etapas";
 
   // ── Valores base do orçamento (com/sem imposto conforme orçamento) ──
-  const aliqImp = orc.aliquotaImposto || 0;
-  const temImpostoOrc = !!orc.incluiImposto;
-  const comImp = (v) => (temImpostoOrc && v > 0)
-    ? Math.round(v / (1 - aliqImp/100) * 100) / 100
-    : v;
+  // Prioridade: snapshot da última proposta > campos raiz
+  const ultPropImp = orc.propostas && orc.propostas.length > 0
+    ? orc.propostas[orc.propostas.length - 1]
+    : null;
+  const temImpostoOrc = ultPropImp?.temImposto ?? !!orc.incluiImposto;
+  const aliqImp       = ultPropImp?.aliqImp ?? orc.aliquotaImposto ?? 0;
 
-  // Valores efetivos (já com imposto se tiver)
-  const orcArq = comImp(orc.resultado?.precoArq || 0);
-  const orcEng = comImp(orc.resultado?.precoEng || 0);
-  const temArq = orcArq > 0;
-  const temEng = orcEng > 0;
-
-  // ── Etapas do orçamento (só para tipo "etapas") ──
-  // Estrutura: [{ id, nome, pct, valor, marcado }]
-  // Pelo código do orçamento: etapa id=5 é sempre Engenharia
-  const etapasBase = (() => {
-    if (!ehTipoEtapas) return [];
-    const ultProp = orc.propostas && orc.propostas.length > 0
-      ? orc.propostas[orc.propostas.length - 1]
-      : null;
-    const etapasOrc = ultProp?.etapasPct || orc.etapasPct || [];
-    if (etapasOrc.length === 0) return [];
-
-    // Total proposto (Arq + Eng) com imposto
-    const totalArqCI = orcArq;
-    const totalEngCI = orcEng;
-
-    return etapasOrc
-      .filter(e => temEng || e.id !== 5) // se não tem Eng no orçamento, ignora etapa 5
-      .map(e => {
-        const pct = parseFloat(e.pct) || 0;
-        // Etapa 5 = Engenharia (valor total de Eng). Outras = pct de Arq.
-        const valor = e.id === 5
-          ? totalEngCI
-          : Math.round(totalArqCI * pct / 100 * 100) / 100;
-        return {
-          id: e.id,
-          nome: e.nome,
-          pct,
-          valor,
-          marcado: true,
-        };
-      });
+  // Valores base SEM imposto — prioridade: proposta exibida > edições > cálculo raiz
+  const baseArq = (() => {
+    if (ultPropImp?.valorArqExibido != null) return ultPropImp.valorArqExibido;
+    if (ultPropImp?.arqEdit != null) return ultPropImp.arqEdit;
+    if (ultPropImp?.calculo?.precoArq != null) return ultPropImp.calculo.precoArq;
+    return orc.resultado?.precoArq || 0;
+  })();
+  const baseEng = (() => {
+    if (ultPropImp?.valorEngExibido != null) return ultPropImp.valorEngExibido;
+    if (ultPropImp?.engEdit != null) return ultPropImp.engEdit;
+    if (ultPropImp?.calculo?.precoEng != null) return ultPropImp.calculo.precoEng;
+    return orc.resultado?.precoEng || 0;
   })();
 
   // ── Estados principais ──
-  const [inclArq, setInclArq]             = useState(temArq);
-  const [inclEng, setInclEng]             = useState(temEng);
-  const [etapas, setEtapas]               = useState(etapasBase);  // só usado se ehTipoEtapas
-  const [modoEtapas, setModoEtapas]       = useState(false);        // modo "livre" de parcelas na seção 2
-  const [totalFechado, setTotalFechado]   = useState(0);            // fonte única da verdade (desconto é derivado)
-  const [parcelas, setParcelas]           = useState([]);            // [{ nome, valor, data }]
+  const [incluirImposto, setIncluirImposto] = useState(temImpostoOrc);   // começa marcado se orçamento tem imposto
+  const [inclArq, setInclArq]             = useState(baseArq > 0);
+  const [inclEng, setInclEng]             = useState(baseEng > 0);
+  const [etapas, setEtapas]               = useState([]);                // preenchido no useEffect
+  const [modoEtapas, setModoEtapas]       = useState(false);
+  const [totalFechado, setTotalFechado]   = useState(0);
+  const [parcelas, setParcelas]           = useState([]);
+  const [editandoTotal, setEditandoTotal] = useState(false);
+
+  // Função dinâmica: aplica imposto conforme o state atual
+  const comImp = (v) => (incluirImposto && aliqImp > 0 && v > 0)
+    ? Math.round(v / (1 - aliqImp/100) * 100) / 100
+    : v;
+
+  // Valores efetivos (atuais)
+  const orcArq = comImp(baseArq);
+  const orcEng = comImp(baseEng);
+  const temArq = orcArq > 0;
+  const temEng = orcEng > 0;
+
+  // ── Calcula etapas base (só tipo "etapas") — depende de orcArq/orcEng (e portanto imposto) ──
+  function calcularEtapasBase() {
+    if (!ehTipoEtapas) return [];
+    const etapasOrc = ultPropImp?.etapasPct || orc.etapasPct || [];
+    if (etapasOrc.length === 0) return [];
+    const totalArqCI = orcArq;
+    const totalEngCI = orcEng;
+    return etapasOrc
+      .filter(e => temEng || e.id !== 5)
+      .map(e => {
+        const pct = parseFloat(e.pct) || 0;
+        const valor = e.id === 5
+          ? totalEngCI
+          : Math.round(totalArqCI * pct / 100 * 100) / 100;
+        return { id: e.id, nome: e.nome, pct, valor, marcado: true };
+      });
+  }
+
+  // Quando incluirImposto muda, recalcula as etapas preservando o estado "marcado"
+  useEffect(() => {
+    if (!ehTipoEtapas) return;
+    const novasEtapas = calcularEtapasBase();
+    setEtapas(atuais => {
+      // Preserva a marcação atual se já tinha etapas
+      if (atuais.length === 0) return novasEtapas;
+      const marcadasMap = new Map(atuais.map(e => [e.id, e.marcado]));
+      return novasEtapas.map(e => ({
+        ...e,
+        marcado: marcadasMap.has(e.id) ? marcadasMap.get(e.id) : true,
+      }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [incluirImposto]);
 
   // ── Deriva opções padrão do orçamento (desconto e quantidade de parcelas) ──
   // Prioridade: proposta enviada > raiz do orçamento > fallback.
@@ -5284,14 +5309,21 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const temDiferenca = Math.abs(diferencaParcelas) > 0.01;
 
   // ── Helpers ──
+  // Gera N parcelas iguais, com a última absorvendo a diferença de arredondamento.
+  // Garante que soma(parcelas) === total exatamente (em centavos).
   function gerarParcelasIguais(n, total, nomeBase = "Parcela") {
     const hoje = new Date();
-    const vp = n > 0 ? Math.round((total / n) * 100) / 100 : 0;
+    if (n <= 0) return [];
+    const totalCentavos = Math.round(total * 100);
+    const vpCentavos = Math.floor(totalCentavos / n);
+    const sobra = totalCentavos - (vpCentavos * n); // centavos que sobram (vai pra primeira)
     return Array.from({ length: n }, (_, i) => {
       const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, hoje.getDate());
+      // Distribui a sobra nas primeiras parcelas (1 centavo cada) pra fechar exato
+      const centavos = vpCentavos + (i < sobra ? 1 : 0);
       return {
         nome: `${i + 1}ª ${nomeBase}`,
-        valor: vp,
+        valor: centavos / 100,
         data: d.toISOString().slice(0, 10),
       };
     });
@@ -5310,7 +5342,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     const novoTotal = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
     setTotalFechado(novoTotal);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inclArq, inclEng, etapas]);
+  }, [inclArq, inclEng, etapas, incluirImposto]);
 
   useEffect(() => {
     // Regenera parcelas quando escopo muda (1 parcela única por padrão)
@@ -5325,16 +5357,24 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     setParcelas(gerarParcelasIguais(1, totalCalc, "Pagamento"));
     setModoEtapas(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inclArq, inclEng]); // Não dispara quando edita etapas (só quando muda escopo)
+  }, [inclArq, inclEng, incluirImposto]);
 
   // Quando totalFechado muda, redistribui o valor das parcelas (mantém quantidade e datas)
+  // Usa a mesma lógica de distribuição em centavos para garantir soma exata.
   useEffect(() => {
     setParcelas(atuais => {
       if (atuais.length === 0) return atuais;
       if (modoEtapas) return atuais; // etapas: usuário controla valores manualmente
-      const vp = Math.round((totalFechado / atuais.length) * 100) / 100;
-      if (atuais.every(p => p.valor === vp)) return atuais;
-      return atuais.map(p => ({ ...p, valor: vp }));
+      const n = atuais.length;
+      const totalCentavos = Math.round(totalFechado * 100);
+      const vpCentavos = Math.floor(totalCentavos / n);
+      const sobra = totalCentavos - (vpCentavos * n);
+      const novosValores = Array.from({ length: n }, (_, i) =>
+        (vpCentavos + (i < sobra ? 1 : 0)) / 100
+      );
+      // Evita re-render desnecessário
+      if (atuais.every((p, i) => p.valor === novosValores[i])) return atuais;
+      return atuais.map((p, i) => ({ ...p, valor: novosValores[i] }));
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [totalFechado]);
@@ -5365,26 +5405,30 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   function mudarValorEtapa(i, novoValor) {
     setEtapas(atuais => {
       if (atuais.length === 0) return atuais;
+      const novoV = Math.round((parseFloat(novoValor) || 0) * 100) / 100;
       // Só aplica cascata entre etapas MARCADAS (desmarcadas não entram)
       const marcadasIdx = atuais.map((e, idx) => e.marcado ? idx : -1).filter(x => x !== -1);
       const iMarcada = marcadasIdx.indexOf(i);
       if (iMarcada === -1 || marcadasIdx.length < 2) {
-        // Etapa não marcada ou só tem 1: só atualiza ela
-        return atuais.map((e, idx) => idx === i ? { ...e, valor: Math.round((parseFloat(novoValor) || 0) * 100) / 100 } : e);
+        // Etapa não marcada ou só tem 1 marcada: só atualiza ela
+        return atuais.map((e, idx) => idx === i ? { ...e, valor: novoV } : e);
       }
-      const novoV = parseFloat(novoValor) || 0;
-      const valorAnterior = parseFloat(atuais[i].valor) || 0;
-      const delta = novoV - valorAnterior;
-      // Índice (dentro das marcadas) que compensa: próxima, se última volta pra primeira
+      // Soma total das etapas marcadas ANTES da edição (alvo a preservar)
+      const somaAtualMarcadas = marcadasIdx.reduce((s, idx) => s + (parseFloat(atuais[idx].valor) || 0), 0);
+      // Índice que compensa: próxima etapa marcada (última volta pra primeira)
       const jMarcada = iMarcada === marcadasIdx.length - 1 ? 0 : iMarcada + 1;
       const jCompensar = marcadasIdx[jMarcada];
+      // Soma das etapas marcadas exceto a editada e a que compensa
+      const somaOutras = marcadasIdx.reduce((s, idx) => {
+        if (idx === i || idx === jCompensar) return s;
+        return s + (parseFloat(atuais[idx].valor) || 0);
+      }, 0);
+      // Valor compensador = soma total marcadas - novoV - somaOutras
+      const valorCompensador = Math.round((somaAtualMarcadas - novoV - somaOutras) * 100) / 100;
 
       return atuais.map((e, idx) => {
-        if (idx === i) return { ...e, valor: Math.round(novoV * 100) / 100 };
-        if (idx === jCompensar) {
-          const compensado = (parseFloat(e.valor) || 0) - delta;
-          return { ...e, valor: Math.round(compensado * 100) / 100 };
-        }
+        if (idx === i) return { ...e, valor: novoV };
+        if (idx === jCompensar) return { ...e, valor: valorCompensador };
         return e;
       });
     });
@@ -5401,25 +5445,27 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
       setParcelas(atuais => atuais.map((p, idx) => idx === i ? { ...p, [campo]: valor } : p));
       return;
     }
-    // Edição de VALOR: aplica cascata (compensa na próxima parcela; última compensa na primeira)
+    // Edição de VALOR com cascata: a próxima parcela absorve a diferença.
+    // Estratégia: seta o valor novo na parcela i, depois define a parcela j (próxima)
+    // como o que falta pra fechar o total (totalFechado - soma das outras).
+    // Se for a última parcela editada, a primeira absorve.
     setParcelas(atuais => {
       if (atuais.length === 0) return atuais;
+      const novoValor = Math.round((parseFloat(valor) || 0) * 100) / 100;
       if (atuais.length === 1) {
-        // Única parcela: só atualiza
-        return [{ ...atuais[0], valor }];
+        return [{ ...atuais[0], valor: novoValor }];
       }
-      const novoValor = parseFloat(valor) || 0;
-      const valorAnterior = parseFloat(atuais[i].valor) || 0;
-      const delta = novoValor - valorAnterior; // quanto mudou
-      // Índice da parcela que "absorve" a diferença: próxima (se última, volta pra primeira)
       const jCompensar = i === atuais.length - 1 ? 0 : i + 1;
-
+      // Soma todas as parcelas exceto a editada e a que compensa
+      const somaOutras = atuais.reduce((s, p, idx) => {
+        if (idx === i || idx === jCompensar) return s;
+        return s + (parseFloat(p.valor) || 0);
+      }, 0);
+      // O que falta pra fechar o total = totalFechado - novoValor - somaOutras
+      const valorCompensador = Math.round((totalFechado - novoValor - somaOutras) * 100) / 100;
       return atuais.map((p, idx) => {
-        if (idx === i) return { ...p, valor: Math.round(novoValor * 100) / 100 };
-        if (idx === jCompensar) {
-          const compensado = (parseFloat(p.valor) || 0) - delta;
-          return { ...p, valor: Math.round(compensado * 100) / 100 };
-        }
+        if (idx === i) return { ...p, valor: novoValor };
+        if (idx === jCompensar) return { ...p, valor: valorCompensador };
         return p;
       });
     });
@@ -5491,6 +5537,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
 
     const ganhoData = {
       tipoPagamentoOrc: tipoPgtoOrc,  // "padrao" ou "etapas"
+      incluirImposto,
+      aliqImposto: incluirImposto ? aliqImp : 0,
       inclArq,
       inclEng,
       valorArqFechado: fecArq,
@@ -5553,7 +5601,31 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
 
           {/* Seção 1: Escopo */}
           <div style={{ marginBottom:22 }}>
-            <div style={SECTION_TITLE}>1. O que foi fechado</div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+              <div style={SECTION_TITLE}>1. O que foi fechado</div>
+              {temImpostoOrc && aliqImp > 0 && (
+                <div
+                  onClick={() => setIncluirImposto(v => !v)}
+                  style={{
+                    display:"flex", alignItems:"center", gap:6,
+                    cursor:"pointer", padding:"4px 10px",
+                    border:`1px solid ${incluirImposto ? "#111" : "#e5e7eb"}`,
+                    borderRadius:5,
+                    background: incluirImposto ? "#fafafa" : "transparent",
+                    fontSize:11, fontWeight:500, color: incluirImposto ? "#111" : "#6b7280",
+                    userSelect:"none",
+                  }}>
+                  <div style={{
+                    width:13, height:13, borderRadius:3,
+                    border:`1.5px solid ${incluirImposto ? "#111" : "#d1d5db"}`,
+                    background: incluirImposto ? "#111" : "#fff",
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    color:"#fff", fontSize:9, fontWeight:700, flexShrink:0,
+                  }}>{incluirImposto ? "✓" : ""}</div>
+                  Incluir imposto ({aliqImp}%)
+                </div>
+              )}
+            </div>
 
             {ehTipoEtapas ? (
               // ── Tipo "etapas": lista de etapas com checkbox + valor editável ──
@@ -5593,11 +5665,6 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                     </div>
                   );
                 })}
-                {temImpostoOrc && (
-                  <div style={{ fontSize:11, color:"#9ca3af", marginTop:4, paddingLeft:4 }}>
-                    Valores já incluem imposto ({aliqImp}%)
-                  </div>
-                )}
               </>
             ) : (
               // ── Tipo "padrão": Arq / Eng ──
@@ -5634,11 +5701,6 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                     </div>
                   );
                 })}
-                {temImpostoOrc && (
-                  <div style={{ fontSize:11, color:"#9ca3af", marginTop:4, paddingLeft:4 }}>
-                    Valores já incluem imposto ({aliqImp}%)
-                  </div>
-                )}
               </>
             )}
           </div>
@@ -5717,7 +5779,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
               </div>
 
               {/* Alerta de diferença entre soma e total fechado */}
-              {temDiferenca && parcelas.length > 1 && (
+              {temDiferenca && parcelas.length > 1 && !editandoTotal && (
                 <div style={{
                   marginTop:10, padding:"8px 10px",
                   background:"#fef2f2", border:"1px solid #fecaca",
@@ -5744,6 +5806,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
               </div>
             </div>
             <NumBR valor={totalFechado} onChange={mudarTotalFechado} min={0} max={propTotal} decimais={2}
+              onFocus={() => setEditandoTotal(true)}
+              onBlur={() => setEditandoTotal(false)}
               style={{ fontSize:15, fontWeight:600, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, background:"#fff", width:140, textAlign:"right", fontFamily:"inherit", color:"#111", outline:"none" }} />
           </div>
 
