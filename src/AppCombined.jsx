@@ -5106,111 +5106,48 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const temArq = orcArq > 0;
   const temEng = orcEng > 0;
 
-  // ── Estados ──
-  const [inclArq, setInclArq] = useState(temArq);
-  const [inclEng, setInclEng] = useState(temEng);
+  // ── Estados principais ──
+  const [inclArq, setInclArq]         = useState(temArq);
+  const [inclEng, setInclEng]         = useState(temEng);
+  const [pgtoSel, setPgtoSel]         = useState("antecipado"); // "antecipado" | "parcelado" | "personalizado"
+  const [descontoPct, setDescontoPct] = useState(0);            // % editável
+  const [parcelas, setParcelas]       = useState([]);            // [{ nome, valor, data }]
 
-  // ── Deriva opções de pagamento baseado no escopo marcado ──
-  // O orçamento tem 2 conjuntos de condições:
-  //   • Serviço único (só Arq OU só Eng) — descontoEtapa / parcelasEtapa
-  //   • Pacote Completo (Arq + Eng)       — descontoPacote / parcelasPacote
-  // Tipo "etapas": descontoEtapaCtrt / parcelasEtapaCtrt (etapa individual)
-  //                descontoPacoteCtrt / parcelasPacoteCtrt (pacote de etapas)
-  //
-  // Se o orçamento tem proposta salva, os valores vêm do snapshot da proposta
-  // (descArq/parcArq/descPacote/parcPacote), senão dos campos raiz salvos no cadastro.
-  const opcoes = (() => {
+  // ── Deriva opções padrão do orçamento (desconto e quantidade de parcelas) ──
+  // Prioridade: proposta enviada > raiz do orçamento > fallback.
+  const opcoesOrcamento = (() => {
     const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
     const ehPacote = inclArq && inclEng;
-
-    // Prioridade: última proposta enviada > campos raiz do orçamento
     const ultProp = orc.propostas && orc.propostas.length > 0
       ? orc.propostas[orc.propostas.length - 1]
       : null;
-
-    // Helper: pega o primeiro valor não-nulo entre proposta > raiz > fallback
-    const pick = (...vals) => {
-      for (const v of vals) if (v != null) return v;
-      return 0;
-    };
+    const pick = (...vals) => { for (const v of vals) if (v != null) return v; return 0; };
 
     if (tipoPgto === "padrao") {
-      // Apenas Arq (ou apenas Eng) — desconto/parcelas de "serviço único"
       const descArq = pick(ultProp?.descArq, orc.descontoEtapa, orc.descArq, 5);
       const parcArq = pick(ultProp?.parcArq, orc.parcelasEtapa, orc.parcArq, 3);
-      // Pacote Completo (Arq + Eng) — desconto/parcelas de "pacote"
       const descPac = pick(ultProp?.descPacote, orc.descontoPacote, orc.descPacote, 10);
       const parcPac = pick(ultProp?.parcPacote, orc.parcelasPacote, orc.parcPacote, 4);
-
-      const descAntec = ehPacote ? descPac : descArq;
-      const parcParc  = ehPacote ? parcPac : parcArq;
-      const blocoLabel = ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia");
-      return [
-        { key:"antecipado", label:"Antecipado",
-          desc:`${blocoLabel} · À vista com desconto`,
-          descontoPct: descAntec,
-          parcelas: 1 },
-        { key:"parcelado", label:"Parcelado",
-          desc:`${blocoLabel} · Em ${parcParc}x sem desconto`,
-          descontoPct: 0,
-          parcelas: parcParc },
-      ];
+      return {
+        descAntecipado: ehPacote ? descPac : descArq,
+        qtdParcelado:   ehPacote ? parcPac : parcArq,
+        blocoLabel:     ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia"),
+      };
     }
-
-    // Tipo "etapas"
-    const descEtapa  = pick(ultProp?.descEtCtrt,  orc.descontoEtapaCtrt,  orc.descEtCtrt,  0);
-    const parcEtapa  = pick(ultProp?.parcEtCtrt,  orc.parcelasEtapaCtrt,  orc.parcEtCtrt,  2);
-    const descPacEt  = pick(ultProp?.descPacCtrt, orc.descontoPacoteCtrt, orc.descPacCtrt, 0);
-    const parcPacEt  = pick(ultProp?.parcPacCtrt, orc.parcelasPacoteCtrt, orc.parcPacCtrt, 1);
-    return [
-      { key:"etapa", label:"Por Etapa",
-        desc:"Paga cada etapa quando conclui",
-        descontoPct: descEtapa,
-        parcelas: parcEtapa },
-      { key:"pacoteEtapas", label:"Pacote das Etapas",
-        desc:"Paga o pacote antecipado",
-        descontoPct: descPacEt,
-        parcelas: parcPacEt },
-    ];
+    // etapas
+    return {
+      descAntecipado: pick(ultProp?.descEtCtrt, orc.descontoEtapaCtrt, orc.descEtCtrt, 0),
+      qtdParcelado:   pick(ultProp?.parcPacCtrt, orc.parcelasPacoteCtrt, orc.parcPacCtrt, 2),
+      blocoLabel:     "Por Etapas",
+    };
   })();
-
-  // Estados restantes (opcoes pronto)
-  const [pgtoSel, setPgtoSel] = useState(opcoes[0].key);
-  const [personalizado, setPersonalizado] = useState(false);
-  const [parcelas, setParcelas] = useState(() => gerarParcelasIniciais(opcoes[0].parcelas));
-  const [valorFechadoManual, setValorFechadoManual] = useState(null);
-
-  function gerarParcelasIniciais(n) {
-    const hoje = new Date();
-    return Array.from({ length: n }, (_, i) => {
-      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, hoje.getDate());
-      return { data: d.toISOString().slice(0, 10) };
-    });
-  }
-
-  // Quando muda o escopo (Arq/Eng), as opções de pagamento mudam.
-  // Resincroniza parcelas e limpa valor manual para refletir o novo bloco.
-  useEffect(() => {
-    if (personalizado) return;
-    const opc = opcoes.find(o => o.key === pgtoSel) || opcoes[0];
-    if (!opc) return;
-    setParcelas(gerarParcelasIniciais(opc.parcelas));
-    setValorFechadoManual(null);
-    // Se pgtoSel não existe mais nas novas opções, usa a primeira
-    if (!opcoes.find(o => o.key === pgtoSel)) {
-      setPgtoSel(opcoes[0].key);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [inclArq, inclEng]);
 
   // ── Cálculos derivados ──
   const propArq = inclArq ? orcArq : 0;
   const propEng = inclEng ? orcEng : 0;
   const propTotal = propArq + propEng;
-  const opcAtual = opcoes.find(o => o.key === pgtoSel) || opcoes[0];
-  const descPct = personalizado ? 0 : (opcAtual?.descontoPct || 0);
-  const sugerido = Math.round(propTotal * (1 - descPct/100));
-  const totalFechado = (valorFechadoManual != null) ? valorFechadoManual : sugerido;
+  const sugerido = Math.round(propTotal * (1 - descontoPct/100));
+  const totalFechado = sugerido;
 
   // Distribui proporcional
   let fecArq = 0, fecEng = 0;
@@ -5219,54 +5156,94 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     fecEng = totalFechado - fecArq;
   }
   const descontoRs = propTotal - totalFechado;
-  const descontoEfetivoPct = propTotal > 0 ? (descontoRs / propTotal * 100) : 0;
-  const valorParcela = totalFechado / (parcelas.length || 1);
+
+  // ── Helpers ──
+  function gerarParcelasIguais(n, total, nomeBase = "Parcela") {
+    const hoje = new Date();
+    const vp = n > 0 ? Math.round((total / n) * 100) / 100 : 0;
+    return Array.from({ length: n }, (_, i) => {
+      const d = new Date(hoje.getFullYear(), hoje.getMonth() + i, hoje.getDate());
+      return {
+        nome: `${i + 1}ª ${nomeBase}`,
+        valor: vp,
+        data: d.toISOString().slice(0, 10),
+      };
+    });
+  }
+
+  function gerarParcelasPersonalizadas(total) {
+    const hoje = new Date();
+    const d2 = new Date(hoje.getFullYear(), hoje.getMonth() + 1, hoje.getDate());
+    const metade = Math.round((total / 2) * 100) / 100;
+    return [
+      { nome: "Entrada",    valor: metade,         data: hoje.toISOString().slice(0, 10) },
+      { nome: "Na entrega", valor: total - metade, data: d2.toISOString().slice(0, 10) },
+    ];
+  }
+
+  // ── Inicialização e resincronização quando escopo/opção mudam ──
+  useEffect(() => {
+    // Define desconto padrão baseado na opção selecionada
+    let novoDesc = 0;
+    if (pgtoSel === "antecipado") novoDesc = opcoesOrcamento.descAntecipado;
+    else if (pgtoSel === "parcelado") novoDesc = 0;
+    else if (pgtoSel === "personalizado") novoDesc = 0;
+    setDescontoPct(novoDesc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pgtoSel, inclArq, inclEng]);
+
+  useEffect(() => {
+    // Regenera parcelas quando opção ou total muda
+    let novasParc;
+    if (pgtoSel === "antecipado") {
+      novasParc = gerarParcelasIguais(1, totalFechado, "Pagamento");
+    } else if (pgtoSel === "parcelado") {
+      novasParc = gerarParcelasIguais(opcoesOrcamento.qtdParcelado, totalFechado, "Parcela");
+    } else {
+      novasParc = gerarParcelasPersonalizadas(totalFechado);
+    }
+    setParcelas(novasParc);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pgtoSel, inclArq, inclEng]);
+
+  // Quando desconto ou escopo mudam, redistribui o valor das parcelas (mantém quantidade e datas)
+  useEffect(() => {
+    setParcelas(atuais => {
+      if (atuais.length === 0) return atuais;
+      if (pgtoSel === "personalizado") return atuais; // personalizado: usuário controla valores manualmente
+      const vp = Math.round((totalFechado / atuais.length) * 100) / 100;
+      return atuais.map(p => ({ ...p, valor: vp }));
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalFechado]);
 
   // ── Handlers ──
   function toggleEscopo(key) {
     if (key === "arq") {
       if (!inclArq) setInclArq(true);
-      else if (inclEng) setInclArq(false); // não deixa desmarcar os dois
+      else if (inclEng) setInclArq(false);
     }
     if (key === "eng") {
       if (!inclEng) setInclEng(true);
       else if (inclArq) setInclEng(false);
     }
-    setValorFechadoManual(null);
-  }
-
-  function selecionarOpcao(key) {
-    setPgtoSel(key);
-    setPersonalizado(false);
-    const opc = opcoes.find(o => o.key === key);
-    setParcelas(gerarParcelasIniciais(opc.parcelas));
-    setValorFechadoManual(null);
-  }
-
-  function togglePersonalizado() {
-    if (personalizado) {
-      setPersonalizado(false);
-    } else {
-      setPersonalizado(true);
-      setParcelas(gerarParcelasIniciais(3));
-      setValorFechadoManual(null);
-    }
   }
 
   function mudarQtdParcelas(n) {
     const qtd = Math.max(1, Math.min(24, parseInt(n) || 1));
-    setParcelas(gerarParcelasIniciais(qtd));
+    setParcelas(gerarParcelasIguais(qtd, totalFechado, "Parcela"));
   }
 
-  function mudarDataParcela(i, nova) {
-    setParcelas(p => p.map((x, idx) => idx === i ? { ...x, data: nova } : x));
+  function mudarParcelaCampo(i, campo, valor) {
+    setParcelas(atuais => atuais.map((p, idx) => idx === i ? { ...p, [campo]: valor } : p));
   }
 
   function adicionarParcela() {
     const ult = parcelas[parcelas.length - 1];
-    const d = new Date(ult.data);
+    const d = ult ? new Date(ult.data) : new Date();
     d.setMonth(d.getMonth() + 1);
-    setParcelas([...parcelas, { data: d.toISOString().slice(0, 10) }]);
+    const nome = pgtoSel === "personalizado" ? "Nova etapa" : `${parcelas.length + 1}ª Parcela`;
+    setParcelas([...parcelas, { nome, valor: 0, data: d.toISOString().slice(0, 10) }]);
   }
 
   function removerParcela(i) {
@@ -5274,28 +5251,50 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     setParcelas(parcelas.filter((_, idx) => idx !== i));
   }
 
-  function mudarValorFechado(v) {
-    const n = parseFloat(v) || 0;
-    if (n > propTotal) { setValorFechadoManual(propTotal); return; }
-    if (n < 0) { setValorFechadoManual(0); return; }
-    setValorFechadoManual(n);
+  // ── Desconto ⇄ Valor fechado (sincronia) ──
+  function mudarDesconto(v) {
+    let n = parseFloat(v);
+    if (isNaN(n)) n = 0;
+    if (n < 0) n = 0;
+    if (n > 100) n = 100;
+    setDescontoPct(n);
+  }
+
+  function mudarTotalFechado(v) {
+    let n = parseFloat(v);
+    if (isNaN(n) || n < 0) n = 0;
+    if (n > propTotal) n = propTotal;
+    // Calcula o desconto implícito pra esse total
+    const novoDesc = propTotal > 0 ? ((propTotal - n) / propTotal) * 100 : 0;
+    setDescontoPct(Math.round(novoDesc * 100) / 100);
   }
 
   function confirmar() {
+    const somaPersonalizada = parcelas.reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
+    // Valida total das parcelas no modo personalizado
+    if (pgtoSel === "personalizado") {
+      if (Math.abs(somaPersonalizada - totalFechado) > 0.5) {
+        if (!confirm(`A soma das parcelas (${fmtBRL(somaPersonalizada)}) não bate com o total fechado (${fmtBRL(totalFechado)}).\n\nContinuar mesmo assim?`)) return;
+      }
+    }
+
     const ganhoData = {
       inclArq,
       inclEng,
       valorArqFechado: fecArq,
       valorEngFechado: fecEng,
       valorTotalFechado: totalFechado,
+      descontoPct,
       descontoRs,
-      descontoPct: descontoEfetivoPct,
       condicao: {
-        tipo: personalizado ? "personalizada" : pgtoSel,
-        label: personalizado ? "Personalizada" : opcAtual.label,
+        tipo: pgtoSel,
+        label: pgtoSel === "antecipado" ? "Antecipado"
+             : pgtoSel === "parcelado" ? "Parcelado"
+             : "Personalizada",
         parcelas: parcelas.map((p, i) => ({
           numero: i + 1,
-          valor: Math.round(valorParcela * 100) / 100,
+          nome: p.nome,
+          valor: Math.round((parseFloat(p.valor) || 0) * 100) / 100,
           data: p.data,
         })),
       },
@@ -5303,7 +5302,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     onConfirmar(ganhoData);
   }
 
-  // ── Helpers de formatação ──
+  // ── Formatação ──
   const fmtBRL = v => "R$ " + Math.round(v).toLocaleString("pt-BR");
   const fmtData = iso => {
     if (!iso) return "";
@@ -5311,16 +5310,38 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     return `${p[2]}/${p[1]}/${p[0].slice(2)}`;
   };
 
-  // ── Estilos (inline) ──
+  // ── Estilos ──
   const SECTION_TITLE = { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 };
-  const ROW_LABEL     = { fontSize:11.5, color:"#6b7280", minWidth:64 };
+  const ROW_LABEL     = { fontSize:11.5, color:"#6b7280", minWidth:60 };
   const INPUT_STYLE   = { fontSize:12.5, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, fontFamily:"inherit", color:"#111", background:"#fff", outline:"none" };
+
+  // ── Lista de opções (3 fixas) ──
+  const opcoes = [
+    {
+      key:"antecipado",
+      label:"Antecipado",
+      sublabel:`${opcoesOrcamento.blocoLabel} · À vista com desconto`,
+      descBase: opcoesOrcamento.descAntecipado,
+    },
+    {
+      key:"parcelado",
+      label:"Parcelado",
+      sublabel:`${opcoesOrcamento.blocoLabel} · Em ${opcoesOrcamento.qtdParcelado}x sem desconto`,
+      descBase: 0,
+    },
+    {
+      key:"personalizado",
+      label:"Personalizada",
+      sublabel:"Entrada e etapas com valores e datas livres",
+      descBase: 0,
+    },
+  ];
 
   return (
     <div
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100, padding:20 }}>
-      <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:520, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
+      <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:540, maxHeight:"92vh", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
 
         {/* Head */}
         <div style={{ padding:"20px 24px 14px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
@@ -5375,10 +5396,10 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
           <div style={{ marginBottom:22 }}>
             <div style={SECTION_TITLE}>2. Forma de pagamento</div>
             {opcoes.map(opc => {
-              const selected = pgtoSel === opc.key && !personalizado;
+              const selected = pgtoSel === opc.key;
               return (
                 <div key={opc.key}
-                  onClick={e => { if (!e.target.closest("[data-stop]")) selecionarOpcao(opc.key); }}
+                  onClick={e => { if (!e.target.closest("[data-stop]")) setPgtoSel(opc.key); }}
                   style={{
                     padding:"12px 14px", border:`1px solid ${selected ? "#111" : "#e5e7eb"}`,
                     borderRadius:7, marginBottom:6, cursor:"pointer", transition:"border-color 0.12s",
@@ -5391,59 +5412,95 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                       </div>
                       {opc.label}
                     </div>
-                    {opc.descontoPct > 0 && (
+                    {opc.descBase > 0 && !selected && (
                       <span style={{
                         fontSize:11, color:"#111", fontWeight:600,
                         background:"#f3f4f6", padding:"3px 8px", borderRadius:10,
                         border:"1px solid #e5e7eb",
                       }}>
-                        {opc.descontoPct}% de desconto
+                        {opc.descBase}% de desconto
                       </span>
                     )}
                   </div>
-                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, marginLeft:25 }}>{opc.desc}</div>
+                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, marginLeft:25 }}>{opc.sublabel}</div>
 
                   {selected && (
                     <div style={{ marginTop:12, marginLeft:25 }} data-stop="1">
-                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-                        <label style={ROW_LABEL}>Parcelas</label>
-                        <input type="number" min="1" max="24" value={parcelas.length}
-                          onChange={e => mudarQtdParcelas(e.target.value)}
-                          style={{ ...INPUT_STYLE, width:70 }} />
-                        <span style={{ fontSize:11.5, color:"#9ca3af" }}>× {fmtBRL(valorParcela)}</span>
-                      </div>
-                      {parcelas.length > 1 && (
-                        <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:7, padding:10, marginTop:8 }}>
-                          {parcelas.map((p, i) => (
-                            <div key={i} style={{ display:"grid", gridTemplateColumns:"26px 1fr 26px", gap:8, alignItems:"center", marginBottom:6 }}>
-                              <span style={{ fontSize:11, color:"#9ca3af", fontWeight:500 }}>{i+1}</span>
-                              <input type="date" value={p.data}
-                                onChange={e => mudarDataParcela(i, e.target.value)}
-                                style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", width:"100%" }} />
-                              <button onClick={() => removerParcela(i)}
-                                style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
-                            </div>
-                          ))}
-                          <button onClick={adicionarParcela}
-                            style={{ fontSize:11.5, background:"transparent", border:"1px dashed #d1d5db", borderRadius:5, padding:"5px 10px", cursor:"pointer", color:"#6b7280", fontFamily:"inherit", marginTop:4 }}>
-                            + Adicionar parcela
-                          </button>
+                      {/* Campos editáveis por tipo */}
+                      {opc.key === "antecipado" && (
+                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                          <label style={ROW_LABEL}>Desconto</label>
+                          <input type="number" min="0" max="100" step="0.01" value={descontoPct}
+                            onChange={e => mudarDesconto(e.target.value)}
+                            style={{ ...INPUT_STYLE, width:80 }} />
+                          <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
                         </div>
                       )}
+                      {opc.key === "parcelado" && (
+                        <>
+                          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8, flexWrap:"wrap" }}>
+                            <label style={ROW_LABEL}>Parcelas</label>
+                            <input type="number" min="1" max="24" value={parcelas.length}
+                              onChange={e => mudarQtdParcelas(e.target.value)}
+                              style={{ ...INPUT_STYLE, width:70 }} />
+                            <label style={{ ...ROW_LABEL, marginLeft:8 }}>Desconto</label>
+                            <input type="number" min="0" max="100" step="0.01" value={descontoPct}
+                              onChange={e => mudarDesconto(e.target.value)}
+                              style={{ ...INPUT_STYLE, width:80 }} />
+                            <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
+                          </div>
+                        </>
+                      )}
+                      {opc.key === "personalizado" && (
+                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+                          <label style={ROW_LABEL}>Desconto</label>
+                          <input type="number" min="0" max="100" step="0.01" value={descontoPct}
+                            onChange={e => mudarDesconto(e.target.value)}
+                            style={{ ...INPUT_STYLE, width:80 }} />
+                          <span style={{ fontSize:11.5, color:"#9ca3af" }}>%</span>
+                        </div>
+                      )}
+
+                      {/* Lista de parcelas/etapas */}
+                      <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:7, padding:10, marginTop:8 }}>
+                        {parcelas.map((p, i) => (
+                          <div key={i} style={{
+                            display:"grid",
+                            gridTemplateColumns: opc.key === "personalizado" ? "1fr 110px 120px 20px" : "100px 110px 120px 20px",
+                            gap:6, alignItems:"center", marginBottom:6,
+                          }}>
+                            {opc.key === "personalizado" ? (
+                              <input type="text" value={p.nome}
+                                onChange={e => mudarParcelaCampo(i, "nome", e.target.value)}
+                                placeholder="Descrição"
+                                style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
+                            ) : (
+                              <span style={{ fontSize:11.5, color:"#6b7280", fontWeight:500 }}>{p.nome}</span>
+                            )}
+                            <input type="number" min="0" step="0.01" value={p.valor}
+                              onChange={e => mudarParcelaCampo(i, "valor", parseFloat(e.target.value) || 0)}
+                              style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px", textAlign:"right" }} />
+                            <input type="date" value={p.data}
+                              onChange={e => mudarParcelaCampo(i, "data", e.target.value)}
+                              style={{ ...INPUT_STYLE, fontSize:12, padding:"5px 8px" }} />
+                            {parcelas.length > 1 ? (
+                              <button onClick={() => removerParcela(i)}
+                                style={{ background:"transparent", border:"none", color:"#9ca3af", cursor:"pointer", fontSize:14, padding:0, lineHeight:1, fontFamily:"inherit" }}>×</button>
+                            ) : <span/>}
+                          </div>
+                        ))}
+                        {(opc.key === "parcelado" || opc.key === "personalizado") && (
+                          <button onClick={adicionarParcela}
+                            style={{ fontSize:11.5, background:"transparent", border:"1px dashed #d1d5db", borderRadius:5, padding:"5px 10px", cursor:"pointer", color:"#6b7280", fontFamily:"inherit", marginTop:4 }}>
+                            + Adicionar {opc.key === "personalizado" ? "etapa" : "parcela"}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
               );
             })}
-            <button onClick={togglePersonalizado}
-              style={{
-                width:"100%", padding:10, background: personalizado ? "#fafafa" : "#fff",
-                border:`1px ${personalizado ? "solid" : "dashed"} ${personalizado ? "#111" : "#d1d5db"}`,
-                borderRadius:7, fontSize:12, color: personalizado ? "#111" : "#6b7280",
-                cursor:"pointer", fontFamily:"inherit", marginTop:6,
-              }}>
-              {personalizado ? "✓ Condição personalizada" : "+ Condição personalizada"}
-            </button>
           </div>
 
           {/* Valor fechado */}
@@ -5452,11 +5509,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
               <div style={{ fontSize:12, color:"#111", fontWeight:600 }}>Valor fechado total</div>
               <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>
                 Proposto {fmtBRL(propTotal)}
-                {descPct > 0 && ` · Sugerido ${fmtBRL(sugerido)} (${descPct}% desc)`}
+                {descontoPct > 0 && ` · ${descontoPct.toFixed(2).replace(/\.?0+$/, "").replace(".", ",")}% de desconto`}
               </div>
             </div>
             <input type="number" value={totalFechado} max={propTotal} min={0}
-              onChange={e => mudarValorFechado(e.target.value)}
+              onChange={e => mudarTotalFechado(e.target.value)}
               style={{ fontSize:15, fontWeight:600, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, background:"#fff", width:140, textAlign:"right", fontFamily:"inherit", color:"#111", outline:"none" }} />
           </div>
 
@@ -5478,17 +5535,22 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
             </div>
             {descontoRs > 0 && (
               <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>
-                Desconto de {fmtBRL(descontoRs)} · {descontoEfetivoPct.toFixed(1).replace(".", ",")}%
+                Desconto de {fmtBRL(descontoRs)}
               </div>
             )}
             <div style={{ fontSize:11.5, color:"#374151", marginTop:8, padding:"8px 10px", background:"#fafafa", borderRadius:6 }}>
-              {parcelas.length <= 1 ? (
-                <><strong>Antecipado</strong> · {fmtData(parcelas[0].data)}</>
+              {parcelas.length === 0 ? null : parcelas.length === 1 ? (
+                <><strong>{parcelas[0].nome}</strong> · {fmtBRL(parcelas[0].valor)} · {fmtData(parcelas[0].data)}</>
               ) : (
                 <>
-                  <strong>{parcelas.length}x de {fmtBRL(valorParcela)}</strong>
-                  <div style={{ marginTop:3, color:"#9ca3af", fontSize:10.5 }}>
-                    {parcelas.map(p => fmtData(p.data).slice(0,5)).join(" · ")}
+                  <strong>{parcelas.length} pagamento{parcelas.length !== 1 ? "s" : ""}</strong>
+                  <div style={{ marginTop:4, color:"#6b7280", fontSize:11 }}>
+                    {parcelas.map((p, i) => (
+                      <div key={i} style={{ display:"flex", justifyContent:"space-between", padding:"1px 0" }}>
+                        <span>{p.nome}</span>
+                        <span>{fmtBRL(p.valor)} · {fmtData(p.data)}</span>
+                      </div>
+                    ))}
                   </div>
                 </>
               )}
