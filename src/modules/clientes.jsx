@@ -31,6 +31,124 @@ function colunaDoCliente(c) {
   return (c?.ativo === false) ? "inativos" : "ativos";
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Helper: statusCliente(cliente, data) → retorna chips + status
+// ═══════════════════════════════════════════════════════════════
+// Retorna:
+//   {
+//     chips: [{ tipo, estado, info, alerta }...],  // serviços ativos
+//     inativaEm: N ou null,                         // dias até inativar (se sem serviço)
+//     temAtividade: boolean,                        // false = nada aberto
+//   }
+// Prioridade de chips: orçamento > projeto > obra
+// "Serviço ativo" = mantém cliente ativo (não conta prazo de inativação)
+function statusCliente(cliente, data) {
+  const chips = [];
+  const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
+  const projetos   = (data.projetos || []).filter(p => p.clienteId === cliente.id);
+  const obras      = (data.obras || []).filter(o => o.clienteId === cliente.id);
+
+  // ── ORÇAMENTOS ATIVOS (rascunho ou aberto) ────────────────
+  const orcsRascunho = orcamentos.filter(o => o.status === "rascunho");
+  const orcsAbertos  = orcamentos.filter(o => o.status === "aberto");
+
+  // Agrupa propostas enviadas (se proposta em aberto)
+  for (const orc of orcsAbertos) {
+    const propostas = orc.propostas || [];
+    if (propostas.length > 0) {
+      const ultima = propostas[propostas.length - 1];
+      if (ultima.enviadaEm) {
+        const msEnv = new Date(ultima.enviadaEm).getTime();
+        const diasPassados = Math.floor((Date.now() - msEnv) / (1000 * 60 * 60 * 24));
+        const diasExp = 30 - diasPassados;
+        if (diasExp > 0) {
+          chips.push({
+            tipo: "Orçamento",
+            estado: "Enviado",
+            info: `Exp. ${diasExp}d`,
+            alerta: diasExp <= 7 ? "vermelho" : (diasExp <= 15 ? "amarelo" : null),
+          });
+          continue;
+        }
+      }
+    }
+    // Aberto sem proposta enviada
+    chips.push({ tipo: "Orçamento", estado: "Aberto" });
+  }
+
+  // Rascunhos
+  if (orcsRascunho.length > 0) {
+    chips.push({
+      tipo: orcsRascunho.length > 1 ? `${orcsRascunho.length} Orçamentos` : "1 Orçamento",
+      estado: "Rascunho",
+    });
+  }
+
+  // ── PROJETOS EM ANDAMENTO ─────────────────────────────────
+  // Agrupa por etapa
+  const ETAPAS_LABEL = {
+    briefing: "Briefing",
+    preliminar: "Preliminar",
+    prefeitura: "Prefeitura",
+    executivo: "Executivo",
+    engenharia: "Engenharia",
+  };
+  const projsPorEtapa = {};
+  for (const p of projetos) {
+    const et = p.colunaEtapa || "briefing";
+    projsPorEtapa[et] = (projsPorEtapa[et] || 0) + 1;
+  }
+  for (const et of Object.keys(projsPorEtapa)) {
+    const n = projsPorEtapa[et];
+    chips.push({
+      tipo: n > 1 ? `${n} Projetos` : "1 Projeto",
+      estado: ETAPAS_LABEL[et] || et,
+    });
+  }
+
+  // ── OBRAS EM ANDAMENTO ────────────────────────────────────
+  const obrasAndamento = obras.filter(o => o.status !== "concluida");
+  const obrasConcluidas = obras.filter(o => o.status === "concluida");
+  if (obrasAndamento.length > 0) {
+    chips.push({
+      tipo: obrasAndamento.length > 1 ? `${obrasAndamento.length} Obras` : "1 Obra",
+      estado: "Em andamento",
+    });
+  }
+  if (obrasConcluidas.length > 0 && chips.length === 0) {
+    // Só mostra obras concluídas se não tem nada ativo
+    chips.push({
+      tipo: obrasConcluidas.length > 1 ? `${obrasConcluidas.length} Obras` : "1 Obra",
+      estado: "Concluída",
+    });
+  }
+
+  const temAtividade = chips.length > 0 && !chips.every(c => c.estado === "Concluída");
+
+  // ── SEM ATIVIDADE ─────────────────────────────────────────
+  // Calcula data do último serviço concluído (orçamento perdido/ganho, obra concluída, etc)
+  let inativaEm = null;
+  if (!temAtividade) {
+    // Data mais recente de conclusão
+    let ultimaConclusao = null;
+    for (const o of orcamentos) {
+      const d = o.concluidoEm || o.expirouEm;
+      if (d && (!ultimaConclusao || d > ultimaConclusao)) ultimaConclusao = d;
+    }
+    for (const o of obras) {
+      const d = o.concluidaEm;
+      if (d && (!ultimaConclusao || d > ultimaConclusao)) ultimaConclusao = d;
+    }
+    // Fallback: criação do cliente
+    if (!ultimaConclusao) ultimaConclusao = cliente.criadoEm || cliente.desde || new Date().toISOString();
+
+    const diasPassados = Math.floor((Date.now() - new Date(ultimaConclusao).getTime()) / (1000 * 60 * 60 * 24));
+    inativaEm = 90 - diasPassados;
+  }
+
+  return { chips, inativaEm, temAtividade };
+}
+
 function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   const [abertos, setAbertos] = useState({ cadastro:false, financeiro:false });
   const toggle = k => setAbertos(p => ({...p, [k]:!p[k]}));
@@ -223,41 +341,91 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
   // ── Card de cliente — reutilizado em mobile e desktop ────────
   function ClienteCard({ c, mobile }) {
-    const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
-    const corAv = c.tipo==="PJ" ? "#7c3aed" : "#2563eb";
-    const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone || c.contatos?.[0]?.telefone || "";
+    const status = statusCliente(c, data);
+    const isInativo = colunaDoCliente(c) === "inativos";
+
+    // Texto secundário (linha 2 do card)
+    const renderStatusLinha = () => {
+      // Cliente inativo: mostra quando foi inativado
+      if (isInativo) {
+        if (c.inativadoAutomaticamente && c.inativadoEm) {
+          const meses = Math.floor((Date.now() - new Date(c.inativadoEm).getTime()) / (1000 * 60 * 60 * 24 * 30));
+          return <span style={{ color:"#9ca3af" }}>Inativo há {meses} {meses === 1 ? "mês" : "meses"} · automático</span>;
+        }
+        if (c.inativadoEm) {
+          return <span style={{ color:"#9ca3af" }}>Inativado em {new Date(c.inativadoEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}</span>;
+        }
+        return <span style={{ color:"#9ca3af" }}>Inativo</span>;
+      }
+
+      // Sem atividade: mostra "cliente inativa em X dias"
+      if (!status.temAtividade) {
+        if (status.inativaEm != null) {
+          if (status.inativaEm <= 0) {
+            return <span style={{ color:"#b91c1c" }}>Será inativado em breve</span>;
+          }
+          if (status.inativaEm <= 15) {
+            return <span style={{ color:"#b91c1c", fontWeight:500 }}>⚠ Inativa em {status.inativaEm} dias</span>;
+          }
+          if (status.inativaEm <= 30) {
+            return <span style={{ color:"#b45309" }}>Inativa em {status.inativaEm} dias</span>;
+          }
+          return <span style={{ color:"#9ca3af" }}>Sem serviço ativo</span>;
+        }
+        return <span style={{ color:"#9ca3af" }}>Novo cliente</span>;
+      }
+
+      // Cliente com serviços ativos: renderiza chips
+      return status.chips.map((chip, i) => {
+        const corAlerta = chip.alerta === "vermelho" ? "#b91c1c" : chip.alerta === "amarelo" ? "#b45309" : null;
+        return (
+          <span key={i} style={{ color:"#374151" }}>
+            {i > 0 && <span style={{ color:"#d1d5db", margin:"0 6px" }}>·</span>}
+            <span>{chip.tipo}</span>
+            <span style={{ color:"#9ca3af" }}> ({chip.estado})</span>
+            {chip.info && (
+              <span style={{ color:corAlerta || "#9ca3af", marginLeft:4 }}>
+                {corAlerta === "#b91c1c" ? "⚠ " : ""}{chip.info}
+              </span>
+            )}
+          </span>
+        );
+      });
+    };
+
     return (
       <div
         onClick={() => openDetail(c)}
-        style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"12px", marginBottom:8, cursor:"pointer", transition:"box-shadow 0.15s" }}
-        onMouseEnter={e=>e.currentTarget.style.borderColor="#111"}
+        style={{
+          background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+          padding:"10px 14px", marginBottom:6, cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
+          transition:"border-color 0.15s",
+        }}
+        onMouseEnter={e=>e.currentTarget.style.borderColor="#d1d5db"}
         onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-          <div style={{ width:36, height:36, borderRadius:9, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, fontWeight:700, flexShrink:0 }}>
-            {iniciais}
+        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
+          <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {c.nome}
           </div>
-          <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.nome}</div>
-            <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>{c.cidade||c.cpfCnpj||""}</div>
+          <div style={{ fontSize:11.5, lineHeight:1.4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {renderStatusLinha()}
           </div>
         </div>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <span style={C.tag(corAv)}>{c.tipo}</span>
-          <div style={{ display:"flex", gap:4 }} onClick={e=>e.stopPropagation()}>
-            {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:11, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"4px 8px" }}>WA</a>}
-            {mobile ? (
-              /* Mobile: botão mover coluna */
-              <select
-                value={colunaDoCliente(c)}
-                onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
-                onClick={e => e.stopPropagation()}
-                style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
-                {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
-              </select>
-            ) : (
-              <button onClick={e=>{e.stopPropagation();openEdit(c);}} style={{ fontSize:11, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 7px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
-            )}
-          </div>
+        <div style={{ display:"flex", gap:4, alignItems:"center", flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+          {mobile ? (
+            <select
+              value={colunaDoCliente(c)}
+              onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
+              onClick={e => e.stopPropagation()}
+              style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
+              {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
+            </select>
+          ) : (
+            <button onClick={e=>{e.stopPropagation();openEdit(c);}}
+              style={{ fontSize:11, color:"#9ca3af", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 6px" }}
+              title="Editar">⋯</button>
+          )}
         </div>
       </div>
     );
@@ -774,10 +942,44 @@ function ModalConfirmarGanho({ orc, arqTotal, engTotal, grandTotal, data, save, 
       });
     }
 
-    const novosOrc  = (data.orcamentosProjeto || []).map(o => o.id===orc.id ? {...o, status:"ganho", pagamento:pgto} : o);
+    // Marca orçamento como ganho + adiciona data de conclusão
+    const agora = new Date().toISOString();
+    const novosOrc  = (data.orcamentosProjeto || []).map(o =>
+      o.id === orc.id
+        ? { ...o, status:"ganho", pagamento:pgto, concluidoEm: agora, ganhoEm: agora }
+        : o
+    );
+
+    // Cria projeto automaticamente no Kanban Etapas
+    const projetosAtuais = data.projetos || [];
+    const projetoJaExiste = projetosAtuais.some(p => p.orcId === orc.id);
+    const novosProjetos = projetoJaExiste
+      ? projetosAtuais
+      : [
+          ...projetosAtuais,
+          {
+            id: "PRJ-" + Date.now(),
+            orcId: orc.id,
+            clienteId: orc.clienteId,
+            tipo: orc.tipo,
+            subtipo: orc.subtipo,
+            padrao: orc.padrao,
+            tamanho: orc.tamanho,
+            referencia: orc.referencia || "",
+            areaTotal: orc.resultado?.areaTotal || 0,
+            colunaEtapa: "briefing",
+            criadoEm: agora,
+          },
+        ];
+
     const novosLanc = [...existentes, ...lancs];
     onClose();
-    save({ ...data, orcamentosProjeto:novosOrc, receitasFinanceiro:novosLanc }).catch(console.error);
+    save({
+      ...data,
+      orcamentosProjeto: novosOrc,
+      receitasFinanceiro: novosLanc,
+      projetos: novosProjetos,
+    }).catch(console.error);
   }
 
   const inp = { background:"#0a1122", border:"1px solid #1e293b", borderRadius:6, color:"#f1f5f9", padding:"7px 10px", fontSize:13, outline:"none", fontFamily:"inherit", width:"100%", boxSizing:"border-box" };
@@ -1074,12 +1276,32 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
     const todos = data.orcamentosProjeto || [];
     const orc = todos.find(o => o.id === orcId);
     let novosLanc = data.receitasFinanceiro || [];
+    let novosProjetos = data.projetos || [];
+    const agora = new Date().toISOString();
+
+    // Se reverte ganho → perdido, remove lançamentos e projeto associado
     if (orc?.status === "ganho" && novoStatus === "perdido") {
       novosLanc = novosLanc.filter(r => r.orcId !== orcId);
+      novosProjetos = novosProjetos.filter(p => p.orcId !== orcId);
     }
-    const novosOrc = todos.map(o => o.id===orcId ? {...o, status:novoStatus} : o);
+
+    const novosOrc = todos.map(o => {
+      if (o.id !== orcId) return o;
+      const atualizado = { ...o, status: novoStatus };
+      // Registra data de conclusão quando sai de aberto/rascunho
+      if (novoStatus === "perdido" || novoStatus === "ganho") {
+        atualizado.concluidoEm = o.concluidoEm || agora;
+        if (novoStatus === "ganho") atualizado.ganhoEm = o.ganhoEm || agora;
+      }
+      // Reabrindo: limpa concluidoEm
+      if (novoStatus === "rascunho" || novoStatus === "aberto") {
+        delete atualizado.concluidoEm;
+      }
+      return atualizado;
+    });
+
     setOrcamentos(novosOrc.filter(o=>o.clienteId===cliente.id));
-    await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc });
+    await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc, projetos: novosProjetos });
   }
 
   async function excluirOrcamento(orcId) {

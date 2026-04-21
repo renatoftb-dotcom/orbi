@@ -94,6 +94,29 @@ function Etapas({ data, save }) {
     return projetosFiltrados.filter(p => (p.colunaEtapa || "briefing") === colKey);
   }
 
+  // Finaliza projeto → move pra Obras
+  function finalizarProjeto(projeto) {
+    if (!confirm(`Finalizar projeto de ${clientes.find(c=>c.id===projeto.clienteId)?.nome || "—"}?\n\nO projeto sairá do Kanban Etapas e será enviado para o módulo Obras como "Em andamento".`)) return;
+    const agora = new Date().toISOString();
+    const novaObra = {
+      id: "OBR-" + Date.now(),
+      projetoId: projeto.id,
+      orcId: projeto.orcId || null,
+      clienteId: projeto.clienteId,
+      tipo: projeto.tipo,
+      subtipo: projeto.subtipo,
+      padrao: projeto.padrao,
+      tamanho: projeto.tamanho,
+      referencia: projeto.referencia || "",
+      areaTotal: projeto.areaTotal || projeto.area || 0,
+      status: "em_andamento",
+      iniciadaEm: agora,
+    };
+    const novosProjetos = projetos.filter(p => p.id !== projeto.id);
+    const novasObras = [...(data.obras || []), novaObra];
+    save({ ...data, projetos: novosProjetos, obras: novasObras }).catch(console.error);
+  }
+
   return (
     <div style={{ padding:"24px 28px", display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
       {/* Cabeçalho */}
@@ -196,7 +219,7 @@ function KanbanColumn({ col, cards, clientes }) {
             Nenhum projeto
           </div>
         ) : cards.map(card => (
-          <ProjetoCard key={card.id} projeto={card} clientes={clientes} col={col} />
+          <ProjetoCard key={card.id} projeto={card} clientes={clientes} col={col} onFinalizar={finalizarProjeto} />
         ))}
       </div>
     </div>
@@ -204,17 +227,18 @@ function KanbanColumn({ col, cards, clientes }) {
 }
 
 // ─── Card de projeto ───────────────────────────────────────
-function ProjetoCard({ projeto, clientes, col }) {
+function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
   const cliente = clientes.find(c => c.id === projeto.clienteId);
   const nomeCli = cliente?.nome || projeto.clienteNome || "—";
   const ref = projeto.referencia || "";
   const tipo = projeto.tipo || "Residencial";
   const tag = TIPO_TAGS[tipo] || TIPO_TAGS["Residencial"];
-  const area = projeto.area || 0;
+  const area = projeto.area || projeto.areaTotal || 0;
   const valor = projeto.valor || 0;
 
   const dias = diasRestantes(projeto.prazoEtapa);
   const atrasado = dias != null && dias < 0;
+  const isEngenharia = col.key === "engenharia";
 
   return (
     <div style={{
@@ -252,6 +276,19 @@ function ProjetoCard({ projeto, clientes, col }) {
 
       {/* Footer: responsável(is) + prazo */}
       <CardFooter projeto={projeto} col={col} dias={dias} atrasado={atrasado} />
+
+      {/* Botão Finalizar (só na coluna Engenharia) */}
+      {isEngenharia && onFinalizar && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onFinalizar(projeto); }}
+          style={{
+            marginTop:6, background:"#16a34a", color:"#fff",
+            border:"none", borderRadius:6, padding:"6px 10px",
+            fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+          }}>
+          ✓ Finalizar projeto → Obras
+        </button>
+      )}
     </div>
   );
 }
@@ -393,19 +430,154 @@ function motivoPadrao(colKey) {
 // MÓDULO OBRAS (stub — será desenvolvido em fase posterior)
 // ═══════════════════════════════════════════════════════════════
 function Obras({ data, save }) {
+  const obras = data.obras || [];
+  const clientes = data.clientes || [];
+  const [filtro, setFiltro] = useState("andamento"); // "andamento" | "concluidas" | "todas"
+
+  function nomeCliente(clienteId) {
+    return clientes.find(c => c.id === clienteId)?.nome || "—";
+  }
+
+  function concluirObra(obra) {
+    if (!confirm(`Concluir obra de ${nomeCliente(obra.clienteId)}?\n\nA obra será marcada como concluída e o cliente começará a contar 3 meses para inativação automática (se não tiver outro serviço ativo).`)) return;
+    const agora = new Date().toISOString();
+    const novasObras = obras.map(o =>
+      o.id === obra.id ? { ...o, status: "concluida", concluidaEm: agora } : o
+    );
+    save({ ...data, obras: novasObras }).catch(console.error);
+  }
+
+  function reabrirObra(obra) {
+    if (!confirm("Reabrir esta obra? Ela voltará para 'Em andamento'.")) return;
+    const novasObras = obras.map(o =>
+      o.id === obra.id ? { ...o, status: "em_andamento", concluidaEm: null } : o
+    );
+    save({ ...data, obras: novasObras }).catch(console.error);
+  }
+
+  function excluirObra(obra) {
+    if (!confirm(`Excluir obra de ${nomeCliente(obra.clienteId)}?\n\nEsta ação não pode ser desfeita.`)) return;
+    const novasObras = obras.filter(o => o.id !== obra.id);
+    save({ ...data, obras: novasObras }).catch(console.error);
+  }
+
+  const obrasFiltradas = obras.filter(o => {
+    if (filtro === "andamento") return o.status !== "concluida";
+    if (filtro === "concluidas") return o.status === "concluida";
+    return true;
+  });
+
+  const totais = {
+    andamento: obras.filter(o => o.status !== "concluida").length,
+    concluidas: obras.filter(o => o.status === "concluida").length,
+    todas: obras.length,
+  };
+
+  const pillStyle = (ativa) => ({
+    padding: "6px 14px", borderRadius: 7, fontSize: 12,
+    border: "1px solid " + (ativa ? "#111" : "#e5e7eb"),
+    background: ativa ? "#111" : "#fff",
+    color: ativa ? "#fff" : "#6b7280",
+    cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
+  });
+
   return (
     <PageContainer>
-      <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
-      <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
-      <div style={{
-        marginTop:32, padding:"48px 24px", textAlign:"center",
-        border:"1px dashed #e5e7eb", borderRadius:10, background:"#fafafa",
-      }}>
-        <div style={{ color:"#6b7280", fontSize:14, marginBottom:6, fontWeight:600 }}>Módulo em desenvolvimento</div>
-        <div style={{ color:"#9ca3af", fontSize:12.5, maxWidth:420, margin:"0 auto" }}>
-          Este módulo será ativado em breve. Projetos que concluírem a etapa <strong style={{ color:"#374151" }}>Engenharia</strong> aparecerão aqui automaticamente.
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:4 }}>
+        <div>
+          <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
+          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
         </div>
       </div>
+
+      {/* Filtros */}
+      <div style={{ display:"flex", gap:8, marginTop:20, marginBottom:20 }}>
+        <button onClick={() => setFiltro("andamento")} style={pillStyle(filtro==="andamento")}>
+          Em andamento {totais.andamento > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.andamento}</span>}
+        </button>
+        <button onClick={() => setFiltro("concluidas")} style={pillStyle(filtro==="concluidas")}>
+          Concluídas {totais.concluidas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.concluidas}</span>}
+        </button>
+        <button onClick={() => setFiltro("todas")} style={pillStyle(filtro==="todas")}>
+          Todas {totais.todas > 0 && <span style={{ opacity:0.7, marginLeft:4 }}>{totais.todas}</span>}
+        </button>
+      </div>
+
+      {/* Lista */}
+      {obrasFiltradas.length === 0 ? (
+        <div style={{
+          marginTop: 20, padding: "48px 24px", textAlign: "center",
+          border: "1px dashed #e5e7eb", borderRadius: 10, background: "#fafafa",
+        }}>
+          <div style={{ color:"#9ca3af", fontSize:13 }}>
+            {filtro === "andamento" && "Nenhuma obra em andamento."}
+            {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
+            {filtro === "todas" && "Nenhuma obra cadastrada."}
+          </div>
+          <div style={{ color:"#d1d5db", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
+            Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#9ca3af" }}>Engenharia</strong> do Kanban de Projetos.
+          </div>
+        </div>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
+          {obrasFiltradas.map(obra => {
+            const concluida = obra.status === "concluida";
+            const tipo = obra.tipo || "Residencial";
+            const tag = TIPO_TAGS[tipo] || TIPO_TAGS["Residencial"];
+            const dataIni = obra.iniciadaEm ? fmtDataBR(obra.iniciadaEm) : "";
+            const dataFim = obra.concluidaEm ? fmtDataBR(obra.concluidaEm) : "";
+
+            return (
+              <div key={obra.id} style={{
+                background: concluida ? "#fafafa" : "#fff",
+                border:"1px solid #e5e7eb", borderRadius:9,
+                padding:"12px 16px",
+                display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
+              }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
+                    <span style={{
+                      fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.6,
+                      padding:"2px 7px", borderRadius:4, background:tag.bg, color:tag.color,
+                    }}>{tag.label}</span>
+                    <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>{nomeCliente(obra.clienteId)}</div>
+                    {concluida && (
+                      <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, padding:"2px 7px", borderRadius:4, background:"#f0fdf4", color:"#16a34a" }}>
+                        Concluída
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize:12, color:"#6b7280" }}>
+                    {obra.referencia && <span>{obra.referencia} · </span>}
+                    {obra.areaTotal > 0 && <span>{obra.areaTotal}m² · </span>}
+                    <span style={{ color:"#9ca3af" }}>{obra.id}</span>
+                    {dataIni && <span style={{ color:"#9ca3af" }}> · iniciada em {dataIni}</span>}
+                    {dataFim && <span style={{ color:"#9ca3af" }}> · concluída em {dataFim}</span>}
+                  </div>
+                </div>
+                <div style={{ display:"flex", gap:6 }}>
+                  {!concluida && (
+                    <button onClick={() => concluirObra(obra)}
+                      style={{ fontSize:11.5, color:"#16a34a", background:"#fff", border:"1px solid #bbf7d0", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>
+                      ✓ Concluir
+                    </button>
+                  )}
+                  {concluida && (
+                    <button onClick={() => reabrirObra(obra)}
+                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                      Reabrir
+                    </button>
+                  )}
+                  <button onClick={() => excluirObra(obra)}
+                    style={{ fontSize:11.5, color:"#dc2626", background:"#fff", border:"1px solid #fecaca", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                    Excluir
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </PageContainer>
   );
 }
