@@ -16,12 +16,20 @@ const C = {
   row:      { display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid #f9fafb" },
 };
 
+// Colunas do Kanban: 2 estados baseados no campo `ativo` do cliente.
+// - ativos: cliente com trabalhos em aberto ou potencial
+// - inativos: cliente sem serviço em aberto há 3 meses (automático via backend)
+//             ou manualmente desativado
+// O campo `key` é a string comparada a `(cliente.ativo !== false) ? "ativos" : "inativos"`.
 const COLUNAS = [
-  { key:"",             label:"Leads",         cor:"#9ca3af" },
-  { key:"orcamento",    label:"Em orçamento",  cor:"#f59e0b" },
-  { key:"estudo",       label:"Em estudo",     cor:"#3b82f6" },
-  { key:"andamento",    label:"Em andamento",  cor:"#10b981" },
+  { key:"ativos",   label:"Ativos",   cor:"#10b981" },
+  { key:"inativos", label:"Inativos", cor:"#9ca3af" },
 ];
+
+// Helper: retorna a key da coluna a partir do cliente
+function colunaDoCliente(c) {
+  return (c?.ativo === false) ? "inativos" : "ativos";
+}
 
 function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   const [abertos, setAbertos] = useState({ cadastro:false, financeiro:false });
@@ -98,7 +106,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   const [dragId, setDragId]           = useState(null);
   const [dragOver, setDragOver]       = useState(null);
   const [isMobile, setIsMobile]       = useState(typeof window !== "undefined" && window.innerWidth < 768);
-  const [abaKanban, setAbaKanban]     = useState("");
+  const [abaKanban, setAbaKanban]     = useState("ativos");
 
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
@@ -168,8 +176,32 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     setView("kanban");
   }
 
-  function moverCliente(id, novoStatus) {
-    const novos = data.clientes.map(c => c.id === id ? {...c, status: novoStatus} : c);
+  function moverCliente(id, novaColuna) {
+    const agora = new Date().toISOString();
+    const novos = data.clientes.map(c => {
+      if (c.id !== id) return c;
+      if (novaColuna === "inativos") {
+        // Inativa manualmente
+        const obs = c.observacoes || "";
+        const dataFmt = new Date().toLocaleDateString("pt-BR");
+        const marcador = `[${dataFmt}] Cliente inativado manualmente.`;
+        return {
+          ...c,
+          ativo: false,
+          inativadoEm: agora,
+          inativadoAutomaticamente: false,
+          observacoes: obs.includes(marcador) ? obs : (obs ? `${obs}\n\n${marcador}` : marcador),
+        };
+      } else {
+        // Reativa (ativos)
+        return {
+          ...c,
+          ativo: true,
+          inativadoEm: null,
+          inativadoAutomaticamente: false,
+        };
+      }
+    });
     save({ ...data, clientes: novos });
   }
 
@@ -216,11 +248,11 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             {mobile ? (
               /* Mobile: botão mover coluna */
               <select
-                value={c.status||""}
+                value={colunaDoCliente(c)}
                 onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
                 onClick={e => e.stopPropagation()}
                 style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
-                {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label||"Leads"}</option>)}
+                {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
               </select>
             ) : (
               <button onClick={e=>{e.stopPropagation();openEdit(c);}} style={{ fontSize:11, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:5, padding:"2px 7px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
@@ -242,7 +274,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     // ── MOBILE: abas por coluna ──────────────────────────────
     if (isMobile) {
       const colAtual = COLUNAS.find(x => x.key === abaKanban) || COLUNAS[0];
-      const cardsAba = filtrados.filter(c => (c.status||"") === abaKanban);
+      const cardsAba = filtrados.filter(c => colunaDoCliente(c) === abaKanban);
       return (
         <div style={{ fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
           {/* Header mobile */}
@@ -260,7 +292,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           {/* Abas */}
           <div style={{ display:"flex", overflowX:"auto", padding:"12px 16px 0", gap:0, borderBottom:"1px solid #f3f4f6" }}>
             {COLUNAS.map(col => {
-              const count = filtrados.filter(c => (c.status||"") === col.key).length;
+              const count = filtrados.filter(c => colunaDoCliente(c) === col.key).length;
               const ativa = abaKanban === col.key;
               return (
                 <button key={col.key} onClick={() => setAbaKanban(col.key)}
@@ -269,7 +301,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                     background:"transparent", border:"none", borderBottom: ativa ? `2px solid ${col.cor}` : "2px solid transparent",
                     cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
                   <span style={{ width:7, height:7, borderRadius:"50%", background: ativa ? col.cor : "#d1d5db", display:"inline-block", flexShrink:0 }} />
-                  {col.label||"Leads"}
+                  {col.label}
                   <span style={{ fontSize:11, background: ativa ? col.cor+"18" : "#f3f4f6", color: ativa ? col.cor : "#9ca3af", borderRadius:10, padding:"1px 7px", fontWeight:600 }}>{count}</span>
                 </button>
               );
@@ -281,7 +313,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             {cardsAba.length === 0 ? (
               <div style={{ textAlign:"center", padding:"48px 0", color:"#d1d5db", fontSize:13 }}>
                 <div style={{ fontSize:28, marginBottom:8 }}>—</div>
-                Nenhum cliente em {colAtual.label||"Leads"}
+                Nenhum cliente em {colAtual.label}
               </div>
             ) : (
               cardsAba.map(c => <ClienteCard key={c.id} c={c} mobile={true} />)
@@ -310,7 +342,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         {/* Kanban 4 colunas */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, flex:1, overflowY:"auto" }}>
           {COLUNAS.map(col => {
-            const cards = filtrados.filter(c => (c.status||"") === col.key);
+            const cards = filtrados.filter(c => colunaDoCliente(c) === col.key);
             const isOver = dragOver === col.key;
             return (
               <div key={col.key}
@@ -394,7 +426,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           {filtrados.map(c => {
             const iniciais = c.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
             const corAv = c.tipo==="PJ"?"#7c3aed":"#2563eb";
-            const col = COLUNAS.find(x=>x.key===(c.status||"")) || COLUNAS[0];
+            const col = COLUNAS.find(x=>x.key===colunaDoCliente(c)) || COLUNAS[0];
             const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
             return (
               <div key={c.id} style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
@@ -407,7 +439,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                   <div style={{ fontSize:12, color:"#9ca3af" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
-                  <span style={C.tag(col.cor)}>{col.label||"Sem status"}</span>
+                  <span style={C.tag(col.cor)}>{col.label}</span>
                   {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px" }}>WA</a>}
                   <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
                 </div>
@@ -424,13 +456,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const cliente = data.clientes.find(c => c.id === sel.id) || sel;
     const iniciais = cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
-    const col = COLUNAS.find(x=>x.key===(cliente.status||""))||COLUNAS[0];
+    const col = COLUNAS.find(x=>x.key===colunaDoCliente(cliente))||COLUNAS[0];
     return (
       <div style={{ padding: isMobile ? "16px" : "28px 32px", maxWidth:780, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, flexWrap:"wrap" }}>
           <button style={C.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
           <div style={{ flex:1 }} />
-          <select value={cliente.status||""} onChange={e=>moverCliente(cliente.id, e.target.value)}
+          <select value={colunaDoCliente(cliente)} onChange={e=>moverCliente(cliente.id, e.target.value)}
             style={{ ...C.input, width:"auto", fontSize:12, padding:"6px 10px", cursor:"pointer" }}>
             {COLUNAS.map(x=><option key={x.key} value={x.key}>{x.label}</option>)}
           </select>
@@ -469,17 +501,6 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
             <button key={v} onClick={()=>setForm({...form,tipo:v})}
               style={{ border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
-          ))}
-        </div>
-      </div>
-      <div style={{ marginBottom:16 }}>
-        <div style={C.secTit}>Status</div>
-        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-          {COLUNAS.map(col=>(
-            <button key={col.key} onClick={()=>setForm({...form,status:col.key})}
-              style={{ border:`1px solid ${form.status===col.key?col.cor:"#e5e7eb"}`, borderRadius:8, padding:"7px 16px", fontSize:12, fontWeight:form.status===col.key?600:400, background:form.status===col.key?col.cor+"15":"#fff", color:form.status===col.key?col.cor:"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>
-              {col.label||"Sem status"}
-            </button>
           ))}
         </div>
       </div>

@@ -300,6 +300,70 @@ function Escritorio({ data, save }) {
     </div>
   );
 
+  // ── ABA SISTEMA ──────────────────────────────────────────────
+  const [manutResult, setManutResult] = useState(null);
+  const [manutLoading, setManutLoading] = useState(false);
+
+  async function executarManutencao() {
+    if (!confirm("Executar rotina de manutenção agora?\n\n• Expira propostas com mais de 30 dias (remove imagens, marca como perdido)\n• Inativa clientes sem serviço em aberto há 3 meses\n\nNormalmente roda sozinha todo dia às 3h da manhã.")) return;
+    setManutLoading(true);
+    setManutResult(null);
+    try {
+      const token = localStorage.getItem("vicke_token");
+      if (!token) {
+        alert("Sessão expirada. Faça login novamente.");
+        setManutLoading(false);
+        return;
+      }
+      const res = await fetch("https://orbi-production-5f5c.up.railway.app/admin/manutencao", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setManutResult(json.data);
+      } else {
+        alert("Erro: " + (json.error || "Falha ao executar manutenção"));
+      }
+    } catch (e) {
+      alert("Erro de rede: " + e.message);
+    } finally {
+      setManutLoading(false);
+    }
+  }
+
+  const renderSistema = () => (
+    <div style={E.body}>
+      <div style={E.secao}>
+        <div style={E.secTitulo}>Manutenção automática</div>
+        <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
+          O sistema executa automaticamente, todo dia às 3h da manhã:
+          <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
+            <li>Expira propostas com mais de 30 dias (marca como "Perdido" e remove imagens salvas)</li>
+            <li>Inativa clientes sem serviço em aberto há 3 meses (com observação automática)</li>
+          </ul>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:20 }}>
+          <button
+            onClick={executarManutencao}
+            disabled={manutLoading}
+            style={{ ...E.btn, opacity: manutLoading ? 0.5 : 1, cursor: manutLoading ? "not-allowed" : "pointer" }}>
+            {manutLoading ? "Executando..." : "Executar manutenção agora"}
+          </button>
+          {manutResult && (
+            <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, padding:"8px 14px" }}>
+              ✓ Executado em {new Date(manutResult.executadoEm).toLocaleString("pt-BR")}
+              <br/>
+              <span style={{ color:"#374151" }}>
+                {manutResult.orcamentosExpirados} orçamento(s) expirado(s) · {manutResult.clientesInativados} cliente(s) inativado(s)
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div style={E.wrap}>
       {/* Header */}
@@ -312,7 +376,7 @@ function Escritorio({ data, save }) {
 
       {/* Abas */}
       <div style={E.abas}>
-        {[["dados","Dados gerais"],["equipe","Equipe"],["usuarios","Usuários"]].map(([key,lbl]) => (
+        {[["dados","Dados gerais"],["equipe","Equipe"],["usuarios","Usuários"],["sistema","Sistema"]].map(([key,lbl]) => (
           <button key={key} style={E.aba(aba===key)} onClick={() => setAba(key)}>{lbl}</button>
         ))}
       </div>
@@ -321,6 +385,7 @@ function Escritorio({ data, save }) {
       {aba === "dados"    && renderDados()}
       {aba === "equipe"   && renderEquipe()}
       {aba === "usuarios" && renderUsuarios()}
+      {aba === "sistema"  && renderSistema()}
     </div>
   );
 }

@@ -96,60 +96,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const orcamentos = data?.orcamentosProjeto || [];
   const clientes = data?.clientes || [];
 
-  // ── Auto-expiração de propostas ─────────────────────────────
-  // Roda 1x ao montar o módulo. Orçamentos com proposta enviada há mais
-  // de 30 dias e que NÃO foram marcados como "ganho" são automaticamente
-  // marcados como "perdido" por expiração e têm suas imagens removidas
-  // (libera storage — ~1MB por proposta).
-  // Dados textuais são preservados pra histórico.
-  useEffect(() => {
-    if (!data || !Array.isArray(data.orcamentosProjeto)) return;
-    const agora = Date.now();
-    const LIMITE_MS = 30 * 24 * 60 * 60 * 1000; // 30 dias
-    let houveMudanca = false;
-
-    const orcamentosAtualizados = data.orcamentosProjeto.map(orc => {
-      // Orçamentos ganhos ficam intocados (histórico importante)
-      if (orc.status === "ganho") return orc;
-      // Já marcado como perdido? Mas ainda tem imagens — limpa.
-      // Sem propostas? Nada a fazer.
-      if (!orc.propostas || orc.propostas.length === 0) return orc;
-
-      // Última proposta
-      const ultimaProp = orc.propostas[orc.propostas.length - 1];
-      const enviadaEm = ultimaProp.enviadaEm ? new Date(ultimaProp.enviadaEm).getTime() : null;
-      if (!enviadaEm) return orc;
-
-      const vencido = (agora - enviadaEm) > LIMITE_MS;
-      if (!vencido) return orc;
-
-      // Expirou: remove imagens de todas as propostas + marca perdido
-      const propostasLimpas = orc.propostas.map(p => {
-        if (!p.imagensPdf || p.imagensPdf.length === 0) return p;
-        // Remove imagens mas marca a flag de expirada
-        const { imagensPdf, ...resto } = p;
-        return { ...resto, expirouEm: new Date(agora).toISOString() };
-      });
-
-      // Só conta como mudança se algo foi alterado
-      const mudouStatus = orc.status !== "perdido";
-      const mudouImagens = propostasLimpas.some((p, i) => p !== orc.propostas[i]);
-      if (!mudouStatus && !mudouImagens) return orc;
-
-      houveMudanca = true;
-      return {
-        ...orc,
-        status: "perdido",
-        expirouEm: orc.expirouEm || new Date(agora).toISOString(),
-        propostas: propostasLimpas,
-      };
-    });
-
-    if (houveMudanca) {
-      save({ ...data, orcamentosProjeto: orcamentosAtualizados }).catch(console.error);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Nota: expiração automática de propostas (30 dias) é feita pelo backend
+  // via cron job (endpoint POST /admin/manutencao), todo dia às 3h da manhã.
 
   async function salvarOrcamento(orc) {
     const todos = data.orcamentosProjeto || [];
@@ -169,7 +117,28 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     };
     setOrcBase(novo);
     const novos = orc.id ? todos.map(o => o.id === orc.id ? novo : o) : [...todos, novo];
-    save({ ...data, orcamentosProjeto: novos }).catch(console.error);
+
+    // Reativação automática: se o cliente está inativo e está criando novo orçamento,
+    // reativa automaticamente (cliente voltou a ser ativo).
+    let clientesAtualizados = data.clientes || [];
+    const cliId = novo.clienteId;
+    if (cliId && !orc.id) { // só em novos orçamentos
+      const cli = clientesAtualizados.find(c => c.id === cliId);
+      if (cli && cli.ativo === false) {
+        const dataFmt = new Date().toLocaleDateString("pt-BR");
+        const marcador = `[${dataFmt}] Cliente reativado automaticamente ao iniciar novo orçamento.`;
+        const obs = cli.observacoes || "";
+        clientesAtualizados = clientesAtualizados.map(c => c.id === cliId ? {
+          ...c,
+          ativo: true,
+          inativadoEm: null,
+          inativadoAutomaticamente: false,
+          observacoes: obs ? `${obs}\n\n${marcador}` : marcador,
+        } : c);
+      }
+    }
+
+    save({ ...data, orcamentosProjeto: novos, clientes: clientesAtualizados }).catch(console.error);
   }
 
   function abrirNovoOrcamento(cliente) {
