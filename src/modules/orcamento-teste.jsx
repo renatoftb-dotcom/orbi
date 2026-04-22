@@ -451,6 +451,48 @@ function OrcFilterPill({ label, count, active, onClick, countColor }) {
   );
 }
 
+// ─── Helper: calcula o status de vencimento de um orçamento ───────────────
+// Retorna { label, cor, aplicavel } para exibição nas colunas "Venc." da lista.
+// Vencimento só se aplica a orçamentos com proposta enviada e em aberto.
+// Rascunho, Ganho e Perdido retornam aplicavel=false.
+function calcVencimentoOrc(orc) {
+  const status = orc.status || "rascunho";
+  // Só faz sentido mostrar vencimento pra orçamentos "Em aberto" (proposta enviada, aguardando resposta)
+  if (status !== "aberto") {
+    return { label: "—", cor: "#d1d5db", aplicavel: false };
+  }
+  // Busca a data de validade na última proposta. Formato salvo: "dd/mm/yyyy" (string editável).
+  const ultProp = orc.propostas && orc.propostas.length > 0
+    ? orc.propostas[orc.propostas.length - 1]
+    : null;
+  const validadeStr = ultProp?.validadeEdit || ultProp?.validadeStr;
+  if (!validadeStr) {
+    return { label: "—", cor: "#d1d5db", aplicavel: false };
+  }
+  // Parse "dd/mm/yyyy"
+  const m = String(validadeStr).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) {
+    return { label: "—", cor: "#d1d5db", aplicavel: false };
+  }
+  const validade = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  validade.setHours(0, 0, 0, 0);
+  const msPorDia = 86400000;
+  const dias = Math.round((validade - hoje) / msPorDia);
+
+  if (dias < 0) {
+    return { label: "Vencido", cor: "#b91c1c", bold: true, aplicavel: true };
+  }
+  if (dias === 0) {
+    return { label: "Vence hoje", cor: "#b91c1c", bold: true, aplicavel: true };
+  }
+  if (dias <= 7) {
+    return { label: `${dias} ${dias === 1 ? "dia" : "dias"}`, cor: "#b91c1c", bold: false, aplicavel: true };
+  }
+  return { label: `${dias} dias`, cor: "#6b7280", bold: false, aplicavel: true };
+}
+
 // ─── Card de orçamento na lista ──────────────────
 function OrcCard({ orc, clientes, onAbrir, onAction }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
@@ -519,8 +561,14 @@ function OrcCard({ orc, clientes, onAbrir, onAction }) {
       onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; }}
     >
       <div style={{ minWidth:0 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
           <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>{nomeCliente}</div>
+          <span style={{
+            fontSize:10.5, color:"#9ca3af",
+            fontVariantNumeric:"tabular-nums",
+            background:"#f4f5f7",
+            padding:"2px 7px", borderRadius:4, fontWeight:500,
+          }}>{orc.id}</span>
           <span style={{
             fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
             padding:"2px 7px", borderRadius:4,
@@ -529,7 +577,19 @@ function OrcCard({ orc, clientes, onAbrir, onAction }) {
         </div>
         <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
           <span style={{ color:"#374151" }}>{ref}</span>
-          <span style={{ color:"#9ca3af" }}> · {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""} · {orc.id}{dataFmt ? ` · ${dataFmt}` : ""}</span>
+          <span style={{ color:"#9ca3af" }}> · {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""}{dataFmt ? ` · Criado ${dataFmt}` : ""}</span>
+          {(() => {
+            const venc = calcVencimentoOrc(orc);
+            if (!venc.aplicavel) return null;
+            return (
+              <>
+                <span style={{ color:"#9ca3af" }}> · </span>
+                <span style={{ color: venc.cor, fontWeight: venc.bold ? 600 : 500 }}>
+                  {venc.label === "Vencido" || venc.label === "Vence hoje" ? venc.label : `Vence em ${venc.label}`}
+                </span>
+              </>
+            );
+          })()}
         </div>
         {orc.propostas && orc.propostas.length > 0 && (
           <div
@@ -738,6 +798,9 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
 
   const tipo = orc.tipo || "—";
   const ref = orc.referencia || "(sem referência)";
+  const dataCriado = orc.criadoEm ? new Date(orc.criadoEm) : null;
+  const dataCriadaFmt = dataCriado ? dataCriado.toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "") : "";
+  const venc = calcVencimentoOrc(orc);
 
   const STATUS_TAGS = {
     rascunho: { label:"Rascunho",  bg:"#f3f4f6", color:"#6b7280" },
@@ -747,12 +810,15 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
   };
   const tag = STATUS_TAGS[status] || STATUS_TAGS.rascunho;
 
+  // Grid: Cliente/Ref | Tipo/Área | Criado | Venc. | Status | Total | ⋯
+  const gridCols = "1.8fr 1.1fr 75px 90px 95px 110px 34px";
+
   return (
     <div
       onClick={() => onAbrir("ver")}
       style={{
         display:"grid",
-        gridTemplateColumns: showCliente ? "1.6fr 1.2fr 80px 80px 110px 40px" : "1.6fr 1.2fr 80px 110px 40px",
+        gridTemplateColumns: gridCols,
         alignItems:"center", gap:12,
         padding:"10px 14px",
         borderBottom:"0.5px solid #f1f2f4",
@@ -762,19 +828,33 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
       onMouseEnter={e => { e.currentTarget.style.background = "#fafbfc"; }}
       onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
     >
-      {/* Coluna 1: Cliente · Referência */}
-      <div style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-        {showCliente && <span style={{ fontWeight:600, color:"#111" }}>{nomeCliente}</span>}
-        {showCliente && <span style={{ color:"#9ca3af" }}> · </span>}
-        <span style={{ color: showCliente ? "#6b7280" : "#111", fontWeight: showCliente ? 400 : 500 }}>{ref}</span>
-        {orc.propostas && orc.propostas.length > 0 && !orc.expirouEm && (
-          <span
-            onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
-            title="Ver proposta enviada"
-            style={{ marginLeft:6, fontSize:11, color:"#16a34a", fontWeight:500, cursor:"pointer" }}>
-            📄
-          </span>
-        )}
+      {/* Coluna 1: Cliente + ID em cima, Referência embaixo */}
+      <div style={{ minWidth:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden" }}>
+          {showCliente && (
+            <span style={{ fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {nomeCliente}
+            </span>
+          )}
+          <span style={{
+            fontSize:10.5, color:"#9ca3af",
+            fontVariantNumeric:"tabular-nums",
+            background:"#f4f5f7",
+            padding:"2px 7px", borderRadius:4, fontWeight:500,
+            flexShrink:0,
+          }}>{orc.id}</span>
+          {orc.propostas && orc.propostas.length > 0 && !orc.expirouEm && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
+              title="Ver proposta enviada"
+              style={{ fontSize:11, color:"#16a34a", fontWeight:500, cursor:"pointer", flexShrink:0 }}>
+              📄
+            </span>
+          )}
+        </div>
+        <div style={{ fontSize:12, color:"#6b7280", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          {ref}
+        </div>
       </div>
 
       {/* Coluna 2: Tipo · Área */}
@@ -782,14 +862,22 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
         {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""}
       </div>
 
-      {/* Coluna 3: ID */}
-      {showCliente && (
-        <div style={{ color:"#9ca3af", fontSize:11, fontVariantNumeric:"tabular-nums" }}>
-          {orc.id}
-        </div>
-      )}
+      {/* Coluna 3: Criado */}
+      <div style={{ color:"#6b7280", fontSize:12, fontVariantNumeric:"tabular-nums" }}>
+        {dataCriadaFmt || "—"}
+      </div>
 
-      {/* Coluna 4: Status */}
+      {/* Coluna 4: Venc. */}
+      <div style={{
+        fontSize:12,
+        color: venc.cor,
+        fontWeight: venc.bold ? 600 : (venc.aplicavel ? 500 : 400),
+        fontVariantNumeric:"tabular-nums",
+      }}>
+        {venc.label}
+      </div>
+
+      {/* Coluna 5: Status */}
       <div>
         <span style={{
           fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
@@ -799,12 +887,12 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
         }}>{tag.label}</span>
       </div>
 
-      {/* Coluna 5: Total */}
+      {/* Coluna 6: Total */}
       <div style={{ textAlign:"right", fontWeight:600, color:"#111", fontVariantNumeric:"tabular-nums" }}>
         {valorTotal > 0 ? `R$ ${valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}` : "—"}
       </div>
 
-      {/* Coluna 6: Menu ações */}
+      {/* Coluna 7: Menu ações */}
       <div style={{ position:"relative", display:"flex", justifyContent:"flex-end" }}
            onClick={e => e.stopPropagation()} data-orc-menu-row={orc.id}>
         <button onClick={() => setMenuOpen(v => !v)}
@@ -871,10 +959,12 @@ const menuItemStyle = {
 // Header da tabela
 function OrcRowHeader({ showCliente = true }) {
   const colStyle = { fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6 };
+  // Mesmo grid do OrcRow: Cliente/Ref | Tipo/Área | Criado | Venc. | Status | Total | ⋯
+  const gridCols = "1.8fr 1.1fr 75px 90px 95px 110px 34px";
   return (
     <div style={{
       display:"grid",
-      gridTemplateColumns: showCliente ? "1.6fr 1.2fr 80px 80px 110px 40px" : "1.6fr 1.2fr 80px 110px 40px",
+      gridTemplateColumns: gridCols,
       alignItems:"center", gap:12,
       padding:"9px 14px",
       borderBottom:"1px solid #e5e7eb",
@@ -882,7 +972,8 @@ function OrcRowHeader({ showCliente = true }) {
     }}>
       <div style={colStyle}>{showCliente ? "Cliente · Referência" : "Referência"}</div>
       <div style={colStyle}>Tipo / Área</div>
-      {showCliente && <div style={colStyle}>ID</div>}
+      <div style={colStyle}>Criado</div>
+      <div style={colStyle}>Venc.</div>
       <div style={colStyle}>Status</div>
       <div style={{ ...colStyle, textAlign:"right" }}>Total</div>
       <div></div>
