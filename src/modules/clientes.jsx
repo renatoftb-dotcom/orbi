@@ -942,12 +942,20 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
             const mkFetchOrc = (o) => async (modo) => {
               const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
               const orcCompleto = res?.ok ? res.data : o;
+              // Se clicou em "ver" e tem proposta enviada, abre o snapshot em vez do form.
+              if (modo === "ver" && orcCompleto.propostas && orcCompleto.propostas.length > 0) {
+                modo = "verProposta";
+              }
               if (modo === "verProposta") {
                 const ultima = orcCompleto.propostas && orcCompleto.propostas.length > 0
                   ? orcCompleto.propostas[orcCompleto.propostas.length - 1]
                   : null;
                 if (ultima) {
-                  setPropostaVisualizada({ ...ultima, clienteNome: cliente.nome || "Cliente" });
+                  setPropostaVisualizada({
+                    ...ultima,
+                    clienteNome: cliente.nome || "Cliente",
+                    _orcOrigem: orcCompleto,
+                  });
                   return;
                 }
                 modo = "ver";
@@ -1164,6 +1172,12 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
         <PropostaVisualizer
           proposta={propostaVisualizada}
           onFechar={() => setPropostaVisualizada(null)}
+          onEditar={() => {
+            const orc = propostaVisualizada._orcOrigem;
+            if (!orc) return;
+            setPropostaVisualizada(null);
+            onAbrirOrcamento(cliente, orc, "editar");
+          }}
         />
       )}
 

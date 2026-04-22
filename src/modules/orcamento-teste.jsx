@@ -264,6 +264,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [modoAbertura, setModoAbertura] = useState(null); // "ver" | "editar" | null
 
   function abrirOrcamentoExistente(orc, modo = "ver") {
+    // Se clicou em "ver" e o orçamento tem proposta enviada, abre o snapshot
+    // em vez do formulário de edição. Para editar, o usuário usa outra ação.
+    if (modo === "ver" && orc.propostas && orc.propostas.length > 0) {
+      modo = "verProposta";
+    }
     // Modo "verProposta": abre o visualizador de snapshot (modal com imagens)
     if (modo === "verProposta") {
       const ultima = orc.propostas && orc.propostas.length > 0
@@ -271,7 +276,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         : null;
       if (ultima) {
         const cli = clientes.find(c => c.id === orc.clienteId);
-        setPropostaVisualizada({ ...ultima, clienteNome: cli?.nome || orc.cliente || "Cliente" });
+        setPropostaVisualizada({
+          ...ultima,
+          clienteNome: cli?.nome || orc.cliente || "Cliente",
+          _orcOrigem: orc, // guarda referência pra botão Editar
+        });
         return;
       }
       // Se não tem proposta, cai no fluxo normal de "ver"
@@ -425,7 +434,13 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     : clientes.slice(0, 20);
 
   return (
-    <PageContainer>
+    <div style={{
+      background:"#f4f5f7",
+      minHeight:"100vh",
+      padding:"28px 32px 60px",
+      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+    }}>
+      <div style={{ maxWidth:1100, width:"100%" }}>
       {/* Header */}
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, marginBottom:20 }}>
         <div>
@@ -512,7 +527,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       )}
 
       {/* Lista */}
-      <div style={{ maxWidth:960 }}>
+      <div style={{ maxWidth:1100 }}>
         {orcOrdenados.length === 0 ? (
           <div style={{
             padding:"48px 24px", textAlign:"center",
@@ -603,6 +618,15 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         <PropostaVisualizer
           proposta={propostaVisualizada}
           onFechar={() => setPropostaVisualizada(null)}
+          onEditar={() => {
+            const orc = propostaVisualizada._orcOrigem;
+            if (!orc) return;
+            setPropostaVisualizada(null);
+            const cli = clientes.find(c => c.id === orc.clienteId) || { nome: orc.cliente || "Cliente" };
+            setClienteAtivo(cli);
+            setOrcBase(orc);
+            setModoAbertura("editar");
+          }}
         />
       )}
 
@@ -614,7 +638,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           onConfirmar={confirmarGanho}
         />
       )}
-    </PageContainer>
+      </div>
+    </div>
   );
 }
 
@@ -785,21 +810,34 @@ function OrcCard({ orc, clientes, onAbrir, onAction }) {
             style={{
               fontSize:11.5, marginTop:4, fontWeight:500,
               color: orc.expirouEm ? "#b91c1c" : "#16a34a",
-              cursor:"pointer", display:"inline-block",
+              cursor:"pointer", display:"inline-flex", alignItems:"center", gap:6,
             }}
             onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
             onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
             title={orc.expirouEm ? "Ver registro da proposta expirada" : "Ver a última proposta enviada (somente leitura)"}
           >
-            {orc.expirouEm ? "⚠️" : "📄"} {orc.propostas.length} proposta{orc.propostas.length > 1 ? "s" : ""} {orc.expirouEm ? "expirou" : "enviada" + (orc.propostas.length > 1 ? "s" : "")}
+            <span>
+              {orc.expirouEm ? "⚠️" : "📄"} {orc.propostas.length} proposta{orc.propostas.length > 1 ? "s" : ""} {orc.expirouEm ? "expirou" : "enviada" + (orc.propostas.length > 1 ? "s" : "")}
+            </span>
+            {orc.propostas.length > 1 && !orc.expirouEm && (
+              <span style={{
+                fontSize:9.5, fontWeight:700,
+                color:"#16a34a", background:"#dcfce7",
+                padding:"1px 6px", borderRadius:6,
+                fontVariantNumeric:"tabular-nums",
+                textDecoration:"none",
+              }}>
+                última: v{orc.propostas.length}
+              </span>
+            )}
             {!orc.expirouEm && orc.ultimaPropostaEm && (
               <span style={{ color:"#6b7280", fontWeight:400 }}>
-                {" "}· última em {new Date(orc.ultimaPropostaEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
+                · última em {new Date(orc.ultimaPropostaEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
               </span>
             )}
             {orc.expirouEm && (
               <span style={{ color:"#6b7280", fontWeight:400 }}>
-                {" "}· expirou em {new Date(orc.expirouEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
+                · expirou em {new Date(orc.expirouEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
               </span>
             )}
           </div>
@@ -1058,9 +1096,23 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
           {orc.propostas && orc.propostas.length > 0 && !orc.expirouEm && (
             <span
               onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
-              title="Ver proposta enviada"
-              style={{ fontSize:11, color:"#16a34a", fontWeight:500, cursor:"pointer", flexShrink:0 }}>
+              title={orc.propostas.length > 1 ? `${orc.propostas.length} versões — ver última` : "Ver proposta enviada"}
+              style={{
+                display:"inline-flex", alignItems:"center", gap:3,
+                fontSize:11, color:"#16a34a", fontWeight:500,
+                cursor:"pointer", flexShrink:0,
+              }}>
               📄
+              {orc.propostas.length > 1 && (
+                <span style={{
+                  fontSize:9.5, fontWeight:700,
+                  color:"#16a34a", background:"#dcfce7",
+                  padding:"1px 5px", borderRadius:6,
+                  fontVariantNumeric:"tabular-nums",
+                }}>
+                  v{orc.propostas.length}
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -3303,8 +3355,9 @@ function OpcoesPagamento({ tipo, valor, desc, parcelas, fmtV }) {
 // Modal overlay que mostra as páginas da proposta como imagens.
 // É um registro imutável — literalmente as imagens renderizadas
 // do PDF no momento em que a proposta foi enviada ao cliente.
-function PropostaVisualizer({ proposta, onFechar }) {
+function PropostaVisualizer({ proposta, onFechar, onEditar }) {
   const [baixando, setBaixando] = useState(false);
+  const [confirmEditar, setConfirmEditar] = useState(false);
 
   // Fecha com ESC
   useEffect(() => {
@@ -3396,6 +3449,21 @@ function PropostaVisualizer({ proposta, onFechar }) {
           )}
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          {onEditar && (
+            <button
+              onClick={() => setConfirmEditar(true)}
+              style={{
+                background:"rgba(255,255,255,0.12)",
+                border:"1px solid rgba(255,255,255,0.2)",
+                color:"#fff", borderRadius:6, padding:"6px 12px",
+                cursor:"pointer", fontSize:13, fontFamily:"inherit",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.2)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; }}
+            >
+              ✎ Editar
+            </button>
+          )}
           {temImagens && (
             <button
               onClick={baixarPdf}
@@ -3505,6 +3573,67 @@ function PropostaVisualizer({ proposta, onFechar }) {
           </div>
         )}
       </div>
+
+      {/* Modal de confirmação ao clicar Editar */}
+      {confirmEditar && (
+        <div
+          onClick={() => setConfirmEditar(false)}
+          style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,0.5)",
+            zIndex:400, display:"flex", alignItems:"center", justifyContent:"center",
+            padding:20,
+          }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{
+              background:"#fff", borderRadius:12,
+              padding:"26px 28px 20px", maxWidth:440, width:"100%",
+              boxShadow:"0 8px 32px rgba(0,0,0,0.3)",
+            }}>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>
+              Editar e criar uma nova versão?
+            </div>
+            <div style={{ fontSize:13, color:"#6b7280", marginBottom:14, lineHeight:1.5 }}>
+              A proposta <strong>{proposta.versao || "v1"}</strong> atual será preservada no histórico. Ao enviar as alterações, uma <strong>nova versão</strong> da proposta será criada.
+            </div>
+            <div style={{
+              display:"flex", alignItems:"flex-start", gap:8,
+              background:"#eff6ff", border:"1px solid #bfdbfe",
+              borderRadius:8, padding:"9px 12px", marginBottom:18,
+              fontSize:12, color:"#1e3a8a", lineHeight:1.45,
+            }}>
+              <span style={{ fontSize:14, lineHeight:1 }}>ℹ</span>
+              <span>
+                O orçamento e o histórico anterior permanecem intactos. Se desistir de editar, nada muda.
+              </span>
+            </div>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end", flexWrap:"wrap" }}>
+              <button
+                onClick={() => setConfirmEditar(false)}
+                style={{
+                  background:"#fff", color:"#374151",
+                  border:"1px solid #d1d5db", borderRadius:8,
+                  padding:"9px 18px", fontSize:13, fontWeight:500,
+                  cursor:"pointer", fontFamily:"inherit",
+                }}>
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmEditar(false);
+                  onEditar && onEditar();
+                }}
+                style={{
+                  background:"#111", color:"#fff",
+                  border:"none", borderRadius:8,
+                  padding:"9px 20px", fontSize:13, fontWeight:600,
+                  cursor:"pointer", fontFamily:"inherit",
+                }}>
+                Continuar editando
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
