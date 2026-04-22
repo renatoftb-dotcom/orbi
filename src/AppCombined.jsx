@@ -5242,6 +5242,52 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
   );
 }
 
+// Input de quantidade de parcelas (1–24).
+// Mantém state local durante digitação (aceita string vazia) e só commita no blur/Enter.
+// Sincroniza com qtd externa quando input não está focado.
+function InputQtdParcelas({ qtd, onCommit, style }) {
+  const [valor, setValor] = useState(String(qtd));
+  const focadoRef = useRef(false);
+
+  // Sincroniza com valor externo quando não está em edição
+  useEffect(() => {
+    if (!focadoRef.current) setValor(String(qtd));
+  }, [qtd]);
+
+  const handleChange = (e) => {
+    const v = e.target.value;
+    // Permite vazio ou dígitos
+    if (v === "" || /^\d{1,2}$/.test(v)) setValor(v);
+  };
+
+  const handleBlur = () => {
+    focadoRef.current = false;
+    const n = parseInt(valor, 10);
+    if (isNaN(n) || n < 1) { setValor("1"); onCommit(1); return; }
+    if (n > 24) { setValor("24"); onCommit(24); return; }
+    setValor(String(n));
+    if (n !== qtd) onCommit(n);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") { e.currentTarget.blur(); }
+  };
+
+  return (
+    <input
+      type="number"
+      min="1"
+      max="24"
+      value={valor}
+      onFocus={() => { focadoRef.current = true; }}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      style={style}
+    />
+  );
+}
+
 function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   // ── Valores base do orçamento (com/sem imposto conforme orçamento) ──
   // Prioridade: snapshot da última proposta > campos raiz
@@ -5930,9 +5976,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
                 {!modoEtapas && (
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     <label style={ROW_LABEL}>Parcelas</label>
-                    <input type="number" min="1" max="24" value={parcelas.length}
-                      onChange={e => mudarQtdParcelas(e.target.value)}
-                      style={{ ...INPUT_STYLE, width:70 }} />
+                    <InputQtdParcelas
+                      qtd={parcelas.length}
+                      onCommit={mudarQtdParcelas}
+                      style={{ ...INPUT_STYLE, width:70 }}
+                    />
                   </div>
                 )}
               </div>
