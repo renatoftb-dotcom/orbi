@@ -759,6 +759,9 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const [orcGanho, setOrcGanho] = useState(null);
   // Visualização (persistida em localStorage, compartilhada com a página Orçamentos)
   const [viz, setViz] = useVisualizacaoOrcamentos();
+  // Ordenação (reseta a cada abertura) e filtros por coluna
+  const [sort, setSort] = useState({ col: "cliente", dir: "asc" });
+  const [filtrosCol, setFiltrosCol] = useState({ clientes: new Set(), tipos: new Set(), status: new Set() });
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -946,16 +949,120 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               if (acao === "excluir") setConfirmDelete(orc.id);
             };
 
+            // Helpers pra ordenação
+            const valorTotal = (o) => {
+              const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
+              if (ult) {
+                if (ult.valorTotalExibido != null) return ult.valorTotalExibido;
+                const arq = ult.arqEdit != null ? ult.arqEdit : (ult.calculo?.precoArq || 0);
+                const eng = ult.engEdit != null ? ult.engEdit : (ult.calculo?.precoEng || 0);
+                return arq + eng;
+              }
+              return (o.resultado?.precoArq || 0) + (o.resultado?.precoEng || 0);
+            };
+            const diasParaVencer = (o) => {
+              if ((o.status || "rascunho") !== "aberto") return null;
+              const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
+              const v = ult?.validadeEdit || ult?.validadeStr;
+              if (!v) return null;
+              const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+              if (!m) return null;
+              const validade = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+              const hoje = new Date(); hoje.setHours(0,0,0,0); validade.setHours(0,0,0,0);
+              return Math.round((validade - hoje) / 86400000);
+            };
+
+            // Aplica filtros de coluna (clientes não se aplica aqui — só 1 cliente)
+            const orcsFiltrados = orcamentos.filter(o => {
+              if (filtrosCol.tipos.size > 0 && !filtrosCol.tipos.has(o.tipo || "—")) return false;
+              if (filtrosCol.status.size > 0 && !filtrosCol.status.has(o.status || "rascunho")) return false;
+              return true;
+            });
+
+            // Ordena
+            const orcsOrdenados = [...orcsFiltrados].sort((a, b) => {
+              const dir = sort.dir === "asc" ? 1 : -1;
+              if (sort.col === "cliente") {
+                return (a.referencia || "").localeCompare(b.referencia || "", "pt-BR") * dir;
+              }
+              if (sort.col === "tipo") {
+                const aT = (a.tipo || "").toLowerCase(); const bT = (b.tipo || "").toLowerCase();
+                if (aT !== bT) return aT.localeCompare(bT, "pt-BR") * dir;
+                return ((a.resultado?.areaTotal || 0) - (b.resultado?.areaTotal || 0)) * dir;
+              }
+              if (sort.col === "criado") {
+                const aD = a.criadoEm ? new Date(a.criadoEm).getTime() : 0;
+                const bD = b.criadoEm ? new Date(b.criadoEm).getTime() : 0;
+                return (aD - bD) * dir;
+              }
+              if (sort.col === "venc") {
+                const aV = diasParaVencer(a); const bV = diasParaVencer(b);
+                if (aV == null && bV == null) return 0;
+                if (aV == null) return 1;
+                if (bV == null) return -1;
+                return (aV - bV) * dir;
+              }
+              if (sort.col === "status") {
+                const ordem = { aberto: 0, rascunho: 1, ganho: 2, perdido: 3 };
+                return ((ordem[a.status || "rascunho"] ?? 99) - (ordem[b.status || "rascunho"] ?? 99)) * dir;
+              }
+              if (sort.col === "total") return (valorTotal(a) - valorTotal(b)) * dir;
+              return 0;
+            });
+
             return (
               <div>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, gap:8, flexWrap:"wrap" }}>
                   <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
-                  <ToggleVisualizacao viz={viz} setViz={setViz} />
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    {viz === "cards" && <SortDropdown sort={sort} setSort={setSort} />}
+                    <ToggleVisualizacao viz={viz} setViz={setViz} />
+                  </div>
                 </div>
-                {viz === "tabela" ? (
-                  <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"hidden" }}>
-                    <OrcRowHeader showCliente={false} />
-                    {orcamentos.map(o => (
+
+                {/* Chips de filtros ativos */}
+                {(filtrosCol.tipos.size > 0 || filtrosCol.status.size > 0) && (
+                  <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:8 }}>
+                    {[...filtrosCol.tipos].map(v => (
+                      <FiltroChip key={"t-"+v} label={`Tipo: ${v}`} onRemove={() => {
+                        const n = new Set(filtrosCol.tipos); n.delete(v);
+                        setFiltrosCol({ ...filtrosCol, tipos: n });
+                      }} />
+                    ))}
+                    {[...filtrosCol.status].map(v => (
+                      <FiltroChip key={"s-"+v} label={`Status: ${({rascunho:"Rascunho",aberto:"Em aberto",ganho:"Ganho",perdido:"Perdido"}[v] || v)}`} onRemove={() => {
+                        const n = new Set(filtrosCol.status); n.delete(v);
+                        setFiltrosCol({ ...filtrosCol, status: n });
+                      }} />
+                    ))}
+                    <button
+                      onClick={() => setFiltrosCol({ clientes: new Set(), tipos: new Set(), status: new Set() })}
+                      style={{
+                        fontSize:11.5, color:"#6b7280", background:"transparent",
+                        border:"none", cursor:"pointer", padding:"3px 6px",
+                        textDecoration:"underline", fontFamily:"inherit",
+                      }}>
+                      Limpar filtros
+                    </button>
+                  </div>
+                )}
+
+                {orcsOrdenados.length === 0 ? (
+                  <div style={{
+                    padding:"24px", textAlign:"center", border:"1px dashed #e5e7eb",
+                    borderRadius:9, color:"#9ca3af", fontSize:12.5, background:"#fafafa",
+                  }}>
+                    Nenhum orçamento corresponde aos filtros.
+                  </div>
+                ) : viz === "tabela" ? (
+                  <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"visible" }}>
+                    <OrcRowHeader
+                      showCliente={false}
+                      sort={sort} setSort={setSort}
+                      filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+                      orcamentos={orcamentos} clientes={[cliente]}
+                    />
+                    {orcsOrdenados.map(o => (
                       <OrcRow
                         key={o.id} orc={o} clientes={[cliente]}
                         onAbrir={mkFetchOrc(o)}
@@ -966,7 +1073,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                   </div>
                 ) : (
                   <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {orcamentos.map(o => (
+                    {orcsOrdenados.map(o => (
                       <OrcCard
                         key={o.id} orc={o} clientes={[cliente]}
                         onAbrir={mkFetchOrc(o)}

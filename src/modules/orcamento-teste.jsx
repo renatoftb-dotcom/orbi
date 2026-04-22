@@ -92,6 +92,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [buscaCliente, setBuscaCliente] = useState("");
   // Visualização (persistida em localStorage): tabela | cards
   const [viz, setViz] = useVisualizacaoOrcamentos();
+  // Ordenação (reseta a cada abertura, NÃO persiste): { col, dir }
+  // col: "cliente"|"tipo"|"criado"|"venc"|"status"|"total"   dir: "asc"|"desc"
+  const [sort, setSort] = useState({ col: "cliente", dir: "asc" });
+  // Filtros de coluna (multiselect): { clientes: Set, tipos: Set, status: Set }
+  const [filtrosCol, setFiltrosCol] = useState({ clientes: new Set(), tipos: new Set(), status: new Set() });
   // Proposta sendo visualizada (modal visualizer de snapshot)
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   // Orçamento selecionado para marcar como ganho (abre ModalConfirmarGanho)
@@ -289,6 +294,31 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const totalTodos = orcamentos.length;
   const totalAtivos = totalTodos - totalContadores.perdido;
 
+  // Helper: valor Total do orçamento (usa proposta salva se existir)
+  const valorTotalOrc = (o) => {
+    const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
+    if (ult) {
+      if (ult.valorTotalExibido != null) return ult.valorTotalExibido;
+      const arq = ult.arqEdit != null ? ult.arqEdit : (ult.calculo?.precoArq || 0);
+      const eng = ult.engEdit != null ? ult.engEdit : (ult.calculo?.precoEng || 0);
+      return arq + eng;
+    }
+    return (o.resultado?.precoArq || 0) + (o.resultado?.precoEng || 0);
+  };
+
+  // Helper: dias até vencer (null se não aplicável). Negativo = já vencido.
+  const diasParaVencer = (o) => {
+    if ((o.status || "rascunho") !== "aberto") return null;
+    const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
+    const v = ult?.validadeEdit || ult?.validadeStr;
+    if (!v) return null;
+    const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!m) return null;
+    const validade = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
+    const hoje = new Date(); hoje.setHours(0,0,0,0); validade.setHours(0,0,0,0);
+    return Math.round((validade - hoje) / 86400000);
+  };
+
   const orcFiltrados = orcamentos.filter(o => {
     const st = o.status || "rascunho";
     if (filtro === "ativos"   && st === "perdido") return false;
@@ -303,7 +333,61 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       const q = busca.toLowerCase();
       if (!nomeCli.includes(q) && !ref.includes(q)) return false;
     }
+    // Filtros de coluna (multiselect — vazio = todos)
+    if (filtrosCol.clientes.size > 0) {
+      const cli = clientes.find(c => c.id === o.clienteId);
+      const nomeCli = cli?.nome || o.cliente || "—";
+      if (!filtrosCol.clientes.has(nomeCli)) return false;
+    }
+    if (filtrosCol.tipos.size > 0) {
+      if (!filtrosCol.tipos.has(o.tipo || "—")) return false;
+    }
+    if (filtrosCol.status.size > 0) {
+      if (!filtrosCol.status.has(st)) return false;
+    }
     return true;
+  });
+
+  // Ordenação
+  const orcOrdenados = [...orcFiltrados].sort((a, b) => {
+    const dir = sort.dir === "asc" ? 1 : -1;
+    const aCli = (clientes.find(c => c.id === a.clienteId)?.nome || a.cliente || "").toLowerCase();
+    const bCli = (clientes.find(c => c.id === b.clienteId)?.nome || b.cliente || "").toLowerCase();
+    if (sort.col === "cliente") {
+      // Desempate por referência para clientes iguais
+      if (aCli !== bCli) return aCli.localeCompare(bCli, "pt-BR") * dir;
+      return (a.referencia || "").localeCompare(b.referencia || "", "pt-BR") * dir;
+    }
+    if (sort.col === "tipo") {
+      const aT = (a.tipo || "").toLowerCase();
+      const bT = (b.tipo || "").toLowerCase();
+      if (aT !== bT) return aT.localeCompare(bT, "pt-BR") * dir;
+      return ((a.resultado?.areaTotal || 0) - (b.resultado?.areaTotal || 0)) * dir;
+    }
+    if (sort.col === "criado") {
+      const aD = a.criadoEm ? new Date(a.criadoEm).getTime() : 0;
+      const bD = b.criadoEm ? new Date(b.criadoEm).getTime() : 0;
+      return (aD - bD) * dir;
+    }
+    if (sort.col === "venc") {
+      // Ordem: vencidos → próximos → distantes → não aplicáveis (sempre no fim)
+      const aV = diasParaVencer(a);
+      const bV = diasParaVencer(b);
+      if (aV == null && bV == null) return aCli.localeCompare(bCli, "pt-BR");
+      if (aV == null) return 1;
+      if (bV == null) return -1;
+      return (aV - bV) * dir;
+    }
+    if (sort.col === "status") {
+      const ordem = { aberto: 0, rascunho: 1, ganho: 2, perdido: 3 };
+      const aS = ordem[a.status || "rascunho"] ?? 99;
+      const bS = ordem[b.status || "rascunho"] ?? 99;
+      return (aS - bS) * dir;
+    }
+    if (sort.col === "total") {
+      return (valorTotalOrc(a) - valorTotalOrc(b)) * dir;
+    }
+    return 0;
   });
 
   // Clientes filtrados no modal de novo
@@ -336,7 +420,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       </div>
 
       {/* Toolbar: filtros + busca + visualização */}
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:12, flexWrap:"wrap" }}>
         <OrcFilterPill label="Ativos"    count={totalAtivos}              active={filtro==="ativos"}   onClick={()=>setFiltro("ativos")} />
         <OrcFilterPill label="Todos"     count={totalTodos}               active={filtro==="todos"}    onClick={()=>setFiltro("todos")} countColor="#9ca3af" />
         <OrcFilterPill label="Rascunho"  count={totalContadores.rascunho} active={filtro==="rascunho"} onClick={()=>setFiltro("rascunho")} countColor="#6b7280" />
@@ -354,12 +438,46 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
             fontFamily:"inherit", outline:"none",
           }}
         />
+        {viz === "cards" && <SortDropdown sort={sort} setSort={setSort} />}
         <ToggleVisualizacao viz={viz} setViz={setViz} />
       </div>
 
+      {/* Chips de filtros ativos (aparecem quando há filtros de coluna aplicados) */}
+      {(filtrosCol.clientes.size > 0 || filtrosCol.tipos.size > 0 || filtrosCol.status.size > 0) && (
+        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:12 }}>
+          {[...filtrosCol.clientes].map(v => (
+            <FiltroChip key={"c-"+v} label={`Cliente: ${v}`} onRemove={() => {
+              const n = new Set(filtrosCol.clientes); n.delete(v);
+              setFiltrosCol({ ...filtrosCol, clientes: n });
+            }} />
+          ))}
+          {[...filtrosCol.tipos].map(v => (
+            <FiltroChip key={"t-"+v} label={`Tipo: ${v}`} onRemove={() => {
+              const n = new Set(filtrosCol.tipos); n.delete(v);
+              setFiltrosCol({ ...filtrosCol, tipos: n });
+            }} />
+          ))}
+          {[...filtrosCol.status].map(v => (
+            <FiltroChip key={"s-"+v} label={`Status: ${({rascunho:"Rascunho",aberto:"Em aberto",ganho:"Ganho",perdido:"Perdido"}[v] || v)}`} onRemove={() => {
+              const n = new Set(filtrosCol.status); n.delete(v);
+              setFiltrosCol({ ...filtrosCol, status: n });
+            }} />
+          ))}
+          <button
+            onClick={() => setFiltrosCol({ clientes: new Set(), tipos: new Set(), status: new Set() })}
+            style={{
+              fontSize:11.5, color:"#6b7280", background:"transparent",
+              border:"none", cursor:"pointer", padding:"3px 6px",
+              textDecoration:"underline", fontFamily:"inherit",
+            }}>
+            Limpar filtros
+          </button>
+        </div>
+      )}
+
       {/* Lista */}
       <div style={{ maxWidth:960 }}>
-        {orcFiltrados.length === 0 ? (
+        {orcOrdenados.length === 0 ? (
           <div style={{
             padding:"48px 24px", textAlign:"center",
             border:"1px dashed #e5e7eb", borderRadius:9, background:"#fafafa",
@@ -370,9 +488,14 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               : "Nenhum orçamento corresponde aos filtros."}
           </div>
         ) : viz === "tabela" ? (
-          <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"hidden" }}>
-            <OrcRowHeader showCliente={true} />
-            {orcFiltrados.map(orc => (
+          <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"visible" }}>
+            <OrcRowHeader
+              showCliente={true}
+              sort={sort} setSort={setSort}
+              filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+              orcamentos={orcamentos} clientes={clientes}
+            />
+            {orcOrdenados.map(orc => (
               <OrcRow
                 key={orc.id} orc={orc} clientes={clientes}
                 onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
@@ -383,7 +506,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           </div>
         ) : (
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {orcFiltrados.map(orc => (
+            {orcOrdenados.map(orc => (
               <OrcCard
                 key={orc.id} orc={orc} clientes={clientes}
                 onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
@@ -956,11 +1079,294 @@ const menuItemStyle = {
   cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
 };
 
-// Header da tabela
-function OrcRowHeader({ showCliente = true }) {
-  const colStyle = { fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6 };
-  // Mesmo grid do OrcRow: Cliente/Ref | Tipo/Área | Criado | Venc. | Status | Total | ⋯
+// ─── Componentes de ordenação e filtros ─────────────────────────────────
+
+// Chip mostrando um filtro ativo, com × pra remover
+function FiltroChip({ label, onRemove }) {
+  return (
+    <span style={{
+      display:"inline-flex", alignItems:"center", gap:6,
+      fontSize:11.5, padding:"4px 4px 4px 10px",
+      background:"#eff6ff", color:"#2563eb",
+      border:"0.5px solid #bfdbfe", borderRadius:12, fontWeight:500,
+    }}>
+      {label}
+      <button onClick={onRemove}
+        style={{
+          background:"transparent", border:"none",
+          color:"#2563eb", opacity:0.7,
+          fontSize:13, fontWeight:700, padding:"0 6px", cursor:"pointer",
+          fontFamily:"inherit", lineHeight:1,
+        }}>×</button>
+    </span>
+  );
+}
+
+// Dropdown de ordenação pra visualização em cards
+function SortDropdown({ sort, setSort }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (!e.target.closest("[data-sort-drop]")) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open]);
+  const opcoes = [
+    { col:"cliente", dir:"asc",  label:"Cliente A → Z" },
+    { col:"cliente", dir:"desc", label:"Cliente Z → A" },
+    { col:"criado",  dir:"desc", label:"Mais recente primeiro" },
+    { col:"criado",  dir:"asc",  label:"Mais antigo primeiro" },
+    { col:"venc",    dir:"asc",  label:"Vencem antes" },
+    { col:"total",   dir:"desc", label:"Maior valor" },
+    { col:"total",   dir:"asc",  label:"Menor valor" },
+  ];
+  const atual = opcoes.find(o => o.col === sort.col && o.dir === sort.dir);
+  return (
+    <div data-sort-drop style={{ position:"relative" }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display:"inline-flex", alignItems:"center", gap:6,
+          padding:"6px 10px", fontSize:12, background:"#fff",
+          border:"0.5px solid #e5e7eb", borderRadius:6,
+          color:"#374151", cursor:"pointer", fontFamily:"inherit",
+        }}>
+        <span style={{ color:"#9ca3af" }}>Ordenar:</span>
+        {atual ? atual.label : "Padrão"}
+        <span style={{ fontSize:9, color:"#9ca3af" }}>▾</span>
+      </button>
+      {open && (
+        <div style={{
+          position:"absolute", top:"calc(100% + 4px)", right:0, zIndex:50,
+          background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+          boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:220, overflow:"hidden", padding:"6px 0",
+        }}>
+          {opcoes.map(o => {
+            const ativo = o.col === sort.col && o.dir === sort.dir;
+            return (
+              <button key={`${o.col}-${o.dir}`}
+                onClick={() => { setSort({ col: o.col, dir: o.dir }); setOpen(false); }}
+                style={{
+                  display:"block", width:"100%", textAlign:"left",
+                  background:"transparent", border:"none",
+                  padding:"7px 14px", fontSize:12.5,
+                  color: ativo ? "#111" : "#374151",
+                  fontWeight: ativo ? 600 : 400,
+                  cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "#f4f5f7"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                {ativo ? "✓ " : "  "}{o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Menu popover de uma coluna na tabela. Oferece ordenação + filtro (multiselect).
+// Props:
+//   col: nome da coluna ("cliente" | "tipo" | "criado" | "venc" | "status" | "total")
+//   label: texto do cabeçalho
+//   sort, setSort: state de ordenação atual
+//   filtrosCol, setFiltrosCol: filtros multiselect por coluna
+//   opcoesFiltro: array de { valor, label, count } ou null (coluna sem filtro)
+//   chaveFiltro: chave dentro de filtrosCol ("clientes" | "tipos" | "status")
+//   align: "left" | "right" pra posicionar popover
+function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
+                     opcoesFiltro = null, chaveFiltro = null, align = "left" }) {
+  const [open, setOpen] = useState(false);
+  const [busca, setBusca] = useState("");
+  useEffect(() => {
+    if (!open) return;
+    const h = (e) => { if (!e.target.closest(`[data-col-menu="${col}"]`)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [open, col]);
+  const ativo = sort.col === col;
+  const setaIco = ativo ? (sort.dir === "asc" ? "▲" : "▼") : "▾";
+  const filtroAtivoCount = chaveFiltro ? (filtrosCol[chaveFiltro]?.size || 0) : 0;
+
+  const opcoesFiltradas = opcoesFiltro && busca
+    ? opcoesFiltro.filter(o => o.label.toLowerCase().includes(busca.toLowerCase()))
+    : opcoesFiltro;
+
+  const toggleFiltro = (valor) => {
+    if (!chaveFiltro) return;
+    const atual = new Set(filtrosCol[chaveFiltro] || []);
+    if (atual.has(valor)) atual.delete(valor);
+    else atual.add(valor);
+    setFiltrosCol({ ...filtrosCol, [chaveFiltro]: atual });
+  };
+
+  const limparFiltro = () => {
+    if (!chaveFiltro) return;
+    setFiltrosCol({ ...filtrosCol, [chaveFiltro]: new Set() });
+  };
+
+  return (
+    <div data-col-menu={col} style={{ position:"relative", display:"inline-block" }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        style={{
+          display:"inline-flex", alignItems:"center", gap:5,
+          fontSize:10, fontWeight:600, color: ativo || filtroAtivoCount > 0 ? "#111" : "#9ca3af",
+          textTransform:"uppercase", letterSpacing:0.6,
+          background:"transparent", border:"none", padding:0,
+          cursor:"pointer", fontFamily:"inherit",
+        }}>
+        {label}
+        <span style={{ fontSize:9, color: ativo ? "#111" : "#d1d5db" }}>{setaIco}</span>
+        {filtroAtivoCount > 0 && (
+          <span style={{
+            fontSize:9, background:"#2563eb", color:"#fff",
+            padding:"0 5px", borderRadius:8, fontWeight:700, marginLeft:2,
+          }}>{filtroAtivoCount}</span>
+        )}
+      </button>
+      {open && (
+        <div style={{
+          position:"absolute",
+          top:"calc(100% + 6px)",
+          [align]: 0,
+          zIndex:50,
+          background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+          boxShadow:"0 4px 16px rgba(0,0,0,0.1)",
+          minWidth:220, maxWidth:280, overflow:"hidden",
+          textTransform:"none", letterSpacing:"0", fontWeight:400,
+        }}>
+          {/* Ordenar */}
+          <div style={{ padding:"8px 14px 4px", fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Ordenar</div>
+          {["asc","desc"].map(d => {
+            const labels = {
+              cliente: { asc:"A → Z", desc:"Z → A" },
+              tipo:    { asc:"A → Z", desc:"Z → A" },
+              criado:  { asc:"Mais antigo", desc:"Mais recente" },
+              venc:    { asc:"Vencem antes", desc:"Vencem depois" },
+              status:  { asc:"Em aberto → Perdido", desc:"Perdido → Em aberto" },
+              total:   { asc:"Menor valor", desc:"Maior valor" },
+            };
+            const sel = ativo && sort.dir === d;
+            return (
+              <button key={d}
+                onClick={() => { setSort({ col, dir: d }); setOpen(false); }}
+                style={{
+                  display:"block", width:"100%", textAlign:"left",
+                  background:"transparent", border:"none",
+                  padding:"6px 14px", fontSize:12.5,
+                  color: sel ? "#111" : "#374151",
+                  fontWeight: sel ? 600 : 400,
+                  cursor:"pointer", fontFamily:"inherit",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "#f4f5f7"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                {sel ? "✓ " : "  "}{labels[col]?.[d] || d}
+              </button>
+            );
+          })}
+
+          {/* Filtro (se a coluna suporta) */}
+          {opcoesFiltro && (
+            <>
+              <div style={{ borderTop:"0.5px solid #f1f2f4", marginTop:4 }} />
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 14px 4px" }}>
+                <span style={{ fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Filtrar</span>
+                {filtroAtivoCount > 0 && (
+                  <button onClick={limparFiltro}
+                    style={{ fontSize:11, color:"#6b7280", background:"transparent", border:"none", cursor:"pointer", textDecoration:"underline", fontFamily:"inherit", padding:0 }}>
+                    limpar
+                  </button>
+                )}
+              </div>
+              {/* Busca — só se há mais de 5 opções */}
+              {opcoesFiltro.length > 5 && (
+                <input
+                  value={busca}
+                  onChange={e => setBusca(e.target.value)}
+                  placeholder="Buscar…"
+                  style={{
+                    margin:"4px 10px 6px", padding:"5px 10px", fontSize:12,
+                    border:"0.5px solid #e5e7eb", borderRadius:5,
+                    width:"calc(100% - 20px)", boxSizing:"border-box",
+                    fontFamily:"inherit", outline:"none",
+                  }}
+                />
+              )}
+              <div style={{ maxHeight:220, overflowY:"auto" }}>
+                {opcoesFiltradas.length === 0 ? (
+                  <div style={{ padding:"8px 14px", fontSize:12, color:"#9ca3af" }}>Nenhum resultado</div>
+                ) : opcoesFiltradas.map(op => {
+                  const marcado = filtrosCol[chaveFiltro]?.has(op.valor);
+                  return (
+                    <button key={op.valor}
+                      onClick={() => toggleFiltro(op.valor)}
+                      style={{
+                        display:"flex", alignItems:"center", gap:8,
+                        width:"100%", textAlign:"left",
+                        background:"transparent", border:"none",
+                        padding:"5px 14px", fontSize:12.5, color:"#374151",
+                        cursor:"pointer", fontFamily:"inherit",
+                      }}
+                      onMouseEnter={e => { e.currentTarget.style.background = "#f4f5f7"; }}
+                      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                      <span style={{
+                        width:13, height:13, borderRadius:3,
+                        border: `1px solid ${marcado ? "#111" : "#9ca3af"}`,
+                        background: marcado ? "#111" : "#fff",
+                        display:"flex", alignItems:"center", justifyContent:"center",
+                        color:"#fff", fontSize:9, fontWeight:700, flexShrink:0,
+                      }}>{marcado ? "✓" : ""}</span>
+                      <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{op.label}</span>
+                      {op.count != null && (
+                        <span style={{ fontSize:11, color:"#9ca3af" }}>{op.count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Header da tabela — cada coluna com menu de ordenação/filtro (estilo Excel)
+function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltrosCol, orcamentos = [], clientes = [] }) {
   const gridCols = "1.8fr 1.1fr 75px 90px 95px 110px 34px";
+
+  // Monta opções de filtro por coluna a partir do dataset
+  const opcoesCliente = (() => {
+    if (!showCliente) return null;
+    const mapa = new Map();
+    orcamentos.forEach(o => {
+      const cli = clientes.find(c => c.id === o.clienteId);
+      const nome = cli?.nome || o.cliente || "—";
+      mapa.set(nome, (mapa.get(nome) || 0) + 1);
+    });
+    return [...mapa.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+      .map(([nome, n]) => ({ valor: nome, label: nome, count: n }));
+  })();
+  const opcoesTipo = (() => {
+    const mapa = new Map();
+    orcamentos.forEach(o => { const t = o.tipo || "—"; mapa.set(t, (mapa.get(t) || 0) + 1); });
+    return [...mapa.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+      .map(([t, n]) => ({ valor: t, label: t, count: n }));
+  })();
+  const opcoesStatus = (() => {
+    const labels = { rascunho:"Rascunho", aberto:"Em aberto", ganho:"Ganho", perdido:"Perdido" };
+    const mapa = new Map();
+    orcamentos.forEach(o => { const s = o.status || "rascunho"; mapa.set(s, (mapa.get(s) || 0) + 1); });
+    return [...mapa.entries()]
+      .sort((a, b) => (labels[a[0]] || a[0]).localeCompare(labels[b[0]] || b[0], "pt-BR"))
+      .map(([s, n]) => ({ valor: s, label: labels[s] || s, count: n }));
+  })();
+
   return (
     <div style={{
       display:"grid",
@@ -970,12 +1376,35 @@ function OrcRowHeader({ showCliente = true }) {
       borderBottom:"1px solid #e5e7eb",
       background:"#fafbfc",
     }}>
-      <div style={colStyle}>{showCliente ? "Cliente · Referência" : "Referência"}</div>
-      <div style={colStyle}>Tipo / Área</div>
-      <div style={colStyle}>Criado</div>
-      <div style={colStyle}>Venc.</div>
-      <div style={colStyle}>Status</div>
-      <div style={{ ...colStyle, textAlign:"right" }}>Total</div>
+      <ColunaMenu col="cliente" label={showCliente ? "Cliente · Referência" : "Referência"}
+        sort={sort} setSort={setSort}
+        filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+        opcoesFiltro={opcoesCliente} chaveFiltro={showCliente ? "clientes" : null}
+        align="left" />
+      <ColunaMenu col="tipo" label="Tipo / Área"
+        sort={sort} setSort={setSort}
+        filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+        opcoesFiltro={opcoesTipo} chaveFiltro="tipos"
+        align="left" />
+      <ColunaMenu col="criado" label="Criado"
+        sort={sort} setSort={setSort}
+        filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+        align="left" />
+      <ColunaMenu col="venc" label="Venc."
+        sort={sort} setSort={setSort}
+        filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+        align="left" />
+      <ColunaMenu col="status" label="Status"
+        sort={sort} setSort={setSort}
+        filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+        opcoesFiltro={opcoesStatus} chaveFiltro="status"
+        align="left" />
+      <div style={{ textAlign:"right" }}>
+        <ColunaMenu col="total" label="Total"
+          sort={sort} setSort={setSort}
+          filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+          align="right" />
+      </div>
       <div></div>
     </div>
   );
