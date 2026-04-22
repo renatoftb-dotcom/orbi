@@ -5091,7 +5091,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
   return (
     <div style={{
-      background:"#f4f5f7",
+      background:"#fff",
       minHeight:"100vh",
       padding:"28px 32px 60px",
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
@@ -5231,7 +5231,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
             ))}
           </div>
         ) : (
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:10 }}>
             {orcOrdenados.map(orc => (
               <OrcCard
                 key={orc.id} orc={orc} clientes={clientes}
@@ -5421,107 +5421,119 @@ function OrcCard({ orc, clientes, onAbrir, onAction }) {
     <div
       onClick={() => onAbrir("ver")}
       style={{
-        background:"#fff", border:"1px solid #e5e7eb", borderRadius:9,
+        background:"#fafbfc", border:"1px solid #eef0f3", borderRadius:10,
         padding:"14px 16px",
-        display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
         transition:"all 0.12s", cursor:"pointer",
+        display:"flex", flexDirection:"column", gap:6,
+        minWidth:0,
       }}
-      onMouseEnter={e => { e.currentTarget.style.borderColor = "#d1d5db"; }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; }}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = "#d1d5db"; e.currentTarget.style.background = "#fff"; }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = "#eef0f3"; e.currentTarget.style.background = "#fafbfc"; }}
     >
-      <div style={{ minWidth:0 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-          <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>{nomeCliente}</div>
+      {/* Linha 1: Nome + ID + Status (esq) | Valor (dir) */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:7, minWidth:0, flex:1, overflow:"hidden" }}>
           <span style={{
-            fontSize:10.5, color:"#9ca3af",
+            fontSize:13.5, fontWeight:600, color:"#111",
+            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+          }}>{nomeCliente}</span>
+          <span style={{
+            fontSize:10, color:"#9ca3af",
             fontVariantNumeric:"tabular-nums",
-            background:"#f4f5f7",
-            padding:"2px 7px", borderRadius:4, fontWeight:500,
+            background:"#eef0f3",
+            padding:"1px 6px", borderRadius:4, fontWeight:500,
+            flexShrink:0,
           }}>{orc.id}</span>
           <span style={{
-            fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
-            padding:"2px 7px", borderRadius:4,
+            fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
+            padding:"2px 6px", borderRadius:4,
             background: tag.bg, color: tag.color,
+            flexShrink:0,
           }}>{tag.label}</span>
         </div>
-        <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
-          <span style={{ color:"#374151" }}>{ref}</span>
-          <span style={{ color:"#9ca3af" }}> · {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""}{dataFmt ? ` · Criado ${dataFmt}` : ""}</span>
-          {(() => {
-            const venc = calcVencimentoOrc(orc);
-            if (!venc.aplicavel) return null;
-            return (
-              <>
-                <span style={{ color:"#9ca3af" }}> · </span>
-                <span style={{ color: venc.cor, fontWeight: venc.bold ? 600 : 500 }}>
-                  {venc.label === "Vencido" || venc.label === "Vence hoje" ? venc.label : `Vence em ${venc.label}`}
-                </span>
-              </>
-            );
-          })()}
-        </div>
-        {orc.propostas && orc.propostas.length > 0 && (
-          <div
-            onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
-            style={{
-              fontSize:11.5, marginTop:4, fontWeight:500,
-              color: orc.expirouEm ? "#b91c1c" : "#16a34a",
-              cursor:"pointer", display:"inline-flex", alignItems:"center", gap:6,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
-            onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
-            title={orc.expirouEm ? "Ver registro da proposta expirada" : "Ver a última proposta enviada (somente leitura)"}
-          >
-            <span>
-              {orc.expirouEm ? "⚠️" : "📄"} {orc.propostas.length} proposta{orc.propostas.length > 1 ? "s" : ""} {orc.expirouEm ? "expirou" : "enviada" + (orc.propostas.length > 1 ? "s" : "")}
-            </span>
-            {orc.propostas.length > 1 && !orc.expirouEm && (
-              <span style={{
-                fontSize:9.5, fontWeight:700,
-                color:"#16a34a", background:"#dcfce7",
-                padding:"1px 6px", borderRadius:6,
-                fontVariantNumeric:"tabular-nums",
-                textDecoration:"none",
-              }}>
-                última: v{orc.propostas.length}
-              </span>
-            )}
-            {!orc.expirouEm && orc.ultimaPropostaEm && (
-              <span style={{ color:"#6b7280", fontWeight:400 }}>
-                · última em {new Date(orc.ultimaPropostaEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
-              </span>
-            )}
-            {orc.expirouEm && (
-              <span style={{ color:"#6b7280", fontWeight:400 }}>
-                · expirou em {new Date(orc.expirouEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}
-              </span>
-            )}
+        {valorTotal > 0 && (
+          <div style={{
+            fontSize:14.5, fontWeight:600, color:"#111",
+            fontVariantNumeric:"tabular-nums",
+            flexShrink:0, whiteSpace:"nowrap",
+          }}>
+            R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
           </div>
         )}
       </div>
-      <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
-        {valorTotal > 0 && (
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:2 }}>
-            {precoArq > 0 && precoEng > 0 && (
-              <div style={{ display:"flex", gap:10, fontSize:11, color:"#6b7280", whiteSpace:"nowrap" }}>
-                <span>Arq: <strong style={{ color:"#374151", fontWeight:600 }}>R$ {precoArq.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}</strong></span>
-                <span>Eng: <strong style={{ color:"#374151", fontWeight:600 }}>R$ {precoEng.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}</strong></span>
-              </div>
-            )}
-            <div style={{ fontSize:14, fontWeight:600, color:"#111", whiteSpace:"nowrap" }}>
-              {precoArq > 0 && precoEng > 0 ? "Total: " : ""}R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
-            </div>
-          </div>
-        )}
-        <div style={{ display:"flex", gap:4 }} onClick={e => e.stopPropagation()}>
+
+      {/* Linha 2: Referência */}
+      <div style={{
+        fontSize:12.5, color:"#374151",
+        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+      }}>
+        {ref}
+      </div>
+
+      {/* Linha 3: Metadados */}
+      <div style={{
+        fontSize:11.5, color:"#9ca3af", lineHeight:1.4,
+        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+      }}>
+        {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""}{dataFmt ? ` · ${dataFmt}` : ""}
+        {(() => {
+          const venc = calcVencimentoOrc(orc);
+          if (!venc.aplicavel) return null;
+          return (
+            <>
+              <span> · </span>
+              <span style={{ color: venc.cor, fontWeight: venc.bold ? 600 : 500 }}>
+                {venc.label === "Vencido" || venc.label === "Vence hoje" ? venc.label : `Vence em ${venc.label}`}
+              </span>
+            </>
+          );
+        })()}
+      </div>
+
+      {/* Linha 4: Footer — badge proposta (esq) | menu ⋯ (dir) */}
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        marginTop:2, minHeight:20,
+      }}>
+        <div style={{ minWidth:0, flex:1 }}>
+          {orc.propostas && orc.propostas.length > 0 && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
+              style={{
+                fontSize:11, fontWeight:500,
+                color: orc.expirouEm ? "#b91c1c" : "#16a34a",
+                cursor:"pointer", display:"inline-flex", alignItems:"center", gap:5,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
+              onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
+              title={orc.expirouEm ? "Ver registro da proposta expirada" : "Ver a última proposta enviada"}
+            >
+              <span>
+                {orc.expirouEm ? "⚠" : "📄"} {orc.propostas.length > 1 ? `${orc.propostas.length} propostas` : "Proposta enviada"}
+                {orc.expirouEm ? " (expirou)" : ""}
+              </span>
+              {orc.propostas.length > 1 && !orc.expirouEm && (
+                <span style={{
+                  fontSize:9.5, fontWeight:700,
+                  color:"#16a34a", background:"#dcfce7",
+                  padding:"1px 5px", borderRadius:4,
+                  fontVariantNumeric:"tabular-nums",
+                }}>
+                  v{orc.propostas.length}
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+        <div onClick={e => e.stopPropagation()}>
           <div style={{ position:"relative" }} data-orc-menu={orc.id}>
             <button onClick={() => setMenuOpen(v => !v)}
               style={{
                 background:"transparent", border:"none",
-                fontSize:18, color:"#9ca3af", padding:"2px 10px",
-                cursor:"pointer", borderRadius:5, fontFamily:"inherit", lineHeight:1,
+                fontSize:16, color:"#9ca3af", padding:"2px 8px",
+                cursor:"pointer", borderRadius:4, fontFamily:"inherit", lineHeight:1,
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = "#f3f4f6"; }}
+              onMouseEnter={e => { e.currentTarget.style.background = "#eef0f3"; }}
               onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
               ⋯
             </button>
