@@ -897,13 +897,14 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   // Prioridade: proposta enviada > raiz do orçamento > fallback.
   const opcoesOrcamento = (() => {
     const tipoPgto = orc.tipoPagamento || orc.tipoPgto || "padrao";
-    const ehPacote = inclArq && inclEng;
     const ultProp = orc.propostas && orc.propostas.length > 0
       ? orc.propostas[orc.propostas.length - 1]
       : null;
     const pick = (...vals) => { for (const v of vals) if (v != null) return v; return 0; };
 
     if (tipoPgto === "padrao") {
+      // Arq + Eng = pacote completo | só um dos dois = "etapa" (individual)
+      const ehPacote = inclArq && inclEng;
       const descArq = pick(ultProp?.descArq, orc.descontoEtapa, orc.descArq, 5);
       const parcArq = pick(ultProp?.parcArq, orc.parcelasEtapa, orc.parcArq, 3);
       const descPac = pick(ultProp?.descPacote, orc.descontoPacote, orc.descPacote, 10);
@@ -914,11 +915,20 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
         blocoLabel:     ehPacote ? "Pacote Completo" : (inclArq ? "Apenas Arquitetura" : "Apenas Engenharia"),
       };
     }
-    // etapas
+
+    // Tipo "etapas": se TODAS etapas marcadas → pacote (Ctrt Pacote); se subset → etapa a etapa (Ctrt Etapa)
+    const totalEtapas = etapas.length;
+    const marcadas    = etapas.filter(e => e.marcado).length;
+    const ehPacote    = totalEtapas > 0 && marcadas === totalEtapas;
+
+    const descEt  = pick(ultProp?.descEtCtrt,  orc.descontoEtapaCtrt,  orc.descEtCtrt,  5);
+    const parcEt  = pick(ultProp?.parcEtCtrt,  orc.parcelasEtapaCtrt,  orc.parcEtCtrt,  2);
+    const descPac = pick(ultProp?.descPacCtrt, orc.descontoPacoteCtrt, orc.descPacCtrt, 15);
+    const parcPac = pick(ultProp?.parcPacCtrt, orc.parcelasPacoteCtrt, orc.parcPacCtrt, 8);
     return {
-      descAntecipado: pick(ultProp?.descEtCtrt, orc.descontoEtapaCtrt, orc.descEtCtrt, 0),
-      qtdParcelado:   pick(ultProp?.parcPacCtrt, orc.parcelasPacoteCtrt, orc.parcPacCtrt, 2),
-      blocoLabel:     "Por Etapas",
+      descAntecipado: ehPacote ? descPac : descEt,
+      qtdParcelado:   ehPacote ? parcPac : parcEt,
+      blocoLabel:     ehPacote ? "Pacote de Etapas" : "Etapa a Etapa",
     };
   })();
 
@@ -988,18 +998,35 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
       propAtual = (inclArq ? orcArq : 0) + (inclEng ? orcEng : 0);
     }
     const descBase = opcoesOrcamento.descAntecipado;
+    const qtdBase  = Math.max(1, parseInt(opcoesOrcamento.qtdParcelado) || 1);
     const totalCalc = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
     setTotalFechado(totalCalc);
-    setParcelas(gerarParcelasIguais(1, totalCalc, "Pagamento"));
+    setParcelas(gerarParcelasIguais(qtdBase, totalCalc, "Parcela"));
     setModoEtapas(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inclArq, inclEng]);
+
+  // Ref pra detectar primeira vez que etapas são preenchidas (tipo etapas)
+  const etapasInicializadasRef = useRef(false);
 
   // ── Recalcula total quando etapas marcadas/valores mudam (tipo etapas) ──
   useEffect(() => {
     if (!ehTipoEtapas) return;
     const propAtual = etapas.filter(e => e.marcado).reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
-    // Preserva desconto atual
+
+    // Primeira vez que etapas são preenchidas: aplica desconto e qtd parcelas do orçamento.
+    // As edições manuais posteriores (marcar/desmarcar, editar valor) preservam o desconto atual.
+    if (!etapasInicializadasRef.current && etapas.length > 0) {
+      etapasInicializadasRef.current = true;
+      const descBase = opcoesOrcamento.descAntecipado;
+      const qtdBase  = Math.max(1, parseInt(opcoesOrcamento.qtdParcelado) || 1);
+      const novoTotal = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
+      setTotalFechado(novoTotal);
+      setParcelas(gerarParcelasIguais(qtdBase, novoTotal, "Parcela"));
+      return;
+    }
+
+    // Preserva desconto atual (edições posteriores)
     const descAtual = descontoPct;
     const novoTotal = Math.round(propAtual * (1 - descAtual/100) * 100) / 100;
     setTotalFechado(novoTotal);
