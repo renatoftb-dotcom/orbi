@@ -2,7 +2,7 @@
 // HOME MENU
 // ═══════════════════════════════════════════════════════════════
 
-function HomeMenu({ data, setAba }) {
+function HomeMenu({ data, setAba, tentarTrocar }) {
   const nomeEscritorio = data?.escritorio?.nome || "";
   const [texto, setTexto] = useState("Bem-vindo");
   const [fase, setFase] = useState("bemvindo");
@@ -36,7 +36,7 @@ function HomeMenu({ data, setAba }) {
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, width:"100%", maxWidth:680 }}>
         {modulos.map(m => (
-          <button key={m.k} onClick={() => setAba(m.k)}
+          <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
             style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"20px", textAlign:"left", cursor:"pointer", fontFamily:"inherit", position:"relative" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor="#e5e7eb"; }}>
@@ -74,6 +74,19 @@ export default function ModuloClientesFornecedores() {
   const [clienteRetorno, setClienteRetorno] = useState(null); // cliente pra abrir detail ao fechar orçamento
   const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false); // sinal pra abrir cadastro de cliente
   const [backendOffline, setBackendOffline]   = useState(false);
+
+  // tentarTrocar: quando há orçamento em tela cheia com dados não salvos,
+  // consulta o handler registrado pelo FormOrcamento (window.__vickeOrcDirtyPrompt).
+  // Se o handler retornar true, o modal de "salvar rascunho/descartar" será mostrado
+  // e a navegação será executada depois da decisão do usuário. Caso contrário,
+  // a navegação acontece imediatamente.
+  function tentarTrocar(fn) {
+    if (typeof window !== "undefined" && typeof window.__vickeOrcDirtyPrompt === "function") {
+      const absorveu = window.__vickeOrcDirtyPrompt(fn);
+      if (absorveu) return; // modal vai cuidar
+    }
+    fn();
+  }
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
   // IMPORTANTE: hooks DEVEM ser chamados antes de qualquer return condicional (regra do React)
@@ -267,10 +280,12 @@ export default function ModuloClientesFornecedores() {
                               onMouseEnter={e => { if (!ativoSub) { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#6b7280"; } }}
                               onMouseLeave={e => { if (!ativoSub) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}
                               onClick={() => {
-                                setAba(s.k);
-                                setOrcamentoTelaCheia(null);
-                                if (s.k === "projetos:etapas") setProjetosKey(n=>n+1);
-                                if (s.k === "projetos:orcamentos") setOrcamentosKey(n=>n+1);
+                                tentarTrocar(() => {
+                                  setAba(s.k);
+                                  setOrcamentoTelaCheia(null);
+                                  if (s.k === "projetos:etapas") setProjetosKey(n=>n+1);
+                                  if (s.k === "projetos:orcamentos") setOrcamentosKey(n=>n+1);
+                                });
                               }}
                             >
                               {s.label}
@@ -288,13 +303,15 @@ export default function ModuloClientesFornecedores() {
                   onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
                   onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
                   onClick={() => {
-                    setAba(k);
-                    setOrcamentoTelaCheia(null);
-                    if(k==="clientes")    setClientesKey(n=>n+1);
-                    if(k==="obras")       setObrasKey(n=>n+1);
-                    if(k==="financeiro")  setFinanceiroKey(n=>n+1);
-                    if(k==="fornecedores")setFornecedoresKey(n=>n+1);
-                    if(k==="projetos:orcamentos") setOrcamentosKey(n=>n+1);
+                    tentarTrocar(() => {
+                      setAba(k);
+                      setOrcamentoTelaCheia(null);
+                      if(k==="clientes")    setClientesKey(n=>n+1);
+                      if(k==="obras")       setObrasKey(n=>n+1);
+                      if(k==="financeiro")  setFinanceiroKey(n=>n+1);
+                      if(k==="fornecedores")setFornecedoresKey(n=>n+1);
+                      if(k==="projetos:orcamentos") setOrcamentosKey(n=>n+1);
+                    });
                   }}>
                   <span>{label}</span>
                   {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
@@ -306,14 +323,14 @@ export default function ModuloClientesFornecedores() {
             <button style={itemStyle(aba==="escritorio")}
               onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
               onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
-              onClick={() => { setAba("escritorio"); setEscritorioKey(n=>n+1); setOrcamentoTelaCheia(null); }}>
+              onClick={() => { tentarTrocar(() => { setAba("escritorio"); setEscritorioKey(n=>n+1); setOrcamentoTelaCheia(null); }); }}>
               Escritório
             </button>
             {usuario?.perfil === "master" && (
               <button style={itemStyle(aba==="admin")}
                 onMouseEnter={e => { if(aba!=="admin") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="admin") e.currentTarget.style.background="transparent"; }}
-                onClick={() => { setAba("admin"); setOrcamentoTelaCheia(null); }}>
+                onClick={() => { tentarTrocar(() => { setAba("admin"); setOrcamentoTelaCheia(null); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:6 }}>
                   Admin
                   <span style={{ fontSize:9, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
@@ -388,7 +405,7 @@ export default function ModuloClientesFornecedores() {
               }}
             />
           ) : (<>
-          {aba === "home"                   && <HomeMenu setAba={setAba} data={data} />}
+          {aba === "home"                   && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
           {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}

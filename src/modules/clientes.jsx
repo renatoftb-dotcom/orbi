@@ -762,6 +762,9 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   // Ordenação (reseta a cada abertura) e filtros por coluna
   const [sort, setSort] = useState({ col: "cliente", dir: "asc" });
   const [filtrosCol, setFiltrosCol] = useState({ clientes: new Set(), tipos: new Set(), status: new Set() });
+  // Seleção em massa (tabela) + modal de confirmação
+  const [selecionados, setSelecionados] = useState(new Set());
+  const [confirmExcluirMassa, setConfirmExcluirMassa] = useState(false);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -877,6 +880,18 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
     save({ ...data, orcamentosProjeto: novos }).catch(console.error);
   }
 
+  async function excluirOrcamentosEmMassa() {
+    const ids = selecionados;
+    const novos = (data.orcamentosProjeto||[]).filter(x => !ids.has(x.id));
+    setConfirmExcluirMassa(false);
+    try {
+      await save({ ...data, orcamentosProjeto: novos });
+      setSelecionados(new Set());
+    } catch (e) {
+      console.error("Erro ao excluir em massa:", e);
+    }
+  }
+
   function ativarProjeto() {
     const novosServicos = { ...cliente.servicos, projeto: true };
     const novosClientes = data.clientes.map(c => c.id===cliente.id ? { ...c, servicos:novosServicos } : c);
@@ -982,6 +997,10 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
             // Ordena
             const orcsOrdenados = [...orcsFiltrados].sort((a, b) => {
               const dir = sort.dir === "asc" ? 1 : -1;
+              if (sort.col === "id") {
+                const num = (id) => { const m = String(id || "").match(/(\d+)/); return m ? parseInt(m[1]) : 0; };
+                return (num(a.id) - num(b.id)) * dir;
+              }
               if (sort.col === "cliente") {
                 return (a.referencia || "").localeCompare(b.referencia || "", "pt-BR") * dir;
               }
@@ -1047,6 +1066,17 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                   </div>
                 )}
 
+                {/* Barra de ações em massa (só aparece no modo tabela com itens selecionados) */}
+                {viz === "tabela" && selecionados.size > 0 && (
+                  <BarraSelecao
+                    selecionados={selecionados}
+                    totalVisivel={orcsOrdenados.length}
+                    onSelecionarTodos={() => setSelecionados(new Set(orcsOrdenados.map(o => o.id)))}
+                    onLimpar={() => setSelecionados(new Set())}
+                    onExcluir={() => setConfirmExcluirMassa(true)}
+                  />
+                )}
+
                 {orcsOrdenados.length === 0 ? (
                   <div style={{
                     padding:"24px", textAlign:"center", border:"1px dashed #e5e7eb",
@@ -1061,6 +1091,12 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       sort={sort} setSort={setSort}
                       filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
                       orcamentos={orcamentos} clientes={[cliente]}
+                      selecionados={selecionados}
+                      totalVisivel={orcsOrdenados.length}
+                      onToggleTodos={() => {
+                        if (selecionados.size >= orcsOrdenados.length) setSelecionados(new Set());
+                        else setSelecionados(new Set(orcsOrdenados.map(o => o.id)));
+                      }}
                     />
                     {orcsOrdenados.map(o => (
                       <OrcRow
@@ -1068,6 +1104,12 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         onAbrir={mkFetchOrc(o)}
                         onAction={mkOnAction}
                         showCliente={false}
+                        selecionado={selecionados.has(o.id)}
+                        onToggleSelecao={(id) => {
+                          const n = new Set(selecionados);
+                          if (n.has(id)) n.delete(id); else n.add(id);
+                          setSelecionados(n);
+                        }}
                       />
                     ))}
                   </div>
@@ -1086,6 +1128,16 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
             );
           })()}
         </div>
+      )}
+
+      {/* Modal confirmar exclusão em massa */}
+      {confirmExcluirMassa && (
+        <ModalConfirmarExclusaoMassa
+          orcs={(data.orcamentosProjeto||[]).filter(o => selecionados.has(o.id))}
+          clientes={[cliente]}
+          onConfirmar={excluirOrcamentosEmMassa}
+          onCancelar={() => setConfirmExcluirMassa(false)}
+        />
       )}
 
       {/* Modal confirmar exclusão */}

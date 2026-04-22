@@ -101,6 +101,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   // Orçamento selecionado para marcar como ganho (abre ModalConfirmarGanho)
   const [orcGanho, setOrcGanho] = useState(null);
+  // Seleção em massa (tabela): Set de ids + modal de confirmação
+  const [selecionados, setSelecionados] = useState(new Set());
+  const [confirmExcluirMassa, setConfirmExcluirMassa] = useState(false);
 
   const orcamentos = data?.orcamentosProjeto || [];
   const clientes = data?.clientes || [];
@@ -143,6 +146,21 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       // Abre modal de confirmação com escopo, valores e condição de pagamento
       setOrcGanho(orc);
       return;
+    }
+  }
+
+  // Exclui todos os orçamentos cujo id está em `selecionados`. Limpa a seleção
+  // depois de salvar. O confirm modal já foi mostrado quem chama.
+  async function excluirEmMassa() {
+    const todos = data.orcamentosProjeto || [];
+    const ids = selecionados; // Set
+    const novos = todos.filter(o => !ids.has(o.id));
+    setConfirmExcluirMassa(false);
+    try {
+      await save({ ...data, orcamentosProjeto: novos });
+      setSelecionados(new Set());
+    } catch (e) {
+      console.error("Erro ao excluir em massa:", e);
     }
   }
 
@@ -353,6 +371,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     const dir = sort.dir === "asc" ? 1 : -1;
     const aCli = (clientes.find(c => c.id === a.clienteId)?.nome || a.cliente || "").toLowerCase();
     const bCli = (clientes.find(c => c.id === b.clienteId)?.nome || b.cliente || "").toLowerCase();
+    if (sort.col === "id") {
+      // Extrai número do ORC-NNNN pra ordenar numericamente
+      const num = (id) => { const m = String(id || "").match(/(\d+)/); return m ? parseInt(m[1]) : 0; };
+      return (num(a.id) - num(b.id)) * dir;
+    }
     if (sort.col === "cliente") {
       // Desempate por referência para clientes iguais
       if (aCli !== bCli) return aCli.localeCompare(bCli, "pt-BR") * dir;
@@ -475,6 +498,17 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         </div>
       )}
 
+      {/* Barra de ações em massa (só aparece no modo tabela com itens selecionados) */}
+      {viz === "tabela" && selecionados.size > 0 && (
+        <BarraSelecao
+          selecionados={selecionados}
+          totalVisivel={orcOrdenados.length}
+          onSelecionarTodos={() => setSelecionados(new Set(orcOrdenados.map(o => o.id)))}
+          onLimpar={() => setSelecionados(new Set())}
+          onExcluir={() => setConfirmExcluirMassa(true)}
+        />
+      )}
+
       {/* Lista */}
       <div style={{ maxWidth:960 }}>
         {orcOrdenados.length === 0 ? (
@@ -494,6 +528,12 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               sort={sort} setSort={setSort}
               filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
               orcamentos={orcamentos} clientes={clientes}
+              selecionados={selecionados}
+              totalVisivel={orcOrdenados.length}
+              onToggleTodos={() => {
+                if (selecionados.size >= orcOrdenados.length) setSelecionados(new Set());
+                else setSelecionados(new Set(orcOrdenados.map(o => o.id)));
+              }}
             />
             {orcOrdenados.map(orc => (
               <OrcRow
@@ -501,6 +541,12 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
                 onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
                 onAction={handleOrcAction}
                 showCliente={true}
+                selecionado={selecionados.has(orc.id)}
+                onToggleSelecao={(id) => {
+                  const n = new Set(selecionados);
+                  if (n.has(id)) n.delete(id); else n.add(id);
+                  setSelecionados(n);
+                }}
               />
             ))}
           </div>
@@ -516,6 +562,16 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           </div>
         )}
       </div>
+
+      {/* Modal confirmar exclusão em massa */}
+      {confirmExcluirMassa && (
+        <ModalConfirmarExclusaoMassa
+          orcs={orcamentos.filter(o => selecionados.has(o.id))}
+          clientes={clientes}
+          onConfirmar={excluirEmMassa}
+          onCancelar={() => setConfirmExcluirMassa(false)}
+        />
+      )}
 
       {/* Modal Novo Orçamento */}
       {modalNovoAberto && (
@@ -755,10 +811,17 @@ function OrcCard({ orc, clientes, onAbrir, onAction }) {
           </div>
         )}
         <div style={{ display:"flex", gap:4 }} onClick={e => e.stopPropagation()}>
-          <button onClick={() => onAbrir("ver")} style={btnIconStyle}>Ver</button>
-          <button onClick={() => onAbrir("editar")} style={btnIconStyle}>Editar</button>
           <div style={{ position:"relative" }} data-orc-menu={orc.id}>
-            <button onClick={() => setMenuOpen(v => !v)} style={btnIconStyle}>Ações</button>
+            <button onClick={() => setMenuOpen(v => !v)}
+              style={{
+                background:"transparent", border:"none",
+                fontSize:18, color:"#9ca3af", padding:"2px 10px",
+                cursor:"pointer", borderRadius:5, fontFamily:"inherit", lineHeight:1,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "#f3f4f6"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+              ⋯
+            </button>
             {menuOpen && (
               <div style={{
                 position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
@@ -814,13 +877,6 @@ function OrcCard({ orc, clientes, onAbrir, onAction }) {
     </div>
   );
 }
-
-const btnIconStyle = {
-  fontSize:11.5, color:"#6b7280",
-  border:"1px solid #e5e7eb", borderRadius:5,
-  padding:"3px 9px", background:"#fff",
-  cursor:"pointer", fontFamily:"inherit",
-};
 
 // ─── Toggle Tabela/Cards (persiste escolha no localStorage) ───────────────
 // Uso: const [viz, setViz] = useVisualizacaoOrcamentos();
@@ -886,7 +942,8 @@ function ToggleVisualizacao({ viz, setViz }) {
 }
 
 // ─── Linha de tabela (versão compacta do OrcCard) ─────────────────────────
-function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
+function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
+                 selecionado = false, onToggleSelecao = null, temSelecao = false }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
@@ -933,8 +990,8 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
   };
   const tag = STATUS_TAGS[status] || STATUS_TAGS.rascunho;
 
-  // Grid: Cliente/Ref | Tipo/Área | Criado | Venc. | Status | Total | ⋯
-  const gridCols = "1.8fr 1.1fr 75px 90px 95px 110px 34px";
+  // Grid: ☐ | ID | Cliente/Ref | Tipo/Área | Criado | Venc. | Status | Total | ⋯
+  const gridCols = "26px 85px 1.6fr 1.1fr 75px 90px 95px 110px 34px";
 
   return (
     <div
@@ -947,11 +1004,31 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
         borderBottom:"0.5px solid #f1f2f4",
         cursor:"pointer", transition:"background 0.1s",
         fontSize:13,
+        background: selecionado ? "#f0f9ff" : "transparent",
       }}
-      onMouseEnter={e => { e.currentTarget.style.background = "#fafbfc"; }}
-      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+      onMouseEnter={e => { if (!selecionado) e.currentTarget.style.background = "#fafbfc"; }}
+      onMouseLeave={e => { if (!selecionado) e.currentTarget.style.background = "transparent"; }}
     >
-      {/* Coluna 1: Cliente + ID em cima, Referência embaixo */}
+      {/* Coluna -1: Checkbox de seleção */}
+      <div onClick={e => e.stopPropagation()} style={{ display:"flex", alignItems:"center" }}>
+        <CheckboxSelecao
+          estado={selecionado}
+          onClick={() => onToggleSelecao && onToggleSelecao(orc.id)}
+          ariaLabel={`Selecionar ${orc.id}`}
+        />
+      </div>
+
+      {/* Coluna 0: ID */}
+      <div style={{
+        fontSize:11, color:"#6b7280",
+        fontVariantNumeric:"tabular-nums",
+        fontWeight:500,
+        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+      }}>
+        {orc.id}
+      </div>
+
+      {/* Coluna 1: Cliente em cima, Referência embaixo */}
       <div style={{ minWidth:0 }}>
         <div style={{ display:"flex", alignItems:"center", gap:6, overflow:"hidden" }}>
           {showCliente && (
@@ -959,13 +1036,6 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
               {nomeCliente}
             </span>
           )}
-          <span style={{
-            fontSize:10.5, color:"#9ca3af",
-            fontVariantNumeric:"tabular-nums",
-            background:"#f4f5f7",
-            padding:"2px 7px", borderRadius:4, fontWeight:500,
-            flexShrink:0,
-          }}>{orc.id}</span>
           {orc.propostas && orc.propostas.length > 0 && !orc.expirouEm && (
             <span
               onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
@@ -1035,13 +1105,6 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
             boxShadow:"0 4px 16px rgba(0,0,0,0.1)", overflow:"hidden", minWidth:130,
           }}>
             <button
-              onClick={() => { setMenuOpen(false); onAbrir("ver"); }}
-              style={menuItemStyle}>Ver</button>
-            <button
-              onClick={() => { setMenuOpen(false); onAbrir("editar"); }}
-              style={menuItemStyle}>Editar</button>
-            <div style={{ borderTop:"0.5px solid #f1f2f4" }} />
-            <button
               disabled={status === "ganho"}
               onClick={() => { setMenuOpen(false); onAction && onAction("ganho", orc); }}
               style={{ ...menuItemStyle,
@@ -1081,6 +1144,163 @@ const menuItemStyle = {
 
 // ─── Componentes de ordenação e filtros ─────────────────────────────────
 
+// Checkbox visual usado na seleção em massa. Aceita 3 estados: false, true, "indet"
+function CheckboxSelecao({ estado, onClick, ariaLabel }) {
+  const marcado = estado === true;
+  const indet = estado === "indet";
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onClick && onClick(e); }}
+      aria-label={ariaLabel || "Selecionar"}
+      style={{
+        width:14, height:14, padding:0,
+        border: `1px solid ${marcado || indet ? "#111" : "#9ca3af"}`,
+        borderRadius:3,
+        background: marcado ? "#111" : "#fff",
+        display:"inline-flex", alignItems:"center", justifyContent:"center",
+        cursor:"pointer", fontFamily:"inherit",
+      }}>
+      {marcado && <span style={{ color:"#fff", fontSize:10, fontWeight:700, lineHeight:1 }}>✓</span>}
+      {indet && <span style={{ color:"#111", fontSize:14, fontWeight:700, lineHeight:1, marginTop:-2 }}>−</span>}
+    </button>
+  );
+}
+
+// Barra preta de ações que aparece quando há orçamentos selecionados
+function BarraSelecao({ selecionados, totalVisivel, onSelecionarTodos, onLimpar, onExcluir }) {
+  if (!selecionados || selecionados.size === 0) return null;
+  const todosMarcados = selecionados.size >= totalVisivel;
+  return (
+    <div style={{
+      background:"#111", color:"#fff",
+      padding:"10px 16px", borderRadius:9,
+      display:"flex", alignItems:"center", justifyContent:"space-between",
+      marginBottom:12, fontSize:13, flexWrap:"wrap", gap:12,
+    }}>
+      <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
+        <span style={{ fontWeight:600 }}>
+          {selecionados.size} {selecionados.size === 1 ? "selecionado" : "selecionados"}
+        </span>
+        {!todosMarcados && (
+          <button onClick={onSelecionarTodos}
+            style={{
+              padding:"4px 10px", fontSize:12.5,
+              background:"transparent", border:"none",
+              color:"rgba(255,255,255,0.75)",
+              cursor:"pointer", fontFamily:"inherit",
+              textDecoration:"underline",
+            }}>
+            Selecionar todos ({totalVisivel})
+          </button>
+        )}
+      </div>
+      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+        <button onClick={onLimpar}
+          style={{
+            padding:"5px 12px", fontSize:12.5,
+            background:"transparent",
+            border:"1px solid rgba(255,255,255,0.3)",
+            borderRadius:6, color:"#fff",
+            cursor:"pointer", fontFamily:"inherit",
+          }}>
+          Limpar
+        </button>
+        <button onClick={onExcluir}
+          style={{
+            padding:"6px 14px", fontSize:12.5,
+            background:"#dc2626", border:"none",
+            borderRadius:6, color:"#fff", fontWeight:500,
+            cursor:"pointer", fontFamily:"inherit",
+          }}>
+          Excluir {selecionados.size}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Modal estilizado pra confirmar exclusão em massa com lista de IDs
+function ModalConfirmarExclusaoMassa({ orcs, clientes, onConfirmar, onCancelar }) {
+  const lista = orcs.slice(0, 10); // limita preview pra 10 primeiros
+  const temMais = orcs.length > 10;
+  return (
+    <div
+      onClick={onCancelar}
+      style={{
+        position:"fixed", inset:0,
+        background:"rgba(0,0,0,0.5)", zIndex:9999,
+        display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+      }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{
+          background:"#fff", borderRadius:12,
+          padding:"24px 24px 20px", maxWidth:460, width:"100%",
+          boxShadow:"0 8px 32px rgba(0,0,0,0.2)",
+          maxHeight:"80vh", display:"flex", flexDirection:"column",
+        }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Excluir {orcs.length} {orcs.length === 1 ? "orçamento" : "orçamentos"}?
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
+          Esta ação não pode ser desfeita. Os seguintes orçamentos serão excluídos permanentemente:
+        </div>
+        <div style={{
+          border:"0.5px solid #e5e7eb", borderRadius:8,
+          background:"#fafbfc", overflow:"auto", flex:1,
+          marginBottom:20,
+        }}>
+          {lista.map(orc => {
+            const cli = clientes.find(c => c.id === orc.clienteId);
+            const nomeCli = cli?.nome || orc.cliente || "—";
+            return (
+              <div key={orc.id}
+                style={{
+                  display:"grid",
+                  gridTemplateColumns:"85px 1fr auto",
+                  gap:10,
+                  padding:"8px 12px",
+                  borderBottom:"0.5px solid #f1f2f4",
+                  fontSize:12.5, alignItems:"center",
+                }}>
+                <span style={{ color:"#6b7280", fontVariantNumeric:"tabular-nums", fontWeight:500 }}>{orc.id}</span>
+                <span style={{ color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {nomeCli} <span style={{ color:"#9ca3af" }}>· {orc.referencia || "(sem referência)"}</span>
+                </span>
+                <span style={{ color:"#6b7280", fontSize:11 }}>{orc.tipo || "—"}</span>
+              </div>
+            );
+          })}
+          {temMais && (
+            <div style={{ padding:"8px 12px", fontSize:12, color:"#6b7280", textAlign:"center", fontStyle:"italic" }}>
+              + {orcs.length - 10} {orcs.length - 10 === 1 ? "outro" : "outros"}
+            </div>
+          )}
+        </div>
+        <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+          <button onClick={onCancelar}
+            style={{
+              background:"#fff", color:"#374151",
+              border:"1px solid #d1d5db", borderRadius:8,
+              padding:"9px 18px", fontSize:13, fontWeight:500,
+              cursor:"pointer", fontFamily:"inherit",
+            }}>
+            Cancelar
+          </button>
+          <button onClick={onConfirmar}
+            style={{
+              background:"#dc2626", color:"#fff",
+              border:"none", borderRadius:8,
+              padding:"9px 20px", fontSize:13, fontWeight:600,
+              cursor:"pointer", fontFamily:"inherit",
+            }}>
+            Excluir {orcs.length}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Chip mostrando um filtro ativo, com × pra remover
 function FiltroChip({ label, onRemove }) {
   return (
@@ -1112,6 +1332,8 @@ function SortDropdown({ sort, setSort }) {
     return () => document.removeEventListener("mousedown", h);
   }, [open]);
   const opcoes = [
+    { col:"id",      dir:"desc", label:"ID mais recente" },
+    { col:"id",      dir:"asc",  label:"ID mais antigo" },
     { col:"cliente", dir:"asc",  label:"Cliente A → Z" },
     { col:"cliente", dir:"desc", label:"Cliente Z → A" },
     { col:"criado",  dir:"desc", label:"Mais recente primeiro" },
@@ -1179,12 +1401,29 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
                      opcoesFiltro = null, chaveFiltro = null, align = "left" }) {
   const [open, setOpen] = useState(false);
   const [busca, setBusca] = useState("");
+  // Estado PENDENTE: cópias locais que o usuário edita enquanto o menu está aberto.
+  // Só são aplicadas (setSort/setFiltrosCol) quando clica OK.
+  // Ao clicar Cancelar, fechar ou clicar fora, as mudanças são descartadas.
+  const [sortPend, setSortPend] = useState(sort);
+  const [filtroPend, setFiltroPend] = useState(() => new Set(chaveFiltro ? (filtrosCol[chaveFiltro] || []) : []));
+
+  // Ao abrir: sincroniza pendente com o estado aplicado
+  useEffect(() => {
+    if (open) {
+      setSortPend(sort);
+      setFiltroPend(new Set(chaveFiltro ? (filtrosCol[chaveFiltro] || []) : []));
+      setBusca("");
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fecha ao clicar fora — trata como Cancelar (não aplica)
   useEffect(() => {
     if (!open) return;
     const h = (e) => { if (!e.target.closest(`[data-col-menu="${col}"]`)) setOpen(false); };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [open, col]);
+
   const ativo = sort.col === col;
   const setaIco = ativo ? (sort.dir === "asc" ? "▲" : "▼") : "▾";
   const filtroAtivoCount = chaveFiltro ? (filtrosCol[chaveFiltro]?.size || 0) : 0;
@@ -1193,18 +1432,35 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
     ? opcoesFiltro.filter(o => o.label.toLowerCase().includes(busca.toLowerCase()))
     : opcoesFiltro;
 
-  const toggleFiltro = (valor) => {
-    if (!chaveFiltro) return;
-    const atual = new Set(filtrosCol[chaveFiltro] || []);
+  const toggleFiltroPend = (valor) => {
+    const atual = new Set(filtroPend);
     if (atual.has(valor)) atual.delete(valor);
     else atual.add(valor);
-    setFiltrosCol({ ...filtrosCol, [chaveFiltro]: atual });
+    setFiltroPend(atual);
   };
 
-  const limparFiltro = () => {
-    if (!chaveFiltro) return;
-    setFiltrosCol({ ...filtrosCol, [chaveFiltro]: new Set() });
+  const limparFiltroPend = () => setFiltroPend(new Set());
+
+  const aplicarEFechar = () => {
+    setSort(sortPend);
+    if (chaveFiltro) {
+      setFiltrosCol({ ...filtrosCol, [chaveFiltro]: filtroPend });
+    }
+    setOpen(false);
   };
+
+  const cancelar = () => setOpen(false); // fecha sem aplicar
+
+  // Detecta se o estado pendente difere do aplicado (pra habilitar/desabilitar OK sugestivamente)
+  const temMudanca = (() => {
+    if (sortPend.col !== sort.col || sortPend.dir !== sort.dir) return true;
+    if (chaveFiltro) {
+      const aplicado = filtrosCol[chaveFiltro] || new Set();
+      if (aplicado.size !== filtroPend.size) return true;
+      for (const v of filtroPend) if (!aplicado.has(v)) return true;
+    }
+    return false;
+  })();
 
   return (
     <div data-col-menu={col} style={{ position:"relative", display:"inline-block" }}>
@@ -1236,11 +1492,13 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
           boxShadow:"0 4px 16px rgba(0,0,0,0.1)",
           minWidth:220, maxWidth:280, overflow:"hidden",
           textTransform:"none", letterSpacing:"0", fontWeight:400,
+          display:"flex", flexDirection:"column",
         }}>
           {/* Ordenar */}
           <div style={{ padding:"8px 14px 4px", fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Ordenar</div>
           {["asc","desc"].map(d => {
             const labels = {
+              id:      { asc:"Menor → Maior", desc:"Maior → Menor" },
               cliente: { asc:"A → Z", desc:"Z → A" },
               tipo:    { asc:"A → Z", desc:"Z → A" },
               criado:  { asc:"Mais antigo", desc:"Mais recente" },
@@ -1248,10 +1506,10 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
               status:  { asc:"Em aberto → Perdido", desc:"Perdido → Em aberto" },
               total:   { asc:"Menor valor", desc:"Maior valor" },
             };
-            const sel = ativo && sort.dir === d;
+            const sel = sortPend.col === col && sortPend.dir === d;
             return (
               <button key={d}
-                onClick={() => { setSort({ col, dir: d }); setOpen(false); }}
+                onClick={() => setSortPend({ col, dir: d })}
                 style={{
                   display:"block", width:"100%", textAlign:"left",
                   background:"transparent", border:"none",
@@ -1273,8 +1531,8 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
               <div style={{ borderTop:"0.5px solid #f1f2f4", marginTop:4 }} />
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 14px 4px" }}>
                 <span style={{ fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Filtrar</span>
-                {filtroAtivoCount > 0 && (
-                  <button onClick={limparFiltro}
+                {filtroPend.size > 0 && (
+                  <button onClick={limparFiltroPend}
                     style={{ fontSize:11, color:"#6b7280", background:"transparent", border:"none", cursor:"pointer", textDecoration:"underline", fontFamily:"inherit", padding:0 }}>
                     limpar
                   </button>
@@ -1298,10 +1556,10 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
                 {opcoesFiltradas.length === 0 ? (
                   <div style={{ padding:"8px 14px", fontSize:12, color:"#9ca3af" }}>Nenhum resultado</div>
                 ) : opcoesFiltradas.map(op => {
-                  const marcado = filtrosCol[chaveFiltro]?.has(op.valor);
+                  const marcado = filtroPend.has(op.valor);
                   return (
                     <button key={op.valor}
-                      onClick={() => toggleFiltro(op.valor)}
+                      onClick={() => toggleFiltroPend(op.valor)}
                       style={{
                         display:"flex", alignItems:"center", gap:8,
                         width:"100%", textAlign:"left",
@@ -1328,6 +1586,35 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
               </div>
             </>
           )}
+
+          {/* Rodapé com OK/Cancelar */}
+          <div style={{
+            borderTop:"0.5px solid #f1f2f4",
+            padding:"8px 10px",
+            display:"flex", justifyContent:"flex-end", gap:6,
+            background:"#fafbfc",
+          }}>
+            <button onClick={cancelar}
+              style={{
+                padding:"5px 12px", fontSize:12,
+                background:"#fff", border:"0.5px solid #e5e7eb", borderRadius:5,
+                color:"#374151", cursor:"pointer", fontFamily:"inherit",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "#f4f5f7"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}>
+              Cancelar
+            </button>
+            <button onClick={aplicarEFechar}
+              style={{
+                padding:"5px 14px", fontSize:12,
+                background: temMudanca ? "#111" : "#6b7280",
+                border:"none", borderRadius:5,
+                color:"#fff", fontWeight:500,
+                cursor:"pointer", fontFamily:"inherit",
+              }}>
+              OK
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -1335,8 +1622,11 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
 }
 
 // Header da tabela — cada coluna com menu de ordenação/filtro (estilo Excel)
-function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltrosCol, orcamentos = [], clientes = [] }) {
-  const gridCols = "1.8fr 1.1fr 75px 90px 95px 110px 34px";
+function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltrosCol,
+                        orcamentos = [], clientes = [],
+                        selecionados = null, onToggleTodos = null, totalVisivel = 0 }) {
+  // Grid: ☐ | ID | Cliente/Ref | Tipo/Área | Criado | Venc. | Status | Total | ⋯
+  const gridCols = "26px 85px 1.6fr 1.1fr 75px 90px 95px 110px 34px";
 
   // Monta opções de filtro por coluna a partir do dataset
   const opcoesCliente = (() => {
@@ -1367,6 +1657,10 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
       .map(([s, n]) => ({ valor: s, label: labels[s] || s, count: n }));
   })();
 
+  // Estado do checkbox master
+  const selSize = selecionados ? selecionados.size : 0;
+  const masterEstado = selSize === 0 ? false : (selSize >= totalVisivel ? true : "indet");
+
   return (
     <div style={{
       display:"grid",
@@ -1376,6 +1670,19 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
       borderBottom:"1px solid #e5e7eb",
       background:"#fafbfc",
     }}>
+      <div style={{ display:"flex", alignItems:"center" }}>
+        {onToggleTodos && (
+          <CheckboxSelecao
+            estado={masterEstado}
+            onClick={onToggleTodos}
+            ariaLabel="Selecionar todos"
+          />
+        )}
+      </div>
+      <ColunaMenu col="id" label="ID"
+        sort={sort} setSort={setSort}
+        filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+        align="left" />
       <ColunaMenu col="cliente" label={showCliente ? "Cliente · Referência" : "Referência"}
         sort={sort} setSort={setSort}
         filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
@@ -4727,12 +5034,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   // ── Salvar como rascunho ao voltar ─────────────────────────
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  // Após confirmar no modal, este callback é chamado (usado quando o
+  // gatilho de troca veio do menu principal — app.jsx precisa trocar a aba
+  // depois que o rascunho for salvo ou descartado).
+  const pendingNavRef = useRef(null);
+  // Regra: orçamento só vira rascunho quando o usuário começa a adicionar
+  // quantidades nos cômodos. Antes disso (só tipoObra, tipoProjeto, padrão,
+  // tipologia, tamanho ou referência), descarta silenciosamente sem modal.
   function temDadosPreenchidos() {
-    // Qualquer coisa além do estado inicial conta como "iniciado"
-    if (referencia?.trim()) return true;
-    if (tipoObra || tipoProjeto || padrao || tipologia || tamanho) return true;
-    if (Object.values(qtds).some(q => q > 0)) return true;
-    return false;
+    return Object.values(qtds).some(q => q > 0);
   }
   function handleVoltar() {
     // Em modo "ver", nunca pergunta — só volta
@@ -4741,6 +5051,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (orcBase?.id) { onVoltar(); return; }
     // Novo orçamento: pergunta se tem algo preenchido
     if (temDadosPreenchidos()) {
+      pendingNavRef.current = null; // voltar normal = usa onVoltar
       setShowSaveDialog(true);
     } else {
       onVoltar();
@@ -4765,8 +5076,38 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (onSalvar) {
       try { await onSalvar(orcRascunho); } catch(e) { console.error("Erro ao salvar rascunho:", e); }
     }
-    onVoltar();
+    // Navegação pendente (vinda do menu) ou voltar normal
+    if (pendingNavRef.current) { const nav = pendingNavRef.current; pendingNavRef.current = null; nav(); }
+    else onVoltar();
   }
+  function descartarEVoltar() {
+    setShowSaveDialog(false);
+    if (pendingNavRef.current) { const nav = pendingNavRef.current; pendingNavRef.current = null; nav(); }
+    else onVoltar();
+  }
+
+  // Registra um handler global que o app.jsx consulta antes de trocar de aba.
+  // Retorna true se "absorveu" a navegação (vai mostrar modal); false caso contrário.
+  // O callback navegacaoPendente será executado depois que o usuário decidir.
+  useEffect(() => {
+    const handler = (navegacaoPendente) => {
+      // Modo ver ou edição: deixa trocar direto (nada pra salvar)
+      if (modoVer || orcBase?.id) return false;
+      if (!temDadosPreenchidos()) return false;
+      // Há dados não salvos: mostra modal e guarda a nav pra depois
+      pendingNavRef.current = navegacaoPendente;
+      setShowSaveDialog(true);
+      return true;
+    };
+    // eslint-disable-next-line no-undef
+    if (typeof window !== "undefined") window.__vickeOrcDirtyPrompt = handler;
+    return () => {
+      // eslint-disable-next-line no-undef
+      if (typeof window !== "undefined" && window.__vickeOrcDirtyPrompt === handler) {
+        window.__vickeOrcDirtyPrompt = null;
+      }
+    };
+  }, [modoVer, orcBase?.id, qtds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wrapRef = useRef(null);
   useEffect(() => {
@@ -6061,24 +6402,29 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       {/* Modal "Deseja salvar?" ao voltar com dados preenchidos */}
       {showSaveDialog && (
         <div
-          onClick={() => setShowSaveDialog(false)}
+          onClick={() => { setShowSaveDialog(false); pendingNavRef.current = null; }}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background:"#fff", borderRadius:12, padding:"28px 28px 20px", maxWidth:380, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.2)" }}>
+            style={{ background:"#fff", borderRadius:12, padding:"28px 28px 20px", maxWidth:420, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.2)" }}>
             <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>Salvar este orçamento?</div>
             <div style={{ fontSize:13, color:"#6b7280", marginBottom:22, lineHeight:1.5 }}>
               Você iniciou um orçamento mas ainda não finalizou. Deseja salvá-lo como rascunho para continuar depois?
             </div>
-            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+            <div style={{ display:"flex", gap:8, justifyContent:"flex-end", flexWrap:"wrap" }}>
               <button
-                onClick={() => { setShowSaveDialog(false); onVoltar(); }}
-                style={{ background:"#fff", color:"#6b7280", border:"1px solid #d1d5db", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                Não
+                onClick={() => { setShowSaveDialog(false); pendingNavRef.current = null; }}
+                style={{ background:"#fff", color:"#6b7280", border:"1px solid #d1d5db", borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+                Cancelar
+              </button>
+              <button
+                onClick={descartarEVoltar}
+                style={{ background:"#fff", color:"#b91c1c", border:"1px solid #fecaca", borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+                Descartar
               </button>
               <button
                 onClick={salvarRascunhoEVoltar}
-                style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                Sim, salvar
+                style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                Salvar rascunho
               </button>
             </div>
           </div>
