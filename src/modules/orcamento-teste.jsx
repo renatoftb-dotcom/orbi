@@ -873,6 +873,19 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const [editandoDesconto, setEditandoDesconto] = useState(false);
   const [editandoImposto, setEditandoImposto] = useState(false);
 
+  // Trava o scroll da página atrás enquanto o modal está aberto.
+  // Preserva overflow original do body/html pra restaurar ao fechar.
+  useEffect(() => {
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, []);
+
   // Função dinâmica: aplica imposto conforme o state atual
   const comImp = (v) => (incluirImposto && aliqImp > 0 && v > 0)
     ? Math.round(v / (1 - aliqImp/100) * 100) / 100
@@ -2098,6 +2111,18 @@ function PropostaVisualizer({ proposta, onFechar }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onFechar]);
+
+  // Trava scroll da página atrás enquanto o modal está aberto
+  useEffect(() => {
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+    };
+  }, []);
 
   if (!proposta) return null;
   const imagens = proposta.imagensPdf || [];
