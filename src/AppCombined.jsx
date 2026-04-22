@@ -3187,6 +3187,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
 
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
+  const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -3312,6 +3313,19 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                 const fetchOrc = async (modo) => {
                   const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
                   const orcCompleto = res?.ok ? res.data : o;
+                  // Modo "verProposta": abre o visualizador de snapshot (modal com imagens do PDF)
+                  // em vez do FormOrcamento em tela cheia.
+                  if (modo === "verProposta") {
+                    const ultima = orcCompleto.propostas && orcCompleto.propostas.length > 0
+                      ? orcCompleto.propostas[orcCompleto.propostas.length - 1]
+                      : null;
+                    if (ultima) {
+                      setPropostaVisualizada({ ...ultima, clienteNome: cliente.nome || "Cliente" });
+                      return;
+                    }
+                    // Sem snapshot: cai no fluxo normal de "ver"
+                    modo = "ver";
+                  }
                   onAbrirOrcamento(cliente, orcCompleto, modo);
                 };
                 return (
@@ -3345,6 +3359,14 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Visualizador de proposta enviada (snapshot de imagens do PDF) */}
+      {propostaVisualizada && (
+        <PropostaVisualizer
+          proposta={propostaVisualizada}
+          onFechar={() => setPropostaVisualizada(null)}
+        />
       )}
     </div>
   );
