@@ -843,8 +843,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   const tipoPgtoOrc = ultPropImp?.tipoPgto || orc.tipoPagamento || orc.tipoPgto || "padrao";
   const ehTipoEtapas = tipoPgtoOrc === "etapas";
 
-  const temImpostoOrc = ultPropImp?.temImposto ?? !!orc.incluiImposto;
-  const aliqImp       = ultPropImp?.aliqImp ?? orc.aliquotaImposto ?? 0;
+  const temImpostoOrc = ultPropImp?.temImposto ?? orc.temImposto ?? !!orc.incluiImposto;
+  const aliqImp       = ultPropImp?.aliqImp ?? orc.aliqImp ?? orc.aliquotaImposto ?? 0;
 
   // Valores base SEM imposto — prioridade: edições manuais > cálculo > raiz
   // IMPORTANTE: NÃO usar valorArqExibido/valorEngExibido da proposta porque esses
@@ -1034,6 +1034,14 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     });
   }
 
+  // Refs de controle (devem ser declarados antes dos useEffects que os usam)
+  // • etapasInicializadasRef: detecta primeira vez que etapas são preenchidas (tipo etapas)
+  // • descAplicadoRef: preserva o último desconto "estável" aplicado — usado pelo useEffect
+  //   [etapas] pra não ler o descontoPct sujo do render intermediário (onde totalFechado
+  //   ainda é velho e propTotal já é novo).
+  const etapasInicializadasRef = useRef(false);
+  const descAplicadoRef = useRef(0);
+
   // ── Inicialização: reset total/parcelas quando ESCOPO muda (Arq/Eng) ──
   // Só reseta qtd de parcelas e desconto quando muda escopo, não quando só muda imposto.
   useEffect(() => {
@@ -1046,14 +1054,12 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     const descBase = opcoesOrcamento.descAntecipado;
     const qtdBase  = Math.max(1, parseInt(opcoesOrcamento.qtdParcelado) || 1);
     const totalCalc = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
+    descAplicadoRef.current = descBase;
     setTotalFechado(totalCalc);
     setParcelas(gerarParcelasIguais(qtdBase, totalCalc, "Parcela"));
     setModoEtapas(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inclArq, inclEng]);
-
-  // Ref pra detectar primeira vez que etapas são preenchidas (tipo etapas)
-  const etapasInicializadasRef = useRef(false);
 
   // ── Recalcula total quando etapas marcadas/valores mudam (tipo etapas) ──
   useEffect(() => {
@@ -1067,13 +1073,14 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
       const descBase = opcoesOrcamento.descAntecipado;
       const qtdBase  = Math.max(1, parseInt(opcoesOrcamento.qtdParcelado) || 1);
       const novoTotal = Math.round(propAtual * (1 - descBase/100) * 100) / 100;
+      descAplicadoRef.current = descBase;
       setTotalFechado(novoTotal);
       setParcelas(gerarParcelasIguais(qtdBase, novoTotal, "Parcela"));
       return;
     }
 
-    // Preserva desconto atual (edições posteriores)
-    const descAtual = descontoPct;
+    // Preserva desconto ESTÁVEL (capturado antes de etapas mudar, via toggleEtapa/mudarValorEtapa)
+    const descAtual = descAplicadoRef.current;
     const novoTotal = Math.round(propAtual * (1 - descAtual/100) * 100) / 100;
     setTotalFechado(novoTotal);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1261,6 +1268,8 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     if (isNaN(n)) n = 0;
     if (n < 0) n = 0;
     if (n > 100) n = 100;
+    // Captura desconto aplicado (usado depois pra preservar em mudanças de etapa)
+    descAplicadoRef.current = n;
     // Converte desconto em totalFechado
     const novoTotal = Math.round(propTotal * (1 - n/100) * 100) / 100;
     setTotalFechado(novoTotal);
@@ -1270,7 +1279,12 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     let n = parseFloat(v);
     if (isNaN(n) || n < 0) n = 0;
     if (n > propTotal) n = propTotal;
-    setTotalFechado(Math.round(n * 100) / 100);
+    const novoTotal = Math.round(n * 100) / 100;
+    // Atualiza desconto aplicado (derivado)
+    if (propTotal > 0) {
+      descAplicadoRef.current = Math.round(((propTotal - novoTotal) / propTotal) * 10000) / 100;
+    }
+    setTotalFechado(novoTotal);
   }
 
   function confirmar() {
