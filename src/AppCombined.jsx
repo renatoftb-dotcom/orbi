@@ -3194,7 +3194,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   // Ordenação (reseta a cada abertura) e filtros por coluna
   const [sort, setSort] = useState({ col: "cliente", dir: "asc" });
   const [filtrosCol, setFiltrosCol] = useState({ clientes: new Set(), tipos: new Set(), status: new Set() });
-  // Seleção em massa (tabela) + modal de confirmação
+  // Seleção em massa (tabela) + modal de confirmação + modo ativável
+  const [modoSelecao, setModoSelecao] = useState(false);
   const [selecionados, setSelecionados] = useState(new Set());
   const [confirmExcluirMassa, setConfirmExcluirMassa] = useState(false);
   const menuRef = useRef(null);
@@ -3498,14 +3499,15 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                   </div>
                 )}
 
-                {/* Barra de ações em massa (só aparece no modo tabela com itens selecionados) */}
-                {viz === "tabela" && selecionados.size > 0 && (
+                {/* Barra de ações em massa (aparece enquanto o modo seleção está ligado) */}
+                {viz === "tabela" && modoSelecao && (
                   <BarraSelecao
                     selecionados={selecionados}
                     totalVisivel={orcsOrdenados.length}
                     onSelecionarTodos={() => setSelecionados(new Set(orcsOrdenados.map(o => o.id)))}
                     onLimpar={() => setSelecionados(new Set())}
                     onExcluir={() => setConfirmExcluirMassa(true)}
+                    onSair={() => { setSelecionados(new Set()); setModoSelecao(false); }}
                   />
                 )}
 
@@ -3523,6 +3525,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       sort={sort} setSort={setSort}
                       filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
                       orcamentos={orcamentos} clientes={[cliente]}
+                      modoSelecao={modoSelecao}
+                      onToggleModoSelecao={() => setModoSelecao(true)}
                       selecionados={selecionados}
                       totalVisivel={orcsOrdenados.length}
                       onToggleTodos={() => {
@@ -3536,6 +3540,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         onAbrir={mkFetchOrc(o)}
                         onAction={mkOnAction}
                         showCliente={false}
+                        modoSelecao={modoSelecao}
                         selecionado={selecionados.has(o.id)}
                         onToggleSelecao={(id) => {
                           const n = new Set(selecionados);
@@ -3567,7 +3572,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
         <ModalConfirmarExclusaoMassa
           orcs={(data.orcamentosProjeto||[]).filter(o => selecionados.has(o.id))}
           clientes={[cliente]}
-          onConfirmar={excluirOrcamentosEmMassa}
+          onConfirmar={async () => { await excluirOrcamentosEmMassa(); setModoSelecao(false); }}
           onCancelar={() => setConfirmExcluirMassa(false)}
         />
       )}
@@ -4738,7 +4743,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   // Orçamento selecionado para marcar como ganho (abre ModalConfirmarGanho)
   const [orcGanho, setOrcGanho] = useState(null);
-  // Seleção em massa (tabela): Set de ids + modal de confirmação
+  // Seleção em massa (tabela): Set de ids + modal de confirmação + modo ativável
+  const [modoSelecao, setModoSelecao] = useState(false);
   const [selecionados, setSelecionados] = useState(new Set());
   const [confirmExcluirMassa, setConfirmExcluirMassa] = useState(false);
 
@@ -5135,14 +5141,15 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         </div>
       )}
 
-      {/* Barra de ações em massa (só aparece no modo tabela com itens selecionados) */}
-      {viz === "tabela" && selecionados.size > 0 && (
+      {/* Barra de ações em massa (aparece enquanto o modo seleção está ligado) */}
+      {viz === "tabela" && modoSelecao && (
         <BarraSelecao
           selecionados={selecionados}
           totalVisivel={orcOrdenados.length}
           onSelecionarTodos={() => setSelecionados(new Set(orcOrdenados.map(o => o.id)))}
           onLimpar={() => setSelecionados(new Set())}
           onExcluir={() => setConfirmExcluirMassa(true)}
+          onSair={() => { setSelecionados(new Set()); setModoSelecao(false); }}
         />
       )}
 
@@ -5165,6 +5172,12 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               sort={sort} setSort={setSort}
               filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
               orcamentos={orcamentos} clientes={clientes}
+              modoSelecao={modoSelecao}
+              onToggleModoSelecao={() => {
+                // Ativa o modo. Desativação acontece via "Limpar" na barra ou via
+                // "Sair da seleção" caso nenhum esteja marcado (ver abaixo).
+                setModoSelecao(true);
+              }}
               selecionados={selecionados}
               totalVisivel={orcOrdenados.length}
               onToggleTodos={() => {
@@ -5178,6 +5191,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
                 onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
                 onAction={handleOrcAction}
                 showCliente={true}
+                modoSelecao={modoSelecao}
                 selecionado={selecionados.has(orc.id)}
                 onToggleSelecao={(id) => {
                   const n = new Set(selecionados);
@@ -5205,7 +5219,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         <ModalConfirmarExclusaoMassa
           orcs={orcamentos.filter(o => selecionados.has(o.id))}
           clientes={clientes}
-          onConfirmar={excluirEmMassa}
+          onConfirmar={async () => { await excluirEmMassa(); setModoSelecao(false); }}
           onCancelar={() => setConfirmExcluirMassa(false)}
         />
       )}
@@ -5580,7 +5594,7 @@ function ToggleVisualizacao({ viz, setViz }) {
 
 // ─── Linha de tabela (versão compacta do OrcCard) ─────────────────────────
 function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
-                 selecionado = false, onToggleSelecao = null, temSelecao = false }) {
+                 modoSelecao = false, selecionado = false, onToggleSelecao = null }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
@@ -5627,12 +5641,20 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
   };
   const tag = STATUS_TAGS[status] || STATUS_TAGS.rascunho;
 
-  // Grid: ☐ | ID | Cliente/Ref | Tipo/Área | Criado | Venc. | Status | Total | ⋯
+  // Grid: sempre com primeira coluna 26px (pro alinhamento com o header).
+  // No modo seleção renderiza checkbox; senão renderiza célula vazia.
   const gridCols = "26px 85px 1.6fr 1.1fr 75px 90px 95px 110px 34px";
 
   return (
     <div
-      onClick={() => onAbrir("ver")}
+      onClick={() => {
+        // No modo seleção, clique na linha toggle seleção (em vez de abrir)
+        if (modoSelecao) {
+          onToggleSelecao && onToggleSelecao(orc.id);
+        } else {
+          onAbrir("ver");
+        }
+      }}
       style={{
         display:"grid",
         gridTemplateColumns: gridCols,
@@ -5646,13 +5668,15 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
       onMouseEnter={e => { if (!selecionado) e.currentTarget.style.background = "#fafbfc"; }}
       onMouseLeave={e => { if (!selecionado) e.currentTarget.style.background = "transparent"; }}
     >
-      {/* Coluna -1: Checkbox de seleção */}
+      {/* Coluna -1: Checkbox de seleção (só no modo seleção; senão espaço vazio) */}
       <div onClick={e => e.stopPropagation()} style={{ display:"flex", alignItems:"center" }}>
-        <CheckboxSelecao
-          estado={selecionado}
-          onClick={() => onToggleSelecao && onToggleSelecao(orc.id)}
-          ariaLabel={`Selecionar ${orc.id}`}
-        />
+        {modoSelecao && (
+          <CheckboxSelecao
+            estado={selecionado}
+            onClick={() => onToggleSelecao && onToggleSelecao(orc.id)}
+            ariaLabel={`Selecionar ${orc.id}`}
+          />
+        )}
       </div>
 
       {/* Coluna 0: ID */}
@@ -5803,10 +5827,11 @@ function CheckboxSelecao({ estado, onClick, ariaLabel }) {
   );
 }
 
-// Barra preta de ações que aparece quando há orçamentos selecionados
-function BarraSelecao({ selecionados, totalVisivel, onSelecionarTodos, onLimpar, onExcluir }) {
-  if (!selecionados || selecionados.size === 0) return null;
-  const todosMarcados = selecionados.size >= totalVisivel;
+// Barra preta de ações que aparece enquanto o modo seleção está ativo.
+// Mostra "Sair da seleção" quando nada está marcado, e ações completas quando há marcações.
+function BarraSelecao({ selecionados, totalVisivel, onSelecionarTodos, onLimpar, onExcluir, onSair }) {
+  const size = selecionados ? selecionados.size : 0;
+  const todosMarcados = size >= totalVisivel;
   return (
     <div style={{
       background:"#111", color:"#fff",
@@ -5816,9 +5841,11 @@ function BarraSelecao({ selecionados, totalVisivel, onSelecionarTodos, onLimpar,
     }}>
       <div style={{ display:"flex", gap:12, alignItems:"center", flexWrap:"wrap" }}>
         <span style={{ fontWeight:600 }}>
-          {selecionados.size} {selecionados.size === 1 ? "selecionado" : "selecionados"}
+          {size === 0
+            ? "Modo seleção"
+            : `${size} ${size === 1 ? "selecionado" : "selecionados"}`}
         </span>
-        {!todosMarcados && (
+        {size > 0 && !todosMarcados && (
           <button onClick={onSelecionarTodos}
             style={{
               padding:"4px 10px", fontSize:12.5,
@@ -5832,25 +5859,40 @@ function BarraSelecao({ selecionados, totalVisivel, onSelecionarTodos, onLimpar,
         )}
       </div>
       <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-        <button onClick={onLimpar}
-          style={{
-            padding:"5px 12px", fontSize:12.5,
-            background:"transparent",
-            border:"1px solid rgba(255,255,255,0.3)",
-            borderRadius:6, color:"#fff",
-            cursor:"pointer", fontFamily:"inherit",
-          }}>
-          Limpar
-        </button>
-        <button onClick={onExcluir}
-          style={{
-            padding:"6px 14px", fontSize:12.5,
-            background:"#dc2626", border:"none",
-            borderRadius:6, color:"#fff", fontWeight:500,
-            cursor:"pointer", fontFamily:"inherit",
-          }}>
-          Excluir {selecionados.size}
-        </button>
+        {size > 0 ? (
+          <>
+            <button onClick={onLimpar}
+              style={{
+                padding:"5px 12px", fontSize:12.5,
+                background:"transparent",
+                border:"1px solid rgba(255,255,255,0.3)",
+                borderRadius:6, color:"#fff",
+                cursor:"pointer", fontFamily:"inherit",
+              }}>
+              Limpar
+            </button>
+            <button onClick={onExcluir}
+              style={{
+                padding:"6px 14px", fontSize:12.5,
+                background:"#dc2626", border:"none",
+                borderRadius:6, color:"#fff", fontWeight:500,
+                cursor:"pointer", fontFamily:"inherit",
+              }}>
+              Excluir {size}
+            </button>
+          </>
+        ) : (
+          <button onClick={onSair}
+            style={{
+              padding:"5px 12px", fontSize:12.5,
+              background:"transparent",
+              border:"1px solid rgba(255,255,255,0.3)",
+              borderRadius:6, color:"#fff",
+              cursor:"pointer", fontFamily:"inherit",
+            }}>
+            Sair da seleção
+          </button>
+        )}
       </div>
     </div>
   );
@@ -6132,7 +6174,16 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
           display:"flex", flexDirection:"column",
         }}>
           {/* Ordenar */}
-          <div style={{ padding:"8px 14px 4px", fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Ordenar</div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"8px 14px 4px" }}>
+            <span style={{ fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Ordenar</span>
+            {sortPend.col === col && (
+              <button onClick={() => setSortPend({ col: "cliente", dir: "asc" })}
+                style={{ fontSize:11, color:"#6b7280", background:"transparent", border:"none", cursor:"pointer", textDecoration:"underline", fontFamily:"inherit", padding:0 }}
+                title="Voltar ao padrão (Cliente A→Z)">
+                limpar
+              </button>
+            )}
+          </div>
           {["asc","desc"].map(d => {
             const labels = {
               id:      { asc:"Menor → Maior", desc:"Maior → Menor" },
@@ -6261,9 +6312,18 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
 // Header da tabela — cada coluna com menu de ordenação/filtro (estilo Excel)
 function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltrosCol,
                         orcamentos = [], clientes = [],
+                        modoSelecao = false, onToggleModoSelecao = null,
                         selecionados = null, onToggleTodos = null, totalVisivel = 0 }) {
-  // Grid: ☐ | ID | Cliente/Ref | Tipo/Área | Criado | Venc. | Status | Total | ⋯
+  // Grid condicional: primeira coluna é 26px sempre (pro ⋯ ou pro checkbox master)
   const gridCols = "26px 85px 1.6fr 1.1fr 75px 90px 95px 110px 34px";
+
+  const [menuAcoesOpen, setMenuAcoesOpen] = useState(false);
+  useEffect(() => {
+    if (!menuAcoesOpen) return;
+    const h = (e) => { if (!e.target.closest("[data-hdr-acoes]")) setMenuAcoesOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [menuAcoesOpen]);
 
   // Monta opções de filtro por coluna a partir do dataset
   const opcoesCliente = (() => {
@@ -6307,13 +6367,58 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
       borderBottom:"1px solid #e5e7eb",
       background:"#fafbfc",
     }}>
-      <div style={{ display:"flex", alignItems:"center" }}>
-        {onToggleTodos && (
-          <CheckboxSelecao
-            estado={masterEstado}
-            onClick={onToggleTodos}
-            ariaLabel="Selecionar todos"
-          />
+      {/* Primeira coluna: checkbox master (modo seleção) OU botão ⋯ (modo normal) */}
+      <div data-hdr-acoes style={{ position:"relative", display:"flex", alignItems:"center" }}>
+        {modoSelecao ? (
+          onToggleTodos && (
+            <CheckboxSelecao
+              estado={masterEstado}
+              onClick={onToggleTodos}
+              ariaLabel="Selecionar todos"
+            />
+          )
+        ) : (
+          onToggleModoSelecao && (
+            <button
+              onClick={() => setMenuAcoesOpen(v => !v)}
+              title="Ações"
+              style={{
+                background:"transparent", border:"none",
+                fontSize:14, color:"#9ca3af", lineHeight:1,
+                padding:"2px 4px", cursor:"pointer", borderRadius:4,
+                fontFamily:"inherit",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "#f3f4f6"; e.currentTarget.style.color = "#374151"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#9ca3af"; }}>
+              ⋯
+            </button>
+          )
+        )}
+        {menuAcoesOpen && !modoSelecao && (
+          <div style={{
+            position:"absolute", left:0, top:"calc(100% + 6px)", zIndex:60,
+            background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+            boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:180, overflow:"hidden",
+            textTransform:"none", letterSpacing:0, fontWeight:400,
+          }}>
+            <button
+              onClick={() => { setMenuAcoesOpen(false); onToggleModoSelecao && onToggleModoSelecao(); }}
+              style={{
+                display:"flex", alignItems:"center", gap:8,
+                width:"100%", textAlign:"left",
+                background:"transparent", border:"none",
+                padding:"8px 14px", fontSize:12.5, color:"#374151",
+                cursor:"pointer", fontFamily:"inherit",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "#f4f5f7"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="2" width="10" height="10" rx="2"/>
+                <path d="M5 7l1.5 1.5L9 6"/>
+              </svg>
+              Selecionar orçamentos
+            </button>
+          </div>
         )}
       </div>
       <ColunaMenu col="id" label="ID"
@@ -11044,8 +11149,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           <div onClick={e => e.stopPropagation()}
             style={{ background:"#fff", borderRadius:12, padding:"28px 28px 20px", maxWidth:420, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.2)" }}>
             <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>Salvar este orçamento?</div>
-            <div style={{ fontSize:13, color:"#6b7280", marginBottom:22, lineHeight:1.5 }}>
+            <div style={{ fontSize:13, color:"#6b7280", marginBottom:12, lineHeight:1.5 }}>
               Você iniciou um orçamento mas ainda não finalizou. Deseja salvá-lo como rascunho para continuar depois?
+            </div>
+            <div style={{
+              display:"flex", alignItems:"flex-start", gap:8,
+              background:"#fffbeb", border:"1px solid #fde68a",
+              borderRadius:8, padding:"9px 12px", marginBottom:20,
+              fontSize:12, color:"#92400e", lineHeight:1.45,
+            }}>
+              <span style={{ fontSize:14, lineHeight:1 }}>⏱</span>
+              <span>
+                <strong>Rascunhos expiram em 3 dias.</strong> Se não for editado ou finalizado até lá, será excluído automaticamente.
+              </span>
             </div>
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end", flexWrap:"wrap" }}>
               <button

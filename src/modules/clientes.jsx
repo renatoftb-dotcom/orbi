@@ -762,7 +762,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   // Ordenação (reseta a cada abertura) e filtros por coluna
   const [sort, setSort] = useState({ col: "cliente", dir: "asc" });
   const [filtrosCol, setFiltrosCol] = useState({ clientes: new Set(), tipos: new Set(), status: new Set() });
-  // Seleção em massa (tabela) + modal de confirmação
+  // Seleção em massa (tabela) + modal de confirmação + modo ativável
+  const [modoSelecao, setModoSelecao] = useState(false);
   const [selecionados, setSelecionados] = useState(new Set());
   const [confirmExcluirMassa, setConfirmExcluirMassa] = useState(false);
   const menuRef = useRef(null);
@@ -1066,14 +1067,15 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                   </div>
                 )}
 
-                {/* Barra de ações em massa (só aparece no modo tabela com itens selecionados) */}
-                {viz === "tabela" && selecionados.size > 0 && (
+                {/* Barra de ações em massa (aparece enquanto o modo seleção está ligado) */}
+                {viz === "tabela" && modoSelecao && (
                   <BarraSelecao
                     selecionados={selecionados}
                     totalVisivel={orcsOrdenados.length}
                     onSelecionarTodos={() => setSelecionados(new Set(orcsOrdenados.map(o => o.id)))}
                     onLimpar={() => setSelecionados(new Set())}
                     onExcluir={() => setConfirmExcluirMassa(true)}
+                    onSair={() => { setSelecionados(new Set()); setModoSelecao(false); }}
                   />
                 )}
 
@@ -1091,6 +1093,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       sort={sort} setSort={setSort}
                       filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
                       orcamentos={orcamentos} clientes={[cliente]}
+                      modoSelecao={modoSelecao}
+                      onToggleModoSelecao={() => setModoSelecao(true)}
                       selecionados={selecionados}
                       totalVisivel={orcsOrdenados.length}
                       onToggleTodos={() => {
@@ -1104,6 +1108,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         onAbrir={mkFetchOrc(o)}
                         onAction={mkOnAction}
                         showCliente={false}
+                        modoSelecao={modoSelecao}
                         selecionado={selecionados.has(o.id)}
                         onToggleSelecao={(id) => {
                           const n = new Set(selecionados);
@@ -1135,7 +1140,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
         <ModalConfirmarExclusaoMassa
           orcs={(data.orcamentosProjeto||[]).filter(o => selecionados.has(o.id))}
           clientes={[cliente]}
-          onConfirmar={excluirOrcamentosEmMassa}
+          onConfirmar={async () => { await excluirOrcamentosEmMassa(); setModoSelecao(false); }}
           onCancelar={() => setConfirmExcluirMassa(false)}
         />
       )}
