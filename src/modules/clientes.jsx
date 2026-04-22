@@ -757,6 +757,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   const [orcGanho, setOrcGanho] = useState(null);
+  // Visualização (persistida em localStorage, compartilhada com a página Orçamentos)
+  const [viz, setViz] = useVisualizacaoOrcamentos();
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -915,49 +917,67 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
             </button>
           </div>
 
-          {/* Lista de orçamentos — usa mesmo OrcCard da página de Orçamentos */}
-          {orcamentos.length > 0 && (
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>Orçamentos</div>
-              {orcamentos.map(o => {
-                const fetchOrc = async (modo) => {
-                  const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
-                  const orcCompleto = res?.ok ? res.data : o;
-                  // Modo "verProposta": abre o visualizador de snapshot (modal com imagens do PDF)
-                  // em vez do FormOrcamento em tela cheia.
-                  if (modo === "verProposta") {
-                    const ultima = orcCompleto.propostas && orcCompleto.propostas.length > 0
-                      ? orcCompleto.propostas[orcCompleto.propostas.length - 1]
-                      : null;
-                    if (ultima) {
-                      setPropostaVisualizada({ ...ultima, clienteNome: cliente.nome || "Cliente" });
-                      return;
-                    }
-                    // Sem snapshot: cai no fluxo normal de "ver"
-                    modo = "ver";
-                  }
-                  onAbrirOrcamento(cliente, orcCompleto, modo);
-                };
-                return (
-                  <OrcCard
-                    key={o.id}
-                    orc={o}
-                    clientes={[cliente]}
-                    onAbrir={(modo) => fetchOrc(modo || "ver")}
-                    onAction={(acao, orc) => {
-                      if (acao === "ganho") {
-                        // Se já está ganho, não faz nada (evita reabrir modal)
-                        if (orc.status === "ganho") return;
-                        setOrcGanho(orc);
-                      }
-                      if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
-                      if (acao === "excluir") setConfirmDelete(orc.id);
-                    }}
-                  />
-                );
-              })}
-            </div>
-          )}
+          {/* Lista de orçamentos — tabela ou cards (mesma preferência da página Orçamentos) */}
+          {orcamentos.length > 0 && (() => {
+            // Helper comum: prepara fetchOrc e onAction pra ambos os modos
+            const mkFetchOrc = (o) => async (modo) => {
+              const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+              const orcCompleto = res?.ok ? res.data : o;
+              if (modo === "verProposta") {
+                const ultima = orcCompleto.propostas && orcCompleto.propostas.length > 0
+                  ? orcCompleto.propostas[orcCompleto.propostas.length - 1]
+                  : null;
+                if (ultima) {
+                  setPropostaVisualizada({ ...ultima, clienteNome: cliente.nome || "Cliente" });
+                  return;
+                }
+                modo = "ver";
+              }
+              onAbrirOrcamento(cliente, orcCompleto, modo);
+            };
+            const mkOnAction = async (acao, orc) => {
+              if (acao === "ganho") {
+                if (orc.status === "ganho") return;
+                const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`).then(r=>r.json()).catch(()=>null);
+                const orcCompleto = res?.ok ? res.data : orc;
+                setOrcGanho(orcCompleto);
+              }
+              if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
+              if (acao === "excluir") setConfirmDelete(orc.id);
+            };
+
+            return (
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
+                  <ToggleVisualizacao viz={viz} setViz={setViz} />
+                </div>
+                {viz === "tabela" ? (
+                  <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"hidden" }}>
+                    <OrcRowHeader showCliente={false} />
+                    {orcamentos.map(o => (
+                      <OrcRow
+                        key={o.id} orc={o} clientes={[cliente]}
+                        onAbrir={mkFetchOrc(o)}
+                        onAction={mkOnAction}
+                        showCliente={false}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {orcamentos.map(o => (
+                      <OrcCard
+                        key={o.id} orc={o} clientes={[cliente]}
+                        onAbrir={mkFetchOrc(o)}
+                        onAction={(acao, orc) => mkOnAction(acao, orc)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 

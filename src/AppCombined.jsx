@@ -3189,6 +3189,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   const [orcGanho, setOrcGanho] = useState(null);
+  // Visualização (persistida em localStorage, compartilhada com a página Orçamentos)
+  const [viz, setViz] = useVisualizacaoOrcamentos();
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -3347,49 +3349,67 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
             </button>
           </div>
 
-          {/* Lista de orçamentos — usa mesmo OrcCard da página de Orçamentos */}
-          {orcamentos.length > 0 && (
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 }}>Orçamentos</div>
-              {orcamentos.map(o => {
-                const fetchOrc = async (modo) => {
-                  const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
-                  const orcCompleto = res?.ok ? res.data : o;
-                  // Modo "verProposta": abre o visualizador de snapshot (modal com imagens do PDF)
-                  // em vez do FormOrcamento em tela cheia.
-                  if (modo === "verProposta") {
-                    const ultima = orcCompleto.propostas && orcCompleto.propostas.length > 0
-                      ? orcCompleto.propostas[orcCompleto.propostas.length - 1]
-                      : null;
-                    if (ultima) {
-                      setPropostaVisualizada({ ...ultima, clienteNome: cliente.nome || "Cliente" });
-                      return;
-                    }
-                    // Sem snapshot: cai no fluxo normal de "ver"
-                    modo = "ver";
-                  }
-                  onAbrirOrcamento(cliente, orcCompleto, modo);
-                };
-                return (
-                  <OrcCard
-                    key={o.id}
-                    orc={o}
-                    clientes={[cliente]}
-                    onAbrir={(modo) => fetchOrc(modo || "ver")}
-                    onAction={(acao, orc) => {
-                      if (acao === "ganho") {
-                        // Se já está ganho, não faz nada (evita reabrir modal)
-                        if (orc.status === "ganho") return;
-                        setOrcGanho(orc);
-                      }
-                      if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
-                      if (acao === "excluir") setConfirmDelete(orc.id);
-                    }}
-                  />
-                );
-              })}
-            </div>
-          )}
+          {/* Lista de orçamentos — tabela ou cards (mesma preferência da página Orçamentos) */}
+          {orcamentos.length > 0 && (() => {
+            // Helper comum: prepara fetchOrc e onAction pra ambos os modos
+            const mkFetchOrc = (o) => async (modo) => {
+              const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+              const orcCompleto = res?.ok ? res.data : o;
+              if (modo === "verProposta") {
+                const ultima = orcCompleto.propostas && orcCompleto.propostas.length > 0
+                  ? orcCompleto.propostas[orcCompleto.propostas.length - 1]
+                  : null;
+                if (ultima) {
+                  setPropostaVisualizada({ ...ultima, clienteNome: cliente.nome || "Cliente" });
+                  return;
+                }
+                modo = "ver";
+              }
+              onAbrirOrcamento(cliente, orcCompleto, modo);
+            };
+            const mkOnAction = async (acao, orc) => {
+              if (acao === "ganho") {
+                if (orc.status === "ganho") return;
+                const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`).then(r=>r.json()).catch(()=>null);
+                const orcCompleto = res?.ok ? res.data : orc;
+                setOrcGanho(orcCompleto);
+              }
+              if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
+              if (acao === "excluir") setConfirmDelete(orc.id);
+            };
+
+            return (
+              <div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
+                  <ToggleVisualizacao viz={viz} setViz={setViz} />
+                </div>
+                {viz === "tabela" ? (
+                  <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"hidden" }}>
+                    <OrcRowHeader showCliente={false} />
+                    {orcamentos.map(o => (
+                      <OrcRow
+                        key={o.id} orc={o} clientes={[cliente]}
+                        onAbrir={mkFetchOrc(o)}
+                        onAction={mkOnAction}
+                        showCliente={false}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {orcamentos.map(o => (
+                      <OrcCard
+                        key={o.id} orc={o} clientes={[cliente]}
+                        onAbrir={mkFetchOrc(o)}
+                        onAction={(acao, orc) => mkOnAction(acao, orc)}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
@@ -4548,6 +4568,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [busca, setBusca] = useState("");
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState("");
+  // Visualização (persistida em localStorage): tabela | cards
+  const [viz, setViz] = useVisualizacaoOrcamentos();
   // Proposta sendo visualizada (modal visualizer de snapshot)
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   // Orçamento selecionado para marcar como ganho (abre ModalConfirmarGanho)
@@ -4791,7 +4813,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         </button>
       </div>
 
-      {/* Toolbar: filtros + busca */}
+      {/* Toolbar: filtros + busca + visualização */}
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
         <OrcFilterPill label="Ativos"    count={totalAtivos}              active={filtro==="ativos"}   onClick={()=>setFiltro("ativos")} />
         <OrcFilterPill label="Todos"     count={totalTodos}               active={filtro==="todos"}    onClick={()=>setFiltro("todos")} countColor="#9ca3af" />
@@ -4804,16 +4826,17 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           onChange={e => setBusca(e.target.value)}
           placeholder="Buscar cliente ou referência…"
           style={{
-            flex:1, maxWidth:280, padding:"6px 12px",
+            flex:1, maxWidth:260, padding:"6px 12px",
             border:"1px solid #e5e7eb", borderRadius:6,
             fontSize:12.5, color:"#111", background:"#fff",
             fontFamily:"inherit", outline:"none",
           }}
         />
+        <ToggleVisualizacao viz={viz} setViz={setViz} />
       </div>
 
       {/* Lista */}
-      <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
+      <div style={{ maxWidth:960 }}>
         {orcFiltrados.length === 0 ? (
           <div style={{
             padding:"48px 24px", textAlign:"center",
@@ -4824,9 +4847,29 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               ? "Nenhum orçamento cadastrado ainda. Clique em + Novo Orçamento para começar."
               : "Nenhum orçamento corresponde aos filtros."}
           </div>
-        ) : orcFiltrados.map(orc => (
-          <OrcCard key={orc.id} orc={orc} clientes={clientes} onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)} onAction={handleOrcAction} />
-        ))}
+        ) : viz === "tabela" ? (
+          <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"hidden" }}>
+            <OrcRowHeader showCliente={true} />
+            {orcFiltrados.map(orc => (
+              <OrcRow
+                key={orc.id} orc={orc} clientes={clientes}
+                onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
+                onAction={handleOrcAction}
+                showCliente={true}
+              />
+            ))}
+          </div>
+        ) : (
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {orcFiltrados.map(orc => (
+              <OrcCard
+                key={orc.id} orc={orc} clientes={clientes}
+                onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
+                onAction={handleOrcAction}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Modal Novo Orçamento */}
@@ -5073,6 +5116,257 @@ const btnIconStyle = {
   padding:"3px 9px", background:"#fff",
   cursor:"pointer", fontFamily:"inherit",
 };
+
+// ─── Toggle Tabela/Cards (persiste escolha no localStorage) ───────────────
+// Uso: const [viz, setViz] = useVisualizacaoOrcamentos();
+//      <ToggleVisualizacao viz={viz} setViz={setViz} />
+const VIZ_STORAGE_KEY = "vicke:orcamentos:view";
+
+function useVisualizacaoOrcamentos() {
+  const [viz, setVizState] = useState(() => {
+    try {
+      const v = localStorage.getItem(VIZ_STORAGE_KEY);
+      return (v === "tabela" || v === "cards") ? v : "cards";
+    } catch { return "cards"; }
+  });
+  const setViz = (v) => {
+    setVizState(v);
+    try { localStorage.setItem(VIZ_STORAGE_KEY, v); } catch {}
+  };
+  return [viz, setViz];
+}
+
+function ToggleVisualizacao({ viz, setViz }) {
+  const btn = (v, label, icon) => (
+    <button
+      onClick={() => setViz(v)}
+      style={{
+        display:"inline-flex", alignItems:"center", gap:6,
+        padding:"5px 10px", borderRadius:6,
+        fontSize:12, fontFamily:"inherit",
+        color: viz === v ? "#111" : "#6b7280",
+        background: viz === v ? "#fff" : "transparent",
+        border:"none",
+        fontWeight: viz === v ? 600 : 400,
+        boxShadow: viz === v ? "0 0 0 0.5px #e5e7eb" : "none",
+        cursor:"pointer",
+      }}>
+      {icon}
+      {label}
+    </button>
+  );
+  // Icons (SVG inline pra manter controle fino)
+  const iconRows = (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <line x1="2" y1="4" x2="12" y2="4"/><line x1="2" y1="7" x2="12" y2="7"/><line x1="2" y1="10" x2="12" y2="10"/>
+    </svg>
+  );
+  const iconCards = (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="3" width="10" height="3" rx="1"/><rect x="2" y="8" width="10" height="3" rx="1"/>
+    </svg>
+  );
+  return (
+    <div style={{
+      display:"inline-flex",
+      background:"#f4f5f7",
+      borderRadius:8,
+      padding:3,
+      gap:2,
+    }}>
+      {btn("tabela", "Tabela", iconRows)}
+      {btn("cards",  "Cards",  iconCards)}
+    </div>
+  );
+}
+
+// ─── Linha de tabela (versão compacta do OrcCard) ─────────────────────────
+function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true }) {
+  const cliente = clientes.find(c => c.id === orc.clienteId);
+  const nomeCliente = cliente?.nome || orc.cliente || "—";
+  const status = orc.status || "rascunho";
+  const area = orc.resultado?.areaTotal || 0;
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handler = (e) => {
+      if (!e.target.closest(`[data-orc-menu-row="${orc.id}"]`)) setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [menuOpen, orc.id]);
+
+  // Mesma lógica de valor do OrcCard
+  const ultimaProposta = orc.propostas && orc.propostas.length > 0
+    ? orc.propostas[orc.propostas.length - 1]
+    : null;
+  let valorTotal;
+  if (ultimaProposta) {
+    if (ultimaProposta.valorTotalExibido != null) {
+      valorTotal = ultimaProposta.valorTotalExibido;
+    } else {
+      const arq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
+      const eng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
+      valorTotal = arq + eng;
+    }
+  } else {
+    valorTotal = (orc.resultado?.precoArq || 0) + (orc.resultado?.precoEng || 0);
+  }
+
+  const tipo = orc.tipo || "—";
+  const ref = orc.referencia || "(sem referência)";
+
+  const STATUS_TAGS = {
+    rascunho: { label:"Rascunho",  bg:"#f3f4f6", color:"#6b7280" },
+    aberto:   { label:"Em aberto", bg:"#eff6ff", color:"#2563eb" },
+    ganho:    { label:"Ganho",     bg:"#f0fdf4", color:"#16a34a" },
+    perdido:  { label:"Perdido",   bg:"#fef2f2", color:"#b91c1c" },
+  };
+  const tag = STATUS_TAGS[status] || STATUS_TAGS.rascunho;
+
+  return (
+    <div
+      onClick={() => onAbrir("ver")}
+      style={{
+        display:"grid",
+        gridTemplateColumns: showCliente ? "1.6fr 1.2fr 80px 80px 110px 40px" : "1.6fr 1.2fr 80px 110px 40px",
+        alignItems:"center", gap:12,
+        padding:"10px 14px",
+        borderBottom:"0.5px solid #f1f2f4",
+        cursor:"pointer", transition:"background 0.1s",
+        fontSize:13,
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = "#fafbfc"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
+    >
+      {/* Coluna 1: Cliente · Referência */}
+      <div style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+        {showCliente && <span style={{ fontWeight:600, color:"#111" }}>{nomeCliente}</span>}
+        {showCliente && <span style={{ color:"#9ca3af" }}> · </span>}
+        <span style={{ color: showCliente ? "#6b7280" : "#111", fontWeight: showCliente ? 400 : 500 }}>{ref}</span>
+        {orc.propostas && orc.propostas.length > 0 && !orc.expirouEm && (
+          <span
+            onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
+            title="Ver proposta enviada"
+            style={{ marginLeft:6, fontSize:11, color:"#16a34a", fontWeight:500, cursor:"pointer" }}>
+            📄
+          </span>
+        )}
+      </div>
+
+      {/* Coluna 2: Tipo · Área */}
+      <div style={{ color:"#6b7280", fontSize:12, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+        {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""}
+      </div>
+
+      {/* Coluna 3: ID */}
+      {showCliente && (
+        <div style={{ color:"#9ca3af", fontSize:11, fontVariantNumeric:"tabular-nums" }}>
+          {orc.id}
+        </div>
+      )}
+
+      {/* Coluna 4: Status */}
+      <div>
+        <span style={{
+          fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
+          padding:"2px 7px", borderRadius:4,
+          background: tag.bg, color: tag.color,
+          whiteSpace:"nowrap",
+        }}>{tag.label}</span>
+      </div>
+
+      {/* Coluna 5: Total */}
+      <div style={{ textAlign:"right", fontWeight:600, color:"#111", fontVariantNumeric:"tabular-nums" }}>
+        {valorTotal > 0 ? `R$ ${valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}` : "—"}
+      </div>
+
+      {/* Coluna 6: Menu ações */}
+      <div style={{ position:"relative", display:"flex", justifyContent:"flex-end" }}
+           onClick={e => e.stopPropagation()} data-orc-menu-row={orc.id}>
+        <button onClick={() => setMenuOpen(v => !v)}
+          style={{
+            background:"transparent", border:"none",
+            fontSize:16, color:"#9ca3af", padding:"4px 8px",
+            cursor:"pointer", borderRadius:4, fontFamily:"inherit", lineHeight:1,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = "#f3f4f6"; }}
+          onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+          ⋯
+        </button>
+        {menuOpen && (
+          <div style={{
+            position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
+            background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+            boxShadow:"0 4px 16px rgba(0,0,0,0.1)", overflow:"hidden", minWidth:130,
+          }}>
+            <button
+              onClick={() => { setMenuOpen(false); onAbrir("ver"); }}
+              style={menuItemStyle}>Ver</button>
+            <button
+              onClick={() => { setMenuOpen(false); onAbrir("editar"); }}
+              style={menuItemStyle}>Editar</button>
+            <div style={{ borderTop:"0.5px solid #f1f2f4" }} />
+            <button
+              disabled={status === "ganho"}
+              onClick={() => { setMenuOpen(false); onAction && onAction("ganho", orc); }}
+              style={{ ...menuItemStyle,
+                background: status === "ganho" ? "#f0fdf4" : "transparent",
+                color: status === "ganho" ? "#16a34a" : "#374151",
+                cursor: status === "ganho" ? "not-allowed" : "pointer",
+                fontWeight: status === "ganho" ? 600 : 400 }}>
+              {status === "ganho" ? "✓ Ganho" : "Ganho"}
+            </button>
+            <button
+              onClick={() => { setMenuOpen(false); onAction && onAction("perdido", orc); }}
+              style={{ ...menuItemStyle,
+                background: status === "perdido" ? "#fef2f2" : "transparent",
+                color: status === "perdido" ? "#dc2626" : "#374151",
+                fontWeight: status === "perdido" ? 600 : 400 }}>
+              {status === "perdido" ? "✓ Perdido" : "Perdido"}
+            </button>
+            <div style={{ borderTop:"0.5px solid #f1f2f4" }} />
+            <button
+              onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
+              style={{ ...menuItemStyle, color:"#dc2626" }}>
+              Excluir
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const menuItemStyle = {
+  display:"block", width:"100%", textAlign:"left",
+  background:"transparent", border:"none",
+  color:"#374151", padding:"7px 14px", fontSize:12.5,
+  cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap",
+};
+
+// Header da tabela
+function OrcRowHeader({ showCliente = true }) {
+  const colStyle = { fontSize:10, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6 };
+  return (
+    <div style={{
+      display:"grid",
+      gridTemplateColumns: showCliente ? "1.6fr 1.2fr 80px 80px 110px 40px" : "1.6fr 1.2fr 80px 110px 40px",
+      alignItems:"center", gap:12,
+      padding:"9px 14px",
+      borderBottom:"1px solid #e5e7eb",
+      background:"#fafbfc",
+    }}>
+      <div style={colStyle}>{showCliente ? "Cliente · Referência" : "Referência"}</div>
+      <div style={colStyle}>Tipo / Área</div>
+      {showCliente && <div style={colStyle}>ID</div>}
+      <div style={colStyle}>Status</div>
+      <div style={{ ...colStyle, textAlign:"right" }}>Total</div>
+      <div></div>
+    </div>
+  );
+}
 
 // ─── Modal de Novo Orçamento (escolha de cliente) ──
 function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar, onCadastrarNovo }) {
