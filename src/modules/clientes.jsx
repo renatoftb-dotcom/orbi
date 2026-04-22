@@ -756,6 +756,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
+  const [orcGanho, setOrcGanho] = useState(null);
   const menuRef = useRef(null);
 
   useEffect(() => {
@@ -821,6 +822,54 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
 
     setOrcamentos(novosOrc.filter(o=>o.clienteId===cliente.id));
     await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc, projetos: novosProjetos });
+  }
+
+  // Confirma ganho do orçamento com os dados do ModalConfirmarGanho (escopo, valores, condição)
+  async function confirmarGanho(ganhoData) {
+    const orc = orcGanho;
+    if (!orc) return;
+    const todos = data.orcamentosProjeto || [];
+    const agora = new Date().toISOString();
+
+    // Cria projeto automaticamente (se ainda não existir)
+    const projetosAtuais = data.projetos || [];
+    const jaExiste = projetosAtuais.some(p => p.orcId === orc.id);
+    const novosProjetos = jaExiste ? projetosAtuais : [
+      ...projetosAtuais,
+      {
+        id: "PRJ-" + Date.now(),
+        orcId: orc.id,
+        clienteId: orc.clienteId,
+        tipo: orc.tipo,
+        subtipo: orc.subtipo,
+        padrao: orc.padrao,
+        tamanho: orc.tamanho,
+        referencia: orc.referencia || "",
+        areaTotal: orc.resultado?.areaTotal || 0,
+        colunaEtapa: "briefing",
+        criadoEm: agora,
+      },
+    ];
+
+    // Atualiza o orçamento: status ganho + fechamento
+    const novosOrc = todos.map(o =>
+      o.id === orc.id
+        ? {
+            ...o,
+            status: "ganho",
+            concluidoEm: o.concluidoEm || agora,
+            ganhoEm: o.ganhoEm || agora,
+            fechamento: {
+              ...ganhoData,
+              fechadoEm: agora,
+            },
+          }
+        : o
+    );
+
+    setOrcamentos(novosOrc.filter(o => o.clienteId === cliente.id));
+    await save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos }).catch(console.error);
+    setOrcGanho(null);
   }
 
   async function excluirOrcamento(orcId) {
@@ -903,7 +952,11 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                     clientes={[cliente]}
                     onAbrir={(modo) => fetchOrc(modo || "ver")}
                     onAction={(acao, orc) => {
-                      if (acao === "ganho")   setStatusOrc(orc.id, "ganho");
+                      if (acao === "ganho") {
+                        // Se já está ganho, não faz nada (evita reabrir modal)
+                        if (orc.status === "ganho") return;
+                        setOrcGanho(orc);
+                      }
                       if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
                       if (acao === "excluir") setConfirmDelete(orc.id);
                     }}
@@ -934,6 +987,15 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
         <PropostaVisualizer
           proposta={propostaVisualizada}
           onFechar={() => setPropostaVisualizada(null)}
+        />
+      )}
+
+      {/* Modal de confirmação de ganho */}
+      {orcGanho && (
+        <ModalConfirmarGanho
+          orc={orcGanho}
+          onClose={() => setOrcGanho(null)}
+          onConfirmar={confirmarGanho}
         />
       )}
     </div>
