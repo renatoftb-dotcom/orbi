@@ -770,14 +770,10 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
 
   const cliente = data.clientes.find(c => c.id === clienteProp.id) || clienteProp;
 
-  const [orcamentos, setOrcamentos] = useState((data.orcamentosProjeto||[]).filter(o=>o.clienteId===cliente.id));
-
-  useEffect(() => {
-    fetch(`${API_URL}/api/orcamentos?clienteId=${cliente.id}`)
-      .then(r=>r.json())
-      .then(d=>{ if(d.ok) setOrcamentos(d.data||[]); })
-      .catch(()=>setOrcamentos((data.orcamentosProjeto||[]).filter(o=>o.clienteId===cliente.id)));
-  }, [cliente.id, data.orcamentosProjeto?.length]);
+  // Fonte única de verdade: data.orcamentosProjeto. Sem state local ou fetch paralelo —
+  // qualquer save() na aplicação re-renderiza este componente com os dados atualizados,
+  // mantendo sincronia com o módulo de Orçamentos do menu.
+  const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
 
 
 
@@ -820,7 +816,6 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
       return atualizado;
     });
 
-    setOrcamentos(novosOrc.filter(o=>o.clienteId===cliente.id));
     await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc, projetos: novosProjetos });
   }
 
@@ -867,14 +862,12 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
         : o
     );
 
-    setOrcamentos(novosOrc.filter(o => o.clienteId === cliente.id));
     await save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos }).catch(console.error);
     setOrcGanho(null);
   }
 
   async function excluirOrcamento(orcId) {
     const novos = (data.orcamentosProjeto||[]).filter(x => x.id !== orcId);
-    setOrcamentos(novos.filter(o=>o.clienteId===cliente.id));
     setConfirmDelete(null);
     save({ ...data, orcamentosProjeto: novos }).catch(console.error);
   }
