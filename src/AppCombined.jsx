@@ -5243,15 +5243,18 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
 }
 
 function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
-  // ── Detecta tipo do orçamento ──
-  const tipoPgtoOrc = orc.tipoPagamento || orc.tipoPgto || "padrao";
-  const ehTipoEtapas = tipoPgtoOrc === "etapas";
-
   // ── Valores base do orçamento (com/sem imposto conforme orçamento) ──
   // Prioridade: snapshot da última proposta > campos raiz
   const ultPropImp = orc.propostas && orc.propostas.length > 0
     ? orc.propostas[orc.propostas.length - 1]
     : null;
+
+  // ── Detecta tipo do orçamento ──
+  // Prioridade: snapshot da proposta enviada > campos raiz > default
+  // (o snapshot reflete o que o cliente de fato viu no PDF)
+  const tipoPgtoOrc = ultPropImp?.tipoPgto || orc.tipoPagamento || orc.tipoPgto || "padrao";
+  const ehTipoEtapas = tipoPgtoOrc === "etapas";
+
   const temImpostoOrc = ultPropImp?.temImposto ?? !!orc.incluiImposto;
   const aliqImp       = ultPropImp?.aliqImp ?? orc.aliquotaImposto ?? 0;
 
@@ -5298,10 +5301,31 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
     if (!ehTipoEtapas) return [];
     const etapasOrc = ultPropImp?.etapasPct || orc.etapasPct || [];
     if (etapasOrc.length === 0) return [];
+
+    // etapasIsoladas: subset de etapas que foi oferecido ao cliente na proposta.
+    // Vazio/undefined = todas as etapas foram oferecidas.
+    // Prioridade: snapshot da proposta enviada > raiz do orçamento.
+    const isoladasArr = ultPropImp?.etapasIsoladas || orc.etapasIsoladas || [];
+    const idsIsolados = new Set(isoladasArr);
+    const temIsoladas = idsIsolados.size > 0;
+    const engIsolada  = idsIsolados.has(5);
+
     const totalArqCI = orcArq;
     const totalEngCI = orcEng;
     return etapasOrc
-      .filter(e => temEng || e.id !== 5)
+      // Filtros:
+      // • Engenharia (id=5): só aparece se o orc tem Eng (temEng)
+      //   — adicionalmente, se tem etapasIsoladas, Eng só aparece se estiver isolada
+      // • Etapas Arq: se tem etapasIsoladas, só as isoladas aparecem
+      .filter(e => {
+        if (e.id === 5) {
+          if (!temEng) return false;
+          if (temIsoladas && !engIsolada) return false;
+          return true;
+        }
+        if (temIsoladas && !idsIsolados.has(e.id)) return false;
+        return true;
+      })
       .map(e => {
         const pct = parseFloat(e.pct) || 0;
         const valor = e.id === 5
