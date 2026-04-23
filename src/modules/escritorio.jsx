@@ -69,6 +69,7 @@ function Escritorio({ data, save }) {
     setErroUsuarios(null);
     try {
       const token = localStorage.getItem("vicke-token");
+      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
       const res = await fetch("https://orbi-production-5f5c.up.railway.app/empresa/usuarios", {
         headers: { "Authorization": `Bearer ${token}` },
       });
@@ -112,6 +113,11 @@ function Escritorio({ data, save }) {
     setSalvandoUsuario(true);
     try {
       const token = localStorage.getItem("vicke-token");
+      if (!token) {
+        alert("Sessão expirada. Faça login novamente.");
+        setSalvandoUsuario(false);
+        return;
+      }
       const body = {
         nome: novoUsuario.nome.trim(),
         email: novoUsuario.email.trim().toLowerCase(),
@@ -152,9 +158,13 @@ function Escritorio({ data, save }) {
       alert("Você não pode excluir a si mesmo.");
       return;
     }
+    const token = localStorage.getItem("vicke-token");
+    if (!token) {
+      alert("Sessão expirada. Faça login novamente.");
+      return;
+    }
     if (!confirm(`Excluir o usuário "${u.nome}"?\n\nEsta ação não pode ser desfeita.`)) return;
     try {
-      const token = localStorage.getItem("vicke-token");
       const res = await fetch(`https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${u.id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` },
