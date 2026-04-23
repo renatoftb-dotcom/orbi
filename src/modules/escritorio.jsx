@@ -69,7 +69,7 @@ function Escritorio({ data, save }) {
     setErroUsuarios(null);
     try {
       const token = localStorage.getItem("vicke-token");
-      const res = await fetch("https://orbi-production-0c32.up.railway.app/empresa/usuarios", {
+      const res = await fetch("https://orbi-production-5f5c.up.railway.app/empresa/usuarios", {
         headers: { "Authorization": `Bearer ${token}` },
       });
       const json = await res.json();
@@ -123,8 +123,8 @@ function Escritorio({ data, save }) {
       if (novoUsuario.senha) body.senha = novoUsuario.senha;
 
       const url = editando
-        ? `https://orbi-production-0c32.up.railway.app/empresa/usuarios/${novoUsuario.id}`
-        : `https://orbi-production-0c32.up.railway.app/empresa/usuarios`;
+        ? `https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${novoUsuario.id}`
+        : `https://orbi-production-5f5c.up.railway.app/empresa/usuarios`;
       const method = editando ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -155,7 +155,7 @@ function Escritorio({ data, save }) {
     if (!confirm(`Excluir o usuário "${u.nome}"?\n\nEsta ação não pode ser desfeita.`)) return;
     try {
       const token = localStorage.getItem("vicke-token");
-      const res = await fetch(`https://orbi-production-0c32.up.railway.app/empresa/usuarios/${u.id}`, {
+      const res = await fetch(`https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${u.id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` },
       });
@@ -708,7 +708,7 @@ function Escritorio({ data, save }) {
         setManutLoading(false);
         return;
       }
-      const res = await fetch("https://orbi-production-0c32.up.railway.app/admin/manutencao", {
+      const res = await fetch("https://orbi-production-5f5c.up.railway.app/admin/manutencao", {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` },
       });
