@@ -13073,8 +13073,8 @@ export default function ModuloClientesFornecedores() {
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
-  function handleLogin(usr, tok) { setUsuario(usr); setToken(tok); setAutenticado(true); }
-  function handleLogout() { clearAuth(); setUsuario(null); setToken(null); setAutenticado(false); setData(null); }
+  function handleLogin(usr, tok) { setUsuario(usr); setToken(tok); setAutenticado(true); setAba("home"); }
+  function handleLogout() { clearAuth(); setUsuario(null); setToken(null); setAutenticado(false); setData(null); setAba("home"); }
 
   async function loadData() {
     try {
