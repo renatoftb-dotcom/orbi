@@ -40,6 +40,7 @@ function Escritorio({ data, save }) {
   const [novoUsuario, setNovoUsuario] = useState(null); // objeto quando modal aberto
   const [confirmSenha, setConfirmSenha] = useState("");
   const [salvandoUsuario, setSalvandoUsuario] = useState(false);
+  const [confirmarExcluir, setConfirmarExcluir] = useState(null); // { id, nome } quando modal aberto
   // JWT (fonte: localStorage), pra identificar o usuário logado e não desativar/excluir a si mesmo
   const tokenAtual = (typeof localStorage !== "undefined") ? localStorage.getItem("vicke-token") : null;
   const usuarioLogadoId = (() => {
@@ -161,7 +162,25 @@ function Escritorio({ data, save }) {
       if (!json.ok) throw new Error(json.error || "Erro ao salvar usuário");
       setNovoUsuario(null);
       setConfirmSenha("");
-      await recarregarUsuariosSilencioso();
+
+      // Optimistic update: insere/atualiza o usuário retornado pelo backend
+      // na lista local, sem precisar refetchar a lista inteira (evita o "piscar").
+      if (json.data) {
+        setUsuarios(prev => {
+          const existente = prev.findIndex(x => x.id === json.data.id);
+          if (existente >= 0) {
+            // Update: substitui o existente
+            const novo = [...prev];
+            novo[existente] = json.data;
+            return novo;
+          }
+          // Insert: adiciona ao fim
+          return [...prev, json.data];
+        });
+      } else {
+        // Fallback: se o backend não devolver o objeto, sincroniza com o servidor
+        await recarregarUsuariosSilencioso();
+      }
     } catch (e) {
       alert("Erro: " + e.message);
     } finally {
@@ -169,7 +188,8 @@ function Escritorio({ data, save }) {
     }
   }
 
-  async function excluirUsuario(u) {
+  // Abre o modal de confirmação de exclusão
+  function pedirConfirmacaoExcluir(u) {
     if (u.id === usuarioLogadoId) {
       alert("Você não pode excluir a si mesmo.");
       return;
@@ -179,19 +199,32 @@ function Escritorio({ data, save }) {
       alert("Sessão expirada. Faça login novamente.");
       return;
     }
-    if (!confirm(`Excluir o usuário "${u.nome}"?\n\nEsta ação não pode ser desfeita.`)) return;
+    setConfirmarExcluir({ id: u.id, nome: u.nome });
+  }
+
+  // Executa a exclusão após o usuário confirmar no modal
+  async function executarExclusao() {
+    if (!confirmarExcluir) return;
+    const { id, nome } = confirmarExcluir;
+    const token = localStorage.getItem("vicke-token");
+    if (!token) {
+      alert("Sessão expirada. Faça login novamente.");
+      setConfirmarExcluir(null);
+      return;
+    }
+    // Fecha o modal imediatamente
+    setConfirmarExcluir(null);
     // Remove da lista imediatamente (optimistic update — evita o "piscar")
     const usuariosAntes = usuarios;
-    setUsuarios(prev => prev.filter(x => x.id !== u.id));
+    setUsuarios(prev => prev.filter(x => x.id !== id));
     try {
-      const res = await fetch(`https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${u.id}`, {
+      const res = await fetch(`https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` },
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || "Erro ao excluir");
-      // Sucesso — sincroniza silenciosamente com o servidor
-      await recarregarUsuariosSilencioso();
+      // Sucesso: já removeu da lista via optimistic update, sem necessidade de refetch
     } catch (e) {
       // Reverte o optimistic update em caso de erro
       setUsuarios(usuariosAntes);
@@ -615,7 +648,7 @@ function Escritorio({ data, save }) {
                 </button>
                 {!ehVoce && (
                   <button
-                    onClick={() => excluirUsuario(u)}
+                    onClick={() => pedirConfirmacaoExcluir(u)}
                     title="Excluir usuário"
                     style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
                 )}
@@ -718,6 +751,33 @@ function Escritorio({ data, save }) {
                   disabled={salvandoUsuario}
                   onClick={salvarUsuario}>
                   {salvandoUsuario ? "Salvando…" : (novoUsuario._editando ? "Salvar alterações" : "Criar usuário")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmação de exclusão */}
+        {confirmarExcluir && (
+          <div style={E.overlay}>
+            <div style={{ ...E.modal, maxWidth: 420 }}>
+              <div style={{ ...E.modalTitulo, marginBottom: 12 }}>Excluir usuário</div>
+              <div style={{ fontSize:14, color:"#374151", lineHeight:1.5, marginBottom:8 }}>
+                Tem certeza que deseja excluir <strong>{confirmarExcluir.nome}</strong>?
+              </div>
+              <div style={{ fontSize:13, color:"#9ca3af", marginBottom:24 }}>
+                Esta ação não pode ser desfeita.
+              </div>
+              <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+                <button
+                  style={E.btnSec}
+                  onClick={() => setConfirmarExcluir(null)}>
+                  Cancelar
+                </button>
+                <button
+                  style={{ ...E.btn, background:"#dc2626" }}
+                  onClick={executarExclusao}>
+                  Excluir
                 </button>
               </div>
             </div>
