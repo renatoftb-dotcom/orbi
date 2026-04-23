@@ -83,6 +83,22 @@ function Escritorio({ data, save }) {
     }
   }
 
+  // Variante "silenciosa" para usar após salvar/excluir: atualiza a lista do servidor
+  // sem acionar o loadingUsuarios (que esconderia os cards e causaria o "piscar").
+  async function recarregarUsuariosSilencioso() {
+    try {
+      const token = localStorage.getItem("vicke-token");
+      if (!token) return;
+      const res = await fetch("https://orbi-production-5f5c.up.railway.app/empresa/usuarios", {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (json.ok) setUsuarios(json.data || []);
+    } catch {
+      // Falha silenciosa — a lista antiga continua na tela
+    }
+  }
+
   async function salvarUsuario() {
     if (!novoUsuario) return;
     // Validação básica
@@ -145,7 +161,7 @@ function Escritorio({ data, save }) {
       if (!json.ok) throw new Error(json.error || "Erro ao salvar usuário");
       setNovoUsuario(null);
       setConfirmSenha("");
-      await carregarUsuarios();
+      await recarregarUsuariosSilencioso();
     } catch (e) {
       alert("Erro: " + e.message);
     } finally {
@@ -164,6 +180,9 @@ function Escritorio({ data, save }) {
       return;
     }
     if (!confirm(`Excluir o usuário "${u.nome}"?\n\nEsta ação não pode ser desfeita.`)) return;
+    // Remove da lista imediatamente (optimistic update — evita o "piscar")
+    const usuariosAntes = usuarios;
+    setUsuarios(prev => prev.filter(x => x.id !== u.id));
     try {
       const res = await fetch(`https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${u.id}`, {
         method: "DELETE",
@@ -171,8 +190,11 @@ function Escritorio({ data, save }) {
       });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || "Erro ao excluir");
-      await carregarUsuarios();
+      // Sucesso — sincroniza silenciosamente com o servidor
+      await recarregarUsuariosSilencioso();
     } catch (e) {
+      // Reverte o optimistic update em caso de erro
+      setUsuarios(usuariosAntes);
       alert("Erro: " + e.message);
     }
   }
