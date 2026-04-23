@@ -415,9 +415,14 @@ var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura",
 const API_URL = "https://orbi-production-5f5c.up.railway.app";
 
 async function req(method, path, body) {
+  // Pega o token do localStorage (salvo pelo login.jsx como "vicke-token")
+  const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`${API_URL}${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json();
@@ -3440,7 +3445,10 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
           {orcamentos.length > 0 && (() => {
             // Helper comum: prepara fetchOrc e onAction pra ambos os modos
             const mkFetchOrc = (o) => async (modo) => {
-              const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+              const _tk = localStorage.getItem("vicke-token");
+              const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`, {
+                headers: _tk ? { Authorization: `Bearer ${_tk}` } : {}
+              }).then(r=>r.json()).catch(()=>null);
               const orcCompleto = res?.ok ? res.data : o;
               // Se clicou em "ver" e tem proposta enviada, abre o snapshot em vez do form.
               if (modo === "ver" && orcCompleto.propostas && orcCompleto.propostas.length > 0) {
@@ -3466,7 +3474,10 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               if (perm.isVisualizador) { alert("Sem permissão para esta ação."); return; }
               if (acao === "ganho") {
                 if (orc.status === "ganho") return;
-                const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`).then(r=>r.json()).catch(()=>null);
+                const _tk = localStorage.getItem("vicke-token");
+                const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`, {
+                  headers: _tk ? { Authorization: `Bearer ${_tk}` } : {}
+                }).then(r=>r.json()).catch(()=>null);
                 const orcCompleto = res?.ok ? res.data : orc;
                 setOrcGanho(orcCompleto);
               }

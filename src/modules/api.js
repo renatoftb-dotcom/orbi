@@ -7,9 +7,14 @@
 const API_URL = "https://orbi-production-5f5c.up.railway.app";
 
 async function req(method, path, body) {
+  // Pega o token do localStorage (salvo pelo login.jsx como "vicke-token")
+  const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
   const res = await fetch(`${API_URL}${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: body ? JSON.stringify(body) : undefined,
   });
   const json = await res.json();
