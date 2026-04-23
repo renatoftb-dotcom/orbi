@@ -17,6 +17,18 @@ async function req(method, path, body) {
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  // Handler global de 401: token expirado/inválido → limpa e volta pra login.
+  // Não aplicamos isto a /auth/login (onde 401 significa senha errada, não sessão).
+  if (res.status === 401 && !path.startsWith("/auth/")) {
+    try {
+      localStorage.removeItem("vicke-token");
+      localStorage.removeItem("vicke-user");
+    } catch {}
+    if (typeof location !== "undefined") location.reload();
+    throw new Error("Sessão expirada — faça login novamente");
+  }
+
   const json = await res.json();
   if (!json.ok) throw new Error(json.error || "Erro na API");
   return json.data;

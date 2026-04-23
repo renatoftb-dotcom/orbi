@@ -99,16 +99,36 @@ export default function ModuloClientesFornecedores() {
 
   // Bootstrap: se já tiver token+user no localStorage, restaura sessão
   // (evita ter que fazer login toda vez que dá F5)
+  // Antes de restaurar, valida se o token não está expirado (JWT tem campo "exp")
   useEffect(() => {
     try {
       const tok = localStorage.getItem("vicke-token");
       const usr = localStorage.getItem("vicke-user");
       if (tok && usr) {
+        // Decodifica o payload do JWT para checar expiração
+        const partes = tok.split(".");
+        if (partes.length !== 3) throw new Error("Token inválido");
+        const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
+        const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
+        const payload = JSON.parse(atob(padded));
+        // exp está em segundos desde epoch (padrão JWT)
+        if (payload.exp && payload.exp * 1000 < Date.now()) {
+          // Token expirado — limpa e deixa cair na tela de login
+          localStorage.removeItem("vicke-token");
+          localStorage.removeItem("vicke-user");
+          return;
+        }
         setUsuario(JSON.parse(usr));
         setToken(tok);
         setAutenticado(true);
       }
-    } catch {}
+    } catch {
+      // Token corrompido ou erro de parse — limpa pra não travar o app
+      try {
+        localStorage.removeItem("vicke-token");
+        localStorage.removeItem("vicke-user");
+      } catch {}
+    }
   }, []);
 
   // Migração de abas antigas para nova nomenclatura
