@@ -4,7 +4,7 @@
 // Substitui o DB (localStorage/window.storage) pelo backend real
 // ═══════════════════════════════════════════════════════════════
 
-const API_URL = "https://orbi-production-5f5c.up.railway.app";
+const API_URL = "https://orbi-production-0c32.up.railway.app";
 
 async function req(method, path, body) {
   const res = await fetch(`${API_URL}${path}`, {

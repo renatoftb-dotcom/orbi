@@ -1008,7 +1008,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
           {orcamentos.length > 0 && (() => {
             // Helper comum: prepara fetchOrc e onAction pra ambos os modos
             const mkFetchOrc = (o) => async (modo) => {
-              const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
+              const res = await fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos/${o.id}`).then(r=>r.json()).catch(()=>null);
               const orcCompleto = res?.ok ? res.data : o;
               // Se clicou em "ver" e tem proposta enviada, abre o snapshot em vez do form.
               if (modo === "ver" && orcCompleto.propostas && orcCompleto.propostas.length > 0) {
@@ -1034,7 +1034,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               if (perm.isVisualizador) { alert("Sem permissão para esta ação."); return; }
               if (acao === "ganho") {
                 if (orc.status === "ganho") return;
-                const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`).then(r=>r.json()).catch(()=>null);
+                const res = await fetch(`https://orbi-production-0c32.up.railway.app/api/orcamentos/${orc.id}`).then(r=>r.json()).catch(()=>null);
                 const orcCompleto = res?.ok ? res.data : orc;
                 setOrcGanho(orcCompleto);
               }
