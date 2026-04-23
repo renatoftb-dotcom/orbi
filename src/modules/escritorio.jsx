@@ -177,13 +177,15 @@ function Escritorio({ data, save }) {
     }
   }
 
-  // Carrega a lista quando a aba Usuários é aberta pela primeira vez
+  // Pré-carrega a lista de usuários assim que o módulo Escritório é aberto
+  // (em vez de esperar o clique na aba). Assim a aba abre imediata.
+  // Só tenta carregar se for admin/master (editor/visualizador recebe 403).
   useEffect(() => {
-    if (aba === "usuarios" && usuarios.length === 0 && !loadingUsuarios && !erroUsuarios) {
+    if (perm.podeGerenciarUsuarios && usuarios.length === 0 && !loadingUsuarios && !erroUsuarios) {
       carregarUsuarios();
     }
     // eslint-disable-next-line
-  }, [aba]);
+  }, []);
 
   const emptyMembro = { id:"", nome:"", cargo:"", email:"", telefone:"", cau:"", cpf:"" };
 

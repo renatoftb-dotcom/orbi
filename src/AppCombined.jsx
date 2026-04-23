@@ -11964,13 +11964,15 @@ function Escritorio({ data, save }) {
     }
   }
 
-  // Carrega a lista quando a aba Usuários é aberta pela primeira vez
+  // Pré-carrega a lista de usuários assim que o módulo Escritório é aberto
+  // (em vez de esperar o clique na aba). Assim a aba abre imediata.
+  // Só tenta carregar se for admin/master (editor/visualizador recebe 403).
   useEffect(() => {
-    if (aba === "usuarios" && usuarios.length === 0 && !loadingUsuarios && !erroUsuarios) {
+    if (perm.podeGerenciarUsuarios && usuarios.length === 0 && !loadingUsuarios && !erroUsuarios) {
       carregarUsuarios();
     }
     // eslint-disable-next-line
-  }, [aba]);
+  }, []);
 
   const emptyMembro = { id:"", nome:"", cargo:"", email:"", telefone:"", cau:"", cpf:"" };
 
@@ -13023,7 +13025,7 @@ export default function ModuloClientesFornecedores() {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
-  useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
+  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
 
   // Bootstrap: se já tiver token+user no localStorage, restaura sessão
   // (evita ter que fazer login toda vez que dá F5)

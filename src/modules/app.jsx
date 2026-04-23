@@ -95,7 +95,7 @@ export default function ModuloClientesFornecedores() {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
-  useEffect(() => { if (autenticado) loadData(); }, [autenticado]);
+  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
 
   // Bootstrap: se já tiver token+user no localStorage, restaura sessão
   // (evita ter que fazer login toda vez que dá F5)
