@@ -973,6 +973,18 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               if (acao === "excluir") setConfirmDelete(orc.id);
             };
 
+            // Handler de mudança de probabilidade (usado pelo ProbRing nos cards/tabela)
+            const mkChangeProb = async (orc, novaProb) => {
+              if (![25, 50, 75].includes(novaProb)) return;
+              const todos = data.orcamentosProjeto || [];
+              const novos = todos.map(o => o.id === orc.id ? { ...o, probabilidade: novaProb } : o);
+              try {
+                await save({ ...data, orcamentosProjeto: novos });
+              } catch (e) {
+                console.error("Erro ao atualizar probabilidade:", e);
+              }
+            };
+
             // Helpers pra ordenação
             const valorTotal = (o) => {
               const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
@@ -1123,6 +1135,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                           if (n.has(id)) n.delete(id); else n.add(id);
                           setSelecionados(n);
                         }}
+                        onChangeProb={mkChangeProb}
                       />
                     ))}
                   </div>
@@ -1133,6 +1146,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         key={o.id} orc={o} clientes={[cliente]}
                         onAbrir={mkFetchOrc(o)}
                         onAction={(acao, orc) => mkOnAction(acao, orc)}
+                        onChangeProb={mkChangeProb}
                       />
                     ))}
                   </div>

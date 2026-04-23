@@ -3405,6 +3405,18 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               if (acao === "excluir") setConfirmDelete(orc.id);
             };
 
+            // Handler de mudança de probabilidade (usado pelo ProbRing nos cards/tabela)
+            const mkChangeProb = async (orc, novaProb) => {
+              if (![25, 50, 75].includes(novaProb)) return;
+              const todos = data.orcamentosProjeto || [];
+              const novos = todos.map(o => o.id === orc.id ? { ...o, probabilidade: novaProb } : o);
+              try {
+                await save({ ...data, orcamentosProjeto: novos });
+              } catch (e) {
+                console.error("Erro ao atualizar probabilidade:", e);
+              }
+            };
+
             // Helpers pra ordenação
             const valorTotal = (o) => {
               const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
@@ -3555,6 +3567,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                           if (n.has(id)) n.delete(id); else n.add(id);
                           setSelecionados(n);
                         }}
+                        onChangeProb={mkChangeProb}
                       />
                     ))}
                   </div>
@@ -3565,6 +3578,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         key={o.id} orc={o} clientes={[cliente]}
                         onAbrir={mkFetchOrc(o)}
                         onAction={(acao, orc) => mkOnAction(acao, orc)}
+                        onChangeProb={mkChangeProb}
                       />
                     ))}
                   </div>
@@ -4821,6 +4835,18 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     }
   }
 
+  // Atualiza a probabilidade de um orçamento (chamado pelo ring do card/tabela)
+  async function handleChangeProb(orc, novaProb) {
+    if (![25, 50, 75].includes(novaProb)) return;
+    const todos = data.orcamentosProjeto || [];
+    const novos = todos.map(o => o.id === orc.id ? { ...o, probabilidade: novaProb } : o);
+    try {
+      await save({ ...data, orcamentosProjeto: novos });
+    } catch (e) {
+      console.error("Erro ao atualizar probabilidade:", e);
+    }
+  }
+
   // Chamado quando o usuário confirma o modal de ganho com os dados fechados
   async function confirmarGanho(ganhoData) {
     const orc = orcGanho;
@@ -5067,6 +5093,23 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       if (bV == null) return -1;
       return (aV - bV) * dir;
     }
+    if (sort.col === "followup") {
+      // Ordem: atrasados → próximos → distantes → não aplicáveis (sempre no fim)
+      const aF = calcFollowUp(a);
+      const bF = calcFollowUp(b);
+      if (!aF.aplicavel && !bF.aplicavel) return aCli.localeCompare(bCli, "pt-BR");
+      if (!aF.aplicavel) return 1;
+      if (!bF.aplicavel) return -1;
+      return ((aF.diasRestantes || 0) - (bF.diasRestantes || 0)) * dir;
+    }
+    if (sort.col === "prob") {
+      const aP = getProbOrc(a);
+      const bP = getProbOrc(b);
+      if (aP == null && bP == null) return aCli.localeCompare(bCli, "pt-BR");
+      if (aP == null) return 1;
+      if (bP == null) return -1;
+      return (aP - bP) * dir;
+    }
     if (sort.col === "status") {
       const ordem = { aberto: 0, rascunho: 1, ganho: 2, perdido: 3 };
       const aS = ordem[a.status || "rascunho"] ?? 99;
@@ -5227,6 +5270,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
                   if (n.has(id)) n.delete(id); else n.add(id);
                   setSelecionados(n);
                 }}
+                onChangeProb={handleChangeProb}
               />
             ))}
           </div>
@@ -5237,6 +5281,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
                 key={orc.id} orc={orc} clientes={clientes}
                 onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
                 onAction={handleOrcAction}
+                onChangeProb={handleChangeProb}
               />
             ))}
           </div>
@@ -5362,8 +5407,199 @@ function calcVencimentoOrc(orc) {
   return { label: `${dias} dias`, cor: "#6b7280", bold: false, aplicavel: true };
 }
 
+// ─── Follow-up (data de retomar contato, 7 dias após envio da proposta) ───
+// Regra: orçamento precisa estar em "aberto" + ter proposta enviada.
+// Retorna { aplicavel, label, cor, bold, diasRestantes, dataAlvo }
+function calcFollowUp(orc) {
+  const status = orc.status || "rascunho";
+  if (status !== "aberto") return { aplicavel: false, label: "—", cor: "#d1d5db" };
+  const ultProp = orc.propostas && orc.propostas.length > 0
+    ? orc.propostas[orc.propostas.length - 1]
+    : null;
+  if (!ultProp || !ultProp.enviadaEm) {
+    return { aplicavel: false, label: "—", cor: "#d1d5db" };
+  }
+  const enviada = new Date(ultProp.enviadaEm);
+  if (isNaN(enviada.getTime())) return { aplicavel: false, label: "—", cor: "#d1d5db" };
+  const alvo = new Date(enviada);
+  alvo.setDate(alvo.getDate() + 7);
+  alvo.setHours(0, 0, 0, 0);
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const msPorDia = 86400000;
+  const dias = Math.round((alvo - hoje) / msPorDia);
+  const dataStr = alvo.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }).replace(".", "");
+
+  if (dias < 0) {
+    const atraso = Math.abs(dias);
+    return {
+      aplicavel: true,
+      label: `atrasado ${atraso}d`,
+      cor: "#b91c1c", bold: true, diasRestantes: dias, dataAlvo: alvo,
+    };
+  }
+  if (dias === 0) {
+    return { aplicavel: true, label: "hoje", cor: "#b45309", bold: true, diasRestantes: 0, dataAlvo: alvo };
+  }
+  if (dias === 1) {
+    return { aplicavel: true, label: "amanhã", cor: "#b45309", bold: false, diasRestantes: 1, dataAlvo: alvo };
+  }
+  return { aplicavel: true, label: dataStr, cor: "#6b7280", bold: false, diasRestantes: dias, dataAlvo: alvo };
+}
+
+// ─── Probabilidade de fechamento (só em "Em aberto") ─────────────────────
+// Retorna um dos 3 valores válidos: 25, 50, 75. Default = 50.
+function getProbOrc(orc) {
+  const status = orc.status || "rascunho";
+  if (status !== "aberto") return null;
+  const v = orc.probabilidade;
+  if (v === 25 || v === 50 || v === 75) return v;
+  return 50;
+}
+
+// Cores por nível de probabilidade
+const PROB_COLORS = {
+  25: { ring: "#d97706", bg: "#fef3c7", text: "#92400e" },
+  50: { ring: "#4f46e5", bg: "#e0e7ff", text: "#3730a3" },
+  75: { ring: "#16a34a", bg: "#dcfce7", text: "#166534" },
+};
+
+// Paleta S2: tags de status monocromático (slate)
+const STATUS_STYLES_S2 = {
+  rascunho: { label: "Rascunho",  bg: "#f1f5f9", color: "#94a3b8", border: "transparent" },
+  aberto:   { label: "Em aberto", bg: "#dbeafe", color: "#1e40af", border: "transparent" },
+  ganho:    { label: "Ganho",     bg: "#334155", color: "#ffffff", border: "transparent" },
+  perdido:  { label: "Perdido",   bg: "#f8fafc", color: "#cbd5e1", border: "#e2e8f0" },
+};
+
+// Paleta P4: dots de serviços (slate 3 tons)
+const SERVICO_DOT_COLORS = {
+  arq: "#334155", // slate-700
+  eng: "#64748b", // slate-500
+  mar: "#94a3b8", // slate-400
+};
+
+// ─── Componente: ring de probabilidade (SVG circular com % no centro) ───
+function ProbRing({ prob, size = 32, onChange = null }) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const h = (e) => { if (!e.target.closest("[data-prob-ring]")) setMenuOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [menuOpen]);
+
+  const cores = PROB_COLORS[prob] || PROB_COLORS[50];
+  const stroke = 3;
+  const r = (size / 2) - stroke;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - (prob / 100));
+  const cx = size / 2;
+  const fontSize = size >= 36 ? 10.5 : 9.5;
+  const clickable = typeof onChange === "function";
+
+  return (
+    <div data-prob-ring style={{ position: "relative", display: "inline-block" }}>
+      <div
+        onClick={(e) => {
+          if (!clickable) return;
+          e.stopPropagation();
+          setMenuOpen(v => !v);
+        }}
+        title={`${prob}% de probabilidade${clickable ? " — clique para alterar" : ""}`}
+        style={{
+          position: "relative",
+          display: "inline-flex", alignItems: "center", justifyContent: "center",
+          width: size, height: size, flexShrink: 0,
+          cursor: clickable ? "pointer" : "default",
+        }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+          <circle cx={cx} cy={cx} r={r} fill="none" stroke="#f3f4f6" strokeWidth={stroke} />
+          <circle
+            cx={cx} cy={cx} r={r} fill="none"
+            stroke={cores.ring} strokeWidth={stroke}
+            strokeDasharray={c} strokeDashoffset={offset}
+            transform={`rotate(-90 ${cx} ${cx})`}
+            strokeLinecap="round"
+          />
+        </svg>
+        <span style={{
+          position: "absolute", inset: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontVariantNumeric: "tabular-nums",
+          fontWeight: 700, letterSpacing: -0.3,
+          fontSize, color: cores.ring,
+        }}>
+          {prob}%
+        </span>
+      </div>
+      {menuOpen && clickable && (
+        <div style={{
+          position: "absolute", left: 0, top: `calc(100% + 6px)`, zIndex: 60,
+          background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8,
+          boxShadow: "0 4px 16px rgba(0,0,0,0.1)", minWidth: 100, overflow: "hidden",
+        }}>
+          <div style={{ padding: "6px 10px 4px", fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            Probabilidade
+          </div>
+          {[25, 50, 75].map(v => {
+            const vc = PROB_COLORS[v];
+            const sel = v === prob;
+            return (
+              <button key={v}
+                onClick={(e) => { e.stopPropagation(); setMenuOpen(false); onChange && onChange(v); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 8,
+                  width: "100%", textAlign: "left",
+                  background: sel ? "#f4f5f7" : "transparent",
+                  border: "none",
+                  padding: "7px 12px", fontSize: 12.5,
+                  color: "#111", fontFamily: "inherit",
+                  cursor: "pointer",
+                  fontWeight: sel ? 600 : 400,
+                }}
+                onMouseEnter={e => { if (!sel) e.currentTarget.style.background = "#fafbfc"; }}
+                onMouseLeave={e => { if (!sel) e.currentTarget.style.background = "transparent"; }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: vc.ring }} />
+                {v}%
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Componente: linha de dots de serviços (Arq · Eng · Marc) ──────────
+function ServicosDots({ orc, textColor = "#6b7280", sepColor = "#d1d5db" }) {
+  const items = [];
+  if (orc.incluiArq)        items.push({ key: "arq", label: "Arq",  color: SERVICO_DOT_COLORS.arq });
+  if (orc.incluiEng)        items.push({ key: "eng", label: "Eng",  color: SERVICO_DOT_COLORS.eng });
+  if (orc.incluiMarcenaria) items.push({ key: "mar", label: "Marc", color: SERVICO_DOT_COLORS.mar });
+  if (items.length === 0)   items.push({ key: "arq", label: "Arq",  color: SERVICO_DOT_COLORS.arq }); // fallback
+  const nodes = [];
+  items.forEach((it, i) => {
+    if (i > 0) {
+      nodes.push(<span key={`sep-${it.key}`} style={{ color: sepColor, margin: "0 2px" }}>·</span>);
+    }
+    nodes.push(
+      <span key={`dot-${it.key}`} style={{
+        display: "inline-block", width: 5, height: 5, borderRadius: "50%",
+        background: it.color,
+      }} />
+    );
+    nodes.push(<span key={`lbl-${it.key}`}>{it.label}</span>);
+  });
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: textColor }}>
+      {nodes}
+    </span>
+  );
+}
+
 // ─── Card de orçamento na lista ──────────────────
-function OrcCard({ orc, clientes, onAbrir, onAction }) {
+function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
@@ -5380,151 +5616,163 @@ function OrcCard({ orc, clientes, onAbrir, onAction }) {
     return () => document.removeEventListener("mousedown", handler);
   }, [menuOpen, orc.id]);
 
-  // Se tem proposta salva, usa os valores dela (edições manuais do usuário)
-  // Senão, usa o cálculo original do orçamento base.
+  // Valor total: usa última proposta se existir, senão resultado do cálculo base
   const ultimaProposta = orc.propostas && orc.propostas.length > 0
     ? orc.propostas[orc.propostas.length - 1]
     : null;
-  let precoArq, precoEng, valorTotal;
+  let valorTotal;
   if (ultimaProposta) {
-    // Prioridade: valorTotalExibido (novo, fonte única da verdade)
-    // Fallback: arqEdit/engEdit somados (versões antigas de snapshot)
     if (ultimaProposta.valorTotalExibido != null) {
-      precoArq = ultimaProposta.valorArqExibido || 0;
-      precoEng = ultimaProposta.valorEngExibido || 0;
       valorTotal = ultimaProposta.valorTotalExibido;
     } else {
-      precoArq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
-      precoEng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
-      valorTotal = precoArq + precoEng;
+      const arq = ultimaProposta.arqEdit != null ? ultimaProposta.arqEdit : (ultimaProposta.calculo?.precoArq || 0);
+      const eng = ultimaProposta.engEdit != null ? ultimaProposta.engEdit : (ultimaProposta.calculo?.precoEng || 0);
+      valorTotal = arq + eng;
     }
   } else {
-    precoArq = orc.resultado?.precoArq || 0;
-    precoEng = orc.resultado?.precoEng || 0;
-    valorTotal = precoArq + precoEng;
+    valorTotal = (orc.resultado?.precoArq || 0) + (orc.resultado?.precoEng || 0);
   }
 
   const tipo = orc.tipo || "—";
-  const ref = orc.referencia || "(sem referência)";
-  const dataCriado = orc.criadoEm ? new Date(orc.criadoEm) : null;
-  const dataFmt = dataCriado ? dataCriado.toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "") : "";
+  const ref = orc.referencia || "";
+  const refEmpty = !orc.referencia;
 
-  const STATUS_TAGS = {
-    rascunho: { label:"Rascunho",  bg:"#f3f4f6", color:"#6b7280" },
-    aberto:   { label:"Em aberto", bg:"#eff6ff", color:"#2563eb" },
-    ganho:    { label:"Ganho",     bg:"#f0fdf4", color:"#16a34a" },
-    perdido:  { label:"Perdido",   bg:"#fef2f2", color:"#b91c1c" },
-  };
-  const tag = STATUS_TAGS[status] || STATUS_TAGS.rascunho;
+  const tag = STATUS_STYLES_S2[status] || STATUS_STYLES_S2.rascunho;
+  const venc = calcVencimentoOrc(orc);
+  const follow = calcFollowUp(orc);
+  const prob = getProbOrc(orc);
+  const mostrarRing = status === "aberto" && prob != null;
+  const mostrarLinhaPrazos = status === "aberto" && (venc.aplicavel || follow.aplicavel);
 
   return (
     <div
       onClick={() => onAbrir("ver")}
       style={{
         background:"#fafbfc", border:"1px solid #eef0f3", borderRadius:10,
-        padding:"14px 16px",
+        padding:"13px 14px",
         transition:"all 0.12s", cursor:"pointer",
-        display:"flex", flexDirection:"column", gap:6,
+        display:"flex", flexDirection:"column", gap:9,
         minWidth:0,
       }}
       onMouseEnter={e => { e.currentTarget.style.borderColor = "#d1d5db"; e.currentTarget.style.background = "#fff"; }}
       onMouseLeave={e => { e.currentTarget.style.borderColor = "#eef0f3"; e.currentTarget.style.background = "#fafbfc"; }}
     >
-      {/* Linha 1: Nome + ID + Status (esq) | Valor (dir) */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:7, minWidth:0, flex:1, overflow:"hidden" }}>
-          <span style={{
+      {/* Head: Ring (se aberto) | Nome + Ref | Valor + Tipo/Área */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, minWidth:0 }}>
+        {mostrarRing && (
+          <div onClick={e => e.stopPropagation()}>
+            <ProbRing
+              prob={prob}
+              size={32}
+              onChange={onChangeProb ? (v) => onChangeProb(orc, v) : null}
+            />
+          </div>
+        )}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{
             fontSize:13.5, fontWeight:600, color:"#111",
             overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-          }}>{nomeCliente}</span>
+          }}>
+            {nomeCliente}
+          </div>
+          <div style={{
+            fontSize:11.5,
+            color: refEmpty ? "#9ca3af" : "#6b7280",
+            fontStyle: refEmpty ? "italic" : "normal",
+            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+          }}>
+            {refEmpty ? "sem referência" : ref}
+          </div>
+        </div>
+        <div style={{
+          display:"flex", flexDirection:"column", alignItems:"flex-end", gap:2,
+          flexShrink:0,
+        }}>
+          {valorTotal > 0 && (
+            <div style={{
+              fontSize:14.5, fontWeight:600, color:"#111",
+              fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap",
+            }}>
+              R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
+            </div>
+          )}
+          <div style={{ fontSize:10, color:"#9ca3af", whiteSpace:"nowrap" }}>
+            {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""}
+          </div>
+        </div>
+      </div>
+
+      {/* Linha de prazos (só em aberto) */}
+      {mostrarLinhaPrazos && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:11 }}>
+          {venc.aplicavel && (
+            <span style={{
+              display:"inline-flex", alignItems:"center", gap:4,
+              padding:"2px 7px", borderRadius:10,
+              fontSize:10.5, fontWeight: venc.bold ? 600 : 500,
+              background: venc.cor === "#b91c1c" ? "#fef2f2" : "#f3f4f6",
+              color: venc.cor,
+            }}>
+              ⏱ {venc.label === "Vencido" || venc.label === "Vence hoje"
+                ? venc.label
+                : `Vence em ${venc.label}`}
+            </span>
+          )}
+          {follow.aplicavel && (
+            <span style={{
+              display:"inline-flex", alignItems:"center", gap:4,
+              fontSize:10.5, fontWeight: follow.bold ? 600 : 500,
+              color: follow.cor,
+            }}>
+              📞 Follow-up: {follow.label}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Footer: ID · Status · Dots | badge proposta | menu ⋯ */}
+      <div style={{
+        display:"flex", alignItems:"center", justifyContent:"space-between",
+        gap:8, paddingTop:8, borderTop:"0.5px solid #eef0f3",
+        minHeight:22,
+      }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", fontSize:11, color:"#6b7280" }}>
           <span style={{
             fontSize:10, color:"#9ca3af",
             fontVariantNumeric:"tabular-nums",
-            background:"#eef0f3",
-            padding:"1px 6px", borderRadius:4, fontWeight:500,
-            flexShrink:0,
+            background:"#eef0f3", padding:"1px 6px", borderRadius:4, fontWeight:500,
           }}>{orc.id}</span>
           <span style={{
             fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
             padding:"2px 6px", borderRadius:4,
             background: tag.bg, color: tag.color,
-            flexShrink:0,
+            border: tag.border !== "transparent" ? `0.5px solid ${tag.border}` : "none",
           }}>{tag.label}</span>
-        </div>
-        {valorTotal > 0 && (
-          <div style={{
-            fontSize:14.5, fontWeight:600, color:"#111",
-            fontVariantNumeric:"tabular-nums",
-            flexShrink:0, whiteSpace:"nowrap",
-          }}>
-            R$ {valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}
-          </div>
-        )}
-      </div>
-
-      {/* Linha 2: Referência */}
-      <div style={{
-        fontSize:12.5, color:"#374151",
-        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-      }}>
-        {ref}
-      </div>
-
-      {/* Linha 3: Metadados */}
-      <div style={{
-        fontSize:11.5, color:"#9ca3af", lineHeight:1.4,
-        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-      }}>
-        {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""}{dataFmt ? ` · ${dataFmt}` : ""}
-        {(() => {
-          const venc = calcVencimentoOrc(orc);
-          if (!venc.aplicavel) return null;
-          return (
-            <>
-              <span> · </span>
-              <span style={{ color: venc.cor, fontWeight: venc.bold ? 600 : 500 }}>
-                {venc.label === "Vencido" || venc.label === "Vence hoje" ? venc.label : `Vence em ${venc.label}`}
-              </span>
-            </>
-          );
-        })()}
-      </div>
-
-      {/* Linha 4: Footer — badge proposta (esq) | menu ⋯ (dir) */}
-      <div style={{
-        display:"flex", alignItems:"center", justifyContent:"space-between",
-        marginTop:2, minHeight:20,
-      }}>
-        <div style={{ minWidth:0, flex:1 }}>
-          {orc.propostas && orc.propostas.length > 0 && (
+          <ServicosDots orc={orc} />
+          {orc.propostas && orc.propostas.length > 1 && !orc.expirouEm && (
+            <span
+              onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
+              title="Ver última proposta enviada"
+              style={{
+                fontSize:9.5, fontWeight:700,
+                color:"#16a34a", background:"#dcfce7",
+                padding:"1px 6px", borderRadius:4,
+                fontVariantNumeric:"tabular-nums", cursor:"pointer",
+              }}>
+              v{orc.propostas.length}
+            </span>
+          )}
+          {orc.expirouEm && (
             <span
               onClick={(e) => { e.stopPropagation(); onAbrir("verProposta"); }}
               style={{
-                fontSize:11, fontWeight:500,
-                color: orc.expirouEm ? "#b91c1c" : "#16a34a",
-                cursor:"pointer", display:"inline-flex", alignItems:"center", gap:5,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.textDecoration = "underline"; }}
-              onMouseLeave={e => { e.currentTarget.style.textDecoration = "none"; }}
-              title={orc.expirouEm ? "Ver registro da proposta expirada" : "Ver a última proposta enviada"}
-            >
-              <span>
-                {orc.expirouEm ? "⚠" : "📄"} {orc.propostas.length > 1 ? `${orc.propostas.length} propostas` : "Proposta enviada"}
-                {orc.expirouEm ? " (expirou)" : ""}
-              </span>
-              {orc.propostas.length > 1 && !orc.expirouEm && (
-                <span style={{
-                  fontSize:9.5, fontWeight:700,
-                  color:"#16a34a", background:"#dcfce7",
-                  padding:"1px 5px", borderRadius:4,
-                  fontVariantNumeric:"tabular-nums",
-                }}>
-                  v{orc.propostas.length}
-                </span>
-              )}
+                fontSize:10, color:"#b91c1c", fontWeight:500, cursor:"pointer",
+              }}>
+              ⚠ Proposta expirou
             </span>
           )}
         </div>
+
         <div onClick={e => e.stopPropagation()}>
           <div style={{ position:"relative" }} data-orc-menu={orc.id}>
             <button onClick={() => setMenuOpen(v => !v)}
@@ -5658,7 +5906,8 @@ function ToggleVisualizacao({ viz, setViz }) {
 
 // ─── Linha de tabela (versão compacta do OrcCard) ─────────────────────────
 function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
-                 modoSelecao = false, selecionado = false, onToggleSelecao = null }) {
+                 modoSelecao = false, selecionado = false, onToggleSelecao = null,
+                 onChangeProb = null }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
@@ -5692,22 +5941,17 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
   }
 
   const tipo = orc.tipo || "—";
-  const ref = orc.referencia || "(sem referência)";
-  const dataCriado = orc.criadoEm ? new Date(orc.criadoEm) : null;
-  const dataCriadaFmt = dataCriado ? dataCriado.toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "") : "";
+  const refRaw = orc.referencia || "";
+  const refEmpty = !refRaw || refRaw === "(sem referência)";
   const venc = calcVencimentoOrc(orc);
+  const follow = calcFollowUp(orc);
+  const prob = getProbOrc(orc);
 
-  const STATUS_TAGS = {
-    rascunho: { label:"Rascunho",  bg:"#f3f4f6", color:"#6b7280" },
-    aberto:   { label:"Em aberto", bg:"#eff6ff", color:"#2563eb" },
-    ganho:    { label:"Ganho",     bg:"#f0fdf4", color:"#16a34a" },
-    perdido:  { label:"Perdido",   bg:"#fef2f2", color:"#b91c1c" },
-  };
-  const tag = STATUS_TAGS[status] || STATUS_TAGS.rascunho;
+  // Paleta S2 (slate monocromático)
+  const tag = STATUS_STYLES_S2[status] || STATUS_STYLES_S2.rascunho;
 
-  // Grid: sempre com primeira coluna 26px (pro alinhamento com o header).
-  // No modo seleção renderiza checkbox; senão renderiza célula vazia.
-  const gridCols = "26px 85px 1.6fr 1.1fr 75px 90px 95px 110px 34px";
+  // Grid novo: ☐ | ID | Cliente/Ref | Tipo/Área | Venc. | Follow | Prob | Status | Total | ⋯
+  const gridCols = "26px 85px 1.6fr 1fr 75px 75px 60px 90px 105px 34px";
 
   return (
     <div
@@ -5743,14 +5987,17 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
         )}
       </div>
 
-      {/* Coluna 0: ID */}
-      <div style={{
-        fontSize:11, color:"#6b7280",
-        fontVariantNumeric:"tabular-nums",
-        fontWeight:500,
-        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-      }}>
-        {orc.id}
+      {/* Coluna 0: ID (pill) */}
+      <div style={{ display:"flex", alignItems:"center", minWidth:0 }}>
+        <span style={{
+          fontSize:10, color:"#9ca3af",
+          fontVariantNumeric:"tabular-nums",
+          background:"#eef0f3",
+          padding:"1px 6px", borderRadius:4, fontWeight:500,
+          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+        }}>
+          {orc.id}
+        </span>
       </div>
 
       {/* Coluna 1: Cliente em cima, Referência embaixo */}
@@ -5784,8 +6031,13 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
             </span>
           )}
         </div>
-        <div style={{ fontSize:12, color:"#6b7280", marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-          {ref}
+        <div style={{
+          fontSize:12, marginTop:2,
+          color: refEmpty ? "#9ca3af" : "#6b7280",
+          fontStyle: refEmpty ? "italic" : "normal",
+          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+        }}>
+          {refEmpty ? "sem referência" : refRaw}
         </div>
       </div>
 
@@ -5794,32 +6046,71 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
         {tipo}{area > 0 ? ` · ${area.toLocaleString("pt-BR")}m²` : ""}
       </div>
 
-      {/* Coluna 3: Criado */}
-      <div style={{ color:"#6b7280", fontSize:12, fontVariantNumeric:"tabular-nums" }}>
-        {dataCriadaFmt || "—"}
-      </div>
-
-      {/* Coluna 4: Venc. */}
+      {/* Coluna 3: Venc. */}
       <div style={{
         fontSize:12,
-        color: venc.cor,
+        color: venc.aplicavel ? venc.cor : "#d1d5db",
         fontWeight: venc.bold ? 600 : (venc.aplicavel ? 500 : 400),
         fontVariantNumeric:"tabular-nums",
       }}>
-        {venc.label}
+        {venc.aplicavel ? venc.label : "—"}
       </div>
 
-      {/* Coluna 5: Status */}
+      {/* Coluna 4: Follow-up */}
+      <div style={{
+        fontSize:12,
+        color: follow.aplicavel ? follow.cor : "#d1d5db",
+        fontWeight: follow.bold ? 600 : (follow.aplicavel ? 500 : 400),
+        fontVariantNumeric:"tabular-nums",
+      }}>
+        {follow.aplicavel ? follow.label : "—"}
+      </div>
+
+      {/* Coluna 5: Prob. (só em aberto) */}
+      <div onClick={e => e.stopPropagation()}>
+        {prob != null ? (
+          (() => {
+            const pc = PROB_COLORS[prob] || PROB_COLORS[50];
+            const clickable = typeof onChangeProb === "function";
+            const pill = (
+              <span style={{
+                display:"inline-flex", alignItems:"center", justifyContent:"center",
+                fontSize:10.5, fontWeight:600,
+                padding:"1px 7px", borderRadius:10,
+                background: pc.bg, color: pc.text,
+                fontVariantNumeric:"tabular-nums",
+                cursor: clickable ? "pointer" : "default",
+              }}>{prob}%</span>
+            );
+            // Se clickable, usa o mesmo ProbRing pra consistência de interação
+            if (clickable) {
+              return (
+                <ProbRing
+                  prob={prob}
+                  size={22}
+                  onChange={(v) => onChangeProb(orc, v)}
+                />
+              );
+            }
+            return pill;
+          })()
+        ) : (
+          <span style={{ color:"#d1d5db", fontSize:12 }}>—</span>
+        )}
+      </div>
+
+      {/* Coluna 6: Status (paleta S2) */}
       <div>
         <span style={{
-          fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
-          padding:"2px 7px", borderRadius:4,
+          fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
+          padding:"2px 6px", borderRadius:4,
           background: tag.bg, color: tag.color,
+          border: tag.border !== "transparent" ? `0.5px solid ${tag.border}` : "none",
           whiteSpace:"nowrap",
         }}>{tag.label}</span>
       </div>
 
-      {/* Coluna 6: Total */}
+      {/* Coluna 7: Total */}
       <div style={{ textAlign:"right", fontWeight:600, color:"#111", fontVariantNumeric:"tabular-nums" }}>
         {valorTotal > 0 ? `R$ ${valorTotal.toLocaleString("pt-BR", { minimumFractionDigits:0, maximumFractionDigits:0 })}` : "—"}
       </div>
@@ -6264,13 +6555,15 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
           </div>
           {["asc","desc"].map(d => {
             const labels = {
-              id:      { asc:"Menor → Maior", desc:"Maior → Menor" },
-              cliente: { asc:"A → Z", desc:"Z → A" },
-              tipo:    { asc:"A → Z", desc:"Z → A" },
-              criado:  { asc:"Mais antigo", desc:"Mais recente" },
-              venc:    { asc:"Vencem antes", desc:"Vencem depois" },
-              status:  { asc:"Em aberto → Perdido", desc:"Perdido → Em aberto" },
-              total:   { asc:"Menor valor", desc:"Maior valor" },
+              id:       { asc:"Menor → Maior", desc:"Maior → Menor" },
+              cliente:  { asc:"A → Z", desc:"Z → A" },
+              tipo:     { asc:"A → Z", desc:"Z → A" },
+              criado:   { asc:"Mais antigo", desc:"Mais recente" },
+              venc:     { asc:"Vencem antes", desc:"Vencem depois" },
+              followup: { asc:"Follow antes", desc:"Follow depois" },
+              prob:     { asc:"Menor prob.", desc:"Maior prob." },
+              status:   { asc:"Em aberto → Perdido", desc:"Perdido → Em aberto" },
+              total:    { asc:"Menor valor", desc:"Maior valor" },
             };
             const sel = sortPend.col === col && sortPend.dir === d;
             return (
@@ -6392,8 +6685,8 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
                         orcamentos = [], clientes = [],
                         modoSelecao = false, onToggleModoSelecao = null,
                         selecionados = null, onToggleTodos = null, totalVisivel = 0 }) {
-  // Grid condicional: primeira coluna é 26px sempre (pro ⋯ ou pro checkbox master)
-  const gridCols = "26px 85px 1.6fr 1.1fr 75px 90px 95px 110px 34px";
+  // Grid: ☐ | ID | Cliente/Ref | Tipo/Área | Venc. | Follow | Prob | Status | Total | ⋯
+  const gridCols = "26px 85px 1.6fr 1fr 75px 75px 60px 90px 105px 34px";
 
   const [menuAcoesOpen, setMenuAcoesOpen] = useState(false);
   useEffect(() => {
@@ -6513,11 +6806,15 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
         filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
         opcoesFiltro={opcoesTipo} chaveFiltro="tipos"
         align="left" />
-      <ColunaMenu col="criado" label="Criado"
+      <ColunaMenu col="venc" label="Venc."
         sort={sort} setSort={setSort}
         filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
         align="left" />
-      <ColunaMenu col="venc" label="Venc."
+      <ColunaMenu col="followup" label="Follow-up"
+        sort={sort} setSort={setSort}
+        filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
+        align="left" />
+      <ColunaMenu col="prob" label="Prob."
         sort={sort} setSort={setSort}
         filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
         align="left" />
@@ -10669,12 +10966,17 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const novaProposta = { ...snapshot, versao: nextVersao };
       // Se ainda é rascunho, promove automaticamente pra "aberto" ao enviar primeira proposta
       const novoStatus = (!base.status || base.status === "rascunho") ? "aberto" : base.status;
+      // Inicializa probabilidade em 50% quando enviar a primeira proposta (se não já estiver definida)
+      const probInicial = base.probabilidade != null && [25, 50, 75].includes(base.probabilidade)
+        ? base.probabilidade
+        : 50;
       // Salva no orçamento (inclui todos os campos atuais do form + nova proposta)
       const orcAtualizado = {
         ...base,
         propostas: [...propostasAtuais, novaProposta],
         ultimaPropostaEm: snapshot.enviadaEm,
         status: novoStatus,
+        probabilidade: probInicial,
       };
       await onSalvar(orcAtualizado);
       return novaProposta;
