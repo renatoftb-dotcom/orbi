@@ -4,7 +4,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 function Escritorio({ data, save }) {
-  const cfg = data.escritorio || {};
+  const cfg = (data && data.escritorio) || {};
   const [aba, setAba] = useState("dados");
   const perm = getPermissoes();
   const [form, setForm] = useState({

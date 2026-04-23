@@ -11779,7 +11779,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 // ═══════════════════════════════════════════════════════════════
 
 function Escritorio({ data, save }) {
-  const cfg = data.escritorio || {};
+  const cfg = (data && data.escritorio) || {};
   const [aba, setAba] = useState("dados");
   const perm = getPermissoes();
   const [form, setForm] = useState({
@@ -13105,6 +13105,21 @@ export default function ModuloClientesFornecedores() {
       </div>
     </div>
   );
+
+  // Proteção: se data ainda é null depois de loading, usa SEED pra não quebrar
+  // (pode acontecer se o backend falhou ou se é um usuário novo com permissões limitadas)
+  if (!data) {
+    return (
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
+        <div style={{ textAlign:"center", maxWidth:400 }}>
+          <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
+          <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
+          <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
+          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
+        </div>
+      </div>
+    );
+  }
 
   const nomeEscritorio = data?.escritorio?.nome || "Vicke";
 
