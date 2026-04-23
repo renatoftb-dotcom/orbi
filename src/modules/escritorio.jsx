@@ -41,7 +41,7 @@ function Escritorio({ data, save }) {
   const [confirmSenha, setConfirmSenha] = useState("");
   const [salvandoUsuario, setSalvandoUsuario] = useState(false);
   // JWT (fonte: localStorage), pra identificar o usuário logado e não desativar/excluir a si mesmo
-  const tokenAtual = (typeof localStorage !== "undefined") ? localStorage.getItem("vicke_token") : null;
+  const tokenAtual = (typeof localStorage !== "undefined") ? localStorage.getItem("vicke-token") : null;
   const usuarioLogadoId = (() => {
     if (!tokenAtual) return null;
     try {
@@ -68,7 +68,7 @@ function Escritorio({ data, save }) {
     setLoadingUsuarios(true);
     setErroUsuarios(null);
     try {
-      const token = localStorage.getItem("vicke_token");
+      const token = localStorage.getItem("vicke-token");
       const res = await fetch("https://orbi-production-5f5c.up.railway.app/empresa/usuarios", {
         headers: { "Authorization": `Bearer ${token}` },
       });
@@ -111,7 +111,7 @@ function Escritorio({ data, save }) {
 
     setSalvandoUsuario(true);
     try {
-      const token = localStorage.getItem("vicke_token");
+      const token = localStorage.getItem("vicke-token");
       const body = {
         nome: novoUsuario.nome.trim(),
         email: novoUsuario.email.trim().toLowerCase(),
@@ -154,7 +154,7 @@ function Escritorio({ data, save }) {
     }
     if (!confirm(`Excluir o usuário "${u.nome}"?\n\nEsta ação não pode ser desfeita.`)) return;
     try {
-      const token = localStorage.getItem("vicke_token");
+      const token = localStorage.getItem("vicke-token");
       const res = await fetch(`https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${u.id}`, {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${token}` },
@@ -702,7 +702,7 @@ function Escritorio({ data, save }) {
     setManutLoading(true);
     setManutResult(null);
     try {
-      const token = localStorage.getItem("vicke_token");
+      const token = localStorage.getItem("vicke-token");
       if (!token) {
         alert("Sessão expirada. Faça login novamente.");
         setManutLoading(false);

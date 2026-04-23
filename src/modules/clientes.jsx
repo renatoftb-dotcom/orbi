@@ -3,11 +3,11 @@
 // ═══════════════════════════════════════════════════════════════
 
 // ── HELPERS DE PERMISSÃO (disponível globalmente a partir daqui) ──
-// Fonte: JWT salvo em localStorage("vicke_token"). Retorna o objeto decodado ou null.
+// Fonte: JWT salvo em localStorage("vicke-token"). Retorna o objeto decodado ou null.
 // Chaves esperadas no payload: { id, nome, email, perfil, nivel, membro_id, empresa_id }
 function getUsuarioAtual() {
   if (typeof localStorage === "undefined") return null;
-  const token = localStorage.getItem("vicke_token");
+  const token = localStorage.getItem("vicke-token");
   if (!token) return null;
   try {
     const part = token.split(".")[1];
@@ -17,13 +17,32 @@ function getUsuarioAtual() {
   } catch { return null; }
 }
 
+// Diagnóstico: chame `__vickeDebugAuth()` no console pra ver o que o app acha do seu usuário
+if (typeof window !== "undefined") {
+  window.__vickeDebugAuth = () => {
+    const u = getUsuarioAtual();
+    const n = getNivelUsuario();
+    const p = getPermissoes();
+    console.log("=== Vicke Auth Debug ===");
+    console.log("Token JWT decodado:", u);
+    console.log("Nível efetivo:", n);
+    console.log("Permissões:", p);
+    return { usuario: u, nivel: n, permissoes: p };
+  };
+}
+
 // Retorna o nível efetivo do usuário (admin, editor, visualizador).
-// Master é tratado como admin. Se não autenticado, retorna "visualizador" (fallback seguro).
+// Master é sempre admin.
+// Retrocompat: se o JWT existe mas ainda não tem o campo `nivel` (tokens emitidos
+// antes da Fase 1 do backend), assume admin — porque antes todos os usuários
+// logados eram efetivamente admins (não havia níveis).
+// Só cai em "visualizador" se não há token nenhum.
 function getNivelUsuario() {
   const u = getUsuarioAtual();
   if (!u) return "visualizador";
   if (u.perfil === "master") return "admin";
-  return u.nivel || "visualizador";
+  // Se o token antigo não tem `nivel`, trata como admin (retrocompat)
+  return u.nivel || "admin";
 }
 
 // Flags de permissão de ação (usar nos componentes pra esconder/desabilitar botões).
