@@ -126,11 +126,19 @@ async function initDB() {
       email        TEXT UNIQUE NOT NULL,
       senha_hash   TEXT NOT NULL,
       perfil       TEXT DEFAULT 'escritorio',
+      nivel        TEXT DEFAULT 'admin',
+      membro_id    TEXT,
       ativo        BOOLEAN DEFAULT TRUE,
       criado_em    TIMESTAMPTZ DEFAULT NOW(),
       atualizado_em TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+
+  // Migração segura: adiciona colunas em bancos já existentes (idempotente)
+  await query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS nivel TEXT DEFAULT 'admin'`);
+  await query(`ALTER TABLE usuarios ADD COLUMN IF NOT EXISTS membro_id TEXT`);
+  // Usuários existentes sem nível: master vira admin (já tem tudo), escritorio vira admin (é o dono)
+  await query(`UPDATE usuarios SET nivel = 'admin' WHERE nivel IS NULL`);
   console.log("  ✓ Tabelas verificadas/criadas");
 }
 
@@ -158,6 +166,24 @@ function masterOnly(req, res, next) {
   next();
 }
 
+// Middleware: garante que o usuário é admin do escritório (ou master)
+function adminOnly(req, res, next) {
+  const isMaster = req.user?.perfil === "master";
+  const isAdmin  = req.user?.nivel === "admin";
+  if (!isMaster && !isAdmin) return err(res, "Acesso restrito a administradores", 403);
+  next();
+}
+
+// Middleware: permite admin ou editor (bloqueia visualizador)
+function editorOrAdmin(req, res, next) {
+  const isMaster = req.user?.perfil === "master";
+  const nivel = req.user?.nivel;
+  if (!isMaster && nivel !== "admin" && nivel !== "editor") {
+    return err(res, "Sem permissão para esta ação", 403);
+  }
+  next();
+}
+
 // ── AUTH ───────────────────────────────────────────────────────
 app.post("/auth/login", async (req, res) => {
   try {
@@ -177,7 +203,9 @@ app.post("/auth/login", async (req, res) => {
 
     const token = jwt.sign(
       { id: usuario.id, nome: usuario.nome, email: usuario.email,
-        perfil: usuario.perfil, empresa_id: usuario.empresa_id,
+        perfil: usuario.perfil, nivel: usuario.nivel || "admin",
+        membro_id: usuario.membro_id || null,
+        empresa_id: usuario.empresa_id,
         empresa_nome: empresa.nome },
       JWT_SECRET,
       { expiresIn: "7d" }
@@ -185,7 +213,9 @@ app.post("/auth/login", async (req, res) => {
 
     ok(res, { token, usuario: {
       id: usuario.id, nome: usuario.nome, email: usuario.email,
-      perfil: usuario.perfil, empresa_id: usuario.empresa_id,
+      perfil: usuario.perfil, nivel: usuario.nivel || "admin",
+      membro_id: usuario.membro_id || null,
+      empresa_id: usuario.empresa_id,
       empresa_nome: empresa.nome
     }});
   } catch(e) { err(res, e.message); }
@@ -193,7 +223,7 @@ app.post("/auth/login", async (req, res) => {
 
 app.get("/auth/me", authMiddleware, async (req, res) => {
   try {
-    const { rows } = await query("SELECT id,nome,email,perfil,empresa_id,ativo FROM usuarios WHERE id = $1", [req.user.id]);
+    const { rows } = await query("SELECT id,nome,email,perfil,nivel,membro_id,empresa_id,ativo FROM usuarios WHERE id = $1", [req.user.id]);
     const usuario = rows[0];
     if (!usuario || !usuario.ativo) return err(res, "Usuário inativo", 401);
     const { rows: empRows } = await query("SELECT nome FROM empresas WHERE id = $1", [usuario.empresa_id]);
@@ -239,9 +269,10 @@ app.post("/admin/usuarios", authMiddleware, masterOnly, async (req, res) => {
   try {
     const { empresa_id, nome, email, senha, perfil } = req.body;
     if (!empresa_id || !nome || !email || !senha) return err(res, "empresa_id, nome, email e senha são obrigatórios");
+    if (senha.length < 6) return err(res, "A senha deve ter no mínimo 6 caracteres");
     const { rows: existe } = await query("SELECT id FROM usuarios WHERE email = $1", [email]);
     if (existe.length > 0) return err(res, "Email já cadastrado");
-    const id = `usr_${Date.now()}`;
+    const id = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const senha_hash = bcrypt.hashSync(senha, 10);
     await query("INSERT INTO usuarios (id,empresa_id,nome,email,senha_hash,perfil,ativo) VALUES ($1,$2,$3,$4,$5,$6,TRUE)",
       [id, empresa_id, nome, email, senha_hash, perfil || "escritorio"]);
@@ -253,6 +284,7 @@ app.put("/admin/usuarios/:id", authMiddleware, masterOnly, async (req, res) => {
   try {
     const { nome, email, perfil, ativo, senha } = req.body;
     if (senha) {
+      if (senha.length < 6) return err(res, "A senha deve ter no mínimo 6 caracteres");
       const senha_hash = bcrypt.hashSync(senha, 10);
       await query("UPDATE usuarios SET nome=$1,email=$2,perfil=$3,ativo=$4,senha_hash=$5,atualizado_em=NOW() WHERE id=$6",
         [nome, email, perfil, ativo, senha_hash, req.params.id]);
@@ -261,6 +293,131 @@ app.put("/admin/usuarios/:id", authMiddleware, masterOnly, async (req, res) => {
         [nome, email, perfil, ativo, req.params.id]);
     }
     ok(res, { id: req.params.id, nome, email, perfil, ativo });
+  } catch(e) { err(res, e.message); }
+});
+
+app.delete("/admin/usuarios/:id", authMiddleware, masterOnly, async (req, res) => {
+  try {
+    if (req.params.id === req.user.id) {
+      return err(res, "Você não pode excluir a si mesmo", 400);
+    }
+    await query("DELETE FROM usuarios WHERE id = $1", [req.params.id]);
+    ok(res, { id: req.params.id, deleted: true });
+  } catch(e) { err(res, e.message); }
+});
+
+// ═══════════════════════════════════════════════════════════════
+// USUÁRIOS DA EMPRESA (gerenciados pelo admin do escritório)
+// ═══════════════════════════════════════════════════════════════
+// Essas rotas permitem ao ADMIN de cada escritório (não master)
+// gerenciar os usuários da SUA PRÓPRIA empresa.
+// Isolamento por empresa_id é aplicado em todas as queries.
+// ═══════════════════════════════════════════════════════════════
+
+// Lista usuários da empresa do admin autenticado
+app.get("/empresa/usuarios", authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT id, nome, email, nivel, membro_id, ativo, criado_em, atualizado_em
+       FROM usuarios WHERE empresa_id = $1 ORDER BY criado_em ASC`,
+      [req.user.empresa_id]
+    );
+    ok(res, rows);
+  } catch(e) { err(res, e.message); }
+});
+
+// Cria novo usuário na empresa do admin autenticado
+app.post("/empresa/usuarios", authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const { nome, email, senha, nivel, membro_id } = req.body;
+    if (!nome || !email || !senha) {
+      return err(res, "Nome, email e senha são obrigatórios");
+    }
+    if (senha.length < 6) {
+      return err(res, "A senha deve ter no mínimo 6 caracteres");
+    }
+    const nivelValido = ["admin", "editor", "visualizador"];
+    const nivelFinal = nivelValido.includes(nivel) ? nivel : "visualizador";
+
+    // Email único no sistema inteiro
+    const { rows: existe } = await query("SELECT id FROM usuarios WHERE email = $1", [email]);
+    if (existe.length > 0) return err(res, "Email já cadastrado");
+
+    const id = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const senha_hash = bcrypt.hashSync(senha, 10);
+
+    await query(
+      `INSERT INTO usuarios (id, empresa_id, nome, email, senha_hash, perfil, nivel, membro_id, ativo)
+       VALUES ($1, $2, $3, $4, $5, 'escritorio', $6, $7, TRUE)`,
+      [id, req.user.empresa_id, nome, email, senha_hash, nivelFinal, membro_id || null]
+    );
+    ok(res, { id, nome, email, nivel: nivelFinal, membro_id: membro_id || null, ativo: true });
+  } catch(e) { err(res, e.message); }
+});
+
+// Atualiza usuário — só dentro da própria empresa
+app.put("/empresa/usuarios/:id", authMiddleware, adminOnly, async (req, res) => {
+  try {
+    const { nome, email, senha, nivel, membro_id, ativo } = req.body;
+
+    // Confere que o usuário editado é da mesma empresa do admin logado
+    const { rows: alvo } = await query(
+      "SELECT id, empresa_id, perfil FROM usuarios WHERE id = $1",
+      [req.params.id]
+    );
+    if (alvo.length === 0) return err(res, "Usuário não encontrado", 404);
+    if (alvo[0].empresa_id !== req.user.empresa_id && req.user.perfil !== "master") {
+      return err(res, "Usuário não pertence à sua empresa", 403);
+    }
+
+    // Não permite desativar o próprio usuário (trava de segurança)
+    if (req.params.id === req.user.id && ativo === false) {
+      return err(res, "Você não pode desativar a si mesmo", 400);
+    }
+
+    const nivelValido = ["admin", "editor", "visualizador"];
+    const nivelFinal = nivelValido.includes(nivel) ? nivel : "visualizador";
+
+    if (senha) {
+      if (senha.length < 6) return err(res, "A senha deve ter no mínimo 6 caracteres");
+      const senha_hash = bcrypt.hashSync(senha, 10);
+      await query(
+        `UPDATE usuarios SET nome=$1, email=$2, nivel=$3, membro_id=$4, ativo=$5, senha_hash=$6, atualizado_em=NOW()
+         WHERE id=$7`,
+        [nome, email, nivelFinal, membro_id || null, ativo !== false, senha_hash, req.params.id]
+      );
+    } else {
+      await query(
+        `UPDATE usuarios SET nome=$1, email=$2, nivel=$3, membro_id=$4, ativo=$5, atualizado_em=NOW()
+         WHERE id=$6`,
+        [nome, email, nivelFinal, membro_id || null, ativo !== false, req.params.id]
+      );
+    }
+    ok(res, { id: req.params.id, nome, email, nivel: nivelFinal, membro_id: membro_id || null, ativo: ativo !== false });
+  } catch(e) { err(res, e.message); }
+});
+
+// Deleta usuário — só dentro da própria empresa, e nunca o próprio usuário
+app.delete("/empresa/usuarios/:id", authMiddleware, adminOnly, async (req, res) => {
+  try {
+    if (req.params.id === req.user.id) {
+      return err(res, "Você não pode excluir a si mesmo", 400);
+    }
+
+    const { rows: alvo } = await query(
+      "SELECT id, empresa_id, perfil FROM usuarios WHERE id = $1",
+      [req.params.id]
+    );
+    if (alvo.length === 0) return err(res, "Usuário não encontrado", 404);
+    if (alvo[0].empresa_id !== req.user.empresa_id && req.user.perfil !== "master") {
+      return err(res, "Usuário não pertence à sua empresa", 403);
+    }
+    if (alvo[0].perfil === "master") {
+      return err(res, "Usuário master não pode ser excluído por esta rota", 403);
+    }
+
+    await query("DELETE FROM usuarios WHERE id = $1", [req.params.id]);
+    ok(res, { id: req.params.id, deleted: true });
   } catch(e) { err(res, e.message); }
 });
 
@@ -288,6 +445,72 @@ async function seedMaster() {
     console.log("  ✓ Usuário master criado: renato@vicke.com.br / vicke2026");
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+// PROTEÇÃO GLOBAL DAS ROTAS /api/*
+// ═══════════════════════════════════════════════════════════════
+// Todas as rotas /api/* exigem token (authMiddleware).
+// Exceções: /api/health (pro Railway fazer health check sem token).
+//
+// Regras por nível (master e admin passam em tudo):
+//   - visualizador: só GET/HEAD
+//   - editor: GET/HEAD + POST/PUT/DELETE em recursos de trabalho
+//            (clientes/orçamentos/obras/etc), MAS não pode:
+//            • alterar config do escritório (/api/escritorio, /api/config/*, /api/logo)
+//            • importar backup (operação destrutiva em massa)
+//            • excluir recursos (DELETE)  ← UX diz "editor não exclui"
+//   - admin/master: tudo
+// ═══════════════════════════════════════════════════════════════
+
+// Lista de rotas /api/* que exigem admin (além do master).
+// Padrões: prefixo exato que começa com esses caminhos.
+const API_ADMIN_ONLY_PATHS = [
+  "/escritorio",         // PUT altera dados do escritório
+  "/config",             // PUT /config/:chave (toda config)
+  "/logo",               // PUT altera logo
+  "/backup/importar",    // POST sobrescreve tudo — extremamente destrutivo
+];
+
+function isAdminOnlyApiPath(path) {
+  return API_ADMIN_ONLY_PATHS.some(p => path === p || path.startsWith(p + "/"));
+}
+
+app.use("/api", (req, res, next) => {
+  // Rotas públicas (sem auth)
+  if (req.path === "/health") return next();
+
+  // Autentica (popula req.user)
+  authMiddleware(req, res, (errAuth) => {
+    if (errAuth) return; // authMiddleware já respondeu com 401
+
+    const isMaster = req.user?.perfil === "master";
+    const nivel    = req.user?.nivel;
+    const isAdmin  = isMaster || nivel === "admin";
+    const isEditor = nivel === "editor";
+    const isWrite  = req.method !== "GET" && req.method !== "HEAD";
+    const isDelete = req.method === "DELETE";
+
+    // Leitura: qualquer autenticado pode ler
+    if (!isWrite) return next();
+
+    // Visualizador nunca escreve
+    if (!isAdmin && !isEditor) {
+      return err(res, "Seu nível de acesso não permite alterar dados (somente visualização)", 403);
+    }
+
+    // DELETE: só admin — editor não exclui nada (consistente com o frontend)
+    if (isDelete && !isAdmin) {
+      return err(res, "Apenas administradores podem excluir registros", 403);
+    }
+
+    // Rotas sensíveis (config, backup): só admin
+    if (isAdminOnlyApiPath(req.path) && !isAdmin) {
+      return err(res, "Esta operação requer permissão de administrador", 403);
+    }
+
+    next();
+  });
+});
 
 // ── CLIENTES ───────────────────────────────────────────────────
 app.get("/api/clientes", async (req, res) => {

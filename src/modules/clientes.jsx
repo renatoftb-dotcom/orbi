@@ -2,6 +2,51 @@
 // CLIENTES — Kanban + visual minimalista
 // ═══════════════════════════════════════════════════════════════
 
+// ── HELPERS DE PERMISSÃO (disponível globalmente a partir daqui) ──
+// Fonte: JWT salvo em localStorage("vicke_token"). Retorna o objeto decodado ou null.
+// Chaves esperadas no payload: { id, nome, email, perfil, nivel, membro_id, empresa_id }
+function getUsuarioAtual() {
+  if (typeof localStorage === "undefined") return null;
+  const token = localStorage.getItem("vicke_token");
+  if (!token) return null;
+  try {
+    const part = token.split(".")[1];
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
+    return JSON.parse(atob(padded));
+  } catch { return null; }
+}
+
+// Retorna o nível efetivo do usuário (admin, editor, visualizador).
+// Master é tratado como admin. Se não autenticado, retorna "visualizador" (fallback seguro).
+function getNivelUsuario() {
+  const u = getUsuarioAtual();
+  if (!u) return "visualizador";
+  if (u.perfil === "master") return "admin";
+  return u.nivel || "visualizador";
+}
+
+// Flags de permissão de ação (usar nos componentes pra esconder/desabilitar botões).
+// - podeEditar: criar e alterar dados (admin e editor)
+// - podeExcluir: ações destrutivas (só admin)
+// - podeGerenciarUsuarios: aba Usuários em Escritório (só admin)
+// - podeAlterarConfig: config do escritório, admin panel etc (só admin)
+function getPermissoes() {
+  const nivel = getNivelUsuario();
+  const isAdmin  = nivel === "admin";
+  const isEditor = nivel === "editor";
+  return {
+    nivel,
+    isAdmin,
+    isEditor,
+    isVisualizador: nivel === "visualizador",
+    podeEditar: isAdmin || isEditor,
+    podeExcluir: isAdmin,
+    podeGerenciarUsuarios: isAdmin,
+    podeAlterarConfig: isAdmin,
+  };
+}
+
 const C = {
   input:    { border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
   label:    { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
@@ -236,6 +281,7 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
 function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto, abrirCadastroNovo, onCadastroNovoAberto }) {
   // IMPORTANTE: Todos os hooks devem ser declarados ANTES de qualquer return condicional.
   // Ordem dos hooks deve ser constante entre renders (regra do React).
+  const perm = getPermissoes();
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
@@ -481,7 +527,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                 <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>Clientes</div>
                 <div style={{ fontSize:12, color:"#9ca3af" }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
               </div>
-              <button style={C.btn} onClick={openNew}>+ Novo</button>
+              {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
             </div>
             <input style={{ ...C.input }} placeholder="Buscar cliente..." value={busca} onChange={e=>setBusca(e.target.value)} />
           </div>
@@ -532,7 +578,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
             <button style={C.btnSec} onClick={() => setView("list")}>Lista</button>
-            <button style={C.btn} onClick={openNew}>+ Novo cliente</button>
+            {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo cliente</button>}
           </div>
         </div>
 
@@ -593,7 +639,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <input style={{ ...C.input, width: isMobile ? "100%" : 220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
             {!isMobile && <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>}
-            <button style={C.btn} onClick={openNew}>+ Novo</button>
+            {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
           </div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -746,6 +792,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 }
 
 function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
+  const perm = getPermissoes();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
@@ -929,11 +976,13 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               <div style={{ width:8, height:8, borderRadius:"50%", background:"#3b82f6" }} />
               <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>Projeto</span>
             </div>
-            <button
-              onClick={() => onAbrirOrcamento(cliente, null)}
-              style={{ background:"#fff", color:"#111", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
-              Orçar projeto
-            </button>
+            {perm.podeEditar && (
+              <button
+                onClick={() => onAbrirOrcamento(cliente, null)}
+                style={{ background:"#fff", color:"#111", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+                Orçar projeto
+              </button>
+            )}
           </div>
 
           {/* Lista de orçamentos — tabela ou cards (mesma preferência da página Orçamentos) */}
@@ -963,6 +1012,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               onAbrirOrcamento(cliente, orcCompleto, modo);
             };
             const mkOnAction = async (acao, orc) => {
+              if (perm.isVisualizador) { alert("Sem permissão para esta ação."); return; }
               if (acao === "ganho") {
                 if (orc.status === "ganho") return;
                 const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`).then(r=>r.json()).catch(()=>null);
@@ -970,11 +1020,15 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                 setOrcGanho(orcCompleto);
               }
               if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
-              if (acao === "excluir") setConfirmDelete(orc.id);
+              if (acao === "excluir") {
+                if (!perm.podeExcluir) { alert("Apenas administradores podem excluir."); return; }
+                setConfirmDelete(orc.id);
+              }
             };
 
             // Handler de mudança de probabilidade (usado pelo ProbRing nos cards/tabela)
             const mkChangeProb = async (orc, novaProb) => {
+              if (!perm.podeEditar) return;
               if (![25, 50, 75].includes(novaProb)) return;
               const todos = data.orcamentosProjeto || [];
               const novos = todos.map(o => o.id === orc.id ? { ...o, probabilidade: novaProb } : o);
@@ -1114,7 +1168,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
                       orcamentos={orcamentos} clientes={[cliente]}
                       modoSelecao={modoSelecao}
-                      onToggleModoSelecao={() => setModoSelecao(true)}
+                      onToggleModoSelecao={perm.podeExcluir ? (() => setModoSelecao(true)) : null}
                       selecionados={selecionados}
                       totalVisivel={orcsOrdenados.length}
                       onToggleTodos={() => {
@@ -1136,6 +1190,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                           setSelecionados(n);
                         }}
                         onChangeProb={mkChangeProb}
+                        perm={perm}
                       />
                     ))}
                   </div>
@@ -1147,6 +1202,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         onAbrir={mkFetchOrc(o)}
                         onAction={(acao, orc) => mkOnAction(acao, orc)}
                         onChangeProb={mkChangeProb}
+                        perm={perm}
                       />
                     ))}
                   </div>

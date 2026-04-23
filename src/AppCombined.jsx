@@ -2434,6 +2434,51 @@ var S = {
 // CLIENTES — Kanban + visual minimalista
 // ═══════════════════════════════════════════════════════════════
 
+// ── HELPERS DE PERMISSÃO (disponível globalmente a partir daqui) ──
+// Fonte: JWT salvo em localStorage("vicke_token"). Retorna o objeto decodado ou null.
+// Chaves esperadas no payload: { id, nome, email, perfil, nivel, membro_id, empresa_id }
+function getUsuarioAtual() {
+  if (typeof localStorage === "undefined") return null;
+  const token = localStorage.getItem("vicke_token");
+  if (!token) return null;
+  try {
+    const part = token.split(".")[1];
+    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
+    return JSON.parse(atob(padded));
+  } catch { return null; }
+}
+
+// Retorna o nível efetivo do usuário (admin, editor, visualizador).
+// Master é tratado como admin. Se não autenticado, retorna "visualizador" (fallback seguro).
+function getNivelUsuario() {
+  const u = getUsuarioAtual();
+  if (!u) return "visualizador";
+  if (u.perfil === "master") return "admin";
+  return u.nivel || "visualizador";
+}
+
+// Flags de permissão de ação (usar nos componentes pra esconder/desabilitar botões).
+// - podeEditar: criar e alterar dados (admin e editor)
+// - podeExcluir: ações destrutivas (só admin)
+// - podeGerenciarUsuarios: aba Usuários em Escritório (só admin)
+// - podeAlterarConfig: config do escritório, admin panel etc (só admin)
+function getPermissoes() {
+  const nivel = getNivelUsuario();
+  const isAdmin  = nivel === "admin";
+  const isEditor = nivel === "editor";
+  return {
+    nivel,
+    isAdmin,
+    isEditor,
+    isVisualizador: nivel === "visualizador",
+    podeEditar: isAdmin || isEditor,
+    podeExcluir: isAdmin,
+    podeGerenciarUsuarios: isAdmin,
+    podeAlterarConfig: isAdmin,
+  };
+}
+
 const C = {
   input:    { border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
   label:    { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
@@ -2668,6 +2713,7 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
 function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto, abrirCadastroNovo, onCadastroNovoAberto }) {
   // IMPORTANTE: Todos os hooks devem ser declarados ANTES de qualquer return condicional.
   // Ordem dos hooks deve ser constante entre renders (regra do React).
+  const perm = getPermissoes();
   const [abrindoOrcamento, setAbrindoOrcamento] = useState(false);
   const [view, setView]               = useState("kanban");
   const [sel, setSel]                 = useState(null);
@@ -2913,7 +2959,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                 <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>Clientes</div>
                 <div style={{ fontSize:12, color:"#9ca3af" }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
               </div>
-              <button style={C.btn} onClick={openNew}>+ Novo</button>
+              {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
             </div>
             <input style={{ ...C.input }} placeholder="Buscar cliente..." value={busca} onChange={e=>setBusca(e.target.value)} />
           </div>
@@ -2964,7 +3010,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
             <button style={C.btnSec} onClick={() => setView("list")}>Lista</button>
-            <button style={C.btn} onClick={openNew}>+ Novo cliente</button>
+            {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo cliente</button>}
           </div>
         </div>
 
@@ -3025,7 +3071,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <input style={{ ...C.input, width: isMobile ? "100%" : 220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
             {!isMobile && <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>}
-            <button style={C.btn} onClick={openNew}>+ Novo</button>
+            {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
           </div>
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -3178,6 +3224,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 }
 
 function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
+  const perm = getPermissoes();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   useEffect(() => {
     const handler = () => setIsMobile(window.innerWidth < 768);
@@ -3361,11 +3408,13 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               <div style={{ width:8, height:8, borderRadius:"50%", background:"#3b82f6" }} />
               <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>Projeto</span>
             </div>
-            <button
-              onClick={() => onAbrirOrcamento(cliente, null)}
-              style={{ background:"#fff", color:"#111", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
-              Orçar projeto
-            </button>
+            {perm.podeEditar && (
+              <button
+                onClick={() => onAbrirOrcamento(cliente, null)}
+                style={{ background:"#fff", color:"#111", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+                Orçar projeto
+              </button>
+            )}
           </div>
 
           {/* Lista de orçamentos — tabela ou cards (mesma preferência da página Orçamentos) */}
@@ -3395,6 +3444,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               onAbrirOrcamento(cliente, orcCompleto, modo);
             };
             const mkOnAction = async (acao, orc) => {
+              if (perm.isVisualizador) { alert("Sem permissão para esta ação."); return; }
               if (acao === "ganho") {
                 if (orc.status === "ganho") return;
                 const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`).then(r=>r.json()).catch(()=>null);
@@ -3402,11 +3452,15 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                 setOrcGanho(orcCompleto);
               }
               if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
-              if (acao === "excluir") setConfirmDelete(orc.id);
+              if (acao === "excluir") {
+                if (!perm.podeExcluir) { alert("Apenas administradores podem excluir."); return; }
+                setConfirmDelete(orc.id);
+              }
             };
 
             // Handler de mudança de probabilidade (usado pelo ProbRing nos cards/tabela)
             const mkChangeProb = async (orc, novaProb) => {
+              if (!perm.podeEditar) return;
               if (![25, 50, 75].includes(novaProb)) return;
               const todos = data.orcamentosProjeto || [];
               const novos = todos.map(o => o.id === orc.id ? { ...o, probabilidade: novaProb } : o);
@@ -3546,7 +3600,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                       filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
                       orcamentos={orcamentos} clientes={[cliente]}
                       modoSelecao={modoSelecao}
-                      onToggleModoSelecao={() => setModoSelecao(true)}
+                      onToggleModoSelecao={perm.podeExcluir ? (() => setModoSelecao(true)) : null}
                       selecionados={selecionados}
                       totalVisivel={orcsOrdenados.length}
                       onToggleTodos={() => {
@@ -3568,6 +3622,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                           setSelecionados(n);
                         }}
                         onChangeProb={mkChangeProb}
+                        perm={perm}
                       />
                     ))}
                   </div>
@@ -3579,6 +3634,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
                         onAbrir={mkFetchOrc(o)}
                         onAction={(acao, orc) => mkOnAction(acao, orc)}
                         onChangeProb={mkChangeProb}
+                        perm={perm}
                       />
                     ))}
                   </div>
@@ -4760,6 +4816,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [busca, setBusca] = useState("");
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState("");
+  const perm = getPermissoes();
   // Visualização (persistida em localStorage): tabela | cards
   const [viz, setViz] = useVisualizacaoOrcamentos();
   // Ordenação (reseta a cada abertura, NÃO persiste): { col, dir }
@@ -4787,7 +4844,17 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     const todos = data.orcamentosProjeto || [];
     const agora = new Date().toISOString();
 
+    // Guard: visualizador não chega aqui pela UI, mas defendemos caso algum código o chame
+    if (perm.isVisualizador) {
+      alert("Sem permissão para esta ação.");
+      return;
+    }
+
     if (acao === "excluir") {
+      if (!perm.podeExcluir) {
+        alert("Apenas administradores podem excluir orçamentos.");
+        return;
+      }
       if (!confirm(`Excluir orçamento ${orc.id}?\n\nEsta ação não pode ser desfeita.`)) return;
       const novos = todos.filter(o => o.id !== orc.id);
       save({ ...data, orcamentosProjeto: novos }).catch(console.error);
@@ -4823,6 +4890,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   // Exclui todos os orçamentos cujo id está em `selecionados`. Limpa a seleção
   // depois de salvar. O confirm modal já foi mostrado quem chama.
   async function excluirEmMassa() {
+    if (!perm.podeExcluir) {
+      alert("Apenas administradores podem excluir orçamentos.");
+      setConfirmExcluirMassa(false);
+      return;
+    }
     const todos = data.orcamentosProjeto || [];
     const ids = selecionados; // Set
     const novos = todos.filter(o => !ids.has(o.id));
@@ -4837,6 +4909,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
   // Atualiza a probabilidade de um orçamento (chamado pelo ring do card/tabela)
   async function handleChangeProb(orc, novaProb) {
+    if (!perm.podeEditar) return; // visualizador não edita probabilidade
     if (![25, 50, 75].includes(novaProb)) return;
     const todos = data.orcamentosProjeto || [];
     const novos = todos.map(o => o.id === orc.id ? { ...o, probabilidade: novaProb } : o);
@@ -5146,6 +5219,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Orçamentos</h2>
           <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Lista de todos os orçamentos do escritório</div>
         </div>
+        {perm.podeEditar && (
         <button
           onClick={() => setModalNovoAberto(true)}
           style={{
@@ -5155,6 +5229,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           }}>
           + Novo Orçamento
         </button>
+        )}
       </div>
 
       {/* Toolbar: filtros + busca + visualização */}
@@ -5245,11 +5320,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
               orcamentos={orcamentos} clientes={clientes}
               modoSelecao={modoSelecao}
-              onToggleModoSelecao={() => {
+              onToggleModoSelecao={perm.podeExcluir ? (() => {
                 // Ativa o modo. Desativação acontece via "Limpar" na barra ou via
                 // "Sair da seleção" caso nenhum esteja marcado (ver abaixo).
                 setModoSelecao(true);
-              }}
+              }) : null}
               selecionados={selecionados}
               totalVisivel={orcOrdenados.length}
               onToggleTodos={() => {
@@ -5271,6 +5346,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
                   setSelecionados(n);
                 }}
                 onChangeProb={handleChangeProb}
+                perm={perm}
               />
             ))}
           </div>
@@ -5282,6 +5358,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
                 onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
                 onAction={handleOrcAction}
                 onChangeProb={handleChangeProb}
+                perm={perm}
               />
             ))}
           </div>
@@ -5599,12 +5676,14 @@ function ServicosDots({ orc, textColor = "#6b7280", sepColor = "#d1d5db" }) {
 }
 
 // ─── Card de orçamento na lista ──────────────────
-function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
+function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
   const area = orc.resultado?.areaTotal || 0;
   const [menuOpen, setMenuOpen] = useState(false);
+  // Fallback defensivo: se perm não foi passado (componente usado em outro lugar), busca agora
+  if (!perm) perm = getPermissoes();
 
   // Fecha menu ao clicar fora
   useEffect(() => {
@@ -5773,6 +5852,7 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
           )}
         </div>
 
+        {!perm.isVisualizador && (
         <div onClick={e => e.stopPropagation()}>
           <div style={{ position:"relative" }} data-orc-menu={orc.id}>
             <button onClick={() => setMenuOpen(v => !v)}
@@ -5822,6 +5902,7 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
                   }}>
                   {status === "perdido" ? "✓ Perdido" : "Perdido"}
                 </button>
+                {perm.podeExcluir && (
                 <button
                   onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
                   style={{
@@ -5832,10 +5913,12 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
                   }}>
                   Excluir
                 </button>
+                )}
               </div>
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
@@ -5907,12 +5990,13 @@ function ToggleVisualizacao({ viz, setViz }) {
 // ─── Linha de tabela (versão compacta do OrcCard) ─────────────────────────
 function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
                  modoSelecao = false, selecionado = false, onToggleSelecao = null,
-                 onChangeProb = null }) {
+                 onChangeProb = null, perm = null }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
   const area = orc.resultado?.areaTotal || 0;
   const [menuOpen, setMenuOpen] = useState(false);
+  if (!perm) perm = getPermissoes();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -6116,6 +6200,9 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
       </div>
 
       {/* Coluna 7: Menu ações */}
+      {perm.isVisualizador ? (
+        <div></div>
+      ) : (
       <div style={{ position:"relative", display:"flex", justifyContent:"flex-end" }}
            onClick={e => e.stopPropagation()} data-orc-menu-row={orc.id}>
         <button onClick={() => setMenuOpen(v => !v)}
@@ -6152,15 +6239,20 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
                 fontWeight: status === "perdido" ? 600 : 400 }}>
               {status === "perdido" ? "✓ Perdido" : "Perdido"}
             </button>
-            <div style={{ borderTop:"0.5px solid #f1f2f4" }} />
-            <button
-              onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
-              style={{ ...menuItemStyle, color:"#dc2626" }}>
-              Excluir
-            </button>
+            {perm.podeExcluir && (
+              <>
+                <div style={{ borderTop:"0.5px solid #f1f2f4" }} />
+                <button
+                  onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
+                  style={{ ...menuItemStyle, color:"#dc2626" }}>
+                  Excluir
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
@@ -11659,6 +11751,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 function Escritorio({ data, save }) {
   const cfg = data.escritorio || {};
   const [aba, setAba] = useState("dados");
+  const perm = getPermissoes();
   const [form, setForm] = useState({
     nome:        cfg.nome        || "",
     cnpj:        cfg.cnpj        || "",
@@ -11684,6 +11777,148 @@ function Escritorio({ data, save }) {
   const [equipe, setEquipe] = useState(cfg.equipe || []);
   const [saved, setSaved] = useState(false);
   const [novoMembro, setNovoMembro] = useState(null);
+
+  // ── Estado da aba Usuários ──────────────────────────────────
+  const [usuarios, setUsuarios] = useState([]);
+  const [loadingUsuarios, setLoadingUsuarios] = useState(false);
+  const [erroUsuarios, setErroUsuarios] = useState(null);
+  const [novoUsuario, setNovoUsuario] = useState(null); // objeto quando modal aberto
+  const [confirmSenha, setConfirmSenha] = useState("");
+  const [salvandoUsuario, setSalvandoUsuario] = useState(false);
+  // JWT (fonte: localStorage), pra identificar o usuário logado e não desativar/excluir a si mesmo
+  const tokenAtual = (typeof localStorage !== "undefined") ? localStorage.getItem("vicke_token") : null;
+  const usuarioLogadoId = (() => {
+    if (!tokenAtual) return null;
+    try {
+      // JWT usa base64url; precisa converter pra base64 padrão antes do atob
+      const part = tokenAtual.split(".")[1];
+      const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
+      const payload = JSON.parse(atob(padded));
+      return payload?.id || null;
+    } catch { return null; }
+  })();
+
+  const emptyUsuario = {
+    id: "",
+    nome: "",
+    email: "",
+    senha: "",
+    nivel: "visualizador",
+    membro_id: "",
+    ativo: true,
+  };
+
+  async function carregarUsuarios() {
+    setLoadingUsuarios(true);
+    setErroUsuarios(null);
+    try {
+      const token = localStorage.getItem("vicke_token");
+      const res = await fetch("https://orbi-production-5f5c.up.railway.app/empresa/usuarios", {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "Erro ao listar usuários");
+      setUsuarios(json.data || []);
+    } catch (e) {
+      setErroUsuarios(e.message);
+    } finally {
+      setLoadingUsuarios(false);
+    }
+  }
+
+  async function salvarUsuario() {
+    if (!novoUsuario) return;
+    // Validação básica
+    if (!novoUsuario.nome?.trim()) { alert("Informe o nome"); return; }
+    if (!novoUsuario.email?.trim()) { alert("Informe o e-mail"); return; }
+    const editando = !!novoUsuario._editando; // flag interna
+    if (!editando) {
+      if (!novoUsuario.senha || novoUsuario.senha.length < 6) {
+        alert("A senha deve ter no mínimo 6 caracteres");
+        return;
+      }
+      if (novoUsuario.senha !== confirmSenha) {
+        alert("As senhas não conferem");
+        return;
+      }
+    } else if (novoUsuario.senha) {
+      // Editando e mudando senha: valida também
+      if (novoUsuario.senha.length < 6) {
+        alert("A nova senha deve ter no mínimo 6 caracteres");
+        return;
+      }
+      if (novoUsuario.senha !== confirmSenha) {
+        alert("As senhas não conferem");
+        return;
+      }
+    }
+
+    setSalvandoUsuario(true);
+    try {
+      const token = localStorage.getItem("vicke_token");
+      const body = {
+        nome: novoUsuario.nome.trim(),
+        email: novoUsuario.email.trim().toLowerCase(),
+        nivel: novoUsuario.nivel || "visualizador",
+        membro_id: novoUsuario.membro_id || null,
+        ativo: novoUsuario.ativo !== false,
+      };
+      // Só manda a senha se foi preenchida (ao editar ela é opcional)
+      if (novoUsuario.senha) body.senha = novoUsuario.senha;
+
+      const url = editando
+        ? `https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${novoUsuario.id}`
+        : `https://orbi-production-5f5c.up.railway.app/empresa/usuarios`;
+      const method = editando ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "Erro ao salvar usuário");
+      setNovoUsuario(null);
+      setConfirmSenha("");
+      await carregarUsuarios();
+    } catch (e) {
+      alert("Erro: " + e.message);
+    } finally {
+      setSalvandoUsuario(false);
+    }
+  }
+
+  async function excluirUsuario(u) {
+    if (u.id === usuarioLogadoId) {
+      alert("Você não pode excluir a si mesmo.");
+      return;
+    }
+    if (!confirm(`Excluir o usuário "${u.nome}"?\n\nEsta ação não pode ser desfeita.`)) return;
+    try {
+      const token = localStorage.getItem("vicke_token");
+      const res = await fetch(`https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${u.id}`, {
+        method: "DELETE",
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "Erro ao excluir");
+      await carregarUsuarios();
+    } catch (e) {
+      alert("Erro: " + e.message);
+    }
+  }
+
+  // Carrega a lista quando a aba Usuários é aberta pela primeira vez
+  useEffect(() => {
+    if (aba === "usuarios" && usuarios.length === 0 && !loadingUsuarios && !erroUsuarios) {
+      carregarUsuarios();
+    }
+    // eslint-disable-next-line
+  }, [aba]);
 
   const emptyMembro = { id:"", nome:"", cargo:"", email:"", telefone:"", cau:"", cpf:"" };
 
@@ -11737,6 +11972,17 @@ function Escritorio({ data, save }) {
     viewVal: { fontSize:14, color:"#111", marginBottom:2 },
     viewLabel: { fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
     viewBloco: { display:"flex", flexDirection:"column", gap:3 },
+  };
+
+  // Tag de nível de usuário (reusável)
+  const tagBase = {
+    fontSize: 9.5,
+    padding: "2px 6px",
+    borderRadius: 4,
+    fontWeight: 600,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
   };
 
   // ── ABA DADOS ───────────────────────────────────────────────
@@ -11859,12 +12105,22 @@ function Escritorio({ data, save }) {
         </div>
       </div>
 
-      {/* Salvar */}
-      <div style={{ display:"flex", justifyContent:"flex-end", gap:10, paddingTop:8 }}>
-        <button style={saved ? E.btnSalvo : E.btn} onClick={handleSave}>
-          {saved ? "Salvo!" : "Salvar alterações"}
-        </button>
-      </div>
+      {/* Salvar — só admin pode alterar config do escritório */}
+      {perm.podeAlterarConfig && (
+        <div style={{ display:"flex", justifyContent:"flex-end", gap:10, paddingTop:8 }}>
+          <button style={saved ? E.btnSalvo : E.btn} onClick={handleSave}>
+            {saved ? "Salvo!" : "Salvar alterações"}
+          </button>
+        </div>
+      )}
+      {!perm.podeAlterarConfig && (
+        <div style={{
+          padding:"12px 14px", background:"#f9fafb", border:"1px solid #f3f4f6",
+          borderRadius:8, color:"#6b7280", fontSize:12.5, textAlign:"center",
+        }}>
+          Somente administradores podem alterar estes dados.
+        </div>
+      )}
     </div>
   );
 
@@ -11945,13 +12201,242 @@ function Escritorio({ data, save }) {
   );
 
   // ── ABA USUÁRIOS ────────────────────────────────────────────
-  const renderUsuarios = () => (
-    <div style={E.body}>
-      <div style={{ fontSize:13, color:"#9ca3af", padding:"40px 0", textAlign:"center" }}>
-        Gestão de usuários em breve — invite por e-mail, perfis e permissões.
+  const renderUsuarios = () => {
+    const labelNivel = { admin:"Admin", editor:"Editor", visualizador:"Visualizador" };
+    const corNivel = {
+      admin:        { bg:"#334155", color:"#fff" },
+      editor:       { bg:"#dbeafe", color:"#1e40af" },
+      visualizador: { bg:"#f1f5f9", color:"#64748b" },
+    };
+
+    return (
+      <div style={E.body}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+          <div>
+            <div style={{ fontSize:14, color:"#111", fontWeight:600 }}>
+              {usuarios.length} {usuarios.length === 1 ? "usuário" : "usuários"}
+            </div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+              Controle quem acessa o sistema e em qual nível de permissão
+            </div>
+          </div>
+          <button
+            style={E.btn}
+            onClick={() => { setNovoUsuario({ ...emptyUsuario, id: `usr_${Date.now()}_${Math.random().toString(36).slice(2,7)}` }); setConfirmSenha(""); }}>
+            + Adicionar usuário
+          </button>
+        </div>
+
+        {/* Legenda dos níveis */}
+        <div style={{
+          background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:10,
+          padding:"12px 14px", marginBottom:20, fontSize:12, lineHeight:1.7, color:"#6b7280",
+        }}>
+          <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4 }}>
+            <span style={{ ...tagBase, background: corNivel.admin.bg, color: corNivel.admin.color }}>Admin</span>
+            Acesso total: criar/editar/excluir dados + gerenciar usuários
+          </div>
+          <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4 }}>
+            <span style={{ ...tagBase, background: corNivel.editor.bg, color: corNivel.editor.color }}>Editor</span>
+            Cria e edita orçamentos, clientes e obras. Não exclui nem mexe em config
+          </div>
+          <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+            <span style={{ ...tagBase, background: corNivel.visualizador.bg, color: corNivel.visualizador.color }}>Visualizador</span>
+            Somente leitura: vê tudo mas não altera nada
+          </div>
+        </div>
+
+        {loadingUsuarios && (
+          <div style={{ textAlign:"center", padding:"40px 0", color:"#9ca3af", fontSize:13 }}>
+            Carregando usuários…
+          </div>
+        )}
+
+        {erroUsuarios && !loadingUsuarios && (
+          <div style={{
+            background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10,
+            padding:"14px 16px", color:"#b91c1c", fontSize:13,
+            display:"flex", justifyContent:"space-between", alignItems:"center",
+          }}>
+            <span>⚠ Erro ao carregar: {erroUsuarios}</span>
+            <button style={E.btnSec} onClick={carregarUsuarios}>Tentar novamente</button>
+          </div>
+        )}
+
+        {!loadingUsuarios && !erroUsuarios && usuarios.length === 0 && (
+          <div style={{ textAlign:"center", padding:"60px 0", color:"#d1d5db", fontSize:14 }}>
+            Nenhum usuário cadastrado ainda.
+          </div>
+        )}
+
+        {!loadingUsuarios && !erroUsuarios && usuarios.map(u => {
+          const cor = corNivel[u.nivel] || corNivel.visualizador;
+          const ehVoce = u.id === usuarioLogadoId;
+          const membroVinculado = u.membro_id ? equipe.find(m => m.id === u.membro_id) : null;
+          return (
+            <div key={u.id} style={{
+              ...E.membroCard,
+              opacity: u.ativo === false ? 0.55 : 1,
+              borderStyle: u.ativo === false ? "dashed" : "solid",
+            }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
+                  <div style={E.membroNome}>{u.nome}</div>
+                  <span style={{ ...tagBase, background: cor.bg, color: cor.color }}>
+                    {labelNivel[u.nivel] || u.nivel}
+                  </span>
+                  {ehVoce && (
+                    <span style={{
+                      fontSize:10, padding:"2px 6px", borderRadius:4,
+                      background:"#eff6ff", color:"#2563eb", fontWeight:600,
+                      textTransform:"uppercase", letterSpacing:0.5,
+                    }}>Você</span>
+                  )}
+                  {u.ativo === false && (
+                    <span style={{
+                      fontSize:10, padding:"2px 6px", borderRadius:4,
+                      background:"#f3f4f6", color:"#6b7280", fontWeight:600,
+                      textTransform:"uppercase", letterSpacing:0.5,
+                    }}>Inativo</span>
+                  )}
+                </div>
+                <div style={E.membroCargo}>{u.email}</div>
+                {membroVinculado && (
+                  <div style={{ fontSize:11.5, color:"#6b7280", marginTop:4 }}>
+                    🔗 Vinculado a: <strong style={{ color:"#374151" }}>{membroVinculado.nome}</strong>
+                    {membroVinculado.cargo && <span style={{ color:"#9ca3af" }}> · {membroVinculado.cargo}</span>}
+                  </div>
+                )}
+              </div>
+              <div style={{ display:"flex", gap:6 }}>
+                <button
+                  onClick={() => {
+                    setNovoUsuario({
+                      id: u.id, nome: u.nome, email: u.email,
+                      senha: "", // senha em branco ao editar (só preenche se quiser trocar)
+                      nivel: u.nivel || "visualizador",
+                      membro_id: u.membro_id || "",
+                      ativo: u.ativo !== false,
+                      _editando: true,
+                    });
+                    setConfirmSenha("");
+                  }}
+                  style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                  Editar
+                </button>
+                {!ehVoce && (
+                  <button
+                    onClick={() => excluirUsuario(u)}
+                    title="Excluir usuário"
+                    style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Modal de criação/edição */}
+        {novoUsuario && (
+          <div style={E.overlay}>
+            <div style={E.modal}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+                <div style={E.modalTitulo}>
+                  {novoUsuario._editando ? "Editar usuário" : "Novo usuário"}
+                </div>
+                <button
+                  onClick={() => { setNovoUsuario(null); setConfirmSenha(""); }}
+                  style={{ background:"none", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
+              </div>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+                <div style={E.campo}>
+                  <label style={E.label}>Nome completo *</label>
+                  <input style={E.input} value={novoUsuario.nome}
+                    onChange={e => setNovoUsuario(u => ({ ...u, nome: e.target.value }))} />
+                </div>
+                <div style={E.campo}>
+                  <label style={E.label}>E-mail *</label>
+                  <input type="email" style={E.input} value={novoUsuario.email}
+                    autoComplete="off"
+                    onChange={e => setNovoUsuario(u => ({ ...u, email: e.target.value }))} />
+                </div>
+              </div>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+                <div style={E.campo}>
+                  <label style={E.label}>
+                    {novoUsuario._editando ? "Nova senha (deixe em branco pra manter)" : "Senha * (mín. 6 caracteres)"}
+                  </label>
+                  <input type="password" style={E.input} value={novoUsuario.senha}
+                    autoComplete="new-password"
+                    onChange={e => setNovoUsuario(u => ({ ...u, senha: e.target.value }))} />
+                </div>
+                <div style={E.campo}>
+                  <label style={E.label}>Confirmar senha</label>
+                  <input type="password" style={E.input} value={confirmSenha}
+                    autoComplete="new-password"
+                    onChange={e => setConfirmSenha(e.target.value)} />
+                </div>
+              </div>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+                <div style={E.campo}>
+                  <label style={E.label}>Nível de acesso *</label>
+                  <select style={E.select} value={novoUsuario.nivel}
+                    onChange={e => setNovoUsuario(u => ({ ...u, nivel: e.target.value }))}>
+                    <option value="admin">Admin — acesso total</option>
+                    <option value="editor">Editor — cria e edita</option>
+                    <option value="visualizador">Visualizador — só leitura</option>
+                  </select>
+                </div>
+                <div style={E.campo}>
+                  <label style={E.label}>Vincular a membro da equipe</label>
+                  <select style={E.select} value={novoUsuario.membro_id}
+                    onChange={e => setNovoUsuario(u => ({ ...u, membro_id: e.target.value }))}>
+                    <option value="">— Nenhum —</option>
+                    {equipe.map(m => (
+                      <option key={m.id} value={m.id}>{m.nome}{m.cargo ? ` (${m.cargo})` : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom:20 }}>
+                <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#374151", cursor:"pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={novoUsuario.ativo !== false}
+                    disabled={novoUsuario._editando && novoUsuario.id === usuarioLogadoId}
+                    onChange={e => setNovoUsuario(u => ({ ...u, ativo: e.target.checked }))}
+                    style={{ width:14, height:14, cursor: novoUsuario._editando && novoUsuario.id === usuarioLogadoId ? "not-allowed" : "pointer" }}
+                  />
+                  Usuário ativo
+                  {novoUsuario._editando && novoUsuario.id === usuarioLogadoId && (
+                    <span style={{ fontSize:11, color:"#9ca3af" }}>· não é possível desativar a si mesmo</span>
+                  )}
+                </label>
+              </div>
+
+              <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+                <button
+                  style={E.btnSec}
+                  disabled={salvandoUsuario}
+                  onClick={() => { setNovoUsuario(null); setConfirmSenha(""); }}>
+                  Cancelar
+                </button>
+                <button
+                  style={{ ...E.btn, opacity: salvandoUsuario ? 0.6 : 1, cursor: salvandoUsuario ? "not-allowed" : "pointer" }}
+                  disabled={salvandoUsuario}
+                  onClick={salvarUsuario}>
+                  {salvandoUsuario ? "Salvando…" : (novoUsuario._editando ? "Salvar alterações" : "Criar usuário")}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   // ── ABA SISTEMA ──────────────────────────────────────────────
   const [manutResult, setManutResult] = useState(null);
@@ -12027,17 +12512,25 @@ function Escritorio({ data, save }) {
         </div>
       </div>
 
-      {/* Abas */}
+      {/* Abas — aba Usuários só visível pra admin (podeGerenciarUsuarios) */}
       <div style={E.abas}>
-        {[["dados","Dados gerais"],["equipe","Equipe"],["usuarios","Usuários"],["sistema","Sistema"]].map(([key,lbl]) => (
-          <button key={key} style={E.aba(aba===key)} onClick={() => setAba(key)}>{lbl}</button>
-        ))}
+        {(() => {
+          const abasDisponiveis = [
+            ["dados",    "Dados gerais"],
+            ["equipe",   "Equipe"],
+          ];
+          if (perm.podeGerenciarUsuarios) abasDisponiveis.push(["usuarios", "Usuários"]);
+          abasDisponiveis.push(["sistema", "Sistema"]);
+          return abasDisponiveis.map(([key, lbl]) => (
+            <button key={key} style={E.aba(aba === key)} onClick={() => setAba(key)}>{lbl}</button>
+          ));
+        })()}
       </div>
 
       {/* Conteúdo */}
       {aba === "dados"    && renderDados()}
       {aba === "equipe"   && renderEquipe()}
-      {aba === "usuarios" && renderUsuarios()}
+      {aba === "usuarios" && perm.podeGerenciarUsuarios && renderUsuarios()}
       {aba === "sistema"  && renderSistema()}
     </div>
   );

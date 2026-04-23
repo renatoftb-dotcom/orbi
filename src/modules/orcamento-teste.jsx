@@ -90,6 +90,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [busca, setBusca] = useState("");
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState("");
+  const perm = getPermissoes();
   // Visualização (persistida em localStorage): tabela | cards
   const [viz, setViz] = useVisualizacaoOrcamentos();
   // Ordenação (reseta a cada abertura, NÃO persiste): { col, dir }
@@ -117,7 +118,17 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     const todos = data.orcamentosProjeto || [];
     const agora = new Date().toISOString();
 
+    // Guard: visualizador não chega aqui pela UI, mas defendemos caso algum código o chame
+    if (perm.isVisualizador) {
+      alert("Sem permissão para esta ação.");
+      return;
+    }
+
     if (acao === "excluir") {
+      if (!perm.podeExcluir) {
+        alert("Apenas administradores podem excluir orçamentos.");
+        return;
+      }
       if (!confirm(`Excluir orçamento ${orc.id}?\n\nEsta ação não pode ser desfeita.`)) return;
       const novos = todos.filter(o => o.id !== orc.id);
       save({ ...data, orcamentosProjeto: novos }).catch(console.error);
@@ -153,6 +164,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   // Exclui todos os orçamentos cujo id está em `selecionados`. Limpa a seleção
   // depois de salvar. O confirm modal já foi mostrado quem chama.
   async function excluirEmMassa() {
+    if (!perm.podeExcluir) {
+      alert("Apenas administradores podem excluir orçamentos.");
+      setConfirmExcluirMassa(false);
+      return;
+    }
     const todos = data.orcamentosProjeto || [];
     const ids = selecionados; // Set
     const novos = todos.filter(o => !ids.has(o.id));
@@ -167,6 +183,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
   // Atualiza a probabilidade de um orçamento (chamado pelo ring do card/tabela)
   async function handleChangeProb(orc, novaProb) {
+    if (!perm.podeEditar) return; // visualizador não edita probabilidade
     if (![25, 50, 75].includes(novaProb)) return;
     const todos = data.orcamentosProjeto || [];
     const novos = todos.map(o => o.id === orc.id ? { ...o, probabilidade: novaProb } : o);
@@ -476,6 +493,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Orçamentos</h2>
           <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Lista de todos os orçamentos do escritório</div>
         </div>
+        {perm.podeEditar && (
         <button
           onClick={() => setModalNovoAberto(true)}
           style={{
@@ -485,6 +503,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           }}>
           + Novo Orçamento
         </button>
+        )}
       </div>
 
       {/* Toolbar: filtros + busca + visualização */}
@@ -575,11 +594,11 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
               orcamentos={orcamentos} clientes={clientes}
               modoSelecao={modoSelecao}
-              onToggleModoSelecao={() => {
+              onToggleModoSelecao={perm.podeExcluir ? (() => {
                 // Ativa o modo. Desativação acontece via "Limpar" na barra ou via
                 // "Sair da seleção" caso nenhum esteja marcado (ver abaixo).
                 setModoSelecao(true);
-              }}
+              }) : null}
               selecionados={selecionados}
               totalVisivel={orcOrdenados.length}
               onToggleTodos={() => {
@@ -601,6 +620,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
                   setSelecionados(n);
                 }}
                 onChangeProb={handleChangeProb}
+                perm={perm}
               />
             ))}
           </div>
@@ -612,6 +632,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
                 onAbrir={(modo) => abrirOrcamentoExistente(orc, modo)}
                 onAction={handleOrcAction}
                 onChangeProb={handleChangeProb}
+                perm={perm}
               />
             ))}
           </div>
@@ -929,12 +950,14 @@ function ServicosDots({ orc, textColor = "#6b7280", sepColor = "#d1d5db" }) {
 }
 
 // ─── Card de orçamento na lista ──────────────────
-function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
+function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
   const area = orc.resultado?.areaTotal || 0;
   const [menuOpen, setMenuOpen] = useState(false);
+  // Fallback defensivo: se perm não foi passado (componente usado em outro lugar), busca agora
+  if (!perm) perm = getPermissoes();
 
   // Fecha menu ao clicar fora
   useEffect(() => {
@@ -1103,6 +1126,7 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
           )}
         </div>
 
+        {!perm.isVisualizador && (
         <div onClick={e => e.stopPropagation()}>
           <div style={{ position:"relative" }} data-orc-menu={orc.id}>
             <button onClick={() => setMenuOpen(v => !v)}
@@ -1152,6 +1176,7 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
                   }}>
                   {status === "perdido" ? "✓ Perdido" : "Perdido"}
                 </button>
+                {perm.podeExcluir && (
                 <button
                   onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
                   style={{
@@ -1162,10 +1187,12 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb }) {
                   }}>
                   Excluir
                 </button>
+                )}
               </div>
             )}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
@@ -1237,12 +1264,13 @@ function ToggleVisualizacao({ viz, setViz }) {
 // ─── Linha de tabela (versão compacta do OrcCard) ─────────────────────────
 function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
                  modoSelecao = false, selecionado = false, onToggleSelecao = null,
-                 onChangeProb = null }) {
+                 onChangeProb = null, perm = null }) {
   const cliente = clientes.find(c => c.id === orc.clienteId);
   const nomeCliente = cliente?.nome || orc.cliente || "—";
   const status = orc.status || "rascunho";
   const area = orc.resultado?.areaTotal || 0;
   const [menuOpen, setMenuOpen] = useState(false);
+  if (!perm) perm = getPermissoes();
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -1446,6 +1474,9 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
       </div>
 
       {/* Coluna 7: Menu ações */}
+      {perm.isVisualizador ? (
+        <div></div>
+      ) : (
       <div style={{ position:"relative", display:"flex", justifyContent:"flex-end" }}
            onClick={e => e.stopPropagation()} data-orc-menu-row={orc.id}>
         <button onClick={() => setMenuOpen(v => !v)}
@@ -1482,15 +1513,20 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
                 fontWeight: status === "perdido" ? 600 : 400 }}>
               {status === "perdido" ? "✓ Perdido" : "Perdido"}
             </button>
-            <div style={{ borderTop:"0.5px solid #f1f2f4" }} />
-            <button
-              onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
-              style={{ ...menuItemStyle, color:"#dc2626" }}>
-              Excluir
-            </button>
+            {perm.podeExcluir && (
+              <>
+                <div style={{ borderTop:"0.5px solid #f1f2f4" }} />
+                <button
+                  onClick={() => { setMenuOpen(false); onAction && onAction("excluir", orc); }}
+                  style={{ ...menuItemStyle, color:"#dc2626" }}>
+                  Excluir
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }
