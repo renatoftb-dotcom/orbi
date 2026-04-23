@@ -897,22 +897,29 @@ async function start() {
     await initDB();
     await seedMaster();
 
-    // Agenda manutenção diária às 3h da manhã (UTC no Railway = 00h Brasília)
-    // Expira propostas > 30 dias e inativa clientes > 3 meses sem serviço
-    cron.schedule("0 3 * * *", async () => {
-      try {
-        await rodarManutencao(query);
-      } catch (e) {
-        console.error("[manutenção] Erro:", e.message);
-      }
-    });
-    console.log("  ✓ Job de manutenção agendado (3h da manhã)");
-
+    // Inicia o servidor PRIMEIRO — garante que o healthcheck responde
+    // antes de qualquer coisa que possa dar problema (cron, etc)
     app.listen(PORT, () => {
       console.log(`\n✓ Vicke rodando em http://localhost:${PORT}`);
       console.log(`  Banco: PostgreSQL`);
       console.log(`  Pressione Ctrl+C para parar\n`);
     });
+
+    // Agenda manutenção diária às 3h da manhã (isolado em try/catch pra não derrubar o server)
+    // Expira propostas > 30 dias e inativa clientes > 3 meses sem serviço
+    try {
+      cron.schedule("0 3 * * *", async () => {
+        try {
+          await rodarManutencao(query);
+        } catch (e) {
+          console.error("[manutenção] Erro:", e.message);
+        }
+      });
+      console.log("  ✓ Job de manutenção agendado (3h da manhã)");
+    } catch (e) {
+      console.error("  ⚠ Não foi possível agendar manutenção automática:", e.message);
+      console.error("  ⚠ Use POST /admin/manutencao manualmente se necessário");
+    }
   } catch(e) {
     console.error("Erro ao iniciar:", e);
     process.exit(1);
@@ -920,6 +927,16 @@ async function start() {
 }
 
 start();
+
+// ── Tratamento global de exceções ──────────────────────────────
+// Loga exceções não capturadas mas NÃO derruba o server. O Railway
+// só deve matar o container se o healthcheck /api/health falhar.
+process.on("uncaughtException", (err) => {
+  console.error("[uncaughtException]", err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});
 
 process.on("SIGINT",  () => { pool.end(); process.exit(0); });
 process.on("SIGTERM", () => { pool.end(); process.exit(0); });
