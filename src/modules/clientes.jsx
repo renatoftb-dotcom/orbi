@@ -1,24 +1,13 @@
 // ═══════════════════════════════════════════════════════════════
 // CLIENTES — Kanban + visual minimalista
 // ═══════════════════════════════════════════════════════════════
+// Helpers de permissão (getUsuarioAtual, getNivelUsuario, getPermissoes)
+// agora vivem em shared.jsx — centralizados e sem duplicação.
 
-// ── HELPERS DE PERMISSÃO (disponível globalmente a partir daqui) ──
-// Fonte: JWT salvo em localStorage("vicke-token"). Retorna o objeto decodado ou null.
-// Chaves esperadas no payload: { id, nome, email, perfil, nivel, membro_id, empresa_id }
-function getUsuarioAtual() {
-  if (typeof localStorage === "undefined") return null;
-  const token = localStorage.getItem("vicke-token");
-  if (!token) return null;
-  try {
-    const part = token.split(".")[1];
-    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
-    return JSON.parse(atob(padded));
-  } catch { return null; }
-}
-
-// Diagnóstico: chame `__vickeDebugAuth()` no console pra ver o que o app acha do seu usuário
-if (typeof window !== "undefined") {
+// Diagnóstico em dev: `__vickeDebugAuth()` no console mostra o que o app acha do seu usuário.
+// Mantido no clientes.jsx por ser o módulo mais usado durante debug.
+// Em produção (build), o Vite remove o bloco via DCE quando import.meta.env.DEV é false.
+if (typeof window !== "undefined" && typeof import.meta !== "undefined" && import.meta.env && import.meta.env.DEV) {
   window.__vickeDebugAuth = () => {
     const u = getUsuarioAtual();
     const n = getNivelUsuario();
@@ -28,41 +17,6 @@ if (typeof window !== "undefined") {
     console.log("Nível efetivo:", n);
     console.log("Permissões:", p);
     return { usuario: u, nivel: n, permissoes: p };
-  };
-}
-
-// Retorna o nível efetivo do usuário (admin, editor, visualizador).
-// Master é sempre admin.
-// Retrocompat: se o JWT existe mas ainda não tem o campo `nivel` (tokens emitidos
-// antes da Fase 1 do backend), assume admin — porque antes todos os usuários
-// logados eram efetivamente admins (não havia níveis).
-// Só cai em "visualizador" se não há token nenhum.
-function getNivelUsuario() {
-  const u = getUsuarioAtual();
-  if (!u) return "visualizador";
-  if (u.perfil === "master") return "admin";
-  // Se o token antigo não tem `nivel`, trata como admin (retrocompat)
-  return u.nivel || "admin";
-}
-
-// Flags de permissão de ação (usar nos componentes pra esconder/desabilitar botões).
-// - podeEditar: criar e alterar dados (admin e editor)
-// - podeExcluir: ações destrutivas (só admin)
-// - podeGerenciarUsuarios: aba Usuários em Escritório (só admin)
-// - podeAlterarConfig: config do escritório, admin panel etc (só admin)
-function getPermissoes() {
-  const nivel = getNivelUsuario();
-  const isAdmin  = nivel === "admin";
-  const isEditor = nivel === "editor";
-  return {
-    nivel,
-    isAdmin,
-    isEditor,
-    isVisualizador: nivel === "visualizador",
-    podeEditar: isAdmin || isEditor,
-    podeExcluir: isAdmin,
-    podeGerenciarUsuarios: isAdmin,
-    podeAlterarConfig: isAdmin,
   };
 }
 

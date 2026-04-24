@@ -1,6 +1,83 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 // ═══════════════════════════════════════════════════════════════
+// API URL — lê de VITE_API_URL com fallback pra produção
+// ═══════════════════════════════════════════════════════════════
+// Em dev local, criar .env.local com: VITE_API_URL=http://localhost:3000
+// Em produção (Vercel), a variável já está setada como a URL do Railway.
+// Fallback garante que mesmo sem env o app aponta pro Railway ativo.
+const API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+  || "https://orbi-production-5f5c.up.railway.app";
+
+// ═══════════════════════════════════════════════════════════════
+// AUTH — decodificação de JWT e permissões (ANTES duplicado 3x)
+// ═══════════════════════════════════════════════════════════════
+// JWT usa base64url (não base64 padrão). A conversão abaixo normaliza.
+// Retorna o payload decodado ou null se inválido/corrompido.
+function decodeJWT(token) {
+  if (!token || typeof token !== "string") return null;
+  try {
+    const partes = token.split(".");
+    if (partes.length !== 3) return null;
+    const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
+    return JSON.parse(atob(padded));
+  } catch { return null; }
+}
+
+// Checa se o token está expirado. Retorna true se exp < agora.
+// Se não tiver campo exp, considera não-expirado (compat tokens antigos).
+function isTokenExpirado(payload) {
+  if (!payload || !payload.exp) return false;
+  return payload.exp * 1000 < Date.now();
+}
+
+// Usuário atualmente logado. Fonte: localStorage('vicke-token').
+// Retorna o payload do JWT ou null se não logado/inválido/expirado.
+function getUsuarioAtual() {
+  if (typeof localStorage === "undefined") return null;
+  const token = localStorage.getItem("vicke-token");
+  const payload = decodeJWT(token);
+  if (!payload || isTokenExpirado(payload)) return null;
+  return payload;
+}
+
+// Nível efetivo do usuário.
+// - Master: sempre admin (tem tudo)
+// - Usuário sem token: visualizador (mas app já redireciona pra login antes)
+// - Token sem campo `nivel`: admin (retrocompat com tokens antigos)
+function getNivelUsuario() {
+  const u = getUsuarioAtual();
+  if (!u) return "visualizador";
+  if (u.perfil === "master") return "admin";
+  return u.nivel || "admin";
+}
+
+// Flags de permissão de ação — base para esconder/desabilitar botões.
+// Backend valida novamente (defesa em profundidade), mas o frontend já
+// reflete as mesmas regras pra UX consistente.
+function getPermissoes() {
+  const u = getUsuarioAtual();
+  const nivel = getNivelUsuario();
+  const isMaster = u?.perfil === "master";
+  const isAdmin  = nivel === "admin";
+  const isEditor = nivel === "editor";
+  return {
+    usuario: u,
+    nivel,
+    isMaster,
+    isAdmin,
+    isEditor,
+    isVisualizador: nivel === "visualizador",
+    podeEditar: isAdmin || isEditor,
+    podeExcluir: isAdmin,
+    podeGerenciarUsuarios: isAdmin,
+    podeAlterarConfig: isAdmin,
+    podeGerenciar: isAdmin, // alias legado
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // PAGE CONTAINER (padrão de largura das páginas)
 // ═══════════════════════════════════════════════════════════════
 // Envelopa módulos que são listas/formulários, limitando largura pra
@@ -17,7 +94,9 @@ function PageContainer({ children, maxWidth = 1200, padding = "24px 28px", style
   );
 }
 
-// Carrega jsPDF e html2canvas
+// ═══════════════════════════════════════════════════════════════
+// CARREGAMENTO DE BIBLIOTECAS EXTERNAS (jsPDF, html2canvas, pdf.js)
+// ═══════════════════════════════════════════════════════════════
 if (typeof window !== "undefined" && !document.getElementById("jspdf-script")) {
   const s = document.createElement("script");
   s.id  = "jspdf-script";
@@ -27,9 +106,10 @@ if (typeof window !== "undefined" && !document.getElementById("jspdf-script")) {
 if (typeof window !== "undefined" && !document.getElementById("h2c-script")) {
   const s2 = document.createElement("script");
   s2.id  = "h2c-script";
-  s2.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";  document.head.appendChild(s2);
+  s2.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+  document.head.appendChild(s2);
 }
-// pdf.js — pra rasterizar PDF em imagem (snapshot de proposta)
+// pdf.js — rasterizar PDF em imagens (snapshot de proposta enviada)
 if (typeof window !== "undefined" && !document.getElementById("pdfjs-script")) {
   const s3 = document.createElement("script");
   s3.id  = "pdfjs-script";
@@ -43,8 +123,8 @@ if (typeof window !== "undefined" && !document.getElementById("pdfjs-script")) {
   document.head.appendChild(s3);
 }
 
-// Utilitário: renderiza PDF (blob) como array de imagens JPEG base64
-// Usado pra gerar snapshot visual de propostas enviadas
+// Utilitário: renderiza PDF (blob) como array de imagens JPEG base64.
+// Usado pra gerar snapshot visual de propostas enviadas.
 async function rasterizarPdfParaImagens(pdfBlob, { maxWidth = 1200, quality = 0.7 } = {}) {
   if (!window.pdfjsLib) throw new Error("pdf.js ainda não carregou — tente novamente em 1s");
   const arrayBuffer = await pdfBlob.arrayBuffer();
@@ -52,7 +132,6 @@ async function rasterizarPdfParaImagens(pdfBlob, { maxWidth = 1200, quality = 0.
   const imagens = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    // Calcula escala pra atingir maxWidth
     const viewport0 = page.getViewport({ scale: 1 });
     const scale = maxWidth / viewport0.width;
     const viewport = page.getViewport({ scale });
@@ -61,43 +140,18 @@ async function rasterizarPdfParaImagens(pdfBlob, { maxWidth = 1200, quality = 0.
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     await page.render({ canvasContext: ctx, viewport }).promise;
-    // JPEG com qualidade configurável
     imagens.push(canvas.toDataURL("image/jpeg", quality));
   }
   return imagens;
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-// STORAGE
+// UTILITÁRIOS GERAIS
 // ═══════════════════════════════════════════════════════════════
-var DB = {
-  get: async (key) => {
-    // Tenta window.storage primeiro, depois localStorage como fallback
-    try {
-      const r = await window.storage.get(key);
-      if (r?.value) {
-        const parsed = JSON.parse(r.value);
-        // Sincroniza com localStorage
-        try { localStorage.setItem(key, r.value); } catch {}
-        return parsed;
-      }
-    } catch {}
-    // Fallback: localStorage (persiste entre sessões do mesmo navegador)
-    try {
-      const local = localStorage.getItem(key);
-      if (local) return JSON.parse(local);
-    } catch {}
-    return null;
-  },
-  set: async (key, val) => {
-    const str = JSON.stringify(val);
-    // Salva em ambos
-    try { await window.storage.set(key, str); } catch {}
-    try { localStorage.setItem(key, str); } catch {}
-    return true;
-  }
-};
+// NOTA: o objeto `DB` global (window.storage + localStorage) foi removido.
+// Não era mais usado desde a migração para Postgres. Persistência agora é
+// 100% via api.js → backend. Estado local efêmero (preferências de UI)
+// continua podendo usar localStorage diretamente onde necessário.
 
 var uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -116,7 +170,6 @@ function calcularEngenharia(areaTotal, precoM2 = 50) {
   let areaRestante = areaTotal;
   let totalEng = 0;
 
-  // Gera faixas dinamicamente
   const LIMITE_INICIAL = 200;
   const DESCONTO_ATE_600 = 0.08;
   const DESCONTO_APOS_600 = 0.02;
@@ -131,18 +184,18 @@ function calcularEngenharia(areaTotal, precoM2 = 50) {
     limiteAnterior = LIMITE_INICIAL;
   }
 
-  // Faixas seguintes de 100m² com desconto composto (máximo 50% de desconto)
+  // Faixas seguintes de 100m² com desconto composto (máximo 50%)
   let faixaNum = 1;
   while (areaRestante > 0) {
     const limiteAtual = limiteAnterior + 100;
     const desconto = limiteAnterior < 600 ? DESCONTO_ATE_600 : DESCONTO_APOS_600;
-    fatorAtual = Math.max(0.5, fatorAtual * (1 - desconto)); // mínimo fator 0.5 = máx 50% desconto
+    fatorAtual = Math.max(0.5, fatorAtual * (1 - desconto));
     const areaFaixa = Math.min(areaRestante, 100);
     const preco = areaFaixa * precoM2 * fatorAtual;
     faixas.push({
       de: limiteAnterior, ate: limiteAnterior + areaFaixa,
       area: areaFaixa, fator: fatorAtual,
-      desconto: Math.round((1 - fatorAtual) * 1000) / 10, // % acumulado
+      desconto: Math.round((1 - fatorAtual) * 1000) / 10,
       preco
     });
     totalEng += preco;
@@ -221,7 +274,7 @@ var GRUPOS_COMODOS_CLINICA = {
 var CUSTOM_CONFIG_KEY_CLINICA = "obramanager-config-clinica-v1";
 
 // ═══════════════════════════════════════════════════════════════
-// COMERCIAL — comodos por bloco
+// COMERCIAL — cômodos por bloco
 // ═══════════════════════════════════════════════════════════════
 var COMODOS_GALERIA_LOJA = {
   "Área de vendas (térrea)":  { indice:0.045, medidas:{ Grande:[10,8],  Médio:[8,6],    Pequeno:[6,5],    Compacta:[5,4]    }},

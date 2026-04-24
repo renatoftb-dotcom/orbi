@@ -70,48 +70,46 @@ export default function ModuloClientesFornecedores() {
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
   const [sidebarAberta, setSidebarAberta]     = useState(true);
-  const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
-  const [clienteRetorno, setClienteRetorno] = useState(null); // cliente pra abrir detail ao fechar orçamento
-  const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false); // sinal pra abrir cadastro de cliente
+  const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null);
+  const [clienteRetorno, setClienteRetorno] = useState(null);
+  const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false);
   const [backendOffline, setBackendOffline]   = useState(false);
+
+  // Flag interna: true quando há salvamento em andamento.
+  // Usada pelo beforeunload pra bloquear fechamento durante saves.
+  const savingRef = useRef(false);
 
   // tentarTrocar: quando há orçamento em tela cheia com dados não salvos,
   // consulta o handler registrado pelo FormOrcamento (window.__vickeOrcDirtyPrompt).
-  // Se o handler retornar true, o modal de "salvar rascunho/descartar" será mostrado
-  // e a navegação será executada depois da decisão do usuário. Caso contrário,
-  // a navegação acontece imediatamente.
   function tentarTrocar(fn) {
     if (typeof window !== "undefined" && typeof window.__vickeOrcDirtyPrompt === "function") {
       const absorveu = window.__vickeOrcDirtyPrompt(fn);
-      if (absorveu) return; // modal vai cuidar
+      if (absorveu) return;
     }
     fn();
   }
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
-  // IMPORTANTE: hooks DEVEM ser chamados antes de qualquer return condicional (regra do React)
   const [projetosAberto, setProjetosAberto] = useState(() => (typeof aba === "string" && aba.indexOf("projetos") === 0));
   useEffect(() => {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
-  // Bootstrap: se já tiver token+user no localStorage, restaura sessão
-  // (evita ter que fazer login toda vez que dá F5)
-  // Antes de restaurar, valida se o token não está expirado (JWT tem campo "exp")
+  // Bootstrap: se já tiver token+user no localStorage, restaura sessão.
+  // Valida expiração usando decodeJWT centralizado de shared.jsx.
   useEffect(() => {
     try {
       const tok = localStorage.getItem("vicke-token");
       const usr = localStorage.getItem("vicke-user");
       if (tok && usr) {
-        // Decodifica o payload do JWT para checar expiração
-        const partes = tok.split(".");
-        if (partes.length !== 3) throw new Error("Token inválido");
-        const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
-        const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
-        const payload = JSON.parse(atob(padded));
-        // exp está em segundos desde epoch (padrão JWT)
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          // Token expirado — limpa e deixa cair na tela de login
+        const payload = decodeJWT(tok);
+        if (!payload) {
+          // Token malformado — limpa e deixa cair na tela de login
+          localStorage.removeItem("vicke-token");
+          localStorage.removeItem("vicke-user");
+          return;
+        }
+        if (isTokenExpirado(payload)) {
           localStorage.removeItem("vicke-token");
           localStorage.removeItem("vicke-user");
           return;
@@ -121,7 +119,7 @@ export default function ModuloClientesFornecedores() {
         setAutenticado(true);
       }
     } catch {
-      // Token corrompido ou erro de parse — limpa pra não travar o app
+      // Erro de parse — limpa pra não travar o app
       try {
         localStorage.removeItem("vicke-token");
         localStorage.removeItem("vicke-user");
@@ -138,8 +136,24 @@ export default function ModuloClientesFornecedores() {
     else if (aba === "teste") setAba("projetos:orcamentos");
   }, [aba]);
 
+  // beforeunload: ANTES disparava sempre "Deseja sair?" mesmo sem alterações.
+  // AGORA: só ativa quando (a) um save está em andamento, ou (b) o módulo
+  // de orçamento em tela cheia tem dados sujos (consulta __vickeOrcDirtyPrompt).
+  // Em todos os outros casos, usuário pode fechar/recarregar sem fricção.
   useEffect(() => {
-    const handler = e => { e.preventDefault(); e.returnValue = "Deseja sair?"; return e.returnValue; };
+    const handler = (e) => {
+      const savingAgora = savingRef.current;
+      let orcSujo = false;
+      try {
+        if (typeof window !== "undefined" && typeof window.__vickeOrcHasDirty === "function") {
+          orcSujo = !!window.__vickeOrcHasDirty();
+        }
+      } catch {}
+      if (!savingAgora && !orcSujo) return; // Deixa sair sem avisar
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
@@ -161,33 +175,53 @@ export default function ModuloClientesFornecedores() {
     setLoading(false);
   }
 
+  // save(): ANTES recarregava tudo do servidor após cada chamada (loadAllData).
+  // AGORA: otimista — aplica localmente, envia pro backend, e fim.
+  // Ganho: latência perceptível em cada ação some (antes eram 8 requests
+  // paralelos depois de cada clique em "salvar ganho", "mover kanban", etc).
+  // Trade-off: se o backend modificar o dado no save (ex: timestamp auto),
+  // o frontend só vê na próxima navegação — aceitável pro caso geral.
+  // A opção { skipReload } continua aceita pra compat com código existente.
   async function save(newData, opts = {}) {
     const oldData = data;
-    setData(newData);
+    setData(newData); // otimista
+    savingRef.current = true;
     try {
       await saveAllData(newData, oldData);
       setBackendOffline(false);
-      if (!opts.skipReload) {
-        const fresh = await loadAllData();
-        setData(fresh);
-      }
     }
     catch(e) {
       console.error("Erro ao salvar:", e);
       setBackendOffline(true);
+      // Não reverte o state — usuário continua vendo seus dados localmente,
+      // backendOffline dispara banner vermelho no topo pra alertar.
+    }
+    finally {
+      savingRef.current = false;
     }
   }
 
+  // Exporta backup: baixa o arquivo .json direto sem mostrar modal duplicado.
+  // Antes: baixava E abria modal com textarea do JSON — confuso, parecia bug.
   function exportarDados() {
     const json = JSON.stringify(data, null, 2);
     try {
-      const blob = new Blob([json], { type:"application/json" });
+      const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `vicke-backup-${new Date().toISOString().slice(0,10)}.json`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    } catch {}
-    setBackupJson(json); setShowBackup(true);
+      a.href = url;
+      a.download = `vicke-backup-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      // Fallback: se o browser bloqueou o download, mostra o JSON em modal
+      // pro usuário copiar manualmente.
+      console.error("Falha no download direto, abrindo modal:", e);
+      setBackupJson(json);
+      setShowBackup(true);
+    }
   }
 
   function importarDados(e) {
@@ -211,8 +245,6 @@ export default function ModuloClientesFornecedores() {
     </div>
   );
 
-  // Proteção: se data ainda é null depois de loading, usa SEED pra não quebrar
-  // (pode acontecer se o backend falhou ou se é um usuário novo com permissões limitadas)
   if (!data) {
     return (
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
@@ -228,10 +260,6 @@ export default function ModuloClientesFornecedores() {
 
   const nomeEscritorio = data?.escritorio?.nome || "Vicke";
 
-  // Itens do menu. "projetos" tem sub-itens que ficam num accordion.
-  // Chaves das abas (aba state):
-  //   "projetos:orcamentos" → módulo Orçamentos
-  //   "projetos:etapas"     → Kanban "Em Andamento"
   const MENU = [
     { k:"home",        label:"Início" },
     { k:"clientes",    label:"Clientes",     count: data?.clientes?.length },
@@ -267,7 +295,6 @@ export default function ModuloClientesFornecedores() {
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
             {MENU.map(item => {
               const {k, label, count, sub} = item;
-              // Item com sub-menu (accordion)
               if (sub && sub.length) {
                 const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
                 return (
@@ -275,10 +302,8 @@ export default function ModuloClientesFornecedores() {
                     <button
                       style={{
                         ...itemStyle(ativoNeleMesmoOuSubitem),
-                        // Força chevron grudado ao texto (ignora o space-between do itemStyle)
                         justifyContent: "flex-start",
                         gap: 6,
-                        // Quando algum subitem está ativo, o pai fica "suavemente marcado"
                         background: ativoNeleMesmoOuSubitem && aba !== k ? "transparent" : undefined,
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
                         color: ativoNeleMesmoOuSubitem ? "#111" : "#6b7280",
@@ -333,7 +358,6 @@ export default function ModuloClientesFornecedores() {
                   </div>
                 );
               }
-              // Item simples
               return (
                 <button key={k} style={itemStyle(aba===k)}
                   onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
@@ -359,7 +383,7 @@ export default function ModuloClientesFornecedores() {
             <button style={itemStyle(aba==="escritorio")}
               onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
               onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
-              onClick={() => { tentarTrocar(() => { setAba("escritorio"); setEscritorioKey(n=>n+1); setOrcamentoTelaCheia(null); }); }}>
+              onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
               Escritório
             </button>
             {usuario?.perfil === "master" && (
@@ -427,17 +451,15 @@ export default function ModuloClientesFornecedores() {
                 const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
                 const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
                 const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
-                await save({ ...data, orcamentosProjeto: novos2 }, { skipReload: true });
-                // Não fecha a tela — apenas atualiza o orcBase para o PDF continuar aberto
+                await save({ ...data, orcamentosProjeto: novos2 });
                 setOrcamentoTelaCheia(prev => ({ ...prev, orcBase: novo2 }));
               }}
               onVoltar={() => {
-                // Lembra cliente para Clientes abrir direto no detail
                 setClienteRetorno(orcamentoTelaCheia.clienteOrc);
                 setOrcamentoTelaCheia(null);
                 setAba("clientes");
                 setClientesKey(n=>n+1);
-                loadData();
+                // Sem loadData aqui — save() otimista já atualizou data localmente.
               }}
             />
           ) : (<>
@@ -450,7 +472,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "admin" && usuario?.perfil === "master" && <Admin usuario={usuario} />}
+          {aba === "admin" && usuario?.perfil === "master" && <Admin usuario={usuario} data={data} save={save} />}
           </>)}
           </>
         </div>
@@ -462,7 +484,7 @@ export default function ModuloClientesFornecedores() {
               <div style={{ fontWeight:700, fontSize:15, color:"#111" }}>Backup dos dados</div>
               <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
-            <div style={{ color:"#6b7280", fontSize:13 }}>Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
+            <div style={{ color:"#6b7280", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
             <textarea readOnly value={backupJson} onClick={e => e.target.select()}
               style={{ flex:1, minHeight:320, background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:8, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>

@@ -5,6 +5,83 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
 // ═══════════════════════════════════════════════════════════════
+// API URL — lê de VITE_API_URL com fallback pra produção
+// ═══════════════════════════════════════════════════════════════
+// Em dev local, criar .env.local com: VITE_API_URL=http://localhost:3000
+// Em produção (Vercel), a variável já está setada como a URL do Railway.
+// Fallback garante que mesmo sem env o app aponta pro Railway ativo.
+const API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+  || "https://orbi-production-5f5c.up.railway.app";
+
+// ═══════════════════════════════════════════════════════════════
+// AUTH — decodificação de JWT e permissões (ANTES duplicado 3x)
+// ═══════════════════════════════════════════════════════════════
+// JWT usa base64url (não base64 padrão). A conversão abaixo normaliza.
+// Retorna o payload decodado ou null se inválido/corrompido.
+function decodeJWT(token) {
+  if (!token || typeof token !== "string") return null;
+  try {
+    const partes = token.split(".");
+    if (partes.length !== 3) return null;
+    const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
+    const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
+    return JSON.parse(atob(padded));
+  } catch { return null; }
+}
+
+// Checa se o token está expirado. Retorna true se exp < agora.
+// Se não tiver campo exp, considera não-expirado (compat tokens antigos).
+function isTokenExpirado(payload) {
+  if (!payload || !payload.exp) return false;
+  return payload.exp * 1000 < Date.now();
+}
+
+// Usuário atualmente logado. Fonte: localStorage('vicke-token').
+// Retorna o payload do JWT ou null se não logado/inválido/expirado.
+function getUsuarioAtual() {
+  if (typeof localStorage === "undefined") return null;
+  const token = localStorage.getItem("vicke-token");
+  const payload = decodeJWT(token);
+  if (!payload || isTokenExpirado(payload)) return null;
+  return payload;
+}
+
+// Nível efetivo do usuário.
+// - Master: sempre admin (tem tudo)
+// - Usuário sem token: visualizador (mas app já redireciona pra login antes)
+// - Token sem campo `nivel`: admin (retrocompat com tokens antigos)
+function getNivelUsuario() {
+  const u = getUsuarioAtual();
+  if (!u) return "visualizador";
+  if (u.perfil === "master") return "admin";
+  return u.nivel || "admin";
+}
+
+// Flags de permissão de ação — base para esconder/desabilitar botões.
+// Backend valida novamente (defesa em profundidade), mas o frontend já
+// reflete as mesmas regras pra UX consistente.
+function getPermissoes() {
+  const u = getUsuarioAtual();
+  const nivel = getNivelUsuario();
+  const isMaster = u?.perfil === "master";
+  const isAdmin  = nivel === "admin";
+  const isEditor = nivel === "editor";
+  return {
+    usuario: u,
+    nivel,
+    isMaster,
+    isAdmin,
+    isEditor,
+    isVisualizador: nivel === "visualizador",
+    podeEditar: isAdmin || isEditor,
+    podeExcluir: isAdmin,
+    podeGerenciarUsuarios: isAdmin,
+    podeAlterarConfig: isAdmin,
+    podeGerenciar: isAdmin, // alias legado
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
 // PAGE CONTAINER (padrão de largura das páginas)
 // ═══════════════════════════════════════════════════════════════
 // Envelopa módulos que são listas/formulários, limitando largura pra
@@ -21,7 +98,9 @@ function PageContainer({ children, maxWidth = 1200, padding = "24px 28px", style
   );
 }
 
-// Carrega jsPDF e html2canvas
+// ═══════════════════════════════════════════════════════════════
+// CARREGAMENTO DE BIBLIOTECAS EXTERNAS (jsPDF, html2canvas, pdf.js)
+// ═══════════════════════════════════════════════════════════════
 if (typeof window !== "undefined" && !document.getElementById("jspdf-script")) {
   const s = document.createElement("script");
   s.id  = "jspdf-script";
@@ -31,9 +110,10 @@ if (typeof window !== "undefined" && !document.getElementById("jspdf-script")) {
 if (typeof window !== "undefined" && !document.getElementById("h2c-script")) {
   const s2 = document.createElement("script");
   s2.id  = "h2c-script";
-  s2.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";  document.head.appendChild(s2);
+  s2.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+  document.head.appendChild(s2);
 }
-// pdf.js — pra rasterizar PDF em imagem (snapshot de proposta)
+// pdf.js — rasterizar PDF em imagens (snapshot de proposta enviada)
 if (typeof window !== "undefined" && !document.getElementById("pdfjs-script")) {
   const s3 = document.createElement("script");
   s3.id  = "pdfjs-script";
@@ -47,8 +127,8 @@ if (typeof window !== "undefined" && !document.getElementById("pdfjs-script")) {
   document.head.appendChild(s3);
 }
 
-// Utilitário: renderiza PDF (blob) como array de imagens JPEG base64
-// Usado pra gerar snapshot visual de propostas enviadas
+// Utilitário: renderiza PDF (blob) como array de imagens JPEG base64.
+// Usado pra gerar snapshot visual de propostas enviadas.
 async function rasterizarPdfParaImagens(pdfBlob, { maxWidth = 1200, quality = 0.7 } = {}) {
   if (!window.pdfjsLib) throw new Error("pdf.js ainda não carregou — tente novamente em 1s");
   const arrayBuffer = await pdfBlob.arrayBuffer();
@@ -56,7 +136,6 @@ async function rasterizarPdfParaImagens(pdfBlob, { maxWidth = 1200, quality = 0.
   const imagens = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
-    // Calcula escala pra atingir maxWidth
     const viewport0 = page.getViewport({ scale: 1 });
     const scale = maxWidth / viewport0.width;
     const viewport = page.getViewport({ scale });
@@ -65,43 +144,18 @@ async function rasterizarPdfParaImagens(pdfBlob, { maxWidth = 1200, quality = 0.
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     await page.render({ canvasContext: ctx, viewport }).promise;
-    // JPEG com qualidade configurável
     imagens.push(canvas.toDataURL("image/jpeg", quality));
   }
   return imagens;
 }
 
-
 // ═══════════════════════════════════════════════════════════════
-// STORAGE
+// UTILITÁRIOS GERAIS
 // ═══════════════════════════════════════════════════════════════
-var DB = {
-  get: async (key) => {
-    // Tenta window.storage primeiro, depois localStorage como fallback
-    try {
-      const r = await window.storage.get(key);
-      if (r?.value) {
-        const parsed = JSON.parse(r.value);
-        // Sincroniza com localStorage
-        try { localStorage.setItem(key, r.value); } catch {}
-        return parsed;
-      }
-    } catch {}
-    // Fallback: localStorage (persiste entre sessões do mesmo navegador)
-    try {
-      const local = localStorage.getItem(key);
-      if (local) return JSON.parse(local);
-    } catch {}
-    return null;
-  },
-  set: async (key, val) => {
-    const str = JSON.stringify(val);
-    // Salva em ambos
-    try { await window.storage.set(key, str); } catch {}
-    try { localStorage.setItem(key, str); } catch {}
-    return true;
-  }
-};
+// NOTA: o objeto `DB` global (window.storage + localStorage) foi removido.
+// Não era mais usado desde a migração para Postgres. Persistência agora é
+// 100% via api.js → backend. Estado local efêmero (preferências de UI)
+// continua podendo usar localStorage diretamente onde necessário.
 
 var uid = () => Math.random().toString(36).slice(2, 9);
 
@@ -120,7 +174,6 @@ function calcularEngenharia(areaTotal, precoM2 = 50) {
   let areaRestante = areaTotal;
   let totalEng = 0;
 
-  // Gera faixas dinamicamente
   const LIMITE_INICIAL = 200;
   const DESCONTO_ATE_600 = 0.08;
   const DESCONTO_APOS_600 = 0.02;
@@ -135,18 +188,18 @@ function calcularEngenharia(areaTotal, precoM2 = 50) {
     limiteAnterior = LIMITE_INICIAL;
   }
 
-  // Faixas seguintes de 100m² com desconto composto (máximo 50% de desconto)
+  // Faixas seguintes de 100m² com desconto composto (máximo 50%)
   let faixaNum = 1;
   while (areaRestante > 0) {
     const limiteAtual = limiteAnterior + 100;
     const desconto = limiteAnterior < 600 ? DESCONTO_ATE_600 : DESCONTO_APOS_600;
-    fatorAtual = Math.max(0.5, fatorAtual * (1 - desconto)); // mínimo fator 0.5 = máx 50% desconto
+    fatorAtual = Math.max(0.5, fatorAtual * (1 - desconto));
     const areaFaixa = Math.min(areaRestante, 100);
     const preco = areaFaixa * precoM2 * fatorAtual;
     faixas.push({
       de: limiteAnterior, ate: limiteAnterior + areaFaixa,
       area: areaFaixa, fator: fatorAtual,
-      desconto: Math.round((1 - fatorAtual) * 1000) / 10, // % acumulado
+      desconto: Math.round((1 - fatorAtual) * 1000) / 10,
       preco
     });
     totalEng += preco;
@@ -225,7 +278,7 @@ var GRUPOS_COMODOS_CLINICA = {
 var CUSTOM_CONFIG_KEY_CLINICA = "obramanager-config-clinica-v1";
 
 // ═══════════════════════════════════════════════════════════════
-// COMERCIAL — comodos por bloco
+// COMERCIAL — cômodos por bloco
 // ═══════════════════════════════════════════════════════════════
 var COMODOS_GALERIA_LOJA = {
   "Área de vendas (térrea)":  { indice:0.045, medidas:{ Grande:[10,8],  Médio:[8,6],    Pequeno:[6,5],    Compacta:[5,4]    }},
@@ -406,32 +459,37 @@ var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura",
 // api.js
 // ════════════════════════════════════════════════════════════
 
-  // v2 PostgreSQL
+// v2 PostgreSQL — Sprint 2
 // ═══════════════════════════════════════════════════════════════
-// ORBI — API Client
-// Substitui o DB (localStorage/window.storage) pelo backend real
+// VICKE — API Client
+// Centraliza comunicação HTTP com o backend. Todas as chamadas:
+// - Enviam Authorization header automático (lê vicke-token do localStorage)
+// - Tratam 401 com auto-logout (flag anti-cascata evita N reloads)
+// - Retornam data desembrulhado (ou lançam Error em caso de falha)
 // ═══════════════════════════════════════════════════════════════
 
-const API_URL = "https://orbi-production-5f5c.up.railway.app";
+// API_URL vem de shared.jsx (que lê VITE_API_URL ou usa fallback prod).
+// Mantemos esta referência local pra não importar shared em cada chamada.
+const _API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+  || "https://orbi-production-5f5c.up.railway.app";
 
 // Flag pra evitar múltiplos reloads em cascata quando várias requisições
 // retornam 401 ao mesmo tempo (ex: loadAllData faz 8 chamadas em paralelo)
 let _sessionExpiredHandled = false;
 
 async function req(method, path, body) {
-  // Pega o token do localStorage (salvo pelo login.jsx como "vicke-token")
   const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${_API_URL}${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
 
   // Handler global de 401: token expirado/inválido → limpa e volta pra login.
-  // Não aplicamos isto a /auth/login (onde 401 significa senha errada, não sessão).
+  // Não aplicamos isto a /auth/login (onde 401 significa senha errada).
   if (res.status === 401 && !path.startsWith("/auth/")) {
     if (!_sessionExpiredHandled) {
       _sessionExpiredHandled = true;
@@ -454,7 +512,7 @@ const post = (path, body)  => req("POST",   path, body);
 const put  = (path, body)  => req("PUT",    path, body);
 const del  = (path)        => req("DELETE", path);
 
-// ── Clientes ───────────────────────────────────────────────────
+// ── API pública ────────────────────────────────────────────────
 const api = {
   clientes: {
     list:   ()       => get("/api/clientes"),
@@ -504,19 +562,53 @@ const api = {
     deleteByOrc:    (orcId)      => del(`/api/receitas/por-orcamento/${orcId}`),
   },
 
+  // Escritório agora inclui logo no mesmo payload (get/save atômicos).
+  // O backend separa internamente: logo vai pra coluna dedicada, resto
+  // pro JSONB. Pro frontend, é um objeto só.
   escritorio: {
     get:    ()  => get("/api/escritorio"),
     save:   (e) => put("/api/escritorio", e),
   },
 
+  // Logo continua disponível via endpoint dedicado (compat), mas
+  // a rota /api/escritorio também retorna logo junto — preferir ela
+  // nos fluxos de boot/carregamento pra evitar request extra.
   logo: {
-    get:  ()      => get("/api/logo"),
-    save: (data)  => put("/api/logo", { data }),
+    get:    ()     => get("/api/logo"),
+    save:   (data) => put("/api/logo", { data }),
+    clear:  ()     => put("/api/logo", { data: null }),
   },
 
   config: {
     get:  (chave)        => get(`/api/config/${chave}`),
     save: (chave, dados) => put(`/api/config/${chave}`, dados),
+  },
+
+  // ── ADMIN (só master) ──────────────────────────────────────
+  admin: {
+    empresas: {
+      list:   ()           => get("/admin/empresas"),
+      save:   (e)          => post("/admin/empresas", e),
+      update: (id, e)      => put(`/admin/empresas/${id}`, e),
+      delete: (id)         => del(`/admin/empresas/${id}`),
+    },
+    usuarios: {
+      list:   ()           => get("/admin/usuarios"),
+      save:   (u)          => post("/admin/usuarios", u),
+      update: (id, u)      => put(`/admin/usuarios/${id}`, u),
+      delete: (id)         => del(`/admin/usuarios/${id}`),
+    },
+    manutencao: ()         => post("/admin/manutencao"),
+  },
+
+  // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
+  empresa: {
+    usuarios: {
+      list:   ()           => get("/empresa/usuarios"),
+      save:   (u)          => post("/empresa/usuarios", u),
+      update: (id, u)      => put(`/empresa/usuarios/${id}`, u),
+      delete: (id)         => del(`/empresa/usuarios/${id}`),
+    },
   },
 
   backup: {
@@ -527,8 +619,9 @@ const api = {
   health: () => get("/api/health"),
 };
 
-// ── Carrega todos os dados de uma vez (compatível com o data object atual) ──
-// Substitui o DB.get("obramanager-v1")
+// ── Carrega todos os dados de uma vez ──────────────────────────
+// Substitui o DB.get("obramanager-v1") do sistema antigo.
+// Escritório agora vem com logo embutido (um só request).
 async function loadAllData() {
   const [
     clientes,
@@ -558,13 +651,14 @@ async function loadAllData() {
     lancamentos,
     orcamentosProjeto,
     receitasFinanceiro,
+    // escritorio já vem com { ...dados, logo } do backend
     escritorio: escritorio || {},
   };
 }
 
-// ── Salva todos os dados (compatível com o save(newData) atual) ──
-// Substitui o DB.set("obramanager-v1", newData)
-// Por enquanto faz um diff simples — no futuro cada módulo salva individualmente
+// ── Salva diffs entre newData e oldData ────────────────────────
+// Calcula o que mudou e só envia os itens modificados pro backend.
+// Cada módulo é independente — erro em um não afeta os outros.
 async function saveAllData(newData, oldData = {}) {
   const tasks = [];
 
@@ -628,15 +722,13 @@ async function saveAllData(newData, oldData = {}) {
   lancsNovos.forEach(l => tasks.push(api.lancamentos.save(l)));
   lancsRemovidos.forEach(l => tasks.push(api.lancamentos.delete(l.id)));
 
-  // Escritório
+  // Escritório (inclui logo agregado no mesmo objeto)
   if (newData.escritorio && JSON.stringify(newData.escritorio) !== JSON.stringify(oldData.escritorio)) {
     tasks.push(api.escritorio.save(newData.escritorio));
   }
 
   await Promise.all(tasks);
 }
-
-
 
 
 // ════════════════════════════════════════════════════════════
@@ -2457,24 +2549,13 @@ var S = {
 // ═══════════════════════════════════════════════════════════════
 // CLIENTES — Kanban + visual minimalista
 // ═══════════════════════════════════════════════════════════════
+// Helpers de permissão (getUsuarioAtual, getNivelUsuario, getPermissoes)
+// agora vivem em shared.jsx — centralizados e sem duplicação.
 
-// ── HELPERS DE PERMISSÃO (disponível globalmente a partir daqui) ──
-// Fonte: JWT salvo em localStorage("vicke-token"). Retorna o objeto decodado ou null.
-// Chaves esperadas no payload: { id, nome, email, perfil, nivel, membro_id, empresa_id }
-function getUsuarioAtual() {
-  if (typeof localStorage === "undefined") return null;
-  const token = localStorage.getItem("vicke-token");
-  if (!token) return null;
-  try {
-    const part = token.split(".")[1];
-    const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-    const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
-    return JSON.parse(atob(padded));
-  } catch { return null; }
-}
-
-// Diagnóstico: chame `__vickeDebugAuth()` no console pra ver o que o app acha do seu usuário
-if (typeof window !== "undefined") {
+// Diagnóstico em dev: `__vickeDebugAuth()` no console mostra o que o app acha do seu usuário.
+// Mantido no clientes.jsx por ser o módulo mais usado durante debug.
+// Em produção (build), o Vite remove o bloco via DCE quando import.meta.env.DEV é false.
+if (typeof window !== "undefined" && typeof import.meta !== "undefined" && import.meta.env && import.meta.env.DEV) {
   window.__vickeDebugAuth = () => {
     const u = getUsuarioAtual();
     const n = getNivelUsuario();
@@ -2484,41 +2565,6 @@ if (typeof window !== "undefined") {
     console.log("Nível efetivo:", n);
     console.log("Permissões:", p);
     return { usuario: u, nivel: n, permissoes: p };
-  };
-}
-
-// Retorna o nível efetivo do usuário (admin, editor, visualizador).
-// Master é sempre admin.
-// Retrocompat: se o JWT existe mas ainda não tem o campo `nivel` (tokens emitidos
-// antes da Fase 1 do backend), assume admin — porque antes todos os usuários
-// logados eram efetivamente admins (não havia níveis).
-// Só cai em "visualizador" se não há token nenhum.
-function getNivelUsuario() {
-  const u = getUsuarioAtual();
-  if (!u) return "visualizador";
-  if (u.perfil === "master") return "admin";
-  // Se o token antigo não tem `nivel`, trata como admin (retrocompat)
-  return u.nivel || "admin";
-}
-
-// Flags de permissão de ação (usar nos componentes pra esconder/desabilitar botões).
-// - podeEditar: criar e alterar dados (admin e editor)
-// - podeExcluir: ações destrutivas (só admin)
-// - podeGerenciarUsuarios: aba Usuários em Escritório (só admin)
-// - podeAlterarConfig: config do escritório, admin panel etc (só admin)
-function getPermissoes() {
-  const nivel = getNivelUsuario();
-  const isAdmin  = nivel === "admin";
-  const isEditor = nivel === "editor";
-  return {
-    nivel,
-    isAdmin,
-    isEditor,
-    isVisualizador: nivel === "visualizador",
-    podeEditar: isAdmin || isEditor,
-    podeExcluir: isAdmin,
-    podeGerenciarUsuarios: isAdmin,
-    podeAlterarConfig: isAdmin,
   };
 }
 
@@ -12657,72 +12703,61 @@ function Escritorio({ data, save }) {
 // ═══════════════════════════════════════════════════════════════
 // ADMIN — Módulo de Administração do Sistema (VICKE SaaS)
 // ═══════════════════════════════════════════════════════════════
-// Acesso restrito: apenas usuários com perfil "master" (Renato / Anthropic).
-// Escritórios cliente (tenants) NÃO veem este módulo.
+// Acesso restrito: apenas usuários com perfil "master".
+// Gerencia empresas cliente (tenants), usuários master e manutenção.
 //
-// Funcionalidades:
-// - Manutenção: executa rotina de expiração de propostas + inativação
-//   de clientes fora do horário agendado (cron 3h da manhã).
-//
-// Futuramente:
-// - Gestão de empresas (tenants)
-// - Gestão de usuários master
-// - Métricas do sistema
-// - Logs de auditoria
+// Sprint 2 — Bloco C:
+// - Usa api.js em vez de fetch direto (ganha handler 401 automático)
+// - Recebe data/save do app.jsx (integração padrão com o resto)
+// - Abas Empresas e Usuários Master ainda placeholders (Bloco F implementa)
 // ═══════════════════════════════════════════════════════════════
 
-function Admin({ usuario }) {
+function Admin({ usuario, data, save }) {
   const [aba, setAba] = useState("manutencao");
   const [manutResult, setManutResult] = useState(null);
   const [manutLoading, setManutLoading] = useState(false);
+  const [manutErro, setManutErro]       = useState(null);
+  const [confirmManut, setConfirmManut] = useState(false);
 
   async function executarManutencao() {
-    if (!confirm("Executar rotina de manutenção agora?\n\n• Expira propostas com mais de 30 dias (remove imagens, marca como perdido)\n• Inativa clientes sem serviço em aberto há 3 meses\n\nNormalmente roda sozinha todo dia às 3h da manhã.")) return;
+    setConfirmManut(false);
     setManutLoading(true);
     setManutResult(null);
+    setManutErro(null);
     try {
-      const token = localStorage.getItem("vicke-token");
-      if (!token) {
-        alert("Sessão expirada. Faça login novamente.");
-        setManutLoading(false);
-        return;
-      }
-      const res = await fetch("https://orbi-production-5f5c.up.railway.app/admin/manutencao", {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (json.ok) {
-        setManutResult(json.data);
-      } else {
-        alert("Erro: " + (json.error || "Falha ao executar manutenção"));
-      }
+      // api.admin.manutencao() já adiciona Authorization header automaticamente
+      // e dispara auto-logout em caso de 401.
+      const resumo = await api.admin.manutencao();
+      setManutResult(resumo);
     } catch (e) {
-      alert("Erro de rede: " + e.message);
+      setManutErro(e.message || "Falha ao executar manutenção");
     } finally {
       setManutLoading(false);
     }
   }
 
   const S = {
-    wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header: { borderBottom:"1px solid #e5e7eb", padding:"24px 32px" },
-    titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
-    sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
-    abas: { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
-    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
-    body: { padding:"32px", maxWidth:760 },
-    secao: { marginBottom:32 },
-    secTitulo: { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
-    btn: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    tag: { display:"inline-block", fontSize:10, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
+    wrap:    { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
+    header:  { borderBottom:"1px solid #e5e7eb", padding:"24px 32px" },
+    titulo:  { fontSize:18, fontWeight:700, color:"#111", margin:0 },
+    sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
+    abas:    { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
+    aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
+    body:    { padding:"32px", maxWidth:760 },
+    secao:   { marginBottom:32 },
+    secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
+    btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" },
+    modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:420, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
   };
 
   // ── ABA MANUTENÇÃO ────────────────────────────────────────────
   const renderManutencao = () => (
     <div style={S.body}>
       <div style={S.secao}>
-        <div style={S.secTitulo}>Manutenção automática</div>
+        <div style={S.secTit}>Manutenção automática</div>
         <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
           O backend executa automaticamente, todo dia às 3h da manhã (UTC):
           <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
@@ -12733,13 +12768,18 @@ function Admin({ usuario }) {
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:20 }}>
           Use o botão abaixo para forçar uma execução agora, sem esperar o horário agendado.
         </div>
-        <div style={{ display:"flex", alignItems:"flex-start", gap:12 }}>
+        <div style={{ display:"flex", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
           <button
-            onClick={executarManutencao}
+            onClick={() => setConfirmManut(true)}
             disabled={manutLoading}
             style={{ ...S.btn, opacity: manutLoading ? 0.5 : 1, cursor: manutLoading ? "not-allowed" : "pointer" }}>
             {manutLoading ? "Executando..." : "Executar manutenção agora"}
           </button>
+          {manutErro && (
+            <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 14px" }}>
+              ⚠ {manutErro}
+            </div>
+          )}
           {manutResult && (
             <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, padding:"8px 14px" }}>
               ✓ Executado em {new Date(manutResult.executadoEm).toLocaleString("pt-BR")}
@@ -12751,14 +12791,34 @@ function Admin({ usuario }) {
           )}
         </div>
       </div>
+
+      {/* Modal de confirmação — substitui o confirm() nativo */}
+      {confirmManut && (
+        <div style={S.overlay}>
+          <div style={S.modal}>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:10 }}>Executar manutenção agora?</div>
+            <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.6 }}>
+              Esta ação vai:<br/>
+              · Expirar propostas com mais de 30 dias (marca como Perdido e apaga imagens)<br/>
+              · Inativar clientes sem serviço em aberto há 3 meses
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button onClick={() => setConfirmManut(false)} style={S.btnSec}>Cancelar</button>
+              <button onClick={executarManutencao} style={S.btn}>Executar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 
-  // ── PLACEHOLDERS FUTUROS ──────────────────────────────────────
+  // ── PLACEHOLDERS — BLOCO F IMPLEMENTA ────────────────────────
   const renderEmpresas = () => (
     <div style={S.body}>
       <div style={{ fontSize:13, color:"#9ca3af", padding:"40px 0", textAlign:"center" }}>
-        Gestão de empresas cliente (tenants) — em breve.
+        Gestão de empresas cliente — implementação no próximo sprint.
+        <br/>
+        <span style={{ fontSize:12, color:"#d1d5db" }}>Por enquanto, crie empresas direto pelo banco (tabela `empresas`).</span>
       </div>
     </div>
   );
@@ -12766,14 +12826,13 @@ function Admin({ usuario }) {
   const renderUsuariosMaster = () => (
     <div style={S.body}>
       <div style={{ fontSize:13, color:"#9ca3af", padding:"40px 0", textAlign:"center" }}>
-        Usuários com perfil master — em breve.
+        Gestão de usuários master — implementação no próximo sprint.
       </div>
     </div>
   );
 
   return (
     <div style={S.wrap}>
-      {/* Header */}
       <div style={S.header}>
         <div style={{ display:"flex", alignItems:"center" }}>
           <h2 style={S.titulo}>Administração do Sistema</h2>
@@ -12782,14 +12841,12 @@ function Admin({ usuario }) {
         <div style={S.sub}>Acesso restrito · Usuário: {usuario?.nome || "—"}</div>
       </div>
 
-      {/* Abas */}
       <div style={S.abas}>
         {[["manutencao","Manutenção"],["empresas","Empresas"],["usuarios","Usuários Master"]].map(([key,lbl]) => (
           <button key={key} style={S.aba(aba===key)} onClick={() => setAba(key)}>{lbl}</button>
         ))}
       </div>
 
-      {/* Conteúdo */}
       {aba === "manutencao" && renderManutencao()}
       {aba === "empresas"   && renderEmpresas()}
       {aba === "usuarios"   && renderUsuariosMaster()}
@@ -12805,6 +12862,8 @@ function Admin({ usuario }) {
 // ═══════════════════════════════════════════════════════════════
 // LOGIN — Vicke
 // ═══════════════════════════════════════════════════════════════
+// Auth local: salva/lê token e usuário no localStorage.
+// URL do backend vem de API_URL (shared.jsx / VITE_API_URL).
 
 const TOKEN_KEY = "vicke-token";
 const USER_KEY  = "vicke-user";
@@ -12820,8 +12879,13 @@ function clearAuth() {
   localStorage.removeItem(USER_KEY);
 }
 
+// POST sem Authorization (login não tem token ainda).
+// Não usa api.js pra manter o fluxo isolado e legível.
 async function apiPost(path, body) {
-  const res = await fetch("https://orbi-production-5f5c.up.railway.app" + path, {
+  // API_URL é global (declarada em shared.jsx)
+  const _url = (typeof API_URL !== "undefined" && API_URL)
+    || "https://orbi-production-5f5c.up.railway.app";
+  const res = await fetch(_url + path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -12840,14 +12904,15 @@ function TelaLogin({ onLogin }) {
     setErro("");
     setLoading(true);
     try {
-      const res  = await apiPost("/auth/login", { email, senha });
+      const res = await apiPost("/auth/login", { email, senha });
       if (res.ok) {
         saveAuth(res.data.token, res.data.usuario);
         onLogin(res.data.usuario, res.data.token);
       } else {
         setErro(res.error || "E-mail ou senha inválidos.");
       }
-    } catch {
+    } catch (e) {
+      console.error("Erro de login:", e);
       setErro("Não foi possível conectar ao servidor.");
     }
     setLoading(false);
@@ -13059,48 +13124,46 @@ export default function ModuloClientesFornecedores() {
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
   const [sidebarAberta, setSidebarAberta]     = useState(true);
-  const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null); // { clienteOrc, orcBase, modo }
-  const [clienteRetorno, setClienteRetorno] = useState(null); // cliente pra abrir detail ao fechar orçamento
-  const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false); // sinal pra abrir cadastro de cliente
+  const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null);
+  const [clienteRetorno, setClienteRetorno] = useState(null);
+  const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false);
   const [backendOffline, setBackendOffline]   = useState(false);
+
+  // Flag interna: true quando há salvamento em andamento.
+  // Usada pelo beforeunload pra bloquear fechamento durante saves.
+  const savingRef = useRef(false);
 
   // tentarTrocar: quando há orçamento em tela cheia com dados não salvos,
   // consulta o handler registrado pelo FormOrcamento (window.__vickeOrcDirtyPrompt).
-  // Se o handler retornar true, o modal de "salvar rascunho/descartar" será mostrado
-  // e a navegação será executada depois da decisão do usuário. Caso contrário,
-  // a navegação acontece imediatamente.
   function tentarTrocar(fn) {
     if (typeof window !== "undefined" && typeof window.__vickeOrcDirtyPrompt === "function") {
       const absorveu = window.__vickeOrcDirtyPrompt(fn);
-      if (absorveu) return; // modal vai cuidar
+      if (absorveu) return;
     }
     fn();
   }
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
-  // IMPORTANTE: hooks DEVEM ser chamados antes de qualquer return condicional (regra do React)
   const [projetosAberto, setProjetosAberto] = useState(() => (typeof aba === "string" && aba.indexOf("projetos") === 0));
   useEffect(() => {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
-  // Bootstrap: se já tiver token+user no localStorage, restaura sessão
-  // (evita ter que fazer login toda vez que dá F5)
-  // Antes de restaurar, valida se o token não está expirado (JWT tem campo "exp")
+  // Bootstrap: se já tiver token+user no localStorage, restaura sessão.
+  // Valida expiração usando decodeJWT centralizado de shared.jsx.
   useEffect(() => {
     try {
       const tok = localStorage.getItem("vicke-token");
       const usr = localStorage.getItem("vicke-user");
       if (tok && usr) {
-        // Decodifica o payload do JWT para checar expiração
-        const partes = tok.split(".");
-        if (partes.length !== 3) throw new Error("Token inválido");
-        const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
-        const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
-        const payload = JSON.parse(atob(padded));
-        // exp está em segundos desde epoch (padrão JWT)
-        if (payload.exp && payload.exp * 1000 < Date.now()) {
-          // Token expirado — limpa e deixa cair na tela de login
+        const payload = decodeJWT(tok);
+        if (!payload) {
+          // Token malformado — limpa e deixa cair na tela de login
+          localStorage.removeItem("vicke-token");
+          localStorage.removeItem("vicke-user");
+          return;
+        }
+        if (isTokenExpirado(payload)) {
           localStorage.removeItem("vicke-token");
           localStorage.removeItem("vicke-user");
           return;
@@ -13110,7 +13173,7 @@ export default function ModuloClientesFornecedores() {
         setAutenticado(true);
       }
     } catch {
-      // Token corrompido ou erro de parse — limpa pra não travar o app
+      // Erro de parse — limpa pra não travar o app
       try {
         localStorage.removeItem("vicke-token");
         localStorage.removeItem("vicke-user");
@@ -13127,8 +13190,24 @@ export default function ModuloClientesFornecedores() {
     else if (aba === "teste") setAba("projetos:orcamentos");
   }, [aba]);
 
+  // beforeunload: ANTES disparava sempre "Deseja sair?" mesmo sem alterações.
+  // AGORA: só ativa quando (a) um save está em andamento, ou (b) o módulo
+  // de orçamento em tela cheia tem dados sujos (consulta __vickeOrcDirtyPrompt).
+  // Em todos os outros casos, usuário pode fechar/recarregar sem fricção.
   useEffect(() => {
-    const handler = e => { e.preventDefault(); e.returnValue = "Deseja sair?"; return e.returnValue; };
+    const handler = (e) => {
+      const savingAgora = savingRef.current;
+      let orcSujo = false;
+      try {
+        if (typeof window !== "undefined" && typeof window.__vickeOrcHasDirty === "function") {
+          orcSujo = !!window.__vickeOrcHasDirty();
+        }
+      } catch {}
+      if (!savingAgora && !orcSujo) return; // Deixa sair sem avisar
+      e.preventDefault();
+      e.returnValue = "";
+      return "";
+    };
     window.addEventListener("beforeunload", handler);
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
@@ -13150,33 +13229,53 @@ export default function ModuloClientesFornecedores() {
     setLoading(false);
   }
 
+  // save(): ANTES recarregava tudo do servidor após cada chamada (loadAllData).
+  // AGORA: otimista — aplica localmente, envia pro backend, e fim.
+  // Ganho: latência perceptível em cada ação some (antes eram 8 requests
+  // paralelos depois de cada clique em "salvar ganho", "mover kanban", etc).
+  // Trade-off: se o backend modificar o dado no save (ex: timestamp auto),
+  // o frontend só vê na próxima navegação — aceitável pro caso geral.
+  // A opção { skipReload } continua aceita pra compat com código existente.
   async function save(newData, opts = {}) {
     const oldData = data;
-    setData(newData);
+    setData(newData); // otimista
+    savingRef.current = true;
     try {
       await saveAllData(newData, oldData);
       setBackendOffline(false);
-      if (!opts.skipReload) {
-        const fresh = await loadAllData();
-        setData(fresh);
-      }
     }
     catch(e) {
       console.error("Erro ao salvar:", e);
       setBackendOffline(true);
+      // Não reverte o state — usuário continua vendo seus dados localmente,
+      // backendOffline dispara banner vermelho no topo pra alertar.
+    }
+    finally {
+      savingRef.current = false;
     }
   }
 
+  // Exporta backup: baixa o arquivo .json direto sem mostrar modal duplicado.
+  // Antes: baixava E abria modal com textarea do JSON — confuso, parecia bug.
   function exportarDados() {
     const json = JSON.stringify(data, null, 2);
     try {
-      const blob = new Blob([json], { type:"application/json" });
+      const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = `vicke-backup-${new Date().toISOString().slice(0,10)}.json`;
-      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-    } catch {}
-    setBackupJson(json); setShowBackup(true);
+      a.href = url;
+      a.download = `vicke-backup-${new Date().toISOString().slice(0,10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      // Fallback: se o browser bloqueou o download, mostra o JSON em modal
+      // pro usuário copiar manualmente.
+      console.error("Falha no download direto, abrindo modal:", e);
+      setBackupJson(json);
+      setShowBackup(true);
+    }
   }
 
   function importarDados(e) {
@@ -13200,8 +13299,6 @@ export default function ModuloClientesFornecedores() {
     </div>
   );
 
-  // Proteção: se data ainda é null depois de loading, usa SEED pra não quebrar
-  // (pode acontecer se o backend falhou ou se é um usuário novo com permissões limitadas)
   if (!data) {
     return (
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
@@ -13217,10 +13314,6 @@ export default function ModuloClientesFornecedores() {
 
   const nomeEscritorio = data?.escritorio?.nome || "Vicke";
 
-  // Itens do menu. "projetos" tem sub-itens que ficam num accordion.
-  // Chaves das abas (aba state):
-  //   "projetos:orcamentos" → módulo Orçamentos
-  //   "projetos:etapas"     → Kanban "Em Andamento"
   const MENU = [
     { k:"home",        label:"Início" },
     { k:"clientes",    label:"Clientes",     count: data?.clientes?.length },
@@ -13256,7 +13349,6 @@ export default function ModuloClientesFornecedores() {
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
             {MENU.map(item => {
               const {k, label, count, sub} = item;
-              // Item com sub-menu (accordion)
               if (sub && sub.length) {
                 const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
                 return (
@@ -13264,10 +13356,8 @@ export default function ModuloClientesFornecedores() {
                     <button
                       style={{
                         ...itemStyle(ativoNeleMesmoOuSubitem),
-                        // Força chevron grudado ao texto (ignora o space-between do itemStyle)
                         justifyContent: "flex-start",
                         gap: 6,
-                        // Quando algum subitem está ativo, o pai fica "suavemente marcado"
                         background: ativoNeleMesmoOuSubitem && aba !== k ? "transparent" : undefined,
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
                         color: ativoNeleMesmoOuSubitem ? "#111" : "#6b7280",
@@ -13322,7 +13412,6 @@ export default function ModuloClientesFornecedores() {
                   </div>
                 );
               }
-              // Item simples
               return (
                 <button key={k} style={itemStyle(aba===k)}
                   onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
@@ -13348,7 +13437,7 @@ export default function ModuloClientesFornecedores() {
             <button style={itemStyle(aba==="escritorio")}
               onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
               onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
-              onClick={() => { tentarTrocar(() => { setAba("escritorio"); setEscritorioKey(n=>n+1); setOrcamentoTelaCheia(null); }); }}>
+              onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
               Escritório
             </button>
             {usuario?.perfil === "master" && (
@@ -13416,17 +13505,15 @@ export default function ModuloClientesFornecedores() {
                 const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
                 const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
                 const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
-                await save({ ...data, orcamentosProjeto: novos2 }, { skipReload: true });
-                // Não fecha a tela — apenas atualiza o orcBase para o PDF continuar aberto
+                await save({ ...data, orcamentosProjeto: novos2 });
                 setOrcamentoTelaCheia(prev => ({ ...prev, orcBase: novo2 }));
               }}
               onVoltar={() => {
-                // Lembra cliente para Clientes abrir direto no detail
                 setClienteRetorno(orcamentoTelaCheia.clienteOrc);
                 setOrcamentoTelaCheia(null);
                 setAba("clientes");
                 setClientesKey(n=>n+1);
-                loadData();
+                // Sem loadData aqui — save() otimista já atualizou data localmente.
               }}
             />
           ) : (<>
@@ -13439,7 +13526,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "admin" && usuario?.perfil === "master" && <Admin usuario={usuario} />}
+          {aba === "admin" && usuario?.perfil === "master" && <Admin usuario={usuario} data={data} save={save} />}
           </>)}
           </>
         </div>
@@ -13451,7 +13538,7 @@ export default function ModuloClientesFornecedores() {
               <div style={{ fontWeight:700, fontSize:15, color:"#111" }}>Backup dos dados</div>
               <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
-            <div style={{ color:"#6b7280", fontSize:13 }}>Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
+            <div style={{ color:"#6b7280", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
             <textarea readOnly value={backupJson} onClick={e => e.target.select()}
               style={{ flex:1, minHeight:320, background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:8, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>

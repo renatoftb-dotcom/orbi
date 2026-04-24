@@ -1,6 +1,8 @@
 // ═══════════════════════════════════════════════════════════════
 // LOGIN — Vicke
 // ═══════════════════════════════════════════════════════════════
+// Auth local: salva/lê token e usuário no localStorage.
+// URL do backend vem de API_URL (shared.jsx / VITE_API_URL).
 
 const TOKEN_KEY = "vicke-token";
 const USER_KEY  = "vicke-user";
@@ -16,8 +18,13 @@ function clearAuth() {
   localStorage.removeItem(USER_KEY);
 }
 
+// POST sem Authorization (login não tem token ainda).
+// Não usa api.js pra manter o fluxo isolado e legível.
 async function apiPost(path, body) {
-  const res = await fetch("https://orbi-production-5f5c.up.railway.app" + path, {
+  // API_URL é global (declarada em shared.jsx)
+  const _url = (typeof API_URL !== "undefined" && API_URL)
+    || "https://orbi-production-5f5c.up.railway.app";
+  const res = await fetch(_url + path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -36,14 +43,15 @@ function TelaLogin({ onLogin }) {
     setErro("");
     setLoading(true);
     try {
-      const res  = await apiPost("/auth/login", { email, senha });
+      const res = await apiPost("/auth/login", { email, senha });
       if (res.ok) {
         saveAuth(res.data.token, res.data.usuario);
         onLogin(res.data.usuario, res.data.token);
       } else {
         setErro(res.error || "E-mail ou senha inválidos.");
       }
-    } catch {
+    } catch (e) {
+      console.error("Erro de login:", e);
       setErro("Não foi possível conectar ao servidor.");
     }
     setLoading(false);

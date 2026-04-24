@@ -1,29 +1,34 @@
-  // v2 PostgreSQL
+// v2 PostgreSQL — Sprint 2
 // ═══════════════════════════════════════════════════════════════
-// ORBI — API Client
-// Substitui o DB (localStorage/window.storage) pelo backend real
+// VICKE — API Client
+// Centraliza comunicação HTTP com o backend. Todas as chamadas:
+// - Enviam Authorization header automático (lê vicke-token do localStorage)
+// - Tratam 401 com auto-logout (flag anti-cascata evita N reloads)
+// - Retornam data desembrulhado (ou lançam Error em caso de falha)
 // ═══════════════════════════════════════════════════════════════
 
-const API_URL = "https://orbi-production-5f5c.up.railway.app";
+// API_URL vem de shared.jsx (que lê VITE_API_URL ou usa fallback prod).
+// Mantemos esta referência local pra não importar shared em cada chamada.
+const _API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+  || "https://orbi-production-5f5c.up.railway.app";
 
 // Flag pra evitar múltiplos reloads em cascata quando várias requisições
 // retornam 401 ao mesmo tempo (ex: loadAllData faz 8 chamadas em paralelo)
 let _sessionExpiredHandled = false;
 
 async function req(method, path, body) {
-  // Pega o token do localStorage (salvo pelo login.jsx como "vicke-token")
   const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
   const headers = { "Content-Type": "application/json" };
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${_API_URL}${path}`, {
     method,
     headers,
     body: body ? JSON.stringify(body) : undefined,
   });
 
   // Handler global de 401: token expirado/inválido → limpa e volta pra login.
-  // Não aplicamos isto a /auth/login (onde 401 significa senha errada, não sessão).
+  // Não aplicamos isto a /auth/login (onde 401 significa senha errada).
   if (res.status === 401 && !path.startsWith("/auth/")) {
     if (!_sessionExpiredHandled) {
       _sessionExpiredHandled = true;
@@ -46,7 +51,7 @@ const post = (path, body)  => req("POST",   path, body);
 const put  = (path, body)  => req("PUT",    path, body);
 const del  = (path)        => req("DELETE", path);
 
-// ── Clientes ───────────────────────────────────────────────────
+// ── API pública ────────────────────────────────────────────────
 const api = {
   clientes: {
     list:   ()       => get("/api/clientes"),
@@ -96,19 +101,53 @@ const api = {
     deleteByOrc:    (orcId)      => del(`/api/receitas/por-orcamento/${orcId}`),
   },
 
+  // Escritório agora inclui logo no mesmo payload (get/save atômicos).
+  // O backend separa internamente: logo vai pra coluna dedicada, resto
+  // pro JSONB. Pro frontend, é um objeto só.
   escritorio: {
     get:    ()  => get("/api/escritorio"),
     save:   (e) => put("/api/escritorio", e),
   },
 
+  // Logo continua disponível via endpoint dedicado (compat), mas
+  // a rota /api/escritorio também retorna logo junto — preferir ela
+  // nos fluxos de boot/carregamento pra evitar request extra.
   logo: {
-    get:  ()      => get("/api/logo"),
-    save: (data)  => put("/api/logo", { data }),
+    get:    ()     => get("/api/logo"),
+    save:   (data) => put("/api/logo", { data }),
+    clear:  ()     => put("/api/logo", { data: null }),
   },
 
   config: {
     get:  (chave)        => get(`/api/config/${chave}`),
     save: (chave, dados) => put(`/api/config/${chave}`, dados),
+  },
+
+  // ── ADMIN (só master) ──────────────────────────────────────
+  admin: {
+    empresas: {
+      list:   ()           => get("/admin/empresas"),
+      save:   (e)          => post("/admin/empresas", e),
+      update: (id, e)      => put(`/admin/empresas/${id}`, e),
+      delete: (id)         => del(`/admin/empresas/${id}`),
+    },
+    usuarios: {
+      list:   ()           => get("/admin/usuarios"),
+      save:   (u)          => post("/admin/usuarios", u),
+      update: (id, u)      => put(`/admin/usuarios/${id}`, u),
+      delete: (id)         => del(`/admin/usuarios/${id}`),
+    },
+    manutencao: ()         => post("/admin/manutencao"),
+  },
+
+  // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
+  empresa: {
+    usuarios: {
+      list:   ()           => get("/empresa/usuarios"),
+      save:   (u)          => post("/empresa/usuarios", u),
+      update: (id, u)      => put(`/empresa/usuarios/${id}`, u),
+      delete: (id)         => del(`/empresa/usuarios/${id}`),
+    },
   },
 
   backup: {
@@ -119,8 +158,9 @@ const api = {
   health: () => get("/api/health"),
 };
 
-// ── Carrega todos os dados de uma vez (compatível com o data object atual) ──
-// Substitui o DB.get("obramanager-v1")
+// ── Carrega todos os dados de uma vez ──────────────────────────
+// Substitui o DB.get("obramanager-v1") do sistema antigo.
+// Escritório agora vem com logo embutido (um só request).
 async function loadAllData() {
   const [
     clientes,
@@ -150,13 +190,14 @@ async function loadAllData() {
     lancamentos,
     orcamentosProjeto,
     receitasFinanceiro,
+    // escritorio já vem com { ...dados, logo } do backend
     escritorio: escritorio || {},
   };
 }
 
-// ── Salva todos os dados (compatível com o save(newData) atual) ──
-// Substitui o DB.set("obramanager-v1", newData)
-// Por enquanto faz um diff simples — no futuro cada módulo salva individualmente
+// ── Salva diffs entre newData e oldData ────────────────────────
+// Calcula o que mudou e só envia os itens modificados pro backend.
+// Cada módulo é independente — erro em um não afeta os outros.
 async function saveAllData(newData, oldData = {}) {
   const tasks = [];
 
@@ -220,12 +261,10 @@ async function saveAllData(newData, oldData = {}) {
   lancsNovos.forEach(l => tasks.push(api.lancamentos.save(l)));
   lancsRemovidos.forEach(l => tasks.push(api.lancamentos.delete(l.id)));
 
-  // Escritório
+  // Escritório (inclui logo agregado no mesmo objeto)
   if (newData.escritorio && JSON.stringify(newData.escritorio) !== JSON.stringify(oldData.escritorio)) {
     tasks.push(api.escritorio.save(newData.escritorio));
   }
 
   await Promise.all(tasks);
 }
-
-
