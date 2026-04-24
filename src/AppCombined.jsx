@@ -8856,12 +8856,22 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
   const areaTot = calculo.areaTot || calculo.areaTotal || 0;
 
   // ── Estados editáveis ──────────────────────────────────────
+  // CRITICAL: arqEdit/engEdit devem refletir o cálculo ATUAL em modo de edição.
+  // Antes o código usava snap.arqEdit sem ressalva, o que causava:
+  //   - Usuário editava orçamento (ex: adicionava cômodos) → valor no form subia
+  //   - Clicava "Gerar Orçamento" → preview da proposta mostrava valor antigo
+  //     (da v1 salva) porque snap.arqEdit era priorizado
+  //   - Salvava v2 com valor da v1 → card mostrava v2 mas com valor velho
+  // Agora: só usa snap quando a proposta está travada (modoVer / lockEdicao),
+  // onde não faz sentido recalcular. Em edição normal, calculo atual ganha.
+  // Trade-off: edição manual inline do valor não é preservada entre sessões
+  // de edição — mas esse caso é raro e evitar o bug principal é prioridade.
   const [arqEdit, setArqEdit]               = useState(() => {
-    if (snap?.arqEdit != null) return snap.arqEdit;
+    if (lockEdicao && snap?.arqEdit != null) return snap.arqEdit;
     return incluiArq ? (calculo.precoArq || 0) : 0;
   });
   const [engEdit, setEngEdit]               = useState(() => {
-    if (snap?.engEdit != null) return snap.engEdit;
+    if (lockEdicao && snap?.engEdit != null) return snap.engEdit;
     return incluiEng ? (calculo.precoEng || 0) : 0;
   });
   const [resumoEdit, setResumoEdit]         = useState(snap?.resumoEdit ?? null);
