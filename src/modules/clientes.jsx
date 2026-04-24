@@ -328,7 +328,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   function openDetail(c) { setSel(c); setView("detail"); }
 
   function saveCliente() {
-    if (!form.nome?.trim()) { alert("Informe o nome do cliente."); return; }
+    if (!form.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome do cliente", tipo: "aviso" }); return; }
     const novos = form.id
       ? data.clientes.map(c => c.id === form.id ? form : c)
       : [...data.clientes, { ...form, id: uid() }];
@@ -336,8 +336,16 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     setView("kanban");
   }
 
-  function removeCliente(id) {
-    if (!confirm("Remover cliente?")) return;
+  async function removeCliente(id) {
+    const c = data.clientes.find(x => x.id === id);
+    const nome = c?.nome || "este cliente";
+    const ok = await dialogo.confirmar({
+      titulo: "Remover cliente?",
+      mensagem: `${nome} será removido. Esta ação não pode ser desfeita.`,
+      confirmar: "Remover",
+      destrutivo: true,
+    });
+    if (!ok) return;
     save({ ...data, clientes: data.clientes.filter(c => c.id !== id) });
     setView("kanban");
   }
@@ -773,7 +781,6 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
     return () => window.removeEventListener("resize", handler);
   }, []);
 
-  const [confirmDelete, setConfirmDelete] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   const [orcGanho, setOrcGanho] = useState(null);
@@ -896,8 +903,16 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   }
 
   async function excluirOrcamento(orcId) {
+    const orc = (data.orcamentosProjeto||[]).find(x => x.id === orcId);
+    const ref = orc?.id || "orçamento";
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir ${ref}?`,
+      mensagem: "Esta ação não pode ser desfeita.",
+      confirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
     const novos = (data.orcamentosProjeto||[]).filter(x => x.id !== orcId);
-    setConfirmDelete(null);
     save({ ...data, orcamentosProjeto: novos }).catch(console.error);
   }
 
@@ -992,7 +1007,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               onAbrirOrcamento(cliente, orcCompleto, modo);
             };
             const mkOnAction = async (acao, orc) => {
-              if (perm.isVisualizador) { alert("Sem permissão para esta ação."); return; }
+              if (perm.isVisualizador) { dialogo.alertar({ titulo: "Sem permissão", mensagem: "Você não tem permissão para esta ação.", tipo: "aviso" }); return; }
               if (acao === "ganho") {
                 if (orc.status === "ganho") return;
                 // Busca a versão completa pelo api.js (com handler de 401)
@@ -1007,8 +1022,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               }
               if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
               if (acao === "excluir") {
-                if (!perm.podeExcluir) { alert("Apenas administradores podem excluir."); return; }
-                setConfirmDelete(orc.id);
+                if (!perm.podeExcluir) { dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir.", tipo: "aviso" }); return; }
+                excluirOrcamento(orc.id);
               }
             };
 
@@ -1207,20 +1222,6 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
           onConfirmar={async () => { await excluirOrcamentosEmMassa(); setModoSelecao(false); }}
           onCancelar={() => setConfirmExcluirMassa(false)}
         />
-      )}
-
-      {/* Modal confirmar exclusão */}
-      {confirmDelete && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:380, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" }}>
-            <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:10 }}>Excluir orçamento?</div>
-            <div style={{ fontSize:13, color:"#6b7280", marginBottom:24, lineHeight:1.6 }}>Esta ação não pode ser desfeita.</div>
-            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-              <button onClick={() => setConfirmDelete(null)} style={{ background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-              <button onClick={() => excluirOrcamento(confirmDelete)} style={{ background:"#dc2626", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Sim, excluir</button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Visualizador de proposta enviada (snapshot de imagens do PDF) */}

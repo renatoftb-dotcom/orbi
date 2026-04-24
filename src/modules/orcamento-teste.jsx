@@ -120,16 +120,22 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
     // Guard: visualizador não chega aqui pela UI, mas defendemos caso algum código o chame
     if (perm.isVisualizador) {
-      alert("Sem permissão para esta ação.");
+      dialogo.alertar({ titulo: "Sem permissão", mensagem: "Você não tem permissão para esta ação.", tipo: "aviso" });
       return;
     }
 
     if (acao === "excluir") {
       if (!perm.podeExcluir) {
-        alert("Apenas administradores podem excluir orçamentos.");
+        dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
         return;
       }
-      if (!confirm(`Excluir orçamento ${orc.id}?\n\nEsta ação não pode ser desfeita.`)) return;
+      const ok = await dialogo.confirmar({
+        titulo: `Excluir orçamento ${orc.id}?`,
+        mensagem: "Esta ação não pode ser desfeita.",
+        confirmar: "Excluir",
+        destrutivo: true,
+      });
+      if (!ok) return;
       const novos = todos.filter(o => o.id !== orc.id);
       save({ ...data, orcamentosProjeto: novos }).catch(console.error);
       return;
@@ -138,12 +144,17 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     if (acao === "perdido") {
       if (orc.status === "perdido") {
         // Se já está perdido, reabre pra rascunho
-        if (!confirm("Reabrir este orçamento?")) return;
+        const okR = await dialogo.confirmar({ titulo: "Reabrir este orçamento?", confirmar: "Reabrir" });
+        if (!okR) return;
         const novos = todos.map(o => o.id === orc.id ? { ...o, status: "rascunho", concluidoEm: null } : o);
         save({ ...data, orcamentosProjeto: novos }).catch(console.error);
         return;
       }
-      if (!confirm(`Marcar orçamento ${orc.id} como Perdido?`)) return;
+      const okP = await dialogo.confirmar({
+        titulo: `Marcar orçamento ${orc.id} como Perdido?`,
+        confirmar: "Marcar como perdido",
+      });
+      if (!okP) return;
       const novos = todos.map(o =>
         o.id === orc.id
           ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora }
@@ -165,7 +176,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   // depois de salvar. O confirm modal já foi mostrado quem chama.
   async function excluirEmMassa() {
     if (!perm.podeExcluir) {
-      alert("Apenas administradores podem excluir orçamentos.");
+      dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
       setConfirmExcluirMassa(false);
       return;
     }
@@ -2887,7 +2898,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   function confirmar() {
     // Bloqueia se houver diferença entre soma das parcelas e total fechado
     if (temDiferenca) {
-      alert(`Ajuste os valores das parcelas antes de confirmar.\n\nSoma atual: ${fmtBRL(somaParcelas)}\nTotal fechado: ${fmtBRL(totalFechado)}\nDiferença: ${diferencaParcelas > 0 ? "+" : ""}${fmtBRL(diferencaParcelas)}`);
+      dialogo.alertar({
+        titulo: "Ajuste os valores das parcelas",
+        mensagem: `A soma das parcelas precisa bater com o total fechado.\n\nSoma atual: ${fmtBRL(somaParcelas)}\nTotal fechado: ${fmtBRL(totalFechado)}\nDiferença: ${diferencaParcelas > 0 ? "+" : ""}${fmtBRL(diferencaParcelas)}`,
+        tipo: "aviso",
+      });
       return;
     }
 
@@ -3718,8 +3733,8 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
 
   // Gera PDF a partir das imagens salvas — garante fidelidade visual 100% ao que foi enviado
   async function baixarPdf() {
-    if (!temImagens) { alert("Esta proposta não tem imagens salvas."); return; }
-    if (!window.jspdf) { alert("Aguarde 2 segundos e tente novamente."); return; }
+    if (!temImagens) { dialogo.alertar({ titulo: "Sem imagens salvas", mensagem: "Esta proposta não tem imagens salvas.", tipo: "aviso" }); return; }
+    if (!window.jspdf) { dialogo.alertar({ titulo: "Aguarde alguns segundos", mensagem: "A biblioteca de PDF ainda está carregando. Tente novamente em 2 segundos.", tipo: "aviso" }); return; }
     try {
       setBaixando(true);
       const { jsPDF } = window.jspdf;
@@ -3751,7 +3766,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
       doc.save(`proposta-${nome}-${versao}.pdf`);
     } catch(e) {
       console.error(e);
-      alert("Erro ao gerar PDF: " + e.message);
+      dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" });
     } finally {
       setBaixando(false);
     }
@@ -4222,7 +4237,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
     });
   }
   function removerEtapa(id) {
-    if (id === 5) { alert("A etapa de Engenharia não pode ser removida. Use o toggle de Engenharia na Tela 1 para excluir."); return; }
+    if (id === 5) { dialogo.alertar({ titulo: "Etapa de Engenharia", mensagem: "A etapa de Engenharia não pode ser removida por aqui. Use o toggle de Engenharia na Tela 1 para excluir.", tipo: "aviso" }); return; }
     setEtapasPctLocal(prev => prev.filter(e => e.id !== id));
     setEtapasIsoladasLocal(prev => { const n = new Set(prev); n.delete(id); return n; });
   }
@@ -4543,12 +4558,12 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       setConfirmSalvar(false);
     } catch(e) {
       console.error(e);
-      alert("Erro ao salvar proposta: " + e.message);
+      dialogo.alertar({ titulo: "Erro ao salvar proposta", mensagem: e.message, tipo: "erro" });
     }
   }
 
   const handlePdf = async (opts = {}) => {
-    if (!window.jspdf) { alert("Aguarde 2s e tente novamente."); return; }
+    if (!window.jspdf) { dialogo.alertar({ titulo: "Aguarde alguns segundos", mensagem: "A biblioteca de PDF ainda está carregando.", tipo: "aviso" }); return; }
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
@@ -4648,7 +4663,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       if (modelo && subTituloFinal) modelo.subtitulo = subTituloFinal;
       const blob = await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng, { returnBlob: opts.returnBlob });
       if (opts.returnBlob) return blob;
-    } catch(e) { console.error(e); alert("Erro ao gerar PDF: "+e.message); }
+    } catch(e) { console.error(e); dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" }); }
   };
 
   return (

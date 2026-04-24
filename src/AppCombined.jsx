@@ -454,6 +454,287 @@ var SEED = {
 var ESTADOS_BR = ["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"];
 var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura","Cobertura","Elétrico","Hidráulico","Revestimento","Acabamento","Ferramentas","Tintas","Vidros","Geral","Outros"];
 
+// ═══════════════════════════════════════════════════════════════
+// SISTEMA DE DIÁLOGOS E TOASTS (substitui alert/confirm nativos)
+// ═══════════════════════════════════════════════════════════════
+// Rationale:
+// - Diálogos nativos (alert/confirm) têm UX feia, mostram URL do site,
+//   quebram o fluxo visual e não combinam com o design do VICKE.
+// - Este sistema oferece 3 helpers globais chamáveis de qualquer função
+//   (não só dentro de componentes React) pra facilitar migração:
+//     toast.sucesso(msg)   → balão verde que some em 3s (avisos positivos)
+//     toast.erro(msg)      → balão vermelho que some em 4s
+//     dialogo.confirmar({titulo, mensagem, confirmar, destrutivo}) → Promise<boolean>
+//     dialogo.alertar({titulo, mensagem, tipo}) → Promise<void>
+//
+// Arquitetura:
+// - Estado vive num objeto _dialogState fora do React.
+// - Listeners são callbacks registrados por DialogosHost.
+// - DialogosHost é um componente renderizado uma vez no app.jsx que
+//   desenha os modais/toasts ativos.
+// ═══════════════════════════════════════════════════════════════
+
+var _dialogState = {
+  modais: [],      // { id, tipo: "confirm"|"alert", titulo, mensagem, confirmar, cancelar, destrutivo, tipoAlert, resolver }
+  toasts: [],      // { id, tipo: "sucesso"|"erro", mensagem }
+  listeners: new Set(),
+  _nextId: 1,
+};
+
+function _dialogNotify() {
+  _dialogState.listeners.forEach(fn => { try { fn(); } catch {} });
+}
+
+// API pública
+var toast = {
+  sucesso: (mensagem, duracao = 3000) => {
+    const id = _dialogState._nextId++;
+    _dialogState.toasts.push({ id, tipo: "sucesso", mensagem });
+    _dialogNotify();
+    setTimeout(() => {
+      _dialogState.toasts = _dialogState.toasts.filter(t => t.id !== id);
+      _dialogNotify();
+    }, duracao);
+  },
+  erro: (mensagem, duracao = 4000) => {
+    const id = _dialogState._nextId++;
+    _dialogState.toasts.push({ id, tipo: "erro", mensagem });
+    _dialogNotify();
+    setTimeout(() => {
+      _dialogState.toasts = _dialogState.toasts.filter(t => t.id !== id);
+      _dialogNotify();
+    }, duracao);
+  },
+};
+
+var dialogo = {
+  // Retorna Promise<boolean> — true se confirmou, false se cancelou.
+  // Use async/await: const ok = await dialogo.confirmar({...});
+  confirmar: (opts) => {
+    return new Promise(resolver => {
+      const id = _dialogState._nextId++;
+      _dialogState.modais.push({
+        id,
+        tipo: "confirm",
+        titulo: opts.titulo || "Confirmar?",
+        mensagem: opts.mensagem || "",
+        confirmar: opts.confirmar || "Confirmar",
+        cancelar: opts.cancelar || "Cancelar",
+        destrutivo: !!opts.destrutivo,
+        resolver,
+      });
+      _dialogNotify();
+    });
+  },
+  // Retorna Promise<void> — resolve quando usuário clica OK.
+  alertar: (opts) => {
+    return new Promise(resolver => {
+      const id = _dialogState._nextId++;
+      _dialogState.modais.push({
+        id,
+        tipo: "alert",
+        titulo: opts.titulo || "",
+        mensagem: opts.mensagem || "",
+        confirmar: opts.confirmar || "OK",
+        tipoAlert: opts.tipo || "info", // info | erro | sucesso | aviso
+        resolver,
+      });
+      _dialogNotify();
+    });
+  },
+};
+
+// Host React: renderiza modais e toasts. Deve ser montado UMA VEZ
+// no topo da app (app.jsx, dentro do root mas independente das telas).
+function DialogosHost() {
+  const [, forceRender] = useState(0);
+
+  useEffect(() => {
+    const fn = () => forceRender(n => n + 1);
+    _dialogState.listeners.add(fn);
+    return () => { _dialogState.listeners.delete(fn); };
+  }, []);
+
+  function fecharModal(id, valor) {
+    const m = _dialogState.modais.find(x => x.id === id);
+    if (!m) return;
+    _dialogState.modais = _dialogState.modais.filter(x => x.id !== id);
+    _dialogNotify();
+    if (m.resolver) m.resolver(valor);
+  }
+
+  // Suporte a ESC pra fechar modal ativo (cancela em confirm, fecha em alert)
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Escape") return;
+      const m = _dialogState.modais[_dialogState.modais.length - 1];
+      if (!m) return;
+      fecharModal(m.id, m.tipo === "confirm" ? false : undefined);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const modais = _dialogState.modais;
+  const toasts = _dialogState.toasts;
+  const modalTopo = modais[modais.length - 1] || null;
+
+  const coresAlert = {
+    info:    { borda: "#e5e7eb", texto: "#111" },
+    sucesso: { borda: "#bbf7d0", texto: "#15803d" },
+    erro:    { borda: "#fecaca", texto: "#b91c1c" },
+    aviso:   { borda: "#fde68a", texto: "#b45309" },
+  };
+
+  return (
+    <>
+      {/* Modal ativo — só renderiza o último da fila (topo) */}
+      {modalTopo && (
+        <div
+          onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? false : undefined)}
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            zIndex: 100000,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20,
+            fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+            animation: "vickeDialogFade 0.15s ease",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              border: `1px solid ${modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.borda || "#e5e7eb") : "#e5e7eb"}`,
+              borderRadius: 12,
+              padding: "24px 28px",
+              maxWidth: 440,
+              width: "100%",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+              animation: "vickeDialogPop 0.18s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
+            }}
+          >
+            {modalTopo.titulo && (
+              <div style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.texto || "#111") : "#111",
+                marginBottom: modalTopo.mensagem ? 10 : 18,
+              }}>
+                {modalTopo.titulo}
+              </div>
+            )}
+            {modalTopo.mensagem && (
+              <div style={{
+                fontSize: 13.5,
+                color: "#4b5563",
+                lineHeight: 1.55,
+                marginBottom: 20,
+                whiteSpace: "pre-wrap",
+              }}>
+                {modalTopo.mensagem}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              {modalTopo.tipo === "confirm" && (
+                <button
+                  onClick={() => fecharModal(modalTopo.id, false)}
+                  style={{
+                    background: "#fff",
+                    color: "#6b7280",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    padding: "8px 18px",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {modalTopo.cancelar}
+                </button>
+              )}
+              <button
+                autoFocus
+                onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? true : undefined)}
+                style={{
+                  background: modalTopo.destrutivo ? "#dc2626" : "#111",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "8px 20px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {modalTopo.confirmar}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toasts — pilha no canto superior direito. Recente embaixo. */}
+      {toasts.length > 0 && (
+        <div style={{
+          position: "fixed",
+          top: 20,
+          right: 20,
+          zIndex: 100001,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          pointerEvents: "none",
+        }}>
+          {toasts.map(t => (
+            <div
+              key={t.id}
+              style={{
+                background: "#fff",
+                border: `1px solid ${t.tipo === "sucesso" ? "#bbf7d0" : "#fecaca"}`,
+                borderLeft: `4px solid ${t.tipo === "sucesso" ? "#16a34a" : "#dc2626"}`,
+                borderRadius: 8,
+                padding: "10px 14px 10px 12px",
+                fontSize: 13,
+                color: t.tipo === "sucesso" ? "#15803d" : "#b91c1c",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                minWidth: 240,
+                maxWidth: 360,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontWeight: 500,
+                animation: "vickeToastSlide 0.24s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
+                pointerEvents: "auto",
+              }}
+            >
+              <span style={{ fontSize: 14, flexShrink: 0 }}>
+                {t.tipo === "sucesso" ? "✓" : "⚠"}
+              </span>
+              <span>{t.mensagem}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes vickeDialogFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes vickeDialogPop {
+          from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes vickeToastSlide {
+          from { opacity: 0; transform: translateX(40px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
+    </>
+  );
+}
+
 
 // ════════════════════════════════════════════════════════════
 // api.js
@@ -832,8 +1113,14 @@ function Etapas({ data, save }) {
   }
 
   // Finaliza projeto → move pra Obras
-  function finalizarProjeto(projeto) {
-    if (!confirm(`Finalizar projeto de ${clientes.find(c=>c.id===projeto.clienteId)?.nome || "—"}?\n\nO projeto sairá do Kanban Etapas e será enviado para o módulo Obras como "Em andamento".`)) return;
+  async function finalizarProjeto(projeto) {
+    const nomeCli = clientes.find(c=>c.id===projeto.clienteId)?.nome || "—";
+    const ok = await dialogo.confirmar({
+      titulo: `Finalizar projeto de ${nomeCli}?`,
+      mensagem: `O projeto sairá do Kanban Etapas e será enviado para o módulo Obras como "Em andamento".`,
+      confirmar: "Finalizar",
+    });
+    if (!ok) return;
     const agora = new Date().toISOString();
     const novaObra = {
       id: "OBR-" + Date.now(),
@@ -1175,8 +1462,13 @@ function Obras({ data, save }) {
     return clientes.find(c => c.id === clienteId)?.nome || "—";
   }
 
-  function concluirObra(obra) {
-    if (!confirm(`Concluir obra de ${nomeCliente(obra.clienteId)}?\n\nA obra será marcada como concluída e o cliente começará a contar 3 meses para inativação automática (se não tiver outro serviço ativo).`)) return;
+  async function concluirObra(obra) {
+    const ok = await dialogo.confirmar({
+      titulo: `Concluir obra de ${nomeCliente(obra.clienteId)}?`,
+      mensagem: "A obra será marcada como concluída e o cliente começará a contar 3 meses para inativação automática (se não tiver outro serviço ativo).",
+      confirmar: "Concluir",
+    });
+    if (!ok) return;
     const agora = new Date().toISOString();
     const novasObras = obras.map(o =>
       o.id === obra.id ? { ...o, status: "concluida", concluidaEm: agora } : o
@@ -1184,16 +1476,27 @@ function Obras({ data, save }) {
     save({ ...data, obras: novasObras }).catch(console.error);
   }
 
-  function reabrirObra(obra) {
-    if (!confirm("Reabrir esta obra? Ela voltará para 'Em andamento'.")) return;
+  async function reabrirObra(obra) {
+    const ok = await dialogo.confirmar({
+      titulo: "Reabrir esta obra?",
+      mensagem: "Ela voltará para 'Em andamento'.",
+      confirmar: "Reabrir",
+    });
+    if (!ok) return;
     const novasObras = obras.map(o =>
       o.id === obra.id ? { ...o, status: "em_andamento", concluidaEm: null } : o
     );
     save({ ...data, obras: novasObras }).catch(console.error);
   }
 
-  function excluirObra(obra) {
-    if (!confirm(`Excluir obra de ${nomeCliente(obra.clienteId)}?\n\nEsta ação não pode ser desfeita.`)) return;
+  async function excluirObra(obra) {
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir obra de ${nomeCliente(obra.clienteId)}?`,
+      mensagem: "Esta ação não pode ser desfeita.",
+      confirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
     const novasObras = obras.filter(o => o.id !== obra.id);
     save({ ...data, obras: novasObras }).catch(console.error);
   }
@@ -2876,7 +3179,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   function openDetail(c) { setSel(c); setView("detail"); }
 
   function saveCliente() {
-    if (!form.nome?.trim()) { alert("Informe o nome do cliente."); return; }
+    if (!form.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome do cliente", tipo: "aviso" }); return; }
     const novos = form.id
       ? data.clientes.map(c => c.id === form.id ? form : c)
       : [...data.clientes, { ...form, id: uid() }];
@@ -2884,8 +3187,16 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     setView("kanban");
   }
 
-  function removeCliente(id) {
-    if (!confirm("Remover cliente?")) return;
+  async function removeCliente(id) {
+    const c = data.clientes.find(x => x.id === id);
+    const nome = c?.nome || "este cliente";
+    const ok = await dialogo.confirmar({
+      titulo: "Remover cliente?",
+      mensagem: `${nome} será removido. Esta ação não pode ser desfeita.`,
+      confirmar: "Remover",
+      destrutivo: true,
+    });
+    if (!ok) return;
     save({ ...data, clientes: data.clientes.filter(c => c.id !== id) });
     setView("kanban");
   }
@@ -3321,7 +3632,6 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
     return () => window.removeEventListener("resize", handler);
   }, []);
 
-  const [confirmDelete, setConfirmDelete] = useState(null);
   const [openMenu, setOpenMenu] = useState(null);
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   const [orcGanho, setOrcGanho] = useState(null);
@@ -3444,8 +3754,16 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   }
 
   async function excluirOrcamento(orcId) {
+    const orc = (data.orcamentosProjeto||[]).find(x => x.id === orcId);
+    const ref = orc?.id || "orçamento";
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir ${ref}?`,
+      mensagem: "Esta ação não pode ser desfeita.",
+      confirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
     const novos = (data.orcamentosProjeto||[]).filter(x => x.id !== orcId);
-    setConfirmDelete(null);
     save({ ...data, orcamentosProjeto: novos }).catch(console.error);
   }
 
@@ -3540,7 +3858,7 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               onAbrirOrcamento(cliente, orcCompleto, modo);
             };
             const mkOnAction = async (acao, orc) => {
-              if (perm.isVisualizador) { alert("Sem permissão para esta ação."); return; }
+              if (perm.isVisualizador) { dialogo.alertar({ titulo: "Sem permissão", mensagem: "Você não tem permissão para esta ação.", tipo: "aviso" }); return; }
               if (acao === "ganho") {
                 if (orc.status === "ganho") return;
                 // Busca a versão completa pelo api.js (com handler de 401)
@@ -3555,8 +3873,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               }
               if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
               if (acao === "excluir") {
-                if (!perm.podeExcluir) { alert("Apenas administradores podem excluir."); return; }
-                setConfirmDelete(orc.id);
+                if (!perm.podeExcluir) { dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir.", tipo: "aviso" }); return; }
+                excluirOrcamento(orc.id);
               }
             };
 
@@ -3755,20 +4073,6 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
           onConfirmar={async () => { await excluirOrcamentosEmMassa(); setModoSelecao(false); }}
           onCancelar={() => setConfirmExcluirMassa(false)}
         />
-      )}
-
-      {/* Modal confirmar exclusão */}
-      {confirmDelete && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:380, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" }}>
-            <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:10 }}>Excluir orçamento?</div>
-            <div style={{ fontSize:13, color:"#6b7280", marginBottom:24, lineHeight:1.6 }}>Esta ação não pode ser desfeita.</div>
-            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-              <button onClick={() => setConfirmDelete(null)} style={{ background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
-              <button onClick={() => excluirOrcamento(confirmDelete)} style={{ background:"#dc2626", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Sim, excluir</button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Visualizador de proposta enviada (snapshot de imagens do PDF) */}
@@ -4948,16 +5252,22 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
 
     // Guard: visualizador não chega aqui pela UI, mas defendemos caso algum código o chame
     if (perm.isVisualizador) {
-      alert("Sem permissão para esta ação.");
+      dialogo.alertar({ titulo: "Sem permissão", mensagem: "Você não tem permissão para esta ação.", tipo: "aviso" });
       return;
     }
 
     if (acao === "excluir") {
       if (!perm.podeExcluir) {
-        alert("Apenas administradores podem excluir orçamentos.");
+        dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
         return;
       }
-      if (!confirm(`Excluir orçamento ${orc.id}?\n\nEsta ação não pode ser desfeita.`)) return;
+      const ok = await dialogo.confirmar({
+        titulo: `Excluir orçamento ${orc.id}?`,
+        mensagem: "Esta ação não pode ser desfeita.",
+        confirmar: "Excluir",
+        destrutivo: true,
+      });
+      if (!ok) return;
       const novos = todos.filter(o => o.id !== orc.id);
       save({ ...data, orcamentosProjeto: novos }).catch(console.error);
       return;
@@ -4966,12 +5276,17 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     if (acao === "perdido") {
       if (orc.status === "perdido") {
         // Se já está perdido, reabre pra rascunho
-        if (!confirm("Reabrir este orçamento?")) return;
+        const okR = await dialogo.confirmar({ titulo: "Reabrir este orçamento?", confirmar: "Reabrir" });
+        if (!okR) return;
         const novos = todos.map(o => o.id === orc.id ? { ...o, status: "rascunho", concluidoEm: null } : o);
         save({ ...data, orcamentosProjeto: novos }).catch(console.error);
         return;
       }
-      if (!confirm(`Marcar orçamento ${orc.id} como Perdido?`)) return;
+      const okP = await dialogo.confirmar({
+        titulo: `Marcar orçamento ${orc.id} como Perdido?`,
+        confirmar: "Marcar como perdido",
+      });
+      if (!okP) return;
       const novos = todos.map(o =>
         o.id === orc.id
           ? { ...o, status: "perdido", concluidoEm: o.concluidoEm || agora }
@@ -4993,7 +5308,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   // depois de salvar. O confirm modal já foi mostrado quem chama.
   async function excluirEmMassa() {
     if (!perm.podeExcluir) {
-      alert("Apenas administradores podem excluir orçamentos.");
+      dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir orçamentos.", tipo: "aviso" });
       setConfirmExcluirMassa(false);
       return;
     }
@@ -7715,7 +8030,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   function confirmar() {
     // Bloqueia se houver diferença entre soma das parcelas e total fechado
     if (temDiferenca) {
-      alert(`Ajuste os valores das parcelas antes de confirmar.\n\nSoma atual: ${fmtBRL(somaParcelas)}\nTotal fechado: ${fmtBRL(totalFechado)}\nDiferença: ${diferencaParcelas > 0 ? "+" : ""}${fmtBRL(diferencaParcelas)}`);
+      dialogo.alertar({
+        titulo: "Ajuste os valores das parcelas",
+        mensagem: `A soma das parcelas precisa bater com o total fechado.\n\nSoma atual: ${fmtBRL(somaParcelas)}\nTotal fechado: ${fmtBRL(totalFechado)}\nDiferença: ${diferencaParcelas > 0 ? "+" : ""}${fmtBRL(diferencaParcelas)}`,
+        tipo: "aviso",
+      });
       return;
     }
 
@@ -8546,8 +8865,8 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
 
   // Gera PDF a partir das imagens salvas — garante fidelidade visual 100% ao que foi enviado
   async function baixarPdf() {
-    if (!temImagens) { alert("Esta proposta não tem imagens salvas."); return; }
-    if (!window.jspdf) { alert("Aguarde 2 segundos e tente novamente."); return; }
+    if (!temImagens) { dialogo.alertar({ titulo: "Sem imagens salvas", mensagem: "Esta proposta não tem imagens salvas.", tipo: "aviso" }); return; }
+    if (!window.jspdf) { dialogo.alertar({ titulo: "Aguarde alguns segundos", mensagem: "A biblioteca de PDF ainda está carregando. Tente novamente em 2 segundos.", tipo: "aviso" }); return; }
     try {
       setBaixando(true);
       const { jsPDF } = window.jspdf;
@@ -8579,7 +8898,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
       doc.save(`proposta-${nome}-${versao}.pdf`);
     } catch(e) {
       console.error(e);
-      alert("Erro ao gerar PDF: " + e.message);
+      dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" });
     } finally {
       setBaixando(false);
     }
@@ -9050,7 +9369,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
     });
   }
   function removerEtapa(id) {
-    if (id === 5) { alert("A etapa de Engenharia não pode ser removida. Use o toggle de Engenharia na Tela 1 para excluir."); return; }
+    if (id === 5) { dialogo.alertar({ titulo: "Etapa de Engenharia", mensagem: "A etapa de Engenharia não pode ser removida por aqui. Use o toggle de Engenharia na Tela 1 para excluir.", tipo: "aviso" }); return; }
     setEtapasPctLocal(prev => prev.filter(e => e.id !== id));
     setEtapasIsoladasLocal(prev => { const n = new Set(prev); n.delete(id); return n; });
   }
@@ -9371,12 +9690,12 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       setConfirmSalvar(false);
     } catch(e) {
       console.error(e);
-      alert("Erro ao salvar proposta: " + e.message);
+      dialogo.alertar({ titulo: "Erro ao salvar proposta", mensagem: e.message, tipo: "erro" });
     }
   }
 
   const handlePdf = async (opts = {}) => {
-    if (!window.jspdf) { alert("Aguarde 2s e tente novamente."); return; }
+    if (!window.jspdf) { dialogo.alertar({ titulo: "Aguarde alguns segundos", mensagem: "A biblioteca de PDF ainda está carregando.", tipo: "aviso" }); return; }
     try {
       const c = data.calculo;
       const nUnid = c.nRep || 1;
@@ -9476,7 +9795,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
       if (modelo && subTituloFinal) modelo.subtitulo = subTituloFinal;
       const blob = await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng, { returnBlob: opts.returnBlob });
       if (opts.returnBlob) return blob;
-    } catch(e) { console.error(e); alert("Erro ao gerar PDF: "+e.message); }
+    } catch(e) { console.error(e); dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" }); }
   };
 
   return (
@@ -11962,18 +12281,22 @@ function Escritorio({ data, save }) {
   async function salvarUsuario() {
     if (!novoUsuario) return;
     // Validação
-    if (!novoUsuario.nome?.trim()) { alert("Informe o nome"); return; }
-    if (!novoUsuario.email?.trim()) { alert("Informe o e-mail"); return; }
+    if (!novoUsuario.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome", tipo: "aviso" }); return; }
+    if (!novoUsuario.email?.trim()) { dialogo.alertar({ titulo: "Informe o e-mail", tipo: "aviso" }); return; }
     const editando = !!novoUsuario._editando;
     const senhaPreenchida = !!novoUsuario.senha;
     // Ao criar: senha obrigatória. Ao editar: senha opcional (se preencher, valida).
     if (!editando || senhaPreenchida) {
       if (!novoUsuario.senha || novoUsuario.senha.length < 6) {
-        alert(editando ? "A nova senha deve ter no mínimo 6 caracteres" : "A senha deve ter no mínimo 6 caracteres");
+        dialogo.alertar({
+          titulo: "Senha muito curta",
+          mensagem: editando ? "A nova senha deve ter no mínimo 6 caracteres." : "A senha deve ter no mínimo 6 caracteres.",
+          tipo: "aviso",
+        });
         return;
       }
       if (novoUsuario.senha !== confirmSenha) {
-        alert("As senhas não conferem");
+        dialogo.alertar({ titulo: "As senhas não conferem", tipo: "aviso" });
         return;
       }
     }
@@ -12015,7 +12338,7 @@ function Escritorio({ data, save }) {
         } catch {}
       }
     } catch (e) {
-      alert("Erro: " + e.message);
+      dialogo.alertar({ titulo: "Erro ao salvar usuário", mensagem: e.message, tipo: "erro" });
     } finally {
       setSalvandoUsuario(false);
     }
@@ -12024,11 +12347,11 @@ function Escritorio({ data, save }) {
   // Abre o modal de confirmação de exclusão
   function pedirConfirmacaoExcluir(u) {
     if (u.id === usuarioLogadoId) {
-      alert("Você não pode excluir a si mesmo.");
+      dialogo.alertar({ titulo: "Ação não permitida", mensagem: "Você não pode excluir a si mesmo.", tipo: "aviso" });
       return;
     }
     if (!localStorage.getItem("vicke-token")) {
-      alert("Sessão expirada. Faça login novamente.");
+      dialogo.alertar({ titulo: "Sessão expirada", mensagem: "Faça login novamente.", tipo: "erro" });
       return;
     }
     setConfirmarExcluir({ id: u.id, nome: u.nome });
@@ -12049,7 +12372,7 @@ function Escritorio({ data, save }) {
     } catch (e) {
       // Reverte o optimistic update em caso de erro
       setUsuarios(usuariosAntes);
-      alert("Erro: " + e.message);
+      dialogo.alertar({ titulo: "Erro ao excluir", mensagem: e.message, tipo: "erro" });
     }
   }
 
@@ -12612,13 +12935,18 @@ function Escritorio({ data, save }) {
   const [manutLoading, setManutLoading] = useState(false);
 
   async function executarManutencao() {
-    if (!confirm("Executar rotina de manutenção agora?\n\n• Expira propostas com mais de 30 dias (remove imagens, marca como perdido)\n• Inativa clientes sem serviço em aberto há 3 meses\n\nNormalmente roda sozinha todo dia às 3h da manhã.")) return;
+    const ok = await dialogo.confirmar({
+      titulo: "Executar rotina de manutenção agora?",
+      mensagem: "• Expira propostas com mais de 30 dias (remove imagens, marca como perdido)\n• Inativa clientes sem serviço em aberto há 3 meses\n\nNormalmente roda sozinha todo dia às 3h da manhã.",
+      confirmar: "Executar",
+    });
+    if (!ok) return;
     setManutLoading(true);
     setManutResult(null);
     try {
       const token = localStorage.getItem("vicke-token");
       if (!token) {
-        alert("Sessão expirada. Faça login novamente.");
+        dialogo.alertar({ titulo: "Sessão expirada", mensagem: "Faça login novamente.", tipo: "erro" });
         setManutLoading(false);
         return;
       }
@@ -12630,10 +12958,10 @@ function Escritorio({ data, save }) {
       if (json.ok) {
         setManutResult(json.data);
       } else {
-        alert("Erro: " + (json.error || "Falha ao executar manutenção"));
+        dialogo.alertar({ titulo: "Erro na manutenção", mensagem: json.error || "Falha ao executar manutenção", tipo: "erro" });
       }
     } catch (e) {
-      alert("Erro de rede: " + e.message);
+      dialogo.alertar({ titulo: "Erro de rede", mensagem: e.message, tipo: "erro" });
     } finally {
       setManutLoading(false);
     }
@@ -13307,25 +13635,29 @@ export default function ModuloClientesFornecedores() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      try { const parsed = JSON.parse(ev.target.result); await save(parsed); alert("Dados importados!"); }
-      catch { alert("Arquivo inválido."); }
+      try { const parsed = JSON.parse(ev.target.result); await save(parsed); toast.sucesso("Dados importados"); }
+      catch { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: "Não foi possível ler este arquivo JSON.", tipo: "erro" }); }
     };
     reader.readAsText(file); e.target.value = "";
   }
 
-  if (!autenticado) return <TelaLogin onLogin={handleLogin} />;
+  if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /></>;
 
   if (loading) return (
+    <>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ width:20, height:20, border:"2px solid #e5e7eb", borderTop:"2px solid #111", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 12px" }} />
         <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Carregando...</p>
       </div>
     </div>
+    <DialogosHost />
+    </>
   );
 
   if (!data) {
     return (
+      <>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
           <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
@@ -13334,6 +13666,8 @@ export default function ModuloClientesFornecedores() {
           <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
+      <DialogosHost />
+      </>
     );
   }
 
@@ -13362,6 +13696,7 @@ export default function ModuloClientesFornecedores() {
   });
 
   return (
+    <>
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
@@ -13602,6 +13937,8 @@ export default function ModuloClientesFornecedores() {
         </div>
       )}
     </div>
+    <DialogosHost />
+    </>
   );
 }
 

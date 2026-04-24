@@ -95,8 +95,14 @@ function Etapas({ data, save }) {
   }
 
   // Finaliza projeto → move pra Obras
-  function finalizarProjeto(projeto) {
-    if (!confirm(`Finalizar projeto de ${clientes.find(c=>c.id===projeto.clienteId)?.nome || "—"}?\n\nO projeto sairá do Kanban Etapas e será enviado para o módulo Obras como "Em andamento".`)) return;
+  async function finalizarProjeto(projeto) {
+    const nomeCli = clientes.find(c=>c.id===projeto.clienteId)?.nome || "—";
+    const ok = await dialogo.confirmar({
+      titulo: `Finalizar projeto de ${nomeCli}?`,
+      mensagem: `O projeto sairá do Kanban Etapas e será enviado para o módulo Obras como "Em andamento".`,
+      confirmar: "Finalizar",
+    });
+    if (!ok) return;
     const agora = new Date().toISOString();
     const novaObra = {
       id: "OBR-" + Date.now(),
@@ -438,8 +444,13 @@ function Obras({ data, save }) {
     return clientes.find(c => c.id === clienteId)?.nome || "—";
   }
 
-  function concluirObra(obra) {
-    if (!confirm(`Concluir obra de ${nomeCliente(obra.clienteId)}?\n\nA obra será marcada como concluída e o cliente começará a contar 3 meses para inativação automática (se não tiver outro serviço ativo).`)) return;
+  async function concluirObra(obra) {
+    const ok = await dialogo.confirmar({
+      titulo: `Concluir obra de ${nomeCliente(obra.clienteId)}?`,
+      mensagem: "A obra será marcada como concluída e o cliente começará a contar 3 meses para inativação automática (se não tiver outro serviço ativo).",
+      confirmar: "Concluir",
+    });
+    if (!ok) return;
     const agora = new Date().toISOString();
     const novasObras = obras.map(o =>
       o.id === obra.id ? { ...o, status: "concluida", concluidaEm: agora } : o
@@ -447,16 +458,27 @@ function Obras({ data, save }) {
     save({ ...data, obras: novasObras }).catch(console.error);
   }
 
-  function reabrirObra(obra) {
-    if (!confirm("Reabrir esta obra? Ela voltará para 'Em andamento'.")) return;
+  async function reabrirObra(obra) {
+    const ok = await dialogo.confirmar({
+      titulo: "Reabrir esta obra?",
+      mensagem: "Ela voltará para 'Em andamento'.",
+      confirmar: "Reabrir",
+    });
+    if (!ok) return;
     const novasObras = obras.map(o =>
       o.id === obra.id ? { ...o, status: "em_andamento", concluidaEm: null } : o
     );
     save({ ...data, obras: novasObras }).catch(console.error);
   }
 
-  function excluirObra(obra) {
-    if (!confirm(`Excluir obra de ${nomeCliente(obra.clienteId)}?\n\nEsta ação não pode ser desfeita.`)) return;
+  async function excluirObra(obra) {
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir obra de ${nomeCliente(obra.clienteId)}?`,
+      mensagem: "Esta ação não pode ser desfeita.",
+      confirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
     const novasObras = obras.filter(o => o.id !== obra.id);
     save({ ...data, obras: novasObras }).catch(console.error);
   }

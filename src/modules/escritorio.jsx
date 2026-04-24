@@ -105,18 +105,22 @@ function Escritorio({ data, save }) {
   async function salvarUsuario() {
     if (!novoUsuario) return;
     // Validação
-    if (!novoUsuario.nome?.trim()) { alert("Informe o nome"); return; }
-    if (!novoUsuario.email?.trim()) { alert("Informe o e-mail"); return; }
+    if (!novoUsuario.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome", tipo: "aviso" }); return; }
+    if (!novoUsuario.email?.trim()) { dialogo.alertar({ titulo: "Informe o e-mail", tipo: "aviso" }); return; }
     const editando = !!novoUsuario._editando;
     const senhaPreenchida = !!novoUsuario.senha;
     // Ao criar: senha obrigatória. Ao editar: senha opcional (se preencher, valida).
     if (!editando || senhaPreenchida) {
       if (!novoUsuario.senha || novoUsuario.senha.length < 6) {
-        alert(editando ? "A nova senha deve ter no mínimo 6 caracteres" : "A senha deve ter no mínimo 6 caracteres");
+        dialogo.alertar({
+          titulo: "Senha muito curta",
+          mensagem: editando ? "A nova senha deve ter no mínimo 6 caracteres." : "A senha deve ter no mínimo 6 caracteres.",
+          tipo: "aviso",
+        });
         return;
       }
       if (novoUsuario.senha !== confirmSenha) {
-        alert("As senhas não conferem");
+        dialogo.alertar({ titulo: "As senhas não conferem", tipo: "aviso" });
         return;
       }
     }
@@ -158,7 +162,7 @@ function Escritorio({ data, save }) {
         } catch {}
       }
     } catch (e) {
-      alert("Erro: " + e.message);
+      dialogo.alertar({ titulo: "Erro ao salvar usuário", mensagem: e.message, tipo: "erro" });
     } finally {
       setSalvandoUsuario(false);
     }
@@ -167,11 +171,11 @@ function Escritorio({ data, save }) {
   // Abre o modal de confirmação de exclusão
   function pedirConfirmacaoExcluir(u) {
     if (u.id === usuarioLogadoId) {
-      alert("Você não pode excluir a si mesmo.");
+      dialogo.alertar({ titulo: "Ação não permitida", mensagem: "Você não pode excluir a si mesmo.", tipo: "aviso" });
       return;
     }
     if (!localStorage.getItem("vicke-token")) {
-      alert("Sessão expirada. Faça login novamente.");
+      dialogo.alertar({ titulo: "Sessão expirada", mensagem: "Faça login novamente.", tipo: "erro" });
       return;
     }
     setConfirmarExcluir({ id: u.id, nome: u.nome });
@@ -192,7 +196,7 @@ function Escritorio({ data, save }) {
     } catch (e) {
       // Reverte o optimistic update em caso de erro
       setUsuarios(usuariosAntes);
-      alert("Erro: " + e.message);
+      dialogo.alertar({ titulo: "Erro ao excluir", mensagem: e.message, tipo: "erro" });
     }
   }
 
@@ -755,13 +759,18 @@ function Escritorio({ data, save }) {
   const [manutLoading, setManutLoading] = useState(false);
 
   async function executarManutencao() {
-    if (!confirm("Executar rotina de manutenção agora?\n\n• Expira propostas com mais de 30 dias (remove imagens, marca como perdido)\n• Inativa clientes sem serviço em aberto há 3 meses\n\nNormalmente roda sozinha todo dia às 3h da manhã.")) return;
+    const ok = await dialogo.confirmar({
+      titulo: "Executar rotina de manutenção agora?",
+      mensagem: "• Expira propostas com mais de 30 dias (remove imagens, marca como perdido)\n• Inativa clientes sem serviço em aberto há 3 meses\n\nNormalmente roda sozinha todo dia às 3h da manhã.",
+      confirmar: "Executar",
+    });
+    if (!ok) return;
     setManutLoading(true);
     setManutResult(null);
     try {
       const token = localStorage.getItem("vicke-token");
       if (!token) {
-        alert("Sessão expirada. Faça login novamente.");
+        dialogo.alertar({ titulo: "Sessão expirada", mensagem: "Faça login novamente.", tipo: "erro" });
         setManutLoading(false);
         return;
       }
@@ -773,10 +782,10 @@ function Escritorio({ data, save }) {
       if (json.ok) {
         setManutResult(json.data);
       } else {
-        alert("Erro: " + (json.error || "Falha ao executar manutenção"));
+        dialogo.alertar({ titulo: "Erro na manutenção", mensagem: json.error || "Falha ao executar manutenção", tipo: "erro" });
       }
     } catch (e) {
-      alert("Erro de rede: " + e.message);
+      dialogo.alertar({ titulo: "Erro de rede", mensagem: e.message, tipo: "erro" });
     } finally {
       setManutLoading(false);
     }

@@ -243,25 +243,29 @@ export default function ModuloClientesFornecedores() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      try { const parsed = JSON.parse(ev.target.result); await save(parsed); alert("Dados importados!"); }
-      catch { alert("Arquivo inválido."); }
+      try { const parsed = JSON.parse(ev.target.result); await save(parsed); toast.sucesso("Dados importados"); }
+      catch { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: "Não foi possível ler este arquivo JSON.", tipo: "erro" }); }
     };
     reader.readAsText(file); e.target.value = "";
   }
 
-  if (!autenticado) return <TelaLogin onLogin={handleLogin} />;
+  if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /></>;
 
   if (loading) return (
+    <>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ width:20, height:20, border:"2px solid #e5e7eb", borderTop:"2px solid #111", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 12px" }} />
         <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Carregando...</p>
       </div>
     </div>
+    <DialogosHost />
+    </>
   );
 
   if (!data) {
     return (
+      <>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
           <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
@@ -270,6 +274,8 @@ export default function ModuloClientesFornecedores() {
           <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
+      <DialogosHost />
+      </>
     );
   }
 
@@ -298,6 +304,7 @@ export default function ModuloClientesFornecedores() {
   });
 
   return (
+    <>
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
@@ -538,6 +545,8 @@ export default function ModuloClientesFornecedores() {
         </div>
       )}
     </div>
+    <DialogosHost />
+    </>
   );
 }
 

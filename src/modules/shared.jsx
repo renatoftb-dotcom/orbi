@@ -449,3 +449,284 @@ var SEED = {
 
 var ESTADOS_BR = ["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"];
 var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura","Cobertura","Elétrico","Hidráulico","Revestimento","Acabamento","Ferramentas","Tintas","Vidros","Geral","Outros"];
+
+// ═══════════════════════════════════════════════════════════════
+// SISTEMA DE DIÁLOGOS E TOASTS (substitui alert/confirm nativos)
+// ═══════════════════════════════════════════════════════════════
+// Rationale:
+// - Diálogos nativos (alert/confirm) têm UX feia, mostram URL do site,
+//   quebram o fluxo visual e não combinam com o design do VICKE.
+// - Este sistema oferece 3 helpers globais chamáveis de qualquer função
+//   (não só dentro de componentes React) pra facilitar migração:
+//     toast.sucesso(msg)   → balão verde que some em 3s (avisos positivos)
+//     toast.erro(msg)      → balão vermelho que some em 4s
+//     dialogo.confirmar({titulo, mensagem, confirmar, destrutivo}) → Promise<boolean>
+//     dialogo.alertar({titulo, mensagem, tipo}) → Promise<void>
+//
+// Arquitetura:
+// - Estado vive num objeto _dialogState fora do React.
+// - Listeners são callbacks registrados por DialogosHost.
+// - DialogosHost é um componente renderizado uma vez no app.jsx que
+//   desenha os modais/toasts ativos.
+// ═══════════════════════════════════════════════════════════════
+
+var _dialogState = {
+  modais: [],      // { id, tipo: "confirm"|"alert", titulo, mensagem, confirmar, cancelar, destrutivo, tipoAlert, resolver }
+  toasts: [],      // { id, tipo: "sucesso"|"erro", mensagem }
+  listeners: new Set(),
+  _nextId: 1,
+};
+
+function _dialogNotify() {
+  _dialogState.listeners.forEach(fn => { try { fn(); } catch {} });
+}
+
+// API pública
+var toast = {
+  sucesso: (mensagem, duracao = 3000) => {
+    const id = _dialogState._nextId++;
+    _dialogState.toasts.push({ id, tipo: "sucesso", mensagem });
+    _dialogNotify();
+    setTimeout(() => {
+      _dialogState.toasts = _dialogState.toasts.filter(t => t.id !== id);
+      _dialogNotify();
+    }, duracao);
+  },
+  erro: (mensagem, duracao = 4000) => {
+    const id = _dialogState._nextId++;
+    _dialogState.toasts.push({ id, tipo: "erro", mensagem });
+    _dialogNotify();
+    setTimeout(() => {
+      _dialogState.toasts = _dialogState.toasts.filter(t => t.id !== id);
+      _dialogNotify();
+    }, duracao);
+  },
+};
+
+var dialogo = {
+  // Retorna Promise<boolean> — true se confirmou, false se cancelou.
+  // Use async/await: const ok = await dialogo.confirmar({...});
+  confirmar: (opts) => {
+    return new Promise(resolver => {
+      const id = _dialogState._nextId++;
+      _dialogState.modais.push({
+        id,
+        tipo: "confirm",
+        titulo: opts.titulo || "Confirmar?",
+        mensagem: opts.mensagem || "",
+        confirmar: opts.confirmar || "Confirmar",
+        cancelar: opts.cancelar || "Cancelar",
+        destrutivo: !!opts.destrutivo,
+        resolver,
+      });
+      _dialogNotify();
+    });
+  },
+  // Retorna Promise<void> — resolve quando usuário clica OK.
+  alertar: (opts) => {
+    return new Promise(resolver => {
+      const id = _dialogState._nextId++;
+      _dialogState.modais.push({
+        id,
+        tipo: "alert",
+        titulo: opts.titulo || "",
+        mensagem: opts.mensagem || "",
+        confirmar: opts.confirmar || "OK",
+        tipoAlert: opts.tipo || "info", // info | erro | sucesso | aviso
+        resolver,
+      });
+      _dialogNotify();
+    });
+  },
+};
+
+// Host React: renderiza modais e toasts. Deve ser montado UMA VEZ
+// no topo da app (app.jsx, dentro do root mas independente das telas).
+function DialogosHost() {
+  const [, forceRender] = useState(0);
+
+  useEffect(() => {
+    const fn = () => forceRender(n => n + 1);
+    _dialogState.listeners.add(fn);
+    return () => { _dialogState.listeners.delete(fn); };
+  }, []);
+
+  function fecharModal(id, valor) {
+    const m = _dialogState.modais.find(x => x.id === id);
+    if (!m) return;
+    _dialogState.modais = _dialogState.modais.filter(x => x.id !== id);
+    _dialogNotify();
+    if (m.resolver) m.resolver(valor);
+  }
+
+  // Suporte a ESC pra fechar modal ativo (cancela em confirm, fecha em alert)
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Escape") return;
+      const m = _dialogState.modais[_dialogState.modais.length - 1];
+      if (!m) return;
+      fecharModal(m.id, m.tipo === "confirm" ? false : undefined);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const modais = _dialogState.modais;
+  const toasts = _dialogState.toasts;
+  const modalTopo = modais[modais.length - 1] || null;
+
+  const coresAlert = {
+    info:    { borda: "#e5e7eb", texto: "#111" },
+    sucesso: { borda: "#bbf7d0", texto: "#15803d" },
+    erro:    { borda: "#fecaca", texto: "#b91c1c" },
+    aviso:   { borda: "#fde68a", texto: "#b45309" },
+  };
+
+  return (
+    <>
+      {/* Modal ativo — só renderiza o último da fila (topo) */}
+      {modalTopo && (
+        <div
+          onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? false : undefined)}
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            zIndex: 100000,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20,
+            fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+            animation: "vickeDialogFade 0.15s ease",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              border: `1px solid ${modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.borda || "#e5e7eb") : "#e5e7eb"}`,
+              borderRadius: 12,
+              padding: "24px 28px",
+              maxWidth: 440,
+              width: "100%",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+              animation: "vickeDialogPop 0.18s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
+            }}
+          >
+            {modalTopo.titulo && (
+              <div style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.texto || "#111") : "#111",
+                marginBottom: modalTopo.mensagem ? 10 : 18,
+              }}>
+                {modalTopo.titulo}
+              </div>
+            )}
+            {modalTopo.mensagem && (
+              <div style={{
+                fontSize: 13.5,
+                color: "#4b5563",
+                lineHeight: 1.55,
+                marginBottom: 20,
+                whiteSpace: "pre-wrap",
+              }}>
+                {modalTopo.mensagem}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              {modalTopo.tipo === "confirm" && (
+                <button
+                  onClick={() => fecharModal(modalTopo.id, false)}
+                  style={{
+                    background: "#fff",
+                    color: "#6b7280",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    padding: "8px 18px",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {modalTopo.cancelar}
+                </button>
+              )}
+              <button
+                autoFocus
+                onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? true : undefined)}
+                style={{
+                  background: modalTopo.destrutivo ? "#dc2626" : "#111",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "8px 20px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {modalTopo.confirmar}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toasts — pilha no canto superior direito. Recente embaixo. */}
+      {toasts.length > 0 && (
+        <div style={{
+          position: "fixed",
+          top: 20,
+          right: 20,
+          zIndex: 100001,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          pointerEvents: "none",
+        }}>
+          {toasts.map(t => (
+            <div
+              key={t.id}
+              style={{
+                background: "#fff",
+                border: `1px solid ${t.tipo === "sucesso" ? "#bbf7d0" : "#fecaca"}`,
+                borderLeft: `4px solid ${t.tipo === "sucesso" ? "#16a34a" : "#dc2626"}`,
+                borderRadius: 8,
+                padding: "10px 14px 10px 12px",
+                fontSize: 13,
+                color: t.tipo === "sucesso" ? "#15803d" : "#b91c1c",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                minWidth: 240,
+                maxWidth: 360,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontWeight: 500,
+                animation: "vickeToastSlide 0.24s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
+                pointerEvents: "auto",
+              }}
+            >
+              <span style={{ fontSize: 14, flexShrink: 0 }}>
+                {t.tipo === "sucesso" ? "✓" : "⚠"}
+              </span>
+              <span>{t.mensagem}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes vickeDialogFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes vickeDialogPop {
+          from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes vickeToastSlide {
+          from { opacity: 0; transform: translateX(40px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
+    </>
+  );
+}
