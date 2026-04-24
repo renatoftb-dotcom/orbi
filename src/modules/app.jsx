@@ -249,7 +249,7 @@ export default function ModuloClientesFornecedores() {
     reader.readAsText(file); e.target.value = "";
   }
 
-  if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /></>;
+  if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /><VersionWatcher /></>;
 
   if (loading) return (
     <>
@@ -260,6 +260,7 @@ export default function ModuloClientesFornecedores() {
       </div>
     </div>
     <DialogosHost />
+    <VersionWatcher />
     </>
   );
 
@@ -275,6 +276,7 @@ export default function ModuloClientesFornecedores() {
         </div>
       </div>
       <DialogosHost />
+      <VersionWatcher />
       </>
     );
   }
@@ -547,6 +549,7 @@ export default function ModuloClientesFornecedores() {
       )}
     </div>
     <DialogosHost />
+    <VersionWatcher />
     </>
   );
 }

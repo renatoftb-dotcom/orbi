@@ -1,0 +1,25 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "headers": [
+    {
+      "_comment": "HTML nunca deve ser cacheado pelo browser. Sempre que o usuário abre o site ou dá F5, deve bater no servidor e pegar o HTML mais novo, que referencia os arquivos JS/CSS corretos pela hash. Sem isso, o browser pode servir um index.html antigo que referencia um JS que não existe mais (quebra) ou um JS antigo (bug como o do escritório).",
+      "source": "/",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "source": "/index.html",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+      ]
+    },
+    {
+      "_comment": "Arquivos estáticos com hash no nome (gerados pelo Vite em /assets) podem ser cacheados pra sempre. 'immutable' diz ao browser que o arquivo NUNCA vai mudar naquele path — se o conteúdo mudar, o hash no nome muda também. Isso dá velocidade máxima em carregamentos subsequentes SEM risco de ter arquivo velho, porque o HTML atualizado vai pedir um novo nome de arquivo.",
+      "source": "/assets/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+      ]
+    }
+  ]
+}

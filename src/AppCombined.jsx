@@ -735,6 +735,156 @@ function DialogosHost() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// VERSION WATCHER — detecta novos deploys e avisa o usuário
+// ═══════════════════════════════════════════════════════════════
+// Problema resolvido: mesmo com vercel.json definindo no-cache pro HTML,
+// uma sessão aberta há horas continua rodando o JS antigo. Quando o master
+// faz npm run cpush, quem está com a app aberta não vê as mudanças até dar
+// F5 — e pode cair em bugs como "escritório não aparece no PDF" porque
+// o JS em memória não sabe da nova coluna que o backend já espera.
+//
+// Como funciona:
+// 1. No boot, captura o hash do bundle principal (ex: "index-Bkt6z0GT.js")
+//    lendo a própria <script type="module" src="/assets/index-XXXX.js"> do HTML.
+// 2. A cada 5 min, faz fetch("/?v=timestamp") pra forçar bypass de cache
+//    intermediário, lê o HTML retornado, extrai o hash atual do bundle.
+// 3. Se o hash mudou → mostra banner persistente com botão "Atualizar".
+//    O usuário clica → location.reload() com bypass de cache.
+//
+// Não reload automático: pode perder trabalho não salvo do usuário.
+// Notificação + ação manual é o equilíbrio entre segurança e agilidade.
+//
+// IGNORA erros de rede silenciosamente: se o usuário está offline,
+// o próximo check acaba funcionando. Não queremos poluir com avisos.
+// ═══════════════════════════════════════════════════════════════
+
+function _extrairHashBundle(htmlOuDoc) {
+  // Aceita documento atual (document) ou string HTML crua do fetch.
+  // Padrão: <script type="module" crossorigin src="/assets/index-HASH.js">
+  // ou <script type="module" src="/assets/index-HASH.js">
+  try {
+    let src = "";
+    if (typeof htmlOuDoc === "string") {
+      const m = htmlOuDoc.match(/<script[^>]*src=["']([^"']*\/assets\/index-[^"']+\.js)["']/);
+      src = m ? m[1] : "";
+    } else {
+      // document atual: procura a tag script que referenciou o bundle
+      const scripts = htmlOuDoc.querySelectorAll('script[src*="/assets/index-"]');
+      src = scripts.length > 0 ? scripts[0].getAttribute("src") : "";
+    }
+    if (!src) return null;
+    // Extrai só o hash: "/assets/index-Bkt6z0GT.js" → "Bkt6z0GT"
+    const h = src.match(/index-([^.]+)\.js/);
+    return h ? h[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+function VersionWatcher() {
+  const [novaVersao, setNovaVersao] = useState(false);
+  const hashAtualRef = useRef(null);
+
+  useEffect(() => {
+    // Captura hash inicial do bundle que está rodando agora
+    hashAtualRef.current = _extrairHashBundle(document);
+
+    // Se não conseguiu capturar (ex: dev mode sem bundling), desiste silenciosamente
+    if (!hashAtualRef.current) return;
+
+    let cancelado = false;
+
+    async function verificar() {
+      if (cancelado) return;
+      try {
+        // Query string quebra cache intermediário — garante que pegamos
+        // o HTML mais novo do Vercel, não de proxy/CDN
+        const res = await fetch("/?_vck=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) return;
+        const html = await res.text();
+        const hashRemoto = _extrairHashBundle(html);
+        if (hashRemoto && hashRemoto !== hashAtualRef.current) {
+          setNovaVersao(true);
+        }
+      } catch {
+        // Rede caiu, etc. Ignora — próximo tick tenta de novo.
+      }
+    }
+
+    // Primeira checagem 30s depois do boot (evita correr na hora do load)
+    const t0 = setTimeout(verificar, 30_000);
+    // Depois, a cada 5 minutos
+    const interval = setInterval(verificar, 5 * 60 * 1000);
+
+    // Re-checa quando a aba volta a ficar visível (usuário voltou depois de
+    // horas, muito comum em SaaS) — a 5-min interval pode ter pulado checagem
+    function onVisibility() { if (document.visibilityState === "visible") verificar(); }
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelado = true;
+      clearTimeout(t0);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  if (!novaVersao) return null;
+
+  return (
+    <div
+      role="alert"
+      style={{
+        position: "fixed",
+        bottom: 20,
+        right: 20,
+        zIndex: 100002, // acima de toasts (100001) e modais (100000)
+        background: "#111",
+        color: "#fff",
+        padding: "14px 18px",
+        borderRadius: 10,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        fontSize: 13,
+        animation: "vickeToastSlide 0.28s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
+        maxWidth: 360,
+      }}
+    >
+      <span style={{ fontSize: 16 }}>✨</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, marginBottom: 2 }}>Nova versão disponível</div>
+        <div style={{ fontSize: 12, color: "#d1d5db" }}>Atualize para ver as últimas melhorias.</div>
+      </div>
+      <button
+        onClick={() => {
+          // reload(true) é deprecated — cache-busting via query string funciona
+          const u = new URL(window.location.href);
+          u.searchParams.set("_v", Date.now());
+          window.location.href = u.toString();
+        }}
+        style={{
+          background: "#fff",
+          color: "#111",
+          border: "none",
+          borderRadius: 7,
+          padding: "7px 14px",
+          fontSize: 12.5,
+          fontWeight: 600,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Atualizar
+      </button>
+    </div>
+  );
+}
+
 
 // ════════════════════════════════════════════════════════════
 // api.js
@@ -13845,7 +13995,7 @@ export default function ModuloClientesFornecedores() {
     reader.readAsText(file); e.target.value = "";
   }
 
-  if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /></>;
+  if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /><VersionWatcher /></>;
 
   if (loading) return (
     <>
@@ -13856,6 +14006,7 @@ export default function ModuloClientesFornecedores() {
       </div>
     </div>
     <DialogosHost />
+    <VersionWatcher />
     </>
   );
 
@@ -13871,6 +14022,7 @@ export default function ModuloClientesFornecedores() {
         </div>
       </div>
       <DialogosHost />
+      <VersionWatcher />
       </>
     );
   }
@@ -14143,6 +14295,7 @@ export default function ModuloClientesFornecedores() {
       )}
     </div>
     <DialogosHost />
+    <VersionWatcher />
     </>
   );
 }
