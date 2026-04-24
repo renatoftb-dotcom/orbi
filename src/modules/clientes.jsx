@@ -1008,11 +1008,15 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
           {orcamentos.length > 0 && (() => {
             // Helper comum: prepara fetchOrc e onAction pra ambos os modos
             const mkFetchOrc = (o) => async (modo) => {
-              const _tk = localStorage.getItem("vicke-token");
-              const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`, {
-                headers: _tk ? { Authorization: `Bearer ${_tk}` } : {}
-              }).then(r=>r.json()).catch(()=>null);
-              const orcCompleto = res?.ok ? res.data : o;
+              // Usa api.orcamentos.get() em vez de fetch direto — assim o handler
+              // global de 401 do api.js é acionado se o token expirar.
+              let orcCompleto = o;
+              try {
+                const completo = await api.orcamentos.get(o.id);
+                if (completo) orcCompleto = completo;
+              } catch {
+                // Em caso de erro, continua com o orçamento original (o da lista)
+              }
               // Se clicou em "ver" e tem proposta enviada, abre o snapshot em vez do form.
               if (modo === "ver" && orcCompleto.propostas && orcCompleto.propostas.length > 0) {
                 modo = "verProposta";
@@ -1037,11 +1041,14 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               if (perm.isVisualizador) { alert("Sem permissão para esta ação."); return; }
               if (acao === "ganho") {
                 if (orc.status === "ganho") return;
-                const _tk = localStorage.getItem("vicke-token");
-                const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`, {
-                  headers: _tk ? { Authorization: `Bearer ${_tk}` } : {}
-                }).then(r=>r.json()).catch(()=>null);
-                const orcCompleto = res?.ok ? res.data : orc;
+                // Busca a versão completa pelo api.js (com handler de 401)
+                let orcCompleto = orc;
+                try {
+                  const completo = await api.orcamentos.get(orc.id);
+                  if (completo) orcCompleto = completo;
+                } catch {
+                  // Continua com o que tem
+                }
                 setOrcGanho(orcCompleto);
               }
               if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");

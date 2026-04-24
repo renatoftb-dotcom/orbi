@@ -1,10 +1,14 @@
-// v2 PostgreSQL
+  // v2 PostgreSQL
 // ═══════════════════════════════════════════════════════════════
 // ORBI — API Client
 // Substitui o DB (localStorage/window.storage) pelo backend real
 // ═══════════════════════════════════════════════════════════════
 
 const API_URL = "https://orbi-production-5f5c.up.railway.app";
+
+// Flag pra evitar múltiplos reloads em cascata quando várias requisições
+// retornam 401 ao mesmo tempo (ex: loadAllData faz 8 chamadas em paralelo)
+let _sessionExpiredHandled = false;
 
 async function req(method, path, body) {
   // Pega o token do localStorage (salvo pelo login.jsx como "vicke-token")
@@ -21,11 +25,14 @@ async function req(method, path, body) {
   // Handler global de 401: token expirado/inválido → limpa e volta pra login.
   // Não aplicamos isto a /auth/login (onde 401 significa senha errada, não sessão).
   if (res.status === 401 && !path.startsWith("/auth/")) {
-    try {
-      localStorage.removeItem("vicke-token");
-      localStorage.removeItem("vicke-user");
-    } catch {}
-    if (typeof location !== "undefined") location.reload();
+    if (!_sessionExpiredHandled) {
+      _sessionExpiredHandled = true;
+      try {
+        localStorage.removeItem("vicke-token");
+        localStorage.removeItem("vicke-user");
+      } catch {}
+      if (typeof location !== "undefined") location.reload();
+    }
     throw new Error("Sessão expirada — faça login novamente");
   }
 

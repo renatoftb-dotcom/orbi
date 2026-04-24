@@ -406,13 +406,17 @@ var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura",
 // api.js
 // ════════════════════════════════════════════════════════════
 
-// v2 PostgreSQL
+  // v2 PostgreSQL
 // ═══════════════════════════════════════════════════════════════
 // ORBI — API Client
 // Substitui o DB (localStorage/window.storage) pelo backend real
 // ═══════════════════════════════════════════════════════════════
 
 const API_URL = "https://orbi-production-5f5c.up.railway.app";
+
+// Flag pra evitar múltiplos reloads em cascata quando várias requisições
+// retornam 401 ao mesmo tempo (ex: loadAllData faz 8 chamadas em paralelo)
+let _sessionExpiredHandled = false;
 
 async function req(method, path, body) {
   // Pega o token do localStorage (salvo pelo login.jsx como "vicke-token")
@@ -429,11 +433,14 @@ async function req(method, path, body) {
   // Handler global de 401: token expirado/inválido → limpa e volta pra login.
   // Não aplicamos isto a /auth/login (onde 401 significa senha errada, não sessão).
   if (res.status === 401 && !path.startsWith("/auth/")) {
-    try {
-      localStorage.removeItem("vicke-token");
-      localStorage.removeItem("vicke-user");
-    } catch {}
-    if (typeof location !== "undefined") location.reload();
+    if (!_sessionExpiredHandled) {
+      _sessionExpiredHandled = true;
+      try {
+        localStorage.removeItem("vicke-token");
+        localStorage.removeItem("vicke-user");
+      } catch {}
+      if (typeof location !== "undefined") location.reload();
+    }
     throw new Error("Sessão expirada — faça login novamente");
   }
 
@@ -3457,11 +3464,15 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
           {orcamentos.length > 0 && (() => {
             // Helper comum: prepara fetchOrc e onAction pra ambos os modos
             const mkFetchOrc = (o) => async (modo) => {
-              const _tk = localStorage.getItem("vicke-token");
-              const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${o.id}`, {
-                headers: _tk ? { Authorization: `Bearer ${_tk}` } : {}
-              }).then(r=>r.json()).catch(()=>null);
-              const orcCompleto = res?.ok ? res.data : o;
+              // Usa api.orcamentos.get() em vez de fetch direto — assim o handler
+              // global de 401 do api.js é acionado se o token expirar.
+              let orcCompleto = o;
+              try {
+                const completo = await api.orcamentos.get(o.id);
+                if (completo) orcCompleto = completo;
+              } catch {
+                // Em caso de erro, continua com o orçamento original (o da lista)
+              }
               // Se clicou em "ver" e tem proposta enviada, abre o snapshot em vez do form.
               if (modo === "ver" && orcCompleto.propostas && orcCompleto.propostas.length > 0) {
                 modo = "verProposta";
@@ -3486,11 +3497,14 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
               if (perm.isVisualizador) { alert("Sem permissão para esta ação."); return; }
               if (acao === "ganho") {
                 if (orc.status === "ganho") return;
-                const _tk = localStorage.getItem("vicke-token");
-                const res = await fetch(`https://orbi-production-5f5c.up.railway.app/api/orcamentos/${orc.id}`, {
-                  headers: _tk ? { Authorization: `Bearer ${_tk}` } : {}
-                }).then(r=>r.json()).catch(()=>null);
-                const orcCompleto = res?.ok ? res.data : orc;
+                // Busca a versão completa pelo api.js (com handler de 401)
+                let orcCompleto = orc;
+                try {
+                  const completo = await api.orcamentos.get(orc.id);
+                  if (completo) orcCompleto = completo;
+                } catch {
+                  // Continua com o que tem
+                }
                 setOrcGanho(orcCompleto);
               }
               if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
@@ -11852,17 +11866,35 @@ function Escritorio({ data, save }) {
     ativo: true,
   };
 
+  // ── Helpers da aba Usuários ─────────────────────────────────
+  // URL base da API de usuários da empresa (evita repetir URL em vários fetches)
+  const API_USUARIOS = "https://orbi-production-5f5c.up.railway.app/empresa/usuarios";
+
+  // Chama a API de usuários. Retorna { ok, data, error } já parseado.
+  // Garante que o token existe antes de chamar (caso contrário lança "Sessão expirada").
+  async function fetchUsuariosAPI(url, method = "GET", body = null) {
+    const token = localStorage.getItem("vicke-token");
+    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    const opts = {
+      method,
+      headers: { "Authorization": `Bearer ${token}` },
+    };
+    if (body) {
+      opts.headers["Content-Type"] = "application/json";
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(url, opts);
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "Erro na requisição");
+    return json;
+  }
+
+  // Carrega usuários com loading (pra usar no mount inicial e no "Tentar novamente")
   async function carregarUsuarios() {
     setLoadingUsuarios(true);
     setErroUsuarios(null);
     try {
-      const token = localStorage.getItem("vicke-token");
-      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
-      const res = await fetch("https://orbi-production-5f5c.up.railway.app/empresa/usuarios", {
-        headers: { "Authorization": `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error || "Erro ao listar usuários");
+      const json = await fetchUsuariosAPI(API_USUARIOS);
       setUsuarios(json.data || []);
     } catch (e) {
       setErroUsuarios(e.message);
@@ -11871,41 +11903,17 @@ function Escritorio({ data, save }) {
     }
   }
 
-  // Variante "silenciosa" para usar após salvar/excluir: atualiza a lista do servidor
-  // sem acionar o loadingUsuarios (que esconderia os cards e causaria o "piscar").
-  async function recarregarUsuariosSilencioso() {
-    try {
-      const token = localStorage.getItem("vicke-token");
-      if (!token) return;
-      const res = await fetch("https://orbi-production-5f5c.up.railway.app/empresa/usuarios", {
-        headers: { "Authorization": `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (json.ok) setUsuarios(json.data || []);
-    } catch {
-      // Falha silenciosa — a lista antiga continua na tela
-    }
-  }
-
   async function salvarUsuario() {
     if (!novoUsuario) return;
-    // Validação básica
+    // Validação
     if (!novoUsuario.nome?.trim()) { alert("Informe o nome"); return; }
     if (!novoUsuario.email?.trim()) { alert("Informe o e-mail"); return; }
-    const editando = !!novoUsuario._editando; // flag interna
-    if (!editando) {
+    const editando = !!novoUsuario._editando;
+    const senhaPreenchida = !!novoUsuario.senha;
+    // Ao criar: senha obrigatória. Ao editar: senha opcional (se preencher, valida).
+    if (!editando || senhaPreenchida) {
       if (!novoUsuario.senha || novoUsuario.senha.length < 6) {
-        alert("A senha deve ter no mínimo 6 caracteres");
-        return;
-      }
-      if (novoUsuario.senha !== confirmSenha) {
-        alert("As senhas não conferem");
-        return;
-      }
-    } else if (novoUsuario.senha) {
-      // Editando e mudando senha: valida também
-      if (novoUsuario.senha.length < 6) {
-        alert("A nova senha deve ter no mínimo 6 caracteres");
+        alert(editando ? "A nova senha deve ter no mínimo 6 caracteres" : "A senha deve ter no mínimo 6 caracteres");
         return;
       }
       if (novoUsuario.senha !== confirmSenha) {
@@ -11916,12 +11924,6 @@ function Escritorio({ data, save }) {
 
     setSalvandoUsuario(true);
     try {
-      const token = localStorage.getItem("vicke-token");
-      if (!token) {
-        alert("Sessão expirada. Faça login novamente.");
-        setSalvandoUsuario(false);
-        return;
-      }
       const body = {
         nome: novoUsuario.nome.trim(),
         email: novoUsuario.email.trim().toLowerCase(),
@@ -11929,44 +11931,32 @@ function Escritorio({ data, save }) {
         membro_id: novoUsuario.membro_id || null,
         ativo: novoUsuario.ativo !== false,
       };
-      // Só manda a senha se foi preenchida (ao editar ela é opcional)
-      if (novoUsuario.senha) body.senha = novoUsuario.senha;
+      if (senhaPreenchida) body.senha = novoUsuario.senha;
 
-      const url = editando
-        ? `https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${novoUsuario.id}`
-        : `https://orbi-production-5f5c.up.railway.app/empresa/usuarios`;
-      const method = editando ? "PUT" : "POST";
+      const url = editando ? `${API_USUARIOS}/${novoUsuario.id}` : API_USUARIOS;
+      const json = await fetchUsuariosAPI(url, editando ? "PUT" : "POST", body);
 
-      const res = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error || "Erro ao salvar usuário");
       setNovoUsuario(null);
       setConfirmSenha("");
 
-      // Optimistic update: insere/atualiza o usuário retornado pelo backend
-      // na lista local, sem precisar refetchar a lista inteira (evita o "piscar").
+      // Optimistic update: insere/atualiza o usuário retornado pelo backend na lista
+      // local, sem refetchar a lista inteira (evita o "piscar").
       if (json.data) {
         setUsuarios(prev => {
-          const existente = prev.findIndex(x => x.id === json.data.id);
-          if (existente >= 0) {
-            // Update: substitui o existente
+          const idx = prev.findIndex(x => x.id === json.data.id);
+          if (idx >= 0) {
             const novo = [...prev];
-            novo[existente] = json.data;
+            novo[idx] = json.data;
             return novo;
           }
-          // Insert: adiciona ao fim
           return [...prev, json.data];
         });
       } else {
-        // Fallback: se o backend não devolver o objeto, sincroniza com o servidor
-        await recarregarUsuariosSilencioso();
+        // Fallback: backend não devolveu o objeto — recarrega silenciosamente
+        try {
+          const r = await fetchUsuariosAPI(API_USUARIOS);
+          setUsuarios(r.data || []);
+        } catch {}
       }
     } catch (e) {
       alert("Erro: " + e.message);
@@ -11981,8 +11971,7 @@ function Escritorio({ data, save }) {
       alert("Você não pode excluir a si mesmo.");
       return;
     }
-    const token = localStorage.getItem("vicke-token");
-    if (!token) {
+    if (!localStorage.getItem("vicke-token")) {
       alert("Sessão expirada. Faça login novamente.");
       return;
     }
@@ -11992,26 +11981,15 @@ function Escritorio({ data, save }) {
   // Executa a exclusão após o usuário confirmar no modal
   async function executarExclusao() {
     if (!confirmarExcluir) return;
-    const { id, nome } = confirmarExcluir;
-    const token = localStorage.getItem("vicke-token");
-    if (!token) {
-      alert("Sessão expirada. Faça login novamente.");
-      setConfirmarExcluir(null);
-      return;
-    }
+    const { id } = confirmarExcluir;
     // Fecha o modal imediatamente
     setConfirmarExcluir(null);
     // Remove da lista imediatamente (optimistic update — evita o "piscar")
     const usuariosAntes = usuarios;
     setUsuarios(prev => prev.filter(x => x.id !== id));
     try {
-      const res = await fetch(`https://orbi-production-5f5c.up.railway.app/empresa/usuarios/${id}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${token}` },
-      });
-      const json = await res.json();
-      if (!json.ok) throw new Error(json.error || "Erro ao excluir");
-      // Sucesso: já removeu da lista via optimistic update, sem necessidade de refetch
+      await fetchUsuariosAPI(`${API_USUARIOS}/${id}`, "DELETE");
+      // Sucesso: card já foi removido via optimistic update
     } catch (e) {
       // Reverte o optimistic update em caso de erro
       setUsuarios(usuariosAntes);
@@ -12019,8 +11997,7 @@ function Escritorio({ data, save }) {
     }
   }
 
-  // Pré-carrega a lista de usuários assim que o módulo Escritório é aberto
-  // (em vez de esperar o clique na aba). Assim a aba abre imediata.
+  // Pré-carrega a lista de usuários assim que o módulo Escritório é aberto.
   // Só tenta carregar se for admin/master (editor/visualizador recebe 403).
   useEffect(() => {
     if (perm.podeGerenciarUsuarios && usuarios.length === 0 && !loadingUsuarios && !erroUsuarios) {
@@ -13070,7 +13047,7 @@ export default function ModuloClientesFornecedores() {
   const [token, setToken]             = useState(null);
   const [autenticado, setAutenticado] = useState(false);
   const [data, setData]               = useState(null);
-  const [loading, setLoading]         = useState(true);
+  const [loading, setLoading]         = useState(false);
   const [aba, setAba]                 = useState("home");
   const [showBackup, setShowBackup]   = useState(false);
   const [backupJson, setBackupJson]   = useState("");
@@ -13107,8 +13084,6 @@ export default function ModuloClientesFornecedores() {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
-  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
-
   // Bootstrap: se já tiver token+user no localStorage, restaura sessão
   // (evita ter que fazer login toda vez que dá F5)
   // Antes de restaurar, valida se o token não está expirado (JWT tem campo "exp")
@@ -13142,6 +13117,9 @@ export default function ModuloClientesFornecedores() {
       } catch {}
     }
   }, []);
+
+  // Quando autentica (login novo ou bootstrap), carrega os dados
+  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
 
   // Migração de abas antigas para nova nomenclatura
   useEffect(() => {

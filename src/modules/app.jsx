@@ -58,7 +58,7 @@ export default function ModuloClientesFornecedores() {
   const [token, setToken]             = useState(null);
   const [autenticado, setAutenticado] = useState(false);
   const [data, setData]               = useState(null);
-  const [loading, setLoading]         = useState(true);
+  const [loading, setLoading]         = useState(false);
   const [aba, setAba]                 = useState("home");
   const [showBackup, setShowBackup]   = useState(false);
   const [backupJson, setBackupJson]   = useState("");
@@ -95,8 +95,6 @@ export default function ModuloClientesFornecedores() {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
-  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
-
   // Bootstrap: se já tiver token+user no localStorage, restaura sessão
   // (evita ter que fazer login toda vez que dá F5)
   // Antes de restaurar, valida se o token não está expirado (JWT tem campo "exp")
@@ -130,6 +128,9 @@ export default function ModuloClientesFornecedores() {
       } catch {}
     }
   }, []);
+
+  // Quando autentica (login novo ou bootstrap), carrega os dados
+  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
 
   // Migração de abas antigas para nova nomenclatura
   useEffect(() => {

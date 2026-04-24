@@ -14,6 +14,10 @@ const cron     = require("node-cron");
 const { rodarManutencao } = require("./jobs/manutencao");
 
 const JWT_SECRET = process.env.JWT_SECRET || "vicke-secret-dev-2026";
+if (!process.env.JWT_SECRET) {
+  console.warn("⚠ ATENÇÃO: JWT_SECRET não definido nas variáveis de ambiente.");
+  console.warn("   Usando secret padrão (inseguro). Configure JWT_SECRET no Railway.");
+}
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -151,7 +155,10 @@ const now = ()                  => new Date().toISOString();
 function authMiddleware(req, res, next) {
   const header = req.headers["authorization"];
   if (!header) return err(res, "Token não fornecido", 401);
-  const token = header.replace("Bearer ", "");
+  // Extrai o token do header "Bearer <token>". Aceita também o header só com o token bruto.
+  const match = header.match(/^Bearer\s+(.+)$/i);
+  const token = match ? match[1] : header.trim();
+  if (!token) return err(res, "Token não fornecido", 401);
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     req.user = decoded;
@@ -187,7 +194,9 @@ function editorOrAdmin(req, res, next) {
 // ── AUTH ───────────────────────────────────────────────────────
 app.post("/auth/login", async (req, res) => {
   try {
-    const { email, senha } = req.body;
+    const { senha } = req.body;
+    // Normaliza o email (trim + lowercase) pra garantir match com o que está salvo
+    const email = (req.body.email || "").trim().toLowerCase();
     if (!email || !senha) return err(res, "Email e senha são obrigatórios");
 
     const { rows } = await query("SELECT * FROM usuarios WHERE email = $1 AND ativo = TRUE", [email]);
@@ -267,32 +276,38 @@ app.get("/admin/usuarios", authMiddleware, masterOnly, async (req, res) => {
 
 app.post("/admin/usuarios", authMiddleware, masterOnly, async (req, res) => {
   try {
-    const { empresa_id, nome, email, senha, perfil } = req.body;
-    if (!empresa_id || !nome || !email || !senha) return err(res, "empresa_id, nome, email e senha são obrigatórios");
+    const { empresa_id, nome, senha, perfil } = req.body;
+    const email = (req.body.email || "").trim().toLowerCase();
+    const nomeTrim = (nome || "").trim();
+    if (!empresa_id || !nomeTrim || !email || !senha) return err(res, "empresa_id, nome, email e senha são obrigatórios");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err(res, "Email inválido");
     if (senha.length < 6) return err(res, "A senha deve ter no mínimo 6 caracteres");
     const { rows: existe } = await query("SELECT id FROM usuarios WHERE email = $1", [email]);
     if (existe.length > 0) return err(res, "Email já cadastrado");
     const id = `usr_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const senha_hash = bcrypt.hashSync(senha, 10);
     await query("INSERT INTO usuarios (id,empresa_id,nome,email,senha_hash,perfil,ativo) VALUES ($1,$2,$3,$4,$5,$6,TRUE)",
-      [id, empresa_id, nome, email, senha_hash, perfil || "escritorio"]);
-    ok(res, { id, empresa_id, nome, email, perfil: perfil || "escritorio", ativo: true });
+      [id, empresa_id, nomeTrim, email, senha_hash, perfil || "escritorio"]);
+    ok(res, { id, empresa_id, nome: nomeTrim, email, perfil: perfil || "escritorio", ativo: true });
   } catch(e) { err(res, e.message); }
 });
 
 app.put("/admin/usuarios/:id", authMiddleware, masterOnly, async (req, res) => {
   try {
-    const { nome, email, perfil, ativo, senha } = req.body;
+    const { nome, perfil, ativo, senha } = req.body;
+    const email = (req.body.email || "").trim().toLowerCase();
+    const nomeTrim = (nome || "").trim();
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return err(res, "Email inválido");
     if (senha) {
       if (senha.length < 6) return err(res, "A senha deve ter no mínimo 6 caracteres");
       const senha_hash = bcrypt.hashSync(senha, 10);
       await query("UPDATE usuarios SET nome=$1,email=$2,perfil=$3,ativo=$4,senha_hash=$5,atualizado_em=NOW() WHERE id=$6",
-        [nome, email, perfil, ativo, senha_hash, req.params.id]);
+        [nomeTrim, email, perfil, ativo, senha_hash, req.params.id]);
     } else {
       await query("UPDATE usuarios SET nome=$1,email=$2,perfil=$3,ativo=$4,atualizado_em=NOW() WHERE id=$5",
-        [nome, email, perfil, ativo, req.params.id]);
+        [nomeTrim, email, perfil, ativo, req.params.id]);
     }
-    ok(res, { id: req.params.id, nome, email, perfil, ativo });
+    ok(res, { id: req.params.id, nome: nomeTrim, email, perfil, ativo });
   } catch(e) { err(res, e.message); }
 });
 
@@ -329,9 +344,15 @@ app.get("/empresa/usuarios", authMiddleware, adminOnly, async (req, res) => {
 // Cria novo usuário na empresa do admin autenticado
 app.post("/empresa/usuarios", authMiddleware, adminOnly, async (req, res) => {
   try {
-    const { nome, email, senha, nivel, membro_id } = req.body;
-    if (!nome || !email || !senha) {
+    const { nome, senha, nivel, membro_id } = req.body;
+    // Normaliza email: trim + lowercase (garante consistência com o login)
+    const email = (req.body.email || "").trim().toLowerCase();
+    const nomeTrim = (nome || "").trim();
+    if (!nomeTrim || !email || !senha) {
       return err(res, "Nome, email e senha são obrigatórios");
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return err(res, "Email inválido");
     }
     if (senha.length < 6) {
       return err(res, "A senha deve ter no mínimo 6 caracteres");
@@ -349,16 +370,24 @@ app.post("/empresa/usuarios", authMiddleware, adminOnly, async (req, res) => {
     await query(
       `INSERT INTO usuarios (id, empresa_id, nome, email, senha_hash, perfil, nivel, membro_id, ativo)
        VALUES ($1, $2, $3, $4, $5, 'escritorio', $6, $7, TRUE)`,
-      [id, req.user.empresa_id, nome, email, senha_hash, nivelFinal, membro_id || null]
+      [id, req.user.empresa_id, nomeTrim, email, senha_hash, nivelFinal, membro_id || null]
     );
-    ok(res, { id, nome, email, nivel: nivelFinal, membro_id: membro_id || null, ativo: true });
+    ok(res, { id, nome: nomeTrim, email, nivel: nivelFinal, membro_id: membro_id || null, ativo: true });
   } catch(e) { err(res, e.message); }
 });
 
 // Atualiza usuário — só dentro da própria empresa
 app.put("/empresa/usuarios/:id", authMiddleware, adminOnly, async (req, res) => {
   try {
-    const { nome, email, senha, nivel, membro_id, ativo } = req.body;
+    const { nome, senha, nivel, membro_id, ativo } = req.body;
+    // Normaliza email (trim + lowercase) pra consistência com o login
+    const email = (req.body.email || "").trim().toLowerCase();
+    const nomeTrim = (nome || "").trim();
+
+    // Validação de email se foi fornecido
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return err(res, "Email inválido");
+    }
 
     // Confere que o usuário editado é da mesma empresa do admin logado
     const { rows: alvo } = await query(
@@ -384,16 +413,16 @@ app.put("/empresa/usuarios/:id", authMiddleware, adminOnly, async (req, res) => 
       await query(
         `UPDATE usuarios SET nome=$1, email=$2, nivel=$3, membro_id=$4, ativo=$5, senha_hash=$6, atualizado_em=NOW()
          WHERE id=$7`,
-        [nome, email, nivelFinal, membro_id || null, ativo !== false, senha_hash, req.params.id]
+        [nomeTrim, email, nivelFinal, membro_id || null, ativo !== false, senha_hash, req.params.id]
       );
     } else {
       await query(
         `UPDATE usuarios SET nome=$1, email=$2, nivel=$3, membro_id=$4, ativo=$5, atualizado_em=NOW()
          WHERE id=$6`,
-        [nome, email, nivelFinal, membro_id || null, ativo !== false, req.params.id]
+        [nomeTrim, email, nivelFinal, membro_id || null, ativo !== false, req.params.id]
       );
     }
-    ok(res, { id: req.params.id, nome, email, nivel: nivelFinal, membro_id: membro_id || null, ativo: ativo !== false });
+    ok(res, { id: req.params.id, nome: nomeTrim, email, nivel: nivelFinal, membro_id: membro_id || null, ativo: ativo !== false });
   } catch(e) { err(res, e.message); }
 });
 
