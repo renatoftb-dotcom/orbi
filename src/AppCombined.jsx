@@ -854,7 +854,6 @@ function VersionWatcher() {
         maxWidth: 360,
       }}
     >
-      <span style={{ fontSize: 16 }}>✨</span>
       <div style={{ flex: 1 }}>
         <div style={{ fontWeight: 600, marginBottom: 2 }}>Nova versão disponível</div>
         <div style={{ fontSize: 12, color: "#d1d5db" }}>Atualize para ver as últimas melhorias.</div>
@@ -884,7 +883,6 @@ function VersionWatcher() {
     </div>
   );
 }
-
 
 
 // ════════════════════════════════════════════════════════════
