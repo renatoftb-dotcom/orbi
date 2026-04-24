@@ -4,6 +4,25 @@
 async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#ffffff", incluiArq=true, incluiEng=true, opts={}) {
   const { jsPDF } = window.jspdf;
 
+  // ── Escritório ─────────────────────────────────────────────
+  // Recebido via opts.escritorio; se não vier, fallback pra objeto vazio.
+  // Assim o PDF usa dados dinâmicos do banco (aba Escritório → Dados Gerais)
+  // em vez de strings hardcoded. Se algum campo estiver vazio, o PDF mostra
+  // string vazia (visualmente melhor do que dados errados).
+  const escInput = opts.escritorio || {};
+  const _respPrimeiro = (escInput.responsaveis && escInput.responsaveis.length > 0)
+    ? escInput.responsaveis[0] : null;
+  // Responsável formatado com prefixo "Arq." (padrão do escritório).
+  // Para multi-profissional ou prefixos diferentes, passar já formatado
+  // via modeloPdf.aceite.responsavel.
+  const _respNome = _respPrimeiro?.nome ? `Arq. ${_respPrimeiro.nome}` : "";
+  const _respCau = _respPrimeiro?.cau || "";
+  const _cidadeEstado = [escInput.cidade, escInput.estado].filter(Boolean).join(" — ");
+  // PIX formatado: "Chave CNPJ: 00.000.000/0001-00 — Nome · Banco Sicoob"
+  const _pixTexto = escInput.pixChave
+    ? `Chave ${escInput.pixTipo || ""}: ${escInput.pixChave}${escInput.banco ? ` · Banco ${escInput.banco}` : ""}`
+    : "";
+
   // ── Dados base ─────────────────────────────────────────────
   const r       = orc.resultado || {};
   const area    = r.areaTotal || 0;
@@ -152,7 +171,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const LINE  = [229,231,235];
   const BG    = [249,250,251];
 
-  const esc = { nome:"Padovan Arquitetos", tel:"(14) 99767-4200", email:"leopadovan.arq@gmail.com", social:"@padovan_arquitetos" };
+  const esc = {
+    nome:   escInput.nome     || "",
+    tel:    escInput.telefone || "",
+    email:  escInput.email    || "",
+    social: escInput.instagram|| "",
+  };
   const hoje = new Date(orc.criadoEm || Date.now());
   const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
   const dataStr  = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
@@ -651,7 +675,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // PIX
   sf("normal",8); stc(INK_LT);
-  tx(orc.pixTexto || "PIX  ·  Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções  ·  Banco Sicoob",M,y);
+  tx(orc.pixTexto || (_pixTexto ? `PIX  ·  ${_pixTexto}` : ""),M,y);
   y+=8;
 
   // ── ESCOPO DOS SERVIÇOS ───────────────────────────────────
@@ -772,8 +796,15 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const rx = midX+4;
   y -= 21;
   sf("bold",7); stc(INK_LT); tx("RESPONSÁVEL TÉCNICO",rx,y); y+=5;
-  sf("bold",10); stc(INK); tx("Arq. Leonardo Padovan",rx,y); y+=5;
-  sf("normal",7.5); stc(INK_LT); tx("CAU A30278-3  ·  Ourinhos",rx,y); y+=11;
+  sf("bold",10); stc(INK);
+  // Responsável: prioridade modeloPdf.aceite.responsavel > primeiro responsável
+  // do escritório. Campo vazio se nenhum dos dois existir.
+  tx(modeloPdf?.aceite?.responsavel || _respNome, rx, y); y+=5;
+  sf("normal",7.5); stc(INK_LT);
+  // CAU + cidade: idem, com fallback pra campos do escritório
+  const _cauLinha = modeloPdf?.aceite?.registro || _respCau;
+  const _cidadeAceite = modeloPdf?.aceite?.cidade || escInput.cidade || "";
+  tx([_cauLinha, _cidadeAceite].filter(Boolean).join("  ·  "), rx, y); y+=11;
   hr(y,rx,W-M); sf("normal",7); stc(INK_LT);
   tx("Assinatura",rx,y+4);
   tx(dataStr,W-M,y+4,{align:"right"});
@@ -781,7 +812,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // ── RODAPÉ (todas as páginas) ─────────────────────────────
   const totalPgs = doc.getNumberOfPages();
-  const rodTxt = `Padovan Arquitetos  ·  leopadovan.arq@gmail.com  ·  (14) 99767-4200  ·  @padovan_arquitetos`;
+  // Montagem dinâmica: só inclui campos preenchidos (ex: se escritório
+  // não tiver Instagram, não aparece separador solto no rodapé).
+  const rodTxt = [esc.nome, esc.email, esc.tel, esc.social]
+    .filter(Boolean).join("  ·  ");
   for (let pg=1; pg<=totalPgs; pg++) {
     doc.setPage(pg);
     sc(LINE,"draw"); doc.setLineWidth(0.3); doc.line(M,H-14,W-M,H-14);
@@ -817,13 +851,28 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r) {
+function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r, escritorio={}) {
   const dataEmissao = new Date(orc.criadoEm).toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
   const validade    = new Date(new Date(orc.criadoEm).getTime()+15*86400000).toLocaleDateString("pt-BR");
   const comodosAtivos = (orc.comodos||[]).filter(c=>c.qtd>0);
   const totalComodos  = comodosAtivos.reduce((s,c)=>s+c.qtd,0);
+  // Helpers: resp primário + pix formatado. Mesma lógica do buildPdf.
+  const respPrim = (escritorio.responsaveis && escritorio.responsaveis.length > 0)
+    ? escritorio.responsaveis[0] : null;
+  const respNome = respPrim?.nome ? `Arq. ${respPrim.nome}` : "";
+  const respCompleto = [respNome, respPrim?.cau].filter(Boolean).join(" · ");
+  const cidadeEstado = [escritorio.cidade, escritorio.estado].filter(Boolean).join(" — ");
+  const pixTexto = escritorio.pixChave
+    ? `Chave ${escritorio.pixTipo || ""}: ${escritorio.pixChave}${escritorio.banco ? ` · Banco ${escritorio.banco}` : ""}`
+    : "";
   return {
-    escritorio:   { nome:"Padovan Arquitetos", cidade:"Ourinhos — SP", tel:"(14) 99767-4200", email:"leopadovan.arq@gmail.com", social:"@padovan_arquitetos" },
+    escritorio:   {
+      nome:   escritorio.nome     || "",
+      cidade: cidadeEstado,
+      tel:    escritorio.telefone || "",
+      email:  escritorio.email    || "",
+      social: escritorio.instagram|| "",
+    },
     titulo:       "Projeto de Arquitetura e Engenharia",
     subtitulo:    "Proposta Comercial",
     dataEmissao,
@@ -939,14 +988,14 @@ function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, e
         }
         const tipoSing = isClinica ? "clínica" : "residência";
         return `Uma ${tipoSing} ${tipDesc}, com ${fmtN(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
-      })(), responsavel:"Arq. Leonardo Padovan · CAU A30278-3" },
+      })(), responsavel: respCompleto },
     servicos: [
       { id:1, descricao:`Projeto Arquitetônico${nUnid>1?" ("+nUnid+" unidades)":""}`, sub: nUnid>1?`1ª unidade: ${fmt(r.precoFinal)}`:"", valor: arqTotal },
       { id:2, descricao:`Projetos de Engenharia${nUnid>1?" ("+nUnid+" unidades)":""}`, sub:`Estrutural · Elétrico · Hidrossanitário${nUnid>1?" — 1ª unidade: "+fmt(engUnit):""}`, valor: engTotal },
     ],
     pagamento: {
-      pix: "Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções",
-      banco: "Banco Sicoob",
+      pix: pixTexto,
+      banco: escritorio.banco ? `Banco ${escritorio.banco}` : "",
       tipoPagamento: orc.tipoPagamento || "padrao",
       descontoEtapa:      orc.descontoEtapa      ?? 5,
       descontoPacote:     orc.descontoPacote     ?? 10,
@@ -1009,7 +1058,7 @@ function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, e
     escopoEng: ["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações","Elétrico: dimensionamento de cargas, circuitos, quadros e pontos","Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento","Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"],
     naoInclusos: ["Taxas municipais, emolumentos e registros (CAU/Prefeitura)","Impostos","Projetos de climatização","Projeto de prevenção de incêndio","Projeto de automação","Projeto de paisagismo","Projeto de interiores","Projeto de Marcenaria (Móveis internos)","Projeto estrutural de estruturas metálicas","Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura","Sondagem e Planialtimétrico do terreno","Acompanhamento semanal de obra","Gestão e execução de obra","Vistoria para Caixa Econômica Federal","RRT de Execução de obra"],
     prazo: ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação.", "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."],
-    aceite: { responsavel:"Arq. Leonardo Padovan", registro:"CAU A30278-3", cidade:"Ourinhos" },
+    aceite: { responsavel: respNome, registro: respPrim?.cau || "", cidade: escritorio.cidade || "" },
     logoPos: { x:0, y:0 },
   };
 }

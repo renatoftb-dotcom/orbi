@@ -4070,27 +4070,51 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
   const [validadeEdit, setValidadeEdit]     = useState(snap?.validadeEdit || new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR"));
   const [naoInclEdit, setNaoInclEdit]       = useState(snap?.naoInclEdit ?? null);
   const [prazoEdit, setPrazoEdit]           = useState(snap?.prazoEdit ?? null);
-  const [responsavelEdit, setResponsavelEdit] = useState(snap?.responsavelEdit || "Arq. Leonardo Padovan");
-  const [cauEdit, setCauEdit]               = useState(snap?.cauEdit || "CAU A30278-3 · Ourinhos");
-  const [emailEdit, setEmailEdit]           = useState(snap?.emailEdit || "leopadovan.arq@gmail.com");
-  const [telefoneEdit, setTelefoneEdit]     = useState(snap?.telefoneEdit || "(14) 99767-4200");
-  const [instagramEdit, setInstagramEdit]   = useState(snap?.instagramEdit || "@padovan_arquitetos");
-  const [cidadeEdit, setCidadeEdit]         = useState(snap?.cidadeEdit || "Ourinhos");
-  const [pixEdit, setPixEdit]               = useState(snap?.pixEdit || "PIX · Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções · Banco Sicoob");
+  // Dados do escritório — propagados pelo FormOrcamentoProjetoTeste em `data.escritorio`.
+  // Se o escritório não estiver cadastrado (primeiro uso, rascunho antigo),
+  // os campos ficam vazios e o usuário pode preencher manualmente no preview.
+  const escritorio = safeData.escritorio || {};
+  // Primeiro responsável técnico: usado como responsável padrão da proposta
+  // (nome + CAU). Outros responsáveis podem ser selecionados via edição inline
+  // dos campos "responsavelEdit" / "cauEdit" no próprio preview.
+  const _respEsc = (escritorio.responsaveis && escritorio.responsaveis.length > 0)
+    ? escritorio.responsaveis[0]
+    : null;
+  // Nome formal do responsável: assume "Arq." como prefixo padrão.
+  // Se o escritório futuramente quiser outros títulos (Eng., etc.), adicionar
+  // campo tituloProfissional em responsaveis[i] e usar aqui.
+  const _respNome = _respEsc?.nome ? `Arq. ${_respEsc.nome}` : "";
+  // CAU + cidade (padrão da proposta): "CAU A12345-6 · Ourinhos"
+  const _cauCidade = [_respEsc?.cau, escritorio.cidade].filter(Boolean).join(" · ");
+  // PIX: prefixo "PIX · " + chave + opcionalmente banco.
+  // Formato típico: "PIX · Chave CNPJ: 12.345.678/0001-00 · Banco Sicoob"
+  const _pixLabel = (() => {
+    if (!escritorio.pixChave) return "";
+    const tipo = escritorio.pixTipo || "Chave";
+    const banco = escritorio.banco ? ` · Banco ${escritorio.banco}` : "";
+    return `PIX · Chave ${tipo}: ${escritorio.pixChave}${banco}`;
+  })();
+
+  const [responsavelEdit, setResponsavelEdit] = useState(snap?.responsavelEdit ?? _respNome);
+  const [cauEdit, setCauEdit]               = useState(snap?.cauEdit ?? _cauCidade);
+  const [emailEdit, setEmailEdit]           = useState(snap?.emailEdit ?? (escritorio.email || ""));
+  const [telefoneEdit, setTelefoneEdit]     = useState(snap?.telefoneEdit ?? (escritorio.telefone || ""));
+  const [instagramEdit, setInstagramEdit]   = useState(snap?.instagramEdit ?? (escritorio.instagram || ""));
+  const [cidadeEdit, setCidadeEdit]         = useState(snap?.cidadeEdit ?? (escritorio.cidade || ""));
+  const [pixEdit, setPixEdit]               = useState(snap?.pixEdit ?? _pixLabel);
   const [labelApenasEdit, setLabelApenasEdit] = useState(snap?.labelApenasEdit ?? null);
 
-  const [logoPreview, setLogoPreview]       = useState(snap?.logoPreview || null);
+  // Logo do escritório — vem de data.escritorio.logo (salvo no banco via
+  // PUT /api/escritorio) ou do snapshot da proposta (se salva antes).
+  // Snapshot tem prioridade pra preservar proposta histórica mesmo se o
+  // escritório trocar o logo depois.
+  const [logoPreview, setLogoPreview]       = useState(snap?.logoPreview ?? (escritorio.logo || null));
 
-  // Carrega logo do storage ao abrir a proposta (só se não veio do snapshot)
-  useEffect(() => {
-    if (snap?.logoPreview) return; // já tem do snapshot
-    try {
-      window.storage.get("escritorio-logo").then(lr => {
-        if (lr?.value) setLogoPreview(lr.value);
-      }).catch(()=>{});
-    } catch {}
-  }, []);
-
+  // Logo agora vem de data.escritorio.logo (salvo no banco pela aba Escritório).
+  // O upload/remoção aqui no preview fica como override TEMPORÁRIO só pra esta
+  // proposta específica — não mexe no escritório global. Útil pra propostas
+  // excepcionais (ex: parceria com logo diferente) sem afetar as demais.
+  // Ao salvar a proposta, logoPreview entra no snapshot.
   const inputLogoRef = useRef(null);
 
   function handleLogoUpload(e) {
@@ -4100,14 +4124,12 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
     reader.onload = ev => {
       const data64 = ev.target.result;
       setLogoPreview(data64);
-      try { window.storage.set("escritorio-logo", data64).catch(()=>{}); } catch {}
     };
     reader.readAsDataURL(file);
   }
 
   function handleLogoRemove() {
     setLogoPreview(null);
-    try { window.storage.delete("escritorio-logo").catch(()=>{}); } catch {}
   }
 
   const arqOriginal  = incluiArq ? (calculo.precoArq || 0) : 0;
@@ -4657,11 +4679,11 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
         // Escopo editado na preview
         escopoEditado: escopoState,
       };
-      const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
+      const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r, escritorio);
       if (resumoFinal && modelo.cliente) modelo.cliente.resumo = resumoFinal;
       // Sobrescreve subtítulo no modelo (modo estilo C do PDF usa modelo.subtitulo)
       if (modelo && subTituloFinal) modelo.subtitulo = subTituloFinal;
-      const blob = await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng, { returnBlob: opts.returnBlob });
+      const blob = await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng, { returnBlob: opts.returnBlob, escritorio });
       if (opts.returnBlob) return blob;
     } catch(e) { console.error(e); dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" }); }
   };
@@ -5445,7 +5467,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
 
         <div style={{ borderTop:`0.5px solid ${LN}`, marginTop:48, paddingTop:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, fontSize:11, color:LT }}>
-            <span>Padovan Arquitetos</span><span>·</span>
+            <span>{escritorio.nome || "Escritório"}</span><span>·</span>
             <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:11 }} /><span>·</span>
             <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:11 }} /><span>·</span>
             <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:11 }} />
@@ -5456,7 +5478,13 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
   );
 }
 
-function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura }) {
+function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio }) {
+  // Normaliza escritorio (defaults vazios se algo faltar)
+  const esc = escritorio || {};
+  // Primeiro responsável técnico serve como responsável padrão na proposta.
+  // Se o escritório tiver vários, o master/admin ajusta o texto do PDF via
+  // edição inline do "responsavelEdit" / "cauEdit" no PropostaPreview.
+  const _respPrimeiro = (esc.responsaveis && esc.responsaveis.length > 0) ? esc.responsaveis[0] : null;
   const [referencia,   setReferencia]   = useState(orcBase?.referencia  || "");
   const [tipoObra,     setTipoObra]     = useState(orcBase?.subtipo     || null);
   const [tipoProjeto,  setTipoProjeto]  = useState(orcBase?.tipo        || null);
@@ -5492,6 +5520,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     incluiMarcenaria: orcBase.incluiMarcenaria || false,
     grupoQtds: orcBase.grupoQtds || null,
     resumoDescritivo: orcBase.resumoDescritivo || "",
+    escritorio: esc, // Escritório também no modo "ver proposta"
   } : null);
   const [tipoPgto,      setTipoPgto]      = useState(orcBase?.tipoPgto    || "padrao");
   const [temImposto,    setTemImposto]    = useState(orcBase?.temImposto  || false);
@@ -6316,6 +6345,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
       etapasPct,
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+      escritorio: esc, // Passa o escritório inteiro pra PropostaPreview/PDF lerem dados
     });
     const orcParaSalvar = {
       ...(orcBase || {}),

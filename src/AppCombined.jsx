@@ -4115,6 +4115,25 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
 async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#ffffff", incluiArq=true, incluiEng=true, opts={}) {
   const { jsPDF } = window.jspdf;
 
+  // ── Escritório ─────────────────────────────────────────────
+  // Recebido via opts.escritorio; se não vier, fallback pra objeto vazio.
+  // Assim o PDF usa dados dinâmicos do banco (aba Escritório → Dados Gerais)
+  // em vez de strings hardcoded. Se algum campo estiver vazio, o PDF mostra
+  // string vazia (visualmente melhor do que dados errados).
+  const escInput = opts.escritorio || {};
+  const _respPrimeiro = (escInput.responsaveis && escInput.responsaveis.length > 0)
+    ? escInput.responsaveis[0] : null;
+  // Responsável formatado com prefixo "Arq." (padrão do escritório).
+  // Para multi-profissional ou prefixos diferentes, passar já formatado
+  // via modeloPdf.aceite.responsavel.
+  const _respNome = _respPrimeiro?.nome ? `Arq. ${_respPrimeiro.nome}` : "";
+  const _respCau = _respPrimeiro?.cau || "";
+  const _cidadeEstado = [escInput.cidade, escInput.estado].filter(Boolean).join(" — ");
+  // PIX formatado: "Chave CNPJ: 00.000.000/0001-00 — Nome · Banco Sicoob"
+  const _pixTexto = escInput.pixChave
+    ? `Chave ${escInput.pixTipo || ""}: ${escInput.pixChave}${escInput.banco ? ` · Banco ${escInput.banco}` : ""}`
+    : "";
+
   // ── Dados base ─────────────────────────────────────────────
   const r       = orc.resultado || {};
   const area    = r.areaTotal || 0;
@@ -4263,7 +4282,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const LINE  = [229,231,235];
   const BG    = [249,250,251];
 
-  const esc = { nome:"Padovan Arquitetos", tel:"(14) 99767-4200", email:"leopadovan.arq@gmail.com", social:"@padovan_arquitetos" };
+  const esc = {
+    nome:   escInput.nome     || "",
+    tel:    escInput.telefone || "",
+    email:  escInput.email    || "",
+    social: escInput.instagram|| "",
+  };
   const hoje = new Date(orc.criadoEm || Date.now());
   const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
   const dataStr  = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
@@ -4762,7 +4786,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // PIX
   sf("normal",8); stc(INK_LT);
-  tx(orc.pixTexto || "PIX  ·  Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções  ·  Banco Sicoob",M,y);
+  tx(orc.pixTexto || (_pixTexto ? `PIX  ·  ${_pixTexto}` : ""),M,y);
   y+=8;
 
   // ── ESCOPO DOS SERVIÇOS ───────────────────────────────────
@@ -4883,8 +4907,15 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const rx = midX+4;
   y -= 21;
   sf("bold",7); stc(INK_LT); tx("RESPONSÁVEL TÉCNICO",rx,y); y+=5;
-  sf("bold",10); stc(INK); tx("Arq. Leonardo Padovan",rx,y); y+=5;
-  sf("normal",7.5); stc(INK_LT); tx("CAU A30278-3  ·  Ourinhos",rx,y); y+=11;
+  sf("bold",10); stc(INK);
+  // Responsável: prioridade modeloPdf.aceite.responsavel > primeiro responsável
+  // do escritório. Campo vazio se nenhum dos dois existir.
+  tx(modeloPdf?.aceite?.responsavel || _respNome, rx, y); y+=5;
+  sf("normal",7.5); stc(INK_LT);
+  // CAU + cidade: idem, com fallback pra campos do escritório
+  const _cauLinha = modeloPdf?.aceite?.registro || _respCau;
+  const _cidadeAceite = modeloPdf?.aceite?.cidade || escInput.cidade || "";
+  tx([_cauLinha, _cidadeAceite].filter(Boolean).join("  ·  "), rx, y); y+=11;
   hr(y,rx,W-M); sf("normal",7); stc(INK_LT);
   tx("Assinatura",rx,y+4);
   tx(dataStr,W-M,y+4,{align:"right"});
@@ -4892,7 +4923,10 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // ── RODAPÉ (todas as páginas) ─────────────────────────────
   const totalPgs = doc.getNumberOfPages();
-  const rodTxt = `Padovan Arquitetos  ·  leopadovan.arq@gmail.com  ·  (14) 99767-4200  ·  @padovan_arquitetos`;
+  // Montagem dinâmica: só inclui campos preenchidos (ex: se escritório
+  // não tiver Instagram, não aparece separador solto no rodapé).
+  const rodTxt = [esc.nome, esc.email, esc.tel, esc.social]
+    .filter(Boolean).join("  ·  ");
   for (let pg=1; pg<=totalPgs; pg++) {
     doc.setPage(pg);
     sc(LINE,"draw"); doc.setLineWidth(0.3); doc.line(M,H-14,W-M,H-14);
@@ -4928,13 +4962,28 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r) {
+function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r, escritorio={}) {
   const dataEmissao = new Date(orc.criadoEm).toLocaleDateString("pt-BR",{day:"numeric",month:"long",year:"numeric"});
   const validade    = new Date(new Date(orc.criadoEm).getTime()+15*86400000).toLocaleDateString("pt-BR");
   const comodosAtivos = (orc.comodos||[]).filter(c=>c.qtd>0);
   const totalComodos  = comodosAtivos.reduce((s,c)=>s+c.qtd,0);
+  // Helpers: resp primário + pix formatado. Mesma lógica do buildPdf.
+  const respPrim = (escritorio.responsaveis && escritorio.responsaveis.length > 0)
+    ? escritorio.responsaveis[0] : null;
+  const respNome = respPrim?.nome ? `Arq. ${respPrim.nome}` : "";
+  const respCompleto = [respNome, respPrim?.cau].filter(Boolean).join(" · ");
+  const cidadeEstado = [escritorio.cidade, escritorio.estado].filter(Boolean).join(" — ");
+  const pixTexto = escritorio.pixChave
+    ? `Chave ${escritorio.pixTipo || ""}: ${escritorio.pixChave}${escritorio.banco ? ` · Banco ${escritorio.banco}` : ""}`
+    : "";
   return {
-    escritorio:   { nome:"Padovan Arquitetos", cidade:"Ourinhos — SP", tel:"(14) 99767-4200", email:"leopadovan.arq@gmail.com", social:"@padovan_arquitetos" },
+    escritorio:   {
+      nome:   escritorio.nome     || "",
+      cidade: cidadeEstado,
+      tel:    escritorio.telefone || "",
+      email:  escritorio.email    || "",
+      social: escritorio.instagram|| "",
+    },
     titulo:       "Projeto de Arquitetura e Engenharia",
     subtitulo:    "Proposta Comercial",
     dataEmissao,
@@ -5050,14 +5099,14 @@ function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, e
         }
         const tipoSing = isClinica ? "clínica" : "residência";
         return `Uma ${tipoSing} ${tipDesc}, com ${fmtN(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
-      })(), responsavel:"Arq. Leonardo Padovan · CAU A30278-3" },
+      })(), responsavel: respCompleto },
     servicos: [
       { id:1, descricao:`Projeto Arquitetônico${nUnid>1?" ("+nUnid+" unidades)":""}`, sub: nUnid>1?`1ª unidade: ${fmt(r.precoFinal)}`:"", valor: arqTotal },
       { id:2, descricao:`Projetos de Engenharia${nUnid>1?" ("+nUnid+" unidades)":""}`, sub:`Estrutural · Elétrico · Hidrossanitário${nUnid>1?" — 1ª unidade: "+fmt(engUnit):""}`, valor: engTotal },
     ],
     pagamento: {
-      pix: "Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções",
-      banco: "Banco Sicoob",
+      pix: pixTexto,
+      banco: escritorio.banco ? `Banco ${escritorio.banco}` : "",
       tipoPagamento: orc.tipoPagamento || "padrao",
       descontoEtapa:      orc.descontoEtapa      ?? 5,
       descontoPacote:     orc.descontoPacote     ?? 10,
@@ -5120,7 +5169,7 @@ function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, e
     escopoEng: ["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações","Elétrico: dimensionamento de cargas, circuitos, quadros e pontos","Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento","Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"],
     naoInclusos: ["Taxas municipais, emolumentos e registros (CAU/Prefeitura)","Impostos","Projetos de climatização","Projeto de prevenção de incêndio","Projeto de automação","Projeto de paisagismo","Projeto de interiores","Projeto de Marcenaria (Móveis internos)","Projeto estrutural de estruturas metálicas","Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura","Sondagem e Planialtimétrico do terreno","Acompanhamento semanal de obra","Gestão e execução de obra","Vistoria para Caixa Econômica Federal","RRT de Execução de obra"],
     prazo: ["Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação.", "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura."],
-    aceite: { responsavel:"Arq. Leonardo Padovan", registro:"CAU A30278-3", cidade:"Ourinhos" },
+    aceite: { responsavel: respNome, registro: respPrim?.cau || "", cidade: escritorio.cidade || "" },
     logoPos: { x:0, y:0 },
   };
 }
@@ -9202,27 +9251,51 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
   const [validadeEdit, setValidadeEdit]     = useState(snap?.validadeEdit || new Date(hoje.getTime()+15*86400000).toLocaleDateString("pt-BR"));
   const [naoInclEdit, setNaoInclEdit]       = useState(snap?.naoInclEdit ?? null);
   const [prazoEdit, setPrazoEdit]           = useState(snap?.prazoEdit ?? null);
-  const [responsavelEdit, setResponsavelEdit] = useState(snap?.responsavelEdit || "Arq. Leonardo Padovan");
-  const [cauEdit, setCauEdit]               = useState(snap?.cauEdit || "CAU A30278-3 · Ourinhos");
-  const [emailEdit, setEmailEdit]           = useState(snap?.emailEdit || "leopadovan.arq@gmail.com");
-  const [telefoneEdit, setTelefoneEdit]     = useState(snap?.telefoneEdit || "(14) 99767-4200");
-  const [instagramEdit, setInstagramEdit]   = useState(snap?.instagramEdit || "@padovan_arquitetos");
-  const [cidadeEdit, setCidadeEdit]         = useState(snap?.cidadeEdit || "Ourinhos");
-  const [pixEdit, setPixEdit]               = useState(snap?.pixEdit || "PIX · Chave CNPJ: 36.122.417/0001-74 — Leo Padovan Projetos e Construções · Banco Sicoob");
+  // Dados do escritório — propagados pelo FormOrcamentoProjetoTeste em `data.escritorio`.
+  // Se o escritório não estiver cadastrado (primeiro uso, rascunho antigo),
+  // os campos ficam vazios e o usuário pode preencher manualmente no preview.
+  const escritorio = safeData.escritorio || {};
+  // Primeiro responsável técnico: usado como responsável padrão da proposta
+  // (nome + CAU). Outros responsáveis podem ser selecionados via edição inline
+  // dos campos "responsavelEdit" / "cauEdit" no próprio preview.
+  const _respEsc = (escritorio.responsaveis && escritorio.responsaveis.length > 0)
+    ? escritorio.responsaveis[0]
+    : null;
+  // Nome formal do responsável: assume "Arq." como prefixo padrão.
+  // Se o escritório futuramente quiser outros títulos (Eng., etc.), adicionar
+  // campo tituloProfissional em responsaveis[i] e usar aqui.
+  const _respNome = _respEsc?.nome ? `Arq. ${_respEsc.nome}` : "";
+  // CAU + cidade (padrão da proposta): "CAU A12345-6 · Ourinhos"
+  const _cauCidade = [_respEsc?.cau, escritorio.cidade].filter(Boolean).join(" · ");
+  // PIX: prefixo "PIX · " + chave + opcionalmente banco.
+  // Formato típico: "PIX · Chave CNPJ: 12.345.678/0001-00 · Banco Sicoob"
+  const _pixLabel = (() => {
+    if (!escritorio.pixChave) return "";
+    const tipo = escritorio.pixTipo || "Chave";
+    const banco = escritorio.banco ? ` · Banco ${escritorio.banco}` : "";
+    return `PIX · Chave ${tipo}: ${escritorio.pixChave}${banco}`;
+  })();
+
+  const [responsavelEdit, setResponsavelEdit] = useState(snap?.responsavelEdit ?? _respNome);
+  const [cauEdit, setCauEdit]               = useState(snap?.cauEdit ?? _cauCidade);
+  const [emailEdit, setEmailEdit]           = useState(snap?.emailEdit ?? (escritorio.email || ""));
+  const [telefoneEdit, setTelefoneEdit]     = useState(snap?.telefoneEdit ?? (escritorio.telefone || ""));
+  const [instagramEdit, setInstagramEdit]   = useState(snap?.instagramEdit ?? (escritorio.instagram || ""));
+  const [cidadeEdit, setCidadeEdit]         = useState(snap?.cidadeEdit ?? (escritorio.cidade || ""));
+  const [pixEdit, setPixEdit]               = useState(snap?.pixEdit ?? _pixLabel);
   const [labelApenasEdit, setLabelApenasEdit] = useState(snap?.labelApenasEdit ?? null);
 
-  const [logoPreview, setLogoPreview]       = useState(snap?.logoPreview || null);
+  // Logo do escritório — vem de data.escritorio.logo (salvo no banco via
+  // PUT /api/escritorio) ou do snapshot da proposta (se salva antes).
+  // Snapshot tem prioridade pra preservar proposta histórica mesmo se o
+  // escritório trocar o logo depois.
+  const [logoPreview, setLogoPreview]       = useState(snap?.logoPreview ?? (escritorio.logo || null));
 
-  // Carrega logo do storage ao abrir a proposta (só se não veio do snapshot)
-  useEffect(() => {
-    if (snap?.logoPreview) return; // já tem do snapshot
-    try {
-      window.storage.get("escritorio-logo").then(lr => {
-        if (lr?.value) setLogoPreview(lr.value);
-      }).catch(()=>{});
-    } catch {}
-  }, []);
-
+  // Logo agora vem de data.escritorio.logo (salvo no banco pela aba Escritório).
+  // O upload/remoção aqui no preview fica como override TEMPORÁRIO só pra esta
+  // proposta específica — não mexe no escritório global. Útil pra propostas
+  // excepcionais (ex: parceria com logo diferente) sem afetar as demais.
+  // Ao salvar a proposta, logoPreview entra no snapshot.
   const inputLogoRef = useRef(null);
 
   function handleLogoUpload(e) {
@@ -9232,14 +9305,12 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
     reader.onload = ev => {
       const data64 = ev.target.result;
       setLogoPreview(data64);
-      try { window.storage.set("escritorio-logo", data64).catch(()=>{}); } catch {}
     };
     reader.readAsDataURL(file);
   }
 
   function handleLogoRemove() {
     setLogoPreview(null);
-    try { window.storage.delete("escritorio-logo").catch(()=>{}); } catch {}
   }
 
   const arqOriginal  = incluiArq ? (calculo.precoArq || 0) : 0;
@@ -9789,11 +9860,11 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
         // Escopo editado na preview
         escopoEditado: escopoState,
       };
-      const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r);
+      const modelo = defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, engUnit, r, escritorio);
       if (resumoFinal && modelo.cliente) modelo.cliente.resumo = resumoFinal;
       // Sobrescreve subtítulo no modelo (modo estilo C do PDF usa modelo.subtitulo)
       if (modelo && subTituloFinal) modelo.subtitulo = subTituloFinal;
-      const blob = await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng, { returnBlob: opts.returnBlob });
+      const blob = await buildPdf(orc, logoPreview, modelo, null, "#ffffff", incluiArq, incluiEng, { returnBlob: opts.returnBlob, escritorio });
       if (opts.returnBlob) return blob;
     } catch(e) { console.error(e); dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" }); }
   };
@@ -10577,7 +10648,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
 
         <div style={{ borderTop:`0.5px solid ${LN}`, marginTop:48, paddingTop:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, fontSize:11, color:LT }}>
-            <span>Padovan Arquitetos</span><span>·</span>
+            <span>{escritorio.nome || "Escritório"}</span><span>·</span>
             <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:11 }} /><span>·</span>
             <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:11 }} /><span>·</span>
             <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:11 }} />
@@ -10588,7 +10659,13 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
   );
 }
 
-function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura }) {
+function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio }) {
+  // Normaliza escritorio (defaults vazios se algo faltar)
+  const esc = escritorio || {};
+  // Primeiro responsável técnico serve como responsável padrão na proposta.
+  // Se o escritório tiver vários, o master/admin ajusta o texto do PDF via
+  // edição inline do "responsavelEdit" / "cauEdit" no PropostaPreview.
+  const _respPrimeiro = (esc.responsaveis && esc.responsaveis.length > 0) ? esc.responsaveis[0] : null;
   const [referencia,   setReferencia]   = useState(orcBase?.referencia  || "");
   const [tipoObra,     setTipoObra]     = useState(orcBase?.subtipo     || null);
   const [tipoProjeto,  setTipoProjeto]  = useState(orcBase?.tipo        || null);
@@ -10624,6 +10701,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     incluiMarcenaria: orcBase.incluiMarcenaria || false,
     grupoQtds: orcBase.grupoQtds || null,
     resumoDescritivo: orcBase.resumoDescritivo || "",
+    escritorio: esc, // Escritório também no modo "ver proposta"
   } : null);
   const [tipoPgto,      setTipoPgto]      = useState(orcBase?.tipoPgto    || "padrao");
   const [temImposto,    setTemImposto]    = useState(orcBase?.temImposto  || false);
@@ -11448,6 +11526,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
       etapasPct,
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+      escritorio: esc, // Passa o escritório inteiro pra PropostaPreview/PDF lerem dados
     });
     const orcParaSalvar = {
       ...(orcBase || {}),
@@ -12199,6 +12278,7 @@ function Escritorio({ data, save }) {
     tipoConta:   cfg.tipoConta   || "Corrente",
     pixTipo:     cfg.pixTipo     || "CNPJ",
     pixChave:    cfg.pixChave    || "",
+    logo:        cfg.logo        || null,  // base64 data URL (ex: "data:image/png;base64,...")
   });
   const [responsaveis, setResponsaveis] = useState(
     cfg.responsaveis?.length ? cfg.responsaveis
@@ -12393,6 +12473,55 @@ function Escritorio({ data, save }) {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  // Upload do logo: lê o arquivo como base64, valida tamanho e formato.
+  // O logo é salvo dentro do objeto escritorio.logo e enviado no PUT /api/escritorio
+  // junto com os outros dados (server v2.1.0 separa logo pra coluna dedicada).
+  //
+  // Limite: 500KB depois da conversão base64 — isso equivale a ~375KB do arquivo
+  // original. PNG/JPG/SVG aceitos. Qualquer coisa acima disso é rejeitada pra
+  // evitar PDFs lentos e payloads gigantes no backend.
+  async function handleUploadLogo(evento) {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = ""; // permite re-selecionar o mesmo arquivo depois
+    if (!arquivo) return;
+
+    const tiposOk = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml"];
+    if (!tiposOk.includes(arquivo.type)) {
+      dialogo.alertar({
+        titulo: "Formato não suportado",
+        mensagem: "Use PNG, JPG ou SVG.",
+        tipo: "aviso",
+      });
+      return;
+    }
+
+    // Limite original de 1MB pro arquivo (antes do base64)
+    if (arquivo.size > 1024 * 1024) {
+      dialogo.alertar({
+        titulo: "Arquivo grande demais",
+        mensagem: `O logo tem ${(arquivo.size/1024).toFixed(0)}KB. Limite: 1MB.`,
+        tipo: "aviso",
+      });
+      return;
+    }
+
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+        reader.readAsDataURL(arquivo);
+      });
+      setF("logo", base64);
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao ler arquivo", mensagem: e.message, tipo: "erro" });
+    }
+  }
+
+  function removerLogo() {
+    setF("logo", null);
+  }
+
   function setF(key, val) {
     setForm(f => {
       const novo = { ...f, [key]: val };
@@ -12453,6 +12582,81 @@ function Escritorio({ data, save }) {
   // ── ABA DADOS ───────────────────────────────────────────────
   const renderDados = () => (
     <div style={E.body}>
+      {/* Logo do escritório — usado no PDF das propostas */}
+      <div style={E.secao}>
+        <div style={E.secTitulo}>Logo do escritório</div>
+        <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
+          {/* Preview */}
+          <div style={{
+            width: 160,
+            height: 100,
+            border: form.logo ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db",
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#fafbfc",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}>
+            {form.logo ? (
+              <img src={form.logo} alt="Logo"
+                style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+            ) : (
+              <span style={{ fontSize: 12, color: "#9ca3af" }}>Sem logo</span>
+            )}
+          </div>
+
+          {/* Ações */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10, lineHeight: 1.5 }}>
+              Aparece no cabeçalho das propostas em PDF.<br/>
+              Formatos: PNG, JPG ou SVG · Máximo 1MB.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <label style={{
+                ...E.btn,
+                cursor: perm.podeAlterarConfig ? "pointer" : "not-allowed",
+                opacity: perm.podeAlterarConfig ? 1 : 0.5,
+                display: "inline-flex",
+                alignItems: "center",
+                fontSize: 12.5,
+                fontWeight: 600,
+                padding: "7px 14px",
+              }}>
+                {form.logo ? "Trocar logo" : "Enviar logo"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                  style={{ display: "none" }}
+                  onChange={handleUploadLogo}
+                  disabled={!perm.podeAlterarConfig}
+                />
+              </label>
+              {form.logo && perm.podeAlterarConfig && (
+                <button
+                  onClick={removerLogo}
+                  style={{
+                    background: "#fff",
+                    color: "#dc2626",
+                    border: "1px solid #fecaca",
+                    borderRadius: 7,
+                    padding: "7px 14px",
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}>
+                  Remover
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr style={E.divisor} />
+
       {/* Identificação */}
       <div style={E.secao}>
         <div style={E.secTitulo}>Identificação</div>
@@ -13858,6 +14062,7 @@ export default function ModuloClientesFornecedores() {
               clienteNome={orcamentoTelaCheia.clienteOrc.nome}
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
+              escritorio={data.escritorio || {}}
               modoVer={orcamentoTelaCheia.modo === "ver"}
               modoAbertura={orcamentoTelaCheia.modo}
               onSalvar={async (orc) => {

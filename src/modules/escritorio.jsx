@@ -23,6 +23,7 @@ function Escritorio({ data, save }) {
     tipoConta:   cfg.tipoConta   || "Corrente",
     pixTipo:     cfg.pixTipo     || "CNPJ",
     pixChave:    cfg.pixChave    || "",
+    logo:        cfg.logo        || null,  // base64 data URL (ex: "data:image/png;base64,...")
   });
   const [responsaveis, setResponsaveis] = useState(
     cfg.responsaveis?.length ? cfg.responsaveis
@@ -217,6 +218,55 @@ function Escritorio({ data, save }) {
     setTimeout(() => setSaved(false), 2000);
   }
 
+  // Upload do logo: lê o arquivo como base64, valida tamanho e formato.
+  // O logo é salvo dentro do objeto escritorio.logo e enviado no PUT /api/escritorio
+  // junto com os outros dados (server v2.1.0 separa logo pra coluna dedicada).
+  //
+  // Limite: 500KB depois da conversão base64 — isso equivale a ~375KB do arquivo
+  // original. PNG/JPG/SVG aceitos. Qualquer coisa acima disso é rejeitada pra
+  // evitar PDFs lentos e payloads gigantes no backend.
+  async function handleUploadLogo(evento) {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = ""; // permite re-selecionar o mesmo arquivo depois
+    if (!arquivo) return;
+
+    const tiposOk = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml"];
+    if (!tiposOk.includes(arquivo.type)) {
+      dialogo.alertar({
+        titulo: "Formato não suportado",
+        mensagem: "Use PNG, JPG ou SVG.",
+        tipo: "aviso",
+      });
+      return;
+    }
+
+    // Limite original de 1MB pro arquivo (antes do base64)
+    if (arquivo.size > 1024 * 1024) {
+      dialogo.alertar({
+        titulo: "Arquivo grande demais",
+        mensagem: `O logo tem ${(arquivo.size/1024).toFixed(0)}KB. Limite: 1MB.`,
+        tipo: "aviso",
+      });
+      return;
+    }
+
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+        reader.readAsDataURL(arquivo);
+      });
+      setF("logo", base64);
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao ler arquivo", mensagem: e.message, tipo: "erro" });
+    }
+  }
+
+  function removerLogo() {
+    setF("logo", null);
+  }
+
   function setF(key, val) {
     setForm(f => {
       const novo = { ...f, [key]: val };
@@ -277,6 +327,81 @@ function Escritorio({ data, save }) {
   // ── ABA DADOS ───────────────────────────────────────────────
   const renderDados = () => (
     <div style={E.body}>
+      {/* Logo do escritório — usado no PDF das propostas */}
+      <div style={E.secao}>
+        <div style={E.secTitulo}>Logo do escritório</div>
+        <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
+          {/* Preview */}
+          <div style={{
+            width: 160,
+            height: 100,
+            border: form.logo ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db",
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: "#fafbfc",
+            overflow: "hidden",
+            flexShrink: 0,
+          }}>
+            {form.logo ? (
+              <img src={form.logo} alt="Logo"
+                style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+            ) : (
+              <span style={{ fontSize: 12, color: "#9ca3af" }}>Sem logo</span>
+            )}
+          </div>
+
+          {/* Ações */}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10, lineHeight: 1.5 }}>
+              Aparece no cabeçalho das propostas em PDF.<br/>
+              Formatos: PNG, JPG ou SVG · Máximo 1MB.
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <label style={{
+                ...E.btn,
+                cursor: perm.podeAlterarConfig ? "pointer" : "not-allowed",
+                opacity: perm.podeAlterarConfig ? 1 : 0.5,
+                display: "inline-flex",
+                alignItems: "center",
+                fontSize: 12.5,
+                fontWeight: 600,
+                padding: "7px 14px",
+              }}>
+                {form.logo ? "Trocar logo" : "Enviar logo"}
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                  style={{ display: "none" }}
+                  onChange={handleUploadLogo}
+                  disabled={!perm.podeAlterarConfig}
+                />
+              </label>
+              {form.logo && perm.podeAlterarConfig && (
+                <button
+                  onClick={removerLogo}
+                  style={{
+                    background: "#fff",
+                    color: "#dc2626",
+                    border: "1px solid #fecaca",
+                    borderRadius: 7,
+                    padding: "7px 14px",
+                    fontSize: 12.5,
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}>
+                  Remover
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <hr style={E.divisor} />
+
       {/* Identificação */}
       <div style={E.secao}>
         <div style={E.secTitulo}>Identificação</div>

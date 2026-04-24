@@ -466,6 +466,7 @@ export default function ModuloClientesFornecedores() {
               clienteNome={orcamentoTelaCheia.clienteOrc.nome}
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
+              escritorio={data.escritorio || {}}
               modoVer={orcamentoTelaCheia.modo === "ver"}
               modoAbertura={orcamentoTelaCheia.modo}
               onSalvar={async (orc) => {
