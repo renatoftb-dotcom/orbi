@@ -855,7 +855,9 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
     await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc, projetos: novosProjetos });
   }
 
-  // Confirma ganho do orçamento com os dados do ModalConfirmarGanho (escopo, valores, condição)
+  // Confirma ganho do orçamento com os dados do ModalConfirmarGanho (escopo, valores, condição).
+  // Estratégia otimista: fecha modal imediato + toast, save() em background.
+  // Antes: setOrcGanho(null) só após await save() → modal travava esperando rede.
   async function confirmarGanho(ganhoData) {
     const orc = orcGanho;
     if (!orc) return;
@@ -898,8 +900,16 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
         : o
     );
 
-    await save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos }).catch(console.error);
+    // Fecha modal e mostra toast IMEDIATAMENTE — não aguarda save()
     setOrcGanho(null);
+    toast.sucesso("Orçamento marcado como ganho");
+
+    // Save em background; falha mostra toast de erro
+    save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos })
+      .catch(e => {
+        console.error("Erro ao salvar orçamento ganho:", e);
+        toast.erro("Erro ao salvar — tente novamente");
+      });
   }
 
   async function excluirOrcamento(orcId) {

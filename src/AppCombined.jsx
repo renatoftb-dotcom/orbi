@@ -3982,7 +3982,9 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
     await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc, projetos: novosProjetos });
   }
 
-  // Confirma ganho do orçamento com os dados do ModalConfirmarGanho (escopo, valores, condição)
+  // Confirma ganho do orçamento com os dados do ModalConfirmarGanho (escopo, valores, condição).
+  // Estratégia otimista: fecha modal imediato + toast, save() em background.
+  // Antes: setOrcGanho(null) só após await save() → modal travava esperando rede.
   async function confirmarGanho(ganhoData) {
     const orc = orcGanho;
     if (!orc) return;
@@ -4025,8 +4027,16 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
         : o
     );
 
-    await save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos }).catch(console.error);
+    // Fecha modal e mostra toast IMEDIATAMENTE — não aguarda save()
     setOrcGanho(null);
+    toast.sucesso("Orçamento marcado como ganho");
+
+    // Save em background; falha mostra toast de erro
+    save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos })
+      .catch(e => {
+        console.error("Erro ao salvar orçamento ganho:", e);
+        toast.erro("Erro ao salvar — tente novamente");
+      });
   }
 
   async function excluirOrcamento(orcId) {
@@ -5662,7 +5672,12 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
     }
   }
 
-  // Chamado quando o usuário confirma o modal de ganho com os dados fechados
+  // Chamado quando o usuário confirma o modal de ganho com os dados fechados.
+  // Estratégia otimista: fecha modal imediatamente (UX rápida), mostra toast de
+  // sucesso, e deixa o save() rodar em background. Se falhar, toast de erro
+  // alerta o usuário (raro — mas evita perda silenciosa).
+  // Antes: setOrcGanho(null) acontecia DEPOIS do await save(), modal travava
+  // 1-3 segundos esperando rede. Agora fecha em <16ms.
   async function confirmarGanho(ganhoData) {
     const orc = orcGanho;
     if (!orc) return;
@@ -5705,8 +5720,16 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         : o
     );
 
-    await save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos }).catch(console.error);
+    // Fecha modal e mostra toast IMEDIATAMENTE — não aguarda save()
     setOrcGanho(null);
+    toast.sucesso("Orçamento marcado como ganho");
+
+    // Save em background. Falha silenciosa via toast de erro.
+    save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos })
+      .catch(e => {
+        console.error("Erro ao salvar orçamento ganho:", e);
+        toast.erro("Erro ao salvar — tente novamente");
+      });
   }
 
   async function salvarOrcamento(orc) {
@@ -7842,20 +7865,44 @@ function NumBR({ valor, onChange, onFocus: onFocusExt, onBlur: onBlurExt, min, m
 function InputQtdParcelas({ qtd, onCommit, style }) {
   const [valor, setValor] = useState(String(qtd));
   const focadoRef = useRef(false);
+  // Debounce do commit ao vivo: enquanto o usuário digita ou clica nas setas,
+  // espera 250ms de inatividade antes de chamar onCommit. Evita recálculo a cada
+  // tecla/clique (que regenera array de parcelas e datas — caro com 24 parcelas).
+  // Boa prática: feedback visual instantâneo no input + recomputação rápida mas
+  // sem flicker. Ref ao invés de state pra não causar re-render extra.
+  const debounceRef = useRef(null);
 
   // Sincroniza com valor externo quando não está em edição
   useEffect(() => {
     if (!focadoRef.current) setValor(String(qtd));
   }, [qtd]);
 
+  // Limpa timer pendente quando desmonta (evita commit em componente fantasma)
+  useEffect(() => () => { if (debounceRef.current) clearTimeout(debounceRef.current); }, []);
+
+  function commitValor(v) {
+    const n = parseInt(v, 10);
+    if (isNaN(n) || n < 1) return;
+    if (n > 24) return;
+    if (n !== qtd) onCommit(n);
+  }
+
   const handleChange = (e) => {
     const v = e.target.value;
     // Permite vazio ou dígitos
-    if (v === "" || /^\d{1,2}$/.test(v)) setValor(v);
+    if (v === "" || /^\d{1,2}$/.test(v)) {
+      setValor(v);
+      // Live update: cancela debounce anterior, agenda novo commit em 250ms.
+      // Usuário usando setas ↑↓ vê parcelas regenerarem quase instantâneo.
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(() => commitValor(v), 250);
+    }
   };
 
   const handleBlur = () => {
     focadoRef.current = false;
+    // No blur, força commit imediato (sem esperar debounce) e valida limites
+    if (debounceRef.current) { clearTimeout(debounceRef.current); debounceRef.current = null; }
     const n = parseInt(valor, 10);
     if (isNaN(n) || n < 1) { setValor("1"); onCommit(1); return; }
     if (n > 24) { setValor("24"); onCommit(24); return; }
