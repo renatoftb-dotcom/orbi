@@ -12,8 +12,11 @@
 //   Backend já bloqueia excluir último master e auto-exclusão.
 // ═══════════════════════════════════════════════════════════════
 
-function Admin({ usuario, data, save }) {
-  const [aba, setAba] = useState("manutencao");
+function Admin({ usuario, data, save, initialTab }) {
+  // Se initialTab vier, abre direto na aba escolhida (usado pelo Master quando
+  // clica em "Empresas", "Usuários Master" ou "Manutenção" no menu principal —
+  // Sprint 3 Bloco E. Senão fica em manutencao por padrão.
+  const [aba, setAba] = useState(initialTab || "manutencao");
   const [manutResult, setManutResult] = useState(null);
   const [manutLoading, setManutLoading] = useState(false);
   const [manutErro, setManutErro]       = useState(null);

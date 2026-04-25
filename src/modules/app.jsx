@@ -2,7 +2,7 @@
 // HOME MENU
 // ═══════════════════════════════════════════════════════════════
 
-function HomeMenu({ data, setAba, tentarTrocar }) {
+function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
   const nomeEscritorio = data?.escritorio?.nome || "";
   const [texto, setTexto] = useState("Bem-vindo");
   const [fase, setFase] = useState("bemvindo");
@@ -17,7 +17,14 @@ function HomeMenu({ data, setAba, tentarTrocar }) {
   const opacity = fase === "saindo" ? 0 : 1;
   const transform = fase === "saindo" ? "translateY(-8px)" : "translateY(0)";
 
-  const modulos = [
+  // Cards da home dependem do perfil. Master tem Dashboard com métricas +
+  // links pra Mensagens/Empresas/etc. Escritório vê os módulos dele.
+  const modulos = isMaster ? [
+    { k:"mensagens",              label:"Mensagens",      desc:"Caixa do time VICKE" },
+    { k:"admin:empresas",         label:"Empresas",       desc:"Gerenciar empresas cadastradas" },
+    { k:"admin:usuarios-master",  label:"Usuários Master", desc:"Acessos da equipe Vicke" },
+    { k:"admin:manutencao",       label:"Manutenção",     desc:"Jobs e operações do sistema" },
+  ] : [
     { k:"clientes",         label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
     { k:"projetos:etapas",  label:"Projetos",     desc:"Etapas e prazos" },
     { k:"obras",            label:"Obras",        desc:"Acompanhamento e execução" },
@@ -411,7 +418,18 @@ export default function ModuloClientesFornecedores() {
 
   const nomeEscritorio = data?.escritorio?.nome || "Vicke";
 
-  const MENU = [
+  // MENU dinâmico baseado no perfil:
+  // - Master (Renato/Vicke): foca em gestão da plataforma — Painel, Mensagens,
+  //   Empresas, Usuários Master, Manutenção. Não vê Clientes/Projetos/Obras
+  //   (irrelevantes pra quem opera o SaaS).
+  // - Escritório (Padovan, futuras empresas): menu original — gestão do dia a dia.
+  const MENU = isMaster ? [
+    { k:"home",                   label:"Painel" },
+    { k:"mensagens",              label:"Mensagens" },
+    { k:"admin:empresas",         label:"Empresas" },
+    { k:"admin:usuarios-master",  label:"Usuários Master" },
+    { k:"admin:manutencao",       label:"Manutenção" },
+  ] : [
     { k:"home",        label:"Início" },
     { k:"clientes",    label:"Clientes",     count: data?.clientes?.length },
     { k:"projetos", label:"Projetos", sub: [
@@ -539,19 +557,24 @@ export default function ModuloClientesFornecedores() {
             })}
           </nav>
           <div style={{ padding:"8px 8px 12px", borderTop:"1px solid #f3f4f6", display:"flex", flexDirection:"column", gap:2 }}>
-            <button style={itemStyle(aba==="escritorio")}
-              onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
-              onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
-              onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
-              Escritório
-            </button>
+            {/* Botão Escritório só pra perfil escritório (Master vê tudo no menu principal) */}
+            {!isMaster && (
+              <button style={itemStyle(aba==="escritorio")}
+                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
+                onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
+                onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
+                Escritório
+              </button>
+            )}
+            {/* Botão Escritório do Master (gerenciar dados da Vicke). Mantido aqui
+                discretamente — uso raro mas existe. */}
             {isMaster && (
-              <button style={itemStyle(aba==="admin")}
-                onMouseEnter={e => { if(aba!=="admin") e.currentTarget.style.background="#f9fafb"; }}
-                onMouseLeave={e => { if(aba!=="admin") e.currentTarget.style.background="transparent"; }}
-                onClick={() => { tentarTrocar(() => { setAba("admin"); setOrcamentoTelaCheia(null); }); }}>
+              <button style={itemStyle(aba==="escritorio")}
+                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
+                onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
+                onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  Admin
+                  Escritório
                   <span style={{ fontSize:9, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
                 </span>
               </button>
@@ -649,7 +672,7 @@ export default function ModuloClientesFornecedores() {
               }}
             />
           ) : (<>
-          {aba === "home"                   && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} />}
+          {aba === "home"                   && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
           {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
@@ -658,7 +681,13 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
+          {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
+          {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}
+          {aba === "admin:usuarios-master" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="usuarios-master" />}
+          {aba === "admin:manutencao" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="manutencao" />}
+          {/* Caixa de Mensagens — só Master */}
+          {aba === "mensagens" && isMaster && <Mensagens usuario={usuario} />}
           </>)}
           </>
         </div>
