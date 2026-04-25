@@ -15415,12 +15415,19 @@ export default function ModuloClientesFornecedores() {
                         ...itemStyle(ativoNeleMesmoOuSubitem),
                         justifyContent: "flex-start",
                         gap: 6,
-                        background: ativoNeleMesmoOuSubitem && aba !== k ? "transparent" : undefined,
+                        // CORREÇÃO: o botão "Projetos" só deve ter fundo cinza quando
+                        // a aba ativa é "projetos:*" (subitem). Se aba é "projetos"
+                        // exato OU outra coisa (ex: "home"), não destaca o pai —
+                        // só os subitens fazem destaque visual.
+                        // Antes: ativoNeleMesmoOuSubitem incluía aba==="projetos:*"
+                        // o que pintava o pai junto. Agora pai sempre transparente
+                        // (a menos que aba===k exato, raro).
+                        background: aba === k ? "#f3f4f6" : "transparent",
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
                         color: ativoNeleMesmoOuSubitem ? "#111" : "#6b7280",
                       }}
-                      onMouseEnter={e => { if (!ativoNeleMesmoOuSubitem) e.currentTarget.style.background="#f9fafb"; }}
-                      onMouseLeave={e => { if (!ativoNeleMesmoOuSubitem) e.currentTarget.style.background="transparent"; }}
+                      onMouseEnter={e => { if (aba !== k) e.currentTarget.style.background="#f9fafb"; }}
+                      onMouseLeave={e => { if (aba !== k) e.currentTarget.style.background="transparent"; }}
                       onClick={() => setProjetosAberto(o => !o)}
                     >
                       <span>{label}</span>
