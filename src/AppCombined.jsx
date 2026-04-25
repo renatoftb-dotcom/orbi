@@ -1155,6 +1155,15 @@ const api = {
       update: (id, u)      => put(`/admin/usuarios/${id}`, u),
       delete: (id)         => del(`/admin/usuarios/${id}`),
     },
+    mensagens: {
+      // Caixa de email do Master (Sprint 3 Bloco E).
+      // ?filtro=nao-lidas filtra só não lidas; sem param retorna todas.
+      list:        (filtro) => get(`/admin/mensagens${filtro ? `?filtro=${filtro}` : ""}`),
+      get:         (id)     => get(`/admin/mensagens/${id}`),
+      marcarLida:  (id)     => put(`/admin/mensagens/${id}/lida`, {}),
+      marcarNaoLida:(id)    => put(`/admin/mensagens/${id}/nao-lida`, {}),
+      delete:      (id)     => del(`/admin/mensagens/${id}`),
+    },
     manutencao: ()         => post("/admin/manutencao"),
   },
 
@@ -15377,15 +15386,14 @@ function Mensagens({ usuario }) {
 
   async function carregarLista() {
     try {
-      const params = filtro === "nao-lidas" ? "?filtro=nao-lidas" : "";
-      const res = await api.get(`/admin/mensagens${params}`);
-      if (res.ok) {
-        setMensagens(res.data.mensagens || []);
-        setNaoLidas(res.data.nao_lidas || 0);
-      } else {
-        setErro(res.error || "Erro ao carregar");
-      }
+      const filtroParam = filtro === "nao-lidas" ? "nao-lidas" : null;
+      const data = await api.admin.mensagens.list(filtroParam);
+      // api retorna json.data direto (req() já desempacota), então `data` aqui
+      // é { mensagens, total, nao_lidas }
+      setMensagens(data.mensagens || []);
+      setNaoLidas(data.nao_lidas || 0);
     } catch (e) {
+      console.error("Erro carregar mensagens:", e);
       setErro(e.message);
     }
     setLoading(false);
@@ -15396,16 +15404,14 @@ function Mensagens({ usuario }) {
     setSelecionada(msg);
     setCarregandoDet(true);
     try {
-      const res = await api.get(`/admin/mensagens/${msg.id}`);
-      if (res.ok) {
-        setSelecionada(res.data);
-        // Se ainda não lida, marca como lida automaticamente ao abrir
-        if (!res.data.lida) {
-          await api.put(`/admin/mensagens/${msg.id}/lida`, {});
-          // Atualiza lista local sem refetch
-          setMensagens(ms => ms.map(m => m.id === msg.id ? { ...m, lida: true } : m));
-          setNaoLidas(n => Math.max(0, n - 1));
-        }
+      const detalhe = await api.admin.mensagens.get(msg.id);
+      setSelecionada(detalhe);
+      // Se ainda não lida, marca como lida automaticamente ao abrir
+      if (!detalhe.lida) {
+        await api.admin.mensagens.marcarLida(msg.id);
+        // Atualiza lista local sem refetch
+        setMensagens(ms => ms.map(m => m.id === msg.id ? { ...m, lida: true } : m));
+        setNaoLidas(n => Math.max(0, n - 1));
       }
     } catch (e) {
       console.error("Erro ao abrir mensagem:", e);
@@ -15415,7 +15421,7 @@ function Mensagens({ usuario }) {
 
   async function marcarNaoLida(msg) {
     try {
-      await api.put(`/admin/mensagens/${msg.id}/nao-lida`, {});
+      await api.admin.mensagens.marcarNaoLida(msg.id);
       setMensagens(ms => ms.map(m => m.id === msg.id ? { ...m, lida: false } : m));
       setNaoLidas(n => n + 1);
       if (selecionada?.id === msg.id) {
@@ -15435,7 +15441,7 @@ function Mensagens({ usuario }) {
     });
     if (!ok) return;
     try {
-      await api.delete(`/admin/mensagens/${msg.id}`);
+      await api.admin.mensagens.delete(msg.id);
       setMensagens(ms => ms.filter(m => m.id !== msg.id));
       if (selecionada?.id === msg.id) setSelecionada(null);
       if (!msg.lida) setNaoLidas(n => Math.max(0, n - 1));

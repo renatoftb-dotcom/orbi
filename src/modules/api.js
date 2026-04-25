@@ -145,6 +145,15 @@ const api = {
       update: (id, u)      => put(`/admin/usuarios/${id}`, u),
       delete: (id)         => del(`/admin/usuarios/${id}`),
     },
+    mensagens: {
+      // Caixa de email do Master (Sprint 3 Bloco E).
+      // ?filtro=nao-lidas filtra só não lidas; sem param retorna todas.
+      list:        (filtro) => get(`/admin/mensagens${filtro ? `?filtro=${filtro}` : ""}`),
+      get:         (id)     => get(`/admin/mensagens/${id}`),
+      marcarLida:  (id)     => put(`/admin/mensagens/${id}/lida`, {}),
+      marcarNaoLida:(id)    => put(`/admin/mensagens/${id}/nao-lida`, {}),
+      delete:      (id)     => del(`/admin/mensagens/${id}`),
+    },
     manutencao: ()         => post("/admin/manutencao"),
   },
 
