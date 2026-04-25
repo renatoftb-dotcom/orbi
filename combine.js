@@ -20,6 +20,7 @@ const ORDER = [
   "escritorio.jsx",
   "admin.jsx",
   "login.jsx",
+  "mensagens.jsx",
   "app.jsx",
 ];
 
