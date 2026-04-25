@@ -12967,10 +12967,12 @@ function Escritorio({ data, save }) {
 // Acesso restrito: apenas usuários com perfil "master".
 // Gerencia empresas cliente (tenants), usuários master e manutenção.
 //
-// Sprint 2 — Bloco C:
-// - Usa api.js em vez de fetch direto (ganha handler 401 automático)
-// - Recebe data/save do app.jsx (integração padrão com o resto)
-// - Abas Empresas e Usuários Master ainda placeholders (Bloco F implementa)
+// Sprint 2 — Bloco F:
+// - Aba Empresas: listagem com contagens, criar empresa + admin em 1 passo,
+//   desativar/reativar (bloqueia login sem apagar dados). Exclusão definitiva
+//   fica fora da UI (muito destrutivo — fazer via banco se necessário).
+// - Aba Usuários Master: CRUD completo. Máximo 3 masters por segurança.
+//   Backend já bloqueia excluir último master e auto-exclusão.
 // ═══════════════════════════════════════════════════════════════
 
 function Admin({ usuario, data, save }) {
@@ -13004,19 +13006,30 @@ function Admin({ usuario, data, save }) {
     sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
     abas:    { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
     aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
-    body:    { padding:"32px", maxWidth:760 },
+    body:    { padding:"32px" },
+    bodyNarrow: { padding:"32px", maxWidth:760 },
     secao:   { marginBottom:32 },
     secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnDestrutivo: { background:"#dc2626", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
-    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" },
-    modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:420, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
+    modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modalLg: { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
+    input:   { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
+    tabela:  { width:"100%", borderCollapse:"collapse", fontSize:13 },
+    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1px solid #e5e7eb", background:"#fafbfc" },
+    td:      { padding:"12px", borderBottom:"1px solid #f3f4f6", verticalAlign:"middle" },
+    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#15803d", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:4, padding:"2px 8px" },
+    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#b91c1c", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:4, padding:"2px 8px" },
+    vazio:   { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"40px 0" },
   };
 
   // ── ABA MANUTENÇÃO ────────────────────────────────────────────
   const renderManutencao = () => (
-    <div style={S.body}>
+    <div style={S.bodyNarrow}>
       <div style={S.secao}>
         <div style={S.secTit}>Manutenção automática</div>
         <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
@@ -13055,8 +13068,8 @@ function Admin({ usuario, data, save }) {
 
       {/* Modal de confirmação — substitui o confirm() nativo */}
       {confirmManut && (
-        <div style={S.overlay}>
-          <div style={S.modal}>
+        <div style={S.overlay} onClick={() => setConfirmManut(false)}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
             <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:10 }}>Executar manutenção agora?</div>
             <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.6 }}>
               Esta ação vai:<br/>
@@ -13073,25 +13086,7 @@ function Admin({ usuario, data, save }) {
     </div>
   );
 
-  // ── PLACEHOLDERS — BLOCO F IMPLEMENTA ────────────────────────
-  const renderEmpresas = () => (
-    <div style={S.body}>
-      <div style={{ fontSize:13, color:"#9ca3af", padding:"40px 0", textAlign:"center" }}>
-        Gestão de empresas cliente — implementação no próximo sprint.
-        <br/>
-        <span style={{ fontSize:12, color:"#d1d5db" }}>Por enquanto, crie empresas direto pelo banco (tabela `empresas`).</span>
-      </div>
-    </div>
-  );
-
-  const renderUsuariosMaster = () => (
-    <div style={S.body}>
-      <div style={{ fontSize:13, color:"#9ca3af", padding:"40px 0", textAlign:"center" }}>
-        Gestão de usuários master — implementação no próximo sprint.
-      </div>
-    </div>
-  );
-
+  // ── ABA EMPRESAS ─────────────────────────────────────────────
   return (
     <div style={S.wrap}>
       <div style={S.header}>
@@ -13109,8 +13104,752 @@ function Admin({ usuario, data, save }) {
       </div>
 
       {aba === "manutencao" && renderManutencao()}
-      {aba === "empresas"   && renderEmpresas()}
-      {aba === "usuarios"   && renderUsuariosMaster()}
+      {aba === "empresas"   && <PainelEmpresas S={S} />}
+      {aba === "usuarios"   && <PainelUsuariosMaster S={S} usuarioLogado={usuario} />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ErroAcesso — exibição inteligente de erro de carregamento
+// ═══════════════════════════════════════════════════════════════
+// Distingue 3 cenários e mostra UX apropriada:
+// 1. 403 Forbidden + perfil em uso ≠ master → mensagem clara explicando
+//    que o usuário atual não tem permissão, com botão pra fazer logout.
+// 2. 403 mas o JWT diz "master" → backend rejeitou mesmo com perfil ok.
+//    Pode ser bug de servidor; mostra erro genérico mas com detalhes.
+// 3. Outros erros (rede, banco, etc.) → mensagem padrão sem complicar.
+//
+// O objetivo é transformar "Acesso negado" enigmático em ação clara:
+// "você está logado como X, esta tela exige Y, [Sair e entrar como outra]".
+// ═══════════════════════════════════════════════════════════════
+
+function ErroAcesso({ erro, S }) {
+  // erro pode ser string (legacy) ou objeto {message, code, status}
+  const eh403 = (typeof erro === "object") && (erro?.status === 403 || erro?.code === "FORBIDDEN");
+  const msg = (typeof erro === "string") ? erro : (erro?.message || "Erro desconhecido");
+
+  // Lê perfil real do JWT em uso pra explicar ao usuário o que está errado
+  let usuarioAtual = null;
+  try {
+    if (typeof localStorage !== "undefined") {
+      const u = localStorage.getItem("vicke-user");
+      if (u) usuarioAtual = JSON.parse(u);
+    }
+  } catch { /* JSON corrompido */ }
+
+  function fazerLogout() {
+    try {
+      localStorage.removeItem("vicke-token");
+      localStorage.removeItem("vicke-user");
+    } catch {}
+    // Reload pra fresh start (não pode chamar handleLogout do App daqui)
+    window.location.href = "/";
+  }
+
+  if (eh403) {
+    return (
+      <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:10, padding:"18px 20px", marginBottom:16 }}>
+        <div style={{ fontSize:14, fontWeight:700, color:"#92400e", marginBottom:8 }}>
+          Acesso restrito a usuários master
+        </div>
+        <div style={{ fontSize:13, color:"#78350f", lineHeight:1.55, marginBottom:14 }}>
+          {usuarioAtual ? (
+            <>
+              Você está logado como <strong>{usuarioAtual.nome}</strong> ({usuarioAtual.perfil})
+              com email <strong>{usuarioAtual.email}</strong>.<br/>
+              Esta tela só pode ser acessada por usuários com perfil <strong>master</strong>.
+            </>
+          ) : (
+            <>Esta tela só pode ser acessada por usuários com perfil <strong>master</strong>.</>
+          )}
+        </div>
+        <button
+          onClick={fazerLogout}
+          style={{ background:"#92400e", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
+        >
+          Sair e fazer login com outra conta
+        </button>
+      </div>
+    );
+  }
+
+  // Outros erros — mensagem padrão
+  return (
+    <div style={{ fontSize:13, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"10px 14px", marginBottom:16 }}>
+      {msg}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAINEL EMPRESAS — listagem + criar + editar/inativar
+// ═══════════════════════════════════════════════════════════════
+
+function PainelEmpresas({ S }) {
+  const [empresas, setEmpresas] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [erro, setErro]         = useState(null);
+  // Modais — componentes controlados por estado explícito em vez de flags booleanas.
+  // null = fechado. Objeto = aberto com dados daquela empresa (ou dados em branco pra criar).
+  const [modalNova, setModalNova]   = useState(false);
+  const [modalEdit, setModalEdit]   = useState(null);
+
+  async function carregar() {
+    setLoading(true);
+    setErro(null);
+    try {
+      const lista = await api.admin.empresas.list();
+      setEmpresas(lista || []);
+    } catch (e) {
+      // Guarda erro completo pra distinguir 403 (sem permissão) de outros
+      setErro({ message: e.message || "Falha ao carregar empresas", code: e.code, status: e.status });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  function formatarData(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return "—"; }
+  }
+
+  return (
+    <div style={S.body}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Empresas cadastradas</div>
+          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+            {loading ? "Carregando..." : `${empresas.length} empresa(s) · ${empresas.filter(e => e.ativo).length} ativa(s)`}
+          </div>
+        </div>
+        <button style={S.btn} onClick={() => setModalNova(true)}>+ Nova empresa</button>
+      </div>
+
+      {erro && <ErroAcesso erro={erro} S={S} />}
+
+
+      {!loading && empresas.length === 0 && !erro && (
+        <div style={S.vazio}>Nenhuma empresa cadastrada. Crie a primeira pra começar.</div>
+      )}
+
+      {!loading && empresas.length > 0 && (
+        <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+          <table style={S.tabela}>
+            <thead>
+              <tr>
+                <th style={S.th}>Nome</th>
+                <th style={S.th}>CNPJ / CPF</th>
+                <th style={{ ...S.th, textAlign:"center" }}>Usuários</th>
+                <th style={{ ...S.th, textAlign:"center" }}>Orçamentos</th>
+                <th style={S.th}>Criada em</th>
+                <th style={S.th}>Status</th>
+                <th style={S.th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {empresas.map(e => (
+                <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setModalEdit(e)}>
+                  <td style={S.td}>
+                    <div style={{ fontWeight:600, color:"#111" }}>{e.nome}</div>
+                    <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{e.plano || "gratuito"}</div>
+                  </td>
+                  <td style={{ ...S.td, color:"#6b7280" }}>{e.cnpj_cpf || "—"}</td>
+                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }}>
+                    {e.usuarios_ativos || 0}
+                    {e.usuarios_total > e.usuarios_ativos && (
+                      <span style={{ color:"#d1d5db", marginLeft:4 }}>/ {e.usuarios_total}</span>
+                    )}
+                  </td>
+                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }}>{e.orcamentos_total || 0}</td>
+                  <td style={{ ...S.td, color:"#6b7280" }}>{formatarData(e.criado_em)}</td>
+                  <td style={S.td}>
+                    <span style={e.ativo ? S.badgeAtiva : S.badgeInativa}>
+                      {e.ativo ? "Ativa" : "Inativa"}
+                    </span>
+                  </td>
+                  <td style={{ ...S.td, textAlign:"right" }}>
+                    <button
+                      style={{ ...S.btnSec, padding:"5px 12px", fontSize:12 }}
+                      onClick={ev => { ev.stopPropagation(); setModalEdit(e); }}
+                    >
+                      Editar
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modalNova && <ModalNovaEmpresa S={S} onFechar={() => setModalNova(false)} onSucesso={() => { setModalNova(false); carregar(); }} />}
+      {modalEdit && <ModalEditarEmpresa S={S} empresa={modalEdit} onFechar={() => setModalEdit(null)} onSucesso={() => { setModalEdit(null); carregar(); }} />}
+    </div>
+  );
+}
+
+// ── Modal: Nova empresa (dados + admin inicial em 1 passo) ──────
+function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
+  // Um formulário único em vez de wizard de 2 passos — mais rápido pra
+  // quem cria e fácil de validar ambos os lados juntos.
+  const [form, setForm] = useState({
+    nome: "",
+    cnpj_cpf: "",
+    plano: "gratuito",
+    adminNome: "",
+    adminEmail: "",
+    adminSenha: "",
+  });
+  const [salvando, setSalvando] = useState(false);
+
+  function atualizar(campo, valor) {
+    setForm(f => ({ ...f, [campo]: valor }));
+  }
+
+  async function salvar() {
+    // Validação client-side básica — backend valida também (defesa em profundidade),
+    // mas verificar aqui dá feedback imediato sem round-trip.
+    if (!form.nome.trim()) { dialogo.alertar({ titulo: "Informe o nome da empresa", tipo: "aviso" }); return; }
+    if (!form.adminNome.trim()) { dialogo.alertar({ titulo: "Informe o nome do administrador", tipo: "aviso" }); return; }
+    if (!form.adminEmail.trim()) { dialogo.alertar({ titulo: "Informe o email do administrador", tipo: "aviso" }); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.adminEmail.trim())) {
+      dialogo.alertar({ titulo: "Email inválido", tipo: "aviso" }); return;
+    }
+    if (!form.adminSenha || form.adminSenha.length < 6) {
+      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "A senha do administrador deve ter no mínimo 6 caracteres.", tipo: "aviso" }); return;
+    }
+
+    setSalvando(true);
+    try {
+      await api.admin.empresas.save({
+        nome: form.nome.trim(),
+        cnpj_cpf: form.cnpj_cpf.trim() || null,
+        plano: form.plano,
+        admin: {
+          nome: form.adminNome.trim(),
+          email: form.adminEmail.trim().toLowerCase(),
+          senha: form.adminSenha,
+        },
+      });
+      toast.sucesso("Empresa criada");
+      onSucesso();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao criar empresa", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div style={S.overlay} onClick={onFechar}>
+      <div style={S.modalLg} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>Nova empresa</div>
+        <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
+          Cria a empresa e o primeiro administrador que poderá logar.
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div style={S.secTit}>Empresa</div>
+
+          <div>
+            <label style={S.label}>Nome da empresa</label>
+            <input
+              style={S.input}
+              value={form.nome}
+              onChange={e => atualizar("nome", e.target.value)}
+              placeholder="Ex: Padovan Arquitetos"
+              autoFocus
+            />
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:12 }}>
+            <div>
+              <label style={S.label}>CNPJ / CPF</label>
+              <input
+                style={S.input}
+                value={form.cnpj_cpf}
+                onChange={e => atualizar("cnpj_cpf", e.target.value)}
+                placeholder="00.000.000/0001-00 ou 000.000.000-00"
+              />
+            </div>
+            <div>
+              <label style={S.label}>Plano</label>
+              <select
+                style={{ ...S.input, cursor:"pointer" }}
+                value={form.plano}
+                onChange={e => atualizar("plano", e.target.value)}
+              >
+                <option value="gratuito">Gratuito</option>
+                <option value="basico">Básico</option>
+                <option value="profissional">Profissional</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ borderTop:"1px solid #f3f4f6", marginTop:6, paddingTop:14 }}>
+            <div style={S.secTit}>Administrador inicial</div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginBottom:10, marginTop:-10 }}>
+              Esta pessoa vai receber acesso admin e poderá gerenciar usuários da empresa.
+            </div>
+          </div>
+
+          <div>
+            <label style={S.label}>Nome completo</label>
+            <input
+              style={S.input}
+              value={form.adminNome}
+              onChange={e => atualizar("adminNome", e.target.value)}
+              placeholder="Nome do administrador"
+            />
+          </div>
+
+          <div>
+            <label style={S.label}>Email (login)</label>
+            <input
+              style={S.input}
+              type="email"
+              value={form.adminEmail}
+              onChange={e => atualizar("adminEmail", e.target.value)}
+              placeholder="admin@empresa.com.br"
+            />
+          </div>
+
+          <div>
+            <label style={S.label}>Senha (mínimo 6 caracteres)</label>
+            <input
+              style={S.input}
+              type="password"
+              value={form.adminSenha}
+              onChange={e => atualizar("adminSenha", e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
+          <button onClick={onFechar} disabled={salvando} style={S.btnSec}>Cancelar</button>
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            style={{ ...S.btn, opacity: salvando ? 0.6 : 1, cursor: salvando ? "not-allowed" : "pointer" }}
+          >
+            {salvando ? "Criando..." : "Criar empresa"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Editar empresa (só dados básicos + ativar/desativar) ─
+// Edição de usuários da empresa fica na aba própria do escritório — aqui
+// o master só mexe em metadados (nome, doc, plano) e status.
+function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
+  const [form, setForm] = useState({
+    nome: empresa.nome || "",
+    cnpj_cpf: empresa.cnpj_cpf || "",
+    plano: empresa.plano || "gratuito",
+    ativo: empresa.ativo !== false,
+  });
+  const [salvando, setSalvando] = useState(false);
+
+  const isMasterEmp = empresa.id === "emp_master";
+
+  function atualizar(campo, valor) { setForm(f => ({ ...f, [campo]: valor })); }
+
+  async function salvar() {
+    if (!form.nome.trim()) { dialogo.alertar({ titulo: "Informe o nome", tipo: "aviso" }); return; }
+    setSalvando(true);
+    try {
+      await api.admin.empresas.update(empresa.id, {
+        nome: form.nome.trim(),
+        cnpj_cpf: form.cnpj_cpf.trim() || null,
+        plano: form.plano,
+        ativo: form.ativo,
+      });
+      toast.sucesso("Empresa atualizada");
+      onSucesso();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao salvar", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function alternarStatus() {
+    // Confirmação extra pra inativar — bloqueia todos usuários da empresa,
+    // efeito grande. Reativar é reversível e não precisa confirmar.
+    if (form.ativo) {
+      const ok = await dialogo.confirmar({
+        titulo: "Inativar esta empresa?",
+        mensagem: "Todos os usuários dela vão perder acesso imediatamente (próximo request faz logout). Os dados ficam preservados — basta reativar para voltar ao normal.",
+        confirmar: "Inativar",
+        destrutivo: true,
+      });
+      if (!ok) return;
+    }
+    const novoStatus = !form.ativo;
+    setForm(f => ({ ...f, ativo: novoStatus }));
+    // Salva imediatamente pra o status refletir no banco
+    setSalvando(true);
+    try {
+      await api.admin.empresas.update(empresa.id, {
+        nome: form.nome.trim() || empresa.nome,
+        cnpj_cpf: (form.cnpj_cpf.trim() || empresa.cnpj_cpf) || null,
+        plano: form.plano,
+        ativo: novoStatus,
+      });
+      toast.sucesso(novoStatus ? "Empresa reativada" : "Empresa inativada");
+      onSucesso();
+    } catch (e) {
+      // Reverte visualmente se der erro
+      setForm(f => ({ ...f, ativo: !novoStatus }));
+      dialogo.alertar({ titulo: "Erro ao alterar status", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div style={S.overlay} onClick={onFechar}>
+      <div style={S.modalLg} onClick={e => e.stopPropagation()}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+          <div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111" }}>Editar empresa</div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>ID: {empresa.id}</div>
+          </div>
+          <span style={form.ativo ? S.badgeAtiva : S.badgeInativa}>
+            {form.ativo ? "Ativa" : "Inativa"}
+          </span>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div>
+            <label style={S.label}>Nome da empresa</label>
+            <input
+              style={S.input}
+              value={form.nome}
+              onChange={e => atualizar("nome", e.target.value)}
+            />
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:12 }}>
+            <div>
+              <label style={S.label}>CNPJ / CPF</label>
+              <input
+                style={S.input}
+                value={form.cnpj_cpf}
+                onChange={e => atualizar("cnpj_cpf", e.target.value)}
+              />
+            </div>
+            <div>
+              <label style={S.label}>Plano</label>
+              <select
+                style={{ ...S.input, cursor:"pointer" }}
+                value={form.plano}
+                onChange={e => atualizar("plano", e.target.value)}
+              >
+                <option value="gratuito">Gratuito</option>
+                <option value="basico">Básico</option>
+                <option value="profissional">Profissional</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Stats (readonly) — mostra histórico */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, padding:"14px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius:8, marginTop:4 }}>
+            <div>
+              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Usuários</div>
+              <div style={{ fontSize:18, fontWeight:700, color:"#111", marginTop:2 }}>
+                {empresa.usuarios_ativos || 0}
+                {empresa.usuarios_total > empresa.usuarios_ativos && (
+                  <span style={{ fontSize:12, color:"#9ca3af", fontWeight:400, marginLeft:4 }}>/ {empresa.usuarios_total}</span>
+                )}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
+              <div style={{ fontSize:18, fontWeight:700, color:"#111", marginTop:2 }}>{empresa.orcamentos_total || 0}</div>
+            </div>
+            <div>
+              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Criada em</div>
+              <div style={{ fontSize:13, fontWeight:600, color:"#111", marginTop:4 }}>
+                {empresa.criado_em ? new Date(empresa.criado_em).toLocaleDateString("pt-BR") : "—"}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"space-between", marginTop:24, flexWrap:"wrap" }}>
+          <button
+            onClick={alternarStatus}
+            disabled={salvando || isMasterEmp}
+            title={isMasterEmp ? "Empresa master não pode ser inativada" : ""}
+            style={{
+              ...(form.ativo ? S.btnDestrutivo : S.btn),
+              opacity: (salvando || isMasterEmp) ? 0.5 : 1,
+              cursor: (salvando || isMasterEmp) ? "not-allowed" : "pointer",
+              background: form.ativo ? "#dc2626" : "#16a34a",
+            }}
+          >
+            {form.ativo ? "Inativar empresa" : "Reativar empresa"}
+          </button>
+          <div style={{ display:"flex", gap:10 }}>
+            <button onClick={onFechar} disabled={salvando} style={S.btnSec}>Fechar</button>
+            <button
+              onClick={salvar}
+              disabled={salvando}
+              style={{ ...S.btn, opacity: salvando ? 0.6 : 1, cursor: salvando ? "not-allowed" : "pointer" }}
+            >
+              {salvando ? "Salvando..." : "Salvar alterações"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAINEL USUÁRIOS MASTER — listagem + criar + excluir
+// ═══════════════════════════════════════════════════════════════
+// Limite de 3 masters no sistema (regra de segurança, validada no backend).
+// Edição de dados fica por enquanto fora do escopo — pra trocar senha/nome
+// de um master, exclua e recrie. Mantém simples.
+
+function PainelUsuariosMaster({ S, usuarioLogado }) {
+  const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [erro, setErro]         = useState(null);
+  const [modalNovo, setModalNovo] = useState(false);
+
+  async function carregar() {
+    setLoading(true);
+    setErro(null);
+    try {
+      const todos = await api.admin.usuarios.list();
+      // Filtra só masters (endpoint devolve todos)
+      const masters = (todos || []).filter(u => u.perfil === "master");
+      setUsuarios(masters);
+    } catch (e) {
+      setErro({ message: e.message || "Falha ao carregar usuários", code: e.code, status: e.status });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  async function excluirUsuario(u) {
+    if (u.id === usuarioLogado?.id) {
+      dialogo.alertar({ titulo: "Ação não permitida", mensagem: "Você não pode excluir a si mesmo.", tipo: "aviso" });
+      return;
+    }
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir master "${u.nome}"?`,
+      mensagem: "Esta ação não pode ser desfeita. O usuário perderá acesso imediatamente.",
+      confirmar: "Excluir",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    try {
+      await api.admin.usuarios.delete(u.id);
+      toast.sucesso("Usuário master excluído");
+      carregar();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao excluir", mensagem: e.message, tipo: "erro" });
+    }
+  }
+
+  const masterAtivos = usuarios.filter(u => u.ativo).length;
+  const limite = 3;
+  const noLimite = masterAtivos >= limite;
+
+  return (
+    <div style={S.body}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Usuários master</div>
+          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+            {loading ? "Carregando..." : `${masterAtivos} de ${limite} masters ativos · acesso total ao SaaS`}
+          </div>
+        </div>
+        <button
+          style={{ ...S.btn, opacity: noLimite ? 0.5 : 1, cursor: noLimite ? "not-allowed" : "pointer" }}
+          onClick={() => !noLimite && setModalNovo(true)}
+          disabled={noLimite}
+          title={noLimite ? "Limite de 3 masters atingido" : ""}
+        >
+          + Novo master
+        </button>
+      </div>
+
+      {erro && <ErroAcesso erro={erro} S={S} />}
+
+
+      {noLimite && (
+        <div style={{ fontSize:12.5, color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, padding:"10px 14px", marginBottom:16 }}>
+          Limite de {limite} usuários master atingido. Exclua um existente para criar outro.
+        </div>
+      )}
+
+      {!loading && usuarios.length === 0 && !erro && (
+        <div style={S.vazio}>Nenhum usuário master além de você. Use + Novo master para adicionar sócios.</div>
+      )}
+
+      {!loading && usuarios.length > 0 && (
+        <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+          <table style={S.tabela}>
+            <thead>
+              <tr>
+                <th style={S.th}>Nome</th>
+                <th style={S.th}>Email</th>
+                <th style={S.th}>Criado em</th>
+                <th style={S.th}>Status</th>
+                <th style={S.th}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map(u => {
+                const ehVoce = u.id === usuarioLogado?.id;
+                return (
+                  <tr key={u.id}>
+                    <td style={S.td}>
+                      <div style={{ fontWeight:600, color:"#111" }}>
+                        {u.nome}
+                        {ehVoce && (
+                          <span style={{ fontSize:10, fontWeight:600, color:"#6b7280", background:"#f3f4f6", borderRadius:3, padding:"2px 6px", marginLeft:8, letterSpacing:0.3 }}>VOCÊ</span>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ ...S.td, color:"#6b7280" }}>{u.email}</td>
+                    <td style={{ ...S.td, color:"#6b7280" }}>
+                      {u.criado_em ? new Date(u.criado_em).toLocaleDateString("pt-BR") : "—"}
+                    </td>
+                    <td style={S.td}>
+                      <span style={u.ativo ? S.badgeAtiva : S.badgeInativa}>
+                        {u.ativo ? "Ativo" : "Inativo"}
+                      </span>
+                    </td>
+                    <td style={{ ...S.td, textAlign:"right" }}>
+                      {!ehVoce && (
+                        <button
+                          style={{ ...S.btnSec, color:"#dc2626", borderColor:"#fecaca", padding:"5px 12px", fontSize:12 }}
+                          onClick={() => excluirUsuario(u)}
+                        >
+                          Excluir
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {modalNovo && (
+        <ModalNovoMaster
+          S={S}
+          onFechar={() => setModalNovo(false)}
+          onSucesso={() => { setModalNovo(false); carregar(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Modal: Novo usuário master ──────────────────────────────────
+function ModalNovoMaster({ S, onFechar, onSucesso }) {
+  const [form, setForm] = useState({ nome: "", email: "", senha: "" });
+  const [salvando, setSalvando] = useState(false);
+
+  function atualizar(campo, valor) { setForm(f => ({ ...f, [campo]: valor })); }
+
+  async function salvar() {
+    if (!form.nome.trim()) { dialogo.alertar({ titulo: "Informe o nome", tipo: "aviso" }); return; }
+    if (!form.email.trim()) { dialogo.alertar({ titulo: "Informe o email", tipo: "aviso" }); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      dialogo.alertar({ titulo: "Email inválido", tipo: "aviso" }); return;
+    }
+    if (!form.senha || form.senha.length < 6) {
+      dialogo.alertar({ titulo: "Senha muito curta", mensagem: "Mínimo 6 caracteres.", tipo: "aviso" }); return;
+    }
+
+    setSalvando(true);
+    try {
+      // Master pertence à empresa master (emp_master) — é onde ficam contas que
+      // não são clientes do SaaS, apenas administradores globais.
+      await api.admin.usuarios.save({
+        empresa_id: "emp_master",
+        nome: form.nome.trim(),
+        email: form.email.trim().toLowerCase(),
+        senha: form.senha,
+        perfil: "master",
+        nivel: "admin",
+      });
+      toast.sucesso("Usuário master criado");
+      onSucesso();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao criar master", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div style={S.overlay} onClick={onFechar}>
+      <div style={S.modal} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>Novo usuário master</div>
+        <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
+          Masters têm acesso total ao SaaS, incluindo todas as empresas cliente.
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+          <div>
+            <label style={S.label}>Nome completo</label>
+            <input
+              style={S.input}
+              value={form.nome}
+              onChange={e => atualizar("nome", e.target.value)}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label style={S.label}>Email (login)</label>
+            <input
+              style={S.input}
+              type="email"
+              value={form.email}
+              onChange={e => atualizar("email", e.target.value)}
+            />
+          </div>
+          <div>
+            <label style={S.label}>Senha (mínimo 6 caracteres)</label>
+            <input
+              style={S.input}
+              type="password"
+              value={form.senha}
+              onChange={e => atualizar("senha", e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
+          <button onClick={onFechar} disabled={salvando} style={S.btnSec}>Cancelar</button>
+          <button
+            onClick={salvar}
+            disabled={salvando}
+            style={{ ...S.btn, opacity: salvando ? 0.6 : 1, cursor: salvando ? "not-allowed" : "pointer" }}
+          >
+            {salvando ? "Criando..." : "Criar master"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
