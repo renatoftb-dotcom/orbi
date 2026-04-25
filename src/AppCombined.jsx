@@ -454,436 +454,6 @@ var SEED = {
 var ESTADOS_BR = ["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"];
 var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura","Cobertura","Elétrico","Hidráulico","Revestimento","Acabamento","Ferramentas","Tintas","Vidros","Geral","Outros"];
 
-// ═══════════════════════════════════════════════════════════════
-// SISTEMA DE DIÁLOGOS E TOASTS (substitui alert/confirm nativos)
-// ═══════════════════════════════════════════════════════════════
-// Rationale:
-// - Diálogos nativos (alert/confirm) têm UX feia, mostram URL do site,
-//   quebram o fluxo visual e não combinam com o design do VICKE.
-// - Este sistema oferece 3 helpers globais chamáveis de qualquer função
-//   (não só dentro de componentes React) pra facilitar migração:
-//     toast.sucesso(msg)   → balão verde que some em 3s (avisos positivos)
-//     toast.erro(msg)      → balão vermelho que some em 4s
-//     dialogo.confirmar({titulo, mensagem, confirmar, destrutivo}) → Promise<boolean>
-//     dialogo.alertar({titulo, mensagem, tipo}) → Promise<void>
-//
-// Arquitetura:
-// - Estado vive num objeto _dialogState fora do React.
-// - Listeners são callbacks registrados por DialogosHost.
-// - DialogosHost é um componente renderizado uma vez no app.jsx que
-//   desenha os modais/toasts ativos.
-// ═══════════════════════════════════════════════════════════════
-
-var _dialogState = {
-  modais: [],      // { id, tipo: "confirm"|"alert", titulo, mensagem, confirmar, cancelar, destrutivo, tipoAlert, resolver }
-  toasts: [],      // { id, tipo: "sucesso"|"erro", mensagem }
-  listeners: new Set(),
-  _nextId: 1,
-};
-
-function _dialogNotify() {
-  _dialogState.listeners.forEach(fn => { try { fn(); } catch {} });
-}
-
-// API pública
-var toast = {
-  sucesso: (mensagem, duracao = 3000) => {
-    const id = _dialogState._nextId++;
-    _dialogState.toasts.push({ id, tipo: "sucesso", mensagem });
-    _dialogNotify();
-    setTimeout(() => {
-      _dialogState.toasts = _dialogState.toasts.filter(t => t.id !== id);
-      _dialogNotify();
-    }, duracao);
-  },
-  erro: (mensagem, duracao = 4000) => {
-    const id = _dialogState._nextId++;
-    _dialogState.toasts.push({ id, tipo: "erro", mensagem });
-    _dialogNotify();
-    setTimeout(() => {
-      _dialogState.toasts = _dialogState.toasts.filter(t => t.id !== id);
-      _dialogNotify();
-    }, duracao);
-  },
-};
-
-var dialogo = {
-  // Retorna Promise<boolean> — true se confirmou, false se cancelou.
-  // Use async/await: const ok = await dialogo.confirmar({...});
-  confirmar: (opts) => {
-    return new Promise(resolver => {
-      const id = _dialogState._nextId++;
-      _dialogState.modais.push({
-        id,
-        tipo: "confirm",
-        titulo: opts.titulo || "Confirmar?",
-        mensagem: opts.mensagem || "",
-        confirmar: opts.confirmar || "Confirmar",
-        cancelar: opts.cancelar || "Cancelar",
-        destrutivo: !!opts.destrutivo,
-        resolver,
-      });
-      _dialogNotify();
-    });
-  },
-  // Retorna Promise<void> — resolve quando usuário clica OK.
-  alertar: (opts) => {
-    return new Promise(resolver => {
-      const id = _dialogState._nextId++;
-      _dialogState.modais.push({
-        id,
-        tipo: "alert",
-        titulo: opts.titulo || "",
-        mensagem: opts.mensagem || "",
-        confirmar: opts.confirmar || "OK",
-        tipoAlert: opts.tipo || "info", // info | erro | sucesso | aviso
-        resolver,
-      });
-      _dialogNotify();
-    });
-  },
-};
-
-// Host React: renderiza modais e toasts. Deve ser montado UMA VEZ
-// no topo da app (app.jsx, dentro do root mas independente das telas).
-function DialogosHost() {
-  const [, forceRender] = useState(0);
-
-  useEffect(() => {
-    const fn = () => forceRender(n => n + 1);
-    _dialogState.listeners.add(fn);
-    return () => { _dialogState.listeners.delete(fn); };
-  }, []);
-
-  function fecharModal(id, valor) {
-    const m = _dialogState.modais.find(x => x.id === id);
-    if (!m) return;
-    _dialogState.modais = _dialogState.modais.filter(x => x.id !== id);
-    _dialogNotify();
-    if (m.resolver) m.resolver(valor);
-  }
-
-  // Suporte a ESC pra fechar modal ativo (cancela em confirm, fecha em alert)
-  useEffect(() => {
-    const handler = (e) => {
-      if (e.key !== "Escape") return;
-      const m = _dialogState.modais[_dialogState.modais.length - 1];
-      if (!m) return;
-      fecharModal(m.id, m.tipo === "confirm" ? false : undefined);
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, []);
-
-  const modais = _dialogState.modais;
-  const toasts = _dialogState.toasts;
-  const modalTopo = modais[modais.length - 1] || null;
-
-  const coresAlert = {
-    info:    { borda: "#e5e7eb", texto: "#111" },
-    sucesso: { borda: "#bbf7d0", texto: "#15803d" },
-    erro:    { borda: "#fecaca", texto: "#b91c1c" },
-    aviso:   { borda: "#fde68a", texto: "#b45309" },
-  };
-
-  return (
-    <>
-      {/* Modal ativo — só renderiza o último da fila (topo) */}
-      {modalTopo && (
-        <div
-          onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? false : undefined)}
-          style={{
-            position: "fixed", inset: 0,
-            background: "rgba(0,0,0,0.4)",
-            zIndex: 100000,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            padding: 20,
-            fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
-            animation: "vickeDialogFade 0.15s ease",
-          }}
-        >
-          <div
-            onClick={e => e.stopPropagation()}
-            style={{
-              background: "#fff",
-              border: `1px solid ${modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.borda || "#e5e7eb") : "#e5e7eb"}`,
-              borderRadius: 12,
-              padding: "24px 28px",
-              maxWidth: 440,
-              width: "100%",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
-              animation: "vickeDialogPop 0.18s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
-            }}
-          >
-            {modalTopo.titulo && (
-              <div style={{
-                fontSize: 15,
-                fontWeight: 700,
-                color: modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.texto || "#111") : "#111",
-                marginBottom: modalTopo.mensagem ? 10 : 18,
-              }}>
-                {modalTopo.titulo}
-              </div>
-            )}
-            {modalTopo.mensagem && (
-              <div style={{
-                fontSize: 13.5,
-                color: "#4b5563",
-                lineHeight: 1.55,
-                marginBottom: 20,
-                whiteSpace: "pre-wrap",
-              }}>
-                {modalTopo.mensagem}
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-              {modalTopo.tipo === "confirm" && (
-                <button
-                  onClick={() => fecharModal(modalTopo.id, false)}
-                  style={{
-                    background: "#fff",
-                    color: "#6b7280",
-                    border: "1px solid #e5e7eb",
-                    borderRadius: 8,
-                    padding: "8px 18px",
-                    fontSize: 13,
-                    cursor: "pointer",
-                    fontFamily: "inherit",
-                  }}
-                >
-                  {modalTopo.cancelar}
-                </button>
-              )}
-              <button
-                autoFocus
-                onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? true : undefined)}
-                style={{
-                  background: modalTopo.destrutivo ? "#dc2626" : "#111",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "8px 20px",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                {modalTopo.confirmar}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Toasts — pilha no canto superior direito. Recente embaixo. */}
-      {toasts.length > 0 && (
-        <div style={{
-          position: "fixed",
-          top: 20,
-          right: 20,
-          zIndex: 100001,
-          display: "flex",
-          flexDirection: "column",
-          gap: 8,
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
-          pointerEvents: "none",
-        }}>
-          {toasts.map(t => (
-            <div
-              key={t.id}
-              style={{
-                background: "#fff",
-                border: `1px solid ${t.tipo === "sucesso" ? "#bbf7d0" : "#fecaca"}`,
-                borderLeft: `4px solid ${t.tipo === "sucesso" ? "#16a34a" : "#dc2626"}`,
-                borderRadius: 8,
-                padding: "10px 14px 10px 12px",
-                fontSize: 13,
-                color: t.tipo === "sucesso" ? "#15803d" : "#b91c1c",
-                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
-                minWidth: 240,
-                maxWidth: 360,
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontWeight: 500,
-                animation: "vickeToastSlide 0.24s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
-                pointerEvents: "auto",
-              }}
-            >
-              <span style={{ fontSize: 14, flexShrink: 0 }}>
-                {t.tipo === "sucesso" ? "✓" : "⚠"}
-              </span>
-              <span>{t.mensagem}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <style>{`
-        @keyframes vickeDialogFade { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes vickeDialogPop {
-          from { opacity: 0; transform: translateY(-8px) scale(0.98); }
-          to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes vickeToastSlide {
-          from { opacity: 0; transform: translateX(40px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-      `}</style>
-    </>
-  );
-}
-
-// ═══════════════════════════════════════════════════════════════
-// VERSION WATCHER — detecta novos deploys e avisa o usuário
-// ═══════════════════════════════════════════════════════════════
-// Problema resolvido: mesmo com vercel.json definindo no-cache pro HTML,
-// uma sessão aberta há horas continua rodando o JS antigo. Quando o master
-// faz npm run cpush, quem está com a app aberta não vê as mudanças até dar
-// F5 — e pode cair em bugs como "escritório não aparece no PDF" porque
-// o JS em memória não sabe da nova coluna que o backend já espera.
-//
-// Como funciona:
-// 1. No boot, captura o hash do bundle principal (ex: "index-Bkt6z0GT.js")
-//    lendo a própria <script type="module" src="/assets/index-XXXX.js"> do HTML.
-// 2. A cada 5 min, faz fetch("/?v=timestamp") pra forçar bypass de cache
-//    intermediário, lê o HTML retornado, extrai o hash atual do bundle.
-// 3. Se o hash mudou → mostra banner persistente com botão "Atualizar".
-//    O usuário clica → location.reload() com bypass de cache.
-//
-// Não reload automático: pode perder trabalho não salvo do usuário.
-// Notificação + ação manual é o equilíbrio entre segurança e agilidade.
-//
-// IGNORA erros de rede silenciosamente: se o usuário está offline,
-// o próximo check acaba funcionando. Não queremos poluir com avisos.
-// ═══════════════════════════════════════════════════════════════
-
-function _extrairHashBundle(htmlOuDoc) {
-  // Aceita documento atual (document) ou string HTML crua do fetch.
-  // Padrão: <script type="module" crossorigin src="/assets/index-HASH.js">
-  // ou <script type="module" src="/assets/index-HASH.js">
-  try {
-    let src = "";
-    if (typeof htmlOuDoc === "string") {
-      const m = htmlOuDoc.match(/<script[^>]*src=["']([^"']*\/assets\/index-[^"']+\.js)["']/);
-      src = m ? m[1] : "";
-    } else {
-      // document atual: procura a tag script que referenciou o bundle
-      const scripts = htmlOuDoc.querySelectorAll('script[src*="/assets/index-"]');
-      src = scripts.length > 0 ? scripts[0].getAttribute("src") : "";
-    }
-    if (!src) return null;
-    // Extrai só o hash: "/assets/index-Bkt6z0GT.js" → "Bkt6z0GT"
-    const h = src.match(/index-([^.]+)\.js/);
-    return h ? h[1] : null;
-  } catch {
-    return null;
-  }
-}
-
-function VersionWatcher() {
-  const [novaVersao, setNovaVersao] = useState(false);
-  const hashAtualRef = useRef(null);
-
-  useEffect(() => {
-    // Captura hash inicial do bundle que está rodando agora
-    hashAtualRef.current = _extrairHashBundle(document);
-
-    // Se não conseguiu capturar (ex: dev mode sem bundling), desiste silenciosamente
-    if (!hashAtualRef.current) return;
-
-    let cancelado = false;
-
-    async function verificar() {
-      if (cancelado) return;
-      try {
-        // Query string quebra cache intermediário — garante que pegamos
-        // o HTML mais novo do Vercel, não de proxy/CDN
-        const res = await fetch("/?_vck=" + Date.now(), { cache: "no-store" });
-        if (!res.ok) return;
-        const html = await res.text();
-        const hashRemoto = _extrairHashBundle(html);
-        if (hashRemoto && hashRemoto !== hashAtualRef.current) {
-          setNovaVersao(true);
-        }
-      } catch {
-        // Rede caiu, etc. Ignora — próximo tick tenta de novo.
-      }
-    }
-
-    // Primeira checagem 30s depois do boot (evita correr na hora do load)
-    const t0 = setTimeout(verificar, 30_000);
-    // Depois, a cada 5 minutos
-    const interval = setInterval(verificar, 5 * 60 * 1000);
-
-    // Re-checa quando a aba volta a ficar visível (usuário voltou depois de
-    // horas, muito comum em SaaS) — a 5-min interval pode ter pulado checagem
-    function onVisibility() { if (document.visibilityState === "visible") verificar(); }
-    document.addEventListener("visibilitychange", onVisibility);
-
-    return () => {
-      cancelado = true;
-      clearTimeout(t0);
-      clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisibility);
-    };
-  }, []);
-
-  if (!novaVersao) return null;
-
-  return (
-    <div
-      role="alert"
-      style={{
-        position: "fixed",
-        bottom: 20,
-        right: 20,
-        zIndex: 100002, // acima de toasts (100001) e modais (100000)
-        background: "#111",
-        color: "#fff",
-        padding: "14px 18px",
-        borderRadius: 10,
-        boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
-        fontSize: 13,
-        animation: "vickeToastSlide 0.28s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
-        maxWidth: 360,
-      }}
-    >
-      <div style={{ flex: 1 }}>
-        <div style={{ fontWeight: 600, marginBottom: 2 }}>Nova versão disponível</div>
-        <div style={{ fontSize: 12, color: "#d1d5db" }}>Atualize para ver as últimas melhorias.</div>
-      </div>
-      <button
-        onClick={() => {
-          // reload(true) é deprecated — cache-busting via query string funciona
-          const u = new URL(window.location.href);
-          u.searchParams.set("_v", Date.now());
-          window.location.href = u.toString();
-        }}
-        style={{
-          background: "#fff",
-          color: "#111",
-          border: "none",
-          borderRadius: 7,
-          padding: "7px 14px",
-          fontSize: 12.5,
-          fontWeight: 600,
-          cursor: "pointer",
-          fontFamily: "inherit",
-          whiteSpace: "nowrap",
-        }}
-      >
-        Atualizar
-      </button>
-    </div>
-  );
-}
-
 
 // ════════════════════════════════════════════════════════════
 // api.js
@@ -14492,28 +14062,9 @@ export default function ModuloClientesFornecedores() {
   const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false);
   const [backendOffline, setBackendOffline]   = useState(false);
 
-  // Ref pro data atual — usada dentro de callbacks que não devem capturar closure.
-  // Sem isso, callbacks criados numa render leem data antigo mesmo após saves.
-  // Bug histórico: durante edição de orçamento, ao salvar nova proposta o
-  // handler onSalvar misturava data velho + orcamentosProjeto novo, perdendo
-  // propostas intermediárias (card mostrava valor antigo mesmo após gerar
-  // proposta nova com valor diferente).
-  const dataRef = useRef(null);
-  useEffect(() => { dataRef.current = data; }, [data]);
-
   // Flag interna: true quando há salvamento em andamento.
   // Usada pelo beforeunload pra bloquear fechamento durante saves.
   const savingRef = useRef(false);
-
-  // Flag: orçamento em tela cheia está aberto.
-  // Usada pelo beforeunload — se o usuário entrou num form de orçamento,
-  // já pode estar preenchendo e o F5 não deve deixar sair silenciosamente.
-  // Mesmo que o form ainda não tenha registrado __vickeOrcHasDirty,
-  // esta flag captura a situação defensivamente.
-  const orcamentoAbertoRef = useRef(false);
-  useEffect(() => { orcamentoAbertoRef.current = !!orcamentoTelaCheia; }, [orcamentoTelaCheia]);
-
-  const isMaster = usuario?.perfil === "master";
 
   // tentarTrocar: quando há orçamento em tela cheia com dados não salvos,
   // consulta o handler registrado pelo FormOrcamento (window.__vickeOrcDirtyPrompt).
@@ -14531,7 +14082,8 @@ export default function ModuloClientesFornecedores() {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
-  // Bootstrap: restaura sessão salva no localStorage se ainda válida.
+  // Bootstrap: se já tiver token+user no localStorage, restaura sessão.
+  // Valida expiração usando decodeJWT centralizado de shared.jsx.
   useEffect(() => {
     try {
       const tok = localStorage.getItem("vicke-token");
@@ -14539,6 +14091,7 @@ export default function ModuloClientesFornecedores() {
       if (tok && usr) {
         const payload = decodeJWT(tok);
         if (!payload) {
+          // Token malformado — limpa e deixa cair na tela de login
           localStorage.removeItem("vicke-token");
           localStorage.removeItem("vicke-user");
           return;
@@ -14553,6 +14106,7 @@ export default function ModuloClientesFornecedores() {
         setAutenticado(true);
       }
     } catch {
+      // Erro de parse — limpa pra não travar o app
       try {
         localStorage.removeItem("vicke-token");
         localStorage.removeItem("vicke-user");
@@ -14560,31 +14114,29 @@ export default function ModuloClientesFornecedores() {
     }
   }, []);
 
+  // Quando autentica (login novo ou bootstrap), carrega os dados
   useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
 
+  // Migração de abas antigas para nova nomenclatura
   useEffect(() => {
     if (aba === "projetos") setAba("projetos:etapas");
     else if (aba === "teste") setAba("projetos:orcamentos");
   }, [aba]);
 
-  // beforeunload: dispara se há trabalho que o usuário pode perder.
-  // Condições que ativam:
-  //   (a) save em andamento
-  //   (b) orçamento em tela cheia aberto (usuário pode estar preenchendo)
-  //   (c) form registrou __vickeOrcHasDirty e retorna true
-  // A condição (b) é defensiva: cobre o caso em que o usuário começa a
-  // preencher cômodos antes do form fazer setup do handler próprio.
+  // beforeunload: ANTES disparava sempre "Deseja sair?" mesmo sem alterações.
+  // AGORA: só ativa quando (a) um save está em andamento, ou (b) o módulo
+  // de orçamento em tela cheia tem dados sujos (consulta __vickeOrcDirtyPrompt).
+  // Em todos os outros casos, usuário pode fechar/recarregar sem fricção.
   useEffect(() => {
     const handler = (e) => {
       const savingAgora = savingRef.current;
-      const orcamentoAberto = orcamentoAbertoRef.current;
       let orcSujo = false;
       try {
         if (typeof window !== "undefined" && typeof window.__vickeOrcHasDirty === "function") {
           orcSujo = !!window.__vickeOrcHasDirty();
         }
       } catch {}
-      if (!savingAgora && !orcamentoAberto && !orcSujo) return;
+      if (!savingAgora && !orcSujo) return; // Deixa sair sem avisar
       e.preventDefault();
       e.returnValue = "";
       return "";
@@ -14610,17 +14162,16 @@ export default function ModuloClientesFornecedores() {
     setLoading(false);
   }
 
-  // save(): otimista — aplica localmente, envia pro backend, e fim.
-  // Se backend falhar, marca offline mas não reverte (usuário continua
-  // trabalhando; quando reconectar, próximo save sincroniza).
-  //
-  // IMPORTANTE: callers em callbacks capturados (ex: onSalvar do FormOrcamento)
-  // devem usar dataRef.current em vez de data, senão leem data congelado e
-  // sobrescrevem atualizações intermediárias.
+  // save(): ANTES recarregava tudo do servidor após cada chamada (loadAllData).
+  // AGORA: otimista — aplica localmente, envia pro backend, e fim.
+  // Ganho: latência perceptível em cada ação some (antes eram 8 requests
+  // paralelos depois de cada clique em "salvar ganho", "mover kanban", etc).
+  // Trade-off: se o backend modificar o dado no save (ex: timestamp auto),
+  // o frontend só vê na próxima navegação — aceitável pro caso geral.
+  // A opção { skipReload } continua aceita pra compat com código existente.
   async function save(newData, opts = {}) {
-    const oldData = dataRef.current || data;
-    setData(newData);
-    dataRef.current = newData; // mantém ref em sync imediato pra callbacks subsequentes
+    const oldData = data;
+    setData(newData); // otimista
     savingRef.current = true;
     try {
       await saveAllData(newData, oldData);
@@ -14629,14 +14180,16 @@ export default function ModuloClientesFornecedores() {
     catch(e) {
       console.error("Erro ao salvar:", e);
       setBackendOffline(true);
+      // Não reverte o state — usuário continua vendo seus dados localmente,
+      // backendOffline dispara banner vermelho no topo pra alertar.
     }
     finally {
       savingRef.current = false;
     }
   }
 
-  // Backup (exportar/importar): disponível APENAS pro master.
-  // Editor/admin de escritório não precisam exportar todo o banco.
+  // Exporta backup: baixa o arquivo .json direto sem mostrar modal duplicado.
+  // Antes: baixava E abria modal com textarea do JSON — confuso, parecia bug.
   function exportarDados() {
     const json = JSON.stringify(data, null, 2);
     try {
@@ -14650,6 +14203,8 @@ export default function ModuloClientesFornecedores() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
+      // Fallback: se o browser bloqueou o download, mostra o JSON em modal
+      // pro usuário copiar manualmente.
       console.error("Falha no download direto, abrindo modal:", e);
       setBackupJson(json);
       setShowBackup(true);
@@ -14660,30 +14215,25 @@ export default function ModuloClientesFornecedores() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      try { const parsed = JSON.parse(ev.target.result); await save(parsed); toast.sucesso("Dados importados"); }
-      catch { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: "Não foi possível ler este arquivo JSON.", tipo: "erro" }); }
+      try { const parsed = JSON.parse(ev.target.result); await save(parsed); alert("Dados importados!"); }
+      catch { alert("Arquivo inválido."); }
     };
     reader.readAsText(file); e.target.value = "";
   }
 
-  if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /><VersionWatcher /></>;
+  if (!autenticado) return <TelaLogin onLogin={handleLogin} />;
 
   if (loading) return (
-    <>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ width:20, height:20, border:"2px solid #e5e7eb", borderTop:"2px solid #111", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 12px" }} />
         <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Carregando...</p>
       </div>
     </div>
-    <DialogosHost />
-    <VersionWatcher />
-    </>
   );
 
   if (!data) {
     return (
-      <>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
           <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
@@ -14692,9 +14242,6 @@ export default function ModuloClientesFornecedores() {
           <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
-      <DialogosHost />
-      <VersionWatcher />
-      </>
     );
   }
 
@@ -14723,7 +14270,6 @@ export default function ModuloClientesFornecedores() {
   });
 
   return (
-    <>
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
@@ -14827,7 +14373,7 @@ export default function ModuloClientesFornecedores() {
               onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
               Escritório
             </button>
-            {isMaster && (
+            {usuario?.perfil === "master" && (
               <button style={itemStyle(aba==="admin")}
                 onMouseEnter={e => { if(aba!=="admin") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="admin") e.currentTarget.style.background="transparent"; }}
@@ -14853,19 +14399,15 @@ export default function ModuloClientesFornecedores() {
         <div style={{ borderBottom:"1px solid #f3f4f6", padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fff" }}>
           <button onClick={() => setSidebarAberta(s => !s)}
             style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", padding:"4px 8px", fontSize:16, fontFamily:"inherit" }}>☰</button>
-          {/* Import/Export: só master. Editor/admin de escritório não precisam
-              exportar/importar banco inteiro — isso é tarefa do dono do SaaS. */}
-          {isMaster ? (
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <label style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:"#9ca3af", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px" }}>
-                Importar
-                <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
-              </label>
-              <button onClick={exportarDados} style={{ fontSize:12, color:"#6b7280", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", background:"#fff", fontFamily:"inherit" }}>
-                Exportar backup
-              </button>
-            </div>
-          ) : <div />}
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <label style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:"#9ca3af", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px" }}>
+              Importar
+              <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
+            </label>
+            <button onClick={exportarDados} style={{ fontSize:12, color:"#6b7280", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", background:"#fff", fontFamily:"inherit" }}>
+              Exportar backup
+            </button>
+          </div>
         </div>
         {backendOffline && (
           <div style={{ background:"#fef2f2", borderBottom:"1px solid #fecaca", padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
@@ -14885,41 +14427,18 @@ export default function ModuloClientesFornecedores() {
               clienteNome={orcamentoTelaCheia.clienteOrc.nome}
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
-              escritorio={data.escritorio || {}}
               modoVer={orcamentoTelaCheia.modo === "ver"}
               modoAbertura={orcamentoTelaCheia.modo}
               onSalvar={async (orc) => {
-                // CRITICAL FIX — Cenário 1: usar dataRef.current em vez de data.
-                // Este callback é criado na renderização em que orcamentoTelaCheia
-                // mudou. Chamadas subsequentes (salvar orçamento + gerar proposta
-                // + salvar snapshot) disparam este mesmo callback repetidas vezes,
-                // e `data` capturado no closure fica congelado. Resultado: a 2ª
-                // chamada sobrescreve orcamentosProjeto inteiro com o estado
-                // antigo + mudança atual, perdendo atualizações intermediárias
-                // (como propostas recém-salvas).
-                // Solução: ler sempre de dataRef.current, que é atualizado em
-                // tempo real pelo save() e pelo useEffect que segue `data`.
-                const dataAtual = dataRef.current || data;
-                const todos = dataAtual.orcamentosProjeto || [];
+                const todos = data.orcamentosProjeto || [];
                 const maxSeq = todos.reduce((mx2, o2) => {
                   const mm = (o2.id||"").match(/^ORC-(\d+)$/);
                   return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
                 }, 0);
                 const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
-                const novo2 = {
-                  ...orc,
-                  clienteId: orcamentoTelaCheia.clienteOrc.id,
-                  cliente: orcamentoTelaCheia.clienteOrc.nome,
-                  whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "",
-                  id: orc.id || nextId,
-                  criadoEm: orc.criadoEm || new Date().toISOString(),
-                };
-                const novos2 = orc.id
-                  ? todos.map(o2=>o2.id===orc.id?novo2:o2)
-                  : [...todos, novo2];
-                await save({ ...dataAtual, orcamentosProjeto: novos2 });
-                // Propaga o orc atualizado pro state de tela cheia, assim a
-                // próxima edição/geração de proposta vai trabalhar em cima dele.
+                const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
+                const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
+                await save({ ...data, orcamentosProjeto: novos2 });
                 setOrcamentoTelaCheia(prev => ({ ...prev, orcBase: novo2 }));
               }}
               onVoltar={() => {
@@ -14927,7 +14446,7 @@ export default function ModuloClientesFornecedores() {
                 setOrcamentoTelaCheia(null);
                 setAba("clientes");
                 setClientesKey(n=>n+1);
-                // Sem loadData — save() já atualizou data otimisticamente.
+                // Sem loadData aqui — save() otimista já atualizou data localmente.
               }}
             />
           ) : (<>
@@ -14940,7 +14459,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
+          {aba === "admin" && usuario?.perfil === "master" && <Admin usuario={usuario} data={data} save={save} />}
           </>)}
           </>
         </div>
@@ -14965,9 +14484,6 @@ export default function ModuloClientesFornecedores() {
         </div>
       )}
     </div>
-    <DialogosHost />
-    <VersionWatcher />
-    </>
   );
 }
 
