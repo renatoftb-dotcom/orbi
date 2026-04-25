@@ -408,7 +408,7 @@ function Escritorio({ data, save }) {
         <div style={{ ...E.grid2, marginBottom:16 }}>
           <div style={E.campo}>
             <label style={E.label}>Nome do escritório</label>
-            <input style={E.input} value={form.nome} onChange={e => setF("nome", e.target.value)} placeholder="Ex: Padovan Arquitetos" />
+            <input style={E.input} value={form.nome} onChange={e => setF("nome", e.target.value)} placeholder="Ex: Vicke Associados" />
           </div>
           <div style={E.campo}>
             <label style={E.label}>CNPJ / CPF</label>

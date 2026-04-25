@@ -12939,7 +12939,7 @@ function Escritorio({ data, save }) {
         <div style={{ ...E.grid2, marginBottom:16 }}>
           <div style={E.campo}>
             <label style={E.label}>Nome do escritório</label>
-            <input style={E.input} value={form.nome} onChange={e => setF("nome", e.target.value)} placeholder="Ex: Padovan Arquitetos" />
+            <input style={E.input} value={form.nome} onChange={e => setF("nome", e.target.value)} placeholder="Ex: Vicke Associados" />
           </div>
           <div style={E.campo}>
             <label style={E.label}>CNPJ / CPF</label>
@@ -13901,7 +13901,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
   }
 
   return (
-    <div style={S.overlay} onClick={onFechar}>
+    <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>Nova empresa</div>
         <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
@@ -13917,7 +13917,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
               style={S.input}
               value={form.nome}
               onChange={e => atualizar("nome", e.target.value)}
-              placeholder="Ex: Padovan Arquitetos"
+              placeholder="Ex: Vicke Associados"
               autoFocus
             />
           </div>
@@ -14071,7 +14071,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
   }
 
   return (
-    <div style={S.overlay} onClick={onFechar}>
+    <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
           <div>
@@ -14359,7 +14359,7 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
   }
 
   return (
-    <div style={S.overlay} onClick={onFechar}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>Novo usuário master</div>
         <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
@@ -14677,8 +14677,6 @@ function HomeMenu({ data, setAba, tentarTrocar }) {
     { k:"clientes",         label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
     { k:"projetos:etapas",  label:"Projetos",     desc:"Etapas e prazos" },
     { k:"obras",            label:"Obras",        desc:"Acompanhamento e execução" },
-    { k:"financeiro",       label:"Financeiro",   desc:"Receitas e lançamentos" },
-    { k:"fornecedores",     label:"Fornecedores", desc:"Cadastro e histórico",      count: data?.fornecedores?.length },
     { k:"escritorio",       label:"Escritório",   desc:"Dados e equipe" },
   ];
 
@@ -15077,9 +15075,9 @@ export default function ModuloClientesFornecedores() {
       { k:"projetos:etapas",     label:"Em Andamento" },
     ]},
     { k:"obras",       label:"Obras" },
-    { k:"financeiro",  label:"Financeiro" },
-    { k:"fornecedores",label:"Fornecedores", count: data?.fornecedores?.length },
-    { k:"nf",          label:"Notas Fiscais" },
+    // Módulos Financeiro, Fornecedores e Notas Fiscais foram removidos do menu
+    // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
+    // por enquanto pra não quebrar dados antigos, só ocultos do menu.
   ];
 
   const itemStyle = (ativo) => ({

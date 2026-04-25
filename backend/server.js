@@ -1133,13 +1133,20 @@ app.put("/api/escritorio", async (req, res) => {
     // Separa logo dos outros dados. Logo vai pra coluna dedicada;
     // o resto vai pro JSONB. Isso evita carregar logo gigante sempre
     // que só precisa dos dados textuais (futuro endpoint /api/escritorio/meta).
+    //
+    // logo = null (remoção explícita) → grava null no banco.
+    // logo = undefined (campo não enviado) → também grava null aqui, mas o
+    // frontend SEMPRE envia o campo logo no save (mesmo que null), então
+    // não há perda silenciosa. Se algum dia houver endpoint de save parcial,
+    // usar PATCH com COALESCE seletivo, não esse PUT.
     const { logo, ...dados } = req.body || {};
+    const logoFinal = logo !== undefined ? logo : null;
     await query(
       `INSERT INTO escritorio (empresa_id, dados, logo) VALUES ($1, $2, $3)
-       ON CONFLICT(empresa_id) DO UPDATE SET dados=$2, logo=COALESCE($3, escritorio.logo), atualizado_em=NOW()`,
-      [eid, dados, logo !== undefined ? logo : null]
+       ON CONFLICT(empresa_id) DO UPDATE SET dados=$2, logo=$3, atualizado_em=NOW()`,
+      [eid, dados, logoFinal]
     );
-    ok(res, { ...dados, logo: logo !== undefined ? logo : null });
+    ok(res, { ...dados, logo: logoFinal });
   } catch(e) { err(res, e.message); }
 });
 

@@ -21,8 +21,6 @@ function HomeMenu({ data, setAba, tentarTrocar }) {
     { k:"clientes",         label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
     { k:"projetos:etapas",  label:"Projetos",     desc:"Etapas e prazos" },
     { k:"obras",            label:"Obras",        desc:"Acompanhamento e execução" },
-    { k:"financeiro",       label:"Financeiro",   desc:"Receitas e lançamentos" },
-    { k:"fornecedores",     label:"Fornecedores", desc:"Cadastro e histórico",      count: data?.fornecedores?.length },
     { k:"escritorio",       label:"Escritório",   desc:"Dados e equipe" },
   ];
 
@@ -421,9 +419,9 @@ export default function ModuloClientesFornecedores() {
       { k:"projetos:etapas",     label:"Em Andamento" },
     ]},
     { k:"obras",       label:"Obras" },
-    { k:"financeiro",  label:"Financeiro" },
-    { k:"fornecedores",label:"Fornecedores", count: data?.fornecedores?.length },
-    { k:"nf",          label:"Notas Fiscais" },
+    // Módulos Financeiro, Fornecedores e Notas Fiscais foram removidos do menu
+    // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
+    // por enquanto pra não quebrar dados antigos, só ocultos do menu.
   ];
 
   const itemStyle = (ativo) => ({

@@ -381,7 +381,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
   }
 
   return (
-    <div style={S.overlay} onClick={onFechar}>
+    <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>Nova empresa</div>
         <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
@@ -397,7 +397,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
               style={S.input}
               value={form.nome}
               onChange={e => atualizar("nome", e.target.value)}
-              placeholder="Ex: Padovan Arquitetos"
+              placeholder="Ex: Vicke Associados"
               autoFocus
             />
           </div>
@@ -551,7 +551,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
   }
 
   return (
-    <div style={S.overlay} onClick={onFechar}>
+    <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
           <div>
@@ -839,7 +839,7 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
   }
 
   return (
-    <div style={S.overlay} onClick={onFechar}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>Novo usuário master</div>
         <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
