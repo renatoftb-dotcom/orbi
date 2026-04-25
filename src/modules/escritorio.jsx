@@ -246,6 +246,33 @@ function Escritorio({ data, save }) {
     setEditandoDados(false);
   }
 
+  // Limpar todos os campos do escritório de uma vez (NÃO inclui logo — esse tem
+  // fluxo próprio "Remover" porque é caro refazer o upload). Não fecha edição:
+  // mantém o usuário em modo edição pra ele poder digitar o novo cadastro
+  // ou clicar Cancelar caso tenha mudado de ideia. Salvar ainda é manual.
+  // Pede confirmação porque a operação afeta muitos campos de uma vez —
+  // proteção contra clique acidental (especialmente em mobile).
+  async function limparDadosEscritorio() {
+    const confirmou = await dialogo.confirmar({
+      titulo: "Limpar todos os dados do escritório?",
+      mensagem: "Vai apagar nome, CNPJ, contato, endereço, dados bancários, PIX e responsáveis técnicos. O logo NÃO é apagado (use \"Remover\" ao lado dele). Você ainda precisa clicar em \"Salvar alterações\" para confirmar — clique \"Cancelar\" se quiser desfazer.",
+      confirmar: "Limpar campos",
+      destrutivo: true,
+    });
+    if (!confirmou) return;
+    setForm(f => ({
+      ...f,
+      nome: "", cnpj: "",
+      email: "", telefone: "", site: "", instagram: "",
+      cep: "", endereco: "", cidade: "", estado: "",
+      banco: "", agencia: "", conta: "",
+      tipoConta: "Corrente",
+      pixTipo: "CNPJ", pixChave: "",
+      // Logo NÃO mexe — preservar
+    }));
+    setResponsaveis([]);
+  }
+
   // ── Item 6: Consulta automática de CEP via ViaCEP ───────────────
   // ViaCEP é API pública gratuita (https://viacep.com.br) — confiável, sem rate
   // limit problemático pra uso normal. Retorna { logradouro, bairro, localidade,
@@ -475,26 +502,47 @@ function Escritorio({ data, save }) {
       <hr style={E.divisor} />
 
       {/* Header de seção: aparece no topo de Dados Gerais com botão Editar
-          ou Salvar/Cancelar dependendo do modo. Padrão SaaS moderno —
+          ou Limpar/Cancelar/Salvar dependendo do modo. Padrão SaaS moderno —
           usuário entende imediato que campos são readonly até clicar Editar. */}
       {perm.podeAlterarConfig && (
         <div style={{
-          display:"flex", justifyContent:"flex-end", gap:8, marginBottom:20,
+          display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:20,
           paddingBottom:16, borderBottom: editandoDados ? "1px dashed #e5e7eb" : "none",
         }}>
-          {!editandoDados ? (
-            <button onClick={iniciarEdicaoDados} style={E.btnEditar}>
-              <span style={{ fontSize:13 }}>✎</span>
-              <span>Editar dados</span>
-            </button>
-          ) : (
-            <>
-              <button onClick={cancelarEdicaoDados} style={E.btnSec}>Cancelar</button>
-              <button onClick={handleSave} style={saved ? E.btnSalvo : E.btn}>
-                {saved ? "Salvo!" : "Salvar alterações"}
+          {/* Esquerda: ação destrutiva (limpar) — só visível em modo edição */}
+          <div>
+            {editandoDados && (
+              <button
+                onClick={limparDadosEscritorio}
+                style={{
+                  background:"#fff", color:"#dc2626", border:"1px solid #fecaca",
+                  borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:500,
+                  cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "#fef2f2"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}
+              >
+                <span style={{ fontSize:13 }}>🗑</span>
+                <span>Limpar dados</span>
               </button>
-            </>
-          )}
+            )}
+          </div>
+          {/* Direita: ações primárias */}
+          <div style={{ display:"flex", gap:8 }}>
+            {!editandoDados ? (
+              <button onClick={iniciarEdicaoDados} style={E.btnEditar}>
+                <span style={{ fontSize:13 }}>✎</span>
+                <span>Editar dados</span>
+              </button>
+            ) : (
+              <>
+                <button onClick={cancelarEdicaoDados} style={E.btnSec}>Cancelar</button>
+                <button onClick={handleSave} style={saved ? E.btnSalvo : E.btn}>
+                  {saved ? "Salvo!" : "Salvar alterações"}
+                </button>
+              </>
+            )}
+          </div>
         </div>
       )}
 
