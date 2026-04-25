@@ -12,6 +12,7 @@ function Escritorio({ data, save }) {
     cnpj:        cfg.cnpj        || "",
     email:       cfg.email       || "",
     telefone:    cfg.telefone    || "",
+    cep:         cfg.cep         || "",
     endereco:    cfg.endereco    || "",
     cidade:      cfg.cidade      || "",
     estado:      cfg.estado      || "SP",
@@ -33,6 +34,16 @@ function Escritorio({ data, save }) {
   const [equipe, setEquipe] = useState(cfg.equipe || []);
   const [saved, setSaved] = useState(false);
   const [novoMembro, setNovoMembro] = useState(null);
+  // Modo de edição da aba "Dados gerais": false = visualização (texto + botão Editar),
+  // true = edição (inputs + Salvar/Cancelar). Padrão moderno SaaS (GitHub Settings,
+  // Stripe Dashboard) — usuário entende que precisa apertar "Editar" pra alterar.
+  // Ao Salvar volta automático pra visualização. Cancelar restaura valores originais.
+  const [editandoDados, setEditandoDados] = useState(false);
+  // Snapshot dos valores originais ao entrar em edição. Permite Cancelar restaurar.
+  const formOriginalRef = useRef(null);
+  const responsaveisOriginalRef = useRef(null);
+  // Estado do CEP (item 6) — controla loading da consulta ao ViaCEP
+  const [cepLoading, setCepLoading] = useState(false);
 
   // ── Estado da aba Usuários ──────────────────────────────────
   const [usuarios, setUsuarios] = useState([]);
@@ -216,6 +227,52 @@ function Escritorio({ data, save }) {
     save({ ...data, escritorio: { ...form, equipe, responsaveis } });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+    // Volta pro modo visualização — UX padrão de "salvou, fecha edição"
+    setEditandoDados(false);
+  }
+
+  function iniciarEdicaoDados() {
+    // Snapshot pra Cancelar restaurar. JSON.parse(JSON.stringify()) é deep clone
+    // suficiente pra esses dados (sem Date/Map/funções).
+    formOriginalRef.current = JSON.parse(JSON.stringify(form));
+    responsaveisOriginalRef.current = JSON.parse(JSON.stringify(responsaveis));
+    setEditandoDados(true);
+  }
+
+  function cancelarEdicaoDados() {
+    // Restaura valores originais e fecha edição
+    if (formOriginalRef.current) setForm(formOriginalRef.current);
+    if (responsaveisOriginalRef.current) setResponsaveis(responsaveisOriginalRef.current);
+    setEditandoDados(false);
+  }
+
+  // ── Item 6: Consulta automática de CEP via ViaCEP ───────────────
+  // ViaCEP é API pública gratuita (https://viacep.com.br) — confiável, sem rate
+  // limit problemático pra uso normal. Retorna { logradouro, bairro, localidade,
+  // uf, ... }. Falha silenciosa: se CEP inválido ou rede ruim, deixa campos como
+  // estão pro usuário preencher manual.
+  async function buscarCep(cepBruto) {
+    const cep = (cepBruto || "").replace(/\D/g, "");
+    if (cep.length !== 8) return; // só consulta com CEP completo (8 dígitos)
+    setCepLoading(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+      const j = await res.json();
+      if (j && !j.erro) {
+        // Monta endereço como "logradouro, bairro" (sem número — usuário completa)
+        const endereco = [j.logradouro, j.bairro].filter(Boolean).join(", ");
+        setForm(f => ({
+          ...f,
+          endereco: endereco || f.endereco,
+          cidade: j.localidade || f.cidade,
+          estado: j.uf || f.estado,
+        }));
+      }
+    } catch {
+      // Sem rede ou ViaCEP fora do ar — não interrompe fluxo, usuário pode digitar manual
+    } finally {
+      setCepLoading(false);
+    }
   }
 
   // Upload do logo: lê o arquivo como base64, valida tamanho e formato.
@@ -311,6 +368,11 @@ function Escritorio({ data, save }) {
     viewVal: { fontSize:14, color:"#111", marginBottom:2 },
     viewLabel: { fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
     viewBloco: { display:"flex", flexDirection:"column", gap:3 },
+    // Modo visualização vs edição (item 4)
+    secaoHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 },
+    btnEditar: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
+    // Valor "vazio" — aparece quando campo não preenchido em modo visualização
+    viewVazio: { fontSize:14, color:"#d1d5db", fontStyle:"italic", marginBottom:2 },
   };
 
   // Tag de nível de usuário (reusável)
@@ -325,9 +387,19 @@ function Escritorio({ data, save }) {
   };
 
   // ── ABA DADOS ───────────────────────────────────────────────
+  // Helper pra renderizar campo em modo visualização. Mostra label cinza pequeno
+  // + valor preto (ou "—" cinza itálico se vazio). Reusa o estilo viewLabel/viewVal.
+  const Campo = ({ label, valor }) => (
+    <div style={E.viewBloco}>
+      <div style={E.viewLabel}>{label}</div>
+      {valor ? <div style={E.viewVal}>{valor}</div> : <div style={E.viewVazio}>—</div>}
+    </div>
+  );
+
   const renderDados = () => (
     <div style={E.body}>
-      {/* Logo do escritório — usado no PDF das propostas */}
+      {/* Logo do escritório — sempre editável (não usa modo visualização porque
+          ações são únicas: Trocar logo / Remover. Não faz sentido ter "Editar logo") */}
       <div style={E.secao}>
         <div style={E.secTitulo}>Logo do escritório</div>
         <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
@@ -402,43 +474,91 @@ function Escritorio({ data, save }) {
 
       <hr style={E.divisor} />
 
+      {/* Header de seção: aparece no topo de Dados Gerais com botão Editar
+          ou Salvar/Cancelar dependendo do modo. Padrão SaaS moderno —
+          usuário entende imediato que campos são readonly até clicar Editar. */}
+      {perm.podeAlterarConfig && (
+        <div style={{
+          display:"flex", justifyContent:"flex-end", gap:8, marginBottom:20,
+          paddingBottom:16, borderBottom: editandoDados ? "1px dashed #e5e7eb" : "none",
+        }}>
+          {!editandoDados ? (
+            <button onClick={iniciarEdicaoDados} style={E.btnEditar}>
+              <span style={{ fontSize:13 }}>✎</span>
+              <span>Editar dados</span>
+            </button>
+          ) : (
+            <>
+              <button onClick={cancelarEdicaoDados} style={E.btnSec}>Cancelar</button>
+              <button onClick={handleSave} style={saved ? E.btnSalvo : E.btn}>
+                {saved ? "Salvo!" : "Salvar alterações"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Identificação */}
       <div style={E.secao}>
         <div style={E.secTitulo}>Identificação</div>
-        <div style={{ ...E.grid2, marginBottom:16 }}>
-          <div style={E.campo}>
-            <label style={E.label}>Nome do escritório</label>
-            <input style={E.input} value={form.nome} onChange={e => setF("nome", e.target.value)} placeholder="Ex: Vicke Associados" />
-          </div>
-          <div style={E.campo}>
-            <label style={E.label}>CNPJ / CPF</label>
-            <input style={E.input} value={form.cnpj} onChange={e => setF("cnpj", e.target.value)} placeholder="00.000.000/0001-00" />
-          </div>
-        </div>
 
-        {/* Responsáveis técnicos */}
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-          <span style={{ fontSize:12, color:"#6b7280", fontWeight:500 }}>Responsáveis técnicos</span>
-          <button style={E.btnAdd} onClick={() => setResponsaveis(r => [...r, { id:uid(), nome:"", cau:"", cpf:"" }])}>
-            + Adicionar
-          </button>
-        </div>
-        {responsaveis.length === 0 && (
-          <div style={{ fontSize:13, color:"#d1d5db", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
-        )}
-        {responsaveis.map((r, idx) => (
-          <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:10, marginBottom:10, alignItems:"end" }}>
-            {[["Nome","nome","Nome do responsável"],["CAU / CREA","cau","A000000-0"],["CPF","cpf","000.000.000-00"]].map(([lbl,fld,ph]) => (
-              <div key={fld} style={E.campo}>
-                <label style={E.label}>{lbl}</label>
-                <input style={E.input} value={r[fld]||""} placeholder={ph}
-                  onChange={e => setResponsaveis(rs => rs.map((x,i) => i===idx ? {...x,[fld]:e.target.value} : x))} />
+        {!editandoDados ? (
+          <>
+            <div style={{ ...E.grid2, marginBottom:20 }}>
+              <Campo label="Nome do escritório" valor={form.nome} />
+              <Campo label="CNPJ / CPF"         valor={form.cnpj} />
+            </div>
+            <div style={{ fontSize:12, color:"#6b7280", fontWeight:500, marginBottom:10 }}>Responsáveis técnicos</div>
+            {responsaveis.length === 0 ? (
+              <div style={E.viewVazio}>Nenhum responsável cadastrado</div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                {responsaveis.map(r => (
+                  <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:16 }}>
+                    <Campo label="Nome"      valor={r.nome} />
+                    <Campo label="CAU/CREA"  valor={r.cau} />
+                    <Campo label="CPF"       valor={r.cpf} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <div style={{ ...E.grid2, marginBottom:16 }}>
+              <div style={E.campo}>
+                <label style={E.label}>Nome do escritório</label>
+                <input style={E.input} value={form.nome} onChange={e => setF("nome", e.target.value)} placeholder="Ex: Vicke Associados" />
+              </div>
+              <div style={E.campo}>
+                <label style={E.label}>CNPJ / CPF</label>
+                <input style={E.input} value={form.cnpj} onChange={e => setF("cnpj", e.target.value)} placeholder="00.000.000/0001-00" />
+              </div>
+            </div>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+              <span style={{ fontSize:12, color:"#6b7280", fontWeight:500 }}>Responsáveis técnicos</span>
+              <button style={E.btnAdd} onClick={() => setResponsaveis(r => [...r, { id:uid(), nome:"", cau:"", cpf:"" }])}>
+                + Adicionar
+              </button>
+            </div>
+            {responsaveis.length === 0 && (
+              <div style={{ fontSize:13, color:"#d1d5db", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
+            )}
+            {responsaveis.map((r, idx) => (
+              <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:10, marginBottom:10, alignItems:"end" }}>
+                {[["Nome","nome","Nome do responsável"],["CAU / CREA","cau","A000000-0"],["CPF","cpf","000.000.000-00"]].map(([lbl,fld,ph]) => (
+                  <div key={fld} style={E.campo}>
+                    <label style={E.label}>{lbl}</label>
+                    <input style={E.input} value={r[fld]||""} placeholder={ph}
+                      onChange={e => setResponsaveis(rs => rs.map((x,i) => i===idx ? {...x,[fld]:e.target.value} : x))} />
+                  </div>
+                ))}
+                <button onClick={() => setResponsaveis(rs => rs.filter((_,i) => i!==idx))}
+                  style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
               </div>
             ))}
-            <button onClick={() => setResponsaveis(rs => rs.filter((_,i) => i!==idx))}
-              style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
-          </div>
-        ))}
+          </>
+        )}
       </div>
 
       <hr style={E.divisor} />
@@ -446,37 +566,88 @@ function Escritorio({ data, save }) {
       {/* Contato */}
       <div style={E.secao}>
         <div style={E.secTitulo}>Contato</div>
-        <div style={{ ...E.grid2, marginBottom:12 }}>
-          {[["E-mail","email","contato@escritorio.com"],["Telefone / WhatsApp","telefone","(14) 99999-0000"]].map(([lbl,key,ph]) => (
-            <div key={key} style={E.campo}>
-              <label style={E.label}>{lbl}</label>
-              <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+        {!editandoDados ? (
+          <div style={{ ...E.grid2, rowGap:16 }}>
+            <Campo label="E-mail"            valor={form.email} />
+            <Campo label="Telefone / WhatsApp" valor={form.telefone} />
+            <Campo label="Site"               valor={form.site} />
+            <Campo label="Instagram"          valor={form.instagram} />
+          </div>
+        ) : (
+          <>
+            <div style={{ ...E.grid2, marginBottom:12 }}>
+              {[["E-mail","email","contato@escritorio.com"],["Telefone / WhatsApp","telefone","(14) 99999-0000"]].map(([lbl,key,ph]) => (
+                <div key={key} style={E.campo}>
+                  <label style={E.label}>{lbl}</label>
+                  <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <div style={E.grid2}>
-          {[["Site","site","www.escritorio.com.br"],["Instagram","instagram","@escritorio"]].map(([lbl,key,ph]) => (
-            <div key={key} style={E.campo}>
-              <label style={E.label}>{lbl}</label>
-              <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+            <div style={E.grid2}>
+              {[["Site","site","www.escritorio.com.br"],["Instagram","instagram","@escritorio"]].map(([lbl,key,ph]) => (
+                <div key={key} style={E.campo}>
+                  <label style={E.label}>{lbl}</label>
+                  <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          </>
+        )}
       </div>
 
       <hr style={E.divisor} />
 
-      {/* Endereço */}
+      {/* Endereço — agora com CEP (item 6: preenche cidade/estado/endereço auto) */}
       <div style={E.secao}>
         <div style={E.secTitulo}>Endereço</div>
-        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 0.5fr", gap:16 }}>
-          {[["Endereço","endereco","Rua, número, bairro"],["Cidade","cidade","Ourinhos"],["Estado","estado","SP"]].map(([lbl,key,ph]) => (
-            <div key={key} style={E.campo}>
-              <label style={E.label}>{lbl}</label>
-              <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+        {!editandoDados ? (
+          <div style={{ ...E.grid2, rowGap:16 }}>
+            <Campo label="CEP"      valor={form.cep} />
+            <Campo label="Endereço" valor={form.endereco} />
+            <Campo label="Cidade"   valor={form.cidade} />
+            <Campo label="Estado"   valor={form.estado} />
+          </div>
+        ) : (
+          <>
+            {/* Linha 1: CEP (consulta automática) */}
+            <div style={{ display:"grid", gridTemplateColumns:"180px 1fr", gap:16, marginBottom:16 }}>
+              <div style={E.campo}>
+                <label style={E.label}>CEP</label>
+                <input
+                  style={E.input}
+                  value={form.cep}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setF("cep", v);
+                    // Dispara busca quando atinge 8 dígitos (com ou sem máscara)
+                    const digits = v.replace(/\D/g, "");
+                    if (digits.length === 8) buscarCep(digits);
+                  }}
+                  placeholder="00000-000"
+                  maxLength={9}
+                />
+                {cepLoading && (
+                  <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>Buscando endereço…</div>
+                )}
+              </div>
+              <div style={E.campo}>
+                <label style={E.label}>Endereço</label>
+                <input style={E.input} value={form.endereco} onChange={e => setF("endereco", e.target.value)} placeholder="Rua, número, bairro" />
+              </div>
             </div>
-          ))}
-        </div>
+            {/* Linha 2: Cidade e Estado */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 120px", gap:16 }}>
+              <div style={E.campo}>
+                <label style={E.label}>Cidade</label>
+                <input style={E.input} value={form.cidade} onChange={e => setF("cidade", e.target.value)} placeholder="Ourinhos" />
+              </div>
+              <div style={E.campo}>
+                <label style={E.label}>Estado</label>
+                <input style={E.input} value={form.estado} onChange={e => setF("estado", e.target.value)} placeholder="SP" maxLength={2} />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       <hr style={E.divisor} />
@@ -484,53 +655,63 @@ function Escritorio({ data, save }) {
       {/* Dados bancários */}
       <div style={E.secao}>
         <div style={E.secTitulo}>Dados bancários</div>
-        <div style={{ ...E.grid3, marginBottom:16 }}>
-          {[["Banco","banco","Ex: Sicoob"],["Agência","agencia","0000"],["Conta","conta","00000-0"]].map(([lbl,key,ph]) => (
-            <div key={key} style={E.campo}>
-              <label style={E.label}>{lbl}</label>
-              <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+        {!editandoDados ? (
+          <>
+            <div style={{ ...E.grid3, marginBottom:16 }}>
+              <Campo label="Banco"   valor={form.banco} />
+              <Campo label="Agência" valor={form.agencia} />
+              <Campo label="Conta"   valor={form.conta} />
             </div>
-          ))}
-        </div>
-        <div style={E.grid3}>
-          <div style={E.campo}>
-            <label style={E.label}>Tipo de conta</label>
-            <select style={E.select} value={form.tipoConta} onChange={e => setF("tipoConta", e.target.value)}>
-              <option>Corrente</option><option>Poupança</option><option>Pagamento</option>
-            </select>
-          </div>
-          <div style={E.campo}>
-            <label style={E.label}>Tipo de chave PIX</label>
-            <select style={E.select} value={form.pixTipo} onChange={e => {
-              const tipo = e.target.value;
-              let chave = form.pixChave;
-              if (tipo==="CNPJ"||tipo==="CPF") chave = form.cnpj||chave;
-              if (tipo==="E-mail") chave = form.email||chave;
-              if (tipo==="Telefone") chave = form.telefone||chave;
-              setForm(f => ({...f, pixTipo:tipo, pixChave:chave}));
-            }}>
-              <option>CNPJ</option><option>CPF</option><option>E-mail</option><option>Telefone</option><option>Chave Aleatória</option>
-            </select>
-          </div>
-          <div style={E.campo}>
-            <label style={E.label}>Chave PIX</label>
-            <input style={E.input} value={form.pixChave} onChange={e => setF("pixChave", e.target.value)} placeholder="Chave PIX" />
-          </div>
-        </div>
+            <div style={E.grid3}>
+              <Campo label="Tipo de conta"      valor={form.tipoConta} />
+              <Campo label="Tipo de chave PIX"  valor={form.pixTipo} />
+              <Campo label="Chave PIX"          valor={form.pixChave} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div style={{ ...E.grid3, marginBottom:16 }}>
+              {[["Banco","banco","Ex: Sicoob"],["Agência","agencia","0000"],["Conta","conta","00000-0"]].map(([lbl,key,ph]) => (
+                <div key={key} style={E.campo}>
+                  <label style={E.label}>{lbl}</label>
+                  <input style={E.input} value={form[key]} onChange={e => setF(key, e.target.value)} placeholder={ph} />
+                </div>
+              ))}
+            </div>
+            <div style={E.grid3}>
+              <div style={E.campo}>
+                <label style={E.label}>Tipo de conta</label>
+                <select style={E.select} value={form.tipoConta} onChange={e => setF("tipoConta", e.target.value)}>
+                  <option>Corrente</option><option>Poupança</option><option>Pagamento</option>
+                </select>
+              </div>
+              <div style={E.campo}>
+                <label style={E.label}>Tipo de chave PIX</label>
+                <select style={E.select} value={form.pixTipo} onChange={e => {
+                  const tipo = e.target.value;
+                  let chave = form.pixChave;
+                  if (tipo==="CNPJ"||tipo==="CPF") chave = form.cnpj||chave;
+                  if (tipo==="E-mail") chave = form.email||chave;
+                  if (tipo==="Telefone") chave = form.telefone||chave;
+                  setForm(f => ({...f, pixTipo:tipo, pixChave:chave}));
+                }}>
+                  <option>CNPJ</option><option>CPF</option><option>E-mail</option><option>Telefone</option><option>Chave Aleatória</option>
+                </select>
+              </div>
+              <div style={E.campo}>
+                <label style={E.label}>Chave PIX</label>
+                <input style={E.input} value={form.pixChave} onChange={e => setF("pixChave", e.target.value)} placeholder="Chave PIX" />
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Salvar — só admin pode alterar config do escritório */}
-      {perm.podeAlterarConfig && (
-        <div style={{ display:"flex", justifyContent:"flex-end", gap:10, paddingTop:8 }}>
-          <button style={saved ? E.btnSalvo : E.btn} onClick={handleSave}>
-            {saved ? "Salvo!" : "Salvar alterações"}
-          </button>
-        </div>
-      )}
+      {/* Aviso pra quem não tem permissão de alterar — sempre visível pra esses */}
       {!perm.podeAlterarConfig && (
         <div style={{
           padding:"12px 14px", background:"#f9fafb", border:"1px solid #f3f4f6",
-          borderRadius:8, color:"#6b7280", fontSize:12.5, textAlign:"center",
+          borderRadius:8, color:"#6b7280", fontSize:12.5, textAlign:"center", marginTop:24,
         }}>
           Somente administradores podem alterar estes dados.
         </div>
@@ -577,9 +758,10 @@ function Escritorio({ data, save }) {
         ))
       )}
 
-      {/* Modal membro */}
+      {/* Modal membro — zIndex elevado pra ficar acima do modal de usuário
+          quando ambos estão abertos (item 7: cria membro de dentro do modal usuário) */}
       {novoMembro && (
-        <div style={E.overlay}>
+        <div style={{ ...E.overlay, zIndex: 10001 }}>
           <div style={E.modal}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
               <div style={E.modalTitulo}>{novoMembro.nome ? "Editar membro" : "Novo membro"}</div>
@@ -603,6 +785,13 @@ function Escritorio({ data, save }) {
                   : [...equipe, novoMembro];
                 setEquipe(novaEquipe);
                 save({ ...data, escritorio: { ...form, equipe: novaEquipe, responsaveis } });
+                // Item 7: se há um modal de usuário aberto e este é membro NOVO
+                // (não edição), auto-seleciona o membro recém-criado no dropdown.
+                // Fluxo: usuário clica "+ novo membro" → preenche → Adicionar →
+                // membro fica selecionado direto, sem precisar voltar e escolher.
+                if (novoUsuario && !existe) {
+                  setNovoUsuario(u => ({ ...u, membro_id: novoMembro.id }));
+                }
                 setNovoMembro(null);
               }}>
                 {equipe.find(m => m.id === novoMembro.id) ? "Salvar" : "Adicionar"}
@@ -805,13 +994,32 @@ function Escritorio({ data, save }) {
                 </div>
                 <div style={E.campo}>
                   <label style={E.label}>Vincular a membro da equipe</label>
-                  <select style={E.select} value={novoUsuario.membro_id}
-                    onChange={e => setNovoUsuario(u => ({ ...u, membro_id: e.target.value }))}>
-                    <option value="">— Nenhum —</option>
-                    {equipe.map(m => (
-                      <option key={m.id} value={m.id}>{m.nome}{m.cargo ? ` (${m.cargo})` : ""}</option>
-                    ))}
-                  </select>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <select style={{ ...E.select, flex:1 }} value={novoUsuario.membro_id}
+                      onChange={e => {
+                        const valor = e.target.value;
+                        // Opção especial __novo: abre o modal de novo membro sem fechar
+                        // este modal de usuário. Quando o membro for criado, ele aparece
+                        // automaticamente na lista (porque equipe é state) e o usuário
+                        // pode selecionar. Reset do select pra "" pra não confundir.
+                        if (valor === "__novo") {
+                          setNovoMembro({ ...emptyMembro, id: uid() });
+                          return; // não atualiza membro_id ainda
+                        }
+                        setNovoUsuario(u => ({ ...u, membro_id: valor }));
+                      }}>
+                      <option value="">— Nenhum —</option>
+                      {equipe.map(m => (
+                        <option key={m.id} value={m.id}>{m.nome}{m.cargo ? ` (${m.cargo})` : ""}</option>
+                      ))}
+                      <option value="__novo">+ Cadastrar novo membro…</option>
+                    </select>
+                  </div>
+                  {equipe.length === 0 && (
+                    <div style={{ fontSize:11, color:"#9ca3af", marginTop:5 }}>
+                      Nenhum membro cadastrado ainda. Use a opção acima ou a aba Equipe.
+                    </div>
+                  )}
                 </div>
               </div>
 
