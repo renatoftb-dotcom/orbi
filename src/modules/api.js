@@ -42,7 +42,15 @@ async function req(method, path, body) {
   }
 
   const json = await res.json();
-  if (!json.ok) throw new Error(json.error || "Erro na API");
+  if (!json.ok) {
+    // Anexa status e tipo no Error pra que componentes possam distinguir
+    // "sem permissão" (403) de outros erros e mostrar mensagem específica.
+    // Ex: PainelEmpresas mostra "você não é master" em vez de erro genérico.
+    const erro = new Error(json.error || "Erro na API");
+    erro.status = res.status;
+    erro.code   = res.status === 403 ? "FORBIDDEN" : "API_ERROR";
+    throw erro;
+  }
   return json.data;
 }
 

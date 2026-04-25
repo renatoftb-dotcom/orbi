@@ -449,3 +449,552 @@ var SEED = {
 
 var ESTADOS_BR = ["AC","AL","AM","AP","BA","CE","DF","ES","GO","MA","MG","MS","MT","PA","PB","PE","PI","PR","RJ","RN","RO","RR","RS","SC","SE","SP","TO"];
 var CATS_FORNECEDOR = ["Cimento","Concreto","Agregados","Alvenaria","Estrutura","Cobertura","Elétrico","Hidráulico","Revestimento","Acabamento","Ferramentas","Tintas","Vidros","Geral","Outros"];
+
+// ═══════════════════════════════════════════════════════════════
+// SISTEMA DE DIÁLOGOS E TOASTS (substitui alert/confirm nativos)
+// ═══════════════════════════════════════════════════════════════
+// Rationale:
+// - Diálogos nativos (alert/confirm) têm UX feia, mostram URL do site,
+//   quebram o fluxo visual e não combinam com o design do VICKE.
+// - Este sistema oferece 3 helpers globais chamáveis de qualquer função
+//   (não só dentro de componentes React) pra facilitar migração:
+//     toast.sucesso(msg)   → balão verde que some em 3s (avisos positivos)
+//     toast.erro(msg)      → balão vermelho que some em 4s
+//     dialogo.confirmar({titulo, mensagem, confirmar, destrutivo}) → Promise<boolean>
+//     dialogo.alertar({titulo, mensagem, tipo}) → Promise<void>
+//
+// Arquitetura:
+// - Estado vive num objeto _dialogState fora do React.
+// - Listeners são callbacks registrados por DialogosHost.
+// - DialogosHost é um componente renderizado uma vez no app.jsx que
+//   desenha os modais/toasts ativos.
+// ═══════════════════════════════════════════════════════════════
+
+var _dialogState = {
+  modais: [],      // { id, tipo: "confirm"|"alert", titulo, mensagem, confirmar, cancelar, destrutivo, tipoAlert, resolver }
+  toasts: [],      // { id, tipo: "sucesso"|"erro", mensagem }
+  listeners: new Set(),
+  _nextId: 1,
+};
+
+function _dialogNotify() {
+  _dialogState.listeners.forEach(fn => { try { fn(); } catch {} });
+}
+
+// API pública
+var toast = {
+  sucesso: (mensagem, duracao = 3000) => {
+    const id = _dialogState._nextId++;
+    _dialogState.toasts.push({ id, tipo: "sucesso", mensagem });
+    _dialogNotify();
+    setTimeout(() => {
+      _dialogState.toasts = _dialogState.toasts.filter(t => t.id !== id);
+      _dialogNotify();
+    }, duracao);
+  },
+  erro: (mensagem, duracao = 4000) => {
+    const id = _dialogState._nextId++;
+    _dialogState.toasts.push({ id, tipo: "erro", mensagem });
+    _dialogNotify();
+    setTimeout(() => {
+      _dialogState.toasts = _dialogState.toasts.filter(t => t.id !== id);
+      _dialogNotify();
+    }, duracao);
+  },
+};
+
+var dialogo = {
+  // Retorna Promise<boolean> — true se confirmou, false se cancelou.
+  // Use async/await: const ok = await dialogo.confirmar({...});
+  confirmar: (opts) => {
+    return new Promise(resolver => {
+      const id = _dialogState._nextId++;
+      _dialogState.modais.push({
+        id,
+        tipo: "confirm",
+        titulo: opts.titulo || "Confirmar?",
+        mensagem: opts.mensagem || "",
+        confirmar: opts.confirmar || "Confirmar",
+        cancelar: opts.cancelar || "Cancelar",
+        destrutivo: !!opts.destrutivo,
+        resolver,
+      });
+      _dialogNotify();
+    });
+  },
+  // Retorna Promise<void> — resolve quando usuário clica OK.
+  alertar: (opts) => {
+    return new Promise(resolver => {
+      const id = _dialogState._nextId++;
+      _dialogState.modais.push({
+        id,
+        tipo: "alert",
+        titulo: opts.titulo || "",
+        mensagem: opts.mensagem || "",
+        confirmar: opts.confirmar || "OK",
+        tipoAlert: opts.tipo || "info", // info | erro | sucesso | aviso
+        resolver,
+      });
+      _dialogNotify();
+    });
+  },
+};
+
+// Host React: renderiza modais e toasts. Deve ser montado UMA VEZ
+// no topo da app (app.jsx, dentro do root mas independente das telas).
+function DialogosHost() {
+  const [, forceRender] = useState(0);
+
+  useEffect(() => {
+    const fn = () => forceRender(n => n + 1);
+    _dialogState.listeners.add(fn);
+    return () => { _dialogState.listeners.delete(fn); };
+  }, []);
+
+  function fecharModal(id, valor) {
+    const m = _dialogState.modais.find(x => x.id === id);
+    if (!m) return;
+    _dialogState.modais = _dialogState.modais.filter(x => x.id !== id);
+    _dialogNotify();
+    if (m.resolver) m.resolver(valor);
+  }
+
+  // Suporte a ESC pra fechar modal ativo (cancela em confirm, fecha em alert)
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key !== "Escape") return;
+      const m = _dialogState.modais[_dialogState.modais.length - 1];
+      if (!m) return;
+      fecharModal(m.id, m.tipo === "confirm" ? false : undefined);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, []);
+
+  const modais = _dialogState.modais;
+  const toasts = _dialogState.toasts;
+  const modalTopo = modais[modais.length - 1] || null;
+
+  const coresAlert = {
+    info:    { borda: "#e5e7eb", texto: "#111" },
+    sucesso: { borda: "#bbf7d0", texto: "#15803d" },
+    erro:    { borda: "#fecaca", texto: "#b91c1c" },
+    aviso:   { borda: "#fde68a", texto: "#b45309" },
+  };
+
+  return (
+    <>
+      {/* Modal ativo — só renderiza o último da fila (topo) */}
+      {modalTopo && (
+        <div
+          onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? false : undefined)}
+          style={{
+            position: "fixed", inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            zIndex: 100000,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 20,
+            fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+            animation: "vickeDialogFade 0.15s ease",
+          }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{
+              background: "#fff",
+              border: `1px solid ${modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.borda || "#e5e7eb") : "#e5e7eb"}`,
+              borderRadius: 12,
+              padding: "24px 28px",
+              maxWidth: 440,
+              width: "100%",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.15)",
+              animation: "vickeDialogPop 0.18s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
+            }}
+          >
+            {modalTopo.titulo && (
+              <div style={{
+                fontSize: 15,
+                fontWeight: 700,
+                color: modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.texto || "#111") : "#111",
+                marginBottom: modalTopo.mensagem ? 10 : 18,
+              }}>
+                {modalTopo.titulo}
+              </div>
+            )}
+            {modalTopo.mensagem && (
+              <div style={{
+                fontSize: 13.5,
+                color: "#4b5563",
+                lineHeight: 1.55,
+                marginBottom: 20,
+                whiteSpace: "pre-wrap",
+              }}>
+                {modalTopo.mensagem}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              {modalTopo.tipo === "confirm" && (
+                <button
+                  onClick={() => fecharModal(modalTopo.id, false)}
+                  style={{
+                    background: "#fff",
+                    color: "#6b7280",
+                    border: "1px solid #e5e7eb",
+                    borderRadius: 8,
+                    padding: "8px 18px",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {modalTopo.cancelar}
+                </button>
+              )}
+              <button
+                autoFocus
+                onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? true : undefined)}
+                style={{
+                  background: modalTopo.destrutivo ? "#dc2626" : "#111",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "8px 20px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {modalTopo.confirmar}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toasts — pilha no canto superior direito. Recente embaixo. */}
+      {toasts.length > 0 && (
+        <div style={{
+          position: "fixed",
+          top: 20,
+          right: 20,
+          zIndex: 100001,
+          display: "flex",
+          flexDirection: "column",
+          gap: 8,
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          pointerEvents: "none",
+        }}>
+          {toasts.map(t => (
+            <div
+              key={t.id}
+              style={{
+                background: "#fff",
+                border: `1px solid ${t.tipo === "sucesso" ? "#bbf7d0" : "#fecaca"}`,
+                borderLeft: `4px solid ${t.tipo === "sucesso" ? "#16a34a" : "#dc2626"}`,
+                borderRadius: 8,
+                padding: "10px 14px 10px 12px",
+                fontSize: 13,
+                color: t.tipo === "sucesso" ? "#15803d" : "#b91c1c",
+                boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
+                minWidth: 240,
+                maxWidth: 360,
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+                fontWeight: 500,
+                animation: "vickeToastSlide 0.24s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
+                pointerEvents: "auto",
+              }}
+            >
+              <span style={{ fontSize: 14, flexShrink: 0 }}>
+                {t.tipo === "sucesso" ? "✓" : "⚠"}
+              </span>
+              <span>{t.mensagem}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <style>{`
+        @keyframes vickeDialogFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes vickeDialogPop {
+          from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes vickeToastSlide {
+          from { opacity: 0; transform: translateX(40px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+      `}</style>
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// VERSION WATCHER — detecta novos deploys e avisa o usuário
+// ═══════════════════════════════════════════════════════════════
+// Problema resolvido: mesmo com vercel.json definindo no-cache pro HTML,
+// uma sessão aberta há horas continua rodando o JS antigo. Quando o master
+// faz npm run cpush, quem está com a app aberta não vê as mudanças até dar
+// F5 — e pode cair em bugs como "escritório não aparece no PDF" porque
+// o JS em memória não sabe da nova coluna que o backend já espera.
+//
+// Como funciona:
+// 1. No boot, captura o hash do bundle principal (ex: "index-Bkt6z0GT.js")
+//    lendo a própria <script type="module" src="/assets/index-XXXX.js"> do HTML.
+// 2. A cada 5 min, faz fetch("/?v=timestamp") pra forçar bypass de cache
+//    intermediário, lê o HTML retornado, extrai o hash atual do bundle.
+// 3. Se o hash mudou → mostra banner persistente com botão "Atualizar".
+//    O usuário clica → location.reload() com bypass de cache.
+//
+// Não reload automático: pode perder trabalho não salvo do usuário.
+// Notificação + ação manual é o equilíbrio entre segurança e agilidade.
+//
+// IGNORA erros de rede silenciosamente: se o usuário está offline,
+// o próximo check acaba funcionando. Não queremos poluir com avisos.
+// ═══════════════════════════════════════════════════════════════
+
+function _extrairHashBundle(htmlOuDoc) {
+  // Aceita documento atual (document) ou string HTML crua do fetch.
+  // Padrão: <script type="module" crossorigin src="/assets/index-HASH.js">
+  // ou <script type="module" src="/assets/index-HASH.js">
+  try {
+    let src = "";
+    if (typeof htmlOuDoc === "string") {
+      const m = htmlOuDoc.match(/<script[^>]*src=["']([^"']*\/assets\/index-[^"']+\.js)["']/);
+      src = m ? m[1] : "";
+    } else {
+      // document atual: procura a tag script que referenciou o bundle
+      const scripts = htmlOuDoc.querySelectorAll('script[src*="/assets/index-"]');
+      src = scripts.length > 0 ? scripts[0].getAttribute("src") : "";
+    }
+    if (!src) return null;
+    // Extrai só o hash: "/assets/index-Bkt6z0GT.js" → "Bkt6z0GT"
+    const h = src.match(/index-([^.]+)\.js/);
+    return h ? h[1] : null;
+  } catch {
+    return null;
+  }
+}
+
+function VersionWatcher() {
+  const [novaVersao, setNovaVersao] = useState(false);
+  const hashAtualRef = useRef(null);
+
+  useEffect(() => {
+    // Captura hash inicial do bundle que está rodando agora
+    hashAtualRef.current = _extrairHashBundle(document);
+
+    // Se não conseguiu capturar (ex: dev mode sem bundling), desiste silenciosamente
+    if (!hashAtualRef.current) return;
+
+    let cancelado = false;
+
+    async function verificar() {
+      if (cancelado) return;
+      try {
+        // Query string quebra cache intermediário — garante que pegamos
+        // o HTML mais novo do Vercel, não de proxy/CDN
+        const res = await fetch("/?_vck=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) return;
+        const html = await res.text();
+        const hashRemoto = _extrairHashBundle(html);
+        if (hashRemoto && hashRemoto !== hashAtualRef.current) {
+          setNovaVersao(true);
+        }
+      } catch {
+        // Rede caiu, etc. Ignora — próximo tick tenta de novo.
+      }
+    }
+
+    // Primeira checagem 30s depois do boot (evita correr na hora do load)
+    const t0 = setTimeout(verificar, 30_000);
+    // Depois, a cada 5 minutos
+    const interval = setInterval(verificar, 5 * 60 * 1000);
+
+    // Re-checa quando a aba volta a ficar visível (usuário voltou depois de
+    // horas, muito comum em SaaS) — a 5-min interval pode ter pulado checagem
+    function onVisibility() { if (document.visibilityState === "visible") verificar(); }
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      cancelado = true;
+      clearTimeout(t0);
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, []);
+
+  if (!novaVersao) return null;
+
+  return (
+    <div
+      role="alert"
+      style={{
+        position: "fixed",
+        bottom: 20,
+        right: 20,
+        zIndex: 100002, // acima de toasts (100001) e modais (100000)
+        background: "#111",
+        color: "#fff",
+        padding: "14px 18px",
+        borderRadius: 10,
+        boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
+        display: "flex",
+        alignItems: "center",
+        gap: 14,
+        fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        fontSize: 13,
+        animation: "vickeToastSlide 0.28s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
+        maxWidth: 360,
+      }}
+    >
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 600, marginBottom: 2 }}>Nova versão disponível</div>
+        <div style={{ fontSize: 12, color: "#d1d5db" }}>Atualize para ver as últimas melhorias.</div>
+      </div>
+      <button
+        onClick={() => {
+          // reload(true) é deprecated — cache-busting via query string funciona
+          const u = new URL(window.location.href);
+          u.searchParams.set("_v", Date.now());
+          window.location.href = u.toString();
+        }}
+        style={{
+          background: "#fff",
+          color: "#111",
+          border: "none",
+          borderRadius: 7,
+          padding: "7px 14px",
+          fontSize: 12.5,
+          fontWeight: 600,
+          cursor: "pointer",
+          fontFamily: "inherit",
+          whiteSpace: "nowrap",
+        }}
+      >
+        Atualizar
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SESSION COORDINATOR — múltiplas abas, mesma origem
+// ═══════════════════════════════════════════════════════════════
+// Problema: localStorage é compartilhado entre TODAS as abas do mesmo
+// domínio. Quando o usuário faz login na Aba B, o token salvo na Aba A
+// é sobrescrito. Aba A continua com state em memória apontando pra
+// usuário antigo, mas qualquer F5 ou bootstrap puxa o novo token →
+// inconsistência (UI diz X, backend trata como Y).
+//
+// Solução: BroadcastChannel (API moderna, suportada em todos browsers
+// relevantes) pra coordenar abas em tempo real. Quando uma aba muda
+// estado de auth, todas as outras são notificadas e reagem:
+//
+// - Login com USUÁRIO IGUAL: aba antiga atualiza token silenciosamente.
+//   Caso comum quando alguém abre uma 2ª aba pra "trabalhar em paralelo".
+//   Sem fricção, sem reload — mesma sessão, token novo válido.
+//
+// - Login com USUÁRIO DIFERENTE: aba antiga mostra modal "Sessão alterada"
+//   e força reload. Inevitável: a sessão atual não é mais válida pra
+//   usuário X, e continuar usando geraria erros 403 imprevisíveis.
+//
+// - Logout: outras abas mostram "Você foi desconectado" e recarregam
+//   (caem na tela de login).
+//
+// - Storage event como fallback: caso BroadcastChannel falhe (rara),
+//   o evento `storage` do localStorage também dispara entre abas.
+//
+// O "líder" (aba atual) NÃO recebe mensagens que ela própria envia —
+// API garante isso, então não há eco/loop.
+// ═══════════════════════════════════════════════════════════════
+
+const _SESSION_CHANNEL_NAME = "vicke-session";
+let _sessionChannel = null;
+
+function _getSessionChannel() {
+  if (typeof BroadcastChannel === "undefined") return null;
+  if (_sessionChannel) return _sessionChannel;
+  try {
+    _sessionChannel = new BroadcastChannel(_SESSION_CHANNEL_NAME);
+  } catch {
+    _sessionChannel = null;
+  }
+  return _sessionChannel;
+}
+
+// Anuncia evento de sessão pras outras abas. Chamar APÓS já ter
+// atualizado localStorage (as outras abas vão ler de lá pra atualizar).
+function anunciarSessao(tipo, payload) {
+  const ch = _getSessionChannel();
+  if (!ch) return;
+  try {
+    ch.postMessage({ tipo, payload, ts: Date.now() });
+  } catch { /* canal pode estar fechado, ignora */ }
+}
+
+// Hook que aba consumidora usa pra reagir a mudanças vindas de outras abas.
+// onOutroUsuario: outra aba logou com user diferente → exibir modal + reload
+// onMesmoUsuario: outra aba logou com user igual → atualizar token em memória
+// onLogout: outra aba fez logout → exibir modal "desconectado" + reload
+function useSessionCoordinator({ usuarioAtual, onOutroUsuario, onMesmoUsuario, onLogout }) {
+  useEffect(() => {
+    const ch = _getSessionChannel();
+    if (!ch) return; // browser sem BroadcastChannel — fallback storage event abaixo
+
+    function handleMessage(ev) {
+      const msg = ev.data || {};
+      if (!msg.tipo) return;
+
+      if (msg.tipo === "login") {
+        const novoUserId = msg.payload?.userId;
+        const usuarioIdAtual = usuarioAtual?.id;
+        // Sem usuário em memória ainda? Não é nosso problema — ainda na tela de login
+        if (!usuarioIdAtual) return;
+        if (novoUserId === usuarioIdAtual) {
+          onMesmoUsuario && onMesmoUsuario(msg.payload);
+        } else {
+          onOutroUsuario && onOutroUsuario(msg.payload);
+        }
+      } else if (msg.tipo === "logout") {
+        // Só reagir se a aba atual estava logada
+        if (usuarioAtual?.id) {
+          onLogout && onLogout();
+        }
+      }
+    }
+
+    ch.addEventListener("message", handleMessage);
+
+    // Fallback: evento `storage` do localStorage. Dispara em outras abas
+    // quando o valor de uma chave muda. Útil se BroadcastChannel falhar
+    // ou se o navegador for muito antigo.
+    function handleStorage(ev) {
+      if (ev.key !== "vicke-token" && ev.key !== "vicke-user") return;
+      // Token foi removido em outra aba (logout)
+      if (ev.key === "vicke-token" && !ev.newValue && usuarioAtual?.id) {
+        onLogout && onLogout();
+        return;
+      }
+      // User mudou em outra aba → comparar IDs
+      if (ev.key === "vicke-user" && ev.newValue && usuarioAtual?.id) {
+        try {
+          const novoUser = JSON.parse(ev.newValue);
+          if (novoUser?.id && novoUser.id !== usuarioAtual.id) {
+            onOutroUsuario && onOutroUsuario({ userId: novoUser.id });
+          } else if (novoUser?.id === usuarioAtual.id) {
+            onMesmoUsuario && onMesmoUsuario({ userId: novoUser.id });
+          }
+        } catch { /* JSON ruim, ignora */ }
+      }
+    }
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      ch.removeEventListener("message", handleMessage);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, [usuarioAtual?.id, onOutroUsuario, onMesmoUsuario, onLogout]);
+}

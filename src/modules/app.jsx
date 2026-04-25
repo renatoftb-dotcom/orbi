@@ -75,9 +75,43 @@ export default function ModuloClientesFornecedores() {
   const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false);
   const [backendOffline, setBackendOffline]   = useState(false);
 
+  // Ref pro data atual — usada dentro de callbacks que não devem capturar closure.
+  // Sem isso, callbacks criados numa render leem data antigo mesmo após saves.
+  // Bug histórico: durante edição de orçamento, ao salvar nova proposta o
+  // handler onSalvar misturava data velho + orcamentosProjeto novo, perdendo
+  // propostas intermediárias (card mostrava valor antigo mesmo após gerar
+  // proposta nova com valor diferente).
+  const dataRef = useRef(null);
+  useEffect(() => { dataRef.current = data; }, [data]);
+
   // Flag interna: true quando há salvamento em andamento.
   // Usada pelo beforeunload pra bloquear fechamento durante saves.
   const savingRef = useRef(false);
+
+  // Flag: orçamento em tela cheia está aberto.
+  // Usada pelo beforeunload — se o usuário entrou num form de orçamento,
+  // já pode estar preenchendo e o F5 não deve deixar sair silenciosamente.
+  // Mesmo que o form ainda não tenha registrado __vickeOrcHasDirty,
+  // esta flag captura a situação defensivamente.
+  const orcamentoAbertoRef = useRef(false);
+  useEffect(() => { orcamentoAbertoRef.current = !!orcamentoTelaCheia; }, [orcamentoTelaCheia]);
+
+  // isMaster: dupla checagem — state em memória + JWT real do localStorage.
+  // Defesa contra inconsistência: se o state diz "master" mas o JWT em uso
+  // diz "escritorio" (cenário de autopreenchimento + login rápido), retorna
+  // false e a sidebar esconde itens master automaticamente. Backend já bloqueia,
+  // mas isso evita o usuário ver opções que vão dar 403.
+  const isMaster = (() => {
+    if (usuario?.perfil !== "master") return false;
+    if (typeof localStorage === "undefined") return true; // SSR safety
+    try {
+      const tok = localStorage.getItem("vicke-token");
+      if (!tok) return false;
+      const payload = decodeJWT(tok);
+      // JWT é a fonte da verdade do que o backend vai aceitar
+      return payload?.perfil === "master";
+    } catch { return false; }
+  })();
 
   // tentarTrocar: quando há orçamento em tela cheia com dados não salvos,
   // consulta o handler registrado pelo FormOrcamento (window.__vickeOrcDirtyPrompt).
@@ -95,8 +129,12 @@ export default function ModuloClientesFornecedores() {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
 
-  // Bootstrap: se já tiver token+user no localStorage, restaura sessão.
-  // Valida expiração usando decodeJWT centralizado de shared.jsx.
+  // Modal "Sessão alterada em outra aba" — única ação possível: recarregar.
+  // Declarado cedo porque é usado por hooks de bootstrap/visibilidade.
+  const [conflitoSessao, setConflitoSessao] = useState(null);
+  // null = sem conflito | "outro_usuario" | "logout"
+
+  // Bootstrap: restaura sessão salva no localStorage se ainda válida.
   useEffect(() => {
     try {
       const tok = localStorage.getItem("vicke-token");
@@ -104,7 +142,6 @@ export default function ModuloClientesFornecedores() {
       if (tok && usr) {
         const payload = decodeJWT(tok);
         if (!payload) {
-          // Token malformado — limpa e deixa cair na tela de login
           localStorage.removeItem("vicke-token");
           localStorage.removeItem("vicke-user");
           return;
@@ -119,7 +156,6 @@ export default function ModuloClientesFornecedores() {
         setAutenticado(true);
       }
     } catch {
-      // Erro de parse — limpa pra não travar o app
       try {
         localStorage.removeItem("vicke-token");
         localStorage.removeItem("vicke-user");
@@ -127,29 +163,77 @@ export default function ModuloClientesFornecedores() {
     }
   }, []);
 
-  // Quando autentica (login novo ou bootstrap), carrega os dados
+  // Verificação de consistência: quando a aba volta ao foco OU quando window
+  // ganha foco, comparar state em memória com localStorage. Se divergirem,
+  // significa que outra aba mexeu no storage enquanto esta estava em background
+  // — aba precisa recarregar pra refletir o estado correto.
+  //
+  // Cenário coberto: aba A logada como master, outra aba B faz logout/login
+  // como Padovan, usuário volta na aba A → state em memória ainda diz master
+  // mas localStorage agora tem Padovan. Reload corrige.
+  //
+  // Defesa em profundidade — o BroadcastChannel/storage event já cobrem isso
+  // em tempo real, mas se algum evento for perdido (browser bug, foco em outra
+  // janela com aba em sleep), esse hook captura na volta.
+  useEffect(() => {
+    function verificarConsistencia() {
+      // Sem usuário em memória? Não estamos logados, nada pra verificar
+      if (!usuario?.id) return;
+      try {
+        const usrLS = localStorage.getItem("vicke-user");
+        const tokLS = localStorage.getItem("vicke-token");
+        // localStorage vazio mas state diz logado: alguém deslogou em outra aba
+        if (!usrLS || !tokLS) {
+          setConflitoSessao("logout");
+          return;
+        }
+        const userLS = JSON.parse(usrLS);
+        // Usuário diferente do que está em memória
+        if (userLS?.id && userLS.id !== usuario.id) {
+          setConflitoSessao("outro_usuario");
+        }
+        // Mesmo usuário mas token diferente: silenciosamente atualiza memória
+        else if (userLS?.id === usuario.id && tokLS !== token) {
+          setToken(tokLS);
+        }
+      } catch { /* JSON corrompido, deixa próximo request com 401 lidar */ }
+    }
+    function onVisibility() {
+      if (document.visibilityState === "visible") verificarConsistencia();
+    }
+    window.addEventListener("focus", verificarConsistencia);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("focus", verificarConsistencia);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [usuario?.id, token]);
+
   useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
 
-  // Migração de abas antigas para nova nomenclatura
   useEffect(() => {
     if (aba === "projetos") setAba("projetos:etapas");
     else if (aba === "teste") setAba("projetos:orcamentos");
   }, [aba]);
 
-  // beforeunload: ANTES disparava sempre "Deseja sair?" mesmo sem alterações.
-  // AGORA: só ativa quando (a) um save está em andamento, ou (b) o módulo
-  // de orçamento em tela cheia tem dados sujos (consulta __vickeOrcDirtyPrompt).
-  // Em todos os outros casos, usuário pode fechar/recarregar sem fricção.
+  // beforeunload: dispara se há trabalho que o usuário pode perder.
+  // Condições que ativam:
+  //   (a) save em andamento
+  //   (b) orçamento em tela cheia aberto (usuário pode estar preenchendo)
+  //   (c) form registrou __vickeOrcHasDirty e retorna true
+  // A condição (b) é defensiva: cobre o caso em que o usuário começa a
+  // preencher cômodos antes do form fazer setup do handler próprio.
   useEffect(() => {
     const handler = (e) => {
       const savingAgora = savingRef.current;
+      const orcamentoAberto = orcamentoAbertoRef.current;
       let orcSujo = false;
       try {
         if (typeof window !== "undefined" && typeof window.__vickeOrcHasDirty === "function") {
           orcSujo = !!window.__vickeOrcHasDirty();
         }
       } catch {}
-      if (!savingAgora && !orcSujo) return; // Deixa sair sem avisar
+      if (!savingAgora && !orcamentoAberto && !orcSujo) return;
       e.preventDefault();
       e.returnValue = "";
       return "";
@@ -158,8 +242,46 @@ export default function ModuloClientesFornecedores() {
     return () => window.removeEventListener("beforeunload", handler);
   }, []);
 
-  function handleLogin(usr, tok) { setUsuario(usr); setToken(tok); setAutenticado(true); setAba("home"); }
-  function handleLogout() { clearAuth(); setUsuario(null); setToken(null); setAutenticado(false); setData(null); setAba("home"); }
+  function handleLogin(usr, tok) {
+    setUsuario(usr); setToken(tok); setAutenticado(true); setAba("home");
+    // Notifica outras abas que pode haver troca de usuário.
+    // Inclui userId pra outras abas decidirem: mesma sessão (atualizar token)
+    // ou usuário diferente (forçar reload).
+    anunciarSessao("login", { userId: usr.id });
+  }
+  function handleLogout() {
+    anunciarSessao("logout", { userId: usuario?.id });
+    clearAuth();
+    // Reload pra estado limpo: descarta TODO state em memória (data, aba ativa,
+    // forms abertos, etc.) e força bootstrap fresh com localStorage vazio.
+    // Sem reload, restos do app antigo podem se misturar com o login novo
+    // (ex: sidebar mostrando "Admin" mesmo após login com perfil escritorio).
+    // Pequeno delay pra anunciarSessao chegar em outras abas antes do reload.
+    setTimeout(() => { window.location.href = "/"; }, 50);
+  }
+
+  // Reage a mudanças de sessão em outras abas
+  useSessionCoordinator({
+    usuarioAtual: usuario,
+    onMesmoUsuario: () => {
+      // Mesmo usuário relogou em outra aba → token novo no localStorage.
+      // Atualiza state local sem reload pra continuar trabalhando.
+      try {
+        const novoToken = localStorage.getItem("vicke-token");
+        if (novoToken && novoToken !== token) setToken(novoToken);
+      } catch { /* se falhar, próximo request com 401 dá fallback */ }
+    },
+    onOutroUsuario: () => {
+      // Outro usuário logou nesta máquina → continuar usaria credenciais
+      // erradas. Modal pede reload, sem opção de "ignorar" (é inconsistência).
+      setConflitoSessao("outro_usuario");
+    },
+    onLogout: () => {
+      // Outra aba fez logout → token saiu do localStorage. Mostrar modal
+      // pra usuário entender o que aconteceu antes do reload.
+      setConflitoSessao("logout");
+    },
+  });
 
   async function loadData() {
     try {
@@ -175,16 +297,17 @@ export default function ModuloClientesFornecedores() {
     setLoading(false);
   }
 
-  // save(): ANTES recarregava tudo do servidor após cada chamada (loadAllData).
-  // AGORA: otimista — aplica localmente, envia pro backend, e fim.
-  // Ganho: latência perceptível em cada ação some (antes eram 8 requests
-  // paralelos depois de cada clique em "salvar ganho", "mover kanban", etc).
-  // Trade-off: se o backend modificar o dado no save (ex: timestamp auto),
-  // o frontend só vê na próxima navegação — aceitável pro caso geral.
-  // A opção { skipReload } continua aceita pra compat com código existente.
+  // save(): otimista — aplica localmente, envia pro backend, e fim.
+  // Se backend falhar, marca offline mas não reverte (usuário continua
+  // trabalhando; quando reconectar, próximo save sincroniza).
+  //
+  // IMPORTANTE: callers em callbacks capturados (ex: onSalvar do FormOrcamento)
+  // devem usar dataRef.current em vez de data, senão leem data congelado e
+  // sobrescrevem atualizações intermediárias.
   async function save(newData, opts = {}) {
-    const oldData = data;
-    setData(newData); // otimista
+    const oldData = dataRef.current || data;
+    setData(newData);
+    dataRef.current = newData; // mantém ref em sync imediato pra callbacks subsequentes
     savingRef.current = true;
     try {
       await saveAllData(newData, oldData);
@@ -193,16 +316,14 @@ export default function ModuloClientesFornecedores() {
     catch(e) {
       console.error("Erro ao salvar:", e);
       setBackendOffline(true);
-      // Não reverte o state — usuário continua vendo seus dados localmente,
-      // backendOffline dispara banner vermelho no topo pra alertar.
     }
     finally {
       savingRef.current = false;
     }
   }
 
-  // Exporta backup: baixa o arquivo .json direto sem mostrar modal duplicado.
-  // Antes: baixava E abria modal com textarea do JSON — confuso, parecia bug.
+  // Backup (exportar/importar): disponível APENAS pro master.
+  // Editor/admin de escritório não precisam exportar todo o banco.
   function exportarDados() {
     const json = JSON.stringify(data, null, 2);
     try {
@@ -216,8 +337,6 @@ export default function ModuloClientesFornecedores() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (e) {
-      // Fallback: se o browser bloqueou o download, mostra o JSON em modal
-      // pro usuário copiar manualmente.
       console.error("Falha no download direto, abrindo modal:", e);
       setBackupJson(json);
       setShowBackup(true);
@@ -228,25 +347,55 @@ export default function ModuloClientesFornecedores() {
     const file = e.target.files[0]; if (!file) return;
     const reader = new FileReader();
     reader.onload = async (ev) => {
-      try { const parsed = JSON.parse(ev.target.result); await save(parsed); alert("Dados importados!"); }
-      catch { alert("Arquivo inválido."); }
+      try { const parsed = JSON.parse(ev.target.result); await save(parsed); toast.sucesso("Dados importados"); }
+      catch { dialogo.alertar({ titulo: "Arquivo inválido", mensagem: "Não foi possível ler este arquivo JSON.", tipo: "erro" }); }
     };
     reader.readAsText(file); e.target.value = "";
   }
 
-  if (!autenticado) return <TelaLogin onLogin={handleLogin} />;
+  // Renderiza modal de conflito de sessão (compartilhado entre todos os returns)
+  const conflitoModal = conflitoSessao && (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:100050, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>
+          {conflitoSessao === "logout" ? "Sessão encerrada" : "Sessão alterada em outra aba"}
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.55 }}>
+          {conflitoSessao === "logout"
+            ? "Você foi desconectado em outra aba. Esta página será atualizada para voltar à tela de login."
+            : "Outra aba acabou de logar com um usuário diferente. Por segurança, esta página será atualizada para refletir a nova sessão."}
+        </div>
+        <div style={{ display:"flex", justifyContent:"flex-end" }}>
+          <button
+            onClick={() => { setConflitoSessao(null); window.location.reload(); }}
+            style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
+          >
+            Atualizar agora
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /><VersionWatcher />{conflitoModal}</>;
 
   if (loading) return (
+    <>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ width:20, height:20, border:"2px solid #e5e7eb", borderTop:"2px solid #111", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 12px" }} />
         <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Carregando...</p>
       </div>
     </div>
+    <DialogosHost />
+    <VersionWatcher />
+    {conflitoModal}
+    </>
   );
 
   if (!data) {
     return (
+      <>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
           <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
@@ -255,6 +404,10 @@ export default function ModuloClientesFornecedores() {
           <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
+      <DialogosHost />
+      <VersionWatcher />
+      {conflitoModal}
+      </>
     );
   }
 
@@ -283,6 +436,7 @@ export default function ModuloClientesFornecedores() {
   });
 
   return (
+    <>
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
@@ -386,7 +540,7 @@ export default function ModuloClientesFornecedores() {
               onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
               Escritório
             </button>
-            {usuario?.perfil === "master" && (
+            {isMaster && (
               <button style={itemStyle(aba==="admin")}
                 onMouseEnter={e => { if(aba!=="admin") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="admin") e.currentTarget.style.background="transparent"; }}
@@ -412,15 +566,19 @@ export default function ModuloClientesFornecedores() {
         <div style={{ borderBottom:"1px solid #f3f4f6", padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fff" }}>
           <button onClick={() => setSidebarAberta(s => !s)}
             style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", padding:"4px 8px", fontSize:16, fontFamily:"inherit" }}>☰</button>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <label style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:"#9ca3af", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px" }}>
-              Importar
-              <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
-            </label>
-            <button onClick={exportarDados} style={{ fontSize:12, color:"#6b7280", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", background:"#fff", fontFamily:"inherit" }}>
-              Exportar backup
-            </button>
-          </div>
+          {/* Import/Export: só master. Editor/admin de escritório não precisam
+              exportar/importar banco inteiro — isso é tarefa do dono do SaaS. */}
+          {isMaster ? (
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <label style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:"#9ca3af", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px" }}>
+                Importar
+                <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
+              </label>
+              <button onClick={exportarDados} style={{ fontSize:12, color:"#6b7280", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", background:"#fff", fontFamily:"inherit" }}>
+                Exportar backup
+              </button>
+            </div>
+          ) : <div />}
         </div>
         {backendOffline && (
           <div style={{ background:"#fef2f2", borderBottom:"1px solid #fecaca", padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
@@ -440,18 +598,41 @@ export default function ModuloClientesFornecedores() {
               clienteNome={orcamentoTelaCheia.clienteOrc.nome}
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
+              escritorio={data.escritorio || {}}
               modoVer={orcamentoTelaCheia.modo === "ver"}
               modoAbertura={orcamentoTelaCheia.modo}
               onSalvar={async (orc) => {
-                const todos = data.orcamentosProjeto || [];
+                // CRITICAL FIX — Cenário 1: usar dataRef.current em vez de data.
+                // Este callback é criado na renderização em que orcamentoTelaCheia
+                // mudou. Chamadas subsequentes (salvar orçamento + gerar proposta
+                // + salvar snapshot) disparam este mesmo callback repetidas vezes,
+                // e `data` capturado no closure fica congelado. Resultado: a 2ª
+                // chamada sobrescreve orcamentosProjeto inteiro com o estado
+                // antigo + mudança atual, perdendo atualizações intermediárias
+                // (como propostas recém-salvas).
+                // Solução: ler sempre de dataRef.current, que é atualizado em
+                // tempo real pelo save() e pelo useEffect que segue `data`.
+                const dataAtual = dataRef.current || data;
+                const todos = dataAtual.orcamentosProjeto || [];
                 const maxSeq = todos.reduce((mx2, o2) => {
                   const mm = (o2.id||"").match(/^ORC-(\d+)$/);
                   return mm ? Math.max(mx2, parseInt(mm[1])) : mx2;
                 }, 0);
                 const nextId = "ORC-" + String(maxSeq + 1).padStart(4, "0");
-                const novo2 = { ...orc, clienteId: orcamentoTelaCheia.clienteOrc.id, cliente: orcamentoTelaCheia.clienteOrc.nome, whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "", id: orc.id || nextId, criadoEm: orc.criadoEm || new Date().toISOString() };
-                const novos2 = orc.id ? todos.map(o2=>o2.id===orc.id?novo2:o2) : [...todos, novo2];
-                await save({ ...data, orcamentosProjeto: novos2 });
+                const novo2 = {
+                  ...orc,
+                  clienteId: orcamentoTelaCheia.clienteOrc.id,
+                  cliente: orcamentoTelaCheia.clienteOrc.nome,
+                  whatsapp: orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone || "",
+                  id: orc.id || nextId,
+                  criadoEm: orc.criadoEm || new Date().toISOString(),
+                };
+                const novos2 = orc.id
+                  ? todos.map(o2=>o2.id===orc.id?novo2:o2)
+                  : [...todos, novo2];
+                await save({ ...dataAtual, orcamentosProjeto: novos2 });
+                // Propaga o orc atualizado pro state de tela cheia, assim a
+                // próxima edição/geração de proposta vai trabalhar em cima dele.
                 setOrcamentoTelaCheia(prev => ({ ...prev, orcBase: novo2 }));
               }}
               onVoltar={() => {
@@ -459,7 +640,7 @@ export default function ModuloClientesFornecedores() {
                 setOrcamentoTelaCheia(null);
                 setAba("clientes");
                 setClientesKey(n=>n+1);
-                // Sem loadData aqui — save() otimista já atualizou data localmente.
+                // Sem loadData — save() já atualizou data otimisticamente.
               }}
             />
           ) : (<>
@@ -472,7 +653,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "admin" && usuario?.perfil === "master" && <Admin usuario={usuario} data={data} save={save} />}
+          {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
           </>)}
           </>
         </div>
@@ -497,6 +678,10 @@ export default function ModuloClientesFornecedores() {
         </div>
       )}
     </div>
+    <DialogosHost />
+    <VersionWatcher />
+    {conflitoModal}
+    </>
   );
 }
 
