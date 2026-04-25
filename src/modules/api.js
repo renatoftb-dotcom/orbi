@@ -153,6 +153,7 @@ const api = {
       marcarLida:  (id)     => put(`/admin/mensagens/${id}/lida`, {}),
       marcarNaoLida:(id)    => put(`/admin/mensagens/${id}/nao-lida`, {}),
       delete:      (id)     => del(`/admin/mensagens/${id}`),
+      responder:   (id, dados) => post(`/admin/mensagens/${id}/responder`, dados),
     },
     manutencao: ()         => post("/admin/manutencao"),
   },

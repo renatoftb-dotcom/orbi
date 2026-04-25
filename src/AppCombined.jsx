@@ -1163,6 +1163,7 @@ const api = {
       marcarLida:  (id)     => put(`/admin/mensagens/${id}/lida`, {}),
       marcarNaoLida:(id)    => put(`/admin/mensagens/${id}/nao-lida`, {}),
       delete:      (id)     => del(`/admin/mensagens/${id}`),
+      responder:   (id, dados) => post(`/admin/mensagens/${id}/responder`, dados),
     },
     manutencao: ()         => post("/admin/manutencao"),
   },
@@ -15372,6 +15373,11 @@ function Mensagens({ usuario }) {
   // Mensagem selecionada (objeto com body completo carregado sob demanda)
   const [selecionada, setSelecionada] = useState(null);
   const [carregandoDet, setCarregandoDet] = useState(false);
+  // Modal de Responder
+  const [respondendo, setRespondendo]       = useState(null); // mensagem a responder, ou null
+  const [respAssunto, setRespAssunto]       = useState("");
+  const [respCorpo, setRespCorpo]           = useState("");
+  const [enviandoResp, setEnviandoResp]     = useState(false);
 
   // Carrega lista quando filtro muda ou ao montar
   useEffect(() => {
@@ -15451,6 +15457,77 @@ function Mensagens({ usuario }) {
     }
   }
 
+  function abrirResponder(msg) {
+    // Pré-preenche o assunto com "Re: " se ainda não tiver.
+    // Isso é convenção universal de email reply.
+    const assuntoOriginal = msg.assunto || "";
+    const novoAssunto = assuntoOriginal.match(/^re:\s/i)
+      ? assuntoOriginal
+      : `Re: ${assuntoOriginal || "(sem assunto)"}`;
+
+    // Quote do email original (padrão de email client). Usa body_text;
+    // se só tem HTML, faz um stripping simples pra não poluir a resposta.
+    const dataFormatada = new Date(msg.recebido_em).toLocaleString("pt-BR", {
+      day:"2-digit", month:"long", year:"numeric",
+      hour:"2-digit", minute:"2-digit",
+    });
+    let textoOriginal = msg.body_text || "";
+    if (!textoOriginal && msg.body_html) {
+      // Strip HTML simples — só pra ter algo no quote. Não é parser robusto
+      // mas é suficiente pra dar contexto na resposta.
+      textoOriginal = msg.body_html
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<\/p>/gi, "\n\n")
+        .replace(/<[^>]+>/g, "")
+        .replace(/&nbsp;/g, " ")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+    }
+    const quote = textoOriginal
+      ? `\n\n\n\nEm ${dataFormatada}, ${msg.de} escreveu:\n${textoOriginal.split("\n").map(l => `> ${l}`).join("\n")}`
+      : "";
+
+    setRespondendo(msg);
+    setRespAssunto(novoAssunto);
+    setRespCorpo(quote);
+  }
+
+  function fecharResponder() {
+    setRespondendo(null);
+    setRespAssunto("");
+    setRespCorpo("");
+  }
+
+  async function enviarResposta() {
+    if (!respondendo) return;
+    if (!respAssunto.trim()) {
+      toast.erro("Informe o assunto");
+      return;
+    }
+    if (!respCorpo.trim()) {
+      toast.erro("Escreva uma mensagem");
+      return;
+    }
+    setEnviandoResp(true);
+    try {
+      const resp = await api.admin.mensagens.responder(respondendo.id, {
+        assunto: respAssunto.trim(),
+        corpo: respCorpo,
+      });
+      toast.sucesso(`Resposta enviada para ${resp.destinatario}`);
+      fecharResponder();
+    } catch (e) {
+      console.error("Erro ao responder:", e);
+      toast.erro("Falha ao enviar: " + (e.message || "erro desconhecido"));
+    }
+    setEnviandoResp(false);
+  }
+
   // Helper: parser do "from" do Resend — vem como "Nome <email@dominio>"
   // Extrai nome (se houver) e email separados pra exibição.
   function parsearRemetente(de) {
@@ -15519,8 +15596,22 @@ function Mensagens({ usuario }) {
     detBody: { padding:"32px", background:"#fff", margin:"24px 32px", borderRadius:8, border:"1px solid #f3f4f6" },
     detHtml: { fontSize:14, color:"#111", lineHeight:1.6 },
     btnAcao: { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
+    btnAcaoPrimaria: { background:"#111", color:"#fff", border:"1px solid #111", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     btnAcaoDestrutiva: { background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     badge: { display:"inline-block", fontSize:11, fontWeight:600, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:10, padding:"2px 8px", marginLeft:8 },
+    // Modal de Responder
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
+    modal: { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, width:"100%", maxWidth:680, maxHeight:"85vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
+    modalHeader: { padding:"20px 24px 16px", borderBottom:"1px solid #f3f4f6" },
+    modalTitulo: { fontSize:16, fontWeight:700, color:"#111", margin:0 },
+    modalBody: { padding:"20px 24px", flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:14 },
+    modalLabel: { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4, display:"block" },
+    modalInput: { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
+    modalReadonly: { fontSize:13, color:"#374151", padding:"10px 12px", background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:8 },
+    modalTextarea: { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", minHeight:200, resize:"vertical", lineHeight:1.5 },
+    modalFooter: { padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:10 },
+    btnEnviar: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnCancelar: { background:"#fff", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   };
 
   if (loading) {
@@ -15614,6 +15705,9 @@ function Mensagens({ usuario }) {
                   </div>
                 </div>
                 <div style={S.detAcoes}>
+                  <button style={S.btnAcaoPrimaria} onClick={() => abrirResponder(selecionada)}>
+                    ↪ Responder
+                  </button>
                   {selecionada.lida ? (
                     <button style={S.btnAcao} onClick={() => marcarNaoLida(selecionada)}>
                       ↩ Marcar como não lida
@@ -15648,6 +15742,55 @@ function Mensagens({ usuario }) {
           )}
         </div>
       </div>
+
+      {/* Modal de Responder mensagem */}
+      {respondendo && (
+        <div style={S.overlay} onClick={(e) => { if (e.target === e.currentTarget && !enviandoResp) fecharResponder(); }}>
+          <div style={S.modal} onClick={e => e.stopPropagation()}>
+            <div style={S.modalHeader}>
+              <h2 style={S.modalTitulo}>Responder mensagem</h2>
+            </div>
+            <div style={S.modalBody}>
+              <div>
+                <label style={S.modalLabel}>Para</label>
+                <div style={S.modalReadonly}>{respondendo.de}</div>
+              </div>
+              <div>
+                <label style={S.modalLabel}>De</label>
+                <div style={S.modalReadonly}>Time VICKE &lt;time@vicke.com.br&gt;</div>
+              </div>
+              <div>
+                <label style={S.modalLabel}>Assunto</label>
+                <input
+                  style={S.modalInput}
+                  value={respAssunto}
+                  onChange={e => setRespAssunto(e.target.value)}
+                  disabled={enviandoResp}
+                />
+              </div>
+              <div>
+                <label style={S.modalLabel}>Mensagem</label>
+                <textarea
+                  style={S.modalTextarea}
+                  value={respCorpo}
+                  onChange={e => setRespCorpo(e.target.value)}
+                  placeholder="Escreva sua resposta…"
+                  disabled={enviandoResp}
+                  autoFocus
+                />
+              </div>
+            </div>
+            <div style={S.modalFooter}>
+              <button style={S.btnCancelar} onClick={fecharResponder} disabled={enviandoResp}>
+                Cancelar
+              </button>
+              <button style={{ ...S.btnEnviar, opacity: enviandoResp ? 0.6 : 1 }} onClick={enviarResposta} disabled={enviandoResp}>
+                {enviandoResp ? "Enviando…" : "Enviar resposta"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
