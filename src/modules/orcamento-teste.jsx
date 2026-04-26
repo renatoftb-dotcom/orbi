@@ -6431,7 +6431,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           <>
             {/* Trilha horizontal compacta */}
             <div className="vk-trilha">
-              {ordem.map((k, i) => {
+              {ordem.flatMap((k, i) => {
                 const val = VALS[k];
                 const isActive = etapaAtual === k;
                 const isDone = !!val && !isActive;
@@ -6440,46 +6440,49 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 if (isActive) dotCls += " vk-trilha-dot-active";
                 else if (isFuture) dotCls += " vk-trilha-dot-future";
 
-                return (
-                  <React.Fragment key={k}>
-                    <div
-                      className={"vk-trilha-node" + (isDone ? " is-done" : "") + (isFuture ? " vk-trilha-node-future" : "")}
-                      onClick={() => {
-                        if (!isDone) return;
-                        setEtapaEditando(etapaEditando === k ? null : k);
-                      }}
-                      style={{ animationDelay: `${i * 50}ms` }}>
-                      <span className={dotCls}></span>
-                      <span className="vk-trilha-text">
-                        <span className="vk-trilha-key">{LABELS[k]}</span>
-                        <span className={val ? "vk-trilha-val" : "vk-trilha-val-pending"}>
-                          {val ? displayOpcao(k, val) : (isActive ? "respondendo..." : "—")}
-                          {isDone && <span className="vk-trilha-caret">▾</span>}
-                        </span>
+                const nodeEl = (
+                  <div
+                    key={k}
+                    className={"vk-trilha-node" + (isDone ? " is-done" : "") + (isFuture ? " vk-trilha-node-future" : "")}
+                    onClick={() => {
+                      if (!isDone) return;
+                      setEtapaEditando(etapaEditando === k ? null : k);
+                    }}
+                    style={{ animationDelay: `${i * 50}ms` }}>
+                    <span className={dotCls}></span>
+                    <span className="vk-trilha-text">
+                      <span className="vk-trilha-key">{LABELS[k]}</span>
+                      <span className={val ? "vk-trilha-val" : "vk-trilha-val-pending"}>
+                        {val ? displayOpcao(k, val) : (isActive ? "respondendo..." : "—")}
+                        {isDone && <span className="vk-trilha-caret">▾</span>}
                       </span>
+                    </span>
 
-                      {/* popover de edição inline */}
-                      {etapaEditando === k && (
-                        <div className="vk-trilha-edit" onClick={e => e.stopPropagation()}>
-                          <div className="vk-trilha-edit-head">EDITAR · {LABELS[k]}</div>
-                          {(OPCOES[k] || []).map(op => (
-                            <button
-                              key={op}
-                              className={"vk-trilha-edit-row" + (val === op ? " is-selected" : "")}
-                              onClick={() => {
-                                SETS[k](op);
-                                setEtapaEditando(null);
-                              }}>
-                              <span className="vk-trilha-edit-bullet"></span>
-                              <span style={{ flex:1, fontWeight:500 }}>{displayOpcao(k, op)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    {i < ordem.length - 1 && <span className="vk-trilha-sep"></span>}
-                  </React.Fragment>
+                    {/* popover de edição inline */}
+                    {etapaEditando === k && (
+                      <div className="vk-trilha-edit" onClick={e => e.stopPropagation()}>
+                        <div className="vk-trilha-edit-head">EDITAR · {LABELS[k]}</div>
+                        {(OPCOES[k] || []).map(op => (
+                          <button
+                            key={op}
+                            className={"vk-trilha-edit-row" + (val === op ? " is-selected" : "")}
+                            onClick={() => {
+                              SETS[k](op);
+                              setEtapaEditando(null);
+                            }}>
+                            <span className="vk-trilha-edit-bullet"></span>
+                            <span style={{ flex:1, fontWeight:500 }}>{displayOpcao(k, op)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 );
+                const items = [nodeEl];
+                if (i < ordem.length - 1) {
+                  items.push(<span key={k + "-sep"} className="vk-trilha-sep"></span>);
+                }
+                return items;
               })}
               {concluido && (
                 <span style={{ marginLeft:"auto", fontSize:11, fontWeight:600, color:"#16a34a", padding:"4px 10px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:6 }}>
