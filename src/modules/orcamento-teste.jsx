@@ -361,6 +361,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         onSalvar={salvarOrcamento}
         onVoltar={voltarParaLista}
         modoAbertura={modoAbertura}
+        escritorio={data?.escritorio || {}}
       />
     );
   }
