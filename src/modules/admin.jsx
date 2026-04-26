@@ -232,8 +232,9 @@ function PainelEmpresas({ S }) {
   const [erro, setErro]         = useState(null);
   // Modais — null = fechado. Objeto = aberto com dados daquela empresa.
   const [modalNova, setModalNova]   = useState(false);
-  // Drill-in: id da empresa selecionada (ou null = lista). Quando setado,
-  // renderiza EmpresaDetalhe em tela cheia em vez da lista.
+  // Drill-in: empresa selecionada (objeto da listagem). Quando setada,
+  // renderiza EmpresaDetalhe em tela cheia. Passamos o objeto inteiro pra
+  // EmpresaDetalhe usar como dado pré-carregado e pintar a tela imediato.
   const [empresaSelecionada, setEmpresaSelecionada] = useState(null);
 
   async function carregar() {
@@ -267,7 +268,8 @@ function PainelEmpresas({ S }) {
     return (
       <EmpresaDetalhe
         S={S}
-        empresaId={empresaSelecionada}
+        empresaId={empresaSelecionada.id}
+        empresaPreCarregada={empresaSelecionada}
         onVoltar={() => { setEmpresaSelecionada(null); carregar(); }}
         onExcluida={() => { setEmpresaSelecionada(null); carregar(); }}
       />
@@ -308,7 +310,7 @@ function PainelEmpresas({ S }) {
             </thead>
             <tbody>
               {empresas.map(e => (
-                <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setEmpresaSelecionada(e.id)}>
+                <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setEmpresaSelecionada(e)}>
                   <td style={S.td}>
                     <div style={{ fontWeight:600, color:"#111" }}>{e.nome}</div>
                     <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{e.plano || "gratuito"}</div>
@@ -348,23 +350,28 @@ function PainelEmpresas({ S }) {
 //   empresaId: id da empresa a carregar
 //   onVoltar:  callback ao clicar Voltar (volta pra lista)
 //   onExcluida: callback após exclusão (volta pra lista e recarrega)
-function EmpresaDetalhe({ S, empresaId, onVoltar, onExcluida }) {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
+function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluida }) {
+  // Renderiza dados básicos da listagem imediatamente (nome, plano, status,
+  // counts agregados) enquanto carrega o detalhe completo (usuários + métricas
+  // de negócio) em background. Sensação instantânea pro usuário.
+  const [data, setData]       = useState(empresaPreCarregada || null);
+  const [carregando, setCarregando] = useState(true); // true até GET /:id retornar
   const [erro, setErro]       = useState(null);
   const [modalEdit, setModalEdit]   = useState(false);
   const [modalDel, setModalDel]     = useState(false);
 
   async function carregar() {
-    setLoading(true);
+    setCarregando(true);
     setErro(null);
     try {
       const d = await api.admin.empresas.get(empresaId);
-      setData(d);
+      // Mescla com pré-carregado pra preservar campos que a listagem tem
+      // mas o detalhe não retorna (ex: usuarios_total agregado da listagem).
+      setData(prev => ({ ...(prev || {}), ...d }));
     } catch (e) {
       setErro(e.message || "Falha ao carregar empresa");
     } finally {
-      setLoading(false);
+      setCarregando(false);
     }
   }
 
@@ -379,21 +386,31 @@ function EmpresaDetalhe({ S, empresaId, onVoltar, onExcluida }) {
     try { return new Date(iso).toLocaleString("pt-BR"); } catch { return "—"; }
   }
 
-  if (loading) {
+  // Sem pré-carregado E ainda carregando: mostra skeleton mínimo.
+  // Caso normal (vindo da listagem): pré-carregado preenche enquanto fetch corre.
+  if (!data && carregando) {
     return (
       <div style={S.body}>
         <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
-        <div style={{ fontSize:13, color:"#9ca3af" }}>Carregando…</div>
+        <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13 }}>
+          <div style={{
+            width:14, height:14, borderRadius:"50%",
+            border:"2px solid #e5e7eb", borderTopColor:"#9ca3af",
+            animation:"vickeSpin 0.8s linear infinite",
+          }} />
+          Carregando empresa…
+        </div>
+        <style>{`@keyframes vickeSpin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
-  if (erro || !data) {
+  if (erro && !data) {
     return (
       <div style={S.body}>
         <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
         <div style={{ background:"#fef2f2", border:"1px solid #fecaca", color:"#991b1b", borderRadius:9, padding:"12px 16px", fontSize:13 }}>
-          {erro || "Empresa não encontrada"}
+          {erro}
         </div>
       </div>
     );
@@ -439,19 +456,36 @@ function EmpresaDetalhe({ S, empresaId, onVoltar, onExcluida }) {
 
       {/* ── Seção: Métricas ── */}
       <div style={{ ...S.secao, marginBottom:32 }}>
-        <div style={S.secTit}>Métricas</div>
+        <div style={S.secTit}>
+          Métricas
+          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#9ca3af", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
+        </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:10 }}>
-          <MetricaCard label="Usuários"   valor={data.usuarios?.length || 0} />
-          <MetricaCard label="Clientes"   valor={c.clientes_total} />
-          <MetricaCard label="Orçamentos" valor={c.orcamentos_total} />
-          <MetricaCard label="Obras"      valor={c.obras_total} />
+          {/* Usuarios: prioriza array carregado; cai pra agregado da listagem (usuarios_total) */}
+          <MetricaCard label="Usuários"   valor={data.usuarios?.length ?? data.usuarios_total} carregando={carregando && data.usuarios === undefined} />
+          <MetricaCard label="Clientes"   valor={c.clientes_total}   carregando={carregando && data.counts === undefined} />
+          <MetricaCard label="Orçamentos" valor={c.orcamentos_total ?? data.orcamentos_total} carregando={carregando && data.counts === undefined} />
+          <MetricaCard label="Obras"      valor={c.obras_total}      carregando={carregando && data.counts === undefined} />
         </div>
       </div>
 
       {/* ── Seção: Usuários ── */}
       <div style={{ ...S.secao, marginBottom:32 }}>
-        <div style={S.secTit}>Usuários ({data.usuarios?.length || 0})</div>
-        {(!data.usuarios || data.usuarios.length === 0) ? (
+        <div style={S.secTit}>
+          Usuários {data.usuarios !== undefined ? `(${data.usuarios.length})` : ""}
+          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#9ca3af", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
+        </div>
+        {/* Estado: ainda carregando E sem usuários no estado */}
+        {carregando && data.usuarios === undefined ? (
+          <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13, padding:"20px 0" }}>
+            <div style={{
+              width:14, height:14, borderRadius:"50%",
+              border:"2px solid #e5e7eb", borderTopColor:"#9ca3af",
+              animation:"vickeSpin 0.8s linear infinite",
+            }} />
+            Carregando lista de usuários…
+          </div>
+        ) : (!data.usuarios || data.usuarios.length === 0) ? (
           <div style={S.vazio}>Nenhum usuário cadastrado.</div>
         ) : (
           <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
@@ -540,12 +574,15 @@ function DetalheCampo({ label, valor }) {
   );
 }
 
-// Card pequeno de métrica numérica (Usuários / Clientes / Orçamentos / Obras)
-function MetricaCard({ label, valor }) {
+// Card pequeno de métrica numérica (Usuários / Clientes / Orçamentos / Obras).
+// `carregando` mostra "…" cinza no lugar do valor (evita flash de "0").
+function MetricaCard({ label, valor, carregando }) {
   return (
     <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"14px 16px" }}>
       <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
-      <div style={{ fontSize:24, fontWeight:600, color:"#111", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>{valor || 0}</div>
+      <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#d1d5db" : "#111", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
+        {carregando ? "…" : (valor ?? 0)}
+      </div>
     </div>
   );
 }
@@ -558,6 +595,9 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
   const [excluindo, setExcluindo] = useState(false);
   // Botão só habilita quando o nome digitado bate exatamente (sem trim — força exatidão)
   const podeExcluir = confirmacao === empresa.nome;
+  // Dica visual: usuário começou a digitar mas o texto não bate.
+  // Não mostra se input vazio (estado inicial) — só depois que tentou algo.
+  const erroVisivel = confirmacao.length > 0 && !podeExcluir;
 
   async function excluir() {
     if (!podeExcluir) return;
@@ -572,8 +612,11 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
     }
   }
 
+  // Atenção: não passamos onClick no overlay externo. Modais destrutivos
+  // não devem fechar ao clicar fora — risco de cancelar a ação por engano
+  // ou perder o que foi digitado. Usuário fecha via botão Cancelar ou ESC.
   return (
-    <div style={S.overlay} onClick={onFechar}>
+    <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
           Excluir empresa definitivamente?
@@ -593,10 +636,24 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
           <input
             value={confirmacao}
             onChange={e => setConfirmacao(e.target.value)}
-            style={{ ...S.input, fontFamily:"'SF Mono',Menlo,Consolas,monospace" }}
+            style={{
+              ...S.input,
+              fontFamily:"'SF Mono',Menlo,Consolas,monospace",
+              borderColor: erroVisivel ? "#fca5a5" : (podeExcluir ? "#86efac" : "#e5e7eb"),
+            }}
             autoFocus
             placeholder="Digite o nome exato"
           />
+          {erroVisivel && (
+            <div style={{ fontSize:11.5, color:"#b91c1c", marginTop:6 }}>
+              O texto não corresponde. Atenção a maiúsculas, minúsculas e espaços.
+            </div>
+          )}
+          {podeExcluir && (
+            <div style={{ fontSize:11.5, color:"#15803d", marginTop:6 }}>
+              ✓ Confere. Pode excluir.
+            </div>
+          )}
         </div>
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
           <button onClick={onFechar} style={S.btnSec} disabled={excluindo}>Cancelar</button>
