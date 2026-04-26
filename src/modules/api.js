@@ -135,6 +135,7 @@ const api = {
   admin: {
     empresas: {
       list:   ()           => get("/admin/empresas"),
+      get:    (id)         => get(`/admin/empresas/${id}`),
       save:   (e)          => post("/admin/empresas", e),
       update: (id, e)      => put(`/admin/empresas/${id}`, e),
       delete: (id)         => del(`/admin/empresas/${id}`),

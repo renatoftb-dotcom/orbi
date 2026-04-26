@@ -1163,6 +1163,7 @@ const api = {
   admin: {
     empresas: {
       list:   ()           => get("/admin/empresas"),
+      get:    (id)         => get(`/admin/empresas/${id}`),
       save:   (e)          => post("/admin/empresas", e),
       update: (id, e)      => put(`/admin/empresas/${id}`, e),
       delete: (id)         => del(`/admin/empresas/${id}`),
@@ -14240,10 +14241,11 @@ function PainelEmpresas({ S }) {
   const [empresas, setEmpresas] = useState([]);
   const [loading, setLoading]   = useState(true);
   const [erro, setErro]         = useState(null);
-  // Modais — componentes controlados por estado explícito em vez de flags booleanas.
-  // null = fechado. Objeto = aberto com dados daquela empresa (ou dados em branco pra criar).
+  // Modais — null = fechado. Objeto = aberto com dados daquela empresa.
   const [modalNova, setModalNova]   = useState(false);
-  const [modalEdit, setModalEdit]   = useState(null);
+  // Drill-in: id da empresa selecionada (ou null = lista). Quando setado,
+  // renderiza EmpresaDetalhe em tela cheia em vez da lista.
+  const [empresaSelecionada, setEmpresaSelecionada] = useState(null);
 
   async function carregar() {
     setLoading(true);
@@ -14264,6 +14266,23 @@ function PainelEmpresas({ S }) {
   function formatarData(iso) {
     if (!iso) return "—";
     try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return "—"; }
+  }
+
+  function formatarDataHora(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString("pt-BR"); } catch { return "—"; }
+  }
+
+  // Drill-in aberto → renderiza EmpresaDetalhe em vez da lista
+  if (empresaSelecionada) {
+    return (
+      <EmpresaDetalhe
+        S={S}
+        empresaId={empresaSelecionada}
+        onVoltar={() => { setEmpresaSelecionada(null); carregar(); }}
+        onExcluida={() => { setEmpresaSelecionada(null); carregar(); }}
+      />
+    );
   }
 
   return (
@@ -14294,14 +14313,13 @@ function PainelEmpresas({ S }) {
                 <th style={S.th}>CNPJ / CPF</th>
                 <th style={{ ...S.th, textAlign:"center" }}>Usuários</th>
                 <th style={{ ...S.th, textAlign:"center" }}>Orçamentos</th>
-                <th style={S.th}>Criada em</th>
+                <th style={S.th}>Último login</th>
                 <th style={S.th}>Status</th>
-                <th style={S.th}></th>
               </tr>
             </thead>
             <tbody>
               {empresas.map(e => (
-                <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setModalEdit(e)}>
+                <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setEmpresaSelecionada(e.id)}>
                   <td style={S.td}>
                     <div style={{ fontWeight:600, color:"#111" }}>{e.nome}</div>
                     <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{e.plano || "gratuito"}</div>
@@ -14314,19 +14332,11 @@ function PainelEmpresas({ S }) {
                     )}
                   </td>
                   <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }}>{e.orcamentos_total || 0}</td>
-                  <td style={{ ...S.td, color:"#6b7280" }}>{formatarData(e.criado_em)}</td>
+                  <td style={{ ...S.td, color:"#6b7280", fontSize:12 }}>{formatarDataHora(e.ultimo_login_empresa)}</td>
                   <td style={S.td}>
                     <span style={e.ativo ? S.badgeAtiva : S.badgeInativa}>
                       {e.ativo ? "Ativa" : "Inativa"}
                     </span>
-                  </td>
-                  <td style={{ ...S.td, textAlign:"right" }}>
-                    <button
-                      style={{ ...S.btnSec, padding:"5px 12px", fontSize:12 }}
-                      onClick={ev => { ev.stopPropagation(); setModalEdit(e); }}
-                    >
-                      Editar
-                    </button>
                   </td>
                 </tr>
               ))}
@@ -14336,7 +14346,283 @@ function PainelEmpresas({ S }) {
       )}
 
       {modalNova && <ModalNovaEmpresa S={S} onFechar={() => setModalNova(false)} onSucesso={() => { setModalNova(false); carregar(); }} />}
-      {modalEdit && <ModalEditarEmpresa S={S} empresa={modalEdit} onFechar={() => setModalEdit(null)} onSucesso={() => { setModalEdit(null); carregar(); }} />}
+    </div>
+  );
+}
+
+// ── Tela: Detalhe da empresa (drill-in master) ──────────────────
+// Tela cheia com 4 seções: Dados, Usuários, Métricas, Ações.
+// Carrega via GET /admin/empresas/:id (empresa + usuários + counts).
+//
+// Props:
+//   S:         estilos compartilhados do Admin
+//   empresaId: id da empresa a carregar
+//   onVoltar:  callback ao clicar Voltar (volta pra lista)
+//   onExcluida: callback após exclusão (volta pra lista e recarrega)
+function EmpresaDetalhe({ S, empresaId, onVoltar, onExcluida }) {
+  const [data, setData]       = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro]       = useState(null);
+  const [modalEdit, setModalEdit]   = useState(false);
+  const [modalDel, setModalDel]     = useState(false);
+
+  async function carregar() {
+    setLoading(true);
+    setErro(null);
+    try {
+      const d = await api.admin.empresas.get(empresaId);
+      setData(d);
+    } catch (e) {
+      setErro(e.message || "Falha ao carregar empresa");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { carregar(); }, [empresaId]);
+
+  function fmtData(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return "—"; }
+  }
+  function fmtDataHora(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString("pt-BR"); } catch { return "—"; }
+  }
+
+  if (loading) {
+    return (
+      <div style={S.body}>
+        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+        <div style={{ fontSize:13, color:"#9ca3af" }}>Carregando…</div>
+      </div>
+    );
+  }
+
+  if (erro || !data) {
+    return (
+      <div style={S.body}>
+        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+        <div style={{ background:"#fef2f2", border:"1px solid #fecaca", color:"#991b1b", borderRadius:9, padding:"12px 16px", fontSize:13 }}>
+          {erro || "Empresa não encontrada"}
+        </div>
+      </div>
+    );
+  }
+
+  // Empresa master (emp_master) tem proteções extras: não pode ser inativada
+  // nem excluída. UI esconde os botões correspondentes.
+  const isMasterEmp = data.id === "emp_master";
+  const c = data.counts || {};
+
+  return (
+    <div style={S.body}>
+      {/* ── Voltar ── */}
+      <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+
+      {/* ── Header com nome + status + ações principais ── */}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28, gap:16, flexWrap:"wrap" }}>
+        <div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+            <div style={{ fontSize:22, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>{data.nome}</div>
+            <span style={data.ativo ? S.badgeAtiva : S.badgeInativa}>
+              {data.ativo ? "Ativa" : "Inativa"}
+            </span>
+            {isMasterEmp && <span style={S.tag}>MASTER</span>}
+          </div>
+          <div style={{ fontSize:12, color:"#9ca3af", marginTop:4 }}>ID: {data.id}</div>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={() => setModalEdit(true)} style={S.btnSec}>Editar</button>
+        </div>
+      </div>
+
+      {/* ── Seção: Dados ── */}
+      <div style={{ ...S.secao, marginBottom:32 }}>
+        <div style={S.secTit}>Dados</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:14, padding:"16px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius:10 }}>
+          <DetalheCampo label="CNPJ / CPF" valor={data.cnpj_cpf || "—"} />
+          <DetalheCampo label="Plano"       valor={data.plano || "gratuito"} />
+          <DetalheCampo label="Criada em"   valor={fmtData(data.criado_em)} />
+          <DetalheCampo label="Último login" valor={fmtDataHora(data.ultimo_login_empresa)} />
+        </div>
+      </div>
+
+      {/* ── Seção: Métricas ── */}
+      <div style={{ ...S.secao, marginBottom:32 }}>
+        <div style={S.secTit}>Métricas</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:10 }}>
+          <MetricaCard label="Usuários"   valor={data.usuarios?.length || 0} />
+          <MetricaCard label="Clientes"   valor={c.clientes_total} />
+          <MetricaCard label="Orçamentos" valor={c.orcamentos_total} />
+          <MetricaCard label="Obras"      valor={c.obras_total} />
+        </div>
+      </div>
+
+      {/* ── Seção: Usuários ── */}
+      <div style={{ ...S.secao, marginBottom:32 }}>
+        <div style={S.secTit}>Usuários ({data.usuarios?.length || 0})</div>
+        {(!data.usuarios || data.usuarios.length === 0) ? (
+          <div style={S.vazio}>Nenhum usuário cadastrado.</div>
+        ) : (
+          <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+            <table style={S.tabela}>
+              <thead>
+                <tr>
+                  <th style={S.th}>Nome</th>
+                  <th style={S.th}>Email</th>
+                  <th style={S.th}>Nível</th>
+                  <th style={S.th}>Último login</th>
+                  <th style={S.th}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.usuarios.map(u => (
+                  <tr key={u.id}>
+                    <td style={S.td}>
+                      <div style={{ fontWeight:500, color:"#111" }}>{u.nome}</div>
+                      {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
+                    </td>
+                    <td style={{ ...S.td, color:"#6b7280" }}>{u.email}</td>
+                    <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }}>{u.nivel || "—"}</td>
+                    <td style={{ ...S.td, color:"#6b7280", fontSize:12 }}>{fmtDataHora(u.ultimo_login)}</td>
+                    <td style={S.td}>
+                      <span style={u.ativo ? S.badgeAtiva : S.badgeInativa}>
+                        {u.ativo ? "Ativo" : "Inativo"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:8, fontStyle:"italic" }}>
+          Reset de senha e edição de usuário virão na próxima entrega.
+        </div>
+      </div>
+
+      {/* ── Seção: Ações administrativas (perigosas) ── */}
+      {!isMasterEmp && (
+        <div style={{ ...S.secao, marginBottom:32 }}>
+          <div style={S.secTit}>Ações administrativas</div>
+          <div style={{ border:"1px solid #fecaca", background:"#fffbfb", borderRadius:10, padding:"16px" }}>
+            <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom:12 }}>
+              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#991b1b" }}>Não tem como reverter.</strong>
+              <br/>
+              Pra cortar acesso temporariamente, use "Editar → Inativar" — preserva dados.
+            </div>
+            <button
+              onClick={() => setModalDel(true)}
+              style={S.btnDestrutivo}>
+              Excluir empresa
+            </button>
+          </div>
+        </div>
+      )}
+
+      {modalEdit && (
+        <ModalEditarEmpresa
+          S={S}
+          empresa={data}
+          onFechar={() => setModalEdit(false)}
+          onSucesso={() => { setModalEdit(false); carregar(); }}
+        />
+      )}
+      {modalDel && (
+        <ModalConfirmarExclusaoEmpresa
+          S={S}
+          empresa={data}
+          onFechar={() => setModalDel(false)}
+          onConfirmado={onExcluida}
+        />
+      )}
+    </div>
+  );
+}
+
+// Item visual padrão das seções de dados (label em cima, valor em baixo)
+function DetalheCampo({ label, valor }) {
+  return (
+    <div>
+      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:13, color:"#111", lineHeight:1.4 }}>{valor}</div>
+    </div>
+  );
+}
+
+// Card pequeno de métrica numérica (Usuários / Clientes / Orçamentos / Obras)
+function MetricaCard({ label, valor }) {
+  return (
+    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"14px 16px" }}>
+      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
+      <div style={{ fontSize:24, fontWeight:600, color:"#111", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>{valor || 0}</div>
+    </div>
+  );
+}
+
+// Modal de confirmação de exclusão de empresa.
+// Usa padrão GitHub/Stripe: usuário precisa digitar o nome exato da empresa
+// pro botão "Excluir definitivamente" ficar habilitado. Evita cliques acidentais.
+function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
+  const [confirmacao, setConfirmacao] = useState("");
+  const [excluindo, setExcluindo] = useState(false);
+  // Botão só habilita quando o nome digitado bate exatamente (sem trim — força exatidão)
+  const podeExcluir = confirmacao === empresa.nome;
+
+  async function excluir() {
+    if (!podeExcluir) return;
+    setExcluindo(true);
+    try {
+      await api.admin.empresas.delete(empresa.id);
+      toast.sucesso("Empresa excluída");
+      onConfirmado();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao excluir", mensagem: e.message, tipo: "erro" });
+      setExcluindo(false);
+    }
+  }
+
+  return (
+    <div style={S.overlay} onClick={onFechar}>
+      <div style={S.modalLg} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Excluir empresa definitivamente?
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
+          Esta ação <strong style={{ color:"#991b1b" }}>NÃO pode ser desfeita</strong>. Vai apagar permanentemente:
+          <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
+            <li>A empresa <strong>{empresa.nome}</strong></li>
+            <li>Todos os usuários dela</li>
+            <li>Todos os clientes, orçamentos, obras e demais dados</li>
+          </ul>
+        </div>
+        <div style={{ marginBottom:16 }}>
+          <label style={S.label}>
+            Para confirmar, digite o nome da empresa: <strong style={{ color:"#111" }}>{empresa.nome}</strong>
+          </label>
+          <input
+            value={confirmacao}
+            onChange={e => setConfirmacao(e.target.value)}
+            style={{ ...S.input, fontFamily:"'SF Mono',Menlo,Consolas,monospace" }}
+            autoFocus
+            placeholder="Digite o nome exato"
+          />
+        </div>
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={onFechar} style={S.btnSec} disabled={excluindo}>Cancelar</button>
+          <button
+            onClick={excluir}
+            disabled={!podeExcluir || excluindo}
+            style={{
+              ...S.btnDestrutivo,
+              opacity: (!podeExcluir || excluindo) ? 0.45 : 1,
+              cursor: (!podeExcluir || excluindo) ? "not-allowed" : "pointer",
+            }}>
+            {excluindo ? "Excluindo..." : "Excluir definitivamente"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
