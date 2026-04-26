@@ -14642,8 +14642,19 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
         </div>
         <div style={{ marginBottom:16 }}>
           <label style={S.label}>
-            Para confirmar, digite o nome da empresa: <strong style={{ color:"#111" }}>{empresa.nome}</strong>
+            Para confirmar, digite o nome da empresa abaixo:
           </label>
+          {/* Nome em destaque, FORA do label uppercase (S.label tem textTransform).
+              Renderiza com fonte mono pra deixar capitalização inequívoca. */}
+          <div style={{
+            background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:6,
+            padding:"6px 10px", marginBottom:8,
+            fontFamily:"'SF Mono',Menlo,Consolas,monospace",
+            fontSize:13, color:"#111", fontWeight:600,
+            userSelect:"all", // facilita selecionar e copiar
+          }}>
+            {empresa.nome}
+          </div>
           <input
             value={confirmacao}
             onChange={e => setConfirmacao(e.target.value)}
