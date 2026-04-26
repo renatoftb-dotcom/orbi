@@ -53,6 +53,9 @@ function Escritorio({ data, save }) {
   const [confirmSenha, setConfirmSenha] = useState("");
   const [salvandoUsuario, setSalvandoUsuario] = useState(false);
   const [confirmarExcluir, setConfirmarExcluir] = useState(null); // { id, nome } quando modal aberto
+  // Reset de senha: estágio 1 (confirmar) + estágio 2 (exibir senha gerada)
+  const [usuarioParaResetar, setUsuarioParaResetar] = useState(null);
+  const [senhaGerada, setSenhaGerada]               = useState(null);
   // JWT (fonte: localStorage), pra identificar o usuário logado e não desativar/excluir a si mesmo
   const tokenAtual = (typeof localStorage !== "undefined") ? localStorage.getItem("vicke-token") : null;
   const usuarioLogadoId = (() => {
@@ -950,6 +953,15 @@ function Escritorio({ data, save }) {
                       textTransform:"uppercase", letterSpacing:0.5,
                     }}>Inativo</span>
                   )}
+                  {u.precisa_trocar_senha && (
+                    <span style={{
+                      fontSize:10, padding:"2px 6px", borderRadius:4,
+                      background:"#fffbeb", color:"#b45309", fontWeight:600,
+                      textTransform:"uppercase", letterSpacing:0.5,
+                    }} title="Senha foi resetada — usuário precisa trocá-la no próximo login">
+                      ⚠ Trocar senha
+                    </span>
+                  )}
                 </div>
                 <div style={E.membroCargo}>{u.email}</div>
                 {membroVinculado && (
@@ -975,6 +987,16 @@ function Escritorio({ data, save }) {
                   style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                   Editar
                 </button>
+                {/* Reset de senha — só admin de empresa pode, não pra si mesmo,
+                    não pra usuário inativo (sem sentido resetar quem não loga). */}
+                {!ehVoce && u.ativo !== false && (
+                  <button
+                    onClick={() => setUsuarioParaResetar(u)}
+                    title="Resetar senha do usuário"
+                    style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    Resetar senha
+                  </button>
+                )}
                 {!ehVoce && (
                   <button
                     onClick={() => pedirConfirmacaoExcluir(u)}
@@ -1131,6 +1153,46 @@ function Escritorio({ data, save }) {
             </div>
           </div>
         )}
+
+        {/* Reset de senha — reusa componentes definidos em admin.jsx (são funções
+            top-level, ficam disponíveis no bundle combinado). Adapter de estilos E→S
+            pra os componentes encontrarem as chaves esperadas (overlay, modal, btn, etc). */}
+        {(usuarioParaResetar || senhaGerada) && (() => {
+          const S = {
+            overlay: E.overlay,
+            modal:   E.modal,
+            modalLg: { ...E.modal, maxWidth:560 },
+            btn:     E.btn,
+            btnSec:  E.btnSec,
+            input:   E.input,
+            label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
+          };
+          return (
+            <>
+              {usuarioParaResetar && (
+                <ModalConfirmarResetSenha
+                  S={S}
+                  usuario={usuarioParaResetar}
+                  escopo="empresa"
+                  onFechar={() => setUsuarioParaResetar(null)}
+                  onSucesso={(senha) => {
+                    setSenhaGerada({ usuario: usuarioParaResetar, senha });
+                    setUsuarioParaResetar(null);
+                    carregarUsuarios(); // refresh pra pegar precisa_trocar_senha=true
+                  }}
+                />
+              )}
+              {senhaGerada && (
+                <ModalExibirNovaSenha
+                  S={S}
+                  usuario={senhaGerada.usuario}
+                  senha={senhaGerada.senha}
+                  onFechar={() => setSenhaGerada(null)}
+                />
+              )}
+            </>
+          );
+        })()}
       </div>
     );
   };
