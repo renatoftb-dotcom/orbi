@@ -65,12 +65,13 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
       {/* ── 4 Cards de números ── */}
       <DashboardCards counts={dash?.counts} loading={loading} setAba={setAba} tentarTrocar={tentarTrocar} />
 
-      {/* ── Feed de atividade recente ── */}
-      <DashboardFeed feed={dash?.feed} loading={loading} />
-
-      {/* ── Navegação (cards antigos) ── */}
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:32 }}>Acesso rápido</div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+      {/* ── Navegação (acesso rápido sempre acima da dobra) ──
+          Movido pra cima do feed: convenção SaaS (Linear/Vercel/Stripe) é
+          navegação primária no topo, atividade/feed embaixo. Com volume de
+          empresas crescendo, feed pode esticar muito — não pode empurrar
+          os cards de navegação pra fora da tela. */}
+      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8 }}>Acesso rápido</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12, marginBottom:32 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
             style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
@@ -81,6 +82,9 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
           </button>
         ))}
       </div>
+
+      {/* ── Feed de atividade recente ── */}
+      <DashboardFeed feed={dash?.feed} loading={loading} />
     </div>
   );
 }
@@ -151,6 +155,11 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
 
 // Feed de atividade recente — lista simples, focada em legibilidade.
 // Cada linha: ícone (cor por tipo) + descrição + tempo relativo.
+//
+// maxHeight + overflowY:auto: feed pode crescer indefinidamente conforme
+// audit_log acumula. Scroll interno evita empurrar o resto da página.
+// 480px caem ~9-10 linhas de feed comodamente, suficiente pra ver atividade
+// recente sem sobrecarregar.
 function DashboardFeed({ feed, loading }) {
   return (
     <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px 18px" }}>
@@ -164,7 +173,13 @@ function DashboardFeed({ feed, loading }) {
         </div>
       )}
       {!loading && feed && feed.length > 0 && (
-        <div style={{ display:"flex", flexDirection:"column" }}>
+        <div style={{
+          display:"flex", flexDirection:"column",
+          maxHeight:480, overflowY:"auto",
+          // Compensação visual pra scroll: padding direito pra scrollbar
+          // não colar na borda do conteúdo.
+          paddingRight:6, marginRight:-6,
+        }}>
           {feed.map((ev, i) => (
             <FeedItem key={ev.id} ev={ev} primeiro={i === 0} />
           ))}
@@ -324,12 +339,54 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
 //   - Trocar senha com sucesso → onTrocada() → app libera
 //   - Logout → cliente sai sem trocar (caso esteja em máquina errada)
 
+// Input de senha com botão "olho" pra revelar conteúdo. Usado pelos 3
+// campos da tela de troca obrigatória. type alterna entre password (oculto,
+// default) e text (revelado). Visibilidade é controlada pelo pai.
+function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus }) {
+  return (
+    <div style={{ position:"relative" }}>
+      <input
+        type={visivel ? "text" : "password"}
+        value={valor}
+        onChange={e => onChange(e.target.value)}
+        disabled={disabled}
+        autoFocus={autoFocus}
+        style={{
+          width:"100%", border:"1px solid #e5e7eb", borderRadius:8,
+          padding:"10px 40px 10px 12px", // padding direito maior pro botão
+          fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box",
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => setVisivel(v => !v)}
+        disabled={disabled}
+        title={visivel ? "Ocultar senha" : "Mostrar senha"}
+        aria-label={visivel ? "Ocultar senha" : "Mostrar senha"}
+        style={{
+          position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
+          background:"none", border:"none", cursor: disabled ? "not-allowed" : "pointer",
+          padding:"6px 8px", fontSize:14, lineHeight:1,
+          color:"#9ca3af", fontFamily:"inherit",
+        }}>
+        {visivel ? "🙈" : "👁"}
+      </button>
+    </div>
+  );
+}
+
 function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
   const [senhaAtual, setSenhaAtual] = useState("");
   const [senhaNova, setSenhaNova]   = useState("");
   const [confirmar, setConfirmar]   = useState("");
   const [loading, setLoading]       = useState(false);
   const [erro, setErro]             = useState(null);
+  // Visibilidade independente de cada campo. Default: oculto (boa prática
+  // de não vazar senha em ombro alheio enquanto digita). Botão "olho"
+  // permite revelar pra conferir o que digitou.
+  const [verAtual, setVerAtual]     = useState(false);
+  const [verNova, setVerNova]       = useState(false);
+  const [verConfirmar, setVerConfirmar] = useState(false);
 
   function validar() {
     if (!senhaAtual) return "Informe a senha atual (a temporária recebida)";
@@ -383,13 +440,13 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Senha temporária recebida
           </label>
-          <input
-            type="password"
-            value={senhaAtual}
-            onChange={e => setSenhaAtual(e.target.value)}
+          <CampoSenha
+            valor={senhaAtual}
+            onChange={setSenhaAtual}
+            visivel={verAtual}
+            setVisivel={setVerAtual}
             disabled={loading}
             autoFocus
-            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
           />
         </div>
 
@@ -397,12 +454,12 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Nova senha (mínimo 6 caracteres)
           </label>
-          <input
-            type="password"
-            value={senhaNova}
-            onChange={e => setSenhaNova(e.target.value)}
+          <CampoSenha
+            valor={senhaNova}
+            onChange={setSenhaNova}
+            visivel={verNova}
+            setVisivel={setVerNova}
             disabled={loading}
-            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
           />
         </div>
 
@@ -410,12 +467,12 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Confirme a nova senha
           </label>
-          <input
-            type="password"
-            value={confirmar}
-            onChange={e => setConfirmar(e.target.value)}
+          <CampoSenha
+            valor={confirmar}
+            onChange={setConfirmar}
+            visivel={verConfirmar}
+            setVisivel={setVerConfirmar}
             disabled={loading}
-            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
           />
         </div>
 
