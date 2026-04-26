@@ -772,6 +772,123 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   );
 }
 
+// ── Modal "Adicionar Serviço" ────────────────────────────────────
+// Lista os 4 serviços disponíveis. Hoje só "Projeto" está implementado;
+// os outros 3 (Acompanhamento Obra, Gestão Obra, Empreendimento) são
+// listados normalmente mas, ao clicar, mostram aviso "em breve".
+//
+// Props:
+//   cliente:    cliente atual (pra ler servicos.* e marcar quais já estão ativos)
+//   onAtivar:   callback chamado com o nome do serviço a ativar
+//                 ("projeto" | "acompanhamentoObra" | "gestaoObra" | "empreendimento")
+//   onClose:    fecha o modal
+function ModalAdicionarServico({ cliente, onAtivar, onClose }) {
+  const servicos = [
+    { id: "projeto",            nome: "Projeto",                disponivel: true,  desc: "Anteprojeto, aprovação na prefeitura, executivo." },
+    { id: "acompanhamentoObra", nome: "Acompanhamento de Obra", disponivel: false, desc: "Visitas técnicas, ART/RRT, apoio durante a obra." },
+    { id: "gestaoObra",         nome: "Gestão de Obra",         disponivel: false, desc: "Coordenação completa, contratação de equipes, cronograma." },
+    { id: "empreendimento",     nome: "Empreendimento",         disponivel: false, desc: "Viabilidade, incorporação, gestão de empreendimento." },
+  ];
+
+  function ativosDoCliente(id) {
+    return !!cliente?.servicos?.[id];
+  }
+
+  function handleClick(s) {
+    if (!s.disponivel) {
+      dialogo.alertar({
+        titulo: "Em breve",
+        mensagem: `O serviço "${s.nome}" ainda está em desenvolvimento e estará disponível em breve.`,
+        tipo: "aviso",
+      });
+      return;
+    }
+    if (ativosDoCliente(s.id)) {
+      dialogo.alertar({
+        titulo: "Já adicionado",
+        mensagem: `O serviço "${s.nome}" já está ativo neste cliente.`,
+        tipo: "aviso",
+      });
+      return;
+    }
+    onAtivar(s.id);
+    onClose();
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position:"fixed", inset:0,
+        background:"rgba(0,0,0,0.5)", zIndex:9999,
+        display:"flex", alignItems:"center", justifyContent:"center", padding:20,
+      }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{
+          background:"#fff", borderRadius:12,
+          padding:"22px 22px 18px", maxWidth:460, width:"100%",
+          boxShadow:"0 8px 32px rgba(0,0,0,0.2)",
+          maxHeight:"80vh", display:"flex", flexDirection:"column",
+        }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>
+          Adicionar Serviço
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18 }}>
+          Escolha qual serviço deseja iniciar para este cliente.
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
+          {servicos.map(s => {
+            const ativo = ativosDoCliente(s.id);
+            return (
+              <button
+                key={s.id}
+                onClick={() => handleClick(s)}
+                style={{
+                  textAlign:"left", padding:"12px 14px",
+                  border:"1px solid #e5e7eb", borderRadius:9, background:"#fff",
+                  cursor:"pointer", fontFamily:"inherit",
+                  display:"flex", justifyContent:"space-between", alignItems:"center", gap:10,
+                  opacity: s.disponivel ? 1 : 0.85,
+                }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                    <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>{s.nome}</span>
+                    {ativo && (
+                      <span style={{ fontSize:10, fontWeight:600, color:"#16a34a", background:"#f0fdf4", padding:"2px 6px", borderRadius:4, textTransform:"uppercase", letterSpacing:0.4 }}>
+                        Ativo
+                      </span>
+                    )}
+                    {!s.disponivel && (
+                      <span style={{ fontSize:10, fontWeight:600, color:"#6b7280", background:"#f3f4f6", padding:"2px 6px", borderRadius:4, textTransform:"uppercase", letterSpacing:0.4 }}>
+                        Em breve
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, lineHeight:1.4 }}>{s.desc}</div>
+                </div>
+                <span style={{ color:"#9ca3af", fontSize:18, lineHeight:1 }}>›</span>
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ display:"flex", justifyContent:"flex-end" }}>
+          <button onClick={onClose}
+            style={{
+              background:"#fff", color:"#374151",
+              border:"1px solid #e5e7eb", borderRadius:8,
+              padding:"8px 16px", fontSize:13, fontWeight:500,
+              cursor:"pointer", fontFamily:"inherit",
+            }}>
+            Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const perm = getPermissoes();
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
@@ -784,6 +901,8 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
   const [openMenu, setOpenMenu] = useState(null);
   const [propostaVisualizada, setPropostaVisualizada] = useState(null);
   const [orcGanho, setOrcGanho] = useState(null);
+  // Modal "Adicionar Serviço": abre lista com Projeto + 3 placeholders ("em breve")
+  const [modalAddServico, setModalAddServico] = useState(false);
   // Visualização (persistida em localStorage, compartilhada com a página Orçamentos)
   const [viz, setViz] = useVisualizacaoOrcamentos();
   // Ordenação (reseta a cada abertura) e filtros por coluna
@@ -815,7 +934,11 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
 
   // ── Subview: módulo orçamento-teste ─────────────────────────
   // ── Card principal ───────────────────────────────────────────
-  const temProjeto = cliente.servicos?.projeto;
+  // temProjeto: true se o cliente tem o serviço "Projeto" ativado OU se
+  // já tem orçamentos vinculados a ele. Isso garante que o bloco apareça
+  // mesmo se o orçamento foi criado por fora (ex: aba Projetos > Orçamentos)
+  // sem ter passado pelo modal "Adicionar Serviço" deste card.
+  const temProjeto = !!cliente.servicos?.projeto || orcamentos.length > 0;
   const fmt = v => "R$ " + (v||0).toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
 
   const STATUS_ORC = {
@@ -938,8 +1061,10 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
     }
   }
 
-  function ativarProjeto() {
-    const novosServicos = { ...cliente.servicos, projeto: true };
+  // Ativa um serviço no cliente: seta servicos[id]=true e persiste.
+  // Usado pelo ModalAdicionarServico. id ∈ {projeto, acompanhamentoObra, gestaoObra, empreendimento}
+  function ativarServico(id) {
+    const novosServicos = { ...(cliente.servicos || {}), [id]: true };
     const novosClientes = data.clientes.map(c => c.id===cliente.id ? { ...c, servicos:novosServicos } : c);
     save({ ...data, clientes: novosClientes });
   }
@@ -950,17 +1075,17 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
       {/* ── Header serviços ── */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Serviços</div>
-        {!temProjeto && (
+        {perm.podeEditar && (
           <button
-            onClick={ativarProjeto}
+            onClick={() => setModalAddServico(true)}
             style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
             + Adicionar Serviço
           </button>
         )}
       </div>
 
-      {/* ── Sem serviço ── */}
-      {!temProjeto && (
+      {/* ── Sem serviços (cliente novo, sem orçamentos e sem flags) ── */}
+      {!temProjeto && !cliente.servicos?.acompanhamentoObra && !cliente.servicos?.gestaoObra && !cliente.servicos?.empreendimento && (
         <div style={{ border:"1px dashed #e5e7eb", borderRadius:12, padding:"32px", textAlign:"center", color:"#9ca3af", fontSize:13 }}>
           Nenhum serviço cadastrado. Clique em "+ Adicionar Serviço" para começar.
         </div>
@@ -969,19 +1094,27 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
       {/* ── Serviço Projeto ── */}
       {temProjeto && (
         <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:"16px" }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: orcamentos.length > 0 ? 14 : 0 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <div style={{ width:8, height:8, borderRadius:"50%", background:"#3b82f6" }} />
-              <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>Projeto</span>
-            </div>
-            {perm.podeEditar && (
-              <button
-                onClick={() => onAbrirOrcamento(cliente, null)}
-                style={{ background:"#fff", color:"#111", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
-                Orçar projeto
-              </button>
-            )}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: 14 }}>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:"#3b82f6" }} />
+            <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>Projeto</span>
           </div>
+
+          {/* Caso especial: Projeto ativado mas ainda sem orçamentos */}
+          {orcamentos.length === 0 && (
+            <div style={{ padding:"20px", textAlign:"center", color:"#9ca3af", fontSize:12.5, border:"1px dashed #e5e7eb", borderRadius:9, background:"#fafafa" }}>
+              Nenhum orçamento ainda.
+              {perm.podeEditar && (
+                <>
+                  {" "}
+                  <button
+                    onClick={() => onAbrirOrcamento(cliente, null)}
+                    style={{ background:"transparent", border:"none", color:"#3b82f6", cursor:"pointer", padding:0, fontSize:12.5, fontFamily:"inherit", textDecoration:"underline" }}>
+                    Criar primeiro orçamento
+                  </button>
+                </>
+              )}
+            </div>
+          )}
 
           {/* Lista de orçamentos — tabela ou cards (mesma preferência da página Orçamentos) */}
           {orcamentos.length > 0 && (() => {
@@ -1118,7 +1251,22 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
             return (
               <div>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, gap:8, flexWrap:"wrap" }}>
-                  <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
+                    {perm.podeEditar && (
+                      <button
+                        onClick={() => onAbrirOrcamento(cliente, null)}
+                        title="Novo orçamento"
+                        style={{
+                          background:"transparent", border:"1px solid #e5e7eb", borderRadius:"50%",
+                          width:20, height:20, padding:0, cursor:"pointer",
+                          display:"flex", alignItems:"center", justifyContent:"center",
+                          color:"#6b7280", fontSize:14, lineHeight:1, fontFamily:"inherit",
+                        }}>
+                        +
+                      </button>
+                    )}
+                  </div>
                   <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                     {viz === "cards" && <SortDropdown sort={sort} setSort={setSort} />}
                     <ToggleVisualizacao viz={viz} setViz={setViz} />
@@ -1254,6 +1402,15 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
           orc={orcGanho}
           onClose={() => setOrcGanho(null)}
           onConfirmar={confirmarGanho}
+        />
+      )}
+
+      {/* Modal Adicionar Serviço */}
+      {modalAddServico && (
+        <ModalAdicionarServico
+          cliente={cliente}
+          onAtivar={ativarServico}
+          onClose={() => setModalAddServico(false)}
         />
       )}
     </div>
