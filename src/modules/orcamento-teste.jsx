@@ -5533,6 +5533,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [etapaEditando, setEtapaEditando] = useState(null);
   // Opção que está sendo "escolhida" no momento (anima is-chosen + is-fading)
   const [opcaoEscolhida, setOpcaoEscolhida] = useState(null);
+  // Texto temporário do input de referência (commit no Enter/blur)
+  const [referenciaTemp, setReferenciaTemp] = useState(orcBase?.referencia || "");
+  // Flag: usuário está editando a referência inline (abaixo do nome do cliente)
+  const [editandoRefInline, setEditandoRefInline] = useState(false);
   // Abre preview automaticamente quando:
   // - modoVer é true (legado)
   // - modoAbertura === "ver" ou "verProposta" (novo fluxo) E tem orçamento existente
@@ -5590,7 +5594,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!orcBase) return;
     // Ativa flag para evitar que useEffect de grupoParams sobrescreva durante sincronização
     sincronizandoOrcBase.current = true;
-    if (orcBase.referencia  !== undefined) setReferencia(orcBase.referencia || "");
+    if (orcBase.referencia  !== undefined) { setReferencia(orcBase.referencia || ""); setReferenciaTemp(orcBase.referencia || ""); }
     if (orcBase.subtipo     !== undefined) setTipoObra(orcBase.subtipo);
     if (orcBase.tipo        !== undefined) setTipoProjeto(orcBase.tipo);
     if (orcBase.padrao      !== undefined) setPadrao(orcBase.padrao);
@@ -5796,6 +5800,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const SETS   = { tipoObra:setTipoObra, tipoProjeto:setTipoProjeto, padrao:setPadrao, tipologia:setTipologia, tamanho:setTamanho };
 
   function selecionar(key, val) { SETS[key](val); setEtapaEditando(null); }
+
+  // Confirma a referência (Enter ou blur). Anima is-chosen no input antes de aplicar.
+  function confirmarReferencia() {
+    const val = referenciaTemp.trim();
+    if (!val) return; // referência é obrigatória
+    if (val === referencia) {
+      // Já estava com esse valor — só fecha edição se aberta
+      setEtapaEditando(null);
+      return;
+    }
+    // Anima usando o flag opcaoEscolhida (mesmo que pra opções)
+    setOpcaoEscolhida(val);
+    setTimeout(() => {
+      setReferencia(val);
+      setEtapaEditando(null);
+      setOpcaoEscolhida(null);
+    }, 450);
+  }
 
   const grupoDeComodo = useMemo(() => {
     const map = {};
@@ -6042,50 +6064,73 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .comodo-escolhido:hover strong { color: #dc2626 !important; }
 
       /* ===== Fluxo vk-flow2 — perguntas sequenciais ===== */
-      @keyframes flow2NodeIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+      @keyframes flow2NodeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes flow2CardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes flow2OptIn  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes flow2OptChosen { 0% { transform: scale(1); } 35% { transform: scale(1.02); } 100% { transform: scale(1); } }
       @keyframes flow2DotPulse {
-        0%, 100% { box-shadow: 0 0 0 3px #fff, 0 0 0 5px #111; }
-        50%      { box-shadow: 0 0 0 3px #fff, 0 0 0 8px rgba(0,0,0,0); }
+        0%, 100% { box-shadow: 0 0 0 4px #f4f5f7, 0 0 0 6px #111; }
+        50%      { box-shadow: 0 0 0 4px #f4f5f7, 0 0 0 10px rgba(0,0,0,0); }
       }
       @keyframes nodeEditIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
-      /* trilha horizontal compacta */
-      .vk-trilha { display: flex; align-items: center; gap: 0; flex-wrap: wrap; padding: 14px 16px; background: #fafaf7; border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 24px; }
-      .vk-trilha-node { display: inline-flex; align-items: center; gap: 8px; position: relative; padding: 4px 10px; border-radius: 6px; cursor: default; transition: background .12s; animation: flow2NodeIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; }
-      .vk-trilha-node.is-done { cursor: pointer; }
-      .vk-trilha-node.is-done:hover { background: rgba(0,0,0,0.04); }
-      .vk-trilha-dot { width: 8px; height: 8px; border-radius: 50%; background: #111; box-shadow: 0 0 0 3px #fafaf7; flex-shrink: 0; }
-      .vk-trilha-dot-active { width: 10px; height: 10px; box-shadow: 0 0 0 3px #fafaf7, 0 0 0 5px #111; animation: flow2DotPulse 2.4s infinite ease-in-out; }
-      .vk-trilha-dot-future { width: 7px; height: 7px; background: transparent; border: 1.5px solid rgba(0,0,0,0.20); box-shadow: 0 0 0 3px #fafaf7; }
-      .vk-trilha-text { display: flex; flex-direction: column; line-height: 1.15; }
-      .vk-trilha-key { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #828a98; font-weight: 600; }
-      .vk-trilha-val { font-size: 12.5px; font-weight: 600; color: #111; letter-spacing: -0.005em; }
-      .vk-trilha-val-pending { color: #828a98; font-weight: 500; font-style: italic; font-size: 11.5px; }
-      .vk-trilha-caret { font-size: 8px; color: #828a98; margin-left: 2px; }
-      .vk-trilha-node-future .vk-trilha-key { color: rgba(0,0,0,0.30); }
-      .vk-trilha-sep { width: 14px; height: 1px; background: rgba(0,0,0,0.12); margin: 0 2px; flex-shrink: 0; }
+      /* ===== TRILHA VERTICAL LATERAL DIREITA ===== */
+      .vk-flow-shell { display: grid; grid-template-columns: 1fr 280px; gap: 0; min-height: calc(100vh - 200px); }
+      .vk-flow-stage { padding: 32px 48px 40px 8px; }
+      .vk-trilha-rail { background: #f4f5f7; border-left: 1px solid #e5e7eb; padding: 32px 28px 32px 28px; position: relative; }
+      .vk-trilha-rail-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #828a98; font-weight: 600; margin-bottom: 24px; }
+      .vk-trilha-list { position: relative; display: flex; flex-direction: column; gap: 22px; }
+      .vk-trilha-line { position: absolute; left: 9px; top: 10px; bottom: 10px; width: 1.5px; background: linear-gradient(to bottom, #c8cdd6 0%, #c8cdd6 60%, #e5e7eb 100%); z-index: 0; }
 
-      /* popover de edição inline */
-      .vk-trilha-edit { position: absolute; top: calc(100% + 6px); left: 0; z-index: 100; min-width: 200px; background: #fff; border: 1px solid rgba(0,0,0,0.10); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 28px -16px rgba(0,0,0,0.18); animation: nodeEditIn .25s cubic-bezier(0.32, 0.72, 0, 1); }
+      /* Cada nó */
+      .vk-trilha-node { display: grid; grid-template-columns: 22px 1fr; gap: 14px; align-items: flex-start; position: relative; cursor: default; animation: flow2NodeIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; }
+      .vk-trilha-node.is-done { cursor: pointer; }
+      .vk-trilha-node.is-done:hover .vk-trilha-val { color: #4b5563; }
+
+      /* Bolinha — preenchida pretas (done), anel duplo (active), vazada (future) */
+      .vk-trilha-dot { width: 10px; height: 10px; border-radius: 50%; background: #111; margin-top: 4px; margin-left: 5px; position: relative; z-index: 1; box-shadow: 0 0 0 4px #f4f5f7; flex-shrink: 0; transition: all .25s ease; }
+      .vk-trilha-dot-active { width: 14px; height: 14px; margin-top: 2px; margin-left: 3px; box-shadow: 0 0 0 4px #f4f5f7, 0 0 0 6px #111; animation: flow2DotPulse 2.4s infinite ease-in-out; }
+      .vk-trilha-dot-future { width: 9px; height: 9px; margin-top: 5px; margin-left: 6px; background: transparent; border: 1.5px solid #c8cdd6; box-shadow: 0 0 0 3px #f4f5f7; }
+
+      /* Texto */
+      .vk-trilha-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+      .vk-trilha-key { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 600; line-height: 1.2; }
+      .vk-trilha-val { font-size: 13px; font-weight: 600; color: #111; letter-spacing: -0.005em; line-height: 1.3; word-break: break-word; }
+      .vk-trilha-val-pending { color: #828a98; font-weight: 400; font-style: italic; font-size: 12.5px; }
+      .vk-trilha-caret { font-size: 8px; color: #828a98; margin-left: 4px; }
+      .vk-trilha-node-future .vk-trilha-key { color: rgba(0,0,0,0.30); }
+
+      /* Popover de edição inline (no rail) */
+      .vk-trilha-edit { position: absolute; top: 0; right: calc(100% + 8px); z-index: 100; min-width: 240px; background: #fff; border: 1px solid rgba(0,0,0,0.10); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 28px -8px rgba(0,0,0,0.18); animation: nodeEditIn .25s cubic-bezier(0.32, 0.72, 0, 1); }
       .vk-trilha-edit-head { padding: 7px 11px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 600; }
-      .vk-trilha-edit-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
+      .vk-trilha-edit-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 12px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
       .vk-trilha-edit-row:last-child { border-bottom: 0; }
       .vk-trilha-edit-row:hover { background: #fafaf7; }
       .vk-trilha-edit-row.is-selected { background: #111; color: #fff; }
       .vk-trilha-edit-row.is-selected:hover { background: #111; }
       .vk-trilha-edit-bullet { width: 5px; height: 5px; border-radius: 50%; background: rgba(0,0,0,0.20); flex: 0 0 auto; }
       .vk-trilha-edit-row.is-selected .vk-trilha-edit-bullet { background: #fff; }
+      .vk-trilha-edit-input { width: 100%; padding: 9px 12px; border: 0; border-bottom: 1px solid rgba(0,0,0,0.06); background: transparent; font-family: inherit; font-size: 13px; color: #111; outline: none; }
+      .vk-trilha-edit-input:focus { background: #fafaf7; }
+      .vk-trilha-edit-actions { display: flex; justify-content: flex-end; padding: 8px 11px; gap: 6px; background: #fafaf7; }
+      .vk-trilha-edit-btn { font-size: 11px; padding: 5px 10px; border-radius: 4px; border: 1px solid #d0d4db; background: #fff; cursor: pointer; font-family: inherit; font-weight: 500; color: #6b7280; }
+      .vk-trilha-edit-btn-primary { background: #111; color: #fff; border-color: #111; }
 
-      /* card central da pergunta atual */
-      .vk-flow2-card { width: 100%; max-width: 600px; margin: 0 auto 24px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
-      .vk-flow2-progress { margin-bottom: 12px; font-size: 10px; letter-spacing: 0.16em; color: #828a98; font-weight: 500; font-variant-numeric: tabular-nums; text-transform: uppercase; }
-      .vk-flow2-title { font-family: inherit; font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.2; margin: 0; color: #111; }
-      .vk-flow2-hint { font-size: 13px; color: #6b7280; line-height: 1.5; margin-top: 6px; max-width: 460px; }
+      /* Card central da pergunta atual */
+      .vk-flow2-card { width: 100%; max-width: 540px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
+      .vk-flow2-progress { margin-bottom: 14px; font-size: 10px; letter-spacing: 0.16em; color: #828a98; font-weight: 500; font-variant-numeric: tabular-nums; text-transform: uppercase; }
+      .vk-flow2-title { font-family: inherit; font-size: 26px; font-weight: 500; letter-spacing: -0.022em; line-height: 1.2; margin: 0; color: #111; }
+      .vk-flow2-hint { font-size: 13.5px; color: #6b7280; line-height: 1.55; margin-top: 8px; max-width: 460px; }
 
-      /* tabela de opções */
+      /* Input texto pra "Referência" (primeira pergunta) */
+      .vk-flow2-input-wrap { margin-top: 24px; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; }
+      .vk-flow2-input { width: 100%; max-width: 460px; padding: 14px 18px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; background: #fff; font-family: inherit; font-size: 15px; color: #111; outline: none; transition: border-color .15s, box-shadow .15s, background .25s, color .25s; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
+      .vk-flow2-input:focus { border-color: #111; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
+      .vk-flow2-input.is-chosen { background: #111; color: #fff; border-color: #111; animation: flow2OptChosen .55s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .vk-flow2-input::placeholder { color: #828a98; }
+      .vk-flow2-input-hint { font-size: 11.5px; color: #828a98; margin-top: 8px; letter-spacing: 0.02em; }
+
+      /* Tabela de opções */
       .vk-flow2-table { margin-top: 20px; border: 1px solid rgba(0,0,0,0.10); border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 12px 28px -16px rgba(0,0,0,0.10); }
       .vk-flow2-table-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 500; }
       .vk-flow2-row { display: grid; grid-template-columns: 32px 1fr 22px; align-items: center; gap: 14px; padding: 13px 16px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; text-align: left; font-family: inherit; font-size: 14px; color: #111; transition: background .15s ease; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; width: 100%; }
@@ -6395,223 +6440,364 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       </div>
 
       {/* ── Identificação ── */}
-      <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:32 }}>
-        <div>
-          <div style={{ fontSize:20, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
-        </div>
-        <div>
-          <span style={C.fieldLabel}>Referência</span>
-          <input style={C.input} placeholder="Nome do projeto, endereço ou bairro"
-            value={referencia} onChange={e => setReferencia(e.target.value)} />
-        </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:24 }}>
+        <div style={{ fontSize:20, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
+        {/* Referência editável inline abaixo do nome — só aparece após preencher na primeira pergunta */}
+        {referencia && (
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            {editandoRefInline ? (
+              <input
+                autoFocus
+                type="text"
+                value={referenciaTemp}
+                onChange={e => setReferenciaTemp(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (referenciaTemp.trim()) {
+                      setReferencia(referenciaTemp.trim());
+                      setEditandoRefInline(false);
+                    }
+                  } else if (e.key === "Escape") {
+                    setReferenciaTemp(referencia);
+                    setEditandoRefInline(false);
+                  }
+                }}
+                onBlur={() => {
+                  if (referenciaTemp.trim()) {
+                    setReferencia(referenciaTemp.trim());
+                  } else {
+                    setReferenciaTemp(referencia);
+                  }
+                  setEditandoRefInline(false);
+                }}
+                style={{
+                  fontSize:13.5, fontWeight:500, color:"#111",
+                  border:"1px solid #c8cdd6", borderRadius:6,
+                  padding:"4px 10px", outline:"none", fontFamily:"inherit",
+                  minWidth:280, background:"#fff",
+                }}
+              />
+            ) : (
+              <span
+                onClick={() => { setReferenciaTemp(referencia); setEditandoRefInline(true); }}
+                style={{
+                  fontSize:13.5, fontWeight:500, color:"#374151",
+                  cursor:"pointer", padding:"4px 10px", borderRadius:6,
+                  border:"1px solid transparent",
+                  transition:"background 0.15s, border-color 0.15s",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background="#f4f5f7"; e.currentTarget.style.borderColor="#e5e7eb"; }}
+                onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="transparent"; }}
+                title="Clique para editar">
+                {referencia}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* ── Fluxo sequencial de parâmetros: trilha horizontal compacta + card central ── */}
+      {/* ── Barra de toggles (Arq/Eng/Marc + Repetição) — sempre visível ── */}
+      <div style={{
+        display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
+        padding:"12px 16px", marginBottom:16,
+        background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
+      }}>
+        {[
+          { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
+          { key:"incluiEng",        val:incluiEng,        set:setIncluiEng,        label:"Engenharia"   },
+          { key:"incluiMarcenaria", val:incluiMarcenaria, set:setIncluiMarcenaria, label:"Marcenaria"   },
+        ].map(({ key, val, set, label }) => (
+          <label key={key} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
+            <span onClick={() => set(v => !v)} style={{
+              position:"relative", display:"inline-block",
+              width:36, height:20, borderRadius:10, flexShrink:0,
+              background: val ? "#111" : "#d1d5db",
+              transition:"background 0.2s",
+              cursor:"pointer",
+            }}>
+              <span style={{
+                position:"absolute", top:3, left: val ? 19 : 3,
+                width:14, height:14, borderRadius:"50%",
+                background:"#fff",
+                transition:"left 0.2s",
+                boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
+              }} />
+            </span>
+            <span style={{ fontSize:13, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
+              {label}
+            </span>
+          </label>
+        ))}
+        {tipoProjeto !== "Conj. Comercial" && (
+          <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"1px solid #e5e7eb" }}>
+            <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
+            <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+              onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
+            {editandoRep ? (
+              <input
+                autoFocus
+                type="number" min="0"
+                defaultValue={qtdRep}
+                onBlur={e => { const v = parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); }}
+                onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); } }}
+                className="no-spin"
+                style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
+              />
+            ) : (
+              <span
+                onClick={() => setEditandoRep(true)}
+                title="Clique para digitar"
+                style={{ fontSize:13, fontWeight: qtdRep > 0 ? 700 : 400, minWidth:16, textAlign:"center", color: qtdRep > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
+                {qtdRep}
+              </span>
+            )}
+            <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+              onClick={() => setQtdRep(n => n + 1)}>+</button>
+          </div>
+        )}
+      </div>
+
+      {/* ── Fluxo sequencial: shell 2 colunas, card central + trilha lateral direita ── */}
       {(() => {
-        // Etapas em ordem (tipologia/padrao/tamanho só se !isComercial)
-        const ordem = ["tipoObra", "tipoProjeto"];
+        // Etapas em ordem. Referência é a 1ª. Tipologia/padrão/tamanho só se !isComercial.
+        const ordem = ["referencia", "tipoObra", "tipoProjeto"];
         if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
 
+        // VALS expandido inclui referência
+        const VALS_EXT = { referencia, ...VALS };
+
         // Etapa atual: a primeira sem valor, OU a etapa que o usuário clicou pra editar
-        const proximaPendente = ordem.find(k => !VALS[k]);
+        const proximaPendente = ordem.find(k => !VALS_EXT[k]);
         const etapaAtual = etapaEditando || proximaPendente;
         const concluido = !proximaPendente && !etapaEditando;
         const stepIdx = etapaAtual ? ordem.indexOf(etapaAtual) : ordem.length;
 
-        // Hints por etapa
+        // Labels e hints
+        const LABELS_EXT = { referencia: "Referência", ...LABELS };
+        const TITLES = {
+          referencia:  "Dê uma referência a esse projeto",
+          tipoObra:    "Construção nova ou reforma?",
+          tipoProjeto: "Qual o tipo de projeto?",
+          padrao:      "Qual o padrão construtivo?",
+          tipologia:   "Qual a tipologia?",
+          tamanho:     "Qual o tamanho dos ambientes?",
+        };
         const HINTS = {
+          referencia:  "Ex: nome da casa, endereço ou bairro.",
           tipoObra:    "Define se é construção nova ou reforma de algo existente.",
-          tipoProjeto: "Define a tabela de preços base e os ambientes disponíveis.",
+          tipoProjeto: "Cada tipo destrava um conjunto diferente de cômodos e variáveis.",
           padrao:      "Define o índice de preço base do projeto.",
           tipologia:   "Térreo (1 pavimento) ou sobrado (2+ pavimentos).",
           tamanho:     "Define as medidas-padrão de cada cômodo.",
         };
 
         return (
-          <>
-            {/* Trilha horizontal compacta */}
-            <div className="vk-trilha">
-              {ordem.flatMap((k, i) => {
-                const val = VALS[k];
-                const isActive = etapaAtual === k;
-                const isDone = !!val && !isActive;
-                const isFuture = !val && !isActive;
-                let dotCls = "vk-trilha-dot";
-                if (isActive) dotCls += " vk-trilha-dot-active";
-                else if (isFuture) dotCls += " vk-trilha-dot-future";
+          <div className="vk-flow-shell">
+            {/* ─── ÁREA CENTRAL ─── */}
+            <div className="vk-flow-stage">
+              {etapaAtual && (
+                <div className="vk-flow2-card" key={"card-" + etapaAtual + "-" + opcaoEscolhida}>
+                  <div className="vk-flow2-progress">
+                    PERGUNTA {String(stepIdx + 1).padStart(2, "0")} / {String(ordem.length).padStart(2, "0")}
+                  </div>
+                  <h2 className="vk-flow2-title">{TITLES[etapaAtual]}</h2>
+                  <p className="vk-flow2-hint">{HINTS[etapaAtual]}</p>
 
-                const nodeEl = (
-                  <div
-                    key={k}
-                    className={"vk-trilha-node" + (isDone ? " is-done" : "") + (isFuture ? " vk-trilha-node-future" : "")}
-                    onClick={() => {
-                      if (!isDone) return;
-                      setEtapaEditando(etapaEditando === k ? null : k);
-                    }}
-                    style={{ animationDelay: `${i * 50}ms` }}>
-                    <span className={dotCls}></span>
-                    <span className="vk-trilha-text">
-                      <span className="vk-trilha-key">{LABELS[k]}</span>
-                      <span className={val ? "vk-trilha-val" : "vk-trilha-val-pending"}>
-                        {val ? displayOpcao(k, val) : (isActive ? "respondendo..." : "—")}
-                        {isDone && <span className="vk-trilha-caret">▾</span>}
-                      </span>
-                    </span>
-
-                    {/* popover de edição inline */}
-                    {etapaEditando === k && (
-                      <div className="vk-trilha-edit" onClick={e => e.stopPropagation()}>
-                        <div className="vk-trilha-edit-head">EDITAR · {LABELS[k]}</div>
-                        {(OPCOES[k] || []).map(op => (
+                  {/* Input texto para "referencia" */}
+                  {etapaAtual === "referencia" ? (
+                    <div className="vk-flow2-input-wrap">
+                      <input
+                        ref={el => {
+                          if (el && !opcaoEscolhida && document.activeElement !== el) {
+                            // Foco automático ao entrar na etapa
+                            setTimeout(() => { try { el.focus(); } catch {} }, 50);
+                          }
+                        }}
+                        className={"vk-flow2-input" + (opcaoEscolhida ? " is-chosen" : "")}
+                        type="text"
+                        placeholder="Ex: Casa de Praia, Residência Padovan, Bairro Vila Nova..."
+                        value={referenciaTemp}
+                        onChange={e => setReferenciaTemp(e.target.value)}
+                        disabled={!!opcaoEscolhida}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            confirmarReferencia();
+                          } else if (e.key === "Escape") {
+                            setReferenciaTemp(referencia);
+                            setEtapaEditando(null);
+                          }
+                        }}
+                        onBlur={() => {
+                          // Só confirma no blur se tem conteúdo (referência é obrigatória)
+                          if (referenciaTemp.trim() && !opcaoEscolhida) {
+                            confirmarReferencia();
+                          }
+                        }}
+                      />
+                      <div className="vk-flow2-input-hint">
+                        Pressione <strong>Enter</strong> para confirmar ou clique fora do campo.
+                      </div>
+                    </div>
+                  ) : (
+                    /* Tabela de opções */
+                    <div className="vk-flow2-table">
+                      <div className="vk-flow2-table-head">
+                        <span>OPÇÕES</span>
+                        <span>{(OPCOES[etapaAtual] || []).length}</span>
+                      </div>
+                      {(OPCOES[etapaAtual] || []).map((op, i) => {
+                        const isChosen = opcaoEscolhida === op;
+                        const isFading = !!opcaoEscolhida && !isChosen;
+                        let cls = "vk-flow2-row";
+                        if (isChosen) cls += " is-chosen";
+                        if (isFading) cls += " is-fading";
+                        return (
                           <button
                             key={op}
-                            className={"vk-trilha-edit-row" + (val === op ? " is-selected" : "")}
+                            className={cls}
+                            style={{ animationDelay: `${i * 50}ms` }}
+                            disabled={!!opcaoEscolhida}
                             onClick={() => {
-                              SETS[k](op);
-                              setEtapaEditando(null);
+                              if (opcaoEscolhida) return;
+                              setOpcaoEscolhida(op);
+                              setTimeout(() => {
+                                SETS[etapaAtual](op);
+                                setEtapaEditando(null);
+                                setOpcaoEscolhida(null);
+                              }, 450);
                             }}>
-                            <span className="vk-trilha-edit-bullet"></span>
-                            <span style={{ flex:1, fontWeight:500 }}>{displayOpcao(k, op)}</span>
+                            <span className="vk-flow2-row-idx">{String(i + 1).padStart(2, "0")}</span>
+                            <span className="vk-flow2-row-text">{displayOpcao(etapaAtual, op)}</span>
+                            <span className="vk-flow2-row-arrow">→</span>
                           </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-                const items = [nodeEl];
-                if (i < ordem.length - 1) {
-                  items.push(<span key={k + "-sep"} className="vk-trilha-sep"></span>);
-                }
-                return items;
-              })}
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
               {concluido && (
-                <span style={{ marginLeft:"auto", fontSize:11, fontWeight:600, color:"#16a34a", padding:"4px 10px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:6 }}>
-                  ✓ Concluído
-                </span>
+                <div className="vk-flow2-card">
+                  <div className="vk-flow2-progress">CONCLUÍDO</div>
+                  <h2 className="vk-flow2-title">Definições prontas ✓</h2>
+                  <p className="vk-flow2-hint">Agora preencha os cômodos abaixo. Você pode revisar qualquer resposta clicando na trilha à direita.</p>
+                </div>
               )}
             </div>
 
-            {/* Card central da pergunta atual */}
-            {etapaAtual && (
-              <div className="vk-flow2-card" key={"card-" + etapaAtual + "-" + opcaoEscolhida}>
-                <div className="vk-flow2-progress">
-                  {String(stepIdx + 1).padStart(2, "0")} / {String(ordem.length).padStart(2, "0")} · {LABELS[etapaAtual]}
-                </div>
-                <h2 className="vk-flow2-title">
-                  {etapaAtual === "tipoObra"    && "Construção nova ou reforma?"}
-                  {etapaAtual === "tipoProjeto" && "Qual o tipo de projeto?"}
-                  {etapaAtual === "padrao"      && "Qual o padrão construtivo?"}
-                  {etapaAtual === "tipologia"   && "Qual a tipologia?"}
-                  {etapaAtual === "tamanho"     && "Qual o tamanho dos ambientes?"}
-                </h2>
-                <p className="vk-flow2-hint">{HINTS[etapaAtual]}</p>
+            {/* ─── TRILHA VERTICAL LATERAL DIREITA ─── */}
+            <aside className="vk-trilha-rail">
+              <div className="vk-trilha-rail-title">Definições do projeto</div>
+              <div className="vk-trilha-list">
+                <div className="vk-trilha-line"></div>
+                {ordem.map((k, i) => {
+                  const val = VALS_EXT[k];
+                  const isActive = etapaAtual === k;
+                  const isDone = !!val && !isActive;
+                  const isFuture = !val && !isActive;
+                  let dotCls = "vk-trilha-dot";
+                  if (isActive) dotCls += " vk-trilha-dot-active";
+                  else if (isFuture) dotCls += " vk-trilha-dot-future";
 
-                <div className="vk-flow2-table">
-                  <div className="vk-flow2-table-head">
-                    <span>OPÇÕES</span>
-                    <span>{(OPCOES[etapaAtual] || []).length}</span>
-                  </div>
-                  {(OPCOES[etapaAtual] || []).map((op, i) => {
-                    const isChosen = opcaoEscolhida === op;
-                    const isFading = !!opcaoEscolhida && !isChosen;
-                    let cls = "vk-flow2-row";
-                    if (isChosen) cls += " is-chosen";
-                    if (isFading) cls += " is-fading";
-                    return (
-                      <button
-                        key={op}
-                        className={cls}
-                        style={{ animationDelay: `${i * 50}ms` }}
-                        disabled={!!opcaoEscolhida}
-                        onClick={() => {
-                          if (opcaoEscolhida) return;
-                          setOpcaoEscolhida(op);
-                          // Aguarda animação antes de aplicar e seguir
-                          setTimeout(() => {
-                            SETS[etapaAtual](op);
-                            setEtapaEditando(null);
-                            setOpcaoEscolhida(null);
-                          }, 450);
-                        }}>
-                        <span className="vk-flow2-row-idx">{String(i + 1).padStart(2, "0")}</span>
-                        <span className="vk-flow2-row-text">{displayOpcao(etapaAtual, op)}</span>
-                        <span className="vk-flow2-row-arrow">→</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                  return (
+                    <div
+                      key={k}
+                      className={"vk-trilha-node" + (isDone ? " is-done" : "") + (isFuture ? " vk-trilha-node-future" : "")}
+                      onClick={() => {
+                        if (!isDone) return;
+                        if (k === "referencia") setReferenciaTemp(referencia);
+                        setEtapaEditando(etapaEditando === k ? null : k);
+                      }}
+                      style={{ animationDelay: `${i * 60}ms` }}>
+                      <span className={dotCls}></span>
+                      <div className="vk-trilha-text">
+                        <span className="vk-trilha-key">{LABELS_EXT[k]}</span>
+                        <span className={val ? "vk-trilha-val" : "vk-trilha-val-pending"}>
+                          {val ? displayOpcao(k, val) : (isActive ? "aguardando..." : "—")}
+                          {isDone && <span className="vk-trilha-caret">▾</span>}
+                        </span>
+                      </div>
+
+                      {/* Popover de edição inline (lado esquerdo do nó) */}
+                      {etapaEditando === k && k !== "referencia" && (
+                        <div className="vk-trilha-edit" onClick={e => e.stopPropagation()}>
+                          <div className="vk-trilha-edit-head">EDITAR · {LABELS_EXT[k]}</div>
+                          {(OPCOES[k] || []).map(op => (
+                            <button
+                              key={op}
+                              className={"vk-trilha-edit-row" + (val === op ? " is-selected" : "")}
+                              onClick={() => {
+                                SETS[k](op);
+                                setEtapaEditando(null);
+                              }}>
+                              <span className="vk-trilha-edit-bullet"></span>
+                              <span style={{ flex:1, fontWeight:500 }}>{displayOpcao(k, op)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {/* Popover de edição da Referência (input texto) */}
+                      {etapaEditando === k && k === "referencia" && (
+                        <div className="vk-trilha-edit" onClick={e => e.stopPropagation()}>
+                          <div className="vk-trilha-edit-head">EDITAR · REFERÊNCIA</div>
+                          <input
+                            className="vk-trilha-edit-input"
+                            autoFocus
+                            type="text"
+                            value={referenciaTemp}
+                            onChange={e => setReferenciaTemp(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                if (referenciaTemp.trim()) {
+                                  setReferencia(referenciaTemp.trim());
+                                  setEtapaEditando(null);
+                                }
+                              } else if (e.key === "Escape") {
+                                setReferenciaTemp(referencia);
+                                setEtapaEditando(null);
+                              }
+                            }}
+                          />
+                          <div className="vk-trilha-edit-actions">
+                            <button className="vk-trilha-edit-btn" onClick={() => { setReferenciaTemp(referencia); setEtapaEditando(null); }}>Cancelar</button>
+                            <button className="vk-trilha-edit-btn vk-trilha-edit-btn-primary"
+                              onClick={() => {
+                                if (referenciaTemp.trim()) {
+                                  setReferencia(referenciaTemp.trim());
+                                  setEtapaEditando(null);
+                                }
+                              }}>Salvar</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            )}
-          </>
+            </aside>
+          </div>
         );
       })()}
 
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 400px", gap:32, alignItems:"start",
+        <div style={{ display:"grid", gridTemplateColumns:"480px 1fr", gap:24, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
-          marginTop:32,
+          marginTop:24,
         }}>
 
-          <div>
-            {/* Toggles de serviços */}
-            <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginBottom:12, alignItems:"center" }}>
-              {[
-                { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
-                { key:"incluiEng",        val:incluiEng,        set:setIncluiEng,        label:"Engenharia"   },
-                { key:"incluiMarcenaria", val:incluiMarcenaria, set:setIncluiMarcenaria, label:"Marcenaria"   },
-              ].map(({ key, val, set, label }) => (
-                <label key={key} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
-                  <span onClick={() => set(v => !v)} style={{
-                    position:"relative", display:"inline-block",
-                    width:36, height:20, borderRadius:10, flexShrink:0,
-                    background: val ? "#111" : "#d1d5db",
-                    transition:"background 0.2s",
-                    cursor:"pointer",
-                  }}>
-                    <span style={{
-                      position:"absolute", top:3, left: val ? 19 : 3,
-                      width:14, height:14, borderRadius:"50%",
-                      background:"#fff",
-                      transition:"left 0.2s",
-                      boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
-                    }} />
-                  </span>
-                  <span style={{ fontSize:13, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
-                    {label}
-                  </span>
-                </label>
-              ))}
-              {tipoProjeto !== "Conj. Comercial" && (
-                <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:8, borderLeft:"1px solid #e5e7eb" }}>
-                  <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
-                  <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
-                    onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
-                  {editandoRep ? (
-                    <input
-                      autoFocus
-                      type="number" min="0"
-                      defaultValue={qtdRep}
-                      onBlur={e => { const v = parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); }}
-                      onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); } }}
-                      className="no-spin"
-                      style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
-                    />
-                  ) : (
-                    <span
-                      onClick={() => setEditandoRep(true)}
-                      title="Clique para digitar"
-                      style={{ fontSize:13, fontWeight: qtdRep > 0 ? 700 : 400, minWidth:16, textAlign:"center", color: qtdRep > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
-                      {qtdRep}
-                    </span>
-                  )}
-                  <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
-                    onClick={() => setQtdRep(n => n + 1)}>+</button>
-                </div>
-              )}
-            </div>
-
+          <div style={{
+            background:"#fff",
+            border:"1px solid #e5e7eb",
+            borderRadius:10,
+            maxHeight:520,
+            overflowY:"auto",
+            padding:"4px 12px",
+          }}>
 
 
             {/* Container 1 coluna */}
