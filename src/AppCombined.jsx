@@ -11744,10 +11744,20 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       @keyframes nodeEditIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
       /* ===== TRILHA VERTICAL LATERAL DIREITA ===== */
-      .vk-flow-shell { display: grid; grid-template-columns: 1fr 280px; gap: 0; min-height: calc(100vh - 200px); }
-      .vk-flow-stage { padding: 32px 48px 40px 8px; }
-      .vk-trilha-rail { background: #f4f5f7; border-left: 1px solid #e5e7eb; padding: 32px 28px 32px 28px; position: relative; }
-      .vk-trilha-rail-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #828a98; font-weight: 600; margin-bottom: 24px; }
+      .vk-flow-shell { display: grid; grid-template-columns: 1fr 280px; gap: 0; }
+      .vk-flow-stage { padding: 8px 24px 24px 0; }
+      .vk-trilha-rail { background: #f4f5f7; border-left: 1px solid #e5e7eb; padding: 24px 28px 32px 28px; position: relative; align-self: stretch; }
+      .vk-trilha-rail-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #828a98; font-weight: 600; margin-bottom: 20px; }
+
+      /* Trilha horizontal compacta (modo concluído) */
+      .vk-trilha-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 14px; background: #f4f5f7; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 18px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
+      .vk-trilha-h-node { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 5px; cursor: pointer; transition: background .12s; position: relative; }
+      .vk-trilha-h-node:hover { background: rgba(0,0,0,0.04); }
+      .vk-trilha-h-dot { width: 7px; height: 7px; border-radius: 50%; background: #111; flex-shrink: 0; }
+      .vk-trilha-h-key { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #828a98; font-weight: 600; }
+      .vk-trilha-h-val { font-size: 12px; font-weight: 600; color: #111; letter-spacing: -0.005em; }
+      .vk-trilha-h-caret { font-size: 7px; color: #828a98; margin-left: 1px; }
+      .vk-trilha-h-sep { width: 12px; height: 1px; background: rgba(0,0,0,0.10); }
       .vk-trilha-list { position: relative; display: flex; flex-direction: column; gap: 22px; }
       .vk-trilha-line { position: absolute; left: 9px; top: 10px; bottom: 10px; width: 1.5px; background: linear-gradient(to bottom, #c8cdd6 0%, #c8cdd6 60%, #e5e7eb 100%); z-index: 0; }
 
@@ -11819,7 +11829,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, []);
 
   const C = {
-    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative", maxWidth:1200, margin:"0 auto" },
+    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative", margin:0 },
     fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
     input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
@@ -12109,7 +12119,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       </div>
 
       {/* ── Identificação ── */}
-      <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:24 }}>
+      <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:18, maxWidth:600 }}>
         <div style={{ fontSize:20, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
         {/* Referência editável inline abaixo do nome — só aparece após preencher na primeira pergunta */}
         {referencia && (
@@ -12169,7 +12179,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       {/* ── Barra de toggles (Arq/Eng/Marc + Repetição) — sempre visível ── */}
       <div style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
-        padding:"12px 16px", marginBottom:16,
+        padding:"12px 16px", marginBottom:16, maxWidth:600,
         background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
       }}>
         {[
@@ -12261,6 +12271,37 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           tamanho:     "Define as medidas-padrão de cada cômodo.",
         };
 
+        // Se já concluiu todas as etapas, renderiza só a trilha horizontal compacta
+        // (o bloco de cômodos+resumo abaixo ocupa o espaço principal)
+        if (concluido) {
+          return (
+            <div className="vk-trilha-h" style={{ maxWidth: 1100 }}>
+              {ordem.flatMap((k, i) => {
+                const val = VALS_EXT[k];
+                const items = [
+                  <div
+                    key={k}
+                    className="vk-trilha-h-node"
+                    onClick={() => {
+                      if (k === "referencia") setReferenciaTemp(referencia);
+                      setEtapaEditando(k);
+                    }}
+                    title={`Editar ${LABELS_EXT[k]}`}>
+                    <span className="vk-trilha-h-dot"></span>
+                    <span className="vk-trilha-h-key">{LABELS_EXT[k]}</span>
+                    <span className="vk-trilha-h-val">{displayOpcao(k, val)}</span>
+                    <span className="vk-trilha-h-caret">▾</span>
+                  </div>
+                ];
+                if (i < ordem.length - 1) {
+                  items.push(<span key={k + "-sep"} className="vk-trilha-h-sep"></span>);
+                }
+                return items;
+              })}
+            </div>
+          );
+        }
+
         return (
           <div className="vk-flow-shell">
             {/* ─── ÁREA CENTRAL ─── */}
@@ -12345,13 +12386,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       })}
                     </div>
                   )}
-                </div>
-              )}
-              {concluido && (
-                <div className="vk-flow2-card">
-                  <div className="vk-flow2-progress">CONCLUÍDO</div>
-                  <h2 className="vk-flow2-title">Definições prontas ✓</h2>
-                  <p className="vk-flow2-hint">Agora preencha os cômodos abaixo. Você pode revisar qualquer resposta clicando na trilha à direita.</p>
                 </div>
               )}
             </div>
@@ -12454,16 +12488,17 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
-        <div style={{ display:"grid", gridTemplateColumns:"480px 1fr", gap:24, alignItems:"start",
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
-          marginTop:24,
+          marginTop:0,
+          maxWidth:1100,
         }}>
 
           <div style={{
             background:"#fff",
             border:"1px solid #e5e7eb",
             borderRadius:10,
-            maxHeight:520,
+            maxHeight:560,
             overflowY:"auto",
             padding:"4px 12px",
           }}>
