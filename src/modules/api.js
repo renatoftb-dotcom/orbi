@@ -141,10 +141,14 @@ const api = {
       delete: (id)         => del(`/admin/empresas/${id}`),
     },
     usuarios: {
-      list:   ()           => get("/admin/usuarios"),
-      save:   (u)          => post("/admin/usuarios", u),
-      update: (id, u)      => put(`/admin/usuarios/${id}`, u),
-      delete: (id)         => del(`/admin/usuarios/${id}`),
+      list:       ()           => get("/admin/usuarios"),
+      save:       (u)          => post("/admin/usuarios", u),
+      update:     (id, u)      => put(`/admin/usuarios/${id}`, u),
+      delete:     (id)         => del(`/admin/usuarios/${id}`),
+      // Reset administrativo: gera senha aleatória, retorna em texto puro.
+      // Master pode resetar qualquer usuário (qualquer empresa). Backend
+      // bloqueia self-reset (use /auth/trocar-senha pra trocar a própria).
+      resetSenha: (id)         => post(`/admin/usuarios/${id}/reset-senha`),
     },
     mensagens: {
       // Caixa de email do Master (Sprint 3 Bloco E).
@@ -163,11 +167,22 @@ const api = {
   // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
   empresa: {
     usuarios: {
-      list:   ()           => get("/empresa/usuarios"),
-      save:   (u)          => post("/empresa/usuarios", u),
-      update: (id, u)      => put(`/empresa/usuarios/${id}`, u),
-      delete: (id)         => del(`/empresa/usuarios/${id}`),
+      list:       ()           => get("/empresa/usuarios"),
+      save:       (u)          => post("/empresa/usuarios", u),
+      update:     (id, u)      => put(`/empresa/usuarios/${id}`, u),
+      delete:     (id)         => del(`/empresa/usuarios/${id}`),
+      // Admin de empresa só reseta colegas da própria empresa (backend valida).
+      // Não pode resetar usuário master nem a si mesmo.
+      resetSenha: (id)         => post(`/empresa/usuarios/${id}/reset-senha`),
     },
+  },
+
+  // ── AUTH (qualquer usuário autenticado) ────────────────────
+  auth: {
+    me:           ()                          => get("/auth/me"),
+    // Troca da própria senha. Exige senha atual pra prevenir abuso de
+    // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
+    trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
   },
 
   backup: {

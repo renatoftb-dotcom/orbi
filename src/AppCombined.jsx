@@ -1169,10 +1169,14 @@ const api = {
       delete: (id)         => del(`/admin/empresas/${id}`),
     },
     usuarios: {
-      list:   ()           => get("/admin/usuarios"),
-      save:   (u)          => post("/admin/usuarios", u),
-      update: (id, u)      => put(`/admin/usuarios/${id}`, u),
-      delete: (id)         => del(`/admin/usuarios/${id}`),
+      list:       ()           => get("/admin/usuarios"),
+      save:       (u)          => post("/admin/usuarios", u),
+      update:     (id, u)      => put(`/admin/usuarios/${id}`, u),
+      delete:     (id)         => del(`/admin/usuarios/${id}`),
+      // Reset administrativo: gera senha aleatória, retorna em texto puro.
+      // Master pode resetar qualquer usuário (qualquer empresa). Backend
+      // bloqueia self-reset (use /auth/trocar-senha pra trocar a própria).
+      resetSenha: (id)         => post(`/admin/usuarios/${id}/reset-senha`),
     },
     mensagens: {
       // Caixa de email do Master (Sprint 3 Bloco E).
@@ -1191,11 +1195,22 @@ const api = {
   // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
   empresa: {
     usuarios: {
-      list:   ()           => get("/empresa/usuarios"),
-      save:   (u)          => post("/empresa/usuarios", u),
-      update: (id, u)      => put(`/empresa/usuarios/${id}`, u),
-      delete: (id)         => del(`/empresa/usuarios/${id}`),
+      list:       ()           => get("/empresa/usuarios"),
+      save:       (u)          => post("/empresa/usuarios", u),
+      update:     (id, u)      => put(`/empresa/usuarios/${id}`, u),
+      delete:     (id)         => del(`/empresa/usuarios/${id}`),
+      // Admin de empresa só reseta colegas da própria empresa (backend valida).
+      // Não pode resetar usuário master nem a si mesmo.
+      resetSenha: (id)         => post(`/empresa/usuarios/${id}/reset-senha`),
     },
+  },
+
+  // ── AUTH (qualquer usuário autenticado) ────────────────────
+  auth: {
+    me:           ()                          => get("/auth/me"),
+    // Troca da própria senha. Exige senha atual pra prevenir abuso de
+    // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
+    trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
   },
 
   backup: {
@@ -14370,6 +14385,11 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   const [erro, setErro]       = useState(null);
   const [modalEdit, setModalEdit]   = useState(false);
   const [modalDel, setModalDel]     = useState(false);
+  // Modal de reset: 2 estágios.
+  // 1) usuarioParaResetar: usuário em confirmação (mostra "deseja resetar?")
+  // 2) senhaGerada: { usuario, senha } após sucesso (mostra senha pra copiar)
+  const [usuarioParaResetar, setUsuarioParaResetar] = useState(null);
+  const [senhaGerada, setSenhaGerada]               = useState(null);
 
   async function carregar() {
     setCarregando(true);
@@ -14508,6 +14528,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                   <th style={S.th}>Nível</th>
                   <th style={S.th}>Último login</th>
                   <th style={S.th}>Status</th>
+                  <th style={S.th}></th>
                 </tr>
               </thead>
               <tbody>
@@ -14516,6 +14537,11 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                     <td style={S.td}>
                       <div style={{ fontWeight:500, color:"#111" }}>{u.nome}</div>
                       {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
+                      {u.precisa_trocar_senha && (
+                        <div style={{ fontSize:10, color:"#b45309", marginTop:3, fontWeight:600 }}>
+                          ⚠ Precisa trocar senha
+                        </div>
+                      )}
                     </td>
                     <td style={{ ...S.td, color:"#6b7280" }}>{u.email}</td>
                     <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }}>{u.nivel || "—"}</td>
@@ -14525,6 +14551,15 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                         {u.ativo ? "Ativo" : "Inativo"}
                       </span>
                     </td>
+                    <td style={{ ...S.td, textAlign:"right" }}>
+                      {u.ativo && (
+                        <button
+                          onClick={() => setUsuarioParaResetar(u)}
+                          style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
+                          Resetar senha
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -14532,7 +14567,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           </div>
         )}
         <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:8, fontStyle:"italic" }}>
-          Reset de senha e edição de usuário virão na próxima entrega.
+          Edição de usuário (nível, status) virá na próxima entrega.
         </div>
       </div>
 
@@ -14569,6 +14604,27 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           empresa={data}
           onFechar={() => setModalDel(false)}
           onConfirmado={onExcluida}
+        />
+      )}
+      {usuarioParaResetar && (
+        <ModalConfirmarResetSenha
+          S={S}
+          usuario={usuarioParaResetar}
+          escopo="admin"
+          onFechar={() => setUsuarioParaResetar(null)}
+          onSucesso={(senha) => {
+            setSenhaGerada({ usuario: usuarioParaResetar, senha });
+            setUsuarioParaResetar(null);
+            carregar(); // refresh pra pegar precisa_trocar_senha=true
+          }}
+        />
+      )}
+      {senhaGerada && (
+        <ModalExibirNovaSenha
+          S={S}
+          usuario={senhaGerada.usuario}
+          senha={senhaGerada.senha}
+          onFechar={() => setSenhaGerada(null)}
         />
       )}
     </div>
@@ -14689,6 +14745,127 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             }}>
             {excluindo ? "Excluindo..." : "Excluir definitivamente"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Confirmar reset de senha ─────────────────────────────
+// Pede confirmação antes de gerar nova senha. Não deixa fechar clicando
+// fora (proteção contra clique acidental quando estiver com a confirmação
+// aberta sobre uma listagem).
+//
+// Props:
+//   usuario:   { id, nome, email, ... }
+//   escopo:    "admin" (master) ou "empresa" (admin de empresa)
+//   onSucesso: callback(senhaGerada) — recebe a senha em texto puro pra exibir
+function ModalConfirmarResetSenha({ S, usuario, escopo = "admin", onFechar, onSucesso }) {
+  const [resetando, setResetando] = useState(false);
+
+  async function confirmar() {
+    setResetando(true);
+    try {
+      const r = (escopo === "empresa")
+        ? await api.empresa.usuarios.resetSenha(usuario.id)
+        : await api.admin.usuarios.resetSenha(usuario.id);
+      onSucesso(r.senha_temporaria);
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao resetar senha", mensagem: e.message, tipo: "erro" });
+      setResetando(false);
+    }
+  }
+
+  return (
+    <div style={S.overlay}>
+      <div style={S.modal} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Resetar senha?
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
+          Será gerada uma nova senha temporária para <strong style={{ color:"#111" }}>{usuario.nome}</strong> ({usuario.email}).
+          <br/><br/>
+          A senha atual deixará de funcionar imediatamente. <strong>O usuário será obrigado a trocar a senha no próximo login.</strong>
+          <br/><br/>
+          Você verá a senha gerada apenas uma vez — anote ou copie antes de fechar.
+        </div>
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={onFechar} style={S.btnSec} disabled={resetando}>Cancelar</button>
+          <button onClick={confirmar} style={S.btn} disabled={resetando}>
+            {resetando ? "Gerando..." : "Resetar senha"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Exibir nova senha gerada ─────────────────────────────
+// Mostrado depois do reset com sucesso. A senha aparece UMA vez —
+// depois de fechar este modal, não tem mais como recuperar.
+// Botão "copiar" usa Clipboard API; se falhar (browser antigo / contexto
+// sem permissão), o input é selecionável manualmente.
+function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(senha);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      dialogo.alertar({
+        titulo: "Não consegui copiar automaticamente",
+        mensagem: "Selecione a senha manualmente e copie (Ctrl+C).",
+        tipo: "aviso",
+      });
+    }
+  }
+
+  // Atenção: NÃO fecha clicando fora — quase ninguém digita senhas de 12
+  // caracteres confiavelmente. Forçar Cancelar/Concluir evita perder a senha
+  // por engano antes de copiar.
+  return (
+    <div style={S.overlay}>
+      <div style={S.modalLg} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Nova senha gerada
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
+          Senha temporária para <strong style={{ color:"#111" }}>{usuario.nome}</strong> ({usuario.email}).
+          Copie agora — depois de fechar este aviso, ela não aparece mais.
+        </div>
+        <div style={{ marginBottom:18 }}>
+          <label style={S.label}>Senha temporária</label>
+          <div style={{ display:"flex", gap:8, alignItems:"stretch" }}>
+            <input
+              readOnly
+              value={senha}
+              onClick={e => e.target.select()}
+              style={{
+                ...S.input,
+                fontFamily:"'SF Mono',Menlo,Consolas,monospace",
+                fontSize:15, fontWeight:600, color:"#111",
+                background:"#fafbfc", flex:1, userSelect:"all",
+              }}
+            />
+            <button onClick={copiar}
+              style={{
+                ...S.btnSec,
+                padding:"0 14px", whiteSpace:"nowrap",
+                background: copiado ? "#f0fdf4" : "#fff",
+                borderColor: copiado ? "#86efac" : "#e5e7eb",
+                color: copiado ? "#15803d" : "#374151",
+              }}>
+              {copiado ? "✓ Copiado" : "Copiar"}
+            </button>
+          </div>
+        </div>
+        <div style={{ background:"#fffbeb", border:"1px solid #fde68a", color:"#92400e", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+          ⚠ Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
+        </div>
+        <div style={{ display:"flex", justifyContent:"flex-end" }}>
+          <button onClick={onFechar} style={S.btn}>Concluir</button>
         </div>
       </div>
     </div>
@@ -16549,6 +16726,8 @@ function decorarEvento(ev) {
   if (acao === "usuario.login_falha")   return { cor: COR_VERMELHO, descricao: `Login falhou${dados.motivo ? " — " + dados.motivo.replace(/_/g, " ") : ""}` };
   if (acao === "usuario.signup")        return { cor: COR_AZUL,     descricao: `Nova empresa cadastrada: ${dados.empresa_nome || ev.recurso_id}` };
   if (acao === "usuario.senha_alterada") return { cor: COR_LARANJA, descricao: "Senha alterada" };
+  if (acao === "usuario.senha_resetada") return { cor: COR_LARANJA, descricao: `Senha resetada por ${dados.alterado_por === "admin_master" ? "master" : "admin de empresa"} (alvo: ${dados.alvo_email || ev.recurso_id})` };
+  if (acao === "usuario.troca_senha_falha") return { cor: COR_VERMELHO, descricao: `Tentativa de troca de senha falhou${dados.motivo ? " — " + dados.motivo.replace(/_/g, " ") : ""}` };
   if (acao === "usuario.email_alterado") return { cor: COR_LARANJA, descricao: "Email alterado" };
   if (acao === "usuario.nivel_alterado") return { cor: COR_LARANJA, descricao: `Nível alterado: ${dados.antes?.nivel} → ${dados.depois?.nivel}` };
   if (acao === "usuario.criado")        return { cor: COR_VERDE,    descricao: `Usuário criado: ${dados.email || ev.recurso_id}` };
@@ -16640,6 +16819,144 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TELA: TROCAR SENHA OBRIGATÓRIA
+// ═══════════════════════════════════════════════════════════════
+// Renderizada quando o usuário tem `precisa_trocar_senha = true` no JWT/me.
+// Bloqueia toda navegação até trocar a senha temporária (gerada por admin
+// no reset). É a única coisa visível na tela — sem sidebar, sem dados.
+//
+// Saídas possíveis:
+//   - Trocar senha com sucesso → onTrocada() → app libera
+//   - Logout → cliente sai sem trocar (caso esteja em máquina errada)
+
+function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [senhaNova, setSenhaNova]   = useState("");
+  const [confirmar, setConfirmar]   = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [erro, setErro]             = useState(null);
+
+  function validar() {
+    if (!senhaAtual) return "Informe a senha atual (a temporária recebida)";
+    if (!senhaNova || senhaNova.length < 6) return "A nova senha deve ter no mínimo 6 caracteres";
+    if (senhaNova === senhaAtual) return "A nova senha precisa ser diferente da atual";
+    if (senhaNova !== confirmar) return "Confirmação de senha não confere";
+    return null;
+  }
+
+  async function trocar() {
+    const v = validar();
+    if (v) { setErro(v); return; }
+    setLoading(true);
+    setErro(null);
+    try {
+      await api.auth.trocarSenha(senhaAtual, senhaNova);
+      onTrocada();
+    } catch (e) {
+      setErro(e.message || "Falha ao trocar senha");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    trocar();
+  }
+
+  return (
+    <div style={{
+      position:"fixed", inset:0,
+      background:"#fafafa",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+    }}>
+      <form onSubmit={handleSubmit}
+        style={{
+          background:"#fff", border:"1px solid #e5e7eb", borderRadius:12,
+          padding:"32px 32px 24px", maxWidth:420, width:"100%",
+          boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
+        }}>
+        <div style={{ fontSize:18, fontWeight:700, color:"#111", marginBottom:6, letterSpacing:-0.3 }}>
+          Trocar senha
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.5 }}>
+          Sua senha foi resetada por um administrador. Para continuar, escolha uma senha nova que só você saiba.
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+            Senha temporária recebida
+          </label>
+          <input
+            type="password"
+            value={senhaAtual}
+            onChange={e => setSenhaAtual(e.target.value)}
+            disabled={loading}
+            autoFocus
+            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+          />
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+            Nova senha (mínimo 6 caracteres)
+          </label>
+          <input
+            type="password"
+            value={senhaNova}
+            onChange={e => setSenhaNova(e.target.value)}
+            disabled={loading}
+            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+          />
+        </div>
+
+        <div style={{ marginBottom:18 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+            Confirme a nova senha
+          </label>
+          <input
+            type="password"
+            value={confirmar}
+            onChange={e => setConfirmar(e.target.value)}
+            disabled={loading}
+            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+          />
+        </div>
+
+        {erro && (
+          <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
+            {erro}
+          </div>
+        )}
+
+        <button type="submit" disabled={loading}
+          style={{
+            background:"#111", color:"#fff", border:"none", borderRadius:8,
+            padding:"11px 16px", fontSize:13.5, fontWeight:600, cursor: loading ? "not-allowed" : "pointer",
+            fontFamily:"inherit", width:"100%", marginBottom:10,
+            opacity: loading ? 0.6 : 1,
+          }}>
+          {loading ? "Salvando..." : "Trocar senha e continuar"}
+        </button>
+
+        <button type="button" onClick={onLogout} disabled={loading}
+          style={{
+            background:"transparent", color:"#6b7280", border:"none",
+            padding:"8px", fontSize:12, cursor:"pointer", fontFamily:"inherit", width:"100%",
+          }}>
+          Sair sem trocar
+        </button>
+
+        <div style={{ fontSize:11, color:"#9ca3af", marginTop:12, textAlign:"center" }}>
+          Logado como {usuario?.email || ""}
+        </div>
+      </form>
     </div>
   );
 }
@@ -16972,6 +17289,29 @@ export default function ModuloClientesFornecedores() {
   );
 
   if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /><VersionWatcher />{conflitoModal}</>;
+
+  // Senha resetada por admin/master → forçar troca antes de qualquer navegação.
+  // Bloqueia tudo (sidebar, abas, dados) até o usuário escolher senha nova.
+  // Logout disponível pra escape sem trocar senha (usuário pode estar na máquina errada).
+  if (usuario?.precisa_trocar_senha) {
+    return (
+      <>
+      <TelaTrocarSenhaObrigatoria
+        usuario={usuario}
+        onTrocada={() => {
+          // Atualiza o state local pra liberar o app. Backend já zerou a flag.
+          const usrAtualizado = { ...usuario, precisa_trocar_senha: false };
+          setUsuario(usrAtualizado);
+          try { localStorage.setItem("vicke-user", JSON.stringify(usrAtualizado)); } catch {}
+        }}
+        onLogout={handleLogout}
+      />
+      <DialogosHost />
+      <VersionWatcher />
+      {conflitoModal}
+      </>
+    );
+  }
 
   if (loading) return (
     <>

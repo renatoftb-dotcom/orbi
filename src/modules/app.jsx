@@ -216,6 +216,8 @@ function decorarEvento(ev) {
   if (acao === "usuario.login_falha")   return { cor: COR_VERMELHO, descricao: `Login falhou${dados.motivo ? " — " + dados.motivo.replace(/_/g, " ") : ""}` };
   if (acao === "usuario.signup")        return { cor: COR_AZUL,     descricao: `Nova empresa cadastrada: ${dados.empresa_nome || ev.recurso_id}` };
   if (acao === "usuario.senha_alterada") return { cor: COR_LARANJA, descricao: "Senha alterada" };
+  if (acao === "usuario.senha_resetada") return { cor: COR_LARANJA, descricao: `Senha resetada por ${dados.alterado_por === "admin_master" ? "master" : "admin de empresa"} (alvo: ${dados.alvo_email || ev.recurso_id})` };
+  if (acao === "usuario.troca_senha_falha") return { cor: COR_VERMELHO, descricao: `Tentativa de troca de senha falhou${dados.motivo ? " — " + dados.motivo.replace(/_/g, " ") : ""}` };
   if (acao === "usuario.email_alterado") return { cor: COR_LARANJA, descricao: "Email alterado" };
   if (acao === "usuario.nivel_alterado") return { cor: COR_LARANJA, descricao: `Nível alterado: ${dados.antes?.nivel} → ${dados.depois?.nivel}` };
   if (acao === "usuario.criado")        return { cor: COR_VERDE,    descricao: `Usuário criado: ${dados.email || ev.recurso_id}` };
@@ -307,6 +309,144 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TELA: TROCAR SENHA OBRIGATÓRIA
+// ═══════════════════════════════════════════════════════════════
+// Renderizada quando o usuário tem `precisa_trocar_senha = true` no JWT/me.
+// Bloqueia toda navegação até trocar a senha temporária (gerada por admin
+// no reset). É a única coisa visível na tela — sem sidebar, sem dados.
+//
+// Saídas possíveis:
+//   - Trocar senha com sucesso → onTrocada() → app libera
+//   - Logout → cliente sai sem trocar (caso esteja em máquina errada)
+
+function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
+  const [senhaAtual, setSenhaAtual] = useState("");
+  const [senhaNova, setSenhaNova]   = useState("");
+  const [confirmar, setConfirmar]   = useState("");
+  const [loading, setLoading]       = useState(false);
+  const [erro, setErro]             = useState(null);
+
+  function validar() {
+    if (!senhaAtual) return "Informe a senha atual (a temporária recebida)";
+    if (!senhaNova || senhaNova.length < 6) return "A nova senha deve ter no mínimo 6 caracteres";
+    if (senhaNova === senhaAtual) return "A nova senha precisa ser diferente da atual";
+    if (senhaNova !== confirmar) return "Confirmação de senha não confere";
+    return null;
+  }
+
+  async function trocar() {
+    const v = validar();
+    if (v) { setErro(v); return; }
+    setLoading(true);
+    setErro(null);
+    try {
+      await api.auth.trocarSenha(senhaAtual, senhaNova);
+      onTrocada();
+    } catch (e) {
+      setErro(e.message || "Falha ao trocar senha");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    trocar();
+  }
+
+  return (
+    <div style={{
+      position:"fixed", inset:0,
+      background:"#fafafa",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+    }}>
+      <form onSubmit={handleSubmit}
+        style={{
+          background:"#fff", border:"1px solid #e5e7eb", borderRadius:12,
+          padding:"32px 32px 24px", maxWidth:420, width:"100%",
+          boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
+        }}>
+        <div style={{ fontSize:18, fontWeight:700, color:"#111", marginBottom:6, letterSpacing:-0.3 }}>
+          Trocar senha
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.5 }}>
+          Sua senha foi resetada por um administrador. Para continuar, escolha uma senha nova que só você saiba.
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+            Senha temporária recebida
+          </label>
+          <input
+            type="password"
+            value={senhaAtual}
+            onChange={e => setSenhaAtual(e.target.value)}
+            disabled={loading}
+            autoFocus
+            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+          />
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+            Nova senha (mínimo 6 caracteres)
+          </label>
+          <input
+            type="password"
+            value={senhaNova}
+            onChange={e => setSenhaNova(e.target.value)}
+            disabled={loading}
+            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+          />
+        </div>
+
+        <div style={{ marginBottom:18 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+            Confirme a nova senha
+          </label>
+          <input
+            type="password"
+            value={confirmar}
+            onChange={e => setConfirmar(e.target.value)}
+            disabled={loading}
+            style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}
+          />
+        </div>
+
+        {erro && (
+          <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
+            {erro}
+          </div>
+        )}
+
+        <button type="submit" disabled={loading}
+          style={{
+            background:"#111", color:"#fff", border:"none", borderRadius:8,
+            padding:"11px 16px", fontSize:13.5, fontWeight:600, cursor: loading ? "not-allowed" : "pointer",
+            fontFamily:"inherit", width:"100%", marginBottom:10,
+            opacity: loading ? 0.6 : 1,
+          }}>
+          {loading ? "Salvando..." : "Trocar senha e continuar"}
+        </button>
+
+        <button type="button" onClick={onLogout} disabled={loading}
+          style={{
+            background:"transparent", color:"#6b7280", border:"none",
+            padding:"8px", fontSize:12, cursor:"pointer", fontFamily:"inherit", width:"100%",
+          }}>
+          Sair sem trocar
+        </button>
+
+        <div style={{ fontSize:11, color:"#9ca3af", marginTop:12, textAlign:"center" }}>
+          Logado como {usuario?.email || ""}
+        </div>
+      </form>
     </div>
   );
 }
@@ -639,6 +779,29 @@ export default function ModuloClientesFornecedores() {
   );
 
   if (!autenticado) return <><TelaLogin onLogin={handleLogin} /><DialogosHost /><VersionWatcher />{conflitoModal}</>;
+
+  // Senha resetada por admin/master → forçar troca antes de qualquer navegação.
+  // Bloqueia tudo (sidebar, abas, dados) até o usuário escolher senha nova.
+  // Logout disponível pra escape sem trocar senha (usuário pode estar na máquina errada).
+  if (usuario?.precisa_trocar_senha) {
+    return (
+      <>
+      <TelaTrocarSenhaObrigatoria
+        usuario={usuario}
+        onTrocada={() => {
+          // Atualiza o state local pra liberar o app. Backend já zerou a flag.
+          const usrAtualizado = { ...usuario, precisa_trocar_senha: false };
+          setUsuario(usrAtualizado);
+          try { localStorage.setItem("vicke-user", JSON.stringify(usrAtualizado)); } catch {}
+        }}
+        onLogout={handleLogout}
+      />
+      <DialogosHost />
+      <VersionWatcher />
+      {conflitoModal}
+      </>
+    );
+  }
 
   if (loading) return (
     <>

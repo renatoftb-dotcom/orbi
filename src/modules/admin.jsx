@@ -359,6 +359,11 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   const [erro, setErro]       = useState(null);
   const [modalEdit, setModalEdit]   = useState(false);
   const [modalDel, setModalDel]     = useState(false);
+  // Modal de reset: 2 estágios.
+  // 1) usuarioParaResetar: usuário em confirmação (mostra "deseja resetar?")
+  // 2) senhaGerada: { usuario, senha } após sucesso (mostra senha pra copiar)
+  const [usuarioParaResetar, setUsuarioParaResetar] = useState(null);
+  const [senhaGerada, setSenhaGerada]               = useState(null);
 
   async function carregar() {
     setCarregando(true);
@@ -497,6 +502,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                   <th style={S.th}>Nível</th>
                   <th style={S.th}>Último login</th>
                   <th style={S.th}>Status</th>
+                  <th style={S.th}></th>
                 </tr>
               </thead>
               <tbody>
@@ -505,6 +511,11 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                     <td style={S.td}>
                       <div style={{ fontWeight:500, color:"#111" }}>{u.nome}</div>
                       {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
+                      {u.precisa_trocar_senha && (
+                        <div style={{ fontSize:10, color:"#b45309", marginTop:3, fontWeight:600 }}>
+                          ⚠ Precisa trocar senha
+                        </div>
+                      )}
                     </td>
                     <td style={{ ...S.td, color:"#6b7280" }}>{u.email}</td>
                     <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }}>{u.nivel || "—"}</td>
@@ -514,6 +525,15 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                         {u.ativo ? "Ativo" : "Inativo"}
                       </span>
                     </td>
+                    <td style={{ ...S.td, textAlign:"right" }}>
+                      {u.ativo && (
+                        <button
+                          onClick={() => setUsuarioParaResetar(u)}
+                          style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
+                          Resetar senha
+                        </button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -521,7 +541,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           </div>
         )}
         <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:8, fontStyle:"italic" }}>
-          Reset de senha e edição de usuário virão na próxima entrega.
+          Edição de usuário (nível, status) virá na próxima entrega.
         </div>
       </div>
 
@@ -558,6 +578,27 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           empresa={data}
           onFechar={() => setModalDel(false)}
           onConfirmado={onExcluida}
+        />
+      )}
+      {usuarioParaResetar && (
+        <ModalConfirmarResetSenha
+          S={S}
+          usuario={usuarioParaResetar}
+          escopo="admin"
+          onFechar={() => setUsuarioParaResetar(null)}
+          onSucesso={(senha) => {
+            setSenhaGerada({ usuario: usuarioParaResetar, senha });
+            setUsuarioParaResetar(null);
+            carregar(); // refresh pra pegar precisa_trocar_senha=true
+          }}
+        />
+      )}
+      {senhaGerada && (
+        <ModalExibirNovaSenha
+          S={S}
+          usuario={senhaGerada.usuario}
+          senha={senhaGerada.senha}
+          onFechar={() => setSenhaGerada(null)}
         />
       )}
     </div>
@@ -678,6 +719,127 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             }}>
             {excluindo ? "Excluindo..." : "Excluir definitivamente"}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Confirmar reset de senha ─────────────────────────────
+// Pede confirmação antes de gerar nova senha. Não deixa fechar clicando
+// fora (proteção contra clique acidental quando estiver com a confirmação
+// aberta sobre uma listagem).
+//
+// Props:
+//   usuario:   { id, nome, email, ... }
+//   escopo:    "admin" (master) ou "empresa" (admin de empresa)
+//   onSucesso: callback(senhaGerada) — recebe a senha em texto puro pra exibir
+function ModalConfirmarResetSenha({ S, usuario, escopo = "admin", onFechar, onSucesso }) {
+  const [resetando, setResetando] = useState(false);
+
+  async function confirmar() {
+    setResetando(true);
+    try {
+      const r = (escopo === "empresa")
+        ? await api.empresa.usuarios.resetSenha(usuario.id)
+        : await api.admin.usuarios.resetSenha(usuario.id);
+      onSucesso(r.senha_temporaria);
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao resetar senha", mensagem: e.message, tipo: "erro" });
+      setResetando(false);
+    }
+  }
+
+  return (
+    <div style={S.overlay}>
+      <div style={S.modal} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Resetar senha?
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
+          Será gerada uma nova senha temporária para <strong style={{ color:"#111" }}>{usuario.nome}</strong> ({usuario.email}).
+          <br/><br/>
+          A senha atual deixará de funcionar imediatamente. <strong>O usuário será obrigado a trocar a senha no próximo login.</strong>
+          <br/><br/>
+          Você verá a senha gerada apenas uma vez — anote ou copie antes de fechar.
+        </div>
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={onFechar} style={S.btnSec} disabled={resetando}>Cancelar</button>
+          <button onClick={confirmar} style={S.btn} disabled={resetando}>
+            {resetando ? "Gerando..." : "Resetar senha"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Exibir nova senha gerada ─────────────────────────────
+// Mostrado depois do reset com sucesso. A senha aparece UMA vez —
+// depois de fechar este modal, não tem mais como recuperar.
+// Botão "copiar" usa Clipboard API; se falhar (browser antigo / contexto
+// sem permissão), o input é selecionável manualmente.
+function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
+  const [copiado, setCopiado] = useState(false);
+
+  async function copiar() {
+    try {
+      await navigator.clipboard.writeText(senha);
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2500);
+    } catch {
+      dialogo.alertar({
+        titulo: "Não consegui copiar automaticamente",
+        mensagem: "Selecione a senha manualmente e copie (Ctrl+C).",
+        tipo: "aviso",
+      });
+    }
+  }
+
+  // Atenção: NÃO fecha clicando fora — quase ninguém digita senhas de 12
+  // caracteres confiavelmente. Forçar Cancelar/Concluir evita perder a senha
+  // por engano antes de copiar.
+  return (
+    <div style={S.overlay}>
+      <div style={S.modalLg} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Nova senha gerada
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
+          Senha temporária para <strong style={{ color:"#111" }}>{usuario.nome}</strong> ({usuario.email}).
+          Copie agora — depois de fechar este aviso, ela não aparece mais.
+        </div>
+        <div style={{ marginBottom:18 }}>
+          <label style={S.label}>Senha temporária</label>
+          <div style={{ display:"flex", gap:8, alignItems:"stretch" }}>
+            <input
+              readOnly
+              value={senha}
+              onClick={e => e.target.select()}
+              style={{
+                ...S.input,
+                fontFamily:"'SF Mono',Menlo,Consolas,monospace",
+                fontSize:15, fontWeight:600, color:"#111",
+                background:"#fafbfc", flex:1, userSelect:"all",
+              }}
+            />
+            <button onClick={copiar}
+              style={{
+                ...S.btnSec,
+                padding:"0 14px", whiteSpace:"nowrap",
+                background: copiado ? "#f0fdf4" : "#fff",
+                borderColor: copiado ? "#86efac" : "#e5e7eb",
+                color: copiado ? "#15803d" : "#374151",
+              }}>
+              {copiado ? "✓ Copiado" : "Copiar"}
+            </button>
+          </div>
+        </div>
+        <div style={{ background:"#fffbeb", border:"1px solid #fde68a", color:"#92400e", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+          ⚠ Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
+        </div>
+        <div style={{ display:"flex", justifyContent:"flex-end" }}>
+          <button onClick={onFechar} style={S.btn}>Concluir</button>
         </div>
       </div>
     </div>
