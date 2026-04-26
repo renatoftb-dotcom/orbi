@@ -782,6 +782,24 @@ function VersionWatcher() {
   const [novaVersao, setNovaVersao] = useState(false);
   const hashAtualRef = useRef(null);
 
+  // Limpa o param `_v` da URL se ele existir.
+  // Esse param é adicionado pelo botão "Atualizar" deste mesmo componente
+  // como cache-buster do reload — depois do reload, ele fica grudado na
+  // URL/histórico, o que é feio e desnecessário. Remove silenciosamente
+  // sem disparar nova navegação (history.replaceState).
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.has("_v")) {
+        u.searchParams.delete("_v");
+        const novaUrl = u.pathname + (u.searchParams.toString() ? "?" + u.searchParams.toString() : "") + u.hash;
+        window.history.replaceState({}, "", novaUrl);
+      }
+    } catch {
+      // URL inválida ou ambiente sem history API — ignora silenciosamente
+    }
+  }, []);
+
   useEffect(() => {
     // Captura hash inicial do bundle que está rodando agora
     hashAtualRef.current = _extrairHashBundle(document);

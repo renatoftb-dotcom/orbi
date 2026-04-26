@@ -786,6 +786,24 @@ function VersionWatcher() {
   const [novaVersao, setNovaVersao] = useState(false);
   const hashAtualRef = useRef(null);
 
+  // Limpa o param `_v` da URL se ele existir.
+  // Esse param é adicionado pelo botão "Atualizar" deste mesmo componente
+  // como cache-buster do reload — depois do reload, ele fica grudado na
+  // URL/histórico, o que é feio e desnecessário. Remove silenciosamente
+  // sem disparar nova navegação (history.replaceState).
+  useEffect(() => {
+    try {
+      const u = new URL(window.location.href);
+      if (u.searchParams.has("_v")) {
+        u.searchParams.delete("_v");
+        const novaUrl = u.pathname + (u.searchParams.toString() ? "?" + u.searchParams.toString() : "") + u.hash;
+        window.history.replaceState({}, "", novaUrl);
+      }
+    } catch {
+      // URL inválida ou ambiente sem history API — ignora silenciosamente
+    }
+  }, []);
+
   useEffect(() => {
     // Captura hash inicial do bundle que está rodando agora
     hashAtualRef.current = _extrairHashBundle(document);
@@ -1166,6 +1184,7 @@ const api = {
       responder:   (id, dados) => post(`/admin/mensagens/${id}/responder`, dados),
     },
     manutencao: ()         => post("/admin/manutencao"),
+    dashboard:  ()         => get("/admin/dashboard"),
   },
 
   // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
@@ -15959,6 +15978,262 @@ function Mensagens({ usuario }) {
 // ════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
+// DASHBOARD MASTER
+// ═══════════════════════════════════════════════════════════════
+// Home do usuário master. Faz uma chamada a /admin/dashboard que devolve:
+//   - counts: empresas (ativas/total), mensagens não-lidas, signups 7d, logins 24h, logins_falha_24h
+//   - feed: últimas 15 entradas do audit_log com nome da empresa
+//
+// Renderiza:
+//   - 4 cards de números no topo
+//   - Feed de atividade recente
+//   - 4 cards de navegação (mantidos da versão antiga do HomeMenu)
+//
+// Refresh: a cada 60s automaticamente quando aba está visível, via setInterval.
+
+function DashboardMaster({ data, setAba, tentarTrocar }) {
+  const [dash, setDash]     = useState(null);
+  const [loading, setLoad]  = useState(true);
+  const [erro, setErro]     = useState(null);
+
+  // Carrega dashboard. Função separada pra reutilizar no refresh manual.
+  async function carregar() {
+    try {
+      const d = await api.admin.dashboard();
+      setDash(d);
+      setErro(null);
+    } catch(e) {
+      setErro(e.message || "Falha ao carregar dashboard");
+    } finally {
+      setLoad(false);
+    }
+  }
+
+  useEffect(() => {
+    carregar();
+    // Auto-refresh a cada 60s. Pausado quando aba não está visível
+    // pra economizar bateria/banda.
+    const id = setInterval(() => {
+      if (document.visibilityState === "visible") carregar();
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Cards de navegação (mesmos do HomeMenu antigo). Mantidos pra preservar
+  // o atalho de 1-clique pras subabas mais usadas.
+  const modulos = [
+    { k:"mensagens",              label:"Mensagens",       desc:"Caixa do time VICKE" },
+    { k:"admin:empresas",         label:"Empresas",        desc:"Gerenciar empresas cadastradas" },
+    { k:"admin:usuarios-master",  label:"Usuários Master", desc:"Acessos da equipe Vicke" },
+    { k:"admin:manutencao",       label:"Manutenção",      desc:"Jobs e operações do sistema" },
+  ];
+
+  return (
+    <div style={{ padding:"32px 32px 60px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", maxWidth:1100, margin:"0 auto" }}>
+      <div style={{ marginBottom:28 }}>
+        <div style={{ fontSize:24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
+        <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
+      </div>
+
+      {erro && (
+        <div style={{ background:"#fef2f2", border:"1px solid #fecaca", color:"#991b1b", borderRadius:9, padding:"10px 14px", fontSize:13, marginBottom:20 }}>
+          Erro ao carregar dashboard: {erro}
+        </div>
+      )}
+
+      {/* ── 4 Cards de números ── */}
+      <DashboardCards counts={dash?.counts} loading={loading} setAba={setAba} tentarTrocar={tentarTrocar} />
+
+      {/* ── Feed de atividade recente ── */}
+      <DashboardFeed feed={dash?.feed} loading={loading} />
+
+      {/* ── Navegação (cards antigos) ── */}
+      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:32 }}>Acesso rápido</div>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+        {modulos.map(m => (
+          <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
+            style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="#e5e7eb"; }}>
+            <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:4 }}>{m.label}</div>
+            <div style={{ fontSize:11.5, color:"#9ca3af" }}>{m.desc}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 4 Cards de números. Cada card é clicável quando faz sentido (ex: mensagens
+// não-lidas leva pra caixa; signups leva pra empresas). Card de logins não tem
+// destino útil no momento, fica não-clicável.
+function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
+  const c = counts || {};
+  const goto = (aba) => { const fn = () => setAba(aba); if (tentarTrocar) tentarTrocar(fn); else fn(); };
+
+  const items = [
+    {
+      label: "Empresas ativas",
+      value: loading ? "…" : `${c.empresas_ativas || 0}`,
+      sub:   loading ? "" : `de ${c.empresas_total || 0} totais`,
+      onClick: () => goto("admin:empresas"),
+    },
+    {
+      label: "Mensagens não-lidas",
+      value: loading ? "…" : `${c.mensagens_nao_lidas || 0}`,
+      sub:   "caixa do time VICKE",
+      onClick: () => goto("mensagens"),
+      destaque: !loading && (c.mensagens_nao_lidas || 0) > 0,
+    },
+    {
+      label: "Signups (7 dias)",
+      value: loading ? "…" : `${c.signups_7d || 0}`,
+      sub:   "novas empresas",
+    },
+    {
+      label: "Logins (24h)",
+      value: loading ? "…" : `${c.logins_24h || 0}`,
+      sub:   loading ? "" : (c.logins_falha_24h > 0 ? `${c.logins_falha_24h} tentativa(s) falha(s)` : "atividade nas últimas 24h"),
+      destaque: !loading && (c.logins_falha_24h || 0) >= 5,
+    },
+  ];
+
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12, marginBottom:28 }}>
+      {items.map((it, i) => (
+        <div
+          key={i}
+          onClick={it.onClick}
+          style={{
+            background:"#fff",
+            border: it.destaque ? "1px solid #f59e0b" : "1px solid #e5e7eb",
+            borderRadius:12, padding:"16px 18px",
+            cursor: it.onClick ? "pointer" : "default",
+            transition:"border-color 0.12s",
+          }}
+          onMouseEnter={e => { if (it.onClick) e.currentTarget.style.borderColor = "#111"; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
+          <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:8 }}>
+            {it.label}
+          </div>
+          <div style={{ fontSize:28, fontWeight:600, color:"#111", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
+            {it.value}
+          </div>
+          {it.sub && (
+            <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:4 }}>{it.sub}</div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Feed de atividade recente — lista simples, focada em legibilidade.
+// Cada linha: ícone (cor por tipo) + descrição + tempo relativo.
+function DashboardFeed({ feed, loading }) {
+  return (
+    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px 18px" }}>
+      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
+        Atividade recente
+      </div>
+      {loading && <div style={{ fontSize:13, color:"#9ca3af" }}>Carregando…</div>}
+      {!loading && (!feed || feed.length === 0) && (
+        <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 0" }}>
+          Nenhuma atividade ainda.
+        </div>
+      )}
+      {!loading && feed && feed.length > 0 && (
+        <div style={{ display:"flex", flexDirection:"column" }}>
+          {feed.map((ev, i) => (
+            <FeedItem key={ev.id} ev={ev} primeiro={i === 0} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Linha do feed. Decora o evento com ícone/cor baseado em `acao`.
+function FeedItem({ ev, primeiro }) {
+  const meta = decorarEvento(ev);
+  return (
+    <div style={{
+      display:"flex", alignItems:"flex-start", gap:12,
+      padding:"10px 0",
+      borderTop: primeiro ? "none" : "1px solid #f3f4f6",
+    }}>
+      <div style={{
+        flexShrink:0, width:8, height:8, borderRadius:"50%",
+        background: meta.cor, marginTop:6,
+      }} />
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:13, color:"#111", lineHeight:1.4 }}>
+          {meta.descricao}
+        </div>
+        <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:2 }}>
+          {ev.empresa_nome && ev.empresa_nome !== "—" ? `${ev.empresa_nome} · ` : ""}
+          {ev.usuario_email || "anônimo"} · {tempoRelativo(ev.criado_em)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Mapa de cor + texto humano por ação. Centralizar aqui evita switch espalhado.
+function decorarEvento(ev) {
+  const acao = ev.acao || "";
+  const dados = ev.dados || {};
+
+  // Mapas — fáceis de estender quando criarmos eventos novos
+  const COR_VERDE   = "#16a34a";
+  const COR_VERMELHO= "#dc2626";
+  const COR_AZUL    = "#3b82f6";
+  const COR_LARANJA = "#f59e0b";
+  const COR_CINZA   = "#9ca3af";
+
+  if (acao === "usuario.login_sucesso") return { cor: COR_VERDE,    descricao: "Login bem-sucedido" };
+  if (acao === "usuario.login_falha")   return { cor: COR_VERMELHO, descricao: `Login falhou${dados.motivo ? " — " + dados.motivo.replace(/_/g, " ") : ""}` };
+  if (acao === "usuario.signup")        return { cor: COR_AZUL,     descricao: `Nova empresa cadastrada: ${dados.empresa_nome || ev.recurso_id}` };
+  if (acao === "usuario.senha_alterada") return { cor: COR_LARANJA, descricao: "Senha alterada" };
+  if (acao === "usuario.email_alterado") return { cor: COR_LARANJA, descricao: "Email alterado" };
+  if (acao === "usuario.nivel_alterado") return { cor: COR_LARANJA, descricao: `Nível alterado: ${dados.antes?.nivel} → ${dados.depois?.nivel}` };
+  if (acao === "usuario.criado")        return { cor: COR_VERDE,    descricao: `Usuário criado: ${dados.email || ev.recurso_id}` };
+  if (acao === "usuario.editado")       return { cor: COR_CINZA,    descricao: "Usuário editado" };
+  if (acao === "usuario.desativado")    return { cor: COR_LARANJA, descricao: "Usuário desativado" };
+  if (acao === "usuario.reativado")     return { cor: COR_VERDE,    descricao: "Usuário reativado" };
+  if (acao === "usuario.excluido")      return { cor: COR_VERMELHO, descricao: `Usuário excluído: ${dados.snapshot?.email || ev.recurso_id}` };
+  if (acao === "empresa.criada")        return { cor: COR_VERDE,    descricao: `Empresa criada: ${dados.nome || ev.recurso_id}` };
+  if (acao === "empresa.editada")       return { cor: COR_CINZA,    descricao: "Empresa editada" };
+  if (acao === "empresa.desativada")    return { cor: COR_LARANJA, descricao: "Empresa desativada" };
+  if (acao === "empresa.reativada")     return { cor: COR_VERDE,    descricao: "Empresa reativada" };
+  if (acao === "empresa.excluida")      return { cor: COR_VERMELHO, descricao: `Empresa excluída: ${dados.snapshot?.nome || ev.recurso_id}` };
+  if (acao === "cliente.excluido")      return { cor: COR_VERMELHO, descricao: `Cliente excluído: ${dados.snapshot?.nome || ev.recurso_id}` };
+  if (acao === "orcamento.excluido")    return { cor: COR_VERMELHO, descricao: `Orçamento excluído: ${ev.recurso_id}` };
+  if (acao === "obra.excluida")         return { cor: COR_VERMELHO, descricao: `Obra excluída: ${ev.recurso_id}` };
+  if (acao === "fornecedor.excluido")   return { cor: COR_VERMELHO, descricao: `Fornecedor excluído: ${ev.recurso_id}` };
+  if (acao === "lancamento.excluido")   return { cor: COR_VERMELHO, descricao: `Lançamento excluído: ${ev.recurso_id}` };
+
+  // Default: ação desconhecida — mostra o nome bruto
+  return { cor: COR_CINZA, descricao: acao };
+}
+
+// "há 3min", "há 2h", "há 4d" — formato compacto pro feed
+function tempoRelativo(iso) {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return "agora há pouco";
+  const min = Math.floor(ms / 60_000);
+  if (min < 60) return `há ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `há ${h}h`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `há ${d}d`;
+  // Caiu muito atrás — mostra data formatada (timezone do browser do usuário,
+  // que via configuração de SO normalmente já é America/Sao_Paulo).
+  return new Date(iso).toLocaleDateString("pt-BR");
+}
+
+// ═══════════════════════════════════════════════════════════════
 // HOME MENU
 // ═══════════════════════════════════════════════════════════════
 
@@ -16632,7 +16907,8 @@ export default function ModuloClientesFornecedores() {
               }}
             />
           ) : (<>
-          {aba === "home"                   && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
+          {aba === "home" && isMaster && <DashboardMaster setAba={setAba} data={data} tentarTrocar={tentarTrocar} />}
+          {aba === "home" && !isMaster && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
           {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}

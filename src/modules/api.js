@@ -156,6 +156,7 @@ const api = {
       responder:   (id, dados) => post(`/admin/mensagens/${id}/responder`, dados),
     },
     manutencao: ()         => post("/admin/manutencao"),
+    dashboard:  ()         => get("/admin/dashboard"),
   },
 
   // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
