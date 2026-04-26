@@ -11198,9 +11198,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [padrao,       setPadrao]       = useState(orcBase?.padrao      || null);
   const [tipologia,    setTipologia]    = useState(orcBase?.tipologia   || null);
   const [tamanho,      setTamanho]      = useState(orcBase?.tamanho     || null);
-  const [aberto,       setAberto]       = useState(null);
-  const [hoverDrop,    setHoverDrop]    = useState(null);
-  const [panelPos,     setPanelPos]     = useState({ top:0, left:0 });
+  // Etapa que o usuário clicou pra editar (popover inline na trilha)
+  const [etapaEditando, setEtapaEditando] = useState(null);
+  // Opção que está sendo "escolhida" no momento (anima is-chosen + is-fading)
+  const [opcaoEscolhida, setOpcaoEscolhida] = useState(null);
   // Abre preview automaticamente quando:
   // - modoVer é true (legado)
   // - modoAbertura === "ver" ou "verProposta" (novo fluxo) E tem orçamento existente
@@ -11432,36 +11433,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const wrapRef = useRef(null);
   useEffect(() => {
-    if (!aberto && !abertoGrupo) return;
+    if (!etapaEditando && !abertoGrupo) return;
     const h = e => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setAberto(null);
+        setEtapaEditando(null);
         setAbertoGrupo(null);
       }
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
-  }, [aberto, abertoGrupo]);
-
-  // Reposiciona o painel dropdown ao fazer scroll/resize (para grudar no botão)
-  useEffect(() => {
-    if (!aberto) return;
-    const reposicionar = () => {
-      const btn = document.querySelector(`[data-drop-btn="${aberto}"]`);
-      if (btn) {
-        const r = btn.getBoundingClientRect();
-        setPanelPos({ top: r.bottom + 6, left: r.left });
-      }
-    };
-    // capture: true captura scroll de qualquer elemento descendente
-    // (inclui containers internos com overflow:auto)
-    document.addEventListener("scroll", reposicionar, true);
-    window.addEventListener("resize", reposicionar);
-    return () => {
-      document.removeEventListener("scroll", reposicionar, true);
-      window.removeEventListener("resize", reposicionar);
-    };
-  }, [aberto]);
+  }, [etapaEditando, abertoGrupo]);
 
   const OPCOES = {
     tipoObra:    ["Construção nova", "Reforma"],
@@ -11483,7 +11464,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const LABELS = { tipoObra:"Tipo Obra", tipoProjeto:"Tipo Projeto", padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
   const SETS   = { tipoObra:setTipoObra, tipoProjeto:setTipoProjeto, padrao:setPadrao, tipologia:setTipologia, tamanho:setTamanho };
 
-  function selecionar(key, val) { SETS[key](val); setAberto(null); setHoverDrop(null); }
+  function selecionar(key, val) { SETS[key](val); setEtapaEditando(null); }
 
   const grupoDeComodo = useMemo(() => {
     const map = {};
@@ -11722,13 +11703,72 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     s.id = "slide-up-style";
     s.textContent = `
       @keyframes slideUp { from { opacity:0; transform:translateY(32px); } to { opacity:1; transform:translateY(0); } }
-      @keyframes surgeHoriz { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
       input.no-spin::-webkit-outer-spin-button,
       input.no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
       input.no-spin { -moz-appearance: textfield; }
       .comodo-escolhido:hover { color: #dc2626 !important; text-decoration: line-through; text-decoration-color: #dc2626; }
       .comodo-escolhido:hover .comodo-m2 { color: #dc2626 !important; }
       .comodo-escolhido:hover strong { color: #dc2626 !important; }
+
+      /* ===== Fluxo vk-flow2 — perguntas sequenciais ===== */
+      @keyframes flow2NodeIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+      @keyframes flow2CardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes flow2OptIn  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes flow2OptChosen { 0% { transform: scale(1); } 35% { transform: scale(1.02); } 100% { transform: scale(1); } }
+      @keyframes flow2DotPulse {
+        0%, 100% { box-shadow: 0 0 0 3px #fff, 0 0 0 5px #111; }
+        50%      { box-shadow: 0 0 0 3px #fff, 0 0 0 8px rgba(0,0,0,0); }
+      }
+      @keyframes nodeEditIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+      /* trilha horizontal compacta */
+      .vk-trilha { display: flex; align-items: center; gap: 0; flex-wrap: wrap; padding: 14px 16px; background: #fafaf7; border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 24px; }
+      .vk-trilha-node { display: inline-flex; align-items: center; gap: 8px; position: relative; padding: 4px 10px; border-radius: 6px; cursor: default; transition: background .12s; animation: flow2NodeIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; }
+      .vk-trilha-node.is-done { cursor: pointer; }
+      .vk-trilha-node.is-done:hover { background: rgba(0,0,0,0.04); }
+      .vk-trilha-dot { width: 8px; height: 8px; border-radius: 50%; background: #111; box-shadow: 0 0 0 3px #fafaf7; flex-shrink: 0; }
+      .vk-trilha-dot-active { width: 10px; height: 10px; box-shadow: 0 0 0 3px #fafaf7, 0 0 0 5px #111; animation: flow2DotPulse 2.4s infinite ease-in-out; }
+      .vk-trilha-dot-future { width: 7px; height: 7px; background: transparent; border: 1.5px solid rgba(0,0,0,0.20); box-shadow: 0 0 0 3px #fafaf7; }
+      .vk-trilha-text { display: flex; flex-direction: column; line-height: 1.15; }
+      .vk-trilha-key { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #828a98; font-weight: 600; }
+      .vk-trilha-val { font-size: 12.5px; font-weight: 600; color: #111; letter-spacing: -0.005em; }
+      .vk-trilha-val-pending { color: #828a98; font-weight: 500; font-style: italic; font-size: 11.5px; }
+      .vk-trilha-caret { font-size: 8px; color: #828a98; margin-left: 2px; }
+      .vk-trilha-node-future .vk-trilha-key { color: rgba(0,0,0,0.30); }
+      .vk-trilha-sep { width: 14px; height: 1px; background: rgba(0,0,0,0.12); margin: 0 2px; flex-shrink: 0; }
+
+      /* popover de edição inline */
+      .vk-trilha-edit { position: absolute; top: calc(100% + 6px); left: 0; z-index: 100; min-width: 200px; background: #fff; border: 1px solid rgba(0,0,0,0.10); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 28px -16px rgba(0,0,0,0.18); animation: nodeEditIn .25s cubic-bezier(0.32, 0.72, 0, 1); }
+      .vk-trilha-edit-head { padding: 7px 11px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 600; }
+      .vk-trilha-edit-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 11px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
+      .vk-trilha-edit-row:last-child { border-bottom: 0; }
+      .vk-trilha-edit-row:hover { background: #fafaf7; }
+      .vk-trilha-edit-row.is-selected { background: #111; color: #fff; }
+      .vk-trilha-edit-row.is-selected:hover { background: #111; }
+      .vk-trilha-edit-bullet { width: 5px; height: 5px; border-radius: 50%; background: rgba(0,0,0,0.20); flex: 0 0 auto; }
+      .vk-trilha-edit-row.is-selected .vk-trilha-edit-bullet { background: #fff; }
+
+      /* card central da pergunta atual */
+      .vk-flow2-card { width: 100%; max-width: 600px; margin: 0 auto 24px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
+      .vk-flow2-progress { margin-bottom: 12px; font-size: 10px; letter-spacing: 0.16em; color: #828a98; font-weight: 500; font-variant-numeric: tabular-nums; text-transform: uppercase; }
+      .vk-flow2-title { font-family: inherit; font-size: 24px; font-weight: 500; letter-spacing: -0.02em; line-height: 1.2; margin: 0; color: #111; }
+      .vk-flow2-hint { font-size: 13px; color: #6b7280; line-height: 1.5; margin-top: 6px; max-width: 460px; }
+
+      /* tabela de opções */
+      .vk-flow2-table { margin-top: 20px; border: 1px solid rgba(0,0,0,0.10); border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 12px 28px -16px rgba(0,0,0,0.10); }
+      .vk-flow2-table-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 500; }
+      .vk-flow2-row { display: grid; grid-template-columns: 32px 1fr 22px; align-items: center; gap: 14px; padding: 13px 16px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; text-align: left; font-family: inherit; font-size: 14px; color: #111; transition: background .15s ease; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; width: 100%; }
+      .vk-flow2-row:last-child { border-bottom: 0; }
+      .vk-flow2-row:hover:not(:disabled) { background: #fafaf7; }
+      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-arrow { opacity: 1; transform: translateX(0); color: #111; }
+      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx { color: #111; }
+      .vk-flow2-row-idx { font-size: 10.5px; letter-spacing: 0.06em; color: #828a98; font-family: ui-monospace, "JetBrains Mono", monospace; font-weight: 500; transition: color .15s; }
+      .vk-flow2-row-text { font-weight: 500; letter-spacing: -0.005em; }
+      .vk-flow2-row-arrow { color: #828a98; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; display: inline-flex; justify-content: flex-end; }
+      .vk-flow2-row.is-chosen { background: #111; color: #fff; animation: flow2OptChosen .55s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .vk-flow2-row.is-chosen .vk-flow2-row-idx { color: rgba(255,255,255,0.5); }
+      .vk-flow2-row.is-chosen .vk-flow2-row-arrow { color: #fff; opacity: 1; transform: translateX(0); }
+      .vk-flow2-row.is-fading { opacity: 0; height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; overflow: hidden; transition: all .35s cubic-bezier(0.32, 0.72, 0, 1); }
     `;
     document.head.appendChild(s);
   }, []);
@@ -11738,15 +11778,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
     input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
-    dropWrap:   { position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:6 },
-    dropLbl:    { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center" },
-    dropBtn:    (open, hasVal) => ({ display:"flex", alignItems:"center", gap:6, background: hasVal&&!open?"#fff":"#fff", border:`1px solid ${open?"#111": hasVal?"#c0c5cf":"#333"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, userSelect:"none", WebkitUserSelect:"none" }),
-    dropBtnTxt: (val) => ({ flex:1, textAlign:"center", color: val ? "#111" : "#828a98" }),
-    chevron:    (open) => ({ transition:"transform 0.15s", transform: open ? "rotate(180deg)" : "none", display:"flex", alignItems:"center" }),
-    dropPanel:  { position:"fixed", zIndex:9999, background:"#fff", border:"1px solid #333", borderRadius:10, boxShadow:"0 4px 16px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden" },
-    dropItem:   (sel) => ({ padding:"10px 16px", fontSize:14, cursor:"pointer", color:"#374151", background: sel ? "#eceef2" : "#fff", fontWeight: sel ? 600 : 400 }),
-    groupHdr:   { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12 },
-    sep:        { width:1, background:"#c8cdd6", alignSelf:"stretch", marginTop:22 },
     btnDefinir: { width:"100%", maxWidth:380, background:"#111", border:"1px solid #111", borderRadius:10, padding:"13px 0", fontSize:14, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
     aviso:      { fontSize:12, color:"#ef4444", textAlign:"center", marginTop:8 },
     comodoGrupoHdr: { fontSize:10, color:"#555e6b", textTransform:"uppercase", letterSpacing:1, marginBottom:8, marginTop:20, background:"#f0f1f4", border:"1px solid #b8bec8", borderRadius:6, padding:"6px 10px", display:"inline-block" },
@@ -11766,113 +11797,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     resumoArea: { background:"#f0f1f4", border:"1px solid #c0c5cf", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" },
   };
 
-  function renderStep(id) {
-    const open = aberto === id;
-    const val  = VALS[id];
-    const lbl  = LABELS[id];
-    const btnRef = { current: null };
-    const hovered = hoverDrop === id;
-    const ativo = open || hovered;
-    return (
-      <div style={{ position:"relative" }} key={id}>
-        <button
-          ref={el => { btnRef.current = el; }}
-          data-drop-btn={id}
-          onMouseEnter={(e) => {
-            // Cancela qualquer fechamento pendente
-            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
-            setHoverDrop(id);
-            // Abre o dropdown automaticamente no hover
-            if (!open) {
-              const r = e.currentTarget.getBoundingClientRect();
-              setPanelPos({ top: r.bottom + 6, left: r.left });
-              setAberto(id);
-            }
-          }}
-          onMouseLeave={() => {
-            // Fecha com pequeno delay pra permitir mover o mouse pro painel
-            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
-            hoverCloseRef.current = setTimeout(() => {
-              setHoverDrop(null);
-              setAberto(null);
-            }, 120);
-          }}
-          style={{
-            ...C.dropBtn(open, !!val),
-            background: ativo ? "#eceef2" : (val ? "#f4f5f7" : "#fff"),
-          }}
-          onClick={(e) => {
-            // Tira o focus pra evitar highlight azul ao clicar
-            e.currentTarget.blur();
-            if (open) { setAberto(null); return; }
-            const r = e.currentTarget.getBoundingClientRect();
-            setPanelPos({ top: r.bottom + 6, left: r.left });
-            setAberto(id);
-          }}>
-          <span style={C.dropBtnTxt(val)}>
-            {val
-              ? <><span style={{ color:"#828a98", fontWeight:400 }}>{lbl}: </span><span style={{ fontWeight:600, color:"#111" }}>{val}</span></>
-              : <span style={{ color:"#828a98" }}>{lbl}</span>
-            }
-          </span>
-          <span style={C.chevron(open)}>
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-              <path d="M2 4l4 4 4-4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          </span>
-        </button>
-      </div>
-    );
-  }
-
-  // Renderiza um valor já escolhido como texto editável — hover reabre dropdown
-  function renderValor(id) {
-    const open = aberto === id;
-    const val  = VALS[id];
-    if (!val) return null;
-    const hovered = hoverDrop === id;
-    const ativo = open || hovered;
-    return (
-      <div style={{ position:"relative" }} key={id+"-valor"}>
-        <span
-          data-drop-btn={id}
-          onMouseEnter={(e) => {
-            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
-            setHoverDrop(id);
-            if (!open) {
-              const r = e.currentTarget.getBoundingClientRect();
-              setPanelPos({ top: r.bottom + 6, left: r.left });
-              setAberto(id);
-            }
-          }}
-          onMouseLeave={() => {
-            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
-            hoverCloseRef.current = setTimeout(() => {
-              setHoverDrop(null);
-              setAberto(null);
-            }, 120);
-          }}
-          onClick={(e) => {
-            if (open) { setAberto(null); return; }
-            const r = e.currentTarget.getBoundingClientRect();
-            setPanelPos({ top: r.bottom + 6, left: r.left });
-            setAberto(id);
-          }}
-          style={{
-            display:"inline-block",
-            fontSize:14, color:"#111", fontWeight:500,
-            cursor:"pointer", userSelect:"none", WebkitUserSelect:"none",
-            padding:"4px 10px", borderRadius:6,
-            background: ativo ? "#eceef2" : "transparent",
-            borderBottom: ativo ? "1px solid #c8cdd6" : "1px solid transparent",
-            transition: "background 0.2s ease, border-color 0.2s ease",
-            animation: "surgeHoriz 0.35s ease both",
-          }}>
-          {displayOpcao(id, val)}
-        </span>
-      </div>
-    );
-  }
 
   const GRUPO_DISPLAY = {
     "Por Loja":        "Loja",
@@ -12151,32 +12075,143 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         </div>
       </div>
 
-      {/* ── Fluxo sequencial de parâmetros (horizontal: botão ativo à esquerda + valores editáveis à direita) ── */}
+      {/* ── Fluxo sequencial de parâmetros: trilha horizontal compacta + card central ── */}
       {(() => {
-        // Determina qual é a próxima etapa pendente (ordem: tipoObra → tipoProjeto → padrao → tipologia → tamanho)
-        // Pula etapas condicionais (padrao/tipologia/tamanho só se !isComercial)
+        // Etapas em ordem (tipologia/padrao/tamanho só se !isComercial)
         const ordem = ["tipoObra", "tipoProjeto"];
         if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
-        const proxima = ordem.find(k => !VALS[k]);
-        const concluido = !proxima;
+
+        // Etapa atual: a primeira sem valor, OU a etapa que o usuário clicou pra editar
+        const proximaPendente = ordem.find(k => !VALS[k]);
+        const etapaAtual = etapaEditando || proximaPendente;
+        const concluido = !proximaPendente && !etapaEditando;
+        const stepIdx = etapaAtual ? ordem.indexOf(etapaAtual) : ordem.length;
+
+        // Hints por etapa
+        const HINTS = {
+          tipoObra:    "Define se é construção nova ou reforma de algo existente.",
+          tipoProjeto: "Define a tabela de preços base e os ambientes disponíveis.",
+          padrao:      "Define o índice de preço base do projeto.",
+          tipologia:   "Térreo (1 pavimento) ou sobrado (2+ pavimentos).",
+          tamanho:     "Define as medidas-padrão de cada cômodo.",
+        };
+
         return (
-          <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", minHeight:42 }}>
-            {/* Botão ativo à esquerda (ou "Concluído" quando tudo preenchido) */}
-            {proxima ? renderStep(proxima) : (
-              <div style={{
-                display:"inline-flex", alignItems:"center",
-                padding:"9px 18px", border:"1px solid #c0c5cf", borderRadius:10,
-                fontSize:11, background:"#f4f5f7", color:"#828a98",
-                minWidth:110, justifyContent:"center", userSelect:"none",
-              }}>
-                Concluído ✓
+          <>
+            {/* Trilha horizontal compacta */}
+            <div className="vk-trilha">
+              {ordem.map((k, i) => {
+                const val = VALS[k];
+                const isActive = etapaAtual === k;
+                const isDone = !!val && !isActive;
+                const isFuture = !val && !isActive;
+                let dotCls = "vk-trilha-dot";
+                if (isActive) dotCls += " vk-trilha-dot-active";
+                else if (isFuture) dotCls += " vk-trilha-dot-future";
+
+                return (
+                  <React.Fragment key={k}>
+                    <div
+                      className={"vk-trilha-node" + (isDone ? " is-done" : "") + (isFuture ? " vk-trilha-node-future" : "")}
+                      onClick={() => {
+                        if (!isDone) return;
+                        setEtapaEditando(etapaEditando === k ? null : k);
+                      }}
+                      style={{ animationDelay: `${i * 50}ms` }}>
+                      <span className={dotCls}></span>
+                      <span className="vk-trilha-text">
+                        <span className="vk-trilha-key">{LABELS[k]}</span>
+                        <span className={val ? "vk-trilha-val" : "vk-trilha-val-pending"}>
+                          {val ? displayOpcao(k, val) : (isActive ? "respondendo..." : "—")}
+                          {isDone && <span className="vk-trilha-caret">▾</span>}
+                        </span>
+                      </span>
+
+                      {/* popover de edição inline */}
+                      {etapaEditando === k && (
+                        <div className="vk-trilha-edit" onClick={e => e.stopPropagation()}>
+                          <div className="vk-trilha-edit-head">EDITAR · {LABELS[k]}</div>
+                          {(OPCOES[k] || []).map(op => (
+                            <button
+                              key={op}
+                              className={"vk-trilha-edit-row" + (val === op ? " is-selected" : "")}
+                              onClick={() => {
+                                SETS[k](op);
+                                setEtapaEditando(null);
+                              }}>
+                              <span className="vk-trilha-edit-bullet"></span>
+                              <span style={{ flex:1, fontWeight:500 }}>{displayOpcao(k, op)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {i < ordem.length - 1 && <span className="vk-trilha-sep"></span>}
+                  </React.Fragment>
+                );
+              })}
+              {concluido && (
+                <span style={{ marginLeft:"auto", fontSize:11, fontWeight:600, color:"#16a34a", padding:"4px 10px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:6 }}>
+                  ✓ Concluído
+                </span>
+              )}
+            </div>
+
+            {/* Card central da pergunta atual */}
+            {etapaAtual && (
+              <div className="vk-flow2-card" key={"card-" + etapaAtual + "-" + opcaoEscolhida}>
+                <div className="vk-flow2-progress">
+                  {String(stepIdx + 1).padStart(2, "0")} / {String(ordem.length).padStart(2, "0")} · {LABELS[etapaAtual]}
+                </div>
+                <h2 className="vk-flow2-title">
+                  {etapaAtual === "tipoObra"    && "Construção nova ou reforma?"}
+                  {etapaAtual === "tipoProjeto" && "Qual o tipo de projeto?"}
+                  {etapaAtual === "padrao"      && "Qual o padrão construtivo?"}
+                  {etapaAtual === "tipologia"   && "Qual a tipologia?"}
+                  {etapaAtual === "tamanho"     && "Qual o tamanho dos ambientes?"}
+                </h2>
+                <p className="vk-flow2-hint">{HINTS[etapaAtual]}</p>
+
+                <div className="vk-flow2-table">
+                  <div className="vk-flow2-table-head">
+                    <span>OPÇÕES</span>
+                    <span>{(OPCOES[etapaAtual] || []).length}</span>
+                  </div>
+                  {(OPCOES[etapaAtual] || []).map((op, i) => {
+                    const isChosen = opcaoEscolhida === op;
+                    const isFading = !!opcaoEscolhida && !isChosen;
+                    let cls = "vk-flow2-row";
+                    if (isChosen) cls += " is-chosen";
+                    if (isFading) cls += " is-fading";
+                    return (
+                      <button
+                        key={op}
+                        className={cls}
+                        style={{ animationDelay: `${i * 50}ms` }}
+                        disabled={!!opcaoEscolhida}
+                        onClick={() => {
+                          if (opcaoEscolhida) return;
+                          setOpcaoEscolhida(op);
+                          // Aguarda animação antes de aplicar e seguir
+                          setTimeout(() => {
+                            SETS[etapaAtual](op);
+                            setEtapaEditando(null);
+                            setOpcaoEscolhida(null);
+                          }, 450);
+                        }}>
+                        <span className="vk-flow2-row-idx">{String(i + 1).padStart(2, "0")}</span>
+                        <span className="vk-flow2-row-text">{displayOpcao(etapaAtual, op)}</span>
+                        <span className="vk-flow2-row-arrow">→</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
-            {/* Valores escolhidos em ordem — cada um editável via hover */}
-            {ordem.map(k => VALS[k] ? renderValor(k) : null)}
-          </div>
+          </>
         );
       })()}
+
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
@@ -12688,43 +12723,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         }
         return null;
       })()}
-
-
-      {aberto && (
-        <div
-          onMouseEnter={() => {
-            // Mantém aberto quando mouse entra no painel
-            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
-          }}
-          onMouseLeave={() => {
-            // Fecha ao sair do painel (sem delay pois já saiu do botão também)
-            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
-            hoverCloseRef.current = setTimeout(() => {
-              setHoverDrop(null);
-              setAberto(null);
-            }, 80);
-          }}
-          style={{
-          position:"fixed",
-          top: panelPos.top, left: panelPos.left,
-          zIndex:9999,
-          background:"#fff", border:"1px solid #b0b7c3", borderRadius:10,
-          boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden",
-        }}>
-          {(OPCOES[aberto] || []).map(op => {
-            const val = VALS[aberto];
-            return (
-              <div key={op}
-                style={C.dropItem(val === op)}
-                onMouseEnter={e => { if (val !== op) e.currentTarget.style.background = "#f4f5f7"; }}
-                onMouseLeave={e => { if (val !== op) e.currentTarget.style.background = val === op ? "#efefef" : "#fff"; }}
-                onClick={() => selecionar(aberto, op)}>
-                {op}
-              </div>
-            );
-          })}
-        </div>
-      )}
 
       {/* Modal "Deseja salvar?" ao voltar com dados preenchidos */}
       {showSaveDialog && (
