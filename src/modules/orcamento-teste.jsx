@@ -6325,8 +6325,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-trilha-h-pop { position: fixed; z-index: 9999; min-width: 200px; background: #fff; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 28px -8px rgba(0,0,0,0.18); animation: nodeEditIn .18s cubic-bezier(0.32, 0.72, 0, 1); }
       .vk-trilha-h-pop-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 12px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
       .vk-trilha-h-pop-row:last-child { border-bottom: 0; }
-      .vk-trilha-h-pop-row:hover { background: #fafaf7; }
-      .vk-trilha-h-pop-row.is-focused-kb { background: #fafaf7; }
+      .vk-trilha-h-pop-row:hover { background: #e5e7eb; }
+      .vk-trilha-h-pop-row.is-focused-kb { background: #e5e7eb; }
       .vk-trilha-h-pop-row.is-selected { background: #111; color: #fff; }
       .vk-trilha-h-pop-row.is-selected:hover,
       .vk-trilha-h-pop-row.is-selected.is-focused-kb { background: #111; }
@@ -6388,8 +6388,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-table-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 500; }
       .vk-flow2-row { display: grid; grid-template-columns: 32px 1fr 22px; align-items: center; gap: 14px; padding: 13px 16px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; text-align: left; font-family: inherit; font-size: 14px; color: #111; transition: background .15s ease; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; width: 100%; }
       .vk-flow2-row:last-child { border-bottom: 0; }
-      .vk-flow2-row:hover:not(:disabled) { background: #fafaf7; }
-      .vk-flow2-row.is-focused:not(:disabled) { background: #fafaf7; }
+      .vk-flow2-row:hover:not(:disabled) { background: #e5e7eb; }
+      .vk-flow2-row.is-focused:not(:disabled) { background: #e5e7eb; }
       .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-arrow,
       .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-arrow { opacity: 1; transform: translateX(0); color: #111; }
       .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx,
@@ -6970,7 +6970,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       {/* ── Barra de toggles (Arq/Eng/Marc + Imposto + Repetição) — sempre visível ── */}
       <div style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
-        padding:"12px 16px", marginBottom:16, maxWidth:1100,
+        padding:"12px 16px", marginBottom:6, maxWidth:1100,
         background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
       }}>
         {[
@@ -6994,7 +6994,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
               }} />
             </span>
-            <span style={{ fontSize:14, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
+            <span style={{ fontSize:13, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
               {label}
             </span>
           </label>
@@ -7017,7 +7017,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
             }} />
           </span>
-          <span style={{ fontSize:14, color: temImposto ? "#111" : "#828a98", fontWeight: temImposto ? 600 : 400, transition:"color 0.2s" }}>
+          <span style={{ fontSize:13, color: temImposto ? "#111" : "#828a98", fontWeight: temImposto ? 600 : 400, transition:"color 0.2s" }}>
             Imposto
           </span>
         </label>
@@ -7050,7 +7050,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
         {tipoProjeto !== "Conj. Comercial" && (
           <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"1px solid #e5e7eb" }}>
-            <span style={{ fontSize:14, color:"#828a98" }}>Repetição</span>
+            <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
             <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
               onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
             {editandoRep ? (
