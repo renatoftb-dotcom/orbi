@@ -3466,59 +3466,125 @@ function AreaDetalhe({ calculo, fmtNum }) {
   );
 }
 
-function ResumoDetalhes({ calculo, fmtNum, C }) {
-  const [repAberto, setRepAberto] = useState(false);
+function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
+  const [arqAberto, setArqAberto] = useState(false);
+  const [engAberto, setEngAberto] = useState(false);
   const fmt2   = (v) => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
-  const m2str  = (v, area) => area > 0 ? ` (R$ ${fmtNum(Math.round(v / area * 100) / 100)}/m²)` : "";
   const hasRep = calculo.nRep > 1;
+  const totalGeral = calculo.precoArq + calculo.precoEng;
+  const m2Total = calculo.areaTot > 0 ? Math.round(totalGeral / calculo.areaTot * 100) / 100 : 0;
+
+  // Imposto inside-out: total já é o líquido; bruto = liquido / (1 - aliq/100)
+  const aliq = aliqImp || 16;
+  const totalComImp = temImposto && totalGeral > 0
+    ? Math.round(totalGeral / (1 - aliq/100) * 100) / 100
+    : totalGeral;
+  const valorImposto = totalComImp - totalGeral;
+
+  // Ícone "grupo" SVG inline (people-icon)
+  const IconUnidades = ({ size = 13 }) => (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ flexShrink:0 }}>
+      <circle cx="6" cy="5" r="2.2" stroke="#828a98" strokeWidth="1.3"/>
+      <path d="M2.5 12c0-1.8 1.6-3.2 3.5-3.2s3.5 1.4 3.5 3.2" stroke="#828a98" strokeWidth="1.3" strokeLinecap="round"/>
+      <circle cx="11.5" cy="4.5" r="1.6" stroke="#828a98" strokeWidth="1.2"/>
+      <path d="M9.5 11c.6-1.2 1.5-2 2.7-2 1.4 0 2.4.9 2.4 2.4" stroke="#828a98" strokeWidth="1.2" strokeLinecap="round"/>
+    </svg>
+  );
+
   return (
     <>
-      <div style={{ ...C.resumoSec, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span>Arquitetura</span>
-        {hasRep && (
-          <span onClick={() => setRepAberto(v => !v)} style={{ cursor:"pointer", fontSize:13, color:"#828a98", userSelect:"none" }}>
-            {repAberto ? "▲" : "▼"}
-          </span>
+      {/* TOTAL GERAL — destaque no topo */}
+      <div style={{ marginTop:0, marginBottom:14 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+          <div style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Total Geral</div>
+          {hasRep && (
+            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"#828a98", fontWeight:500 }}>
+              <IconUnidades size={12} />
+              <span>{calculo.nRep} unid · {fmtNum(calculo.areaTot)}/m²</span>
+            </div>
+          )}
+        </div>
+        <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
+          <span style={{ fontSize:22, fontWeight:800, color:"#111", letterSpacing:"-0.01em" }}>{fmt2(totalComImp)}</span>
+          <span style={{ fontSize:13, color:"#828a98" }}>R$ {fmtNum(calculo.areaTot > 0 ? Math.round(totalComImp / calculo.areaTot * 100) / 100 : 0)}/m²</span>
+        </div>
+        {/* Imposto inline — só quando temImposto E há valor */}
+        {temImposto && valorImposto > 0 && (
+          <div style={{ fontSize:11.5, color:"#dc2626", marginTop:4, fontWeight:500 }}>
+            inclui imposto ({aliq}%) — {fmt2(valorImposto)}
+          </div>
         )}
       </div>
-      <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
-        <span style={C.resumoVal}>{fmt2(calculo.precoArq)}</span>
-        <span style={C.resumoM2}>R$ {fmtNum(calculo.precoM2Arq)}/m²</span>
-      </div>
-      {hasRep && repAberto && (
-        <div style={{ marginTop:4, borderLeft:"2px solid #f3f4f6", paddingLeft:8 }}>
-          {calculo.unidades.map(u => (
-            <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#6b7280", marginTop:3 }}>
-              <span>Und {u.und}{u.und > 1 ? ` (${Math.round(calculo.pctRep * 100)}%)` : ""}</span>
-              <span>{fmt2(u.arq)}{m2str(u.arq, calculo.areaTotal)}</span>
+
+      {/* ARQUITETURA */}
+      {calculo.precoArq > 0 && (
+        <div style={{ paddingTop:14, borderTop:"1px solid #e5e7eb" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Arquitetura</span>
+              {hasRep && <IconUnidades size={12} />}
             </div>
-          ))}
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:14.5, fontWeight:700, color:"#111" }}>{fmt2(calculo.precoArq)}</span>
+              <span style={{ fontSize:12, color:"#828a98" }}>R$ {fmtNum(calculo.precoM2Arq)}/m²</span>
+              {hasRep && (
+                <span onClick={() => setArqAberto(v => !v)} style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none", marginLeft:2 }}>
+                  {arqAberto ? "▲" : "▼"}
+                </span>
+              )}
+            </div>
+          </div>
+          {hasRep && arqAberto && (
+            <div style={{ marginTop:8, paddingLeft:10, borderLeft:"2px solid #e5e7eb", display:"flex", flexDirection:"column", gap:4 }}>
+              {calculo.unidades.map(u => {
+                const pct = u.und > 1 ? Math.round(calculo.pctRep * 100) : null;
+                const m2u = calculo.areaTotal > 0 ? Math.round(u.arq / calculo.areaTotal * 100) / 100 : 0;
+                return (
+                  <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#6b7280" }}>
+                    <span>Und {u.und}{pct ? ` (${pct}%)` : ""}</span>
+                    <span style={{ color:"#374151" }}>{fmt2(u.arq)} <span style={{ color:"#9ca3af", fontSize:11 }}>· {fmtNum(m2u)}/m²</span></span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
-      <div style={{ ...C.resumoSec, marginTop:16, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <span>Engenharia</span>
-      </div>
-      <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
-        <span style={C.resumoVal}>{fmt2(calculo.precoEng)}</span>
-        <span style={C.resumoM2}>R$ {fmtNum(calculo.precoM2Eng)}/m²</span>
-      </div>
-      {hasRep && repAberto && (
-        <div style={{ marginTop:4, borderLeft:"2px solid #f3f4f6", paddingLeft:8 }}>
-          {calculo.unidades.map(u => (
-            <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#6b7280", marginTop:3 }}>
-              <span>Und {u.und}{u.und > 1 ? ` (${Math.round(calculo.pctRep * 100)}%)` : ""}</span>
-              <span>{fmt2(u.eng)}{m2str(u.eng, calculo.areaTotal)}</span>
+
+      {/* ENGENHARIA */}
+      {calculo.precoEng > 0 && (
+        <div style={{ paddingTop:14, marginTop:14, borderTop:"1px solid #e5e7eb" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+              <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Engenharia</span>
+              {hasRep && <IconUnidades size={12} />}
             </div>
-          ))}
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:14.5, fontWeight:700, color:"#111" }}>{fmt2(calculo.precoEng)}</span>
+              <span style={{ fontSize:12, color:"#828a98" }}>R$ {fmtNum(calculo.precoM2Eng)}/m²</span>
+              {hasRep && (
+                <span onClick={() => setEngAberto(v => !v)} style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none", marginLeft:2 }}>
+                  {engAberto ? "▲" : "▼"}
+                </span>
+              )}
+            </div>
+          </div>
+          {hasRep && engAberto && (
+            <div style={{ marginTop:8, paddingLeft:10, borderLeft:"2px solid #e5e7eb", display:"flex", flexDirection:"column", gap:4 }}>
+              {calculo.unidades.map(u => {
+                const pct = u.und > 1 ? Math.round(calculo.pctRep * 100) : null;
+                const m2u = calculo.areaTotal > 0 ? Math.round(u.eng / calculo.areaTotal * 100) / 100 : 0;
+                return (
+                  <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#6b7280" }}>
+                    <span>Und {u.und}{pct ? ` (${pct}%)` : ""}</span>
+                    <span style={{ color:"#374151" }}>{fmt2(u.eng)} <span style={{ color:"#9ca3af", fontSize:11 }}>· {fmtNum(m2u)}/m²</span></span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
-      <div style={{ marginTop:20, paddingTop:14, borderTop:"1px solid #dde0e5" }}>
-        <div style={{ fontSize:11, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Total Geral</div>
-        <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
-          <span style={{ fontSize:21, fontWeight:800, color:"#111" }}>{fmt2(calculo.precoArq + calculo.precoEng)}</span>
-          <span style={C.resumoM2}>R$ {fmtNum(calculo.areaTot > 0 ? Math.round((calculo.precoArq + calculo.precoEng) / calculo.areaTot * 100) / 100 : 0)}/m²</span>
-        </div>
-      </div>
     </>
   );
 }
@@ -5586,6 +5652,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   ]);
   const [qtdRep, setQtdRep] = useState(orcBase?.repeticao ? (orcBase?.nUnidades || 2) : 0);
   const [editandoRep, setEditandoRep] = useState(false);
+  const [editandoAliq, setEditandoAliq] = useState(false);
   const [editandoGrupoQtd, setEditandoGrupoQtd] = useState(null); // guarda o nome do grupo que está com input aberto
   const [etapasIsoladas, setEtapasIsoladas] = useState(new Set(orcBase?.etapasIsoladas || []));
   const [incluiArq,        setIncluiArq]        = useState(orcBase?.incluiArq        !== false);
@@ -5684,11 +5751,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!orcBase?.comodos) return {};
     return Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd]));
   });
+  // Cômodos que o usuário já interagiu — mesmo com qty=0, ficam em "escolhidos".
+  // Ao zerar via clique no botão "0", o cômodo permanece visível (com qty=0).
+  // Só sai dos escolhidos ao clicar no chip ou no ✕.
+  const [comodosTocados, setComodosTocados] = useState(() => {
+    if (!orcBase?.comodos) return new Set();
+    return new Set(orcBase.comodos.filter(c => c.qtd > 0).map(c => c.nome));
+  });
 
   const isEdicao = useRef(!!orcBase?.comodos?.length);
   useEffect(() => {
     if (isEdicao.current) { isEdicao.current = false; return; }
     setQtds({});
+    setComodosTocados(new Set());
   }, [tipoProjeto]);
 
   // ── Salvar como rascunho ao voltar ─────────────────────────
@@ -6333,6 +6408,26 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       if (v === 0) delete next[nome]; else next[nome] = v;
       return next;
     });
+    // Marca como "tocado": permanece em escolhidos mesmo com qty=0
+    setComodosTocados(prev => {
+      const next = new Set(prev);
+      next.add(nome);
+      return next;
+    });
+  }
+
+  // Remove totalmente: zera qty E tira de comodosTocados (volta pra disponíveis)
+  function removerComodo(nome) {
+    setQtds(prev => {
+      const next = { ...prev };
+      delete next[nome];
+      return next;
+    });
+    setComodosTocados(prev => {
+      const next = new Set(prev);
+      next.delete(nome);
+      return next;
+    });
   }
 
   function getArea(nome) {
@@ -6549,11 +6644,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         )}
       </div>
 
-      {/* ── Barra de toggles (Arq/Eng/Marc + Repetição) — sempre visível ── */}
+      {/* ── Barra de toggles (Arq/Eng/Marc + Imposto + Repetição) — sempre visível ── */}
       <div style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
         padding:"12px 16px", marginBottom:16, maxWidth:1100,
-        background:"#eef2f7", border:"1px solid #d8dee8", borderRadius:10,
+        background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
       }}>
         {[
           { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
@@ -6581,6 +6676,55 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             </span>
           </label>
         ))}
+
+        {/* Toggle Imposto + input de alíquota (só quando ligado) */}
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
+          <span onClick={() => setTemImposto(v => !v)} style={{
+            position:"relative", display:"inline-block",
+            width:36, height:20, borderRadius:10, flexShrink:0,
+            background: temImposto ? "#111" : "#d1d5db",
+            transition:"background 0.2s",
+            cursor:"pointer",
+          }}>
+            <span style={{
+              position:"absolute", top:3, left: temImposto ? 19 : 3,
+              width:14, height:14, borderRadius:"50%",
+              background:"#fff",
+              transition:"left 0.2s",
+              boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
+            }} />
+          </span>
+          <span style={{ fontSize:14, color: temImposto ? "#111" : "#828a98", fontWeight: temImposto ? 600 : 400, transition:"color 0.2s" }}>
+            Imposto
+          </span>
+        </label>
+        {temImposto && (
+          <div style={{ display:"flex", alignItems:"center", gap:0, marginLeft:-8 }}>
+            {editandoAliq ? (
+              <input
+                autoFocus
+                type="number" min="0" max="100" step="0.5"
+                defaultValue={aliqImp}
+                onBlur={e => { const v = parseFloat(e.target.value)||0; setAliqImp(Math.max(0, Math.min(100, v))); setEditandoAliq(false); }}
+                onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseFloat(e.target.value)||0; setAliqImp(Math.max(0, Math.min(100, v))); setEditandoAliq(false); } }}
+                className="no-spin"
+                style={{ width:48, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
+              />
+            ) : (
+              <span
+                onClick={() => setEditandoAliq(true)}
+                title="Clique para editar"
+                style={{
+                  fontSize:13, fontWeight:700, color:"#111",
+                  padding:"3px 8px", border:"1px solid #d0d4db", borderRadius:5,
+                  background:"#fff", cursor:"text",
+                }}>
+                {aliqImp}%
+              </span>
+            )}
+          </div>
+        )}
+
         {tipoProjeto !== "Conj. Comercial" && (
           <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"1px solid #e5e7eb" }}>
             <span style={{ fontSize:14, color:"#828a98" }}>Repetição</span>
@@ -6892,8 +7036,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 return true;
               }).map(([grupo, nomes]) => {
               // Split: escolhidos vs disponíveis
-              const escolhidos  = nomes.filter(n => (qtds[n] || 0) > 0);
-              const disponiveis = nomes.filter(n => (qtds[n] || 0) === 0);
+              // Escolhidos: aparece se já foi tocado (mesmo que qty=0 agora)
+              const escolhidos  = nomes.filter(n => comodosTocados.has(n) || (qtds[n] || 0) > 0);
+              const disponiveis = nomes.filter(n => !comodosTocados.has(n) && (qtds[n] || 0) === 0);
               const m2Grupo  = escolhidos.reduce((s,n) => s + getArea(n) * (qtds[n]||0), 0);
               const qtdGrupo = escolhidos.reduce((s,n) => s + (qtds[n]||0), 0);
 
@@ -6953,28 +7098,31 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         MozAppearance:"textfield",
                       }}
                     />
-                    {[0,1,2,3,4,5,6].map(n => (
+                    {[0,1,2,3,4,5,6].map(n => {
+                      const isSel = n > 0 && q === n;
+                      return (
                       <button key={n}
                         onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); }}
                         style={{
                           width:26, height:26, border:"1px solid transparent", borderRadius:4,
-                          background: q===n ? "#111" : "transparent",
-                          color: q===n ? "#fff" : "#374151",
+                          background: isSel ? "#111" : "transparent",
+                          color: isSel ? "#fff" : "#374151",
                           fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
                           display:"inline-flex", alignItems:"center", justifyContent:"center",
                           flexShrink:0, padding:0,
                           transition:"all 0.1s",
                         }}
-                        onMouseEnter={e => { if (q !== n) { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#fff"; } }}
-                        onMouseLeave={e => { if (q !== n) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#374151"; } }}>
+                        onMouseEnter={e => { if (!isSel) { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#fff"; } }}
+                        onMouseLeave={e => { if (!isSel) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#374151"; } }}>
                         {n}
                       </button>
-                    ))}
+                      );
+                    })}
                     {q > 0 && (
                       <>
                         <span style={{ width:1, height:16, background:"#d1d5db", margin:"0 3px", alignSelf:"center" }} />
                         <button
-                          onClick={e => { e.stopPropagation(); setQtdAbs(nome, 0); setTravado(false); setComodoAberto(null); }}
+                          onClick={e => { e.stopPropagation(); removerComodo(nome); setTravado(false); setComodoAberto(null); }}
                           title="Remover"
                           style={{
                             width:26, height:26, border:"1px solid transparent", borderRadius:4,
@@ -7011,6 +7159,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         onClick={e => {
                           e.stopPropagation();
                           setQtds({});
+                          setComodosTocados(new Set());
                           setGruposAbertos({});
                         }}
                         style={{
@@ -7217,7 +7366,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         const m2Total = getArea(nome) * q;
                         return (
                           <span key={nome}
-                            onClick={() => setQtdAbs(nome, 0)}
+                            onClick={() => removerComodo(nome)}
                             title="Clique para remover"
                             className="comodo-escolhido"
                             style={{
@@ -7279,7 +7428,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     precoEng:   incluiEng ? calculo.precoEng : 0,
                     precoM2Arq: incluiArq ? calculo.precoM2Arq : 0,
                     precoM2Eng: incluiEng ? calculo.precoM2Eng : 0,
-                  }} fmtNum={fmtNum} C={C} />
+                  }} fmtNum={fmtNum} C={C} temImposto={temImposto} aliqImp={aliqImp} />
                 </div>
                 <button
                   style={{ width:"100%", marginTop:10, background:"#111", color:"#fff", border:"1px solid #111", borderRadius:8, padding:"11px 16px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
