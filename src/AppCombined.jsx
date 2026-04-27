@@ -11688,155 +11688,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setOpcaoFocada(null);
   }, [tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando]);
 
-  // ── Navegação por teclado nos cômodos (setas + Tab + Enter) ──
-  // Refs pra ler valores mais recentes nos handlers
-  const comodoAbertoRef = useRef(null);
-  const comodoQtdFocadaRef = useRef(null);
-  useEffect(() => { comodoAbertoRef.current = comodoAberto; }, [comodoAberto]);
-  useEffect(() => { comodoQtdFocadaRef.current = comodoQtdFocada; }, [comodoQtdFocada]);
-
-  // Computa se está na fase de cômodos (perguntas concluídas)
-  // Memoizado pra não recriar handler a cada render
-  useEffect(() => {
-    const ordem = ["referencia", "tipoObra", "tipoProjeto"];
-    if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
-    const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
-    const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-    const concluido = !proximaPendente && !etapaEditando;
-    if (!concluido || !configAtual) return;
-
-    const NUMEROS = [0, 1, 2, 3, 4, 5, 6];
-
-    const handler = (e) => {
-      const tag = (document.activeElement?.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-
-      const flat = comodosFlatRef.current;
-      if (!flat || flat.length === 0) return;
-
-      const aberto = comodoAbertoRef.current;
-      const qtdIdx = comodoQtdFocadaRef.current;
-      const idxAberto = aberto ? flat.indexOf(aberto) : -1;
-
-      // ── ↓ ──
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        if (idxAberto === -1) {
-          // Primeira vez: foca o "1" do primeiro cômodo
-          setComodoAberto(flat[0]);
-          setComodoQtdFocada(1);
-        } else {
-          // Vai pro próximo cômodo (foca "1" dele)
-          const proximo = flat[Math.min(idxAberto + 1, flat.length - 1)];
-          setComodoAberto(proximo);
-          setComodoQtdFocada(1);
-        }
-        return;
-      }
-
-      // ── ↑ ──
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        if (idxAberto === -1) {
-          setComodoAberto(flat[0]);
-          setComodoQtdFocada(1);
-        } else {
-          const anterior = flat[Math.max(idxAberto - 1, 0)];
-          setComodoAberto(anterior);
-          setComodoQtdFocada(1);
-        }
-        return;
-      }
-
-      // Demais: precisam de cômodo aberto
-      if (!aberto) return;
-
-      // ── ← / → ──
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        setComodoQtdFocada(prev => {
-          if (prev === null) return NUMEROS[NUMEROS.length - 1];
-          const i = NUMEROS.indexOf(prev);
-          return NUMEROS[(i - 1 + NUMEROS.length) % NUMEROS.length];
-        });
-        return;
-      }
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        setComodoQtdFocada(prev => {
-          if (prev === null) return NUMEROS[0];
-          const i = NUMEROS.indexOf(prev);
-          return NUMEROS[(i + 1) % NUMEROS.length];
-        });
-        return;
-      }
-
-      // ── Tab ──
-      // Navega entre números (0→1→2...→6); chegando no fim do cômodo, vai pro "1" do próximo
-      if (e.key === "Tab" && !e.shiftKey) {
-        e.preventDefault();
-        const i = qtdIdx === null ? -1 : NUMEROS.indexOf(qtdIdx);
-        if (i < NUMEROS.length - 1) {
-          setComodoQtdFocada(NUMEROS[i + 1]);
-        } else {
-          // Chegou no 6 → foca "1" do cômodo de baixo (sem confirmar nada)
-          if (idxAberto < flat.length - 1) {
-            setComodoAberto(flat[idxAberto + 1]);
-            setComodoQtdFocada(1);
-          }
-        }
-        return;
-      }
-      if (e.key === "Tab" && e.shiftKey) {
-        e.preventDefault();
-        const i = qtdIdx === null ? NUMEROS.length : NUMEROS.indexOf(qtdIdx);
-        if (i > 0) {
-          setComodoQtdFocada(NUMEROS[i - 1]);
-        } else {
-          // No 0 → vai pro "6" do cômodo de cima
-          if (idxAberto > 0) {
-            setComodoAberto(flat[idxAberto - 1]);
-            setComodoQtdFocada(6);
-          }
-        }
-        return;
-      }
-
-      // ── Enter ──
-      // Aplica a quantidade focada e foca o "1" do próximo cômodo automaticamente
-      if (e.key === "Enter" && qtdIdx !== null) {
-        e.preventDefault();
-        setQtdAbs(aberto, qtdIdx);
-        // Após aplicar, o cômodo sai dos disponíveis (a menos que qty=0).
-        // Pegamos o próximo da lista atualizada via setTimeout (próximo tick).
-        setTimeout(() => {
-          const novaFlat = comodosFlatRef.current;
-          if (!novaFlat || novaFlat.length === 0) {
-            setComodoAberto(null);
-            setComodoQtdFocada(null);
-            return;
-          }
-          // Se o cômodo aplicado virou "tocado" (qty>0), ele saiu da lista.
-          // Próximo da lista atual passa a ser na mesma posição. Se qtd=0, ainda está lá → pula 1.
-          const novoIdx = qtdIdx === 0 ? Math.min(idxAberto + 1, novaFlat.length - 1) : Math.min(idxAberto, novaFlat.length - 1);
-          setComodoAberto(novaFlat[novoIdx]);
-          setComodoQtdFocada(1);
-        }, 0);
-        return;
-      }
-
-      // ── Esc ──
-      if (e.key === "Escape") {
-        setComodoAberto(null);
-        setComodoQtdFocada(null);
-        return;
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando, isComercial, configAtual]);
-
   const grupoDeComodo = useMemo(() => {
     const map = {};
     if (configAtual?.grupos) {
@@ -12349,6 +12200,156 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       return next;
     });
   }
+
+  // ── Navegação por teclado nos cômodos (setas + Tab + Enter) ──
+  // Refs pra ler valores mais recentes nos handlers
+  const comodoAbertoRef = useRef(null);
+  const comodoQtdFocadaRef = useRef(null);
+  useEffect(() => { comodoAbertoRef.current = comodoAberto; }, [comodoAberto]);
+  useEffect(() => { comodoQtdFocadaRef.current = comodoQtdFocada; }, [comodoQtdFocada]);
+
+  // Computa se está na fase de cômodos (perguntas concluídas)
+  // Memoizado pra não recriar handler a cada render
+  useEffect(() => {
+    const ordem = ["referencia", "tipoObra", "tipoProjeto"];
+    if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
+    const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
+    const proximaPendente = ordem.find(k => !VALS_EXT[k]);
+    const concluido = !proximaPendente && !etapaEditando;
+    if (!concluido || !configAtual) return;
+
+    const NUMEROS = [0, 1, 2, 3, 4, 5, 6];
+
+    const handler = (e) => {
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      const flat = comodosFlatRef.current;
+      if (!flat || flat.length === 0) return;
+
+      const aberto = comodoAbertoRef.current;
+      const qtdIdx = comodoQtdFocadaRef.current;
+      const idxAberto = aberto ? flat.indexOf(aberto) : -1;
+
+      // ── ↓ ──
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (idxAberto === -1) {
+          // Primeira vez: foca o "1" do primeiro cômodo
+          setComodoAberto(flat[0]);
+          setComodoQtdFocada(1);
+        } else {
+          // Vai pro próximo cômodo (foca "1" dele)
+          const proximo = flat[Math.min(idxAberto + 1, flat.length - 1)];
+          setComodoAberto(proximo);
+          setComodoQtdFocada(1);
+        }
+        return;
+      }
+
+      // ── ↑ ──
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (idxAberto === -1) {
+          setComodoAberto(flat[0]);
+          setComodoQtdFocada(1);
+        } else {
+          const anterior = flat[Math.max(idxAberto - 1, 0)];
+          setComodoAberto(anterior);
+          setComodoQtdFocada(1);
+        }
+        return;
+      }
+
+      // Demais: precisam de cômodo aberto
+      if (!aberto) return;
+
+      // ── ← / → ──
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setComodoQtdFocada(prev => {
+          if (prev === null) return NUMEROS[NUMEROS.length - 1];
+          const i = NUMEROS.indexOf(prev);
+          return NUMEROS[(i - 1 + NUMEROS.length) % NUMEROS.length];
+        });
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setComodoQtdFocada(prev => {
+          if (prev === null) return NUMEROS[0];
+          const i = NUMEROS.indexOf(prev);
+          return NUMEROS[(i + 1) % NUMEROS.length];
+        });
+        return;
+      }
+
+      // ── Tab ──
+      // Navega entre números (0→1→2...→6); chegando no fim do cômodo, vai pro "1" do próximo
+      if (e.key === "Tab" && !e.shiftKey) {
+        e.preventDefault();
+        const i = qtdIdx === null ? -1 : NUMEROS.indexOf(qtdIdx);
+        if (i < NUMEROS.length - 1) {
+          setComodoQtdFocada(NUMEROS[i + 1]);
+        } else {
+          // Chegou no 6 → foca "1" do cômodo de baixo (sem confirmar nada)
+          if (idxAberto < flat.length - 1) {
+            setComodoAberto(flat[idxAberto + 1]);
+            setComodoQtdFocada(1);
+          }
+        }
+        return;
+      }
+      if (e.key === "Tab" && e.shiftKey) {
+        e.preventDefault();
+        const i = qtdIdx === null ? NUMEROS.length : NUMEROS.indexOf(qtdIdx);
+        if (i > 0) {
+          setComodoQtdFocada(NUMEROS[i - 1]);
+        } else {
+          // No 0 → vai pro "6" do cômodo de cima
+          if (idxAberto > 0) {
+            setComodoAberto(flat[idxAberto - 1]);
+            setComodoQtdFocada(6);
+          }
+        }
+        return;
+      }
+
+      // ── Enter ──
+      // Aplica a quantidade focada e foca o "1" do próximo cômodo automaticamente
+      if (e.key === "Enter" && qtdIdx !== null) {
+        e.preventDefault();
+        setQtdAbs(aberto, qtdIdx);
+        // Após aplicar, o cômodo sai dos disponíveis (a menos que qty=0).
+        // Pegamos o próximo da lista atualizada via setTimeout (próximo tick).
+        setTimeout(() => {
+          const novaFlat = comodosFlatRef.current;
+          if (!novaFlat || novaFlat.length === 0) {
+            setComodoAberto(null);
+            setComodoQtdFocada(null);
+            return;
+          }
+          // Se o cômodo aplicado virou "tocado" (qty>0), ele saiu da lista.
+          // Próximo da lista atual passa a ser na mesma posição. Se qtd=0, ainda está lá → pula 1.
+          const novoIdx = qtdIdx === 0 ? Math.min(idxAberto + 1, novaFlat.length - 1) : Math.min(idxAberto, novaFlat.length - 1);
+          setComodoAberto(novaFlat[novoIdx]);
+          setComodoQtdFocada(1);
+        }, 0);
+        return;
+      }
+
+      // ── Esc ──
+      if (e.key === "Escape") {
+        setComodoAberto(null);
+        setComodoQtdFocada(null);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando, isComercial, configAtual]);
+
 
   function getArea(nome) {
     if (!configAtual) return 0;
