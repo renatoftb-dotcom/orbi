@@ -5996,7 +5996,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
     const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
     const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-    const etapaAtual = etapaEditando || proximaPendente;
+    const etapaAtual = proximaPendente;
 
     // Sem etapa ativa, etapa de referência (input texto), ou animando: ignora
     if (!etapaAtual || etapaAtual === "referencia" || opcaoEscolhida) return;
@@ -6584,7 +6584,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
     const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
     const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-    const concluido = !proximaPendente && !etapaEditando;
+    const concluido = !proximaPendente;
     if (!concluido || !configAtual) return;
 
     // Sequência de navegação: 0,1,2,3,4,5,6,"input"
@@ -7090,10 +7090,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         // VALS expandido inclui referência
         const VALS_EXT = { referencia, ...VALS };
 
-        // Etapa atual: a primeira sem valor, OU a etapa que o usuário clicou pra editar
+        // Card central: só renderiza a próxima pergunta pendente (nunca volta pra editar).
+        // Edição via trilha lateral usa popover próprio (etapaEditando).
         const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-        const etapaAtual = etapaEditando || proximaPendente;
-        const concluido = !proximaPendente && !etapaEditando;
+        const etapaAtual = proximaPendente;
+        const concluido = !proximaPendente;
         const stepIdx = etapaAtual ? ordem.indexOf(etapaAtual) : ordem.length;
 
         // Labels e hints
@@ -7616,21 +7617,43 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
               return (
                 <div key={grupo} style={{ marginBottom:14 }}>
-                  {/* Header: retângulo cinza com bordas arredondadas */}
+                  {/* Header: retângulo cinza com bordas arredondadas. No comercial usa 2 linhas. */}
                   <div style={{
-                    display:"flex", alignItems:"center", gap:10,
+                    display:"flex", flexDirection: isComercial ? "column" : "row",
+                    alignItems: isComercial ? "stretch" : "center", gap: isComercial ? 8 : 10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
-                    padding:"5px 10px",
+                    padding:"6px 10px",
                     marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
                   }}>
-                    <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
-                      {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
-                    </span>
-                    <span style={{ flex:1 }} />
+                    {/* Linha 1 (sempre): nome + estatísticas + chevron */}
+                    <div style={{ display:"flex", alignItems:"center", gap:10, width:"100%" }}>
+                      <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
+                        {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
+                      </span>
+                      <span style={{ flex:1 }} />
+                      {qtdGrupo > 0 && (
+                        <span style={{ fontSize:11, color:"#9ca3af", whiteSpace:"nowrap", flexShrink:0 }}>
+                          <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
+                        </span>
+                      )}
+                      <button
+                        onClick={() => toggleGrupo(grupo)}
+                        title={recolhido ? "Expandir" : "Recolher"}
+                        style={{
+                          width:18, height:18, border:"none", background:"transparent",
+                          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                          padding:0, fontFamily:"inherit", flexShrink:0,
+                          color:"#6b7280", fontSize:10,
+                        }}>
+                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ transform: recolhido ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>
+                          <path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
+                    </div>
 
-                    {/* Controles específicos de grupos comerciais: Padrão/Tipologia/Tamanho + Quantidade de unidades */}
+                    {/* Linha 2 (só comercial): Padrão/Tipologia/Tamanho + stepper de unidades */}
                     {isComercial && (
-                      <>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", paddingTop:6, borderTop:"1px solid #e5e7eb" }}>
                         {["padrao","tipologia","tamanho"].map(key => {
                           const labels = { padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
                           const opcoes = { padrao:["Alto","Médio","Baixo"], tipologia:["Térreo","Sobrado"], tamanho:["Grande","Médio","Pequeno","Compacta"] };
@@ -7732,26 +7755,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             +
                           </button>
                         </div>
-                      </>
+                      </div>
                     )}
-
-                    {qtdGrupo > 0 && (
-                      <span style={{ fontSize:11, color:"#9ca3af" }}>
-                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
-                      </span>
-                    )}
-                    <button
-                      onClick={() => toggleGrupo(grupo)}
-                      title={recolhido ? "Expandir" : "Recolher"}
-                      style={{
-                        width:18, height:18, border:"none", background:"transparent",
-                        cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                        padding:0, fontFamily:"inherit", flexShrink:0,
-                      }}>
-                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ transform: recolhido ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s" }}>
-                        <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </button>
                   </div>
 
                   {!recolhido && disponiveis.length > 0 && (
