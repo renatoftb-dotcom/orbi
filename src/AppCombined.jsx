@@ -12218,7 +12218,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const concluido = !proximaPendente && !etapaEditando;
     if (!concluido || !configAtual) return;
 
-    const NUMEROS = [0, 1, 2, 3, 4, 5, 6];
+    // Sequência de navegação: 0,1,2,3,4,5,6,"input"
+    const SEQ = [0, 1, 2, 3, 4, 5, 6, "input"];
+
+    // Helper: scrollar pra que o cômodo fique visível
+    const scrollComodoEmFoco = (nome) => {
+      setTimeout(() => {
+        const el = document.querySelector(`[data-comodo-nome="${nome}"]`);
+        if (el && typeof el.scrollIntoView === "function") {
+          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        }
+      }, 0);
+    };
 
     const handler = (e) => {
       const tag = (document.activeElement?.tagName || "").toLowerCase();
@@ -12235,14 +12246,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       if (e.key === "ArrowDown") {
         e.preventDefault();
         if (idxAberto === -1) {
-          // Primeira vez: foca o "1" do primeiro cômodo
           setComodoAberto(flat[0]);
           setComodoQtdFocada(1);
+          scrollComodoEmFoco(flat[0]);
         } else {
-          // Vai pro próximo cômodo (foca "1" dele)
           const proximo = flat[Math.min(idxAberto + 1, flat.length - 1)];
           setComodoAberto(proximo);
           setComodoQtdFocada(1);
+          scrollComodoEmFoco(proximo);
         }
         return;
       }
@@ -12253,10 +12264,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         if (idxAberto === -1) {
           setComodoAberto(flat[0]);
           setComodoQtdFocada(1);
+          scrollComodoEmFoco(flat[0]);
         } else {
           const anterior = flat[Math.max(idxAberto - 1, 0)];
           setComodoAberto(anterior);
           setComodoQtdFocada(1);
+          scrollComodoEmFoco(anterior);
         }
         return;
       }
@@ -12264,64 +12277,83 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       // Demais: precisam de cômodo aberto
       if (!aberto) return;
 
-      // ── ← / → ──
+      // ── ← / → ── (entre 0,1,2,3,4,5,6,"input" — wrap)
       if (e.key === "ArrowLeft") {
         e.preventDefault();
         setComodoQtdFocada(prev => {
-          if (prev === null) return NUMEROS[NUMEROS.length - 1];
-          const i = NUMEROS.indexOf(prev);
-          return NUMEROS[(i - 1 + NUMEROS.length) % NUMEROS.length];
+          if (prev === null) return SEQ[SEQ.length - 1];
+          const i = SEQ.indexOf(prev);
+          return SEQ[(i - 1 + SEQ.length) % SEQ.length];
         });
         return;
       }
       if (e.key === "ArrowRight") {
         e.preventDefault();
         setComodoQtdFocada(prev => {
-          if (prev === null) return NUMEROS[0];
-          const i = NUMEROS.indexOf(prev);
-          return NUMEROS[(i + 1) % NUMEROS.length];
+          if (prev === null) return SEQ[0];
+          const i = SEQ.indexOf(prev);
+          return SEQ[(i + 1) % SEQ.length];
         });
         return;
       }
 
       // ── Tab ──
-      // Navega entre números (0→1→2...→6); chegando no fim do cômodo, vai pro "1" do próximo
+      // Navega entre números do mesmo cômodo. Se chega no fim do último cômodo,
+      // não faz preventDefault → navegador segue o foco natural pra próxima coisa da página.
       if (e.key === "Tab" && !e.shiftKey) {
-        e.preventDefault();
-        const i = qtdIdx === null ? -1 : NUMEROS.indexOf(qtdIdx);
-        if (i < NUMEROS.length - 1) {
-          setComodoQtdFocada(NUMEROS[i + 1]);
+        const i = qtdIdx === null ? -1 : SEQ.indexOf(qtdIdx);
+        if (i < SEQ.length - 1) {
+          // Vai pro próximo da sequência (incluindo "input")
+          e.preventDefault();
+          setComodoQtdFocada(SEQ[i + 1]);
         } else {
-          // Chegou no 6 → foca "1" do cômodo de baixo (sem confirmar nada)
+          // Está no "input" do cômodo atual → vai pro "0" do próximo cômodo
           if (idxAberto < flat.length - 1) {
+            e.preventDefault();
             setComodoAberto(flat[idxAberto + 1]);
-            setComodoQtdFocada(1);
+            setComodoQtdFocada(0);
+            scrollComodoEmFoco(flat[idxAberto + 1]);
+          }
+          // Senão (último cômodo + input): NÃO preventDefault → Tab natural sai da página
+          else {
+            setComodoAberto(null);
+            setComodoQtdFocada(null);
           }
         }
         return;
       }
       if (e.key === "Tab" && e.shiftKey) {
-        e.preventDefault();
-        const i = qtdIdx === null ? NUMEROS.length : NUMEROS.indexOf(qtdIdx);
+        const i = qtdIdx === null ? SEQ.length : SEQ.indexOf(qtdIdx);
         if (i > 0) {
-          setComodoQtdFocada(NUMEROS[i - 1]);
+          e.preventDefault();
+          setComodoQtdFocada(SEQ[i - 1]);
         } else {
-          // No 0 → vai pro "6" do cômodo de cima
+          // Está no "0" do cômodo atual → vai pro "input" do cômodo de cima
           if (idxAberto > 0) {
+            e.preventDefault();
             setComodoAberto(flat[idxAberto - 1]);
-            setComodoQtdFocada(6);
+            setComodoQtdFocada("input");
+            scrollComodoEmFoco(flat[idxAberto - 1]);
+          }
+          // Senão (primeiro cômodo + 0): NÃO preventDefault → Shift+Tab natural sobe
+          else {
+            setComodoAberto(null);
+            setComodoQtdFocada(null);
           }
         }
         return;
       }
 
       // ── Enter ──
-      // Aplica a quantidade focada e foca o "1" do próximo cômodo automaticamente
-      if (e.key === "Enter" && qtdIdx !== null) {
+      // No "input": só sai do modo teclado (não confirma nada).
+      // Em número: aplica a quantidade focada e foca o "1" do próximo cômodo.
+      if (e.key === "Enter") {
+        if (qtdIdx === "input" || qtdIdx === null) {
+          // Não confirma nada
+          return;
+        }
         e.preventDefault();
         setQtdAbs(aberto, qtdIdx);
-        // Após aplicar, o cômodo sai dos disponíveis (a menos que qty=0).
-        // Pegamos o próximo da lista atualizada via setTimeout (próximo tick).
         setTimeout(() => {
           const novaFlat = comodosFlatRef.current;
           if (!novaFlat || novaFlat.length === 0) {
@@ -12329,11 +12361,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             setComodoQtdFocada(null);
             return;
           }
-          // Se o cômodo aplicado virou "tocado" (qty>0), ele saiu da lista.
-          // Próximo da lista atual passa a ser na mesma posição. Se qtd=0, ainda está lá → pula 1.
           const novoIdx = qtdIdx === 0 ? Math.min(idxAberto + 1, novaFlat.length - 1) : Math.min(idxAberto, novaFlat.length - 1);
-          setComodoAberto(novaFlat[novoIdx]);
+          const proximo = novaFlat[novoIdx];
+          setComodoAberto(proximo);
           setComodoQtdFocada(1);
+          scrollComodoEmFoco(proximo);
         }, 0);
         return;
       }
@@ -13027,7 +13059,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         }
                       }}
                       style={{
-                        width:32, height:26, border:"1px solid #d1d5db", borderRadius:4,
+                        width:32, height:26,
+                        border: (comodoAberto === nome && comodoQtdFocada === "input") ? "1px solid #111" : "1px solid #d1d5db",
+                        borderRadius:4,
                         background:"#fff", fontSize:12.5, fontWeight:500, color:"#111",
                         padding:"0 3px", textAlign:"center", outline:"none", fontFamily:"inherit",
                         flexShrink:0, marginRight:3,
