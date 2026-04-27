@@ -6325,8 +6325,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-trilha-h-pop { position: fixed; z-index: 9999; min-width: 200px; background: #fff; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 28px -8px rgba(0,0,0,0.18); animation: nodeEditIn .18s cubic-bezier(0.32, 0.72, 0, 1); }
       .vk-trilha-h-pop-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 12px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
       .vk-trilha-h-pop-row:last-child { border-bottom: 0; }
-      .vk-trilha-h-pop-row:hover { background: #e5e7eb; }
-      .vk-trilha-h-pop-row.is-focused-kb { background: #e5e7eb; }
+      .vk-trilha-h-pop-row:hover { background: #fafaf7; }
+      .vk-trilha-h-pop-row.is-focused-kb { background: #fafaf7; }
+      .vk-trilha-h-pop-row:hover:not(.is-selected),
+      .vk-trilha-h-pop-row.is-focused-kb:not(.is-selected) { font-weight: 700; }
       .vk-trilha-h-pop-row.is-selected { background: #111; color: #fff; }
       .vk-trilha-h-pop-row.is-selected:hover,
       .vk-trilha-h-pop-row.is-selected.is-focused-kb { background: #111; }
@@ -6388,12 +6390,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-table-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 500; }
       .vk-flow2-row { display: grid; grid-template-columns: 32px 1fr 22px; align-items: center; gap: 14px; padding: 13px 16px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; text-align: left; font-family: inherit; font-size: 14px; color: #111; transition: background .15s ease; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; width: 100%; }
       .vk-flow2-row:last-child { border-bottom: 0; }
-      .vk-flow2-row:hover:not(:disabled) { background: #e5e7eb; }
-      .vk-flow2-row.is-focused:not(:disabled) { background: #e5e7eb; }
+      .vk-flow2-row:hover:not(:disabled) { background: #fafaf7; }
+      .vk-flow2-row.is-focused:not(:disabled) { background: #fafaf7; }
       .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-arrow,
       .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-arrow { opacity: 1; transform: translateX(0); color: #111; }
       .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx,
       .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-idx { color: #111; }
+      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-text,
+      .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-text { font-weight: 700; }
       .vk-flow2-row-idx { font-size: 10.5px; letter-spacing: 0.06em; color: #828a98; font-family: ui-monospace, "JetBrains Mono", monospace; font-weight: 500; transition: color .15s; }
       .vk-flow2-row-text { font-weight: 500; letter-spacing: -0.005em; }
       .vk-flow2-row-arrow { color: #828a98; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; display: inline-flex; justify-content: flex-end; }
@@ -7368,11 +7372,53 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               comodosFlatRef.current = flat;
               return null;
             })()}
+
+            {/* Header geral do card de cômodos — com botão Resetar */}
+            {(Object.keys(qtds).some(n => qtds[n] > 0) || comodosTocados.size > 0 || (isComercial && Object.values(grupoQtds || {}).some(v => v > 0))) && (
+              <div style={{
+                display:"flex", alignItems:"center", justifyContent:"space-between",
+                padding:"6px 4px 10px 4px",
+                borderBottom:"1px solid #f3f4f6",
+                marginBottom:8,
+              }}>
+                <span style={{ fontSize:11, color:"#828a98", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>
+                  Cômodos
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQtds({});
+                    setComodosTocados(new Set());
+                    if (isComercial) {
+                      setGrupoQtds({ "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
+                    }
+                  }}
+                  style={{
+                    background:"transparent", border:"1px solid #d0d4db",
+                    color:"#6b7280", fontSize:11, fontFamily:"inherit",
+                    cursor:"pointer", padding:"3px 10px", borderRadius:4,
+                    transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.borderColor = "#dc2626";
+                    e.currentTarget.style.color = "#dc2626";
+                    e.currentTarget.style.background = "#fef2f2";
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.borderColor = "#d0d4db";
+                    e.currentTarget.style.color = "#6b7280";
+                    e.currentTarget.style.background = "transparent";
+                  }}>
+                  Resetar tudo
+                </button>
+              </div>
+            )}
+
             {Object.entries(configAtual.grupos).filter(([grupo]) => {
                 const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                 if (isTerrea && grupo === "Outros") return false;
                 return true;
-              }).map(([grupo, nomes]) => {
+              }).map(([grupo, nomes], grupoIdx) => {
               // Split: escolhidos vs disponíveis
               // Escolhidos: aparece se já foi tocado (mesmo que qty=0 agora)
               const escolhidos  = nomes.filter(n => comodosTocados.has(n) || (qtds[n] || 0) > 0);
@@ -7580,36 +7626,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
-                    {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
-                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          setQtds({});
-                          setComodosTocados(new Set());
-                          setGruposAbertos({});
-                        }}
-                        style={{
-                          background:"transparent", border:"1px solid #d0d4db",
-                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
-                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
-                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
-                          flexShrink:0,
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.borderColor = "#dc2626";
-                          e.currentTarget.style.color = "#dc2626";
-                          e.currentTarget.style.background = "#fef2f2";
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.borderColor = "#d0d4db";
-                          e.currentTarget.style.color = "#6b7280";
-                          e.currentTarget.style.background = "transparent";
-                        }}>
-                        Resetar
-                      </button>
-                    )}
                     <span style={{ flex:1 }} />
 
                     {/* Controles específicos de grupos comerciais: Padrão/Tipologia/Tamanho + Quantidade de unidades */}
