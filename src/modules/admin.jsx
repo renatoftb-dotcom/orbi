@@ -364,6 +364,9 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   // 2) senhaGerada: { usuario, senha } após sucesso (mostra senha pra copiar)
   const [usuarioParaResetar, setUsuarioParaResetar] = useState(null);
   const [senhaGerada, setSenhaGerada]               = useState(null);
+  // Modal de edição: usuário sendo editado (null = fechado).
+  // Usuários master só podem ser editados por outro master via interface separada.
+  const [usuarioParaEditar, setUsuarioParaEditar]   = useState(null);
 
   async function carregar() {
     setCarregando(true);
@@ -526,12 +529,24 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                       </span>
                     </td>
                     <td style={{ ...S.td, textAlign:"right" }}>
-                      {u.ativo && (
-                        <button
-                          onClick={() => setUsuarioParaResetar(u)}
-                          style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
-                          Resetar senha
-                        </button>
+                      {/* Botões de ação. Master é protegido (só edita via tela própria
+                          de "Usuários master"). Para escritorio: Editar sempre disponível,
+                          Resetar senha só pra usuários ativos (sem sentido resetar inativo). */}
+                      {u.perfil !== "master" && (
+                        <div style={{ display:"inline-flex", gap:6, justifyContent:"flex-end" }}>
+                          <button
+                            onClick={() => setUsuarioParaEditar(u)}
+                            style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
+                            Editar
+                          </button>
+                          {u.ativo && (
+                            <button
+                              onClick={() => setUsuarioParaResetar(u)}
+                              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
+                              Resetar senha
+                            </button>
+                          )}
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -540,9 +555,6 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
             </table>
           </div>
         )}
-        <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:8, fontStyle:"italic" }}>
-          Edição de usuário (nível, status) virá na próxima entrega.
-        </div>
       </div>
 
       {/* ── Seção: Ações administrativas (perigosas) ── */}
@@ -599,6 +611,14 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           usuario={senhaGerada.usuario}
           senha={senhaGerada.senha}
           onFechar={() => setSenhaGerada(null)}
+        />
+      )}
+      {usuarioParaEditar && (
+        <ModalEditarUsuarioAdmin
+          S={S}
+          usuario={usuarioParaEditar}
+          onFechar={() => setUsuarioParaEditar(null)}
+          onSucesso={() => { setUsuarioParaEditar(null); carregar(); }}
         />
       )}
     </div>
@@ -840,6 +860,122 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
           <button onClick={onFechar} style={S.btn}>Concluir</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Modal: Editar usuário (master) ──────────────────────────────
+// Edição leve via drill-in master: apenas nivel e status (ativo/inativo).
+// Não permite editar nome/email — esses são identidade e exigem fluxo
+// próprio com confirmação por email. Senha é tratada por reset dedicado.
+//
+// O backend (PUT /admin/usuarios/:id) requer nome/email/perfil no body
+// pra evitar overwrites com NULL — passamos os valores atuais sem alterar.
+//
+// Proteções:
+//   - Master nunca chega aqui (botão Editar é escondido pra perfil="master")
+//   - Backend ainda valida regras (não pode degradar último master ativo, etc)
+function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
+  const [nivel, setNivel]   = useState(usuario.nivel || "visualizador");
+  const [ativo, setAtivo]   = useState(usuario.ativo !== false);
+  const [salvando, setSalvando] = useState(false);
+  // Comparação simples pra detectar mudança e desabilitar botão sem alteração
+  const houveMudanca = nivel !== (usuario.nivel || "visualizador") || ativo !== (usuario.ativo !== false);
+
+  async function salvar() {
+    if (!houveMudanca) { onFechar(); return; }
+    setSalvando(true);
+    try {
+      // Backend exige nome/email/perfil — mantemos os atuais.
+      // Senha: NÃO mandamos. Backend faz UPDATE sem alterar quando senha é falsy.
+      await api.admin.usuarios.update(usuario.id, {
+        nome:   usuario.nome,
+        email:  usuario.email,
+        perfil: usuario.perfil,
+        nivel:  nivel,
+        ativo:  ativo,
+      });
+      toast.sucesso("Usuário atualizado");
+      onSucesso();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro ao salvar", mensagem: e.message, tipo: "erro" });
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div style={S.overlay}>
+      <div style={S.modal} onClick={e => e.stopPropagation()}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Editar usuário
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
+          <strong style={{ color:"#111" }}>{usuario.nome}</strong>
+          <span style={{ color:"#9ca3af" }}> · {usuario.email}</span>
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={S.label}>Nível de permissão</label>
+          <select
+            value={nivel}
+            onChange={e => setNivel(e.target.value)}
+            disabled={salvando}
+            style={{ ...S.input, cursor: salvando ? "not-allowed" : "pointer" }}>
+            <option value="admin">Admin — total (criar, editar, excluir, gerenciar usuários)</option>
+            <option value="editor">Editor — cria e edita, sem excluir nem gerenciar usuários</option>
+            <option value="visualizador">Visualizador — somente leitura</option>
+          </select>
+        </div>
+
+        <div style={{ marginBottom:18 }}>
+          <label style={S.label}>Status</label>
+          <div style={{ display:"flex", gap:8 }}>
+            <button
+              type="button"
+              onClick={() => setAtivo(true)}
+              disabled={salvando}
+              style={{
+                flex:1, padding:"10px", borderRadius:8, fontSize:13,
+                fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
+                border: ativo ? "1px solid #15803d" : "1px solid #e5e7eb",
+                background: ativo ? "#f0fdf4" : "#fff",
+                color: ativo ? "#15803d" : "#6b7280",
+                fontWeight: ativo ? 600 : 400,
+              }}>
+              Ativo
+            </button>
+            <button
+              type="button"
+              onClick={() => setAtivo(false)}
+              disabled={salvando}
+              style={{
+                flex:1, padding:"10px", borderRadius:8, fontSize:13,
+                fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
+                border: !ativo ? "1px solid #b91c1c" : "1px solid #e5e7eb",
+                background: !ativo ? "#fef2f2" : "#fff",
+                color: !ativo ? "#b91c1c" : "#6b7280",
+                fontWeight: !ativo ? 600 : 400,
+              }}>
+              Inativo
+            </button>
+          </div>
+          {!ativo && usuario.ativo && (
+            <div style={{ fontSize:11.5, color:"#92400e", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
+              ⚠ Usuário inativo não consegue mais fazer login. As sessões existentes serão encerradas no próximo refresh.
+            </div>
+          )}
+        </div>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={onFechar} style={S.btnSec} disabled={salvando}>Cancelar</button>
+          <button
+            onClick={salvar}
+            disabled={salvando || !houveMudanca}
+            style={{ ...S.btn, opacity: (salvando || !houveMudanca) ? 0.45 : 1 }}>
+            {salvando ? "Salvando..." : "Salvar"}
+          </button>
         </div>
       </div>
     </div>

@@ -81,8 +81,11 @@ function Escritorio({ data, save }) {
   };
 
   // ── Helpers da aba Usuários ─────────────────────────────────
-  // URL base da API de usuários da empresa (evita repetir URL em vários fetches)
-  const API_USUARIOS = "https://orbi-production-5f5c.up.railway.app/empresa/usuarios";
+  // URL base da API. Usa env var (Vercel injeta VITE_API_URL) com fallback
+  // pro Railway prod ativo — mesma lógica de shared.jsx e api.js.
+  const _API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+    || "https://orbi-production-5f5c.up.railway.app";
+  const API_USUARIOS = `${_API_URL}/empresa/usuarios`;
 
   // Chama a API de usuários. Retorna { ok, data, error } já parseado.
   // Garante que o token existe antes de chamar (caso contrário lança "Sessão expirada").
@@ -1217,7 +1220,7 @@ function Escritorio({ data, save }) {
         setManutLoading(false);
         return;
       }
-      const res = await fetch("https://orbi-production-5f5c.up.railway.app/admin/manutencao", {
+      const res = await fetch(`${_API_URL}/admin/manutencao`, {
         method: "POST",
         headers: { "Authorization": `Bearer ${token}` },
       });
