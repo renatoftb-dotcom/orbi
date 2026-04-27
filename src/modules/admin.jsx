@@ -138,7 +138,7 @@ function Admin({ usuario, data, save, initialTab }) {
       </div>
 
       <div style={S.abas}>
-        {[["manutencao","Manutenção"],["empresas","Empresas"],["usuarios","Usuários Master"]].map(([key,lbl]) => (
+        {[["manutencao","Manutenção"],["empresas","Empresas"],["usuarios","Usuários Master"],["feedback","Feedback"]].map(([key,lbl]) => (
           <button key={key} style={S.aba(aba===key)} onClick={() => setAba(key)}>{lbl}</button>
         ))}
       </div>
@@ -146,6 +146,7 @@ function Admin({ usuario, data, save, initialTab }) {
       {aba === "manutencao" && renderManutencao()}
       {aba === "empresas"   && <PainelEmpresas S={S} />}
       {aba === "usuarios"   && <PainelUsuariosMaster S={S} usuarioLogado={usuario} />}
+      {aba === "feedback"   && <PainelFeedback S={S} />}
     </div>
   );
 }
@@ -1300,6 +1301,278 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAINEL FEEDBACK — caixa de feedback in-app
+// ═══════════════════════════════════════════════════════════════
+// Master vê tudo que clientes mandam pelo botão flutuante. Filtros por
+// categoria/status/busca textual. Cada item é expansível pra ler texto
+// completo + ações (mudar status, anotar, excluir).
+
+const FEEDBACK_CAT_LABELS = {
+  sugestao: { icone:"💡", label:"Sugestão" },
+  bug:      { icone:"🐛", label:"Bug" },
+  pergunta: { icone:"❓", label:"Pergunta" },
+  cobranca: { icone:"💳", label:"Cobrança" },
+  elogio:   { icone:"❤️", label:"Elogio" },
+  outro:    { icone:"✉️", label:"Outro" },
+};
+
+const FEEDBACK_STATUS_LABELS = {
+  aberta:       { label:"Aberta",       cor:"#b45309", bg:"#fffbeb", borda:"#fde68a" },
+  em_andamento: { label:"Em andamento", cor:"#1e40af", bg:"#eff6ff", borda:"#bfdbfe" },
+  resolvida:    { label:"Resolvida",    cor:"#15803d", bg:"#f0fdf4", borda:"#bbf7d0" },
+  arquivada:    { label:"Arquivada",    cor:"#6b7280", bg:"#f9fafb", borda:"#e5e7eb" },
+};
+
+function PainelFeedback({ S }) {
+  const [filtros, setFiltros]     = useState({ categoria: "", status: "aberta", busca: "" });
+  const [feedback, setFeedback]   = useState([]);
+  const [counts, setCounts]       = useState({});
+  const [loading, setLoading]     = useState(true);
+  const [erro, setErro]           = useState(null);
+  const [abertoId, setAbertoId]   = useState(null); // qual item está expandido
+
+  async function carregar() {
+    setLoading(true); setErro(null);
+    try {
+      const r = await api.admin.feedback.list(filtros);
+      setFeedback(r.feedback || []);
+      setCounts(r.counts || {});
+    } catch (e) {
+      setErro({ message: e.message, status: e.status });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Recarrega quando qualquer filtro muda. Debounce na busca pra não disparar
+  // a cada tecla.
+  useEffect(() => {
+    const id = setTimeout(carregar, filtros.busca ? 300 : 0);
+    return () => clearTimeout(id);
+  }, [filtros.categoria, filtros.status, filtros.busca]);
+
+  function fmtDataHora(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString("pt-BR"); } catch { return "—"; }
+  }
+
+  return (
+    <div style={S.body}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18, gap:16, flexWrap:"wrap" }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Caixa de Feedback</div>
+          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+            {loading
+              ? "Carregando..."
+              : `${counts.total || 0} no total · ${counts.abertas || 0} aberta(s) · ${counts.em_andamento || 0} em andamento · ${counts.resolvidas || 0} resolvida(s)`}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Filtros ── */}
+      <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap", alignItems:"center" }}>
+        <select
+          value={filtros.status}
+          onChange={e => setFiltros(f => ({ ...f, status: e.target.value }))}
+          style={{ ...S.input, padding:"7px 10px", fontSize:12.5, width:"auto", cursor:"pointer" }}>
+          <option value="">Todos os status</option>
+          <option value="aberta">Abertas</option>
+          <option value="em_andamento">Em andamento</option>
+          <option value="resolvida">Resolvidas</option>
+          <option value="arquivada">Arquivadas</option>
+        </select>
+        <select
+          value={filtros.categoria}
+          onChange={e => setFiltros(f => ({ ...f, categoria: e.target.value }))}
+          style={{ ...S.input, padding:"7px 10px", fontSize:12.5, width:"auto", cursor:"pointer" }}>
+          <option value="">Todas as categorias</option>
+          <option value="sugestao">Sugestão</option>
+          <option value="bug">Bug</option>
+          <option value="pergunta">Pergunta</option>
+          <option value="cobranca">Cobrança</option>
+          <option value="elogio">Elogio</option>
+          <option value="outro">Outro</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Buscar no texto..."
+          value={filtros.busca}
+          onChange={e => setFiltros(f => ({ ...f, busca: e.target.value }))}
+          style={{ ...S.input, padding:"7px 10px", fontSize:12.5, flex:1, minWidth:200 }}
+        />
+      </div>
+
+      {erro && <ErroAcesso erro={erro} S={S} />}
+
+      {!loading && feedback.length === 0 && !erro && (
+        <div style={S.vazio}>Nenhum feedback {filtros.status || filtros.categoria || filtros.busca ? "com esses filtros" : "ainda"}.</div>
+      )}
+
+      {!loading && feedback.length > 0 && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {feedback.map(fb => (
+            <FeedbackItem
+              key={fb.id}
+              S={S}
+              fb={fb}
+              aberto={abertoId === fb.id}
+              onToggle={() => setAbertoId(abertoId === fb.id ? null : fb.id)}
+              onAtualizado={carregar}
+              fmtDataHora={fmtDataHora}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Cada linha de feedback. Colapsada por padrão (preview do texto). Expandida
+// mostra texto completo + controles de status + notas internas + excluir.
+function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
+  const cat = FEEDBACK_CAT_LABELS[fb.categoria] || { icone:"✉️", label:fb.categoria };
+  const st  = FEEDBACK_STATUS_LABELS[fb.status] || { label:fb.status, cor:"#6b7280", bg:"#f9fafb", borda:"#e5e7eb" };
+  const [salvando, setSalvando] = useState(false);
+  const [notasLocal, setNotasLocal] = useState(fb.notas_internas || "");
+  // Sync se notas mudarem do servidor (recarregamento)
+  useEffect(() => { setNotasLocal(fb.notas_internas || ""); }, [fb.id, fb.notas_internas]);
+
+  async function mudarStatus(novoStatus) {
+    setSalvando(true);
+    try {
+      await api.admin.feedback.update(fb.id, { status: novoStatus });
+      onAtualizado();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function salvarNotas() {
+    setSalvando(true);
+    try {
+      await api.admin.feedback.update(fb.id, { notas_internas: notasLocal });
+      toast.sucesso("Notas salvas");
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluir() {
+    const confirma = await dialogo.confirmar({
+      titulo: "Excluir feedback?",
+      mensagem: "A mensagem será apagada definitivamente.",
+      tipoConfirmar: "destrutivo",
+    });
+    if (!confirma) return;
+    setSalvando(true);
+    try {
+      await api.admin.feedback.delete(fb.id);
+      onAtualizado();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
+      setSalvando(false);
+    }
+  }
+
+  // Preview do texto (~100 chars) quando colapsado
+  const preview = fb.texto.length > 110 ? fb.texto.slice(0, 110) + "…" : fb.texto;
+
+  return (
+    <div style={{ border:"1px solid #e5e7eb", borderRadius:10, background:"#fff" }}>
+      {/* ── Linha clicável (expande/recolhe) ── */}
+      <div onClick={onToggle}
+        style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
+        <div style={{ fontSize:18, lineHeight:1, paddingTop:1 }}>{cat.icone}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
+            <span style={{ fontSize:12, fontWeight:600, color:"#111" }}>{cat.label}</span>
+            <span style={{
+              fontSize:10, padding:"2px 6px", borderRadius:4,
+              background:st.bg, color:st.cor, border:`1px solid ${st.borda}`,
+              fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
+            }}>{st.label}</span>
+            <span style={{ fontSize:11, color:"#9ca3af", marginLeft:"auto" }}>
+              {fmtDataHora(fb.criado_em)}
+            </span>
+          </div>
+          <div style={{ fontSize:13, color:"#374151", lineHeight:1.5, marginBottom:4 }}>
+            {aberto ? fb.texto : preview}
+          </div>
+          <div style={{ fontSize:11, color:"#9ca3af" }}>
+            {fb.usuario_nome} · {fb.usuario_email}{fb.empresa_nome ? ` · ${fb.empresa_nome}` : ""}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Conteúdo expandido: ações ── */}
+      {aberto && (
+        <div style={{ padding:"0 14px 14px", borderTop:"1px solid #f3f4f6", marginTop:6 }}>
+          <div style={{ marginTop:14, marginBottom:14 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
+              Status
+            </div>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {Object.entries(FEEDBACK_STATUS_LABELS).map(([key, meta]) => (
+                <button key={key}
+                  onClick={() => mudarStatus(key)}
+                  disabled={salvando || fb.status === key}
+                  style={{
+                    padding:"5px 10px", borderRadius:6, fontSize:11.5,
+                    fontFamily:"inherit",
+                    cursor: (salvando || fb.status === key) ? "default" : "pointer",
+                    border: fb.status === key ? `1.5px solid ${meta.cor}` : "1px solid #e5e7eb",
+                    background: fb.status === key ? meta.bg : "#fff",
+                    color: fb.status === key ? meta.cor : "#6b7280",
+                    fontWeight: fb.status === key ? 600 : 400,
+                  }}>
+                  {meta.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
+              Notas internas (privadas)
+            </div>
+            <textarea
+              value={notasLocal}
+              onChange={e => setNotasLocal(e.target.value)}
+              placeholder="Anotações pra você lembrar — link pra issue, prioridade, contexto, etc."
+              rows={3}
+              style={{ ...S.input, resize:"vertical", minHeight:60, fontSize:12.5 }}
+            />
+            {notasLocal !== (fb.notas_internas || "") && (
+              <button onClick={salvarNotas} disabled={salvando}
+                style={{ ...S.btnSec, padding:"5px 12px", fontSize:11.5, marginTop:6 }}>
+                Salvar notas
+              </button>
+            )}
+          </div>
+
+          {fb.resolvida_em && (
+            <div style={{ fontSize:11, color:"#9ca3af", marginBottom:10, fontStyle:"italic" }}>
+              Resolvida por {fb.resolvida_por} em {fmtDataHora(fb.resolvida_em)}
+            </div>
+          )}
+
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            <button onClick={excluir} disabled={salvando}
+              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, color:"#b91c1c", borderColor:"#fecaca" }}>
+              Excluir
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1190,6 +1190,22 @@ const api = {
     },
     manutencao: ()         => post("/admin/manutencao"),
     dashboard:  ()         => get("/admin/dashboard"),
+
+    // Caixa de feedback in-app — listagem master com filtros, controle de status.
+    // Diferente de admin.mensagens (que é caixa de email externo via Resend webhook).
+    feedback: {
+      list: (filtros = {}) => {
+        const qs = new URLSearchParams();
+        if (filtros.categoria) qs.set("categoria", filtros.categoria);
+        if (filtros.status)    qs.set("status", filtros.status);
+        if (filtros.busca)     qs.set("busca", filtros.busca);
+        const s = qs.toString();
+        return get(`/admin/feedback${s ? "?" + s : ""}`);
+      },
+      get:    (id)        => get(`/admin/feedback/${id}`),
+      update: (id, dados) => put(`/admin/feedback/${id}`, dados),
+      delete: (id)        => del(`/admin/feedback/${id}`),
+    },
   },
 
   // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
@@ -1211,6 +1227,13 @@ const api = {
     // Troca da própria senha. Exige senha atual pra prevenir abuso de
     // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
     trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
+  },
+
+  // ── FEEDBACK IN-APP (qualquer usuário autenticado) ─────────
+  // Botão flutuante no app dispara aqui. Backend grava em feedback_app
+  // com snapshot de quem enviou + empresa.
+  feedback: {
+    enviar: (categoria, texto) => post("/feedback", { categoria, texto }),
   },
 
   backup: {
@@ -14659,7 +14682,7 @@ function Admin({ usuario, data, save, initialTab }) {
       </div>
 
       <div style={S.abas}>
-        {[["manutencao","Manutenção"],["empresas","Empresas"],["usuarios","Usuários Master"]].map(([key,lbl]) => (
+        {[["manutencao","Manutenção"],["empresas","Empresas"],["usuarios","Usuários Master"],["feedback","Feedback"]].map(([key,lbl]) => (
           <button key={key} style={S.aba(aba===key)} onClick={() => setAba(key)}>{lbl}</button>
         ))}
       </div>
@@ -14667,6 +14690,7 @@ function Admin({ usuario, data, save, initialTab }) {
       {aba === "manutencao" && renderManutencao()}
       {aba === "empresas"   && <PainelEmpresas S={S} />}
       {aba === "usuarios"   && <PainelUsuariosMaster S={S} usuarioLogado={usuario} />}
+      {aba === "feedback"   && <PainelFeedback S={S} />}
     </div>
   );
 }
@@ -15821,6 +15845,278 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PAINEL FEEDBACK — caixa de feedback in-app
+// ═══════════════════════════════════════════════════════════════
+// Master vê tudo que clientes mandam pelo botão flutuante. Filtros por
+// categoria/status/busca textual. Cada item é expansível pra ler texto
+// completo + ações (mudar status, anotar, excluir).
+
+const FEEDBACK_CAT_LABELS = {
+  sugestao: { icone:"💡", label:"Sugestão" },
+  bug:      { icone:"🐛", label:"Bug" },
+  pergunta: { icone:"❓", label:"Pergunta" },
+  cobranca: { icone:"💳", label:"Cobrança" },
+  elogio:   { icone:"❤️", label:"Elogio" },
+  outro:    { icone:"✉️", label:"Outro" },
+};
+
+const FEEDBACK_STATUS_LABELS = {
+  aberta:       { label:"Aberta",       cor:"#b45309", bg:"#fffbeb", borda:"#fde68a" },
+  em_andamento: { label:"Em andamento", cor:"#1e40af", bg:"#eff6ff", borda:"#bfdbfe" },
+  resolvida:    { label:"Resolvida",    cor:"#15803d", bg:"#f0fdf4", borda:"#bbf7d0" },
+  arquivada:    { label:"Arquivada",    cor:"#6b7280", bg:"#f9fafb", borda:"#e5e7eb" },
+};
+
+function PainelFeedback({ S }) {
+  const [filtros, setFiltros]     = useState({ categoria: "", status: "aberta", busca: "" });
+  const [feedback, setFeedback]   = useState([]);
+  const [counts, setCounts]       = useState({});
+  const [loading, setLoading]     = useState(true);
+  const [erro, setErro]           = useState(null);
+  const [abertoId, setAbertoId]   = useState(null); // qual item está expandido
+
+  async function carregar() {
+    setLoading(true); setErro(null);
+    try {
+      const r = await api.admin.feedback.list(filtros);
+      setFeedback(r.feedback || []);
+      setCounts(r.counts || {});
+    } catch (e) {
+      setErro({ message: e.message, status: e.status });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Recarrega quando qualquer filtro muda. Debounce na busca pra não disparar
+  // a cada tecla.
+  useEffect(() => {
+    const id = setTimeout(carregar, filtros.busca ? 300 : 0);
+    return () => clearTimeout(id);
+  }, [filtros.categoria, filtros.status, filtros.busca]);
+
+  function fmtDataHora(iso) {
+    if (!iso) return "—";
+    try { return new Date(iso).toLocaleString("pt-BR"); } catch { return "—"; }
+  }
+
+  return (
+    <div style={S.body}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18, gap:16, flexWrap:"wrap" }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Caixa de Feedback</div>
+          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+            {loading
+              ? "Carregando..."
+              : `${counts.total || 0} no total · ${counts.abertas || 0} aberta(s) · ${counts.em_andamento || 0} em andamento · ${counts.resolvidas || 0} resolvida(s)`}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Filtros ── */}
+      <div style={{ display:"flex", gap:8, marginBottom:18, flexWrap:"wrap", alignItems:"center" }}>
+        <select
+          value={filtros.status}
+          onChange={e => setFiltros(f => ({ ...f, status: e.target.value }))}
+          style={{ ...S.input, padding:"7px 10px", fontSize:12.5, width:"auto", cursor:"pointer" }}>
+          <option value="">Todos os status</option>
+          <option value="aberta">Abertas</option>
+          <option value="em_andamento">Em andamento</option>
+          <option value="resolvida">Resolvidas</option>
+          <option value="arquivada">Arquivadas</option>
+        </select>
+        <select
+          value={filtros.categoria}
+          onChange={e => setFiltros(f => ({ ...f, categoria: e.target.value }))}
+          style={{ ...S.input, padding:"7px 10px", fontSize:12.5, width:"auto", cursor:"pointer" }}>
+          <option value="">Todas as categorias</option>
+          <option value="sugestao">Sugestão</option>
+          <option value="bug">Bug</option>
+          <option value="pergunta">Pergunta</option>
+          <option value="cobranca">Cobrança</option>
+          <option value="elogio">Elogio</option>
+          <option value="outro">Outro</option>
+        </select>
+        <input
+          type="text"
+          placeholder="Buscar no texto..."
+          value={filtros.busca}
+          onChange={e => setFiltros(f => ({ ...f, busca: e.target.value }))}
+          style={{ ...S.input, padding:"7px 10px", fontSize:12.5, flex:1, minWidth:200 }}
+        />
+      </div>
+
+      {erro && <ErroAcesso erro={erro} S={S} />}
+
+      {!loading && feedback.length === 0 && !erro && (
+        <div style={S.vazio}>Nenhum feedback {filtros.status || filtros.categoria || filtros.busca ? "com esses filtros" : "ainda"}.</div>
+      )}
+
+      {!loading && feedback.length > 0 && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {feedback.map(fb => (
+            <FeedbackItem
+              key={fb.id}
+              S={S}
+              fb={fb}
+              aberto={abertoId === fb.id}
+              onToggle={() => setAbertoId(abertoId === fb.id ? null : fb.id)}
+              onAtualizado={carregar}
+              fmtDataHora={fmtDataHora}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Cada linha de feedback. Colapsada por padrão (preview do texto). Expandida
+// mostra texto completo + controles de status + notas internas + excluir.
+function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
+  const cat = FEEDBACK_CAT_LABELS[fb.categoria] || { icone:"✉️", label:fb.categoria };
+  const st  = FEEDBACK_STATUS_LABELS[fb.status] || { label:fb.status, cor:"#6b7280", bg:"#f9fafb", borda:"#e5e7eb" };
+  const [salvando, setSalvando] = useState(false);
+  const [notasLocal, setNotasLocal] = useState(fb.notas_internas || "");
+  // Sync se notas mudarem do servidor (recarregamento)
+  useEffect(() => { setNotasLocal(fb.notas_internas || ""); }, [fb.id, fb.notas_internas]);
+
+  async function mudarStatus(novoStatus) {
+    setSalvando(true);
+    try {
+      await api.admin.feedback.update(fb.id, { status: novoStatus });
+      onAtualizado();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function salvarNotas() {
+    setSalvando(true);
+    try {
+      await api.admin.feedback.update(fb.id, { notas_internas: notasLocal });
+      toast.sucesso("Notas salvas");
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  async function excluir() {
+    const confirma = await dialogo.confirmar({
+      titulo: "Excluir feedback?",
+      mensagem: "A mensagem será apagada definitivamente.",
+      tipoConfirmar: "destrutivo",
+    });
+    if (!confirma) return;
+    setSalvando(true);
+    try {
+      await api.admin.feedback.delete(fb.id);
+      onAtualizado();
+    } catch (e) {
+      dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
+      setSalvando(false);
+    }
+  }
+
+  // Preview do texto (~100 chars) quando colapsado
+  const preview = fb.texto.length > 110 ? fb.texto.slice(0, 110) + "…" : fb.texto;
+
+  return (
+    <div style={{ border:"1px solid #e5e7eb", borderRadius:10, background:"#fff" }}>
+      {/* ── Linha clicável (expande/recolhe) ── */}
+      <div onClick={onToggle}
+        style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
+        <div style={{ fontSize:18, lineHeight:1, paddingTop:1 }}>{cat.icone}</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
+            <span style={{ fontSize:12, fontWeight:600, color:"#111" }}>{cat.label}</span>
+            <span style={{
+              fontSize:10, padding:"2px 6px", borderRadius:4,
+              background:st.bg, color:st.cor, border:`1px solid ${st.borda}`,
+              fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
+            }}>{st.label}</span>
+            <span style={{ fontSize:11, color:"#9ca3af", marginLeft:"auto" }}>
+              {fmtDataHora(fb.criado_em)}
+            </span>
+          </div>
+          <div style={{ fontSize:13, color:"#374151", lineHeight:1.5, marginBottom:4 }}>
+            {aberto ? fb.texto : preview}
+          </div>
+          <div style={{ fontSize:11, color:"#9ca3af" }}>
+            {fb.usuario_nome} · {fb.usuario_email}{fb.empresa_nome ? ` · ${fb.empresa_nome}` : ""}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Conteúdo expandido: ações ── */}
+      {aberto && (
+        <div style={{ padding:"0 14px 14px", borderTop:"1px solid #f3f4f6", marginTop:6 }}>
+          <div style={{ marginTop:14, marginBottom:14 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
+              Status
+            </div>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {Object.entries(FEEDBACK_STATUS_LABELS).map(([key, meta]) => (
+                <button key={key}
+                  onClick={() => mudarStatus(key)}
+                  disabled={salvando || fb.status === key}
+                  style={{
+                    padding:"5px 10px", borderRadius:6, fontSize:11.5,
+                    fontFamily:"inherit",
+                    cursor: (salvando || fb.status === key) ? "default" : "pointer",
+                    border: fb.status === key ? `1.5px solid ${meta.cor}` : "1px solid #e5e7eb",
+                    background: fb.status === key ? meta.bg : "#fff",
+                    color: fb.status === key ? meta.cor : "#6b7280",
+                    fontWeight: fb.status === key ? 600 : 400,
+                  }}>
+                  {meta.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
+              Notas internas (privadas)
+            </div>
+            <textarea
+              value={notasLocal}
+              onChange={e => setNotasLocal(e.target.value)}
+              placeholder="Anotações pra você lembrar — link pra issue, prioridade, contexto, etc."
+              rows={3}
+              style={{ ...S.input, resize:"vertical", minHeight:60, fontSize:12.5 }}
+            />
+            {notasLocal !== (fb.notas_internas || "") && (
+              <button onClick={salvarNotas} disabled={salvando}
+                style={{ ...S.btnSec, padding:"5px 12px", fontSize:11.5, marginTop:6 }}>
+                Salvar notas
+              </button>
+            )}
+          </div>
+
+          {fb.resolvida_em && (
+            <div style={{ fontSize:11, color:"#9ca3af", marginBottom:10, fontStyle:"italic" }}>
+              Resolvida por {fb.resolvida_por} em {fmtDataHora(fb.resolvida_em)}
+            </div>
+          )}
+
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            <button onClick={excluir} disabled={salvando}
+              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, color:"#b91c1c", borderColor:"#fecaca" }}>
+              Excluir
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -17185,6 +17481,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   // o atalho de 1-clique pras subabas mais usadas.
   const modulos = [
     { k:"mensagens",              label:"Mensagens",       desc:"Caixa do time VICKE" },
+    { k:"admin:feedback",         label:"Feedback",        desc:"Sugestões e bugs dos clientes" },
     { k:"admin:empresas",         label:"Empresas",        desc:"Gerenciar empresas cadastradas" },
     { k:"admin:usuarios-master",  label:"Usuários Master", desc:"Acessos da equipe Vicke" },
     { k:"admin:manutencao",       label:"Manutenção",      desc:"Jobs e operações do sistema" },
@@ -17250,6 +17547,13 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
       sub:   "caixa do time VICKE",
       onClick: () => goto("mensagens"),
       destaque: !loading && (c.mensagens_nao_lidas || 0) > 0,
+    },
+    {
+      label: "Feedback abertos",
+      value: loading ? "…" : `${c.feedback_abertos || 0}`,
+      sub:   "sugestões/bugs por revisar",
+      onClick: () => goto("admin:feedback"),
+      destaque: !loading && (c.feedback_abertos || 0) > 0,
     },
     {
       label: "Signups (7 dias)",
@@ -17391,6 +17695,11 @@ function decorarEvento(ev) {
   if (acao === "obra.excluida")         return { cor: COR_VERMELHO, descricao: `Obra excluída: ${ev.recurso_id}` };
   if (acao === "fornecedor.excluido")   return { cor: COR_VERMELHO, descricao: `Fornecedor excluído: ${ev.recurso_id}` };
   if (acao === "lancamento.excluido")   return { cor: COR_VERMELHO, descricao: `Lançamento excluído: ${ev.recurso_id}` };
+
+  // Feedback in-app
+  if (acao === "feedback.enviado")        return { cor: COR_AZUL, descricao: `Feedback (${dados.categoria || "outro"}): "${(dados.texto_preview || "").slice(0, 60)}${(dados.texto_preview || "").length > 60 ? "…" : ""}"` };
+  if (acao === "feedback.status_alterado") return { cor: COR_CINZA, descricao: `Feedback ${ev.recurso_id}: ${dados.de} → ${dados.para}` };
+  if (acao === "feedback.excluido")        return { cor: COR_VERMELHO, descricao: `Feedback excluído: ${ev.recurso_id}` };
 
   // Default: ação desconhecida — mostra o nome bruto
   return { cor: COR_CINZA, descricao: acao };
@@ -17645,6 +17954,204 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           Logado como {usuario?.email || ""}
         </div>
       </form>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FEEDBACK IN-APP — botão flutuante + modal
+// ═══════════════════════════════════════════════════════════════
+// Botão fixo no canto inferior direito (z-index alto pra ficar sobre tudo
+// que não seja modal/dialog do sistema). Visível em qualquer aba, exceto
+// na tela de troca de senha obrigatória (que bloqueia tudo).
+//
+// Categorias seguem CHECK constraint do backend (feedback_app.categoria):
+// sugestao | bug | pergunta | cobranca | elogio | outro
+
+const FEEDBACK_CATEGORIAS = [
+  { id: "sugestao",  label: "Sugestão",  icone: "💡", desc: "Uma ideia pra melhorar a plataforma" },
+  { id: "bug",       label: "Bug",       icone: "🐛", desc: "Algo não está funcionando como deveria" },
+  { id: "pergunta",  label: "Pergunta",  icone: "❓", desc: "Quero tirar uma dúvida" },
+  { id: "cobranca",  label: "Cobrança",  icone: "💳", desc: "Sobre planos, faturas ou pagamentos" },
+  { id: "elogio",    label: "Elogio",    icone: "❤️", desc: "Algo está bom e quero contar" },
+  { id: "outro",     label: "Outro",     icone: "✉️", desc: "Outro tipo de mensagem" },
+];
+
+function BotaoFeedbackFlutuante({ usuario }) {
+  const [modalAberto, setModalAberto] = useState(false);
+  // Master não envia feedback pra si mesmo — caixa é pra clientes.
+  if (usuario?.perfil === "master") return null;
+
+  return (
+    <>
+      <button
+        onClick={() => setModalAberto(true)}
+        title="Enviar feedback"
+        style={{
+          position:"fixed", right:24, bottom:24, zIndex: 800,
+          background:"#111", color:"#fff", border:"none",
+          borderRadius:"50%", width:52, height:52,
+          fontSize:22, cursor:"pointer", fontFamily:"inherit",
+          boxShadow:"0 4px 16px rgba(0,0,0,0.18)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}>
+        💬
+      </button>
+      {modalAberto && (
+        <ModalEnviarFeedback
+          usuario={usuario}
+          onFechar={() => setModalAberto(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function ModalEnviarFeedback({ usuario, onFechar }) {
+  const [categoria, setCategoria] = useState("sugestao");
+  const [texto, setTexto]         = useState("");
+  const [enviando, setEnviando]   = useState(false);
+  const [erro, setErro]           = useState(null);
+  const [enviado, setEnviado]     = useState(false);
+  const MAX_CHARS = 2000;
+
+  async function enviar() {
+    const txt = texto.trim();
+    if (!txt) { setErro("Escreva alguma coisa antes de enviar"); return; }
+    if (txt.length > MAX_CHARS) { setErro(`Texto muito longo (máximo ${MAX_CHARS} caracteres)`); return; }
+    setEnviando(true);
+    setErro(null);
+    try {
+      await api.feedback.enviar(categoria, txt);
+      setEnviado(true);
+      setTimeout(onFechar, 1800); // fecha sozinho após mostrar "enviado"
+    } catch (e) {
+      setErro(e.message || "Falha ao enviar");
+      setEnviando(false);
+    }
+  }
+
+  // Estado de sucesso: mostra confirmação por ~1.8s antes de fechar.
+  // Feedback positivo curto evita que o cliente fique com dúvida se foi.
+  if (enviado) {
+    return (
+      <div onClick={onFechar} style={{
+        position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        zIndex:900, padding:20,
+      }}>
+        <div style={{
+          background:"#fff", borderRadius:12, padding:"32px 28px",
+          maxWidth:380, textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
+        }}>
+          <div style={{ fontSize:36, marginBottom:12 }}>✓</div>
+          <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:6 }}>Recebido!</div>
+          <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
+            Obrigado pelo feedback. Vou ler com atenção.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div onClick={onFechar} style={{
+      position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      zIndex:900, padding:20,
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background:"#fff", borderRadius:12, padding:"24px 24px 20px",
+        maxWidth:480, width:"100%", maxHeight:"90vh", overflowY:"auto",
+        boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
+      }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Enviar feedback
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
+          Sua mensagem chega direto pro time da Vicke. Pode mandar bugs, ideias, perguntas — tudo serve.
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
+            Tipo
+          </label>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:6 }}>
+            {FEEDBACK_CATEGORIAS.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCategoria(c.id)}
+                disabled={enviando}
+                style={{
+                  padding:"10px 12px", borderRadius:8, fontSize:13,
+                  fontFamily:"inherit", textAlign:"left",
+                  cursor: enviando ? "not-allowed" : "pointer",
+                  border: categoria === c.id ? "1.5px solid #111" : "1px solid #e5e7eb",
+                  background: categoria === c.id ? "#fafbfc" : "#fff",
+                  color:"#111",
+                  fontWeight: categoria === c.id ? 600 : 400,
+                }}>
+                <span style={{ marginRight:6 }}>{c.icone}</span>{c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+            Mensagem
+          </label>
+          <textarea
+            value={texto}
+            onChange={e => setTexto(e.target.value)}
+            disabled={enviando}
+            placeholder="Escreva o que quiser compartilhar..."
+            rows={5}
+            style={{
+              width:"100%", border:"1px solid #e5e7eb", borderRadius:8,
+              padding:"10px 12px", fontSize:13, fontFamily:"inherit",
+              outline:"none", boxSizing:"border-box", resize:"vertical",
+              minHeight:100,
+            }}
+          />
+          <div style={{ fontSize:11, color: texto.length > MAX_CHARS ? "#b91c1c" : "#9ca3af", marginTop:4, textAlign:"right" }}>
+            {texto.length} / {MAX_CHARS}
+          </div>
+        </div>
+
+        {erro && (
+          <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
+            {erro}
+          </div>
+        )}
+
+        <div style={{ fontSize:11, color:"#9ca3af", marginBottom:14, lineHeight:1.5 }}>
+          Enviado por: <strong style={{ color:"#6b7280" }}>{usuario?.nome}</strong> · {usuario?.email}
+        </div>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={onFechar} disabled={enviando}
+            style={{
+              background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+              padding:"9px 14px", fontSize:13, color:"#6b7280", cursor: enviando ? "not-allowed" : "pointer",
+              fontFamily:"inherit",
+            }}>
+            Cancelar
+          </button>
+          <button onClick={enviar} disabled={enviando || !texto.trim()}
+            style={{
+              background:"#111", color:"#fff", border:"none", borderRadius:8,
+              padding:"9px 16px", fontSize:13, fontWeight:600,
+              cursor: (enviando || !texto.trim()) ? "not-allowed" : "pointer",
+              fontFamily:"inherit", opacity: (enviando || !texto.trim()) ? 0.5 : 1,
+            }}>
+            {enviando ? "Enviando..." : "Enviar"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -18304,6 +18811,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}
           {aba === "admin:usuarios-master" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="usuarios-master" />}
           {aba === "admin:manutencao" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="manutencao" />}
+          {aba === "admin:feedback" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="feedback" />}
           {/* Caixa de Mensagens — só Master */}
           {aba === "mensagens" && isMaster && <Mensagens usuario={usuario} />}
           </>)}
@@ -18332,6 +18840,7 @@ export default function ModuloClientesFornecedores() {
     </div>
     <DialogosHost />
     <VersionWatcher />
+    <BotaoFeedbackFlutuante usuario={usuario} />
     {conflitoModal}
     </>
   );

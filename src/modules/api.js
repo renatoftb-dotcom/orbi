@@ -162,6 +162,22 @@ const api = {
     },
     manutencao: ()         => post("/admin/manutencao"),
     dashboard:  ()         => get("/admin/dashboard"),
+
+    // Caixa de feedback in-app — listagem master com filtros, controle de status.
+    // Diferente de admin.mensagens (que é caixa de email externo via Resend webhook).
+    feedback: {
+      list: (filtros = {}) => {
+        const qs = new URLSearchParams();
+        if (filtros.categoria) qs.set("categoria", filtros.categoria);
+        if (filtros.status)    qs.set("status", filtros.status);
+        if (filtros.busca)     qs.set("busca", filtros.busca);
+        const s = qs.toString();
+        return get(`/admin/feedback${s ? "?" + s : ""}`);
+      },
+      get:    (id)        => get(`/admin/feedback/${id}`),
+      update: (id, dados) => put(`/admin/feedback/${id}`, dados),
+      delete: (id)        => del(`/admin/feedback/${id}`),
+    },
   },
 
   // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
@@ -183,6 +199,13 @@ const api = {
     // Troca da própria senha. Exige senha atual pra prevenir abuso de
     // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
     trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
+  },
+
+  // ── FEEDBACK IN-APP (qualquer usuário autenticado) ─────────
+  // Botão flutuante no app dispara aqui. Backend grava em feedback_app
+  // com snapshot de quem enviou + empresa.
+  feedback: {
+    enviar: (categoria, texto) => post("/feedback", { categoria, texto }),
   },
 
   backup: {
