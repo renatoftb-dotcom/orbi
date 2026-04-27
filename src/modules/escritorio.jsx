@@ -959,17 +959,18 @@ function Escritorio({ data, save }) {
                   {u.precisa_trocar_senha && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#fffbeb", color:"#b45309", fontWeight:600,
+                      background:"#fafafa", color:"#374151", fontWeight:600,
+                      border:"1px solid #e5e7eb",
                       textTransform:"uppercase", letterSpacing:0.5,
                     }} title="Senha foi resetada — usuário precisa trocá-la no próximo login">
-                      ⚠ Trocar senha
+                      Trocar senha
                     </span>
                   )}
                 </div>
                 <div style={E.membroCargo}>{u.email}</div>
                 {membroVinculado && (
                   <div style={{ fontSize:11.5, color:"#6b7280", marginTop:4 }}>
-                    🔗 Vinculado a: <strong style={{ color:"#374151" }}>{membroVinculado.nome}</strong>
+                    Vinculado a: <strong style={{ color:"#374151" }}>{membroVinculado.nome}</strong>
                     {membroVinculado.cargo && <span style={{ color:"#9ca3af" }}> · {membroVinculado.cargo}</span>}
                   </div>
                 )}

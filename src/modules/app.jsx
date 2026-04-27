@@ -228,11 +228,14 @@ function decorarEvento(ev) {
   const acao = ev.acao || "";
   const dados = ev.dados || {};
 
-  // Mapas — fáceis de estender quando criarmos eventos novos
-  const COR_VERDE   = "#16a34a";
-  const COR_VERMELHO= "#dc2626";
-  const COR_AZUL    = "#3b82f6";
-  const COR_LARANJA = "#f59e0b";
+  // Mapas — fáceis de estender quando criarmos eventos novos.
+  // Tons sóbrios (não saturados) pra combinar com a paleta minimalista
+  // do sistema. Cor é informação semântica essencial em log de eventos
+  // (sucesso/falha/atenção visível de relance), mas não precisa berrar.
+  const COR_VERDE   = "#0f766e"; // teal-700, mais discreto que green-600
+  const COR_VERMELHO= "#991b1b"; // red-800, vinho em vez de vermelho-aviso
+  const COR_AZUL    = "#1e3a8a"; // blue-900, marinho
+  const COR_LARANJA = "#92400e"; // amber-800, mostarda em vez de laranja
   const COR_CINZA   = "#9ca3af";
 
   if (acao === "usuario.login_sucesso") return { cor: COR_VERDE,    descricao: "Login bem-sucedido" };
@@ -379,10 +382,25 @@ function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus 
         style={{
           position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
           background:"none", border:"none", cursor: disabled ? "not-allowed" : "pointer",
-          padding:"6px 8px", fontSize:14, lineHeight:1,
+          padding:"6px 8px", lineHeight:0,
           color:"#9ca3af", fontFamily:"inherit",
-        }}>
-        {visivel ? "🙈" : "👁"}
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}
+        onMouseEnter={e => { if (!disabled) e.currentTarget.style.color = "#374151"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = "#9ca3af"; }}>
+        {visivel ? (
+          // eye-off
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          </svg>
+        ) : (
+          // eye
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        )}
       </button>
     </div>
   );
@@ -532,12 +550,12 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 // sugestao | bug | pergunta | cobranca | elogio | outro
 
 const FEEDBACK_CATEGORIAS = [
-  { id: "sugestao",  label: "Sugestão",  icone: "💡", desc: "Uma ideia pra melhorar a plataforma" },
-  { id: "bug",       label: "Bug",       icone: "🐛", desc: "Algo não está funcionando como deveria" },
-  { id: "pergunta",  label: "Pergunta",  icone: "❓", desc: "Quero tirar uma dúvida" },
-  { id: "cobranca",  label: "Cobrança",  icone: "💳", desc: "Sobre planos, faturas ou pagamentos" },
-  { id: "elogio",    label: "Elogio",    icone: "❤️", desc: "Algo está bom e quero contar" },
-  { id: "outro",     label: "Outro",     icone: "✉️", desc: "Outro tipo de mensagem" },
+  { id: "sugestao",  label: "Sugestão" },
+  { id: "bug",       label: "Bug" },
+  { id: "pergunta",  label: "Pergunta" },
+  { id: "cobranca",  label: "Cobrança" },
+  { id: "elogio",    label: "Elogio" },
+  { id: "outro",     label: "Outro" },
 ];
 
 function BotaoFeedbackFlutuante({ usuario }) {
@@ -553,14 +571,19 @@ function BotaoFeedbackFlutuante({ usuario }) {
         style={{
           position:"fixed", right:24, bottom:24, zIndex: 800,
           background:"#111", color:"#fff", border:"none",
-          borderRadius:"50%", width:52, height:52,
-          fontSize:22, cursor:"pointer", fontFamily:"inherit",
-          boxShadow:"0 4px 16px rgba(0,0,0,0.18)",
+          borderRadius:"50%", width:48, height:48,
+          cursor:"pointer", fontFamily:"inherit",
+          boxShadow:"0 4px 12px rgba(0,0,0,0.15)",
           display:"flex", alignItems:"center", justifyContent:"center",
+          transition:"transform 0.12s ease",
         }}
         onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; }}
         onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}>
-        💬
+        {/* Ícone mensagem outline (estilo Lucide) — alinhado com identidade
+            visual minimalista preto/branco do sistema */}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
       </button>
       {modalAberto && (
         <ModalEnviarFeedback
@@ -609,10 +632,20 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
           background:"#fff", borderRadius:12, padding:"32px 28px",
           maxWidth:380, textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
         }}>
-          <div style={{ fontSize:36, marginBottom:12 }}>✓</div>
-          <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:6 }}>Recebido!</div>
+          <div style={{ marginBottom:14, display:"flex", justifyContent:"center" }}>
+            <div style={{
+              width:48, height:48, borderRadius:"50%",
+              background:"#111", color:"#fff",
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+            </div>
+          </div>
+          <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:6 }}>Recebido</div>
           <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
-            Obrigado pelo feedback. Vou ler com atenção.
+            Obrigado pelo feedback.
           </div>
         </div>
       </div>
@@ -650,14 +683,14 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
                 disabled={enviando}
                 style={{
                   padding:"10px 12px", borderRadius:8, fontSize:13,
-                  fontFamily:"inherit", textAlign:"left",
+                  fontFamily:"inherit", textAlign:"center",
                   cursor: enviando ? "not-allowed" : "pointer",
                   border: categoria === c.id ? "1.5px solid #111" : "1px solid #e5e7eb",
                   background: categoria === c.id ? "#fafbfc" : "#fff",
                   color:"#111",
                   fontWeight: categoria === c.id ? 600 : 400,
                 }}>
-                <span style={{ marginRight:6 }}>{c.icone}</span>{c.label}
+                {c.label}
               </button>
             ))}
           </div>

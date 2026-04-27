@@ -516,8 +516,8 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                       <div style={{ fontWeight:500, color:"#111" }}>{u.nome}</div>
                       {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
                       {u.precisa_trocar_senha && (
-                        <div style={{ fontSize:10, color:"#b45309", marginTop:3, fontWeight:600 }}>
-                          ⚠ Precisa trocar senha
+                        <div style={{ fontSize:10, color:"#6b7280", marginTop:3, fontWeight:600, textTransform:"uppercase", letterSpacing:0.4 }}>
+                          Precisa trocar senha
                         </div>
                       )}
                     </td>
@@ -712,19 +712,23 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             style={{
               ...S.input,
               fontFamily:"'SF Mono',Menlo,Consolas,monospace",
-              borderColor: erroVisivel ? "#fca5a5" : (podeExcluir ? "#86efac" : "#e5e7eb"),
+              borderColor: podeExcluir ? "#111" : (erroVisivel ? "#9ca3af" : "#e5e7eb"),
+              borderWidth: podeExcluir ? 1.5 : 1,
             }}
             autoFocus
             placeholder="Digite o nome exato"
           />
           {erroVisivel && (
-            <div style={{ fontSize:11.5, color:"#b91c1c", marginTop:6 }}>
+            <div style={{ fontSize:11.5, color:"#6b7280", marginTop:6 }}>
               O texto não corresponde. Atenção a maiúsculas, minúsculas e espaços.
             </div>
           )}
           {podeExcluir && (
-            <div style={{ fontSize:11.5, color:"#15803d", marginTop:6 }}>
-              ✓ Confere. Pode excluir.
+            <div style={{ fontSize:11.5, color:"#111", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"/>
+              </svg>
+              Confere
             </div>
           )}
         </div>
@@ -848,16 +852,22 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
               style={{
                 ...S.btnSec,
                 padding:"0 14px", whiteSpace:"nowrap",
-                background: copiado ? "#f0fdf4" : "#fff",
-                borderColor: copiado ? "#86efac" : "#e5e7eb",
-                color: copiado ? "#15803d" : "#374151",
+                background: copiado ? "#111" : "#fff",
+                borderColor: copiado ? "#111" : "#e5e7eb",
+                color: copiado ? "#fff" : "#374151",
+                display:"flex", alignItems:"center", gap:6,
               }}>
-              {copiado ? "✓ Copiado" : "Copiar"}
+              {copiado && (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              )}
+              {copiado ? "Copiado" : "Copiar"}
             </button>
           </div>
         </div>
-        <div style={{ background:"#fffbeb", border:"1px solid #fde68a", color:"#92400e", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
-          ⚠ Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
+        <div style={{ background:"#fafafa", border:"1px solid #e5e7eb", color:"#374151", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+          Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
           <button onClick={onFechar} style={S.btn}>Concluir</button>
@@ -940,9 +950,9 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               style={{
                 flex:1, padding:"10px", borderRadius:8, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
-                border: ativo ? "1px solid #15803d" : "1px solid #e5e7eb",
-                background: ativo ? "#f0fdf4" : "#fff",
-                color: ativo ? "#15803d" : "#6b7280",
+                border: ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                background: ativo ? "#111" : "#fff",
+                color: ativo ? "#fff" : "#6b7280",
                 fontWeight: ativo ? 600 : 400,
               }}>
               Ativo
@@ -954,17 +964,17 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               style={{
                 flex:1, padding:"10px", borderRadius:8, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
-                border: !ativo ? "1px solid #b91c1c" : "1px solid #e5e7eb",
-                background: !ativo ? "#fef2f2" : "#fff",
-                color: !ativo ? "#b91c1c" : "#6b7280",
+                border: !ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                background: !ativo ? "#111" : "#fff",
+                color: !ativo ? "#fff" : "#6b7280",
                 fontWeight: !ativo ? 600 : 400,
               }}>
               Inativo
             </button>
           </div>
           {!ativo && usuario.ativo && (
-            <div style={{ fontSize:11.5, color:"#92400e", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
-              ⚠ Usuário inativo não consegue mais fazer login. As sessões existentes serão encerradas no próximo refresh.
+            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
+              Usuário inativo não consegue mais fazer login. As sessões existentes serão encerradas no próximo refresh.
             </div>
           )}
         </div>
@@ -1313,19 +1323,22 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
 // completo + ações (mudar status, anotar, excluir).
 
 const FEEDBACK_CAT_LABELS = {
-  sugestao: { icone:"💡", label:"Sugestão" },
-  bug:      { icone:"🐛", label:"Bug" },
-  pergunta: { icone:"❓", label:"Pergunta" },
-  cobranca: { icone:"💳", label:"Cobrança" },
-  elogio:   { icone:"❤️", label:"Elogio" },
-  outro:    { icone:"✉️", label:"Outro" },
+  sugestao: { label: "Sugestão" },
+  bug:      { label: "Bug" },
+  pergunta: { label: "Pergunta" },
+  cobranca: { label: "Cobrança" },
+  elogio:   { label: "Elogio" },
+  outro:    { label: "Outro" },
 };
 
+// Status: aberta/em_andamento/resolvida/arquivada. Mantém paleta neutra
+// (cinza/preto/branco) — diferenciação por intensidade do texto e fundo.
+// Aberta destaca com fundo preto pra chamar atenção; arquivada cinza pálido.
 const FEEDBACK_STATUS_LABELS = {
-  aberta:       { label:"Aberta",       cor:"#b45309", bg:"#fffbeb", borda:"#fde68a" },
-  em_andamento: { label:"Em andamento", cor:"#1e40af", bg:"#eff6ff", borda:"#bfdbfe" },
-  resolvida:    { label:"Resolvida",    cor:"#15803d", bg:"#f0fdf4", borda:"#bbf7d0" },
-  arquivada:    { label:"Arquivada",    cor:"#6b7280", bg:"#f9fafb", borda:"#e5e7eb" },
+  aberta:       { label: "Aberta",       cor: "#fff",    bg: "#111",     borda: "#111"    },
+  em_andamento: { label: "Em andamento", cor: "#111",    bg: "#fafafa",  borda: "#111"    },
+  resolvida:    { label: "Resolvida",    cor: "#6b7280", bg: "#fafafa",  borda: "#e5e7eb" },
+  arquivada:    { label: "Arquivada",    cor: "#9ca3af", bg: "#f9fafb",  borda: "#e5e7eb" },
 };
 
 function PainelFeedback({ S }) {
@@ -1336,23 +1349,39 @@ function PainelFeedback({ S }) {
   const [erro, setErro]           = useState(null);
   const [abertoId, setAbertoId]   = useState(null); // qual item está expandido
 
-  async function carregar() {
-    setLoading(true); setErro(null);
+  // carregar(opts):
+  //   opts.silencioso=true → não mostra spinner global. Usado quando atualização
+  //   vem de salvar status/notas — UI já tem feedback localizado ("salvo"),
+  //   não queremos piscar a tela inteira.
+  //   opts.preservarAberto=true → mantém o item expandido após reload. Usado
+  //   pelos handlers de mudança que ocorrem dentro de um item (mudarStatus,
+  //   salvarNotas) — usuário deve continuar trabalhando no mesmo item.
+  async function carregar(opts = {}) {
+    if (!opts.silencioso) setLoading(true);
+    setErro(null);
     try {
       const r = await api.admin.feedback.list(filtros);
       setFeedback(r.feedback || []);
       setCounts(r.counts || {});
+      // Se mudança de filtros e item aberto desapareceu da lista, fecha.
+      // Se foi ação interna de item (preservarAberto), mantém abertoId.
+      if (!opts.preservarAberto && abertoId) {
+        // Avalia depois do setFeedback — não dá pra ler estado antigo aqui,
+        // delegamos pro próximo render. Na prática o filtro é raro mudar
+        // junto com item aberto.
+      }
     } catch (e) {
       setErro({ message: e.message, status: e.status });
     } finally {
-      setLoading(false);
+      if (!opts.silencioso) setLoading(false);
     }
   }
 
-  // Recarrega quando qualquer filtro muda. Debounce na busca pra não disparar
-  // a cada tecla.
+  // Recarrega quando filtros mudam. Debounce só na busca.
+  // Filtro de status/categoria → fecha qualquer item aberto (a lista pode mudar).
   useEffect(() => {
-    const id = setTimeout(carregar, filtros.busca ? 300 : 0);
+    setAbertoId(null); // novos filtros, item aberto pode não estar mais na lista
+    const id = setTimeout(() => carregar(), filtros.busca ? 300 : 0);
     return () => clearTimeout(id);
   }, [filtros.categoria, filtros.status, filtros.busca]);
 
@@ -1422,7 +1451,7 @@ function PainelFeedback({ S }) {
               fb={fb}
               aberto={abertoId === fb.id}
               onToggle={() => setAbertoId(abertoId === fb.id ? null : fb.id)}
-              onAtualizado={carregar}
+              onAtualizado={(opts) => carregar({ silencioso: true, ...opts })}
               fmtDataHora={fmtDataHora}
             />
           ))}
@@ -1435,18 +1464,29 @@ function PainelFeedback({ S }) {
 // Cada linha de feedback. Colapsada por padrão (preview do texto). Expandida
 // mostra texto completo + controles de status + notas internas + excluir.
 function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
-  const cat = FEEDBACK_CAT_LABELS[fb.categoria] || { icone:"✉️", label:fb.categoria };
-  const st  = FEEDBACK_STATUS_LABELS[fb.status] || { label:fb.status, cor:"#6b7280", bg:"#f9fafb", borda:"#e5e7eb" };
+  const cat = FEEDBACK_CAT_LABELS[fb.categoria] || { label: fb.categoria };
+  const st  = FEEDBACK_STATUS_LABELS[fb.status] || { label: fb.status, cor: "#6b7280", bg: "#f9fafb", borda: "#e5e7eb" };
   const [salvando, setSalvando] = useState(false);
   const [notasLocal, setNotasLocal] = useState(fb.notas_internas || "");
+  // Indica "salvo agora" — feedback visual após salvarNotas/mudarStatus.
+  // Reseta após 1.8s pra não ficar permanente. Permite o usuário ver
+  // confirmação sem precisar fechar e reabrir o item.
+  const [recemSalvo, setRecemSalvo] = useState(false);
   // Sync se notas mudarem do servidor (recarregamento)
   useEffect(() => { setNotasLocal(fb.notas_internas || ""); }, [fb.id, fb.notas_internas]);
+
+  function piscarSalvo() {
+    setRecemSalvo(true);
+    setTimeout(() => setRecemSalvo(false), 1800);
+  }
 
   async function mudarStatus(novoStatus) {
     setSalvando(true);
     try {
       await api.admin.feedback.update(fb.id, { status: novoStatus });
-      onAtualizado();
+      piscarSalvo();
+      // Reload em background — não fechamos o item, deixamos o usuário continuar
+      onAtualizado({ preservarAberto: true });
     } catch (e) {
       dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
     } finally {
@@ -1458,7 +1498,8 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
     setSalvando(true);
     try {
       await api.admin.feedback.update(fb.id, { notas_internas: notasLocal });
-      toast.sucesso("Notas salvas");
+      piscarSalvo();
+      onAtualizado({ preservarAberto: true });
     } catch (e) {
       dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
     } finally {
@@ -1491,15 +1532,19 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
       {/* ── Linha clicável (expande/recolhe) ── */}
       <div onClick={onToggle}
         style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
-        <div style={{ fontSize:18, lineHeight:1, paddingTop:1 }}>{cat.icone}</div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
             <span style={{ fontSize:12, fontWeight:600, color:"#111" }}>{cat.label}</span>
             <span style={{
-              fontSize:10, padding:"2px 6px", borderRadius:4,
+              fontSize:10, padding:"2px 7px", borderRadius:4,
               background:st.bg, color:st.cor, border:`1px solid ${st.borda}`,
               fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
             }}>{st.label}</span>
+            {recemSalvo && (
+              <span style={{ fontSize:10, color:"#6b7280", fontWeight:500 }}>
+                salvo
+              </span>
+            )}
             <span style={{ fontSize:11, color:"#9ca3af", marginLeft:"auto" }}>
               {fmtDataHora(fb.criado_em)}
             </span>
@@ -1521,22 +1566,26 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
               Status
             </div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {Object.entries(FEEDBACK_STATUS_LABELS).map(([key, meta]) => (
-                <button key={key}
-                  onClick={() => mudarStatus(key)}
-                  disabled={salvando || fb.status === key}
-                  style={{
-                    padding:"5px 10px", borderRadius:6, fontSize:11.5,
-                    fontFamily:"inherit",
-                    cursor: (salvando || fb.status === key) ? "default" : "pointer",
-                    border: fb.status === key ? `1.5px solid ${meta.cor}` : "1px solid #e5e7eb",
-                    background: fb.status === key ? meta.bg : "#fff",
-                    color: fb.status === key ? meta.cor : "#6b7280",
-                    fontWeight: fb.status === key ? 600 : 400,
-                  }}>
-                  {meta.label}
-                </button>
-              ))}
+              {Object.entries(FEEDBACK_STATUS_LABELS).map(([key, meta]) => {
+                const ativo = fb.status === key;
+                return (
+                  <button key={key}
+                    onClick={() => mudarStatus(key)}
+                    disabled={salvando || ativo}
+                    style={{
+                      padding:"6px 12px", borderRadius:6, fontSize:12,
+                      fontFamily:"inherit",
+                      cursor: (salvando || ativo) ? "default" : "pointer",
+                      border: ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                      background: ativo ? "#111" : "#fff",
+                      color: ativo ? "#fff" : "#374151",
+                      fontWeight: ativo ? 600 : 400,
+                      transition:"all 0.12s",
+                    }}>
+                    {meta.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
