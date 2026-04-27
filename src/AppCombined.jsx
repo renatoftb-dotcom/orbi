@@ -13035,6 +13035,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     }}>
                     {/* Input em primeiro lugar */}
                     <input
+                      ref={el => {
+                        // Foca automaticamente quando o usuário navega via teclado até esse input
+                        if (el && comodoAberto === nome && comodoQtdFocada === "input" && document.activeElement !== el) {
+                          setTimeout(() => { try { el.focus(); el.select(); } catch {} }, 0);
+                        }
+                      }}
                       type="number" min="0"
                       defaultValue={q > 6 ? q : ""}
                       className="no-spin"
@@ -13042,20 +13048,95 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       onClick={e => e.stopPropagation()}
                       onFocus={e => {
                         setComodoAberto(nome);
+                        setComodoQtdFocada("input");
                         setTravado(true);
                         if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
+                      }}
+                      onBlur={e => {
+                        // Se o foco saiu do input mas continua na navegação por teclado,
+                        // não fechar o popup. Só limpar travado se realmente perdeu foco geral.
+                        setTravado(false);
                       }}
                       onKeyDown={e => {
                         if (e.key === "Enter") {
                           const v = parseInt(e.currentTarget.value) || 0;
-                          if (v > 0) setQtdAbs(nome, v);
+                          if (v > 0) {
+                            setQtdAbs(nome, v);
+                            // Após aplicar, foca o "1" do próximo cômodo (mesma lógica do Enter no número)
+                            const flat = comodosFlatRef.current;
+                            const idx = flat ? flat.indexOf(nome) : -1;
+                            setTimeout(() => {
+                              const novaFlat = comodosFlatRef.current;
+                              if (!novaFlat || novaFlat.length === 0) {
+                                setComodoAberto(null);
+                                setComodoQtdFocada(null);
+                                return;
+                              }
+                              const novoIdx = Math.min(idx, novaFlat.length - 1);
+                              setComodoAberto(novaFlat[novoIdx]);
+                              setComodoQtdFocada(1);
+                            }, 0);
+                          }
                           setTravado(false);
-                          setComodoAberto(null);
                           e.currentTarget.blur();
                         } else if (e.key === "Escape") {
                           setTravado(false);
                           setComodoAberto(null);
+                          setComodoQtdFocada(null);
                           e.currentTarget.blur();
+                        } else if (e.key === "Tab") {
+                          // Deixa o handler global cuidar — mas precisamos liberar o foco primeiro
+                          // pra que a checagem `tag === "input"` não bloqueie
+                          e.currentTarget.blur();
+                          // O global vai pegar a próxima tecla; mas aqui, esse evento já está em curso.
+                          // Em vez disso, replicamos a lógica:
+                          e.preventDefault();
+                          const flat = comodosFlatRef.current;
+                          const idxAtual = flat ? flat.indexOf(nome) : -1;
+                          if (e.shiftKey) {
+                            // Shift+Tab no input → vai pro 6 do mesmo cômodo
+                            setComodoQtdFocada(6);
+                          } else {
+                            // Tab no input → próximo cômodo no 0
+                            if (idxAtual >= 0 && idxAtual < flat.length - 1) {
+                              setComodoAberto(flat[idxAtual + 1]);
+                              setComodoQtdFocada(0);
+                            } else {
+                              // último cômodo: sai
+                              setComodoAberto(null);
+                              setComodoQtdFocada(null);
+                            }
+                          }
+                        } else if (e.key === "ArrowLeft") {
+                          // ←: volta pro 6
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                          setComodoQtdFocada(6);
+                        } else if (e.key === "ArrowRight") {
+                          // →: vai pro 0 (wrap)
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                          setComodoQtdFocada(0);
+                        } else if (e.key === "ArrowDown") {
+                          // ↓: próximo cômodo, "1"
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                          const flat = comodosFlatRef.current;
+                          const idxAtual = flat ? flat.indexOf(nome) : -1;
+                          if (idxAtual >= 0 && idxAtual < flat.length - 1) {
+                            setComodoAberto(flat[idxAtual + 1]);
+                            setComodoQtdFocada(1);
+                          }
+                        } else if (e.key === "ArrowUp") {
+                          // ↑: cômodo anterior, "1"
+                          e.preventDefault();
+                          e.currentTarget.blur();
+                          const flat = comodosFlatRef.current;
+                          const idxAtual = flat ? flat.indexOf(nome) : -1;
+                          if (idxAtual > 0) {
+                            setComodoAberto(flat[idxAtual - 1]);
+                            setComodoQtdFocada(1);
+                          }
                         }
                       }}
                       style={{
