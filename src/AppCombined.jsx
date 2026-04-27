@@ -11206,6 +11206,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [referenciaTemp, setReferenciaTemp] = useState(orcBase?.referencia || "");
   // Flag: usuário está editando a referência inline (abaixo do nome do cliente)
   const [editandoRefInline, setEditandoRefInline] = useState(false);
+  // Trilha horizontal: { key, top, left } da etapa com dropdown aberto (position fixed)
+  const [trilhaHPop, setTrilhaHPop] = useState(null);
   // Abre preview automaticamente quando:
   // - modoVer é true (legado)
   // - modoAbertura === "ver" ou "verProposta" (novo fluxo) E tem orçamento existente
@@ -11447,6 +11449,35 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
   }, [etapaEditando, abertoGrupo]);
+
+  // Trilha horizontal: fecha popover ao clicar fora
+  useEffect(() => {
+    if (!trilhaHPop) return;
+    const h = e => {
+      if (e.target.closest(".vk-trilha-h-pop") || e.target.closest(`.vk-trilha-h-node[data-tk="${trilhaHPop.key}"]`)) return;
+      setTrilhaHPop(null);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, [trilhaHPop]);
+
+  // Trilha horizontal: reposiciona popover ao scroll/resize (position fixed gruda no botão)
+  useEffect(() => {
+    if (!trilhaHPop) return;
+    const reposicionar = () => {
+      const btn = document.querySelector(`.vk-trilha-h-node[data-tk="${trilhaHPop.key}"]`);
+      if (btn) {
+        const r = btn.getBoundingClientRect();
+        setTrilhaHPop(prev => prev ? { ...prev, top: r.bottom + 6, left: r.left } : null);
+      }
+    };
+    document.addEventListener("scroll", reposicionar, true);
+    window.addEventListener("resize", reposicionar);
+    return () => {
+      document.removeEventListener("scroll", reposicionar, true);
+      window.removeEventListener("resize", reposicionar);
+    };
+  }, [trilhaHPop?.key]);
 
   const OPCOES = {
     tipoObra:    ["Construção nova", "Reforma"],
@@ -11738,26 +11769,37 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       @keyframes flow2OptIn  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
       @keyframes flow2OptChosen { 0% { transform: scale(1); } 35% { transform: scale(1.02); } 100% { transform: scale(1); } }
       @keyframes flow2DotPulse {
-        0%, 100% { box-shadow: 0 0 0 4px #f4f5f7, 0 0 0 6px #111; }
-        50%      { box-shadow: 0 0 0 4px #f4f5f7, 0 0 0 10px rgba(0,0,0,0); }
+        0%, 100% { box-shadow: 0 0 0 4px #fff, 0 0 0 6px #111; }
+        50%      { box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(0,0,0,0); }
       }
       @keyframes nodeEditIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
       /* ===== TRILHA VERTICAL LATERAL DIREITA ===== */
       .vk-flow-shell { display: grid; grid-template-columns: 1fr 280px; gap: 0; }
       .vk-flow-stage { padding: 8px 24px 24px 0; }
-      .vk-trilha-rail { background: #f4f5f7; border-left: 1px solid #e5e7eb; padding: 24px 28px 32px 28px; position: relative; align-self: stretch; }
+      .vk-trilha-rail { background: transparent; border-left: 0; padding: 24px 28px 32px 8px; position: relative; align-self: stretch; }
       .vk-trilha-rail-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #828a98; font-weight: 600; margin-bottom: 20px; }
 
-      /* Trilha horizontal compacta (modo concluído) */
-      .vk-trilha-h { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 10px 14px; background: #f4f5f7; border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 18px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
-      .vk-trilha-h-node { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 5px; cursor: pointer; transition: background .12s; position: relative; }
-      .vk-trilha-h-node:hover { background: rgba(0,0,0,0.04); }
-      .vk-trilha-h-dot { width: 7px; height: 7px; border-radius: 50%; background: #111; flex-shrink: 0; }
+      /* Trilha horizontal compacta (modo concluído) — sem fundo, sutil */
+      .vk-trilha-h { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px 0; margin-bottom: 18px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
+      .vk-trilha-h-node { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 5px; cursor: pointer; transition: background .12s, border-color .12s; position: relative; border: 1px solid transparent; background: transparent; font-family: inherit; }
+      .vk-trilha-h-node:hover { background: #fafaf7; border-color: #e5e7eb; }
+      .vk-trilha-h-node.is-open { background: #fafaf7; border-color: #c8cdd6; }
+      .vk-trilha-h-dot { width: 6px; height: 6px; border-radius: 50%; background: #111; flex-shrink: 0; }
       .vk-trilha-h-key { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #828a98; font-weight: 600; }
       .vk-trilha-h-val { font-size: 12px; font-weight: 600; color: #111; letter-spacing: -0.005em; }
-      .vk-trilha-h-caret { font-size: 7px; color: #828a98; margin-left: 1px; }
-      .vk-trilha-h-sep { width: 12px; height: 1px; background: rgba(0,0,0,0.10); }
+      .vk-trilha-h-caret { font-size: 8px; color: #828a98; margin-left: 1px; }
+      .vk-trilha-h-sep { width: 10px; height: 1px; background: rgba(0,0,0,0.12); }
+
+      /* Dropdown com position fixed (grudado no botão, não desencaixa no scroll) */
+      .vk-trilha-h-pop { position: fixed; z-index: 9999; min-width: 200px; background: #fff; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 28px -8px rgba(0,0,0,0.18); animation: nodeEditIn .18s cubic-bezier(0.32, 0.72, 0, 1); }
+      .vk-trilha-h-pop-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 12px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
+      .vk-trilha-h-pop-row:last-child { border-bottom: 0; }
+      .vk-trilha-h-pop-row:hover { background: #fafaf7; }
+      .vk-trilha-h-pop-row.is-selected { background: #111; color: #fff; }
+      .vk-trilha-h-pop-row.is-selected:hover { background: #111; }
+      .vk-trilha-h-pop-bullet { width: 5px; height: 5px; border-radius: 50%; background: rgba(0,0,0,0.20); flex: 0 0 auto; }
+      .vk-trilha-h-pop-row.is-selected .vk-trilha-h-pop-bullet { background: #fff; }
       .vk-trilha-list { position: relative; display: flex; flex-direction: column; gap: 22px; }
       .vk-trilha-line { position: absolute; left: 9px; top: 10px; bottom: 10px; width: 1.5px; background: linear-gradient(to bottom, #c8cdd6 0%, #c8cdd6 60%, #e5e7eb 100%); z-index: 0; }
 
@@ -11767,9 +11809,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-trilha-node.is-done:hover .vk-trilha-val { color: #4b5563; }
 
       /* Bolinha — preenchida pretas (done), anel duplo (active), vazada (future) */
-      .vk-trilha-dot { width: 10px; height: 10px; border-radius: 50%; background: #111; margin-top: 4px; margin-left: 5px; position: relative; z-index: 1; box-shadow: 0 0 0 4px #f4f5f7; flex-shrink: 0; transition: all .25s ease; }
-      .vk-trilha-dot-active { width: 14px; height: 14px; margin-top: 2px; margin-left: 3px; box-shadow: 0 0 0 4px #f4f5f7, 0 0 0 6px #111; animation: flow2DotPulse 2.4s infinite ease-in-out; }
-      .vk-trilha-dot-future { width: 9px; height: 9px; margin-top: 5px; margin-left: 6px; background: transparent; border: 1.5px solid #c8cdd6; box-shadow: 0 0 0 3px #f4f5f7; }
+      .vk-trilha-dot { width: 10px; height: 10px; border-radius: 50%; background: #111; margin-top: 4px; margin-left: 5px; position: relative; z-index: 1; box-shadow: 0 0 0 4px #fff; flex-shrink: 0; transition: all .25s ease; }
+      .vk-trilha-dot-active { width: 14px; height: 14px; margin-top: 2px; margin-left: 3px; box-shadow: 0 0 0 4px #fff, 0 0 0 6px #111; animation: flow2DotPulse 2.4s infinite ease-in-out; }
+      .vk-trilha-dot-future { width: 9px; height: 9px; margin-top: 5px; margin-left: 6px; background: transparent; border: 1.5px solid #c8cdd6; box-shadow: 0 0 0 3px #fff; }
 
       /* Texto */
       .vk-trilha-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
@@ -12272,28 +12314,35 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         };
 
         // Se já concluiu todas as etapas, renderiza só a trilha horizontal compacta
-        // (o bloco de cômodos+resumo abaixo ocupa o espaço principal)
+        // (referência fica editável só pelo texto inline abaixo do nome do cliente)
         if (concluido) {
+          // Remove "referencia" da trilha horizontal
+          const ordemH = ordem.filter(k => k !== "referencia");
           return (
             <div className="vk-trilha-h" style={{ maxWidth: 1100 }}>
-              {ordem.flatMap((k, i) => {
+              {ordemH.flatMap((k, i) => {
                 const val = VALS_EXT[k];
+                const isOpen = trilhaHPop?.key === k;
                 const items = [
-                  <div
+                  <button
                     key={k}
-                    className="vk-trilha-h-node"
-                    onClick={() => {
-                      if (k === "referencia") setReferenciaTemp(referencia);
-                      setEtapaEditando(k);
+                    type="button"
+                    className={"vk-trilha-h-node" + (isOpen ? " is-open" : "")}
+                    data-tk={k}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (isOpen) { setTrilhaHPop(null); return; }
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setTrilhaHPop({ key: k, top: r.bottom + 6, left: r.left });
                     }}
                     title={`Editar ${LABELS_EXT[k]}`}>
                     <span className="vk-trilha-h-dot"></span>
                     <span className="vk-trilha-h-key">{LABELS_EXT[k]}</span>
                     <span className="vk-trilha-h-val">{displayOpcao(k, val)}</span>
                     <span className="vk-trilha-h-caret">▾</span>
-                  </div>
+                  </button>
                 ];
-                if (i < ordem.length - 1) {
+                if (i < ordemH.length - 1) {
                   items.push(<span key={k + "-sep"} className="vk-trilha-h-sep"></span>);
                 }
                 return items;
@@ -12947,6 +12996,30 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         }
         return null;
       })()}
+
+      {/* Popover global da trilha horizontal (position fixed, gruda no botão clicado) */}
+      {trilhaHPop && (
+        <div
+          className="vk-trilha-h-pop"
+          style={{ top: trilhaHPop.top, left: trilhaHPop.left }}
+          onClick={e => e.stopPropagation()}>
+          {(OPCOES[trilhaHPop.key] || []).map(op => {
+            const sel = VALS[trilhaHPop.key] === op;
+            return (
+              <button
+                key={op}
+                className={"vk-trilha-h-pop-row" + (sel ? " is-selected" : "")}
+                onClick={() => {
+                  SETS[trilhaHPop.key](op);
+                  setTrilhaHPop(null);
+                }}>
+                <span className="vk-trilha-h-pop-bullet"></span>
+                <span style={{ flex:1, fontWeight:500 }}>{displayOpcao(trilhaHPop.key, op)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* Modal "Deseja salvar?" ao voltar com dados preenchidos */}
       {showSaveDialog && (
