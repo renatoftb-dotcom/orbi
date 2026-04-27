@@ -850,7 +850,18 @@ export default function ModuloClientesFornecedores() {
   const [obrasKey, setObrasKey]               = useState(0);
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
-  const [sidebarAberta, setSidebarAberta]     = useState(true);
+  // Sidebar colapsada: estado persistido em localStorage. False = full
+  // (ícones + texto). True = estreita (só ícones, popover nos submenus).
+  // Padrão dos SaaS modernos (Linear/Notion/VSCode) — usuário escolhe uma
+  // vez e a preferência persiste entre sessões.
+  const [sidebarColapsada, setSidebarColapsada] = useState(() => {
+    try {
+      return localStorage.getItem("vicke-sidebar-colapsada") === "true";
+    } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("vicke-sidebar-colapsada", String(sidebarColapsada)); } catch {}
+  }, [sidebarColapsada]);
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null);
   const [clienteRetorno, setClienteRetorno] = useState(null);
   const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false);
@@ -906,6 +917,24 @@ export default function ModuloClientesFornecedores() {
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
   const [projetosAberto, setProjetosAberto] = useState(() => (typeof aba === "string" && aba.indexOf("projetos") === 0));
+  // Popover do submenu Projetos quando sidebar está colapsada. null = fechado,
+  // ou {x, y} pra posicionar absolutamente perto do botão pai.
+  const [popoverProjetos, setPopoverProjetos] = useState(null);
+  // Fecha popover ao clicar fora (delegação no document — captura
+  // clicks em qualquer lugar da página quando popover está aberto).
+  useEffect(() => {
+    if (!popoverProjetos) return;
+    function onClickFora(e) {
+      // Se clicou dentro do popover ou no botão que abriu, ignora
+      const popover = document.getElementById("popover-projetos");
+      const trigger = document.getElementById("trigger-projetos");
+      if (popover && popover.contains(e.target)) return;
+      if (trigger && trigger.contains(e.target)) return;
+      setPopoverProjetos(null);
+    }
+    document.addEventListener("mousedown", onClickFora);
+    return () => document.removeEventListener("mousedown", onClickFora);
+  }, [popoverProjetos]);
   useEffect(() => {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
@@ -1242,8 +1271,10 @@ export default function ModuloClientesFornecedores() {
   ];
 
   const itemStyle = (ativo) => ({
-    display:"flex", alignItems:"center", justifyContent:"space-between",
-    padding:"8px 12px", borderRadius:7, cursor:"pointer", fontSize:13,
+    display:"flex", alignItems:"center",
+    justifyContent: sidebarColapsada ? "center" : "space-between",
+    padding: sidebarColapsada ? "10px 8px" : "8px 12px",
+    borderRadius:7, cursor:"pointer", fontSize:13,
     fontWeight: ativo ? 600 : 400, color: ativo ? "#111" : "#6b7280",
     background: ativo ? "#f3f4f6" : "transparent",
     border:"none", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
@@ -1255,52 +1286,92 @@ export default function ModuloClientesFornecedores() {
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {sidebarAberta && (
-        <div style={{ width:220, minWidth:220, background:"#fff", borderRight:"1px solid #f3f4f6", display:"flex", flexDirection:"column" }}>
-          <div style={{ padding:"20px 16px 16px", borderBottom:"1px solid #f3f4f6" }}>
-            <div style={{ fontSize:15, fontWeight:700, color:"#111", letterSpacing:-0.3 }}>{nomeEscritorio}</div>
-            <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>Vicke</div>
-          </div>
+      <div style={{ width: sidebarColapsada ? 56 : 220, minWidth: sidebarColapsada ? 56 : 220, transition:"width 0.18s ease, min-width 0.18s ease", background:"#fff", borderRight:"1px solid #f3f4f6", display:"flex", flexDirection:"column" }}>
+        {/* ── Header da sidebar: nome do escritório + botão toggle ──
+            Quando colapsada: apenas o botão toggle centralizado (sem título).
+            Quando aberta: título à esquerda + toggle à direita. */}
+        <div style={{
+          padding: sidebarColapsada ? "16px 8px" : "20px 16px 16px",
+          borderBottom:"1px solid #f3f4f6",
+          display:"flex", alignItems:"center",
+          justifyContent: sidebarColapsada ? "center" : "space-between",
+          gap: 8,
+        }}>
+          {!sidebarColapsada && (
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:15, fontWeight:700, color:"#111", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
+              <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>Vicke</div>
+            </div>
+          )}
+          {/* Toggle minimalista — ícone "panel-left" estilo Lucide.
+              Click alterna entre colapsada/expandida; preferência persiste
+              em localStorage. */}
+          <button
+            onClick={() => setSidebarColapsada(c => !c)}
+            title={sidebarColapsada ? "Expandir menu" : "Recolher menu"}
+            aria-label={sidebarColapsada ? "Expandir menu" : "Recolher menu"}
+            style={{
+              background:"none", border:"none", cursor:"pointer",
+              padding: 6, color:"#9ca3af", lineHeight:0,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              borderRadius:6, fontFamily:"inherit",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.color="#374151"; }}
+            onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+              <line x1="9" y1="3" x2="9" y2="21"/>
+            </svg>
+          </button>
+        </div>
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
             {MENU.map(item => {
               const {k, label, count, sub, icon} = item;
               if (sub && sub.length) {
                 const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
                 return (
-                  <div key={k} style={{ display:"flex", flexDirection:"column" }}>
+                  <div key={k} style={{ display:"flex", flexDirection:"column", position:"relative" }}>
                     <button
+                      id={k === "projetos" ? "trigger-projetos" : undefined}
+                      title={sidebarColapsada ? label : undefined}
                       style={{
                         ...itemStyle(ativoNeleMesmoOuSubitem),
-                        justifyContent: "flex-start",
+                        justifyContent: sidebarColapsada ? "center" : "flex-start",
                         gap: 6,
-                        // CORREÇÃO: o botão "Projetos" só deve ter fundo cinza quando
-                        // a aba ativa é "projetos:*" (subitem). Se aba é "projetos"
-                        // exato OU outra coisa (ex: "home"), não destaca o pai —
-                        // só os subitens fazem destaque visual.
-                        // Antes: ativoNeleMesmoOuSubitem incluía aba==="projetos:*"
-                        // o que pintava o pai junto. Agora pai sempre transparente
-                        // (a menos que aba===k exato, raro).
                         background: aba === k ? "#f3f4f6" : "transparent",
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
                         color: ativoNeleMesmoOuSubitem ? "#111" : "#6b7280",
                       }}
                       onMouseEnter={e => { if (aba !== k) e.currentTarget.style.background="#f9fafb"; }}
                       onMouseLeave={e => { if (aba !== k) e.currentTarget.style.background="transparent"; }}
-                      onClick={() => setProjetosAberto(o => !o)}
+                      onClick={(ev) => {
+                        if (sidebarColapsada) {
+                          // Sidebar colapsada: abre popover lateral com os subitens.
+                          // Posiciona absoluto à direita do botão.
+                          const rect = ev.currentTarget.getBoundingClientRect();
+                          setPopoverProjetos({ top: rect.top, left: rect.right + 4 });
+                        } else {
+                          // Sidebar aberta: comportamento accordion (expandir/recolher)
+                          setProjetosAberto(o => !o);
+                        }
+                      }}
                     >
-                      <span style={{ display:"flex", alignItems:"center", gap:10, flex:1 }}>
+                      <span style={{ display:"flex", alignItems:"center", gap:10, flex:1, justifyContent: sidebarColapsada ? "center" : "flex-start" }}>
                         {icon && <IconeMaster nome={icon} tamanho={16} cor={ativoNeleMesmoOuSubitem ? "#111" : "#6b7280"} />}
-                        {label}
+                        {!sidebarColapsada && label}
                       </span>
-                      <span style={{
-                        color:"#9ca3af", fontSize:9,
-                        transition:"transform 0.2s",
-                        transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
-                        display:"inline-block",
-                        lineHeight: 1,
-                      }}>▶</span>
+                      {!sidebarColapsada && (
+                        <span style={{
+                          color:"#9ca3af", fontSize:9,
+                          transition:"transform 0.2s",
+                          transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
+                          display:"inline-block",
+                          lineHeight: 1,
+                        }}>▶</span>
+                      )}
                     </button>
-                    {projetosAberto && (
+                    {/* Submenus inline (accordion) — só quando expandida */}
+                    {!sidebarColapsada && projetosAberto && (
                       <div style={{ display:"flex", flexDirection:"column", gap:1, marginLeft:14, paddingLeft:8, borderLeft:"1px solid #f3f4f6", marginTop:2 }}>
                         {sub.map(s => {
                           const ativoSub = aba === s.k;
@@ -1342,6 +1413,7 @@ export default function ModuloClientesFornecedores() {
               }
               return (
                 <button key={k} style={itemStyle(aba===k)}
+                  title={sidebarColapsada ? label : undefined}
                   onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
                   onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
                   onClick={() => {
@@ -1357,17 +1429,16 @@ export default function ModuloClientesFornecedores() {
                   }}>
                   <span style={{ display:"flex", alignItems:"center", gap:10 }}>
                     {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#111" : "#6b7280"} />}
-                    {label}
+                    {!sidebarColapsada && label}
                   </span>
-                  {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
+                  {!sidebarColapsada && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
                 </button>
               );
             })}
           </nav>
           <div style={{ padding:"8px 8px 12px", borderTop:"1px solid #f3f4f6", display:"flex", flexDirection:"column", gap:2 }}>
-            {/* Header da seção (visível apenas pra perfil escritório — pra master,
-                Escritório fica logo abaixo do separador sem header destacado). */}
-            {!isMaster && (
+            {/* Header da seção — esconde quando sidebar colapsada (não cabe). */}
+            {!isMaster && !sidebarColapsada && (
               <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 12px 2px" }}>
                 Configuração
               </div>
@@ -1375,12 +1446,13 @@ export default function ModuloClientesFornecedores() {
             {/* Botão Escritório só pra perfil escritório (Master vê tudo no menu principal) */}
             {!isMaster && (
               <button style={itemStyle(aba==="escritorio")}
+                title={sidebarColapsada ? "Escritório" : undefined}
                 onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#111" : "#6b7280"} />
-                  Escritório
+                  {!sidebarColapsada && "Escritório"}
                 </span>
               </button>
             )}
@@ -1388,45 +1460,70 @@ export default function ModuloClientesFornecedores() {
                 discretamente — uso raro mas existe. */}
             {isMaster && (
               <button style={itemStyle(aba==="escritorio")}
+                title={sidebarColapsada ? "Escritório (Master)" : undefined}
                 onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#111" : "#6b7280"} />
-                  Escritório
-                  <span style={{ fontSize:9, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
+                  {!sidebarColapsada && (
+                    <>
+                      Escritório
+                      <span style={{ fontSize:9, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
+                    </>
+                  )}
                 </span>
               </button>
             )}
-            <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:"#374151" }}>{usuario?.nome || "—"}</div>
-                <div style={{ fontSize:11, color:"#d1d5db" }}>{usuario?.perfil || ""}</div>
-              </div>
-              <button onClick={handleLogout} style={{ background:"none", border:"none", color:"#d1d5db", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-        <div style={{ borderBottom:"1px solid #f3f4f6", padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fff" }}>
-          <button onClick={() => setSidebarAberta(s => !s)}
-            style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", padding:"4px 8px", fontSize:16, fontFamily:"inherit" }}>☰</button>
-          {/* Import/Export: só master. Editor/admin de escritório não precisam
-              exportar/importar banco inteiro — isso é tarefa do dono do SaaS. */}
-          {isMaster ? (
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <label style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:"#9ca3af", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px" }}>
-                Importar
-                <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
-              </label>
-              <button onClick={exportarDados} style={{ fontSize:12, color:"#6b7280", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", background:"#fff", fontFamily:"inherit" }}>
-                Exportar backup
+            <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+              {!sidebarColapsada && (
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:"#374151", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
+                  <div style={{ fontSize:11, color:"#d1d5db" }}>{usuario?.perfil || ""}</div>
+                </div>
+              )}
+              <button
+                onClick={handleLogout}
+                title="Sair"
+                style={{
+                  background:"none", border:"none", color:"#9ca3af",
+                  fontSize:12, cursor:"pointer", fontFamily:"inherit",
+                  padding: sidebarColapsada ? "6px" : "4px 8px",
+                  borderRadius:6, lineHeight:0,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.color="#374151"; }}
+                onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
+                {sidebarColapsada ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                  </svg>
+                ) : "Sair"}
               </button>
             </div>
-          ) : <div />}
-        </div>
+            {/* Importar/Exportar — só master. Discreto, no rodapé. */}
+            {isMaster && !sidebarColapsada && (
+              <div style={{ padding:"4px 12px 8px", display:"flex", gap:6, fontSize:11 }}>
+                <label style={{ flex:1, textAlign:"center", color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px" }}
+                  onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
+                  Importar
+                  <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
+                </label>
+                <button onClick={exportarDados}
+                  style={{ flex:1, color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px", background:"transparent", fontFamily:"inherit", fontSize:11 }}
+                  onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
+                  Exportar
+                </button>
+              </div>
+            )}
+          </div>
+      </div>
+
+      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
         {backendOffline && (
           <div style={{ background:"#fef2f2", borderBottom:"1px solid #fecaca", padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
             <div style={{ fontSize:12, color:"#991b1b" }}>
@@ -1533,6 +1630,64 @@ export default function ModuloClientesFornecedores() {
         </div>
       )}
     </div>
+    {/* ── Popover dos subitens de Projetos (sidebar colapsada) ──
+        Posicionado fixed na coordenada do trigger. Click fora fecha (handler
+        em useEffect mais acima). Aparece à direita do botão na sidebar. */}
+    {popoverProjetos && sidebarColapsada && (() => {
+      const projetosItem = MENU.find(m => m.k === "projetos");
+      if (!projetosItem) return null;
+      return (
+        <div
+          id="popover-projetos"
+          style={{
+            position:"fixed",
+            top: popoverProjetos.top,
+            left: popoverProjetos.left,
+            background:"#fff",
+            border:"1px solid #e5e7eb",
+            borderRadius:8,
+            boxShadow:"0 4px 16px rgba(0,0,0,0.08)",
+            padding:"6px",
+            minWidth:180,
+            zIndex:1000,
+            fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+            display:"flex", flexDirection:"column", gap:1,
+          }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 10px 4px" }}>
+            {projetosItem.label}
+          </div>
+          {projetosItem.sub.map(s => {
+            const ativoSub = aba === s.k;
+            return (
+              <button
+                key={s.k}
+                onClick={() => {
+                  tentarTrocar(() => {
+                    setAba(s.k);
+                    setOrcamentoTelaCheia(null);
+                    if (s.k === "projetos:etapas") setProjetosKey(n => n+1);
+                    if (s.k === "projetos:orcamentos") setOrcamentosKey(n => n+1);
+                  });
+                  setPopoverProjetos(null);
+                }}
+                style={{
+                  display:"flex", alignItems:"center", gap:10,
+                  padding:"7px 10px", borderRadius:6, fontSize:12.5,
+                  border:"none", background: ativoSub ? "#f3f4f6" : "transparent",
+                  color: ativoSub ? "#111" : "#374151",
+                  fontWeight: ativoSub ? 600 : 400,
+                  fontFamily:"inherit", cursor:"pointer", textAlign:"left",
+                }}
+                onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#f9fafb"; }}
+                onMouseLeave={e => { if (!ativoSub) e.currentTarget.style.background="transparent"; }}>
+                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#111" : "#9ca3af"} />}
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    })()}
     <DialogosHost />
     <VersionWatcher />
     <BotaoFeedbackFlutuante usuario={usuario} />

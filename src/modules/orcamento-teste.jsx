@@ -7367,6 +7367,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       }}
                       onKeyDown={e => {
                         if (e.key === "Enter") {
+                          e.stopPropagation();
                           const v = parseInt(e.currentTarget.value) || 0;
                           if (v > 0) {
                             setQtdAbs(nome, v);
@@ -7388,17 +7389,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           setTravado(false);
                           e.currentTarget.blur();
                         } else if (e.key === "Escape") {
+                          e.stopPropagation();
                           setTravado(false);
                           setComodoAberto(null);
                           setComodoQtdFocada(null);
                           e.currentTarget.blur();
                         } else if (e.key === "Tab") {
-                          // Deixa o handler global cuidar — mas precisamos liberar o foco primeiro
-                          // pra que a checagem `tag === "input"` não bloqueie
-                          e.currentTarget.blur();
-                          // O global vai pegar a próxima tecla; mas aqui, esse evento já está em curso.
-                          // Em vez disso, replicamos a lógica:
                           e.preventDefault();
+                          e.stopPropagation();
+                          e.currentTarget.blur();
                           const flat = comodosFlatRef.current;
                           const idxAtual = flat ? flat.indexOf(nome) : -1;
                           if (e.shiftKey) {
@@ -7418,16 +7417,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         } else if (e.key === "ArrowLeft") {
                           // ←: volta pro 6
                           e.preventDefault();
+                          e.stopPropagation();
                           e.currentTarget.blur();
                           setComodoQtdFocada(6);
                         } else if (e.key === "ArrowRight") {
                           // →: vai pro 0 (wrap)
                           e.preventDefault();
+                          e.stopPropagation();
                           e.currentTarget.blur();
                           setComodoQtdFocada(0);
                         } else if (e.key === "ArrowDown") {
                           // ↓: próximo cômodo, "1"
                           e.preventDefault();
+                          e.stopPropagation();
                           e.currentTarget.blur();
                           const flat = comodosFlatRef.current;
                           const idxAtual = flat ? flat.indexOf(nome) : -1;
@@ -7438,6 +7440,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         } else if (e.key === "ArrowUp") {
                           // ↑: cômodo anterior, "1"
                           e.preventDefault();
+                          e.stopPropagation();
                           e.currentTarget.blur();
                           const flat = comodosFlatRef.current;
                           const idxAtual = flat ? flat.indexOf(nome) : -1;
