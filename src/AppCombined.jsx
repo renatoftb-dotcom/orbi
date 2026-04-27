@@ -11306,6 +11306,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [editandoRefInline, setEditandoRefInline] = useState(false);
   // Trilha horizontal: { key, top, left } da etapa com dropdown aberto (position fixed)
   const [trilhaHPop, setTrilhaHPop] = useState(null);
+  // Índice da opção destacada via teclado no popover da trilha horizontal
+  const [trilhaHPopFocada, setTrilhaHPopFocada] = useState(null);
   // Abre preview automaticamente quando:
   // - modoVer é true (legado)
   // - modoAbertura === "ver" ou "verProposta" (novo fluxo) E tem orçamento existente
@@ -11593,6 +11595,57 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     tipologia:   ["Térreo", "Sobrado"],
     tamanho:     ["Grande", "Médio", "Pequeno", "Compacta"],
   };
+
+  // ── Navegação por teclado no popover da trilha horizontal (Tipo Obra/Padrão/etc) ──
+  useEffect(() => {
+    if (!trilhaHPop) {
+      setTrilhaHPopFocada(null);
+      return;
+    }
+    const opcoes = OPCOES[trilhaHPop.key] || [];
+    if (!opcoes.length) return;
+
+    // Foca a opção atualmente selecionada (ou primeira) ao abrir
+    const valAtual = trilhaHPop.key === "referencia" ? referencia : ({ tipoObra, tipoProjeto, padrao, tipologia, tamanho }[trilhaHPop.key]);
+    const idxAtual = opcoes.indexOf(valAtual);
+    setTrilhaHPopFocada(idxAtual >= 0 ? idxAtual : 0);
+
+    const handler = (e) => {
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        e.stopPropagation();
+        setTrilhaHPopFocada(prev => prev === null ? 0 : (prev + 1) % opcoes.length);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        e.stopPropagation();
+        setTrilhaHPopFocada(prev => prev === null ? opcoes.length - 1 : (prev - 1 + opcoes.length) % opcoes.length);
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        e.stopPropagation();
+        setTrilhaHPopFocada(idx => {
+          if (idx === null) return null;
+          const op = opcoes[idx];
+          if (op) {
+            const SETS_TR = { tipoObra:setTipoObra, tipoProjeto:setTipoProjeto, padrao:setPadrao, tipologia:setTipologia, tamanho:setTamanho };
+            if (SETS_TR[trilhaHPop.key]) SETS_TR[trilhaHPop.key](op);
+            setTrilhaHPop(null);
+          }
+          return null;
+        });
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopPropagation();
+        setTrilhaHPop(null);
+        setTrilhaHPopFocada(null);
+      }
+    };
+    // capture: true pra rodar antes do handler dos cômodos (que está em window)
+    window.addEventListener("keydown", handler, true);
+    return () => window.removeEventListener("keydown", handler, true);
+  }, [trilhaHPop, referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho]);
 
   // Mapa de display: valor interno → label exibido APENAS após seleção (no fluxo horizontal).
   // Na lista de opções do dropdown, o valor interno é mantido ("Alto", "Médio", "Baixo").
@@ -11965,8 +12018,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-trilha-h-pop-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 12px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
       .vk-trilha-h-pop-row:last-child { border-bottom: 0; }
       .vk-trilha-h-pop-row:hover { background: #fafaf7; }
+      .vk-trilha-h-pop-row.is-focused-kb { background: #fafaf7; }
       .vk-trilha-h-pop-row.is-selected { background: #111; color: #fff; }
-      .vk-trilha-h-pop-row.is-selected:hover { background: #111; }
+      .vk-trilha-h-pop-row.is-selected:hover,
+      .vk-trilha-h-pop-row.is-selected.is-focused-kb { background: #111; }
       .vk-trilha-h-pop-bullet { width: 5px; height: 5px; border-radius: 50%; background: rgba(0,0,0,0.20); flex: 0 0 auto; }
       .vk-trilha-h-pop-row.is-selected .vk-trilha-h-pop-bullet { background: #fff; }
       .vk-trilha-list { position: relative; display: flex; flex-direction: column; gap: 22px; }
@@ -12205,8 +12260,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // Refs pra ler valores mais recentes nos handlers
   const comodoAbertoRef = useRef(null);
   const comodoQtdFocadaRef = useRef(null);
+  const trilhaHPopRef = useRef(null);
   useEffect(() => { comodoAbertoRef.current = comodoAberto; }, [comodoAberto]);
   useEffect(() => { comodoQtdFocadaRef.current = comodoQtdFocada; }, [comodoQtdFocada]);
+  useEffect(() => { trilhaHPopRef.current = trilhaHPop; }, [trilhaHPop]);
 
   // Computa se está na fase de cômodos (perguntas concluídas)
   // Memoizado pra não recriar handler a cada render
@@ -12234,6 +12291,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const handler = (e) => {
       const tag = (document.activeElement?.tagName || "").toLowerCase();
       if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      // Não roda se popover da trilha horizontal está aberto (ele tem prioridade)
+      if (trilhaHPopRef.current) return;
 
       const flat = comodosFlatRef.current;
       if (!flat || flat.length === 0) return;
@@ -12361,7 +12421,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             setComodoQtdFocada(null);
             return;
           }
-          const novoIdx = qtdIdx === 0 ? Math.min(idxAberto + 1, novaFlat.length - 1) : Math.min(idxAberto, novaFlat.length - 1);
+          // O cômodo aplicado (qtdIdx 0 ou >0) sempre vira "tocado" e sai da lista de disponíveis.
+          // Pegamos o próximo da lista atual na mesma posição.
+          const novoIdx = Math.min(idxAberto, novaFlat.length - 1);
           const proximo = novaFlat[novoIdx];
           setComodoAberto(proximo);
           setComodoQtdFocada(1);
@@ -13520,12 +13582,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           className="vk-trilha-h-pop"
           style={{ top: trilhaHPop.top, left: trilhaHPop.left }}
           onClick={e => e.stopPropagation()}>
-          {(OPCOES[trilhaHPop.key] || []).map(op => {
+          {(OPCOES[trilhaHPop.key] || []).map((op, i) => {
             const sel = VALS[trilhaHPop.key] === op;
+            const focada = trilhaHPopFocada === i;
             return (
               <button
                 key={op}
-                className={"vk-trilha-h-pop-row" + (sel ? " is-selected" : "")}
+                className={"vk-trilha-h-pop-row" + (sel ? " is-selected" : "") + (focada ? " is-focused-kb" : "")}
                 onClick={() => {
                   SETS[trilhaHPop.key](op);
                   setTrilhaHPop(null);
