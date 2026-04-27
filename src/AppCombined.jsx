@@ -9167,8 +9167,7 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
           <div style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Total Geral</div>
           {hasRep && (
-            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"#828a98", fontWeight:500 }}>
-              <IconUnidades size={12} />
+            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:13, color:"#828a98", fontWeight:500 }}>
               <span>{calculo.nRep} unid · {fmtNum(calculo.areaTot)}/m²</span>
             </div>
           )}
@@ -9189,9 +9188,13 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
       {calculo.precoArq > 0 && (
         <div style={{ paddingTop:14, borderTop:"1px solid #e5e7eb" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Arquitetura</span>
-              {hasRep && <IconUnidades size={12} />}
+              {totalGeral > 0 && (
+                <span style={{ fontSize:11, fontWeight:600, color:"#6b7280", padding:"2px 7px", background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:999 }}>
+                  {Math.round(calculo.precoArq / totalGeral * 100)}%
+                </span>
+              )}
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:14.5, fontWeight:700, color:"#111" }}>{fmt2(calculo.precoArq)}</span>
@@ -9224,9 +9227,13 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
       {calculo.precoEng > 0 && (
         <div style={{ paddingTop:14, marginTop:14, borderTop:"1px solid #e5e7eb" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Engenharia</span>
-              {hasRep && <IconUnidades size={12} />}
+              {totalGeral > 0 && (
+                <span style={{ fontSize:11, fontWeight:600, color:"#6b7280", padding:"2px 7px", background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:999 }}>
+                  {Math.round(calculo.precoEng / totalGeral * 100)}%
+                </span>
+              )}
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:14.5, fontWeight:700, color:"#111" }}>{fmt2(calculo.precoEng)}</span>
@@ -11857,7 +11864,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       /* Trilha horizontal compacta (modo concluído) — sem fundo, sutil */
       .vk-trilha-h { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px 0; margin-bottom: 18px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
-      .vk-trilha-h-node { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 5px; cursor: pointer; transition: background .12s, border-color .12s; position: relative; border: 1px solid transparent; background: transparent; font-family: inherit; }
+      .vk-trilha-h-node { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; cursor: pointer; transition: background .12s, border-color .12s; position: relative; border: 1px solid #e5e7eb; background: #fafaf7; font-family: inherit; }
       .vk-trilha-h-node:hover { background: #fafaf7; border-color: #e5e7eb; }
       .vk-trilha-h-node.is-open { background: #fafaf7; border-color: #c8cdd6; }
       .vk-trilha-h-dot { width: 6px; height: 6px; border-radius: 50%; background: #111; flex-shrink: 0; }
