@@ -9032,13 +9032,13 @@ function AreaDetalhe({ calculo, fmtNum }) {
   return (
     <div style={{ background:"#f4f5f7", border:"1px solid #dde0e5", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" }}>
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-        <span style={{ fontSize:12, color:"#828a98" }}>Área útil</span>
-        <span style={{ fontSize:13, color:"#374151" }}>{fmt2(calculo.areaBruta)} m²</span>
+        <span style={{ fontSize:13, color:"#828a98" }}>Área útil</span>
+        <span style={{ fontSize:14, color:"#374151" }}>{fmt2(calculo.areaBruta)} m²</span>
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ fontSize:12, color:"#828a98" }}>Área total (+circ.)</span>
+        <span style={{ fontSize:13, color:"#828a98" }}>Área total (+circ.)</span>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{fmt2(calculo.areaTotal)} m²</span>
+          <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>{fmt2(calculo.areaTotal)} m²</span>
           <span onClick={() => setAberto(v => !v)}
             style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none", lineHeight:1 }}>
             {aberto ? "▲" : "▼"}
@@ -9182,9 +9182,9 @@ function ResumoDetalhes({ calculo, fmtNum, C }) {
         </div>
       )}
       <div style={{ marginTop:20, paddingTop:14, borderTop:"1px solid #dde0e5" }}>
-        <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Total Geral</div>
+        <div style={{ fontSize:11, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Total Geral</div>
         <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
-          <span style={{ fontSize:20, fontWeight:800, color:"#111" }}>{fmt2(calculo.precoArq + calculo.precoEng)}</span>
+          <span style={{ fontSize:21, fontWeight:800, color:"#111" }}>{fmt2(calculo.precoArq + calculo.precoEng)}</span>
           <span style={C.resumoM2}>R$ {fmtNum(calculo.areaTot > 0 ? Math.round((calculo.precoArq + calculo.precoEng) / calculo.areaTot * 100) / 100 : 0)}/m²</span>
         </div>
       </div>
@@ -11786,8 +11786,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-trilha-h-node:hover { background: #fafaf7; border-color: #e5e7eb; }
       .vk-trilha-h-node.is-open { background: #fafaf7; border-color: #c8cdd6; }
       .vk-trilha-h-dot { width: 6px; height: 6px; border-radius: 50%; background: #111; flex-shrink: 0; }
-      .vk-trilha-h-key { font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #828a98; font-weight: 600; }
-      .vk-trilha-h-val { font-size: 12px; font-weight: 600; color: #111; letter-spacing: -0.005em; }
+      .vk-trilha-h-key { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #828a98; font-weight: 600; }
+      .vk-trilha-h-val { font-size: 13px; font-weight: 600; color: #111; letter-spacing: -0.005em; }
       .vk-trilha-h-caret { font-size: 8px; color: #828a98; margin-left: 1px; }
       .vk-trilha-h-sep { width: 10px; height: 1px; background: rgba(0,0,0,0.12); }
 
@@ -11886,10 +11886,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#828a98" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
     resumoBox:  { background:"#fff", border:"1px solid #c8cdd6", borderRadius:10, padding:"16px 18px" },
-    resumoHdr:  { fontSize:10, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12, paddingBottom:10, borderBottom:"1px solid #e5e7eb" },
-    resumoSec:  { fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
-    resumoVal:  { fontSize:18, fontWeight:700, color:"#111" },
-    resumoM2:   { fontSize:12, color:"#828a98", marginTop:2 },
+    resumoHdr:  { fontSize:11, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12, paddingBottom:10, borderBottom:"1px solid #e5e7eb" },
+    resumoSec:  { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
+    resumoVal:  { fontSize:19, fontWeight:700, color:"#111" },
+    resumoM2:   { fontSize:13, color:"#828a98", marginTop:2 },
     resumoLinha:{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:4 },
     resumoArea: { background:"#f0f1f4", border:"1px solid #c0c5cf", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" },
   };
@@ -12162,7 +12162,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Identificação ── */}
       <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:18, maxWidth:600 }}>
-        <div style={{ fontSize:20, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
+        <div style={{ fontSize:21, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
         {/* Referência editável inline abaixo do nome — só aparece após preencher na primeira pergunta */}
         {referencia && (
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -12193,7 +12193,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   setEditandoRefInline(false);
                 }}
                 style={{
-                  fontSize:13.5, fontWeight:500, color:"#111",
+                  fontSize:14.5, fontWeight:500, color:"#111",
                   border:"1px solid #c8cdd6", borderRadius:6,
                   padding:"4px 10px", outline:"none", fontFamily:"inherit",
                   minWidth:280, background:"#fff",
@@ -12203,7 +12203,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               <span
                 onClick={() => { setReferenciaTemp(referencia); setEditandoRefInline(true); }}
                 style={{
-                  fontSize:13.5, fontWeight:500, color:"#374151",
+                  fontSize:14.5, fontWeight:500, color:"#374151",
                   cursor:"pointer", padding:"4px 10px", borderRadius:6,
                   border:"1px solid transparent",
                   transition:"background 0.15s, border-color 0.15s",
@@ -12221,8 +12221,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       {/* ── Barra de toggles (Arq/Eng/Marc + Repetição) — sempre visível ── */}
       <div style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
-        padding:"12px 16px", marginBottom:16, maxWidth:600,
-        background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
+        padding:"12px 16px", marginBottom:16, maxWidth:1100,
+        background:"#eef2f7", border:"1px solid #d8dee8", borderRadius:10,
       }}>
         {[
           { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
@@ -12245,14 +12245,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
               }} />
             </span>
-            <span style={{ fontSize:13, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
+            <span style={{ fontSize:14, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
               {label}
             </span>
           </label>
         ))}
         {tipoProjeto !== "Conj. Comercial" && (
           <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"1px solid #e5e7eb" }}>
-            <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
+            <span style={{ fontSize:14, color:"#828a98" }}>Repetição</span>
             <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
               onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
             {editandoRep ? (
@@ -12622,7 +12622,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         MozAppearance:"textfield",
                       }}
                     />
-                    {[1,2,3,4,5,6].map(n => (
+                    {[0,1,2,3,4,5,6].map(n => (
                       <button key={n}
                         onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); }}
                         style={{
@@ -12670,7 +12670,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     padding:"5px 10px",
                     marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
                   }}>
-                    <span style={{ fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
+                    <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
                     {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
@@ -12812,7 +12812,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     )}
 
                     {qtdGrupo > 0 && (
-                      <span style={{ fontSize:10, color:"#9ca3af" }}>
+                      <span style={{ fontSize:11, color:"#9ca3af" }}>
                         <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
                       </span>
                     )}
@@ -12935,9 +12935,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             </div>
           </div>
 
-          {/* Resumo Cálculo */}
+          {/* Resumo Cálculo — só aparece quando tem cômodos */}
           <div style={{ position:"sticky", top:24 }}>
-            {temComodos && calculo ? (
+            {temComodos && calculo && (
               <div>
                 <div style={C.resumoBox}>
                   <div style={C.resumoHdr}>Resumo Cálculo</div>
@@ -12951,17 +12951,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   }} fmtNum={fmtNum} C={C} />
                 </div>
                 <button
-                  style={{ width:"100%", marginTop:10, background:"#111", color:"#fff", border:"1px solid #111", borderRadius:8, padding:"10px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
+                  style={{ width:"100%", marginTop:10, background:"#111", color:"#fff", border:"1px solid #111", borderRadius:8, padding:"11px 16px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#000"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="#111"; }}
                   onClick={gerarProposta}>
                   Gerar Orçamento →
                 </button>
-              </div>
-            ) : (
-              <div style={{ ...C.resumoBox, textAlign:"center", padding:"32px 20px" }}>
-                <div style={{ fontSize:12, color:"#d1d5db" }}>Resumo Cálculo</div>
-                <div style={{ fontSize:11, color:"#e5e7eb", marginTop:8 }}>Preencha os ambientes</div>
               </div>
             )}
           </div>
