@@ -5606,6 +5606,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [etapaEditando, setEtapaEditando] = useState(null);
   // Opção que está sendo "escolhida" no momento (anima is-chosen + is-fading)
   const [opcaoEscolhida, setOpcaoEscolhida] = useState(null);
+  // Índice da opção destacada via teclado (setas) — null = nenhum
+  const [opcaoFocada, setOpcaoFocada] = useState(null);
   // Texto temporário do input de referência (commit no Enter/blur)
   const [referenciaTemp, setReferenciaTemp] = useState(orcBase?.referencia || "");
   // Flag: usuário está editando a referência inline (abaixo do nome do cliente)
@@ -5931,6 +5933,217 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       setOpcaoEscolhida(null);
     }, 450);
   }
+
+  // ── Navegação por teclado nas perguntas (setas + Enter) ──
+  // Computa qual etapa está ativa (mesma lógica do IIFE de render).
+  // Não escuta na etapa "referencia" (input de texto cuida do Enter próprio).
+  useEffect(() => {
+    const ordem = ["referencia", "tipoObra", "tipoProjeto"];
+    if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
+
+    const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
+    const proximaPendente = ordem.find(k => !VALS_EXT[k]);
+    const etapaAtual = etapaEditando || proximaPendente;
+
+    // Sem etapa ativa, etapa de referência (input texto), ou animando: ignora
+    if (!etapaAtual || etapaAtual === "referencia" || opcaoEscolhida) return;
+
+    const opcoes = OPCOES[etapaAtual] || [];
+    if (!opcoes.length) return;
+
+    const handler = (e) => {
+      // Não captura se foco está em input/textarea/etc
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setOpcaoFocada(prev => {
+          if (prev === null) return 0;
+          return (prev + 1) % opcoes.length;
+        });
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setOpcaoFocada(prev => {
+          if (prev === null) return opcoes.length - 1;
+          return (prev - 1 + opcoes.length) % opcoes.length;
+        });
+      } else if (e.key === "Enter") {
+        if (opcaoFocadaRef.current === null) return;
+        e.preventDefault();
+        const op = opcoes[opcaoFocadaRef.current];
+        if (!op) return;
+        setOpcaoEscolhida(op);
+        setTimeout(() => {
+          SETS[etapaAtual](op);
+          setEtapaEditando(null);
+          setOpcaoEscolhida(null);
+          setOpcaoFocada(null);
+        }, 450);
+      } else if (e.key === "Escape") {
+        setOpcaoFocada(null);
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando, isComercial, opcaoEscolhida]);
+
+  // Reset opcaoFocada quando muda de etapa
+  const opcaoFocadaRef = useRef(null);
+  useEffect(() => { opcaoFocadaRef.current = opcaoFocada; }, [opcaoFocada]);
+  useEffect(() => {
+    setOpcaoFocada(null);
+  }, [tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando]);
+
+  // ── Navegação por teclado nos cômodos (setas + Tab + Enter) ──
+  // Refs pra ler valores mais recentes nos handlers
+  const comodoAbertoRef = useRef(null);
+  const comodoQtdFocadaRef = useRef(null);
+  useEffect(() => { comodoAbertoRef.current = comodoAberto; }, [comodoAberto]);
+  useEffect(() => { comodoQtdFocadaRef.current = comodoQtdFocada; }, [comodoQtdFocada]);
+
+  // Computa se está na fase de cômodos (perguntas concluídas)
+  // Memoizado pra não recriar handler a cada render
+  useEffect(() => {
+    const ordem = ["referencia", "tipoObra", "tipoProjeto"];
+    if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
+    const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
+    const proximaPendente = ordem.find(k => !VALS_EXT[k]);
+    const concluido = !proximaPendente && !etapaEditando;
+    if (!concluido || !configAtual) return;
+
+    const NUMEROS = [0, 1, 2, 3, 4, 5, 6];
+
+    const handler = (e) => {
+      const tag = (document.activeElement?.tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+
+      const flat = comodosFlatRef.current;
+      if (!flat || flat.length === 0) return;
+
+      const aberto = comodoAbertoRef.current;
+      const qtdIdx = comodoQtdFocadaRef.current;
+      const idxAberto = aberto ? flat.indexOf(aberto) : -1;
+
+      // ── ↓ ──
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (idxAberto === -1) {
+          // Primeira vez: foca o "1" do primeiro cômodo
+          setComodoAberto(flat[0]);
+          setComodoQtdFocada(1);
+        } else {
+          // Vai pro próximo cômodo (foca "1" dele)
+          const proximo = flat[Math.min(idxAberto + 1, flat.length - 1)];
+          setComodoAberto(proximo);
+          setComodoQtdFocada(1);
+        }
+        return;
+      }
+
+      // ── ↑ ──
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (idxAberto === -1) {
+          setComodoAberto(flat[0]);
+          setComodoQtdFocada(1);
+        } else {
+          const anterior = flat[Math.max(idxAberto - 1, 0)];
+          setComodoAberto(anterior);
+          setComodoQtdFocada(1);
+        }
+        return;
+      }
+
+      // Demais: precisam de cômodo aberto
+      if (!aberto) return;
+
+      // ── ← / → ──
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setComodoQtdFocada(prev => {
+          if (prev === null) return NUMEROS[NUMEROS.length - 1];
+          const i = NUMEROS.indexOf(prev);
+          return NUMEROS[(i - 1 + NUMEROS.length) % NUMEROS.length];
+        });
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setComodoQtdFocada(prev => {
+          if (prev === null) return NUMEROS[0];
+          const i = NUMEROS.indexOf(prev);
+          return NUMEROS[(i + 1) % NUMEROS.length];
+        });
+        return;
+      }
+
+      // ── Tab ──
+      // Navega entre números (0→1→2...→6); chegando no fim do cômodo, vai pro "1" do próximo
+      if (e.key === "Tab" && !e.shiftKey) {
+        e.preventDefault();
+        const i = qtdIdx === null ? -1 : NUMEROS.indexOf(qtdIdx);
+        if (i < NUMEROS.length - 1) {
+          setComodoQtdFocada(NUMEROS[i + 1]);
+        } else {
+          // Chegou no 6 → foca "1" do cômodo de baixo (sem confirmar nada)
+          if (idxAberto < flat.length - 1) {
+            setComodoAberto(flat[idxAberto + 1]);
+            setComodoQtdFocada(1);
+          }
+        }
+        return;
+      }
+      if (e.key === "Tab" && e.shiftKey) {
+        e.preventDefault();
+        const i = qtdIdx === null ? NUMEROS.length : NUMEROS.indexOf(qtdIdx);
+        if (i > 0) {
+          setComodoQtdFocada(NUMEROS[i - 1]);
+        } else {
+          // No 0 → vai pro "6" do cômodo de cima
+          if (idxAberto > 0) {
+            setComodoAberto(flat[idxAberto - 1]);
+            setComodoQtdFocada(6);
+          }
+        }
+        return;
+      }
+
+      // ── Enter ──
+      // Aplica a quantidade focada e foca o "1" do próximo cômodo automaticamente
+      if (e.key === "Enter" && qtdIdx !== null) {
+        e.preventDefault();
+        setQtdAbs(aberto, qtdIdx);
+        // Após aplicar, o cômodo sai dos disponíveis (a menos que qty=0).
+        // Pegamos o próximo da lista atualizada via setTimeout (próximo tick).
+        setTimeout(() => {
+          const novaFlat = comodosFlatRef.current;
+          if (!novaFlat || novaFlat.length === 0) {
+            setComodoAberto(null);
+            setComodoQtdFocada(null);
+            return;
+          }
+          // Se o cômodo aplicado virou "tocado" (qty>0), ele saiu da lista.
+          // Próximo da lista atual passa a ser na mesma posição. Se qtd=0, ainda está lá → pula 1.
+          const novoIdx = qtdIdx === 0 ? Math.min(idxAberto + 1, novaFlat.length - 1) : Math.min(idxAberto, novaFlat.length - 1);
+          setComodoAberto(novaFlat[novoIdx]);
+          setComodoQtdFocada(1);
+        }, 0);
+        return;
+      }
+
+      // ── Esc ──
+      if (e.key === "Escape") {
+        setComodoAberto(null);
+        setComodoQtdFocada(null);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando, isComercial, configAtual]);
 
   const grupoDeComodo = useMemo(() => {
     const map = {};
@@ -6270,8 +6483,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-row { display: grid; grid-template-columns: 32px 1fr 22px; align-items: center; gap: 14px; padding: 13px 16px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; text-align: left; font-family: inherit; font-size: 14px; color: #111; transition: background .15s ease; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; width: 100%; }
       .vk-flow2-row:last-child { border-bottom: 0; }
       .vk-flow2-row:hover:not(:disabled) { background: #fafaf7; }
-      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-arrow { opacity: 1; transform: translateX(0); color: #111; }
-      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx { color: #111; }
+      .vk-flow2-row.is-focused:not(:disabled) { background: #fafaf7; }
+      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-arrow,
+      .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-arrow { opacity: 1; transform: translateX(0); color: #111; }
+      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx,
+      .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-idx { color: #111; }
       .vk-flow2-row-idx { font-size: 10.5px; letter-spacing: 0.06em; color: #828a98; font-family: ui-monospace, "JetBrains Mono", monospace; font-weight: 500; transition: color .15s; }
       .vk-flow2-row-text { font-weight: 500; letter-spacing: -0.005em; }
       .vk-flow2-row-arrow { color: #828a98; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; display: inline-flex; justify-content: flex-end; }
@@ -6319,6 +6535,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [gruposAbertos, setGruposAbertos] = useState({});
   // Cômodo com popup visível (via hover OU via click no input)
   const [comodoAberto, setComodoAberto] = useState(null);
+  // Navegação por teclado: índice da quantidade (0-6) destacada visualmente.
+  // Não confirma sozinho — só Enter confirma. Tab também navega mas não confirma.
+  const [comodoQtdFocada, setComodoQtdFocada] = useState(null);
+  // Ref atualizada a cada render: lista plana de cômodos disponíveis em ordem (todos os grupos)
+  const comodosFlatRef = useRef([]);
   // Quando true, o popup está "travado" pelo clique no input:
   // - mouseLeave não fecha
   // - hover em outros cômodos é ignorado
@@ -6891,9 +7112,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       {(OPCOES[etapaAtual] || []).map((op, i) => {
                         const isChosen = opcaoEscolhida === op;
                         const isFading = !!opcaoEscolhida && !isChosen;
+                        const isFocused = opcaoFocada === i && !opcaoEscolhida;
                         let cls = "vk-flow2-row";
                         if (isChosen) cls += " is-chosen";
                         if (isFading) cls += " is-fading";
+                        if (isFocused) cls += " is-focused";
                         return (
                           <button
                             key={op}
@@ -7037,6 +7260,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
             {/* Container 1 coluna */}
             <div>
+            {(() => {
+              // Popula ref com lista plana de cômodos disponíveis em ordem (pra navegação por teclado)
+              const flat = [];
+              Object.entries(configAtual.grupos).forEach(([grupo, nomes]) => {
+                const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
+                if (isTerrea && grupo === "Outros") return;
+                nomes.forEach(n => {
+                  if (!comodosTocados.has(n) && (qtds[n] || 0) === 0) flat.push(n);
+                });
+              });
+              comodosFlatRef.current = flat;
+              return null;
+            })()}
             {Object.entries(configAtual.grupos).filter(([grupo]) => {
                 const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                 if (isTerrea && grupo === "Outros") return false;
@@ -7107,20 +7343,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     />
                     {[0,1,2,3,4,5,6].map(n => {
                       const isSel = n > 0 && q === n;
+                      const isKbFoc = comodoAberto === nome && comodoQtdFocada === n;
                       return (
                       <button key={n}
-                        onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); }}
+                        onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); setComodoQtdFocada(null); }}
                         style={{
-                          width:26, height:26, border:"1px solid transparent", borderRadius:4,
+                          width:26, height:26,
+                          border: isKbFoc && !isSel ? "1px solid #111" : "1px solid transparent",
+                          borderRadius:4,
                           background: isSel ? "#111" : "transparent",
                           color: isSel ? "#fff" : "#374151",
                           fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
                           display:"inline-flex", alignItems:"center", justifyContent:"center",
                           flexShrink:0, padding:0,
                           transition:"all 0.1s",
+                          outline: "none",
                         }}
-                        onMouseEnter={e => { if (!isSel) { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#fff"; } }}
-                        onMouseLeave={e => { if (!isSel) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#374151"; } }}>
+                        onMouseEnter={e => { if (!isSel && !isKbFoc) { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#fff"; } }}
+                        onMouseLeave={e => { if (!isSel && !isKbFoc) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#374151"; } }}>
                         {n}
                       </button>
                       );
