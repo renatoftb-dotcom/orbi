@@ -199,6 +199,11 @@ const api = {
     // Troca da própria senha. Exige senha atual pra prevenir abuso de
     // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
     trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
+    // Recuperação de senha self-service (público — sem token JWT).
+    // recuperar: usuário pede via email; backend manda link com token único.
+    // redefinir: usuário usa o token do link pra setar senha nova.
+    recuperar:    (email)                     => post("/auth/recuperar-senha", { email }),
+    redefinir:    (token, senha_nova)         => post("/auth/redefinir-senha", { token, senha_nova }),
   },
 
   // ── FEEDBACK IN-APP (qualquer usuário autenticado) ─────────

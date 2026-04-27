@@ -1227,6 +1227,11 @@ const api = {
     // Troca da própria senha. Exige senha atual pra prevenir abuso de
     // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
     trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
+    // Recuperação de senha self-service (público — sem token JWT).
+    // recuperar: usuário pede via email; backend manda link com token único.
+    // redefinir: usuário usa o token do link pra setar senha nova.
+    recuperar:    (email)                     => post("/auth/recuperar-senha", { email }),
+    redefinir:    (token, senha_nova)         => post("/auth/redefinir-senha", { token, senha_nova }),
   },
 
   // ── FEEDBACK IN-APP (qualquer usuário autenticado) ─────────
@@ -16990,7 +16995,17 @@ function getEstilos(loading) {
 // ═══════════════════════════════════════════════════════════════
 function TelaLogin({ onLogin }) {
   // Estado da tela ativa: "login" | "cadastro-form" | "cadastro-codigo"
-  const [tela, setTela] = useState("login");
+  // | "recuperar-senha" | "redefinir-senha"
+  // Detecta token de recuperação na URL ao iniciar — se tiver, abre direto
+  // a tela de redefinir. Token chega como ?recuperar=xxx.
+  const tokenRecuperarInicial = (() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("recuperar") || null;
+    } catch { return null; }
+  })();
+  const [tela, setTela] = useState(tokenRecuperarInicial ? "redefinir-senha" : "login");
+  const [tokenRecuperar] = useState(tokenRecuperarInicial);
   // Email persistido entre telas: usuário digitou no cadastro,
   // precisamos lembrar dele ao mostrar a tela do código.
   const [emailCadastro, setEmailCadastro] = useState("");
@@ -17020,13 +17035,36 @@ function TelaLogin({ onLogin }) {
     );
   }
 
-  return <TelaLoginEntrada onLogin={onLogin} onCriarConta={() => setTela("cadastro-form")} />;
+  if (tela === "recuperar-senha") {
+    return (
+      <TelaRecuperarSenha onVoltar={() => setTela("login")} />
+    );
+  }
+
+  if (tela === "redefinir-senha") {
+    return (
+      <TelaRedefinirSenha
+        token={tokenRecuperar}
+        onConcluido={() => {
+          // Limpa token da URL pra não ficar visível ao login
+          try {
+            const url = new URL(window.location.href);
+            url.searchParams.delete("recuperar");
+            window.history.replaceState({}, "", url.pathname + url.search);
+          } catch {}
+          setTela("login");
+        }}
+      />
+    );
+  }
+
+  return <TelaLoginEntrada onLogin={onLogin} onCriarConta={() => setTela("cadastro-form")} onEsqueciSenha={() => setTela("recuperar-senha")} />;
 }
 
 // ═══════════════════════════════════════════════════════════════
 // 1. Tela de Login (email + senha)
 // ═══════════════════════════════════════════════════════════════
-function TelaLoginEntrada({ onLogin, onCriarConta }) {
+function TelaLoginEntrada({ onLogin, onCriarConta, onEsqueciSenha }) {
   const [email, setEmail]               = useState("");
   const [senha, setSenha]               = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
@@ -17120,6 +17158,22 @@ function TelaLoginEntrada({ onLogin, onCriarConta }) {
             {loading ? "Entrando..." : "Entrar"}
           </button>
           {erro && <div style={S.erro}>{erro}</div>}
+          {/* Link de recuperação — discreto, abaixo do botão Entrar.
+              Padrão UX universal pra logins. */}
+          <div style={{ textAlign:"center", marginTop:14 }}>
+            <button
+              type="button"
+              onClick={onEsqueciSenha}
+              style={{
+                background:"none", border:"none", padding:0, cursor:"pointer",
+                fontFamily:"inherit", fontSize:12.5, color:"#9ca3af",
+                textDecoration:"underline", textUnderlineOffset:2,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = "#374151"; }}
+              onMouseLeave={e => { e.currentTarget.style.color = "#9ca3af"; }}>
+              Esqueci minha senha
+            </button>
+          </div>
         </div>
         {/* Link de cadastro — caminho de baixa fricção pra novos usuários */}
         <div style={S.linkSec}>
@@ -17463,6 +17517,271 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
         </div>
         <div style={S.linkSec}>
           <button style={S.linkBtn} onClick={onVoltar}>← Voltar</button>
+        </div>
+        <div style={S.rodape}>Vicke — Conectando elos</div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 4. Tela de Recuperar Senha (digite email → recebe link)
+// ═══════════════════════════════════════════════════════════════
+// Anti-enumeração: backend sempre retorna sucesso, então UI também
+// mostra a mesma mensagem de "se existir, vai receber". Não vazamos
+// se o email existe ou não.
+function TelaRecuperarSenha({ onVoltar }) {
+  const [email, setEmail]   = useState("");
+  const [loading, setLoading] = useState(false);
+  const [enviado, setEnviado] = useState(false);
+  const [erro, setErro]     = useState("");
+  const S = getEstilos(loading);
+
+  async function handleEnviar() {
+    const e = email.trim();
+    if (!e) { setErro("Digite seu e-mail."); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) { setErro("E-mail inválido."); return; }
+    setErro("");
+    setLoading(true);
+    try {
+      const res = await apiPost("/auth/recuperar-senha", { email: e });
+      if (res.ok) {
+        setEnviado(true);
+      } else {
+        setErro(res.error || "Não foi possível processar a solicitação.");
+      }
+    } catch (err) {
+      console.error("Erro recuperar senha:", err);
+      setErro("Não foi possível conectar ao servidor.");
+    }
+    setLoading(false);
+  }
+
+  function handleKey(ev) { if (ev.key === "Enter") handleEnviar(); }
+
+  // Tela de confirmação após envio. Texto é genérico de propósito —
+  // não confirma se o email realmente existe (anti-enumeração).
+  if (enviado) {
+    return (
+      <div style={S.wrap}>
+        <div style={S.box}>
+          <div style={S.header}>
+            <div style={S.titulo}>Vicke</div>
+            <div style={S.sub}>Verifique seu e-mail</div>
+          </div>
+          <div style={S.card}>
+            <div style={{ fontSize:13.5, color:"#374151", lineHeight:1.6, textAlign:"center" }}>
+              Se houver uma conta com o e-mail informado, você receberá em instantes um link para redefinir sua senha.
+            </div>
+            <div style={{ fontSize:12, color:"#9ca3af", lineHeight:1.5, marginTop:14, textAlign:"center" }}>
+              O link expira em 1 hora. Verifique também a pasta de spam.
+            </div>
+          </div>
+          <div style={S.linkSec}>
+            <button style={S.linkBtn} onClick={onVoltar}>← Voltar para o login</button>
+          </div>
+          <div style={S.rodape}>Vicke — Conectando elos</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.box}>
+        <div style={S.header}>
+          <div style={S.titulo}>Vicke</div>
+          <div style={S.sub}>Recuperar senha</div>
+        </div>
+        <div style={S.card}>
+          <div style={{ fontSize:12.5, color:"#6b7280", lineHeight:1.5, marginBottom:16 }}>
+            Digite o e-mail da sua conta. Vamos te enviar um link para criar uma nova senha.
+          </div>
+          <div style={S.grupo}>
+            <label style={S.label}>E-mail</label>
+            <input
+              style={S.input}
+              type="email"
+              placeholder="seu@email.com"
+              value={email}
+              onChange={ev => setEmail(ev.target.value)}
+              onKeyDown={handleKey}
+              autoFocus
+            />
+          </div>
+          <button style={S.btn} onClick={handleEnviar} disabled={loading}>
+            {loading ? "Enviando..." : "Enviar link"}
+          </button>
+          {erro && <div style={S.erro}>{erro}</div>}
+        </div>
+        <div style={S.linkSec}>
+          <button style={S.linkBtn} onClick={onVoltar}>← Voltar para o login</button>
+        </div>
+        <div style={S.rodape}>Vicke — Conectando elos</div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// 5. Tela de Redefinir Senha (com token vindo do link do email)
+// ═══════════════════════════════════════════════════════════════
+function TelaRedefinirSenha({ token, onConcluido }) {
+  const [senha, setSenha]                 = useState("");
+  const [confirmar, setConfirmar]         = useState("");
+  const [mostrarSenha, setMostrarSenha]   = useState(false);
+  const [erro, setErro]                   = useState("");
+  const [loading, setLoading]             = useState(false);
+  const [sucesso, setSucesso]             = useState(false);
+  const S = getEstilos(loading);
+
+  async function handleRedefinir() {
+    if (!token) { setErro("Link inválido ou expirado."); return; }
+    if (senha.length < 8) { setErro("A senha precisa ter pelo menos 8 caracteres."); return; }
+    if (senha !== confirmar) { setErro("As senhas não coincidem."); return; }
+    setErro("");
+    setLoading(true);
+    try {
+      const res = await apiPost("/auth/redefinir-senha", { token, senha_nova: senha });
+      if (res.ok) {
+        setSucesso(true);
+        // Volta pro login automaticamente após 2.5s
+        setTimeout(onConcluido, 2500);
+      } else {
+        setErro(res.error || "Não foi possível redefinir a senha.");
+      }
+    } catch (e) {
+      console.error("Erro redefinir senha:", e);
+      setErro("Não foi possível conectar ao servidor.");
+    }
+    setLoading(false);
+  }
+
+  function handleKey(ev) { if (ev.key === "Enter") handleRedefinir(); }
+
+  // Sem token na URL — usuário caiu aqui sem clicar no link válido.
+  // Não acontece em fluxo normal (TelaLogin só roteia aqui se tiver token).
+  // Mas defesa em profundidade.
+  if (!token) {
+    return (
+      <div style={S.wrap}>
+        <div style={S.box}>
+          <div style={S.header}>
+            <div style={S.titulo}>Vicke</div>
+            <div style={S.sub}>Link inválido</div>
+          </div>
+          <div style={S.card}>
+            <div style={{ fontSize:13.5, color:"#374151", lineHeight:1.6, textAlign:"center" }}>
+              Este link de redefinição de senha não é válido ou já foi usado.
+            </div>
+          </div>
+          <div style={S.linkSec}>
+            <button style={S.linkBtn} onClick={onConcluido}>← Voltar para o login</button>
+          </div>
+          <div style={S.rodape}>Vicke — Conectando elos</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (sucesso) {
+    return (
+      <div style={S.wrap}>
+        <div style={S.box}>
+          <div style={S.header}>
+            <div style={S.titulo}>Vicke</div>
+            <div style={S.sub}>Senha redefinida</div>
+          </div>
+          <div style={S.card}>
+            <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}>
+              <div style={{
+                width:48, height:48, borderRadius:"50%",
+                background:"#111", color:"#fff",
+                display:"flex", alignItems:"center", justifyContent:"center",
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+            </div>
+            <div style={{ fontSize:14, fontWeight:600, color:"#111", textAlign:"center", marginBottom:6 }}>
+              Pronto!
+            </div>
+            <div style={{ fontSize:13, color:"#6b7280", textAlign:"center", lineHeight:1.5 }}>
+              Sua senha foi redefinida. Você já pode entrar com a nova senha.
+            </div>
+          </div>
+          <div style={S.rodape}>Vicke — Conectando elos</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.box}>
+        <div style={S.header}>
+          <div style={S.titulo}>Vicke</div>
+          <div style={S.sub}>Crie uma nova senha</div>
+        </div>
+        <div style={S.card}>
+          <div style={{ fontSize:12.5, color:"#6b7280", lineHeight:1.5, marginBottom:16 }}>
+            Digite a nova senha que você quer usar a partir de agora. Mínimo de 8 caracteres.
+          </div>
+          <div style={S.grupo}>
+            <label style={S.label}>Nova senha</label>
+            <div style={{ position:"relative" }}>
+              <input
+                style={{ ...S.input, paddingRight: 40 }}
+                type={mostrarSenha ? "text" : "password"}
+                placeholder="••••••••"
+                value={senha}
+                onChange={ev => setSenha(ev.target.value)}
+                onKeyDown={handleKey}
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={() => setMostrarSenha(v => !v)}
+                aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+                style={{
+                  position:"absolute", right: 8, top:"50%", transform:"translateY(-50%)",
+                  background:"none", border:"none", padding: 6, cursor:"pointer",
+                  color:"#9ca3af", display:"flex", alignItems:"center", justifyContent:"center",
+                  borderRadius: 6,
+                }}>
+                {mostrarSenha ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                    <line x1="1" y1="1" x2="23" y2="23"/>
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                    <circle cx="12" cy="12" r="3"/>
+                  </svg>
+                )}
+              </button>
+            </div>
+          </div>
+          <div style={S.grupo}>
+            <label style={S.label}>Confirmar nova senha</label>
+            <input
+              style={S.input}
+              type={mostrarSenha ? "text" : "password"}
+              placeholder="••••••••"
+              value={confirmar}
+              onChange={ev => setConfirmar(ev.target.value)}
+              onKeyDown={handleKey}
+            />
+          </div>
+          <button style={S.btn} onClick={handleRedefinir} disabled={loading}>
+            {loading ? "Redefinindo..." : "Redefinir senha"}
+          </button>
+          {erro && <div style={S.erro}>{erro}</div>}
+        </div>
+        <div style={S.linkSec}>
+          <button style={S.linkBtn} onClick={onConcluido}>← Voltar para o login</button>
         </div>
         <div style={S.rodape}>Vicke — Conectando elos</div>
       </div>
@@ -18255,6 +18574,11 @@ function decorarEvento(ev) {
   if (acao === "usuario.senha_alterada") return { cor: COR_LARANJA, descricao: "Senha alterada" };
   if (acao === "usuario.senha_resetada") return { cor: COR_LARANJA, descricao: `Senha resetada por ${dados.alterado_por === "admin_master" ? "master" : "admin de empresa"} (alvo: ${dados.alvo_email || ev.recurso_id})` };
   if (acao === "usuario.troca_senha_falha") return { cor: COR_VERMELHO, descricao: `Tentativa de troca de senha falhou${dados.motivo ? " — " + dados.motivo.replace(/_/g, " ") : ""}` };
+  // Recuperação self-service ("Esqueci senha"): solicitação dispara email,
+  // redefinição efetiva acontece quando usuário clica no link e cria senha nova.
+  if (acao === "usuario.recuperacao_solicitada") return { cor: COR_LARANJA, descricao: `Recuperação de senha solicitada${dados.email_enviado === false ? " (falha no envio)" : ""}` };
+  if (acao === "usuario.recuperacao_rate_limit") return { cor: COR_VERMELHO, descricao: "Recuperação bloqueada por rate limit" };
+  if (acao === "usuario.senha_redefinida") return { cor: COR_VERDE, descricao: "Senha redefinida via recuperação" };
   if (acao === "usuario.email_alterado") return { cor: COR_LARANJA, descricao: "Email alterado" };
   if (acao === "usuario.nivel_alterado") return { cor: COR_LARANJA, descricao: `Nível alterado: ${dados.antes?.nivel} → ${dados.depois?.nivel}` };
   if (acao === "usuario.criado")        return { cor: COR_VERDE,    descricao: `Usuário criado: ${dados.email || ev.recurso_id}` };

@@ -323,6 +323,11 @@ function decorarEvento(ev) {
   if (acao === "usuario.senha_alterada") return { cor: COR_LARANJA, descricao: "Senha alterada" };
   if (acao === "usuario.senha_resetada") return { cor: COR_LARANJA, descricao: `Senha resetada por ${dados.alterado_por === "admin_master" ? "master" : "admin de empresa"} (alvo: ${dados.alvo_email || ev.recurso_id})` };
   if (acao === "usuario.troca_senha_falha") return { cor: COR_VERMELHO, descricao: `Tentativa de troca de senha falhou${dados.motivo ? " — " + dados.motivo.replace(/_/g, " ") : ""}` };
+  // Recuperação self-service ("Esqueci senha"): solicitação dispara email,
+  // redefinição efetiva acontece quando usuário clica no link e cria senha nova.
+  if (acao === "usuario.recuperacao_solicitada") return { cor: COR_LARANJA, descricao: `Recuperação de senha solicitada${dados.email_enviado === false ? " (falha no envio)" : ""}` };
+  if (acao === "usuario.recuperacao_rate_limit") return { cor: COR_VERMELHO, descricao: "Recuperação bloqueada por rate limit" };
+  if (acao === "usuario.senha_redefinida") return { cor: COR_VERDE, descricao: "Senha redefinida via recuperação" };
   if (acao === "usuario.email_alterado") return { cor: COR_LARANJA, descricao: "Email alterado" };
   if (acao === "usuario.nivel_alterado") return { cor: COR_LARANJA, descricao: `Nível alterado: ${dados.antes?.nivel} → ${dados.depois?.nivel}` };
   if (acao === "usuario.criado")        return { cor: COR_VERDE,    descricao: `Usuário criado: ${dados.email || ev.recurso_id}` };
