@@ -9173,7 +9173,7 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
           )}
         </div>
         <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
-          <span style={{ fontSize:22, fontWeight:800, color:"#111", letterSpacing:"-0.01em" }}>{fmt2(totalComImp)}</span>
+          <span style={{ fontSize:22, fontWeight:700, color:"#111" }}>{fmt2(totalComImp)}</span>
           <span style={{ fontSize:13, color:"#828a98" }}>R$ {fmtNum(calculo.areaTot > 0 ? Math.round(totalComImp / calculo.areaTot * 100) / 100 : 0)}/m²</span>
         </div>
         {/* Imposto inline — só quando temImposto E há valor */}
