@@ -11775,7 +11775,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       @keyframes nodeEditIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
       /* ===== TRILHA VERTICAL LATERAL DIREITA ===== */
-      .vk-flow-shell { display: grid; grid-template-columns: 1fr 280px; gap: 0; }
+      .vk-flow-shell { display: grid; grid-template-columns: 540px 240px; gap: 32px; max-width: 880px; }
       .vk-flow-stage { padding: 8px 24px 24px 0; }
       .vk-trilha-rail { background: transparent; border-left: 0; padding: 24px 28px 32px 8px; position: relative; align-self: stretch; }
       .vk-trilha-rail-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #828a98; font-weight: 600; margin-bottom: 20px; }
@@ -11885,8 +11885,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     qtdBtn:     { width:26, height:26, borderRadius:6, border:"1px solid #888", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
     qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#828a98" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
-    resumoBox:  { background:"#fff", border:"1px solid #333", borderRadius:12, padding:"20px 20px" },
-    resumoHdr:  { fontSize:10, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:16, paddingBottom:12, borderBottom:"1px solid #b8bec8" },
+    resumoBox:  { background:"#fff", border:"1px solid #c8cdd6", borderRadius:10, padding:"16px 18px" },
+    resumoHdr:  { fontSize:10, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12, paddingBottom:10, borderBottom:"1px solid #e5e7eb" },
     resumoSec:  { fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
     resumoVal:  { fontSize:18, fontWeight:700, color:"#111" },
     resumoM2:   { fontSize:12, color:"#828a98", marginTop:2 },
@@ -12537,7 +12537,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20, alignItems:"start",
+        <div style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
           marginTop:0,
           maxWidth:1100,
@@ -12577,14 +12577,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 return (
                   <span key={nome+"-ctrls"}
                     style={{
-                      display: "inline-flex", alignItems: "center", gap: 1,
+                      display: "inline-flex", alignItems: "center", gap: 2,
                       transition: "opacity 0.15s ease",
                       flexShrink: 0,
                       whiteSpace: "nowrap",
-                      background: "transparent",
-                      padding: 0,
-                      borderRadius: 4,
-                      border: "none",
+                      background: "#fff",
+                      padding: "3px 5px",
+                      borderRadius: 6,
+                      border: "1px solid #e5e7eb",
+                      boxShadow: "0 2px 8px -2px rgba(0,0,0,0.08)",
                       zIndex: 100,
                       position: "relative",
                     }}>
@@ -12614,10 +12615,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         }
                       }}
                       style={{
-                        width:28, height:22, border:"1px solid #d1d5db", borderRadius:4,
-                        background:"#fff", fontSize:11, fontWeight:500, color:"#111",
-                        padding:"0 2px", textAlign:"center", outline:"none", fontFamily:"inherit",
-                        flexShrink:0, marginRight:2,
+                        width:32, height:26, border:"1px solid #d1d5db", borderRadius:4,
+                        background:"#fff", fontSize:12.5, fontWeight:500, color:"#111",
+                        padding:"0 3px", textAlign:"center", outline:"none", fontFamily:"inherit",
+                        flexShrink:0, marginRight:3,
                         MozAppearance:"textfield",
                       }}
                     />
@@ -12625,28 +12626,28 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       <button key={n}
                         onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); }}
                         style={{
-                          width:22, height:22, border:"1px solid transparent", borderRadius:4,
+                          width:26, height:26, border:"1px solid transparent", borderRadius:4,
                           background: q===n ? "#111" : "transparent",
-                          color: q===n ? "#fff" : "#6b7280",
-                          fontSize:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
+                          color: q===n ? "#fff" : "#374151",
+                          fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
                           display:"inline-flex", alignItems:"center", justifyContent:"center",
                           flexShrink:0, padding:0,
                           transition:"all 0.1s",
                         }}
                         onMouseEnter={e => { if (q !== n) { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#fff"; } }}
-                        onMouseLeave={e => { if (q !== n) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#6b7280"; } }}>
+                        onMouseLeave={e => { if (q !== n) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#374151"; } }}>
                         {n}
                       </button>
                     ))}
                     {q > 0 && (
                       <>
-                        <span style={{ width:1, height:14, background:"#d1d5db", margin:"0 3px", alignSelf:"center" }} />
+                        <span style={{ width:1, height:16, background:"#d1d5db", margin:"0 3px", alignSelf:"center" }} />
                         <button
                           onClick={e => { e.stopPropagation(); setQtdAbs(nome, 0); setTravado(false); setComodoAberto(null); }}
                           title="Remover"
                           style={{
-                            width:22, height:22, border:"1px solid transparent", borderRadius:4,
-                            background:"transparent", color:"#dc2626", fontSize:12,
+                            width:26, height:26, border:"1px solid transparent", borderRadius:4,
+                            background:"transparent", color:"#dc2626", fontSize:13.5,
                             display:"inline-flex", alignItems:"center", justifyContent:"center",
                             cursor:"pointer", fontFamily:"inherit", flexShrink:0, padding:0,
                           }}>
@@ -12831,27 +12832,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
                   {!recolhido && disponiveis.length > 0 && (
                     <>
-                      {/* Disponíveis — layout em 2 colunas padronizado: nome (fixo) + quantidades (fundo cinza) */}
-                      <div style={{ position:"relative", marginTop:4, maxWidth:380 }}>
-                        {/* Faixa de fundo da coluna de quantidades + título */}
-                        <div style={{
-                          position:"absolute", top:0, right:0, bottom:0,
-                          width:180,
-                          background:"#f4f5f7",
-                          borderRadius:6,
-                          zIndex:0,
-                        }}>
-                          <div style={{
-                            fontSize:9, color:"#6b7280",
-                            textTransform:"uppercase", letterSpacing:1, fontWeight:600,
-                            padding:"4px 10px", textAlign:"center",
-                            borderBottom:"1px solid #e5e7eb",
-                          }}>
-                            Quantidades
-                          </div>
-                        </div>
-                        {/* Lista */}
-                        <div style={{ display:"flex", flexDirection:"column", gap:2, position:"relative", zIndex:1, paddingTop:22 }}>
+                      {/* Disponíveis — nome à esquerda, controles flutuantes à direita ao hover */}
+                      <div style={{ marginTop:4, maxWidth:380 }}>
+                        <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
                             return (
@@ -12863,21 +12846,21 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                 style={{
                                   position:"relative",
                                   display:"flex", alignItems:"center",
-                                  padding:"4px 8px", fontSize:13,
+                                  padding:"6px 10px", fontSize:14.5,
                                   color: isOpen ? "#111" : "#6b7280",
-                                  background: isOpen ? "#e5e7eb" : "transparent",
+                                  background: isOpen ? "#f4f5f7" : "transparent",
                                   borderRadius:6,
                                   userSelect:"none",
                                   transition:"color 0.15s, background 0.15s",
-                                  minHeight:28,
+                                  minHeight:34,
                                 }}>
                                 <span style={{ flex:1, fontWeight: isOpen ? 500 : 400, minWidth:0, whiteSpace:"nowrap" }}>
                                   {nome}
                                   {(nome === "Suíte" || nome === "Dormitório") && (
-                                    <span style={{ fontSize:10, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
+                                    <span style={{ fontSize:10.5, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
                                   )}
                                 </span>
-                                <span style={{ width:180, flexShrink:0, display:"flex", justifyContent:"center", alignItems:"center" }}>
+                                <span style={{ flexShrink:0, display:"flex", alignItems:"center" }}>
                                   {renderControles(nome, false)}
                                 </span>
                               </div>
@@ -12892,7 +12875,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   {escolhidos.length > 0 && (
                     <div style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
-                      gap:"6px 14px",
+                      gap:"8px 8px",
                       paddingTop: (!recolhido && disponiveis.length > 0) ? 10 : 0,
                       marginTop:  (!recolhido && disponiveis.length > 0) ? 10 : 4,
                       borderTop:  (!recolhido && disponiveis.length > 0) ? "1px dashed #e5e7eb" : "none",
@@ -12907,22 +12890,23 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             title="Clique para remover"
                             className="comodo-escolhido"
                             style={{
-                              display:"inline-flex", alignItems:"center", gap:4,
-                              fontSize:13, color:"#111",
+                              display:"inline-flex", alignItems:"center", gap:6,
+                              fontSize:13.5, color:"#111", fontWeight:500,
                               userSelect:"none",
                               whiteSpace:"nowrap",
                               flex:"0 0 auto",
                               cursor:"pointer",
-                              transition:"color 0.15s",
-                            }}>
-                            <span>
-                              {nome}
-                              {(nome === "Suíte" || nome === "Dormitório") && (
-                                <span style={{ fontSize:10, color:"#9ca3af", marginLeft:4, fontWeight:400 }}>(Sem Closet)</span>
-                              )}
-                              {" "}<strong style={{ fontWeight:600 }}>{q}</strong>
-                              <span className="comodo-m2" style={{ fontSize:11, color:"#9ca3af", marginLeft:6, transition:"color 0.15s" }}>{fmtNum(m2Total)} m²</span>
-                            </span>
+                              padding:"4px 10px",
+                              background:"#f4f5f7",
+                              border:"1px solid #e5e7eb",
+                              borderRadius:6,
+                              transition:"all 0.15s",
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.background="#fef2f2"; e.currentTarget.style.borderColor="#fecaca"; e.currentTarget.style.color="#dc2626"; }}
+                            onMouseLeave={e => { e.currentTarget.style.background="#f4f5f7"; e.currentTarget.style.borderColor="#e5e7eb"; e.currentTarget.style.color="#111"; }}>
+                            <strong style={{ fontWeight:700 }}>{q}</strong>
+                            <span>{nome}</span>
+                            <span className="comodo-m2" style={{ fontSize:11, color:"#9ca3af", fontWeight:400 }}>· {fmtNum(m2Total)} m²</span>
                           </span>
                         );
                       })}
@@ -12967,11 +12951,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   }} fmtNum={fmtNum} C={C} />
                 </div>
                 <button
-                  style={{ width:"100%", marginTop:12, background:"#f3f4f6", color:"#111", border:"1px solid #c8cdd6", borderRadius:10, padding:"13px 0", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
-                  onMouseEnter={e => { e.currentTarget.style.background="#e5e7eb"; e.currentTarget.style.borderColor="#d1d5db"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.borderColor="#e5e7eb"; }}
+                  style={{ width:"100%", marginTop:10, background:"#111", color:"#fff", border:"1px solid #111", borderRadius:8, padding:"10px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background="#000"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background="#111"; }}
                   onClick={gerarProposta}>
-                  Gerar Orçamento
+                  Gerar Orçamento →
                 </button>
               </div>
             ) : (
