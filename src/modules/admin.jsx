@@ -54,7 +54,7 @@ function Admin({ usuario, data, save, initialTab }) {
     btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#dc2626", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
-    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
     modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     modalLg: { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
@@ -286,7 +286,10 @@ function PainelEmpresas({ S }) {
             {loading ? "Carregando..." : `${empresas.length} empresa(s) · ${empresas.filter(e => e.ativo).length} ativa(s)`}
           </div>
         </div>
-        <button style={S.btn} onClick={() => setModalNova(true)}>+ Nova empresa</button>
+        <button style={{ ...S.btn, display:"inline-flex", alignItems:"center", gap:6 }} onClick={() => setModalNova(true)}>
+          <IconeMaster nome="plus" tamanho={14} cor="#fff" />
+          Nova empresa
+        </button>
       </div>
 
       {erro && <ErroAcesso erro={erro} S={S} />}
@@ -400,7 +403,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   if (!data && carregando) {
     return (
       <div style={S.body}>
-        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
         <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13 }}>
           <div style={{
             width:14, height:14, borderRadius:"50%",
@@ -417,7 +420,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   if (erro && !data) {
     return (
       <div style={S.body}>
-        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
         <div style={{ background:"#fef2f2", border:"1px solid #fecaca", color:"#991b1b", borderRadius:9, padding:"12px 16px", fontSize:13 }}>
           {erro}
         </div>
@@ -433,7 +436,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   return (
     <div style={S.body}>
       {/* ── Voltar ── */}
-      <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+      <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
 
       {/* ── Header com nome + status + ações principais ── */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28, gap:16, flexWrap:"wrap" }}>
@@ -537,13 +540,17 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                         <div style={{ display:"inline-flex", gap:6, justifyContent:"flex-end" }}>
                           <button
                             onClick={() => setUsuarioParaEditar(u)}
-                            style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
+                            title="Editar usuário"
+                            style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, display:"inline-flex", alignItems:"center", gap:5 }}>
+                            <IconeMaster nome="editar" tamanho={12} cor="#374151" />
                             Editar
                           </button>
                           {u.ativo && (
                             <button
                               onClick={() => setUsuarioParaResetar(u)}
-                              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
+                              title="Gerar nova senha temporária"
+                              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, display:"inline-flex", alignItems:"center", gap:5 }}>
+                              <IconeMaster nome="key" tamanho={12} cor="#374151" />
                               Resetar senha
                             </button>
                           )}
@@ -725,9 +732,7 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
           )}
           {podeExcluir && (
             <div style={{ fontSize:11.5, color:"#111", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
+              <IconeMaster nome="check" tamanho={12} cor="#111" />
               Confere
             </div>
           )}
@@ -857,11 +862,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
                 color: copiado ? "#fff" : "#374151",
                 display:"flex", alignItems:"center", gap:6,
               }}>
-              {copiado && (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              )}
+              <IconeMaster nome={copiado ? "check" : "copy"} tamanho={13} cor={copiado ? "#fff" : "#374151"} />
               {copiado ? "Copiado" : "Copiar"}
             </button>
           </div>
@@ -1356,24 +1357,36 @@ function PainelFeedback({ S }) {
   //   opts.preservarAberto=true → mantém o item expandido após reload. Usado
   //   pelos handlers de mudança que ocorrem dentro de um item (mudarStatus,
   //   salvarNotas) — usuário deve continuar trabalhando no mesmo item.
+  //   opts.filtrosOverride → opcional, usa esses filtros em vez do state atual
+  //   (útil quando precisamos sincronizar setFiltros + carregar de uma vez).
   async function carregar(opts = {}) {
     if (!opts.silencioso) setLoading(true);
     setErro(null);
     try {
-      const r = await api.admin.feedback.list(filtros);
+      const f = opts.filtrosOverride || filtros;
+      const r = await api.admin.feedback.list(f);
       setFeedback(r.feedback || []);
       setCounts(r.counts || {});
-      // Se mudança de filtros e item aberto desapareceu da lista, fecha.
-      // Se foi ação interna de item (preservarAberto), mantém abertoId.
-      if (!opts.preservarAberto && abertoId) {
-        // Avalia depois do setFeedback — não dá pra ler estado antigo aqui,
-        // delegamos pro próximo render. Na prática o filtro é raro mudar
-        // junto com item aberto.
-      }
     } catch (e) {
       setErro({ message: e.message, status: e.status });
     } finally {
       if (!opts.silencioso) setLoading(false);
+    }
+  }
+
+  // Quando usuário muda status de um item dentro do filtro atual e o item
+  // sai do filtro (ex: filtro="aberta" + mudou pra "em_andamento"), o item
+  // sumiria da tela e ele perderia o foco do trabalho. Solução: ampliar o
+  // filtro pra "todos" (status="") quando isso aconteceria — usuário continua
+  // vendo o item, agora com o badge novo, e pode continuar anotando.
+  function aoMudarStatusItem(novoStatus) {
+    if (filtros.status && filtros.status !== novoStatus) {
+      const filtrosNovos = { ...filtros, status: "" };
+      setFiltros(filtrosNovos);
+      // Carrega já com filtros novos (em vez de esperar o useEffect que tem race)
+      carregar({ silencioso: true, filtrosOverride: filtrosNovos });
+    } else {
+      carregar({ silencioso: true });
     }
   }
 
@@ -1451,7 +1464,15 @@ function PainelFeedback({ S }) {
               fb={fb}
               aberto={abertoId === fb.id}
               onToggle={() => setAbertoId(abertoId === fb.id ? null : fb.id)}
-              onAtualizado={(opts) => carregar({ silencioso: true, ...opts })}
+              onAtualizado={(opts = {}) => {
+                if (opts.statusMudou) {
+                  // Mudança de status: ampliar filtro se necessário pra item não sumir
+                  aoMudarStatusItem(opts.novoStatus);
+                } else {
+                  // Outras ações (salvar notas, etc): só recarregar silencioso
+                  carregar({ silencioso: true });
+                }
+              }}
               fmtDataHora={fmtDataHora}
             />
           ))}
@@ -1485,8 +1506,8 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
     try {
       await api.admin.feedback.update(fb.id, { status: novoStatus });
       piscarSalvo();
-      // Reload em background — não fechamos o item, deixamos o usuário continuar
-      onAtualizado({ preservarAberto: true });
+      // Avisa o pai que foi mudança de status pra ele ajustar filtro se precisar
+      onAtualizado({ statusMudou: true, novoStatus });
     } catch (e) {
       dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
     } finally {
@@ -1499,7 +1520,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
     try {
       await api.admin.feedback.update(fb.id, { notas_internas: notasLocal });
       piscarSalvo();
-      onAtualizado({ preservarAberto: true });
+      onAtualizado(); // recarregar sem mexer no filtro
     } catch (e) {
       dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
     } finally {
@@ -1590,13 +1611,15 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
           </div>
 
           <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>
               Notas internas (privadas)
+            </div>
+            <div style={{ fontSize:11, color:"#9ca3af", marginBottom:6, lineHeight:1.4 }}>
+              Anotações para você lembrar (link de issue, prioridade, contexto). Visível só pro time master.
             </div>
             <textarea
               value={notasLocal}
               onChange={e => setNotasLocal(e.target.value)}
-              placeholder="Anotações pra você lembrar — link pra issue, prioridade, contexto, etc."
               rows={3}
               style={{ ...S.input, resize:"vertical", minHeight:60, fontSize:12.5 }}
             />

@@ -14874,7 +14874,7 @@ function Admin({ usuario, data, save, initialTab }) {
     btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#dc2626", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
-    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
     modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     modalLg: { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
@@ -15106,7 +15106,10 @@ function PainelEmpresas({ S }) {
             {loading ? "Carregando..." : `${empresas.length} empresa(s) · ${empresas.filter(e => e.ativo).length} ativa(s)`}
           </div>
         </div>
-        <button style={S.btn} onClick={() => setModalNova(true)}>+ Nova empresa</button>
+        <button style={{ ...S.btn, display:"inline-flex", alignItems:"center", gap:6 }} onClick={() => setModalNova(true)}>
+          <IconeMaster nome="plus" tamanho={14} cor="#fff" />
+          Nova empresa
+        </button>
       </div>
 
       {erro && <ErroAcesso erro={erro} S={S} />}
@@ -15220,7 +15223,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   if (!data && carregando) {
     return (
       <div style={S.body}>
-        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
         <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13 }}>
           <div style={{
             width:14, height:14, borderRadius:"50%",
@@ -15237,7 +15240,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   if (erro && !data) {
     return (
       <div style={S.body}>
-        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+        <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
         <div style={{ background:"#fef2f2", border:"1px solid #fecaca", color:"#991b1b", borderRadius:9, padding:"12px 16px", fontSize:13 }}>
           {erro}
         </div>
@@ -15253,7 +15256,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   return (
     <div style={S.body}>
       {/* ── Voltar ── */}
-      <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24 }}>← Voltar</button>
+      <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
 
       {/* ── Header com nome + status + ações principais ── */}
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28, gap:16, flexWrap:"wrap" }}>
@@ -15357,13 +15360,17 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                         <div style={{ display:"inline-flex", gap:6, justifyContent:"flex-end" }}>
                           <button
                             onClick={() => setUsuarioParaEditar(u)}
-                            style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
+                            title="Editar usuário"
+                            style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, display:"inline-flex", alignItems:"center", gap:5 }}>
+                            <IconeMaster nome="editar" tamanho={12} cor="#374151" />
                             Editar
                           </button>
                           {u.ativo && (
                             <button
                               onClick={() => setUsuarioParaResetar(u)}
-                              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5 }}>
+                              title="Gerar nova senha temporária"
+                              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, display:"inline-flex", alignItems:"center", gap:5 }}>
+                              <IconeMaster nome="key" tamanho={12} cor="#374151" />
                               Resetar senha
                             </button>
                           )}
@@ -15545,9 +15552,7 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
           )}
           {podeExcluir && (
             <div style={{ fontSize:11.5, color:"#111", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
+              <IconeMaster nome="check" tamanho={12} cor="#111" />
               Confere
             </div>
           )}
@@ -15677,11 +15682,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
                 color: copiado ? "#fff" : "#374151",
                 display:"flex", alignItems:"center", gap:6,
               }}>
-              {copiado && (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-              )}
+              <IconeMaster nome={copiado ? "check" : "copy"} tamanho={13} cor={copiado ? "#fff" : "#374151"} />
               {copiado ? "Copiado" : "Copiar"}
             </button>
           </div>
@@ -16176,24 +16177,36 @@ function PainelFeedback({ S }) {
   //   opts.preservarAberto=true → mantém o item expandido após reload. Usado
   //   pelos handlers de mudança que ocorrem dentro de um item (mudarStatus,
   //   salvarNotas) — usuário deve continuar trabalhando no mesmo item.
+  //   opts.filtrosOverride → opcional, usa esses filtros em vez do state atual
+  //   (útil quando precisamos sincronizar setFiltros + carregar de uma vez).
   async function carregar(opts = {}) {
     if (!opts.silencioso) setLoading(true);
     setErro(null);
     try {
-      const r = await api.admin.feedback.list(filtros);
+      const f = opts.filtrosOverride || filtros;
+      const r = await api.admin.feedback.list(f);
       setFeedback(r.feedback || []);
       setCounts(r.counts || {});
-      // Se mudança de filtros e item aberto desapareceu da lista, fecha.
-      // Se foi ação interna de item (preservarAberto), mantém abertoId.
-      if (!opts.preservarAberto && abertoId) {
-        // Avalia depois do setFeedback — não dá pra ler estado antigo aqui,
-        // delegamos pro próximo render. Na prática o filtro é raro mudar
-        // junto com item aberto.
-      }
     } catch (e) {
       setErro({ message: e.message, status: e.status });
     } finally {
       if (!opts.silencioso) setLoading(false);
+    }
+  }
+
+  // Quando usuário muda status de um item dentro do filtro atual e o item
+  // sai do filtro (ex: filtro="aberta" + mudou pra "em_andamento"), o item
+  // sumiria da tela e ele perderia o foco do trabalho. Solução: ampliar o
+  // filtro pra "todos" (status="") quando isso aconteceria — usuário continua
+  // vendo o item, agora com o badge novo, e pode continuar anotando.
+  function aoMudarStatusItem(novoStatus) {
+    if (filtros.status && filtros.status !== novoStatus) {
+      const filtrosNovos = { ...filtros, status: "" };
+      setFiltros(filtrosNovos);
+      // Carrega já com filtros novos (em vez de esperar o useEffect que tem race)
+      carregar({ silencioso: true, filtrosOverride: filtrosNovos });
+    } else {
+      carregar({ silencioso: true });
     }
   }
 
@@ -16271,7 +16284,15 @@ function PainelFeedback({ S }) {
               fb={fb}
               aberto={abertoId === fb.id}
               onToggle={() => setAbertoId(abertoId === fb.id ? null : fb.id)}
-              onAtualizado={(opts) => carregar({ silencioso: true, ...opts })}
+              onAtualizado={(opts = {}) => {
+                if (opts.statusMudou) {
+                  // Mudança de status: ampliar filtro se necessário pra item não sumir
+                  aoMudarStatusItem(opts.novoStatus);
+                } else {
+                  // Outras ações (salvar notas, etc): só recarregar silencioso
+                  carregar({ silencioso: true });
+                }
+              }}
               fmtDataHora={fmtDataHora}
             />
           ))}
@@ -16305,8 +16326,8 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
     try {
       await api.admin.feedback.update(fb.id, { status: novoStatus });
       piscarSalvo();
-      // Reload em background — não fechamos o item, deixamos o usuário continuar
-      onAtualizado({ preservarAberto: true });
+      // Avisa o pai que foi mudança de status pra ele ajustar filtro se precisar
+      onAtualizado({ statusMudou: true, novoStatus });
     } catch (e) {
       dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
     } finally {
@@ -16319,7 +16340,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
     try {
       await api.admin.feedback.update(fb.id, { notas_internas: notasLocal });
       piscarSalvo();
-      onAtualizado({ preservarAberto: true });
+      onAtualizado(); // recarregar sem mexer no filtro
     } catch (e) {
       dialogo.alertar({ titulo: "Erro", mensagem: e.message, tipo: "erro" });
     } finally {
@@ -16410,13 +16431,15 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
           </div>
 
           <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>
               Notas internas (privadas)
+            </div>
+            <div style={{ fontSize:11, color:"#9ca3af", marginBottom:6, lineHeight:1.4 }}>
+              Anotações para você lembrar (link de issue, prioridade, contexto). Visível só pro time master.
             </div>
             <textarea
               value={notasLocal}
               onChange={e => setNotasLocal(e.target.value)}
-              placeholder="Anotações pra você lembrar — link pra issue, prioridade, contexto, etc."
               rows={3}
               style={{ ...S.input, resize:"vertical", minHeight:60, fontSize:12.5 }}
             />
@@ -17774,6 +17797,55 @@ function Mensagens({ usuario }) {
 //
 // Refresh: a cada 60s automaticamente quando aba está visível, via setInterval.
 
+// ═══════════════════════════════════════════════════════════════
+// ÍCONES OUTLINE (estilo Lucide) — usados no Master Dashboard,
+// drill-in de empresas, modais de senha. Paleta neutra preto/cinza.
+// Tamanho e cor configuráveis. Não importa biblioteca externa pra evitar
+// peso de bundle desnecessário.
+// ═══════════════════════════════════════════════════════════════
+function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
+  const props = {
+    width: tamanho, height: tamanho,
+    viewBox: "0 0 24 24", fill: "none",
+    stroke: cor, strokeWidth: "1.8",
+    strokeLinecap: "round", strokeLinejoin: "round",
+  };
+  switch (nome) {
+    case "mensagens":
+      // Caixa de email (estilo Lucide "inbox")
+      return (<svg {...props}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>);
+    case "feedback":
+      // Balão de chat outline
+      return (<svg {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>);
+    case "empresas":
+      // Building outline
+      return (<svg {...props}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="22" x2="9" y2="18"/><line x1="15" y1="22" x2="15" y2="18"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/></svg>);
+    case "usuarios":
+      // Users outline (3 pessoas)
+      return (<svg {...props}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>);
+    case "manutencao":
+      // Settings/wrench outline
+      return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
+    case "editar":
+      return (<svg {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
+    case "trash":
+      return (<svg {...props}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>);
+    case "key":
+      // Chave outline (resetar senha)
+      return (<svg {...props}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>);
+    case "back":
+      return (<svg {...props}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>);
+    case "plus":
+      return (<svg {...props}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>);
+    case "check":
+      return (<svg {...props}><polyline points="20 6 9 17 4 12"/></svg>);
+    case "copy":
+      return (<svg {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>);
+    default:
+      return null;
+  }
+}
+
 function DashboardMaster({ data, setAba, tentarTrocar }) {
   const [dash, setDash]     = useState(null);
   const [loading, setLoad]  = useState(true);
@@ -17804,12 +17876,14 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
 
   // Cards de navegação (mesmos do HomeMenu antigo). Mantidos pra preservar
   // o atalho de 1-clique pras subabas mais usadas.
+  // Cada item tem um identificador de ícone — renderizado por IconeMaster
+  // (definido logo abaixo) com SVG outline estilo Lucide, cor neutra.
   const modulos = [
-    { k:"mensagens",              label:"Mensagens",       desc:"Caixa do time VICKE" },
-    { k:"admin:feedback",         label:"Feedback",        desc:"Sugestões e bugs dos clientes" },
-    { k:"admin:empresas",         label:"Empresas",        desc:"Gerenciar empresas cadastradas" },
-    { k:"admin:usuarios-master",  label:"Usuários Master", desc:"Acessos da equipe Vicke" },
-    { k:"admin:manutencao",       label:"Manutenção",      desc:"Jobs e operações do sistema" },
+    { k:"mensagens",              icon:"mensagens",  label:"Mensagens",       desc:"Caixa do time VICKE" },
+    { k:"admin:feedback",         icon:"feedback",   label:"Feedback",        desc:"Sugestões e bugs dos clientes" },
+    { k:"admin:empresas",         icon:"empresas",   label:"Empresas",        desc:"Gerenciar empresas cadastradas" },
+    { k:"admin:usuarios-master",  icon:"usuarios",   label:"Usuários Master", desc:"Acessos da equipe Vicke" },
+    { k:"admin:manutencao",       icon:"manutencao", label:"Manutenção",      desc:"Jobs e operações do sistema" },
   ];
 
   return (
@@ -17840,8 +17914,11 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
             style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor="#e5e7eb"; }}>
-            <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:4 }}>{m.label}</div>
-            <div style={{ fontSize:11.5, color:"#9ca3af" }}>{m.desc}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+              <IconeMaster nome={m.icon} tamanho={18} cor="#374151" />
+              <div style={{ fontSize:13, fontWeight:600, color:"#111" }}>{m.label}</div>
+            </div>
+            <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
           </button>
         ))}
       </div>
@@ -18389,6 +18466,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
         display:"flex", alignItems:"center", justifyContent:"center",
         zIndex:900, padding:20,
+        fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
       }}>
         <div style={{
           background:"#fff", borderRadius:12, padding:"32px 28px",
@@ -18400,9 +18478,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
               background:"#111", color:"#fff",
               display:"flex", alignItems:"center", justifyContent:"center",
             }}>
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"/>
-              </svg>
+              <IconeMaster nome="check" tamanho={22} cor="#fff" />
             </div>
           </div>
           <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:6 }}>Recebido</div>
@@ -18419,6 +18495,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
       position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
       display:"flex", alignItems:"center", justifyContent:"center",
       zIndex:900, padding:20,
+      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         background:"#fff", borderRadius:12, padding:"24px 24px 20px",
