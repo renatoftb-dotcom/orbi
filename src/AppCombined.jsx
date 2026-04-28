@@ -13511,18 +13511,22 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   {!recolhido && disponiveis.length > 0 && (
                     <>
                       {/* Disponíveis — nome à esquerda, controles flutuantes à direita ao hover.
-                          MOBILE: comportamento sequencial — apenas o PRIMEIRO cômodo da
-                          ordem global (flat) aparece com o seletor de quantidade visível.
-                          Os outros cômodos do grupo ficam ocultos até chegar a vez deles.
-                          Sem hover/popup — tudo inline na linha. */}
+                          MOBILE: todos os cômodos VISÍVEIS, mas o seletor [0 1 2 3 4]
+                          aparece só no PRIMEIRO da fila (ordem global flat).
+                          Conforme o usuário define, o cômodo sai da lista de disponíveis
+                          e o seletor migra pro próximo. UX sequencial guiada. */}
                       <div style={{ marginTop:4, maxWidth: isMobileOrc ? "100%" : 380 }}>
                         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
-                            // Em mobile: todos os cômodos visíveis simultaneamente,
-                            // cada um com seu próprio seletor [input] 0 1 2 3 4 inline.
-                            // Usuário escolhe a quantidade direto na linha — não precisa
-                            // hover nem clique pra abrir popup.
+                            // Em mobile: identifica se este cômodo é o primeiro da fila global.
+                            // Só ele recebe o seletor visível (sempreVisivel=true).
+                            // Os demais cômodos aparecem com nome só, esperando a vez.
+                            let mostrarSeletor = !isMobileOrc; // desktop: default false (hover-driven)
+                            if (isMobileOrc) {
+                              const flat = comodosFlatRef.current || [];
+                              mostrarSeletor = flat.indexOf(nome) === 0;
+                            }
                             return (
                               <div key={nome}
                                 data-comodo-wrap
@@ -13535,7 +13539,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                   flexWrap: isMobileOrc ? "wrap" : "nowrap",
                                   padding: isMobileOrc ? "8px 6px" : "6px 10px",
                                   fontSize: isMobileOrc ? 14 : 14.5,
-                                  color: isOpen || isMobileOrc ? "#111" : "#6b7280",
+                                  // Em mobile, só o cômodo "ativo" (com seletor) tem destaque visual.
+                                  // Os outros ficam cinza pra deixar claro que estão aguardando a vez.
+                                  color: isOpen || (isMobileOrc && mostrarSeletor) ? "#111" : (isMobileOrc ? "#6b7280" : "#6b7280"),
                                   background: isOpen ? "#f4f5f7" : "transparent",
                                   borderRadius:6,
                                   userSelect:"none",
@@ -13543,14 +13549,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                   minHeight:34,
                                   gap: isMobileOrc ? 6 : 0,
                                 }}>
-                                <span style={{ flex: isMobileOrc ? "1 1 100%" : 1, fontWeight: isMobileOrc ? 600 : (isOpen ? 500 : 400), minWidth:0, whiteSpace:"nowrap" }}>
+                                <span style={{ flex: isMobileOrc ? "1 1 100%" : 1, fontWeight: (isMobileOrc && mostrarSeletor) ? 600 : (isOpen ? 500 : 400), minWidth:0, whiteSpace:"nowrap" }}>
                                   {nome}
                                   {(nome === "Suíte" || nome === "Dormitório") && (
                                     <span style={{ fontSize:10.5, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
                                   )}
                                 </span>
                                 <span style={{ flexShrink:0, display:"flex", alignItems:"center" }}>
-                                  {renderControles(nome, isMobileOrc)}
+                                  {renderControles(nome, mostrarSeletor)}
                                 </span>
                               </div>
                             );
