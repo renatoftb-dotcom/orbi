@@ -7484,8 +7484,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
                       }}
                       onBlur={e => {
-                        // Se o foco saiu do input mas continua na navegação por teclado,
-                        // não fechar o popup. Só limpar travado se realmente perdeu foco geral.
+                        // No mobile (iOS/Android), o teclado numérico não tem
+                        // botão "Enter" — usuário fecha o teclado tocando "OK",
+                        // "Concluído" ou fora do input, o que dispara blur (não keydown).
+                        // Aplica a quantidade aqui pra não perder o valor digitado.
+                        const v = parseInt(e.currentTarget.value) || 0;
+                        if (v > 0) {
+                          setQtdAbs(nome, v);
+                        }
                         setTravado(false);
                       }}
                       onKeyDown={e => {
