@@ -5996,7 +5996,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
     const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
     const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-    const etapaAtual = proximaPendente;
+    const etapaAtual = etapaEditando || proximaPendente;
 
     // Sem etapa ativa, etapa de referência (input texto), ou animando: ignora
     if (!etapaAtual || etapaAtual === "referencia" || opcaoEscolhida) return;
@@ -6307,6 +6307,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       /* ===== TRILHA VERTICAL LATERAL DIREITA ===== */
       .vk-flow-shell { display: grid; grid-template-columns: 540px 240px; gap: 32px; max-width: 880px; }
       .vk-flow-stage { padding: 8px 24px 24px 0; }
+      /* Mobile: shell vira 1 coluna. Pergunta ocupa largura toda; trilha
+         lateral some (a horizontal acima do título já dá o contexto de
+         progresso pro usuário). */
+      @media (max-width: 767px) {
+        .vk-flow-shell { grid-template-columns: 1fr; gap: 12px; max-width: 100%; }
+        .vk-flow-stage { padding: 4px 0 12px 0; }
+        .vk-trilha-rail { display: none; }
+      }
       .vk-trilha-rail { background: transparent; border-left: 0; padding: 24px 28px 32px 8px; position: relative; align-self: stretch; }
       .vk-trilha-rail-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #828a98; font-weight: 600; margin-bottom: 20px; }
 
@@ -6327,8 +6335,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-trilha-h-pop-row:last-child { border-bottom: 0; }
       .vk-trilha-h-pop-row:hover { background: #fafaf7; }
       .vk-trilha-h-pop-row.is-focused-kb { background: #fafaf7; }
-      .vk-trilha-h-pop-row:hover:not(.is-selected),
-      .vk-trilha-h-pop-row.is-focused-kb:not(.is-selected) { font-weight: 700; }
       .vk-trilha-h-pop-row.is-selected { background: #111; color: #fff; }
       .vk-trilha-h-pop-row.is-selected:hover,
       .vk-trilha-h-pop-row.is-selected.is-focused-kb { background: #111; }
@@ -6396,8 +6402,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-arrow { opacity: 1; transform: translateX(0); color: #111; }
       .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx,
       .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-idx { color: #111; }
-      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-text,
-      .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-text { font-weight: 700; }
       .vk-flow2-row-idx { font-size: 10.5px; letter-spacing: 0.06em; color: #828a98; font-family: ui-monospace, "JetBrains Mono", monospace; font-weight: 500; transition: color .15s; }
       .vk-flow2-row-text { font-weight: 500; letter-spacing: -0.005em; }
       .vk-flow2-row-arrow { color: #828a98; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; display: inline-flex; justify-content: flex-end; }
@@ -6405,6 +6409,25 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-row.is-chosen .vk-flow2-row-idx { color: rgba(255,255,255,0.5); }
       .vk-flow2-row.is-chosen .vk-flow2-row-arrow { color: #fff; opacity: 1; transform: translateX(0); }
       .vk-flow2-row.is-fading { opacity: 0; height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; overflow: hidden; transition: all .35s cubic-bezier(0.32, 0.72, 0, 1); }
+
+      /* ===== Mobile: ajustes globais do formulário de orçamento ===== */
+      @media (max-width: 767px) {
+        /* Reduz padding lateral pro conteúdo respirar mais */
+        .vk-orc-wrap { padding: 12px 14px !important; }
+        /* Título da pergunta menor pra caber em tela pequena */
+        .vk-flow2-title { font-size: 22px !important; line-height: 1.25 !important; }
+        .vk-flow2-card { max-width: 100% !important; }
+        .vk-flow2-input { max-width: 100% !important; padding: 12px 14px !important; }
+        .vk-flow2-hint { max-width: 100% !important; }
+        .vk-flow2-table { margin-top: 14px !important; }
+        .vk-flow2-row { padding: 14px !important; gap: 10px !important; }
+        /* Trilha horizontal: chips menores e quebram linha mais cedo */
+        .vk-trilha-h { gap: 6px !important; padding: 4px 0 !important; margin-bottom: 12px !important; }
+        .vk-trilha-h-node { padding: 4px 9px !important; }
+        .vk-trilha-h-val { font-size: 12px !important; }
+        .vk-trilha-h-key { font-size: 9px !important; }
+        /* Voltar e título da identificação ajustes */
+      }
     `;
     document.head.appendChild(s);
   }, []);
@@ -6584,7 +6607,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
     const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
     const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-    const concluido = !proximaPendente;
+    const concluido = !proximaPendente && !etapaEditando;
     if (!concluido || !configAtual) return;
 
     // Sequência de navegação: 0,1,2,3,4,5,6,"input"
@@ -6903,7 +6926,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }
 
   return (
-    <div style={C.wrap} ref={wrapRef}>
+    <div style={C.wrap} className="vk-orc-wrap" ref={wrapRef}>
 
       {/* ── Botão Voltar ── */}
       <div style={{ marginBottom:16 }}>
@@ -6974,7 +6997,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       {/* ── Barra de toggles (Arq/Eng/Marc + Imposto + Repetição) — sempre visível ── */}
       <div style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
-        padding:"12px 16px", marginBottom:6, maxWidth:1100,
+        padding:"12px 16px", marginBottom:16, maxWidth:1100,
         background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
       }}>
         {[
@@ -6998,7 +7021,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
               }} />
             </span>
-            <span style={{ fontSize:13, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
+            <span style={{ fontSize:14, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
               {label}
             </span>
           </label>
@@ -7021,7 +7044,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
             }} />
           </span>
-          <span style={{ fontSize:13, color: temImposto ? "#111" : "#828a98", fontWeight: temImposto ? 600 : 400, transition:"color 0.2s" }}>
+          <span style={{ fontSize:14, color: temImposto ? "#111" : "#828a98", fontWeight: temImposto ? 600 : 400, transition:"color 0.2s" }}>
             Imposto
           </span>
         </label>
@@ -7054,7 +7077,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
         {tipoProjeto !== "Conj. Comercial" && (
           <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"1px solid #e5e7eb" }}>
-            <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
+            <span style={{ fontSize:14, color:"#828a98" }}>Repetição</span>
             <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
               onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
             {editandoRep ? (
@@ -7090,11 +7113,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         // VALS expandido inclui referência
         const VALS_EXT = { referencia, ...VALS };
 
-        // Card central: só renderiza a próxima pergunta pendente (nunca volta pra editar).
-        // Edição via trilha lateral usa popover próprio (etapaEditando).
+        // Etapa atual: a primeira sem valor, OU a etapa que o usuário clicou pra editar
         const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-        const etapaAtual = proximaPendente;
-        const concluido = !proximaPendente;
+        const etapaAtual = etapaEditando || proximaPendente;
+        const concluido = !proximaPendente && !etapaEditando;
         const stepIdx = etapaAtual ? ordem.indexOf(etapaAtual) : ordem.length;
 
         // Labels e hints
@@ -7373,53 +7395,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               comodosFlatRef.current = flat;
               return null;
             })()}
-
-            {/* Header geral do card de cômodos — com botão Resetar */}
-            {(Object.keys(qtds).some(n => qtds[n] > 0) || comodosTocados.size > 0 || (isComercial && Object.values(grupoQtds || {}).some(v => v > 0))) && (
-              <div style={{
-                display:"flex", alignItems:"center", justifyContent:"space-between",
-                padding:"6px 4px 10px 4px",
-                borderBottom:"1px solid #f3f4f6",
-                marginBottom:8,
-              }}>
-                <span style={{ fontSize:11, color:"#828a98", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>
-                  Cômodos
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQtds({});
-                    setComodosTocados(new Set());
-                    if (isComercial) {
-                      setGrupoQtds({ "Por Loja":0, "Espaço Âncora":0, "Áreas Comuns":0, "Por Apartamento":0, "Galpao":0 });
-                    }
-                  }}
-                  style={{
-                    background:"transparent", border:"1px solid #d0d4db",
-                    color:"#6b7280", fontSize:11, fontFamily:"inherit",
-                    cursor:"pointer", padding:"3px 10px", borderRadius:4,
-                    transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.borderColor = "#dc2626";
-                    e.currentTarget.style.color = "#dc2626";
-                    e.currentTarget.style.background = "#fef2f2";
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.borderColor = "#d0d4db";
-                    e.currentTarget.style.color = "#6b7280";
-                    e.currentTarget.style.background = "transparent";
-                  }}>
-                  Resetar tudo
-                </button>
-              </div>
-            )}
-
             {Object.entries(configAtual.grupos).filter(([grupo]) => {
                 const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                 if (isTerrea && grupo === "Outros") return false;
                 return true;
-              }).map(([grupo, nomes], grupoIdx) => {
+              }).map(([grupo, nomes]) => {
               // Split: escolhidos vs disponíveis
               // Escolhidos: aparece se já foi tocado (mesmo que qty=0 agora)
               const escolhidos  = nomes.filter(n => comodosTocados.has(n) || (qtds[n] || 0) > 0);
@@ -7617,43 +7597,51 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
               return (
                 <div key={grupo} style={{ marginBottom:14 }}>
-                  {/* Header: retângulo cinza com bordas arredondadas. No comercial usa 2 linhas. */}
+                  {/* Header: retângulo cinza com bordas arredondadas */}
                   <div style={{
-                    display:"flex", flexDirection: isComercial ? "column" : "row",
-                    alignItems: isComercial ? "stretch" : "center", gap: isComercial ? 8 : 10,
+                    display:"flex", alignItems:"center", gap:10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
-                    padding:"6px 10px",
+                    padding:"5px 10px",
                     marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
                   }}>
-                    {/* Linha 1 (sempre): nome + estatísticas + chevron */}
-                    <div style={{ display:"flex", alignItems:"center", gap:10, width:"100%" }}>
-                      <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
-                        {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
-                      </span>
-                      <span style={{ flex:1 }} />
-                      {qtdGrupo > 0 && (
-                        <span style={{ fontSize:11, color:"#9ca3af", whiteSpace:"nowrap", flexShrink:0 }}>
-                          <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
-                        </span>
-                      )}
+                    <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
+                      {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
+                    </span>
+                    {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
+                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
                       <button
-                        onClick={() => toggleGrupo(grupo)}
-                        title={recolhido ? "Expandir" : "Recolher"}
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          setQtds({});
+                          setComodosTocados(new Set());
+                          setGruposAbertos({});
+                        }}
                         style={{
-                          width:18, height:18, border:"none", background:"transparent",
-                          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                          padding:0, fontFamily:"inherit", flexShrink:0,
-                          color:"#6b7280", fontSize:10,
+                          background:"transparent", border:"1px solid #d0d4db",
+                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
+                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
+                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
+                          flexShrink:0,
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = "#dc2626";
+                          e.currentTarget.style.color = "#dc2626";
+                          e.currentTarget.style.background = "#fef2f2";
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = "#d0d4db";
+                          e.currentTarget.style.color = "#6b7280";
+                          e.currentTarget.style.background = "transparent";
                         }}>
-                        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ transform: recolhido ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>
-                          <path d="M2 8l4-4 4 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
+                        Resetar
                       </button>
-                    </div>
+                    )}
+                    <span style={{ flex:1 }} />
 
-                    {/* Linha 2 (só comercial): Padrão/Tipologia/Tamanho + stepper de unidades */}
+                    {/* Controles específicos de grupos comerciais: Padrão/Tipologia/Tamanho + Quantidade de unidades */}
                     {isComercial && (
-                      <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", paddingTop:6, borderTop:"1px solid #e5e7eb" }}>
+                      <>
                         {["padrao","tipologia","tamanho"].map(key => {
                           const labels = { padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
                           const opcoes = { padrao:["Alto","Médio","Baixo"], tipologia:["Térreo","Sobrado"], tamanho:["Grande","Médio","Pequeno","Compacta"] };
@@ -7755,8 +7743,26 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             +
                           </button>
                         </div>
-                      </div>
+                      </>
                     )}
+
+                    {qtdGrupo > 0 && (
+                      <span style={{ fontSize:11, color:"#9ca3af" }}>
+                        <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
+                      </span>
+                    )}
+                    <button
+                      onClick={() => toggleGrupo(grupo)}
+                      title={recolhido ? "Expandir" : "Recolher"}
+                      style={{
+                        width:18, height:18, border:"none", background:"transparent",
+                        cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                        padding:0, fontFamily:"inherit", flexShrink:0,
+                      }}>
+                      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ transform: recolhido ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s" }}>
+                        <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </button>
                   </div>
 
                   {!recolhido && disponiveis.length > 0 && (
