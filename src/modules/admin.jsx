@@ -53,7 +53,7 @@ function Admin({ usuario, data, save, initialTab }) {
     btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
+    tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
     modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     modalLg: { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
@@ -801,25 +801,32 @@ function GraficoMensal({ mensal }) {
           const yOrc = padTop + (chartH - hOrc);
 
           // Cor da barra de dados:
-          // - mês atual (último) em preto sólido
-          // - meses anteriores em cinza médio
+          // - Mês atual (último com dados): azul vibrante #3b82f6 (estilo iOS)
+          //   pra dar destaque visual ao "agora"
+          // - Meses anteriores: cinza médio neutro
+          // Identidade do sistema mantida em preto/cinza/branco; só os gráficos
+          // ganham acento de cor pra hierarquia visual.
           const ehAtual = i === ultimoIdx && m.orcamentos > 0;
-          const corBarra = ehAtual ? "#111" : "#9ca3af";
+          const corBarra = ehAtual ? "#3b82f6" : "#9ca3af";
 
-          // Ganhos: segmento sobreposto. Como a barra principal já é preta
-          // no mês atual, o segmento de ganhos fica branco (inverso). Em
-          // meses anteriores, ganhos ficam em preto sobre a barra cinza.
+          // Ganhos: segmento sobreposto. Cor preta pra contrastar tanto com
+          // o azul (mês atual) quanto com o cinza (anteriores).
           const hGan = max > 0 ? (m.ganhos / max) * chartH : 0;
           const yGan = padTop + (chartH - hGan);
-          const corGanhos = ehAtual ? "#fff" : "#111";
+          const corGanhos = "#111";
 
-          const labelCor = ehAtual ? "#111" : "#9ca3af";
+          // Label do mês atual em azul + negrito pra reforçar o destaque.
+          const labelCor = ehAtual ? "#1e3a8a" : "#9ca3af";
           const labelPeso = ehAtual ? 600 : 400;
 
           return (
             <g key={m.mes}>
-              {/* Trilho de fundo (cinza claríssimo, sempre presente) */}
-              <path d={rectTopRounded(xBar, yTrilho, barraW, hTrilho, radius)} fill="#f3f4f6" />
+              {/* Trilho de fundo: SÓ aparece se mês tem dados.
+                  Meses vazios mostram só o label embaixo (visual mais limpo
+                  que esqueleto cheio de barras vazias). */}
+              {m.orcamentos > 0 && (
+                <path d={rectTopRounded(xBar, yTrilho, barraW, hTrilho, radius)} fill="#f3f4f6" />
+              )}
 
               {/* Barra de "criados" sobreposta — só aparece se houver dados */}
               {hOrc > 0 && (
@@ -855,7 +862,7 @@ function GraficoMensal({ mensal }) {
       {/* Legenda discreta abaixo */}
       <div style={{ display:"flex", gap:18, justifyContent:"center", marginTop:8, fontSize:11, color:"#9ca3af" }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          <span style={{ width:10, height:10, background:"#9ca3af", borderRadius:3, display:"inline-block" }} />
+          <span style={{ width:10, height:10, background:"#3b82f6", borderRadius:3, display:"inline-block" }} />
           Criados
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>

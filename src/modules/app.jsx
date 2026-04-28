@@ -1474,7 +1474,7 @@ export default function ModuloClientesFornecedores() {
                   {!sidebarColapsada && (
                     <>
                       Escritório
-                      <span style={{ fontSize:9, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
+                      <span style={{ fontSize:9, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
                     </>
                   )}
                 </span>
