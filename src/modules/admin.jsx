@@ -472,6 +472,8 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           Métricas
           {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#9ca3af", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
         </div>
+
+        {/* Cards de totais (snapshot atual) */}
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:10 }}>
           {/* Usuarios: prioriza array carregado; cai pra agregado da listagem (usuarios_total) */}
           <MetricaCard label="Usuários"   valor={data.usuarios?.length ?? data.usuarios_total} carregando={carregando && data.usuarios === undefined} />
@@ -479,6 +481,38 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           <MetricaCard label="Orçamentos" valor={c.orcamentos_total ?? data.orcamentos_total} carregando={carregando && data.counts === undefined} />
           <MetricaCard label="Obras"      valor={c.obras_total}      carregando={carregando && data.counts === undefined} />
         </div>
+
+        {/* Atividade últimos 30 dias — só renderiza se metricas chegou (fetch completo) */}
+        {data.metricas && (
+          <>
+            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+              Atividade — últimos 30 dias
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:10 }}>
+              <MetricaCard label="Orçamentos novos" valor={data.metricas.ultimos_30d.orcamentos} />
+              <MetricaCard label="Clientes novos"   valor={data.metricas.ultimos_30d.clientes} />
+              <MetricaCard label="Obras novas"      valor={data.metricas.ultimos_30d.obras} />
+            </div>
+
+            {/* Status breakdown — pintura horizontal de barras com cores neutras */}
+            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+              Status atual dos orçamentos
+            </div>
+            <BarraStatus status={data.metricas.status_orcamentos} />
+
+            {/* Gráfico de evolução mensal (SVG inline) */}
+            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+              Evolução mensal — orçamentos criados
+            </div>
+            <GraficoMensal mensal={data.metricas.mensal} />
+
+            {/* Top usuários por atividade */}
+            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+              Usuários mais ativos (últimos 30 dias)
+            </div>
+            <TopUsuarios usuarios={data.metricas.top_usuarios} fmtDataHora={fmtDataHora} />
+          </>
+        )}
       </div>
 
       {/* ── Seção: Usuários ── */}
@@ -652,6 +686,184 @@ function MetricaCard({ label, valor, carregando }) {
       <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#d1d5db" : "#111", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
         {carregando ? "…" : (valor ?? 0)}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BarraStatus — pintura horizontal proporcional dos status de orçamento.
+// ═══════════════════════════════════════════════════════════════
+// Mostra distribuição visual dos 4 status (rascunho, aberto, ganho, perdido)
+// como uma barra única segmentada. Tons neutros (paleta preto/cinza/branco
+// + 1 acento de destaque). Legenda abaixo com contagens.
+function BarraStatus({ status }) {
+  const total = (status.rascunhos || 0) + (status.abertos || 0) + (status.ganhos || 0) + (status.perdidos || 0);
+  if (total === 0) {
+    return (
+      <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius:8, background:"#fafafa" }}>
+        Nenhum orçamento cadastrado ainda.
+      </div>
+    );
+  }
+
+  // Cores: ganho preto sólido (destaque), aberto cinza médio, rascunho cinza
+  // claro, perdido vinho discreto. Mantém identidade neutra.
+  const segs = [
+    { key: "rascunhos", label: "Rascunhos", valor: status.rascunhos, cor: "#e5e7eb" },
+    { key: "abertos",   label: "Abertos",   valor: status.abertos,   cor: "#9ca3af" },
+    { key: "ganhos",    label: "Ganhos",    valor: status.ganhos,    cor: "#111" },
+    { key: "perdidos",  label: "Perdidos",  valor: status.perdidos,  cor: "#991b1b" },
+  ].filter(s => s.valor > 0);
+
+  return (
+    <div>
+      {/* Barra horizontal segmentada */}
+      <div style={{ display:"flex", height:10, borderRadius:6, overflow:"hidden", background:"#fafafa", border:"1px solid #f3f4f6" }}>
+        {segs.map(s => (
+          <div key={s.key}
+            title={`${s.label}: ${s.valor} (${Math.round(s.valor / total * 100)}%)`}
+            style={{ flex: s.valor, background: s.cor, transition:"flex 0.3s" }}
+          />
+        ))}
+      </div>
+      {/* Legenda com bullets */}
+      <div style={{ display:"flex", flexWrap:"wrap", gap:14, marginTop:10 }}>
+        {segs.map(s => (
+          <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"#374151" }}>
+            <span style={{ width:9, height:9, borderRadius:2, background:s.cor, display:"inline-block" }} />
+            <span style={{ fontWeight:500 }}>{s.label}</span>
+            <span style={{ color:"#9ca3af", fontVariantNumeric:"tabular-nums" }}>
+              {s.valor} ({Math.round(s.valor / total * 100)}%)
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GraficoMensal — bar chart SVG inline (últimos 6 meses).
+// ═══════════════════════════════════════════════════════════════
+// Sem libs externas. Cada mês = duas barras lado a lado: total criado
+// (cinza) e ganhos (preto). Valores em cima de cada barra. Eixo X = mês
+// (formato "Abr"). Sem grid pesado — design minimalista.
+function GraficoMensal({ mensal }) {
+  if (!mensal || mensal.length === 0) {
+    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius:8, background:"#fafafa" }}>Sem histórico ainda.</div>;
+  }
+
+  const max = Math.max(...mensal.map(m => m.orcamentos), 1); // evita divisão por 0
+  const W = 600; // viewBox width
+  const H = 160; // viewBox height
+  const padTop = 22, padBottom = 32, padLeft = 8, padRight = 8;
+  const chartH = H - padTop - padBottom;
+  const chartW = W - padLeft - padRight;
+  const grupoW = chartW / mensal.length;
+  const barraW = (grupoW - 12) / 2;
+
+  const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+  function labelMes(s) {
+    // "2026-04" → "Abr"
+    const [, m] = s.split("-");
+    return meses[parseInt(m, 10) - 1] || s;
+  }
+
+  return (
+    <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:8, padding:"12px 14px" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
+        {mensal.map((m, i) => {
+          const xGrupo = padLeft + i * grupoW;
+          const xBar1 = xGrupo + (grupoW - barraW * 2 - 4) / 2;
+          const xBar2 = xBar1 + barraW + 4;
+          const hOrc = max > 0 ? (m.orcamentos / max) * chartH : 0;
+          const hGan = max > 0 ? (m.ganhos / max) * chartH : 0;
+          const yOrc = padTop + (chartH - hOrc);
+          const yGan = padTop + (chartH - hGan);
+          return (
+            <g key={m.mes}>
+              {/* Barra "criados" — cinza */}
+              <rect x={xBar1} y={yOrc} width={barraW} height={hOrc} fill="#d1d5db" rx="2" />
+              {/* Barra "ganhos" — preta */}
+              <rect x={xBar2} y={yGan} width={barraW} height={hGan} fill="#111" rx="2" />
+              {/* Valor de criados (em cima) */}
+              {m.orcamentos > 0 && (
+                <text x={xBar1 + barraW/2} y={yOrc - 4} textAnchor="middle"
+                  fontSize="10" fill="#6b7280" fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
+                  {m.orcamentos}
+                </text>
+              )}
+              {/* Label do mês (em baixo) */}
+              <text x={xGrupo + grupoW/2} y={H - 12} textAnchor="middle"
+                fontSize="11" fill="#6b7280" fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
+                {labelMes(m.mes)}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      {/* Legenda */}
+      <div style={{ display:"flex", gap:14, justifyContent:"center", marginTop:6, fontSize:11, color:"#6b7280" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+          <span style={{ width:10, height:10, background:"#d1d5db", borderRadius:2, display:"inline-block" }} />
+          Criados
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+          <span style={{ width:10, height:10, background:"#111", borderRadius:2, display:"inline-block" }} />
+          Ganhos
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TopUsuarios — top 5 usuários da empresa por atividade no audit_log.
+// ═══════════════════════════════════════════════════════════════
+// "Atividade" = total de ações registradas em audit_log nos últimos 30 dias.
+// Aproximação útil de "quem está usando mais o sistema". Útil pra master ver
+// se há subutilização (uma empresa com 5 usuários mas só 1 ativo, p.ex.).
+function TopUsuarios({ usuarios, fmtDataHora }) {
+  if (!usuarios || usuarios.length === 0) {
+    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius:8, background:"#fafafa" }}>Sem usuários ativos.</div>;
+  }
+
+  // Calcula o máximo pra escalar a barra de progresso
+  const maxAcoes = Math.max(...usuarios.map(u => u.acoes_30d || 0), 1);
+
+  return (
+    <div style={{ border:"1px solid #f3f4f6", borderRadius:8, overflow:"hidden", background:"#fafafa" }}>
+      {usuarios.map((u, i) => {
+        const acoes = u.acoes_30d || 0;
+        const pct = maxAcoes > 0 ? (acoes / maxAcoes) * 100 : 0;
+        return (
+          <div key={u.id} style={{
+            padding:"10px 14px",
+            borderBottom: i < usuarios.length - 1 ? "1px solid #f3f4f6" : "none",
+            background:"#fff",
+          }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {u.nome}
+                </div>
+                <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>
+                  {u.email} · último login: {u.ultimo_login ? fmtDataHora(u.ultimo_login) : "nunca"}
+                </div>
+              </div>
+              <div style={{ fontSize:12, fontWeight:600, color:"#111", fontVariantNumeric:"tabular-nums", minWidth:60, textAlign:"right" }}>
+                {acoes} {acoes === 1 ? "ação" : "ações"}
+              </div>
+            </div>
+            {/* Barra de progresso visual */}
+            {acoes > 0 && (
+              <div style={{ marginTop:8, height:3, background:"#f3f4f6", borderRadius:2, overflow:"hidden" }}>
+                <div style={{ width:`${pct}%`, height:"100%", background:"#111", transition:"width 0.3s" }} />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
