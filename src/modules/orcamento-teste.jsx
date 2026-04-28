@@ -7819,10 +7819,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
-                            // Em mobile: identifica se este cômodo é o primeiro da fila global.
-                            // Só ele recebe o seletor visível (sempreVisivel=true).
-                            // Os demais cômodos aparecem com nome só, esperando a vez.
-                            let mostrarSeletor = !isMobileOrc; // desktop: default false (hover-driven)
+                            // Decide se o seletor [input] 0 1 2 3 4 fica VISÍVEL inline,
+                            // ou se ele só aparece em hover (comportamento desktop antigo).
+                            // - Desktop: false (default) → seletor só aparece no hover
+                            //   sobre o cômodo, via o state `comodoAberto` (renderControles
+                            //   internamente verifica `isOpen` e decide).
+                            // - Mobile: só o PRIMEIRO da fila global tem seletor visível.
+                            //   Os demais cômodos aparecem com nome só, esperando a vez.
+                            let mostrarSeletor = false;
                             if (isMobileOrc) {
                               const flat = comodosFlatRef.current || [];
                               mostrarSeletor = flat.indexOf(nome) === 0;
