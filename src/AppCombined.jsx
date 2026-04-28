@@ -15045,7 +15045,7 @@ function Admin({ usuario, data, save, initialTab }) {
     secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-    btnDestrutivo: { background:"#dc2626", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
     modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
@@ -15055,8 +15055,8 @@ function Admin({ usuario, data, save, initialTab }) {
     tabela:  { width:"100%", borderCollapse:"collapse", fontSize:13 },
     th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1px solid #e5e7eb", background:"#fafbfc" },
     td:      { padding:"12px", borderBottom:"1px solid #f3f4f6", verticalAlign:"middle" },
-    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#15803d", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:4, padding:"2px 8px" },
-    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#b91c1c", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:4, padding:"2px 8px" },
+    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#111", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:4, padding:"2px 8px" },
+    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
     vazio:   { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"40px 0" },
   };
 
@@ -15596,9 +15596,9 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       {!isMasterEmp && (
         <div style={{ ...S.secao, marginBottom:32 }}>
           <div style={S.secTit}>Ações administrativas</div>
-          <div style={{ border:"1px solid #fecaca", background:"#fffbfb", borderRadius:10, padding:"16px" }}>
+          <div style={{ border:"1px solid #e5e7eb", background:"#fafafa", borderRadius:10, padding:"16px" }}>
             <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom:12 }}>
-              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#991b1b" }}>Não tem como reverter.</strong>
+              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#111" }}>Não tem como reverter.</strong>
               <br/>
               Pra cortar acesso temporariamente, use "Editar → Inativar" — preserva dados.
             </div>
@@ -15738,22 +15738,25 @@ function BarraStatus({ status }) {
 // ═══════════════════════════════════════════════════════════════
 // GraficoMensal — bar chart SVG inline (últimos 6 meses).
 // ═══════════════════════════════════════════════════════════════
-// Sem libs externas. Cada mês = duas barras lado a lado: total criado
-// (cinza) e ganhos (preto). Valores em cima de cada barra. Eixo X = mês
-// (formato "Abr"). Sem grid pesado — design minimalista.
+// Estilo moderno: 1 barra por mês com cantos superiores arredondados
+// e "trilho" cinza claro de fundo (mostra "espaço" do mês mesmo se vazio).
+// Mês mais recente destacado em preto. Ganhos aparecem como segmento
+// preto SOBREPOSTO na barra de criados (mesma barra, parte de baixo).
+// Valor numérico aparece em cima de cada barra com dados.
 function GraficoMensal({ mensal }) {
   if (!mensal || mensal.length === 0) {
     return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius:8, background:"#fafafa" }}>Sem histórico ainda.</div>;
   }
 
   const max = Math.max(...mensal.map(m => m.orcamentos), 1); // evita divisão por 0
-  const W = 600; // viewBox width
-  const H = 160; // viewBox height
-  const padTop = 22, padBottom = 32, padLeft = 8, padRight = 8;
+  const W = 600;
+  const H = 200;
+  const padTop = 28, padBottom = 38, padLeft = 16, padRight = 16;
   const chartH = H - padTop - padBottom;
   const chartW = W - padLeft - padRight;
   const grupoW = chartW / mensal.length;
-  const barraW = (grupoW - 12) / 2;
+  const barraW = grupoW * 0.62; // barra ocupa ~62% da largura do grupo
+  const radius = Math.min(barraW * 0.32, 16); // cantos arredondados grandes (estilo iOS/Notion)
 
   const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
   function labelMes(s) {
@@ -15762,47 +15765,94 @@ function GraficoMensal({ mensal }) {
     return meses[parseInt(m, 10) - 1] || s;
   }
 
+  // Helper: gera path SVG de retângulo com SÓ os cantos superiores arredondados.
+  // Cantos inferiores ficam retos (encostam no "chão" do gráfico). Isso é o
+  // que dá o look moderno (estilo Apple Health, Notion, Linear).
+  function rectTopRounded(x, y, w, h, r) {
+    if (h <= 0) return "";
+    const rr = Math.min(r, h, w / 2);
+    return `M ${x},${y+h} L ${x},${y+rr} Q ${x},${y} ${x+rr},${y} L ${x+w-rr},${y} Q ${x+w},${y} ${x+w},${y+rr} L ${x+w},${y+h} Z`;
+  }
+
+  // Identifica último mês com dados pra destacar como "atual"
+  const ultimoIdx = mensal.length - 1;
+
   return (
-    <div style={{ background:"#fafafa", border:"1px solid #f3f4f6", borderRadius:8, padding:"12px 14px" }}>
+    <div style={{ background:"#fff", border:"1px solid #f3f4f6", borderRadius:10, padding:"16px 14px 12px" }}>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
         {mensal.map((m, i) => {
           const xGrupo = padLeft + i * grupoW;
-          const xBar1 = xGrupo + (grupoW - barraW * 2 - 4) / 2;
-          const xBar2 = xBar1 + barraW + 4;
+          const xBar = xGrupo + (grupoW - barraW) / 2;
+
+          // Trilho de fundo (sempre desenhado) — cinza super claro,
+          // ocupa altura cheia. Dá o look de "esqueleto da barra".
+          const yTrilho = padTop;
+          const hTrilho = chartH;
+
+          // Barra de dados (orçamentos criados) — sobreposta no trilho
           const hOrc = max > 0 ? (m.orcamentos / max) * chartH : 0;
-          const hGan = max > 0 ? (m.ganhos / max) * chartH : 0;
           const yOrc = padTop + (chartH - hOrc);
+
+          // Cor da barra de dados:
+          // - mês atual (último) em preto sólido
+          // - meses anteriores em cinza médio
+          const ehAtual = i === ultimoIdx && m.orcamentos > 0;
+          const corBarra = ehAtual ? "#111" : "#9ca3af";
+
+          // Ganhos: segmento sobreposto. Como a barra principal já é preta
+          // no mês atual, o segmento de ganhos fica branco (inverso). Em
+          // meses anteriores, ganhos ficam em preto sobre a barra cinza.
+          const hGan = max > 0 ? (m.ganhos / max) * chartH : 0;
           const yGan = padTop + (chartH - hGan);
+          const corGanhos = ehAtual ? "#fff" : "#111";
+
+          const labelCor = ehAtual ? "#111" : "#9ca3af";
+          const labelPeso = ehAtual ? 600 : 400;
+
           return (
             <g key={m.mes}>
-              {/* Barra "criados" — cinza */}
-              <rect x={xBar1} y={yOrc} width={barraW} height={hOrc} fill="#d1d5db" rx="2" />
-              {/* Barra "ganhos" — preta */}
-              <rect x={xBar2} y={yGan} width={barraW} height={hGan} fill="#111" rx="2" />
-              {/* Valor de criados (em cima) */}
+              {/* Trilho de fundo (cinza claríssimo, sempre presente) */}
+              <path d={rectTopRounded(xBar, yTrilho, barraW, hTrilho, radius)} fill="#f3f4f6" />
+
+              {/* Barra de "criados" sobreposta — só aparece se houver dados */}
+              {hOrc > 0 && (
+                <path d={rectTopRounded(xBar, yOrc, barraW, hOrc, radius)} fill={corBarra} />
+              )}
+
+              {/* Segmento de ganhos: pequena banda no topo da barra principal.
+                  Não aparece se não houver ganhos. Usa cor inversa pro contraste
+                  ficar visível dentro da barra. */}
+              {hGan > 0 && (
+                <path d={rectTopRounded(xBar, yGan, barraW, Math.min(hGan, hOrc), radius)} fill={corGanhos} />
+              )}
+
+              {/* Valor numérico em cima da barra (só se tiver dados) */}
               {m.orcamentos > 0 && (
-                <text x={xBar1 + barraW/2} y={yOrc - 4} textAnchor="middle"
-                  fontSize="10" fill="#6b7280" fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
+                <text x={xBar + barraW/2} y={yOrc - 8} textAnchor="middle"
+                  fontSize="13" fill={labelCor} fontWeight={labelPeso}
+                  fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
                   {m.orcamentos}
                 </text>
               )}
-              {/* Label do mês (em baixo) */}
-              <text x={xGrupo + grupoW/2} y={H - 12} textAnchor="middle"
-                fontSize="11" fill="#6b7280" fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
+
+              {/* Label do mês embaixo */}
+              <text x={xGrupo + grupoW/2} y={H - 14} textAnchor="middle"
+                fontSize="12" fill={labelCor} fontWeight={labelPeso}
+                fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
                 {labelMes(m.mes)}
               </text>
             </g>
           );
         })}
       </svg>
-      {/* Legenda */}
-      <div style={{ display:"flex", gap:14, justifyContent:"center", marginTop:6, fontSize:11, color:"#6b7280" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-          <span style={{ width:10, height:10, background:"#d1d5db", borderRadius:2, display:"inline-block" }} />
+      {/* Legenda discreta abaixo */}
+      <div style={{ display:"flex", gap:18, justifyContent:"center", marginTop:8, fontSize:11, color:"#9ca3af" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ width:10, height:10, background:"#9ca3af", borderRadius:3, display:"inline-block" }} />
           Criados
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:5 }}>
-          <span style={{ width:10, height:10, background:"#111", borderRadius:2, display:"inline-block" }} />
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ width:10, height:10, background:"#111", borderRadius:3, display:"inline-block" }} />
           Ganhos
         </div>
       </div>
@@ -16497,10 +16547,9 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
             disabled={salvando || isMasterEmp}
             title={isMasterEmp ? "Empresa master não pode ser inativada" : ""}
             style={{
-              ...(form.ativo ? S.btnDestrutivo : S.btn),
+              ...S.btnSec,
               opacity: (salvando || isMasterEmp) ? 0.5 : 1,
               cursor: (salvando || isMasterEmp) ? "not-allowed" : "pointer",
-              background: form.ativo ? "#dc2626" : "#16a34a",
             }}
           >
             {form.ativo ? "Inativar empresa" : "Reativar empresa"}
@@ -16844,7 +16893,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
 
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
             <button onClick={excluir} disabled={salvando}
-              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, color:"#b91c1c", borderColor:"#fecaca" }}>
+              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, color:"#6b7280" }}>
               Excluir
             </button>
           </div>
@@ -16978,7 +17027,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                     <td style={{ ...S.td, textAlign:"right" }}>
                       {!ehVoce && (
                         <button
-                          style={{ ...S.btnSec, color:"#dc2626", borderColor:"#fecaca", padding:"5px 12px", fontSize:12 }}
+                          style={{ ...S.btnSec, color:"#6b7280", padding:"5px 12px", fontSize:12 }}
                           onClick={() => excluirUsuario(u)}
                         >
                           Excluir
