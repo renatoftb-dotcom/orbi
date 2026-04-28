@@ -6426,7 +6426,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         .vk-trilha-h-node { padding: 4px 9px !important; }
         .vk-trilha-h-val { font-size: 12px !important; }
         .vk-trilha-h-key { font-size: 9px !important; }
-        /* Voltar e título da identificação ajustes */
+        /* Cômodos + Resumo: vira 1 coluna empilhada.
+           Resumo perde sticky (não funciona bem em coluna única em mobile). */
+        .vk-orc-comodos-shell { grid-template-columns: 1fr !important; gap: 14px !important; max-width: 100% !important; }
+        .vk-orc-resumo-col { position: static !important; top: auto !important; }
       }
     `;
     document.head.appendChild(s);
@@ -7364,7 +7367,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
-        <div style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
+        <div className="vk-orc-comodos-shell" style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
           marginTop:0,
           maxWidth:1100,
@@ -7871,7 +7874,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           </div>
 
           {/* Resumo Cálculo — só aparece quando tem cômodos */}
-          <div style={{ position:"sticky", top:24 }}>
+          <div className="vk-orc-resumo-col" style={{ position:"sticky", top:24 }}>
             {temComodos && calculo && (
               <div>
                 <div style={C.resumoBox}>
