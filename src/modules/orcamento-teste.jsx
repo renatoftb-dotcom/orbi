@@ -6578,7 +6578,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   function toggleGrupo(grupo) {
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
-  function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
+  // Em mobile, todos os grupos ficam sempre abertos — UX sequencial guiada
+  // funciona melhor com tudo visível pro usuário ver o que vem depois.
+  function isGrupoAberto(grupo) {
+    if (isMobileOrc) return true;
+    return gruposAbertos[grupo] !== false;
+  }
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -7898,6 +7903,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   que o scroll não seja reajustado ao selecionar (o próximo cômodo
                   sobe exatamente pra posição do cursor). */}
               {(() => {
+                // Folga é necessária no DESKTOP pra manter scroll estável
+                // ao selecionar cômodo (próximo sobe exatamente pra posição
+                // do cursor). Em mobile não tem hover/cursor preciso, e a
+                // folga só cria gap enorme entre os cômodos e o resumo —
+                // pula em mobile.
+                if (isMobileOrc) return null;
                 const gruposVisiveis = Object.entries(configAtual.grupos).filter(([g]) => {
                   const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                   if (isTerrea && g === "Outros") return false;
