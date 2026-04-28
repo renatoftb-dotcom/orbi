@@ -13536,7 +13536,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                 style={{
                                   position:"relative",
                                   display:"flex", alignItems:"center",
-                                  flexWrap: isMobileOrc ? "wrap" : "nowrap",
+                                  flexWrap:"nowrap", // mantém nome + seletor na mesma linha sempre
                                   padding: isMobileOrc ? "8px 6px" : "6px 10px",
                                   fontSize: isMobileOrc ? 14 : 14.5,
                                   // Em mobile, só o cômodo "ativo" (com seletor) tem destaque visual.
@@ -13547,9 +13547,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                   userSelect:"none",
                                   transition:"color 0.15s, background 0.15s",
                                   minHeight:34,
-                                  gap: isMobileOrc ? 6 : 0,
+                                  gap: isMobileOrc ? 8 : 0,
                                 }}>
-                                <span style={{ flex: isMobileOrc ? "1 1 100%" : 1, fontWeight: (isMobileOrc && mostrarSeletor) ? 600 : (isOpen ? 500 : 400), minWidth:0, whiteSpace:"nowrap" }}>
+                                <span style={{
+                                  flex:1, // cresce conforme tem espaço, sem forçar 100%
+                                  fontWeight: (isMobileOrc && mostrarSeletor) ? 600 : (isOpen ? 500 : 400),
+                                  minWidth:0,
+                                  // truncar com ... se nome for muito longo (cabe seletor ao lado)
+                                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                                }}>
                                   {nome}
                                   {(nome === "Suíte" || nome === "Dormitório") && (
                                     <span style={{ fontSize:10.5, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
