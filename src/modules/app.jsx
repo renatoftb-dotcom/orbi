@@ -41,6 +41,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "manutencao":
       // Settings/wrench outline
       return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
+    case "cub":
+      // Trending up — indica índice de custos
+      return (<svg {...props}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>);
     case "editar":
       return (<svg {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
     case "trash":
@@ -124,6 +127,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
     { k:"admin:empresas",         icon:"empresas",   label:"Empresas",        desc:"Gerenciar empresas cadastradas" },
     { k:"admin:usuarios-master",  icon:"usuarios",   label:"Usuários Master", desc:"Acessos da equipe Vicke" },
     { k:"admin:manutencao",       icon:"manutencao", label:"Manutenção",      desc:"Jobs e operações do sistema" },
+    { k:"admin:cub",              icon:"cub",        label:"CUB",             desc:"Custo Unitário Básico — atualização mensal" },
   ];
 
   return (
@@ -397,6 +401,7 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
     { k:"admin:empresas",         label:"Empresas",       desc:"Gerenciar empresas cadastradas" },
     { k:"admin:usuarios-master",  label:"Usuários Master", desc:"Acessos da equipe Vicke" },
     { k:"admin:manutencao",       label:"Manutenção",     desc:"Jobs e operações do sistema" },
+    { k:"admin:cub",              label:"CUB",            desc:"Custo Unitário Básico — atualização mensal" },
   ] : [
     { k:"clientes",         label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
     { k:"projetos:etapas",  label:"Projetos",     desc:"Etapas e prazos" },
@@ -1335,6 +1340,7 @@ export default function ModuloClientesFornecedores() {
     { k:"admin:empresas",          icon:"empresas",   label:"Empresas" },
     { k:"admin:usuarios-master",   icon:"usuarios",   label:"Usuários Master" },
     { k:"admin:manutencao",        icon:"manutencao", label:"Manutenção" },
+    { k:"admin:cub",               icon:"cub",        label:"CUB" },
   ] : [
     { k:"home",        icon:"home",       label:"Início" },
     { k:"clientes",    icon:"clientes",   label:"Clientes",     count: data?.clientes?.length },
@@ -1772,6 +1778,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "admin:usuarios-master" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="usuarios-master" />}
           {aba === "admin:manutencao" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="manutencao" />}
           {aba === "admin:feedback" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="feedback" />}
+          {aba === "admin:cub" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="cub" />}
           {/* Caixa de Mensagens — só Master */}
           {aba === "mensagens" && isMaster && <Mensagens usuario={usuario} />}
           </>)}
