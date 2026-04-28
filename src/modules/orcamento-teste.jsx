@@ -5855,6 +5855,21 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, [modoVer, orcBase?.id, qtds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wrapRef = useRef(null);
+
+  // Detecta mobile (<768px). Em mobile, a UX dos cômodos muda:
+  // - Sem hover (não tem mouse), o seletor de quantidade fica sempre visível
+  //   apenas pro PRIMEIRO cômodo disponível (resto espera a vez).
+  // - Botões limitados a 0-4 (em vez de 0-6).
+  // - Layout enquadrado, sem scroll horizontal e sem overflow vertical separado.
+  const [isMobileOrc, setIsMobileOrc] = useState(() => {
+    try { return window.innerWidth < 768; } catch { return false; }
+  });
+  useEffect(() => {
+    function onResize() { try { setIsMobileOrc(window.innerWidth < 768); } catch {} }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   useEffect(() => {
     if (!etapaEditando && !abertoGrupo) return;
     const h = e => {
@@ -6422,14 +6437,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         .vk-flow2-table { margin-top: 14px !important; }
         .vk-flow2-row { padding: 14px !important; gap: 10px !important; }
         /* Trilha horizontal: chips menores e quebram linha mais cedo */
-        .vk-trilha-h { gap: 6px !important; padding: 4px 0 !important; margin-bottom: 12px !important; }
-        .vk-trilha-h-node { padding: 4px 9px !important; }
-        .vk-trilha-h-val { font-size: 12px !important; }
+        .vk-trilha-h { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; padding: 4px 0 !important; margin-bottom: 12px !important; }
+        .vk-trilha-h-node { padding: 6px 10px !important; width: 100% !important; box-sizing: border-box !important; justify-content: flex-start !important; min-width: 0 !important; }
+        .vk-trilha-h-val { font-size: 12px !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; min-width: 0 !important; }
         .vk-trilha-h-key { font-size: 9px !important; }
+        /* Separador horizontal some em mobile (o grid já dá a separação visual) */
+        .vk-trilha-h-sep { display: none !important; }
         /* Cômodos + Resumo: vira 1 coluna empilhada.
            Resumo perde sticky (não funciona bem em coluna única em mobile). */
         .vk-orc-comodos-shell { grid-template-columns: 1fr !important; gap: 14px !important; max-width: 100% !important; }
         .vk-orc-resumo-col { position: static !important; top: auto !important; }
+        /* Card de cômodos: remove altura fixa e overflow interno em mobile.
+           A página inteira rola normal — sem scroll vertical separado pro card. */
+        .vk-orc-comodos-card { max-height: none !important; overflow-y: visible !important; padding: 6px 8px !important; }
       }
     `;
     document.head.appendChild(s);
@@ -7373,7 +7393,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           maxWidth:1100,
         }}>
 
-          <div style={{
+          <div className="vk-orc-comodos-card" style={{
             background:"#fff",
             border:"1px solid #e5e7eb",
             borderRadius:10,
@@ -7415,9 +7435,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               const renderControles = (nome, sempreVisivel) => {
                 const q = qtds[nome] || 0;
                 const isOpen = comodoAberto === nome;
+                // Em mobile, sempreVisivel decide pra cada cômodo (chamado decide).
+                // Em desktop, mantém lógica original (visível só em hover).
                 const visivel = sempreVisivel || isOpen;
-                // Só renderiza quando visível — quando fechado, não ocupa espaço no layout
                 if (!visivel) return null;
+                // Em mobile: botões 0-4 (limite). Em desktop: 0-6 (compatibilidade).
+                const numerosBotoes = isMobileOrc ? [0,1,2,3,4] : [0,1,2,3,4,5,6];
                 return (
                   <span key={nome+"-ctrls"}
                     style={{
@@ -7552,7 +7575,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         MozAppearance:"textfield",
                       }}
                     />
-                    {[0,1,2,3,4,5,6].map(n => {
+                    {numerosBotoes.map(n => {
                       const isSel = n > 0 && q === n;
                       const isKbFoc = comodoAberto === nome && comodoQtdFocada === n;
                       return (
@@ -7596,7 +7619,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 );
               };
 
-              const recolhido = !isGrupoAberto(grupo);
+              // Em mobile, "recolhido" não vale — precisamos garantir que
+              // o primeiro cômodo da fila apareça mesmo se o grupo dele estiver
+              // marcado como recolhido pelo usuário.
+              const recolhido = !isMobileOrc && !isGrupoAberto(grupo);
 
               return (
                 <div key={grupo} style={{ marginBottom:14 }}>
@@ -7770,36 +7796,50 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
                   {!recolhido && disponiveis.length > 0 && (
                     <>
-                      {/* Disponíveis — nome à esquerda, controles flutuantes à direita ao hover */}
-                      <div style={{ marginTop:4, maxWidth:380 }}>
+                      {/* Disponíveis — nome à esquerda, controles flutuantes à direita ao hover.
+                          MOBILE: comportamento sequencial — apenas o PRIMEIRO cômodo da
+                          ordem global (flat) aparece com o seletor de quantidade visível.
+                          Os outros cômodos do grupo ficam ocultos até chegar a vez deles.
+                          Sem hover/popup — tudo inline na linha. */}
+                      <div style={{ marginTop:4, maxWidth: isMobileOrc ? "100%" : 380 }}>
                         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
+                            // Em mobile: só renderiza a linha se for o primeiro cômodo
+                            // da lista plana global (flat). Os outros aguardam.
+                            if (isMobileOrc) {
+                              const flat = comodosFlatRef.current || [];
+                              const indexNaFlat = flat.indexOf(nome);
+                              if (indexNaFlat !== 0) return null;
+                            }
                             return (
                               <div key={nome}
                                 data-comodo-wrap
                                 data-comodo-nome={nome}
-                                onMouseEnter={() => abrirComodo(nome)}
-                                onMouseLeave={agendarFecharComodo}
+                                onMouseEnter={isMobileOrc ? undefined : () => abrirComodo(nome)}
+                                onMouseLeave={isMobileOrc ? undefined : agendarFecharComodo}
                                 style={{
                                   position:"relative",
                                   display:"flex", alignItems:"center",
-                                  padding:"6px 10px", fontSize:14.5,
-                                  color: isOpen ? "#111" : "#6b7280",
+                                  flexWrap: isMobileOrc ? "wrap" : "nowrap",
+                                  padding: isMobileOrc ? "8px 6px" : "6px 10px",
+                                  fontSize: isMobileOrc ? 14 : 14.5,
+                                  color: isOpen || isMobileOrc ? "#111" : "#6b7280",
                                   background: isOpen ? "#f4f5f7" : "transparent",
                                   borderRadius:6,
                                   userSelect:"none",
                                   transition:"color 0.15s, background 0.15s",
                                   minHeight:34,
+                                  gap: isMobileOrc ? 6 : 0,
                                 }}>
-                                <span style={{ flex:1, fontWeight: isOpen ? 500 : 400, minWidth:0, whiteSpace:"nowrap" }}>
+                                <span style={{ flex: isMobileOrc ? "1 1 100%" : 1, fontWeight: isMobileOrc ? 600 : (isOpen ? 500 : 400), minWidth:0, whiteSpace:"nowrap" }}>
                                   {nome}
                                   {(nome === "Suíte" || nome === "Dormitório") && (
                                     <span style={{ fontSize:10.5, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
                                   )}
                                 </span>
                                 <span style={{ flexShrink:0, display:"flex", alignItems:"center" }}>
-                                  {renderControles(nome, false)}
+                                  {renderControles(nome, isMobileOrc)}
                                 </span>
                               </div>
                             );
