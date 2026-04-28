@@ -644,6 +644,16 @@ const FEEDBACK_CATEGORIAS = [
 
 function BotaoFeedbackFlutuante({ usuario }) {
   const [modalAberto, setModalAberto] = useState(false);
+  // Detecta mobile pra ajustar offsets do botão.
+  const [isMobile, setIsMobile] = useState(() => {
+    try { return window.innerWidth < 768; } catch { return false; }
+  });
+  useEffect(() => {
+    function onResize() { try { setIsMobile(window.innerWidth < 768); } catch {} }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // Master não envia feedback pra si mesmo — caixa é pra clientes.
   if (usuario?.perfil === "master") return null;
 
@@ -653,9 +663,14 @@ function BotaoFeedbackFlutuante({ usuario }) {
         onClick={() => setModalAberto(true)}
         title="Enviar feedback"
         style={{
-          position:"fixed", right:24, bottom:24, zIndex: 800,
+          position:"fixed",
+          right: isMobile ? 16 : 24,
+          bottom: isMobile ? 16 : 24,
+          zIndex: 800,
           background:"#111", color:"#fff", border:"none",
-          borderRadius:"50%", width:48, height:48,
+          borderRadius:"50%",
+          width: isMobile ? 44 : 48,
+          height: isMobile ? 44 : 48,
           cursor:"pointer", fontFamily:"inherit",
           boxShadow:"0 4px 12px rgba(0,0,0,0.15)",
           display:"flex", alignItems:"center", justifyContent:"center",
@@ -867,6 +882,27 @@ export default function ModuloClientesFornecedores() {
   useEffect(() => {
     try { localStorage.setItem("vicke-sidebar-colapsada", String(sidebarColapsada)); } catch {}
   }, [sidebarColapsada]);
+
+  // Mobile: detecta tamanho de tela pra alternar comportamento da sidebar.
+  // <768px: sidebar vira overlay/drawer (fechada por default, abre por toque).
+  // >=768px: sidebar normal lado a lado com conteúdo (igual desktop).
+  // Listener no resize pra reagir a rotação do dispositivo / redimensionamento.
+  const [isMobile, setIsMobile] = useState(() => {
+    try { return window.innerWidth < 768; } catch { return false; }
+  });
+  useEffect(() => {
+    function onResize() {
+      try { setIsMobile(window.innerWidth < 768); } catch {}
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Sidebar drawer em mobile: estado controla se está aberta (overlay visível).
+  // Sempre começa fechada em mobile — usuário toca hamburguer pra abrir.
+  // Em desktop esse state é ignorado (sidebar sempre visível).
+  const [sidebarMobileAberta, setSidebarMobileAberta] = useState(false);
+
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null);
   const [clienteRetorno, setClienteRetorno] = useState(null);
   const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false);
@@ -912,12 +948,19 @@ export default function ModuloClientesFornecedores() {
 
   // tentarTrocar: quando há orçamento em tela cheia com dados não salvos,
   // consulta o handler registrado pelo FormOrcamento (window.__vickeOrcDirtyPrompt).
+  // Em mobile, fecha o drawer da sidebar após troca bem-sucedida (UX padrão
+  // de drawers — usuário escolhe item, drawer some pra mostrar conteúdo).
   function tentarTrocar(fn) {
+    const fnComFechamento = () => {
+      fn();
+      // Fecha drawer mobile (no-op em desktop)
+      try { setSidebarMobileAberta(false); } catch {}
+    };
     if (typeof window !== "undefined" && typeof window.__vickeOrcDirtyPrompt === "function") {
-      const absorveu = window.__vickeOrcDirtyPrompt(fn);
+      const absorveu = window.__vickeOrcDirtyPrompt(fnComFechamento);
       if (absorveu) return;
     }
-    fn();
+    fnComFechamento();
   }
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
@@ -1275,10 +1318,15 @@ export default function ModuloClientesFornecedores() {
     // por enquanto pra não quebrar dados antigos, só ocultos do menu.
   ];
 
+  // colapsadaEf: "colapsada efetiva" — em mobile, sidebar nunca está colapsada
+  // (o conceito não faz sentido em overlay). Sempre mostra com texto+ícone.
+  // Em desktop, usa a preferência salva do usuário.
+  const colapsadaEf = isMobile ? false : sidebarColapsada;
+
   const itemStyle = (ativo) => ({
     display:"flex", alignItems:"center",
-    justifyContent: sidebarColapsada ? "center" : "space-between",
-    padding: sidebarColapsada ? "10px 8px" : "8px 12px",
+    justifyContent: colapsadaEf ? "center" : "space-between",
+    padding: colapsadaEf ? "10px 8px" : (isMobile ? "12px 14px" : "8px 12px"), // touch target maior em mobile
     borderRadius:7, cursor:"pointer", fontSize:13,
     fontWeight: ativo ? 600 : 400, color: ativo ? "#111" : "#6b7280",
     background: ativo ? "#f3f4f6" : "transparent",
@@ -1291,42 +1339,92 @@ export default function ModuloClientesFornecedores() {
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      <div style={{ width: sidebarColapsada ? 56 : 220, minWidth: sidebarColapsada ? 56 : 220, transition:"width 0.18s ease, min-width 0.18s ease", background:"#fff", borderRight:"1px solid #f3f4f6", display:"flex", flexDirection:"column" }}>
+      {/* ── Backdrop mobile: fundo escurecido por trás do drawer.
+          Aparece SÓ em mobile quando sidebar está aberta. Toque fecha. */}
+      {isMobile && sidebarMobileAberta && (
+        <div
+          onClick={() => setSidebarMobileAberta(false)}
+          style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
+            zIndex:990,
+            transition:"opacity 0.2s",
+          }}
+        />
+      )}
+
+      {/* ── Sidebar: comportamento muda em mobile ──
+          Desktop (>= 768px): fluxo lateral normal, ocupa espaço da grid.
+          Mobile (< 768px): overlay flutuante (position:fixed), só aparece
+          quando sidebarMobileAberta=true, sempre expandida (220px),
+          ignora colapsadaEf. */}
+      <div style={
+        isMobile ? {
+          // Drawer mobile
+          position:"fixed", top:0, left:0, bottom:0,
+          width: 260, // um pouco mais largo que o desktop expandido (260) pro toque ser confortável
+          background:"#fff", borderRight:"1px solid #f3f4f6",
+          display:"flex", flexDirection:"column",
+          zIndex:991,
+          transform: sidebarMobileAberta ? "translateX(0)" : "translateX(-100%)",
+          transition:"transform 0.22s ease",
+          boxShadow: sidebarMobileAberta ? "2px 0 16px rgba(0,0,0,0.12)" : "none",
+        } : {
+          // Sidebar desktop normal
+          width: colapsadaEf ? 56 : 220,
+          minWidth: colapsadaEf ? 56 : 220,
+          transition:"width 0.18s ease, min-width 0.18s ease",
+          background:"#fff", borderRight:"1px solid #f3f4f6",
+          display:"flex", flexDirection:"column",
+        }
+      }>
         {/* ── Header da sidebar: nome do escritório + botão toggle ──
             Quando colapsada: apenas o botão toggle centralizado (sem título).
             Quando aberta: título à esquerda + toggle à direita. */}
         <div style={{
-          padding: sidebarColapsada ? "16px 8px" : "20px 16px 16px",
+          padding: (!isMobile && colapsadaEf) ? "16px 8px" : "20px 16px 16px",
           borderBottom:"1px solid #f3f4f6",
           display:"flex", alignItems:"center",
-          justifyContent: sidebarColapsada ? "center" : "space-between",
+          justifyContent: (!isMobile && colapsadaEf) ? "center" : "space-between",
           gap: 8,
         }}>
-          {!sidebarColapsada && (
+          {(isMobile || !colapsadaEf) && (
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:15, fontWeight:700, color:"#111", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
               <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>Vicke</div>
             </div>
           )}
-          {/* Toggle minimalista — ícone "panel-left" estilo Lucide.
-              Click alterna entre colapsada/expandida; preferência persiste
-              em localStorage. */}
+          {/* Botão de toggle: muda comportamento conforme dispositivo.
+              - Desktop: alterna entre sidebar colapsada/expandida (preferência localStorage)
+              - Mobile: fecha o drawer (X), pois colapsada não faz sentido em overlay */}
           <button
-            onClick={() => setSidebarColapsada(c => !c)}
-            title={sidebarColapsada ? "Expandir menu" : "Recolher menu"}
-            aria-label={sidebarColapsada ? "Expandir menu" : "Recolher menu"}
+            onClick={() => {
+              if (isMobile) setSidebarMobileAberta(false);
+              else setSidebarColapsada(c => !c);
+            }}
+            title={isMobile ? "Fechar menu" : (colapsadaEf ? "Expandir menu" : "Recolher menu")}
+            aria-label={isMobile ? "Fechar menu" : (colapsadaEf ? "Expandir menu" : "Recolher menu")}
             style={{
               background:"none", border:"none", cursor:"pointer",
-              padding: 6, color:"#9ca3af", lineHeight:0,
+              padding: isMobile ? 10 : 6, // touch target maior em mobile
+              color:"#9ca3af", lineHeight:0,
               display:"flex", alignItems:"center", justifyContent:"center",
               borderRadius:6, fontFamily:"inherit",
             }}
-            onMouseEnter={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.color="#374151"; }}
-            onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2"/>
-              <line x1="9" y1="3" x2="9" y2="21"/>
-            </svg>
+            onMouseEnter={e => { if (!isMobile) { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.color="#374151"; } }}
+            onMouseLeave={e => { if (!isMobile) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}>
+            {isMobile ? (
+              // X de fechar em mobile
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            ) : (
+              // Toggle panel-left em desktop
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+              </svg>
+            )}
           </button>
         </div>
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
@@ -1338,10 +1436,10 @@ export default function ModuloClientesFornecedores() {
                   <div key={k} style={{ display:"flex", flexDirection:"column", position:"relative" }}>
                     <button
                       id={k === "projetos" ? "trigger-projetos" : undefined}
-                      title={sidebarColapsada ? label : undefined}
+                      title={colapsadaEf ? label : undefined}
                       style={{
                         ...itemStyle(ativoNeleMesmoOuSubitem),
-                        justifyContent: sidebarColapsada ? "center" : "flex-start",
+                        justifyContent: colapsadaEf ? "center" : "flex-start",
                         gap: 6,
                         background: aba === k ? "#f3f4f6" : "transparent",
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
@@ -1350,7 +1448,7 @@ export default function ModuloClientesFornecedores() {
                       onMouseEnter={e => { if (aba !== k) e.currentTarget.style.background="#f9fafb"; }}
                       onMouseLeave={e => { if (aba !== k) e.currentTarget.style.background="transparent"; }}
                       onClick={(ev) => {
-                        if (sidebarColapsada) {
+                        if (colapsadaEf) {
                           // Sidebar colapsada: abre popover lateral com os subitens.
                           // Posiciona absoluto à direita do botão.
                           const rect = ev.currentTarget.getBoundingClientRect();
@@ -1361,11 +1459,11 @@ export default function ModuloClientesFornecedores() {
                         }
                       }}
                     >
-                      <span style={{ display:"flex", alignItems:"center", gap:10, flex:1, justifyContent: sidebarColapsada ? "center" : "flex-start" }}>
+                      <span style={{ display:"flex", alignItems:"center", gap:10, flex:1, justifyContent: colapsadaEf ? "center" : "flex-start" }}>
                         {icon && <IconeMaster nome={icon} tamanho={16} cor={ativoNeleMesmoOuSubitem ? "#111" : "#6b7280"} />}
-                        {!sidebarColapsada && label}
+                        {!colapsadaEf && label}
                       </span>
-                      {!sidebarColapsada && (
+                      {!colapsadaEf && (
                         <span style={{
                           color:"#9ca3af", fontSize:9,
                           transition:"transform 0.2s",
@@ -1376,7 +1474,7 @@ export default function ModuloClientesFornecedores() {
                       )}
                     </button>
                     {/* Submenus inline (accordion) — só quando expandida */}
-                    {!sidebarColapsada && projetosAberto && (
+                    {!colapsadaEf && projetosAberto && (
                       <div style={{ display:"flex", flexDirection:"column", gap:1, marginLeft:14, paddingLeft:8, borderLeft:"1px solid #f3f4f6", marginTop:2 }}>
                         {sub.map(s => {
                           const ativoSub = aba === s.k;
@@ -1418,7 +1516,7 @@ export default function ModuloClientesFornecedores() {
               }
               return (
                 <button key={k} style={itemStyle(aba===k)}
-                  title={sidebarColapsada ? label : undefined}
+                  title={colapsadaEf ? label : undefined}
                   onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
                   onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
                   onClick={() => {
@@ -1434,16 +1532,16 @@ export default function ModuloClientesFornecedores() {
                   }}>
                   <span style={{ display:"flex", alignItems:"center", gap:10 }}>
                     {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#111" : "#6b7280"} />}
-                    {!sidebarColapsada && label}
+                    {!colapsadaEf && label}
                   </span>
-                  {!sidebarColapsada && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
+                  {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
                 </button>
               );
             })}
           </nav>
           <div style={{ padding:"8px 8px 12px", borderTop:"1px solid #f3f4f6", display:"flex", flexDirection:"column", gap:2 }}>
             {/* Header da seção — esconde quando sidebar colapsada (não cabe). */}
-            {!isMaster && !sidebarColapsada && (
+            {!isMaster && !colapsadaEf && (
               <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 12px 2px" }}>
                 Configuração
               </div>
@@ -1451,13 +1549,13 @@ export default function ModuloClientesFornecedores() {
             {/* Botão Escritório só pra perfil escritório (Master vê tudo no menu principal) */}
             {!isMaster && (
               <button style={itemStyle(aba==="escritorio")}
-                title={sidebarColapsada ? "Escritório" : undefined}
+                title={colapsadaEf ? "Escritório" : undefined}
                 onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#111" : "#6b7280"} />
-                  {!sidebarColapsada && "Escritório"}
+                  {!colapsadaEf && "Escritório"}
                 </span>
               </button>
             )}
@@ -1465,13 +1563,13 @@ export default function ModuloClientesFornecedores() {
                 discretamente — uso raro mas existe. */}
             {isMaster && (
               <button style={itemStyle(aba==="escritorio")}
-                title={sidebarColapsada ? "Escritório (Master)" : undefined}
+                title={colapsadaEf ? "Escritório (Master)" : undefined}
                 onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
                   <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#111" : "#6b7280"} />
-                  {!sidebarColapsada && (
+                  {!colapsadaEf && (
                     <>
                       Escritório
                       <span style={{ fontSize:9, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
@@ -1481,7 +1579,7 @@ export default function ModuloClientesFornecedores() {
               </button>
             )}
             <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-              {!sidebarColapsada && (
+              {!colapsadaEf && (
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:12, fontWeight:600, color:"#374151", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
                   <div style={{ fontSize:11, color:"#d1d5db" }}>{usuario?.perfil || ""}</div>
@@ -1493,13 +1591,13 @@ export default function ModuloClientesFornecedores() {
                 style={{
                   background:"none", border:"none", color:"#9ca3af",
                   fontSize:12, cursor:"pointer", fontFamily:"inherit",
-                  padding: sidebarColapsada ? "6px" : "4px 8px",
+                  padding: colapsadaEf ? "6px" : "4px 8px",
                   borderRadius:6, lineHeight:0,
                   display:"flex", alignItems:"center", justifyContent:"center",
                 }}
                 onMouseEnter={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.color="#374151"; }}
                 onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
-                {sidebarColapsada ? (
+                {colapsadaEf ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
                     <polyline points="16 17 21 12 16 7"/>
@@ -1509,7 +1607,7 @@ export default function ModuloClientesFornecedores() {
               </button>
             </div>
             {/* Importar/Exportar — só master. Discreto, no rodapé. */}
-            {isMaster && !sidebarColapsada && (
+            {isMaster && !colapsadaEf && (
               <div style={{ padding:"4px 12px 8px", display:"flex", gap:6, fontSize:11 }}>
                 <label style={{ flex:1, textAlign:"center", color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
@@ -1529,6 +1627,41 @@ export default function ModuloClientesFornecedores() {
       </div>
 
       <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        {/* ── Header mobile: aparece só em <768px. Tem hamburguer pra abrir
+            o drawer da sidebar + nome do escritório (compacto). ── */}
+        {isMobile && (
+          <div style={{
+            display:"flex", alignItems:"center", gap:10,
+            padding:"10px 14px",
+            borderBottom:"1px solid #f3f4f6",
+            background:"#fff",
+            zIndex: 10,
+          }}>
+            <button
+              onClick={() => setSidebarMobileAberta(true)}
+              aria-label="Abrir menu"
+              style={{
+                background:"none", border:"none",
+                padding:8, lineHeight:0,
+                cursor:"pointer", color:"#374151",
+                borderRadius:6,
+                display:"flex", alignItems:"center", justifyContent:"center",
+              }}>
+              {/* Ícone hamburguer Lucide */}
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
+            <div style={{
+              fontSize:14, fontWeight:600, color:"#111",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1,
+            }}>
+              {nomeEscritorio}
+            </div>
+          </div>
+        )}
         {backendOffline && (
           <div style={{ background:"#fef2f2", borderBottom:"1px solid #fecaca", padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
             <div style={{ fontSize:12, color:"#991b1b" }}>
@@ -1638,7 +1771,7 @@ export default function ModuloClientesFornecedores() {
     {/* ── Popover dos subitens de Projetos (sidebar colapsada) ──
         Posicionado fixed na coordenada do trigger. Click fora fecha (handler
         em useEffect mais acima). Aparece à direita do botão na sidebar. */}
-    {popoverProjetos && sidebarColapsada && (() => {
+    {popoverProjetos && colapsadaEf && (() => {
       const projetosItem = MENU.find(m => m.k === "projetos");
       if (!projetosItem) return null;
       return (
