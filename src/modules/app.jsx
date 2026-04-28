@@ -12,6 +12,83 @@
 //
 // Refresh: a cada 60s automaticamente quando aba está visível, via setInterval.
 
+// ═══════════════════════════════════════════════════════════════
+// ÍCONES OUTLINE (estilo Lucide) — usados no Master Dashboard,
+// drill-in de empresas, modais de senha. Paleta neutra preto/cinza.
+// Tamanho e cor configuráveis. Não importa biblioteca externa pra evitar
+// peso de bundle desnecessário.
+// ═══════════════════════════════════════════════════════════════
+function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
+  const props = {
+    width: tamanho, height: tamanho,
+    viewBox: "0 0 24 24", fill: "none",
+    stroke: cor, strokeWidth: "1.8",
+    strokeLinecap: "round", strokeLinejoin: "round",
+  };
+  switch (nome) {
+    case "mensagens":
+      // Caixa de email (estilo Lucide "inbox")
+      return (<svg {...props}><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>);
+    case "feedback":
+      // Balão de chat outline
+      return (<svg {...props}><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>);
+    case "empresas":
+      // Building outline
+      return (<svg {...props}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="9" y1="22" x2="9" y2="18"/><line x1="15" y1="22" x2="15" y2="18"/><line x1="9" y1="6" x2="15" y2="6"/><line x1="9" y1="10" x2="15" y2="10"/><line x1="9" y1="14" x2="15" y2="14"/></svg>);
+    case "usuarios":
+      // Users outline (3 pessoas)
+      return (<svg {...props}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>);
+    case "manutencao":
+      // Settings/wrench outline
+      return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
+    case "cub":
+      // Trending up + Real (R$) — indica índice de custos
+      return (<svg {...props}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>);
+    case "editar":
+      return (<svg {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
+    case "trash":
+      return (<svg {...props}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>);
+    case "key":
+      // Chave outline (resetar senha)
+      return (<svg {...props}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>);
+    case "back":
+      return (<svg {...props}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>);
+    case "plus":
+      return (<svg {...props}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>);
+    case "check":
+      return (<svg {...props}><polyline points="20 6 9 17 4 12"/></svg>);
+    case "copy":
+      return (<svg {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>);
+    // ── Ícones da sidebar do escritório (perfil cliente) ───────────
+    case "home":
+      // Casa outline
+      return (<svg {...props}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>);
+    case "painel":
+      // Grid 2x2 (dashboard)
+      return (<svg {...props}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>);
+    case "clientes":
+      // 2 pessoas (mais sutil que users de 3)
+      return (<svg {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>);
+    case "projetos":
+      // Pasta (folder)
+      return (<svg {...props}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>);
+    case "projetos-orcamentos":
+      // Documento com $
+      return (<svg {...props}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6M9 15h6"/></svg>);
+    case "projetos-andamento":
+      // Clipboard com check (em andamento)
+      return (<svg {...props}><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>);
+    case "obras":
+      // Casa com martelo / construção
+      return (<svg {...props}><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h.01M15 17h.01"/></svg>);
+    case "escritorio":
+      // Engrenagem / settings outline (mesmo ícone que manutenção mas menor uso)
+      return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
+    default:
+      return null;
+  }
+}
+
 function DashboardMaster({ data, setAba, tentarTrocar }) {
   const [dash, setDash]     = useState(null);
   const [loading, setLoad]  = useState(true);
@@ -42,12 +119,15 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
 
   // Cards de navegação (mesmos do HomeMenu antigo). Mantidos pra preservar
   // o atalho de 1-clique pras subabas mais usadas.
+  // Cada item tem um identificador de ícone — renderizado por IconeMaster
+  // (definido logo abaixo) com SVG outline estilo Lucide, cor neutra.
   const modulos = [
-    { k:"mensagens",              label:"Mensagens",       desc:"Caixa do time VICKE" },
-    { k:"admin:empresas",         label:"Empresas",        desc:"Gerenciar empresas cadastradas" },
-    { k:"admin:usuarios-master",  label:"Usuários Master", desc:"Acessos da equipe Vicke" },
-    { k:"admin:manutencao",       label:"Manutenção",      desc:"Jobs e operações do sistema" },
-    { k:"admin:cub",              label:"CUB",             desc:"Custo Unitário Básico — atualização mensal" },
+    { k:"mensagens",              icon:"mensagens",  label:"Mensagens",       desc:"Caixa do time VICKE" },
+    { k:"admin:feedback",         icon:"feedback",   label:"Feedback",        desc:"Sugestões e bugs dos clientes" },
+    { k:"admin:empresas",         icon:"empresas",   label:"Empresas",        desc:"Gerenciar empresas cadastradas" },
+    { k:"admin:usuarios-master",  icon:"usuarios",   label:"Usuários Master", desc:"Acessos da equipe Vicke" },
+    { k:"admin:manutencao",       icon:"manutencao", label:"Manutenção",      desc:"Jobs e operações do sistema" },
+    { k:"admin:cub",              icon:"cub",        label:"CUB",             desc:"Custo Unitário Básico — atualização mensal" },
   ];
 
   return (
@@ -78,8 +158,11 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
             style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor="#e5e7eb"; }}>
-            <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:4 }}>{m.label}</div>
-            <div style={{ fontSize:11.5, color:"#9ca3af" }}>{m.desc}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
+              <IconeMaster nome={m.icon} tamanho={18} cor="#374151" />
+              <div style={{ fontSize:13, fontWeight:600, color:"#111" }}>{m.label}</div>
+            </div>
+            <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
           </button>
         ))}
       </div>
@@ -110,6 +193,13 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
       sub:   "caixa do time VICKE",
       onClick: () => goto("mensagens"),
       destaque: !loading && (c.mensagens_nao_lidas || 0) > 0,
+    },
+    {
+      label: "Feedback abertos",
+      value: loading ? "…" : `${c.feedback_abertos || 0}`,
+      sub:   "sugestões/bugs por revisar",
+      onClick: () => goto("admin:feedback"),
+      destaque: !loading && (c.feedback_abertos || 0) > 0,
     },
     {
       label: "Signups (7 dias)",
@@ -221,11 +311,14 @@ function decorarEvento(ev) {
   const acao = ev.acao || "";
   const dados = ev.dados || {};
 
-  // Mapas — fáceis de estender quando criarmos eventos novos
-  const COR_VERDE   = "#16a34a";
-  const COR_VERMELHO= "#dc2626";
-  const COR_AZUL    = "#3b82f6";
-  const COR_LARANJA = "#f59e0b";
+  // Mapas — fáceis de estender quando criarmos eventos novos.
+  // Tons sóbrios (não saturados) pra combinar com a paleta minimalista
+  // do sistema. Cor é informação semântica essencial em log de eventos
+  // (sucesso/falha/atenção visível de relance), mas não precisa berrar.
+  const COR_VERDE   = "#0f766e"; // teal-700, mais discreto que green-600
+  const COR_VERMELHO= "#991b1b"; // red-800, vinho em vez de vermelho-aviso
+  const COR_AZUL    = "#1e3a8a"; // blue-900, marinho
+  const COR_LARANJA = "#92400e"; // amber-800, mostarda em vez de laranja
   const COR_CINZA   = "#9ca3af";
 
   if (acao === "usuario.login_sucesso") return { cor: COR_VERDE,    descricao: "Login bem-sucedido" };
@@ -234,6 +327,11 @@ function decorarEvento(ev) {
   if (acao === "usuario.senha_alterada") return { cor: COR_LARANJA, descricao: "Senha alterada" };
   if (acao === "usuario.senha_resetada") return { cor: COR_LARANJA, descricao: `Senha resetada por ${dados.alterado_por === "admin_master" ? "master" : "admin de empresa"} (alvo: ${dados.alvo_email || ev.recurso_id})` };
   if (acao === "usuario.troca_senha_falha") return { cor: COR_VERMELHO, descricao: `Tentativa de troca de senha falhou${dados.motivo ? " — " + dados.motivo.replace(/_/g, " ") : ""}` };
+  // Recuperação self-service ("Esqueci senha"): solicitação dispara email,
+  // redefinição efetiva acontece quando usuário clica no link e cria senha nova.
+  if (acao === "usuario.recuperacao_solicitada") return { cor: COR_LARANJA, descricao: `Recuperação de senha solicitada${dados.email_enviado === false ? " (falha no envio)" : ""}` };
+  if (acao === "usuario.recuperacao_rate_limit") return { cor: COR_VERMELHO, descricao: "Recuperação bloqueada por rate limit" };
+  if (acao === "usuario.senha_redefinida") return { cor: COR_VERDE, descricao: "Senha redefinida via recuperação" };
   if (acao === "usuario.email_alterado") return { cor: COR_LARANJA, descricao: "Email alterado" };
   if (acao === "usuario.nivel_alterado") return { cor: COR_LARANJA, descricao: `Nível alterado: ${dados.antes?.nivel} → ${dados.depois?.nivel}` };
   if (acao === "usuario.criado")        return { cor: COR_VERDE,    descricao: `Usuário criado: ${dados.email || ev.recurso_id}` };
@@ -251,6 +349,11 @@ function decorarEvento(ev) {
   if (acao === "obra.excluida")         return { cor: COR_VERMELHO, descricao: `Obra excluída: ${ev.recurso_id}` };
   if (acao === "fornecedor.excluido")   return { cor: COR_VERMELHO, descricao: `Fornecedor excluído: ${ev.recurso_id}` };
   if (acao === "lancamento.excluido")   return { cor: COR_VERMELHO, descricao: `Lançamento excluído: ${ev.recurso_id}` };
+
+  // Feedback in-app
+  if (acao === "feedback.enviado")        return { cor: COR_AZUL, descricao: `Feedback (${dados.categoria || "outro"}): "${(dados.texto_preview || "").slice(0, 60)}${(dados.texto_preview || "").length > 60 ? "…" : ""}"` };
+  if (acao === "feedback.status_alterado") return { cor: COR_CINZA, descricao: `Feedback ${ev.recurso_id}: ${dados.de} → ${dados.para}` };
+  if (acao === "feedback.excluido")        return { cor: COR_VERMELHO, descricao: `Feedback excluído: ${ev.recurso_id}` };
 
   // Default: ação desconhecida — mostra o nome bruto
   return { cor: COR_CINZA, descricao: acao };
@@ -368,10 +471,25 @@ function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus 
         style={{
           position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
           background:"none", border:"none", cursor: disabled ? "not-allowed" : "pointer",
-          padding:"6px 8px", fontSize:14, lineHeight:1,
+          padding:"6px 8px", lineHeight:0,
           color:"#9ca3af", fontFamily:"inherit",
-        }}>
-        {visivel ? "🙈" : "👁"}
+          display:"flex", alignItems:"center", justifyContent:"center",
+        }}
+        onMouseEnter={e => { if (!disabled) e.currentTarget.style.color = "#374151"; }}
+        onMouseLeave={e => { e.currentTarget.style.color = "#9ca3af"; }}>
+        {visivel ? (
+          // eye-off
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+            <line x1="1" y1="1" x2="23" y2="23"/>
+          </svg>
+        ) : (
+          // eye
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        )}
       </button>
     </div>
   );
@@ -511,6 +629,234 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// FEEDBACK IN-APP — botão flutuante + modal
+// ═══════════════════════════════════════════════════════════════
+// Botão fixo no canto inferior direito (z-index alto pra ficar sobre tudo
+// que não seja modal/dialog do sistema). Visível em qualquer aba, exceto
+// na tela de troca de senha obrigatória (que bloqueia tudo).
+//
+// Categorias seguem CHECK constraint do backend (feedback_app.categoria):
+// sugestao | bug | pergunta | cobranca | elogio | outro
+
+const FEEDBACK_CATEGORIAS = [
+  { id: "sugestao",  label: "Sugestão" },
+  { id: "bug",       label: "Bug" },
+  { id: "pergunta",  label: "Pergunta" },
+  { id: "cobranca",  label: "Cobrança" },
+  { id: "elogio",    label: "Elogio" },
+  { id: "outro",     label: "Outro" },
+];
+
+function BotaoFeedbackFlutuante({ usuario }) {
+  const [modalAberto, setModalAberto] = useState(false);
+  // Detecta mobile pra ajustar offsets do botão.
+  const [isMobile, setIsMobile] = useState(() => {
+    try { return window.innerWidth < 768; } catch { return false; }
+  });
+  useEffect(() => {
+    function onResize() { try { setIsMobile(window.innerWidth < 768); } catch {} }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Master não envia feedback pra si mesmo — caixa é pra clientes.
+  if (usuario?.perfil === "master") return null;
+
+  return (
+    <>
+      <button
+        onClick={() => setModalAberto(true)}
+        title="Enviar feedback"
+        style={{
+          position:"fixed",
+          right: isMobile ? 16 : 24,
+          bottom: isMobile ? 16 : 24,
+          zIndex: 800,
+          background:"#111", color:"#fff", border:"none",
+          borderRadius:"50%",
+          width: isMobile ? 44 : 48,
+          height: isMobile ? 44 : 48,
+          cursor:"pointer", fontFamily:"inherit",
+          boxShadow:"0 4px 12px rgba(0,0,0,0.15)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          transition:"transform 0.12s ease",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.05)"; }}
+        onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}>
+        {/* Ícone mensagem outline (estilo Lucide) — alinhado com identidade
+            visual minimalista preto/branco do sistema */}
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+      {modalAberto && (
+        <ModalEnviarFeedback
+          usuario={usuario}
+          onFechar={() => setModalAberto(false)}
+        />
+      )}
+    </>
+  );
+}
+
+function ModalEnviarFeedback({ usuario, onFechar }) {
+  const [categoria, setCategoria] = useState("sugestao");
+  const [texto, setTexto]         = useState("");
+  const [enviando, setEnviando]   = useState(false);
+  const [erro, setErro]           = useState(null);
+  const [enviado, setEnviado]     = useState(false);
+  const MAX_CHARS = 2000;
+
+  async function enviar() {
+    const txt = texto.trim();
+    if (!txt) { setErro("Escreva alguma coisa antes de enviar"); return; }
+    if (txt.length > MAX_CHARS) { setErro(`Texto muito longo (máximo ${MAX_CHARS} caracteres)`); return; }
+    setEnviando(true);
+    setErro(null);
+    try {
+      await api.feedback.enviar(categoria, txt);
+      setEnviado(true);
+      setTimeout(onFechar, 1800); // fecha sozinho após mostrar "enviado"
+    } catch (e) {
+      setErro(e.message || "Falha ao enviar");
+      setEnviando(false);
+    }
+  }
+
+  // Estado de sucesso: mostra confirmação por ~1.8s antes de fechar.
+  // Feedback positivo curto evita que o cliente fique com dúvida se foi.
+  if (enviado) {
+    return (
+      <div onClick={onFechar} style={{
+        position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        zIndex:900, padding:20,
+        fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      }}>
+        <div style={{
+          background:"#fff", borderRadius:12, padding:"32px 28px",
+          maxWidth:380, textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
+        }}>
+          <div style={{ marginBottom:14, display:"flex", justifyContent:"center" }}>
+            <div style={{
+              width:48, height:48, borderRadius:"50%",
+              background:"#111", color:"#fff",
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}>
+              <IconeMaster nome="check" tamanho={22} cor="#fff" />
+            </div>
+          </div>
+          <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:6 }}>Recebido</div>
+          <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
+            Obrigado pelo feedback.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div onClick={onFechar} style={{
+      position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      zIndex:900, padding:20,
+      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+    }}>
+      <div onClick={e => e.stopPropagation()} style={{
+        background:"#fff", borderRadius:12, padding:"24px 24px 20px",
+        maxWidth:480, width:"100%", maxHeight:"90vh", overflowY:"auto",
+        boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
+      }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+          Enviar feedback
+        </div>
+        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
+          Sua mensagem chega direto pro time da Vicke. Pode mandar bugs, ideias, perguntas — tudo serve.
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
+            Tipo
+          </label>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:6 }}>
+            {FEEDBACK_CATEGORIAS.map(c => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setCategoria(c.id)}
+                disabled={enviando}
+                style={{
+                  padding:"10px 12px", borderRadius:8, fontSize:13,
+                  fontFamily:"inherit", textAlign:"center",
+                  cursor: enviando ? "not-allowed" : "pointer",
+                  border: categoria === c.id ? "1.5px solid #111" : "1px solid #e5e7eb",
+                  background: categoria === c.id ? "#fafbfc" : "#fff",
+                  color:"#111",
+                  fontWeight: categoria === c.id ? 600 : 400,
+                }}>
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+            Mensagem
+          </label>
+          <textarea
+            value={texto}
+            onChange={e => setTexto(e.target.value)}
+            disabled={enviando}
+            placeholder="Escreva o que quiser compartilhar..."
+            rows={5}
+            style={{
+              width:"100%", border:"1px solid #e5e7eb", borderRadius:8,
+              padding:"10px 12px", fontSize:13, fontFamily:"inherit",
+              outline:"none", boxSizing:"border-box", resize:"vertical",
+              minHeight:100,
+            }}
+          />
+          <div style={{ fontSize:11, color: texto.length > MAX_CHARS ? "#b91c1c" : "#9ca3af", marginTop:4, textAlign:"right" }}>
+            {texto.length} / {MAX_CHARS}
+          </div>
+        </div>
+
+        {erro && (
+          <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
+            {erro}
+          </div>
+        )}
+
+        <div style={{ fontSize:11, color:"#9ca3af", marginBottom:14, lineHeight:1.5 }}>
+          Enviado por: <strong style={{ color:"#6b7280" }}>{usuario?.nome}</strong> · {usuario?.email}
+        </div>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button onClick={onFechar} disabled={enviando}
+            style={{
+              background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+              padding:"9px 14px", fontSize:13, color:"#6b7280", cursor: enviando ? "not-allowed" : "pointer",
+              fontFamily:"inherit",
+            }}>
+            Cancelar
+          </button>
+          <button onClick={enviar} disabled={enviando || !texto.trim()}
+            style={{
+              background:"#111", color:"#fff", border:"none", borderRadius:8,
+              padding:"9px 16px", fontSize:13, fontWeight:600,
+              cursor: (enviando || !texto.trim()) ? "not-allowed" : "pointer",
+              fontFamily:"inherit", opacity: (enviando || !texto.trim()) ? 0.5 : 1,
+            }}>
+            {enviando ? "Enviando..." : "Enviar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════════
 export default function ModuloClientesFornecedores() {
@@ -529,7 +875,39 @@ export default function ModuloClientesFornecedores() {
   const [obrasKey, setObrasKey]               = useState(0);
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
-  const [sidebarAberta, setSidebarAberta]     = useState(true);
+  // Sidebar colapsada: estado persistido em localStorage. False = full
+  // (ícones + texto). True = estreita (só ícones, popover nos submenus).
+  // Padrão dos SaaS modernos (Linear/Notion/VSCode) — usuário escolhe uma
+  // vez e a preferência persiste entre sessões.
+  const [sidebarColapsada, setSidebarColapsada] = useState(() => {
+    try {
+      return localStorage.getItem("vicke-sidebar-colapsada") === "true";
+    } catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("vicke-sidebar-colapsada", String(sidebarColapsada)); } catch {}
+  }, [sidebarColapsada]);
+
+  // Mobile: detecta tamanho de tela pra alternar comportamento da sidebar.
+  // <768px: sidebar vira overlay/drawer (fechada por default, abre por toque).
+  // >=768px: sidebar normal lado a lado com conteúdo (igual desktop).
+  // Listener no resize pra reagir a rotação do dispositivo / redimensionamento.
+  const [isMobile, setIsMobile] = useState(() => {
+    try { return window.innerWidth < 768; } catch { return false; }
+  });
+  useEffect(() => {
+    function onResize() {
+      try { setIsMobile(window.innerWidth < 768); } catch {}
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Sidebar drawer em mobile: estado controla se está aberta (overlay visível).
+  // Sempre começa fechada em mobile — usuário toca hamburguer pra abrir.
+  // Em desktop esse state é ignorado (sidebar sempre visível).
+  const [sidebarMobileAberta, setSidebarMobileAberta] = useState(false);
+
   const [orcamentoTelaCheia, setOrcamentoTelaCheia] = useState(null);
   const [clienteRetorno, setClienteRetorno] = useState(null);
   const [cadastroNovoCliente, setCadastroNovoCliente] = useState(false);
@@ -575,16 +953,41 @@ export default function ModuloClientesFornecedores() {
 
   // tentarTrocar: quando há orçamento em tela cheia com dados não salvos,
   // consulta o handler registrado pelo FormOrcamento (window.__vickeOrcDirtyPrompt).
+  // Em mobile, fecha o drawer da sidebar após troca bem-sucedida (UX padrão
+  // de drawers — usuário escolhe item, drawer some pra mostrar conteúdo).
   function tentarTrocar(fn) {
+    const fnComFechamento = () => {
+      fn();
+      // Fecha drawer mobile (no-op em desktop)
+      try { setSidebarMobileAberta(false); } catch {}
+    };
     if (typeof window !== "undefined" && typeof window.__vickeOrcDirtyPrompt === "function") {
-      const absorveu = window.__vickeOrcDirtyPrompt(fn);
+      const absorveu = window.__vickeOrcDirtyPrompt(fnComFechamento);
       if (absorveu) return;
     }
-    fn();
+    fnComFechamento();
   }
 
   // Accordion: Projetos fica aberto quando qualquer aba "projetos:*" está ativa
   const [projetosAberto, setProjetosAberto] = useState(() => (typeof aba === "string" && aba.indexOf("projetos") === 0));
+  // Popover do submenu Projetos quando sidebar está colapsada. null = fechado,
+  // ou {x, y} pra posicionar absolutamente perto do botão pai.
+  const [popoverProjetos, setPopoverProjetos] = useState(null);
+  // Fecha popover ao clicar fora (delegação no document — captura
+  // clicks em qualquer lugar da página quando popover está aberto).
+  useEffect(() => {
+    if (!popoverProjetos) return;
+    function onClickFora(e) {
+      // Se clicou dentro do popover ou no botão que abriu, ignora
+      const popover = document.getElementById("popover-projetos");
+      const trigger = document.getElementById("trigger-projetos");
+      if (popover && popover.contains(e.target)) return;
+      if (trigger && trigger.contains(e.target)) return;
+      setPopoverProjetos(null);
+    }
+    document.addEventListener("mousedown", onClickFora);
+    return () => document.removeEventListener("mousedown", onClickFora);
+  }, [popoverProjetos]);
   useEffect(() => {
     if (typeof aba === "string" && aba.indexOf("projetos") === 0) setProjetosAberto(true);
   }, [aba]);
@@ -902,28 +1305,35 @@ export default function ModuloClientesFornecedores() {
   //   (irrelevantes pra quem opera o SaaS).
   // - Escritório (Padovan, futuras empresas): menu original — gestão do dia a dia.
   const MENU = isMaster ? [
-    { k:"home",                   label:"Painel" },
-    { k:"mensagens",              label:"Mensagens" },
-    { k:"admin:empresas",         label:"Empresas" },
-    { k:"admin:usuarios-master",  label:"Usuários Master" },
-    { k:"admin:manutencao",       label:"Manutenção" },
-    { k:"admin:cub",              label:"CUB" },
+    { k:"home",                   icon:"painel",     label:"Painel" },
+    { k:"mensagens",               icon:"mensagens",  label:"Mensagens" },
+    { k:"admin:empresas",          icon:"empresas",   label:"Empresas" },
+    { k:"admin:usuarios-master",   icon:"usuarios",   label:"Usuários Master" },
+    { k:"admin:manutencao",        icon:"manutencao", label:"Manutenção" },
+    { k:"admin:cub",               icon:"cub",        label:"CUB" },
   ] : [
-    { k:"home",        label:"Início" },
-    { k:"clientes",    label:"Clientes",     count: data?.clientes?.length },
-    { k:"projetos", label:"Projetos", sub: [
-      { k:"projetos:orcamentos", label:"Orçamentos" },
-      { k:"projetos:etapas",     label:"Em Andamento" },
+    { k:"home",        icon:"home",       label:"Início" },
+    { k:"clientes",    icon:"clientes",   label:"Clientes",     count: data?.clientes?.length },
+    { k:"projetos",    icon:"projetos",   label:"Projetos", sub: [
+      { k:"projetos:orcamentos", icon:"projetos-orcamentos", label:"Orçamentos" },
+      { k:"projetos:etapas",     icon:"projetos-andamento",  label:"Em Andamento" },
     ]},
-    { k:"obras",       label:"Obras" },
+    { k:"obras",       icon:"obras",      label:"Obras" },
     // Módulos Financeiro, Fornecedores e Notas Fiscais foram removidos do menu
     // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
     // por enquanto pra não quebrar dados antigos, só ocultos do menu.
   ];
 
+  // colapsadaEf: "colapsada efetiva" — em mobile, sidebar nunca está colapsada
+  // (o conceito não faz sentido em overlay). Sempre mostra com texto+ícone.
+  // Em desktop, usa a preferência salva do usuário.
+  const colapsadaEf = isMobile ? false : sidebarColapsada;
+
   const itemStyle = (ativo) => ({
-    display:"flex", alignItems:"center", justifyContent:"space-between",
-    padding:"8px 12px", borderRadius:7, cursor:"pointer", fontSize:13,
+    display:"flex", alignItems:"center",
+    justifyContent: colapsadaEf ? "center" : "space-between",
+    padding: colapsadaEf ? "10px 8px" : (isMobile ? "12px 14px" : "8px 12px"), // touch target maior em mobile
+    borderRadius:7, cursor:"pointer", fontSize:13,
     fontWeight: ativo ? 600 : 400, color: ativo ? "#111" : "#6b7280",
     background: ativo ? "#f3f4f6" : "transparent",
     border:"none", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
@@ -935,49 +1345,142 @@ export default function ModuloClientesFornecedores() {
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
-      {sidebarAberta && (
-        <div style={{ width:220, minWidth:220, background:"#fff", borderRight:"1px solid #f3f4f6", display:"flex", flexDirection:"column" }}>
-          <div style={{ padding:"20px 16px 16px", borderBottom:"1px solid #f3f4f6" }}>
-            <div style={{ fontSize:15, fontWeight:700, color:"#111", letterSpacing:-0.3 }}>{nomeEscritorio}</div>
-            <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>Vicke</div>
-          </div>
+      {/* ── Backdrop mobile: fundo escurecido por trás do drawer.
+          Aparece SÓ em mobile quando sidebar está aberta. Toque fecha. */}
+      {isMobile && sidebarMobileAberta && (
+        <div
+          onClick={() => setSidebarMobileAberta(false)}
+          style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
+            zIndex:990,
+            transition:"opacity 0.2s",
+          }}
+        />
+      )}
+
+      {/* ── Sidebar: comportamento muda em mobile ──
+          Desktop (>= 768px): fluxo lateral normal, ocupa espaço da grid.
+          Mobile (< 768px): overlay flutuante (position:fixed), só aparece
+          quando sidebarMobileAberta=true, sempre expandida (220px),
+          ignora colapsadaEf. */}
+      <div style={
+        isMobile ? {
+          // Drawer mobile
+          position:"fixed", top:0, left:0, bottom:0,
+          width: 260, // um pouco mais largo que o desktop expandido (260) pro toque ser confortável
+          background:"#fff", borderRight:"1px solid #f3f4f6",
+          display:"flex", flexDirection:"column",
+          zIndex:991,
+          transform: sidebarMobileAberta ? "translateX(0)" : "translateX(-100%)",
+          transition:"transform 0.22s ease",
+          boxShadow: sidebarMobileAberta ? "2px 0 16px rgba(0,0,0,0.12)" : "none",
+        } : {
+          // Sidebar desktop normal
+          width: colapsadaEf ? 56 : 220,
+          minWidth: colapsadaEf ? 56 : 220,
+          transition:"width 0.18s ease, min-width 0.18s ease",
+          background:"#fff", borderRight:"1px solid #f3f4f6",
+          display:"flex", flexDirection:"column",
+        }
+      }>
+        {/* ── Header da sidebar: nome do escritório + botão toggle ──
+            Quando colapsada: apenas o botão toggle centralizado (sem título).
+            Quando aberta: título à esquerda + toggle à direita. */}
+        <div style={{
+          padding: (!isMobile && colapsadaEf) ? "16px 8px" : "20px 16px 16px",
+          borderBottom:"1px solid #f3f4f6",
+          display:"flex", alignItems:"center",
+          justifyContent: (!isMobile && colapsadaEf) ? "center" : "space-between",
+          gap: 8,
+        }}>
+          {(isMobile || !colapsadaEf) && (
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:15, fontWeight:700, color:"#111", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
+              <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>Vicke</div>
+            </div>
+          )}
+          {/* Botão de toggle: muda comportamento conforme dispositivo.
+              - Desktop: alterna entre sidebar colapsada/expandida (preferência localStorage)
+              - Mobile: fecha o drawer (X), pois colapsada não faz sentido em overlay */}
+          <button
+            onClick={() => {
+              if (isMobile) setSidebarMobileAberta(false);
+              else setSidebarColapsada(c => !c);
+            }}
+            title={isMobile ? "Fechar menu" : (colapsadaEf ? "Expandir menu" : "Recolher menu")}
+            aria-label={isMobile ? "Fechar menu" : (colapsadaEf ? "Expandir menu" : "Recolher menu")}
+            style={{
+              background:"none", border:"none", cursor:"pointer",
+              padding: isMobile ? 10 : 6, // touch target maior em mobile
+              color:"#9ca3af", lineHeight:0,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              borderRadius:6, fontFamily:"inherit",
+            }}
+            onMouseEnter={e => { if (!isMobile) { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.color="#374151"; } }}
+            onMouseLeave={e => { if (!isMobile) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}>
+            {isMobile ? (
+              // X de fechar em mobile
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/>
+                <line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            ) : (
+              // Toggle panel-left em desktop
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+              </svg>
+            )}
+          </button>
+        </div>
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
             {MENU.map(item => {
-              const {k, label, count, sub} = item;
+              const {k, label, count, sub, icon} = item;
               if (sub && sub.length) {
                 const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
                 return (
-                  <div key={k} style={{ display:"flex", flexDirection:"column" }}>
+                  <div key={k} style={{ display:"flex", flexDirection:"column", position:"relative" }}>
                     <button
+                      id={k === "projetos" ? "trigger-projetos" : undefined}
+                      title={colapsadaEf ? label : undefined}
                       style={{
                         ...itemStyle(ativoNeleMesmoOuSubitem),
-                        justifyContent: "flex-start",
+                        justifyContent: colapsadaEf ? "center" : "flex-start",
                         gap: 6,
-                        // CORREÇÃO: o botão "Projetos" só deve ter fundo cinza quando
-                        // a aba ativa é "projetos:*" (subitem). Se aba é "projetos"
-                        // exato OU outra coisa (ex: "home"), não destaca o pai —
-                        // só os subitens fazem destaque visual.
-                        // Antes: ativoNeleMesmoOuSubitem incluía aba==="projetos:*"
-                        // o que pintava o pai junto. Agora pai sempre transparente
-                        // (a menos que aba===k exato, raro).
                         background: aba === k ? "#f3f4f6" : "transparent",
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
                         color: ativoNeleMesmoOuSubitem ? "#111" : "#6b7280",
                       }}
                       onMouseEnter={e => { if (aba !== k) e.currentTarget.style.background="#f9fafb"; }}
                       onMouseLeave={e => { if (aba !== k) e.currentTarget.style.background="transparent"; }}
-                      onClick={() => setProjetosAberto(o => !o)}
+                      onClick={(ev) => {
+                        if (colapsadaEf) {
+                          // Sidebar colapsada: abre popover lateral com os subitens.
+                          // Posiciona absoluto à direita do botão.
+                          const rect = ev.currentTarget.getBoundingClientRect();
+                          setPopoverProjetos({ top: rect.top, left: rect.right + 4 });
+                        } else {
+                          // Sidebar aberta: comportamento accordion (expandir/recolher)
+                          setProjetosAberto(o => !o);
+                        }
+                      }}
                     >
-                      <span>{label}</span>
-                      <span style={{
-                        color:"#9ca3af", fontSize:9,
-                        transition:"transform 0.2s",
-                        transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
-                        display:"inline-block",
-                        lineHeight: 1,
-                      }}>▶</span>
+                      <span style={{ display:"flex", alignItems:"center", gap:10, flex:1, justifyContent: colapsadaEf ? "center" : "flex-start" }}>
+                        {icon && <IconeMaster nome={icon} tamanho={16} cor={ativoNeleMesmoOuSubitem ? "#111" : "#6b7280"} />}
+                        {!colapsadaEf && label}
+                      </span>
+                      {!colapsadaEf && (
+                        <span style={{
+                          color:"#9ca3af", fontSize:9,
+                          transition:"transform 0.2s",
+                          transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
+                          display:"inline-block",
+                          lineHeight: 1,
+                        }}>▶</span>
+                      )}
                     </button>
-                    {projetosAberto && (
+                    {/* Submenus inline (accordion) — só quando expandida */}
+                    {!colapsadaEf && projetosAberto && (
                       <div style={{ display:"flex", flexDirection:"column", gap:1, marginLeft:14, paddingLeft:8, borderLeft:"1px solid #f3f4f6", marginTop:2 }}>
                         {sub.map(s => {
                           const ativoSub = aba === s.k;
@@ -1005,7 +1508,10 @@ export default function ModuloClientesFornecedores() {
                                 });
                               }}
                             >
-                              {s.label}
+                              <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+                                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#111" : "#9ca3af"} />}
+                                {s.label}
+                              </span>
                             </button>
                           );
                         })}
@@ -1016,6 +1522,7 @@ export default function ModuloClientesFornecedores() {
               }
               return (
                 <button key={k} style={itemStyle(aba===k)}
+                  title={colapsadaEf ? label : undefined}
                   onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
                   onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
                   onClick={() => {
@@ -1029,64 +1536,138 @@ export default function ModuloClientesFornecedores() {
                       if(k==="projetos:orcamentos") setOrcamentosKey(n=>n+1);
                     });
                   }}>
-                  <span>{label}</span>
-                  {count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
+                  <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#111" : "#6b7280"} />}
+                    {!colapsadaEf && label}
+                  </span>
+                  {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
                 </button>
               );
             })}
           </nav>
           <div style={{ padding:"8px 8px 12px", borderTop:"1px solid #f3f4f6", display:"flex", flexDirection:"column", gap:2 }}>
+            {/* Header da seção — esconde quando sidebar colapsada (não cabe). */}
+            {!isMaster && !colapsadaEf && (
+              <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 12px 2px" }}>
+                Configuração
+              </div>
+            )}
             {/* Botão Escritório só pra perfil escritório (Master vê tudo no menu principal) */}
             {!isMaster && (
               <button style={itemStyle(aba==="escritorio")}
+                title={colapsadaEf ? "Escritório" : undefined}
                 onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
-                Escritório
+                <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#111" : "#6b7280"} />
+                  {!colapsadaEf && "Escritório"}
+                </span>
               </button>
             )}
             {/* Botão Escritório do Master (gerenciar dados da Vicke). Mantido aqui
                 discretamente — uso raro mas existe. */}
             {isMaster && (
               <button style={itemStyle(aba==="escritorio")}
+                title={colapsadaEf ? "Escritório (Master)" : undefined}
                 onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
-                <span style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  Escritório
-                  <span style={{ fontSize:9, fontWeight:700, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
+                <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#111" : "#6b7280"} />
+                  {!colapsadaEf && (
+                    <>
+                      Escritório
+                      <span style={{ fontSize:9, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:3, padding:"1px 5px", textTransform:"uppercase", letterSpacing:0.5 }}>Master</span>
+                    </>
+                  )}
                 </span>
               </button>
             )}
-            <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div>
-                <div style={{ fontSize:12, fontWeight:600, color:"#374151" }}>{usuario?.nome || "—"}</div>
-                <div style={{ fontSize:11, color:"#d1d5db" }}>{usuario?.perfil || ""}</div>
-              </div>
-              <button onClick={handleLogout} style={{ background:"none", border:"none", color:"#d1d5db", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
-        <div style={{ borderBottom:"1px solid #f3f4f6", padding:"12px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", background:"#fff" }}>
-          <button onClick={() => setSidebarAberta(s => !s)}
-            style={{ background:"none", border:"none", color:"#9ca3af", cursor:"pointer", padding:"4px 8px", fontSize:16, fontFamily:"inherit" }}>☰</button>
-          {/* Import/Export: só master. Editor/admin de escritório não precisam
-              exportar/importar banco inteiro — isso é tarefa do dono do SaaS. */}
-          {isMaster ? (
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <label style={{ display:"flex", alignItems:"center", gap:5, fontSize:12, color:"#9ca3af", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px" }}>
-                Importar
-                <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
-              </label>
-              <button onClick={exportarDados} style={{ fontSize:12, color:"#6b7280", cursor:"pointer", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", background:"#fff", fontFamily:"inherit" }}>
-                Exportar backup
+            <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+              {!colapsadaEf && (
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, fontWeight:600, color:"#374151", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
+                  <div style={{ fontSize:11, color:"#d1d5db" }}>{usuario?.perfil || ""}</div>
+                </div>
+              )}
+              <button
+                onClick={handleLogout}
+                title="Sair"
+                style={{
+                  background:"none", border:"none", color:"#9ca3af",
+                  fontSize:12, cursor:"pointer", fontFamily:"inherit",
+                  padding: colapsadaEf ? "6px" : "4px 8px",
+                  borderRadius:6, lineHeight:0,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.color="#374151"; }}
+                onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
+                {colapsadaEf ? (
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+                    <polyline points="16 17 21 12 16 7"/>
+                    <line x1="21" y1="12" x2="9" y2="12"/>
+                  </svg>
+                ) : "Sair"}
               </button>
             </div>
-          ) : <div />}
-        </div>
+            {/* Importar/Exportar — só master. Discreto, no rodapé. */}
+            {isMaster && !colapsadaEf && (
+              <div style={{ padding:"4px 12px 8px", display:"flex", gap:6, fontSize:11 }}>
+                <label style={{ flex:1, textAlign:"center", color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px" }}
+                  onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
+                  Importar
+                  <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
+                </label>
+                <button onClick={exportarDados}
+                  style={{ flex:1, color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px", background:"transparent", fontFamily:"inherit", fontSize:11 }}
+                  onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
+                  Exportar
+                </button>
+              </div>
+            )}
+          </div>
+      </div>
+
+      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        {/* ── Header mobile: aparece só em <768px. Tem hamburguer pra abrir
+            o drawer da sidebar + nome do escritório (compacto). ── */}
+        {isMobile && (
+          <div style={{
+            display:"flex", alignItems:"center", gap:10,
+            padding:"10px 14px",
+            borderBottom:"1px solid #f3f4f6",
+            background:"#fff",
+            zIndex: 10,
+          }}>
+            <button
+              onClick={() => setSidebarMobileAberta(true)}
+              aria-label="Abrir menu"
+              style={{
+                background:"none", border:"none",
+                padding:8, lineHeight:0,
+                cursor:"pointer", color:"#374151",
+                borderRadius:6,
+                display:"flex", alignItems:"center", justifyContent:"center",
+              }}>
+              {/* Ícone hamburguer Lucide */}
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="6" x2="21" y2="6"/>
+                <line x1="3" y1="12" x2="21" y2="12"/>
+                <line x1="3" y1="18" x2="21" y2="18"/>
+              </svg>
+            </button>
+            <div style={{
+              fontSize:14, fontWeight:600, color:"#111",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1,
+            }}>
+              {nomeEscritorio}
+            </div>
+          </div>
+        )}
         {backendOffline && (
           <div style={{ background:"#fef2f2", borderBottom:"1px solid #fecaca", padding:"8px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
             <div style={{ fontSize:12, color:"#991b1b" }}>
@@ -1166,6 +1747,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}
           {aba === "admin:usuarios-master" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="usuarios-master" />}
           {aba === "admin:manutencao" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="manutencao" />}
+          {aba === "admin:feedback" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="feedback" />}
           {aba === "admin:cub" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="cub" />}
           {/* Caixa de Mensagens — só Master */}
           {aba === "mensagens" && isMaster && <Mensagens usuario={usuario} />}
@@ -1193,8 +1775,67 @@ export default function ModuloClientesFornecedores() {
         </div>
       )}
     </div>
+    {/* ── Popover dos subitens de Projetos (sidebar colapsada) ──
+        Posicionado fixed na coordenada do trigger. Click fora fecha (handler
+        em useEffect mais acima). Aparece à direita do botão na sidebar. */}
+    {popoverProjetos && colapsadaEf && (() => {
+      const projetosItem = MENU.find(m => m.k === "projetos");
+      if (!projetosItem) return null;
+      return (
+        <div
+          id="popover-projetos"
+          style={{
+            position:"fixed",
+            top: popoverProjetos.top,
+            left: popoverProjetos.left,
+            background:"#fff",
+            border:"1px solid #e5e7eb",
+            borderRadius:8,
+            boxShadow:"0 4px 16px rgba(0,0,0,0.08)",
+            padding:"6px",
+            minWidth:180,
+            zIndex:1000,
+            fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+            display:"flex", flexDirection:"column", gap:1,
+          }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 10px 4px" }}>
+            {projetosItem.label}
+          </div>
+          {projetosItem.sub.map(s => {
+            const ativoSub = aba === s.k;
+            return (
+              <button
+                key={s.k}
+                onClick={() => {
+                  tentarTrocar(() => {
+                    setAba(s.k);
+                    setOrcamentoTelaCheia(null);
+                    if (s.k === "projetos:etapas") setProjetosKey(n => n+1);
+                    if (s.k === "projetos:orcamentos") setOrcamentosKey(n => n+1);
+                  });
+                  setPopoverProjetos(null);
+                }}
+                style={{
+                  display:"flex", alignItems:"center", gap:10,
+                  padding:"7px 10px", borderRadius:6, fontSize:12.5,
+                  border:"none", background: ativoSub ? "#f3f4f6" : "transparent",
+                  color: ativoSub ? "#111" : "#374151",
+                  fontWeight: ativoSub ? 600 : 400,
+                  fontFamily:"inherit", cursor:"pointer", textAlign:"left",
+                }}
+                onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#f9fafb"; }}
+                onMouseLeave={e => { if (!ativoSub) e.currentTarget.style.background="transparent"; }}>
+                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#111" : "#9ca3af"} />}
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
+      );
+    })()}
     <DialogosHost />
     <VersionWatcher />
+    <BotaoFeedbackFlutuante usuario={usuario} />
     {conflitoModal}
     </>
   );
