@@ -6427,8 +6427,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       /* ===== Mobile: ajustes globais do formulário de orçamento ===== */
       @media (max-width: 767px) {
+        /* Bloqueia scroll horizontal em qualquer nível —
+           se algum elemento estourar a largura, fica oculto em vez de criar scroll lateral */
+        html, body { overflow-x: hidden !important; max-width: 100vw !important; }
         /* Reduz padding lateral pro conteúdo respirar mais */
-        .vk-orc-wrap { padding: 12px 14px !important; }
+        .vk-orc-wrap { padding: 12px 14px !important; max-width: 100vw !important; overflow-x: hidden !important; }
         /* Título da pergunta menor pra caber em tela pequena */
         .vk-flow2-title { font-size: 22px !important; line-height: 1.25 !important; }
         .vk-flow2-card { max-width: 100% !important; }
@@ -7810,13 +7813,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
-                            // Em mobile: só renderiza a linha se for o primeiro cômodo
-                            // da lista plana global (flat). Os outros aguardam.
-                            if (isMobileOrc) {
-                              const flat = comodosFlatRef.current || [];
-                              const indexNaFlat = flat.indexOf(nome);
-                              if (indexNaFlat !== 0) return null;
-                            }
+                            // Em mobile: todos os cômodos visíveis simultaneamente,
+                            // cada um com seu próprio seletor [input] 0 1 2 3 4 inline.
+                            // Usuário escolhe a quantidade direto na linha — não precisa
+                            // hover nem clique pra abrir popup.
                             return (
                               <div key={nome}
                                 data-comodo-wrap

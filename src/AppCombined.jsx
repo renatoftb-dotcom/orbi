@@ -12133,8 +12133,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       /* ===== Mobile: ajustes globais do formulário de orçamento ===== */
       @media (max-width: 767px) {
+        /* Bloqueia scroll horizontal em qualquer nível —
+           se algum elemento estourar a largura, fica oculto em vez de criar scroll lateral */
+        html, body { overflow-x: hidden !important; max-width: 100vw !important; }
         /* Reduz padding lateral pro conteúdo respirar mais */
-        .vk-orc-wrap { padding: 12px 14px !important; }
+        .vk-orc-wrap { padding: 12px 14px !important; max-width: 100vw !important; overflow-x: hidden !important; }
         /* Título da pergunta menor pra caber em tela pequena */
         .vk-flow2-title { font-size: 22px !important; line-height: 1.25 !important; }
         .vk-flow2-card { max-width: 100% !important; }
@@ -13516,13 +13519,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
-                            // Em mobile: só renderiza a linha se for o primeiro cômodo
-                            // da lista plana global (flat). Os outros aguardam.
-                            if (isMobileOrc) {
-                              const flat = comodosFlatRef.current || [];
-                              const indexNaFlat = flat.indexOf(nome);
-                              if (indexNaFlat !== 0) return null;
-                            }
+                            // Em mobile: todos os cômodos visíveis simultaneamente,
+                            // cada um com seu próprio seletor [input] 0 1 2 3 4 inline.
+                            // Usuário escolhe a quantidade direto na linha — não precisa
+                            // hover nem clique pra abrir popup.
                             return (
                               <div key={nome}
                                 data-comodo-wrap
@@ -18920,9 +18920,6 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "manutencao":
       // Settings/wrench outline
       return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
-    case "cub":
-      // Trending up + Real (R$) — indica índice de custos
-      return (<svg {...props}><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>);
     case "editar":
       return (<svg {...props}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>);
     case "trash":
@@ -19006,7 +19003,6 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
     { k:"admin:empresas",         icon:"empresas",   label:"Empresas",        desc:"Gerenciar empresas cadastradas" },
     { k:"admin:usuarios-master",  icon:"usuarios",   label:"Usuários Master", desc:"Acessos da equipe Vicke" },
     { k:"admin:manutencao",       icon:"manutencao", label:"Manutenção",      desc:"Jobs e operações do sistema" },
-    { k:"admin:cub",              icon:"cub",        label:"CUB",             desc:"Custo Unitário Básico — atualização mensal" },
   ];
 
   return (
@@ -19280,7 +19276,6 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
     { k:"admin:empresas",         label:"Empresas",       desc:"Gerenciar empresas cadastradas" },
     { k:"admin:usuarios-master",  label:"Usuários Master", desc:"Acessos da equipe Vicke" },
     { k:"admin:manutencao",       label:"Manutenção",     desc:"Jobs e operações do sistema" },
-    { k:"admin:cub",              label:"CUB",            desc:"Custo Unitário Básico — atualização mensal" },
   ] : [
     { k:"clientes",         label:"Clientes",     desc:"Cadastro e orçamentos",     count: data?.clientes?.length },
     { k:"projetos:etapas",  label:"Projetos",     desc:"Etapas e prazos" },
@@ -19782,6 +19777,36 @@ export default function ModuloClientesFornecedores() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Força meta viewport restrito em mobile + bloqueia scroll horizontal global.
+  // Roda uma vez no boot. Garante que mesmo se o index.html tiver viewport
+  // permissivo, a UI não dê zoom horizontal nem permita scroll lateral.
+  useEffect(() => {
+    try {
+      // 1. Atualiza/insere <meta name="viewport"> com escala fixa
+      let meta = document.querySelector('meta[name="viewport"]');
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.name = "viewport";
+        document.head.appendChild(meta);
+      }
+      meta.content = "width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover";
+
+      // 2. Injeta CSS global pra bloquear overflow horizontal em html/body.
+      // Se algum elemento estourar a largura, fica oculto em vez de criar
+      // scroll lateral. ID único pra não duplicar se App remontar.
+      if (!document.getElementById("vicke-global-mobile-fix")) {
+        const style = document.createElement("style");
+        style.id = "vicke-global-mobile-fix";
+        style.textContent = `
+          html, body, #root { max-width: 100vw; overflow-x: hidden; }
+          /* Previne tap delay e zoom em double tap em mobile */
+          * { touch-action: manipulation; }
+        `;
+        document.head.appendChild(style);
+      }
+    } catch {}
+  }, []);
+
   // Sidebar drawer em mobile: estado controla se está aberta (overlay visível).
   // Sempre começa fechada em mobile — usuário toca hamburguer pra abrir.
   // Em desktop esse state é ignorado (sidebar sempre visível).
@@ -20189,7 +20214,6 @@ export default function ModuloClientesFornecedores() {
     { k:"admin:empresas",          icon:"empresas",   label:"Empresas" },
     { k:"admin:usuarios-master",   icon:"usuarios",   label:"Usuários Master" },
     { k:"admin:manutencao",        icon:"manutencao", label:"Manutenção" },
-    { k:"admin:cub",               icon:"cub",        label:"CUB" },
   ] : [
     { k:"home",        icon:"home",       label:"Início" },
     { k:"clientes",    icon:"clientes",   label:"Clientes",     count: data?.clientes?.length },
@@ -20627,7 +20651,6 @@ export default function ModuloClientesFornecedores() {
           {aba === "admin:usuarios-master" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="usuarios-master" />}
           {aba === "admin:manutencao" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="manutencao" />}
           {aba === "admin:feedback" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="feedback" />}
-          {aba === "admin:cub" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="cub" />}
           {/* Caixa de Mensagens — só Master */}
           {aba === "mensagens" && isMaster && <Mensagens usuario={usuario} />}
           </>)}
