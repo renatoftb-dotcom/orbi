@@ -6329,7 +6329,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-trilha-h-node.is-open { background: #fafaf7; border-color: #c8cdd6; }
       .vk-trilha-h-dot { width: 6px; height: 6px; border-radius: 50%; background: #111; flex-shrink: 0; }
       .vk-trilha-h-key { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #828a98; font-weight: 600; }
-      .vk-trilha-h-val { font-size: 13px; font-weight: 600; color: #111; letter-spacing: -0.005em; }
+      .vk-trilha-h-val { font-size: 13px; font-weight: 700; color: #111; letter-spacing: -0.005em; }
       .vk-trilha-h-caret { font-size: 8px; color: #828a98; margin-left: 1px; }
       .vk-trilha-h-sep { width: 10px; height: 1px; background: rgba(0,0,0,0.12); }
 
@@ -6360,7 +6360,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       /* Texto */
       .vk-trilha-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
       .vk-trilha-key { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 600; line-height: 1.2; }
-      .vk-trilha-val { font-size: 13px; font-weight: 600; color: #111; letter-spacing: -0.005em; line-height: 1.3; word-break: break-word; }
+      .vk-trilha-val { font-size: 13px; font-weight: 700; color: #111; letter-spacing: -0.005em; line-height: 1.3; word-break: break-word; }
       .vk-trilha-val-pending { color: #828a98; font-weight: 400; font-style: italic; font-size: 12.5px; }
       .vk-trilha-caret { font-size: 8px; color: #828a98; margin-left: 4px; }
       .vk-trilha-node-future .vk-trilha-key { color: rgba(0,0,0,0.30); }
@@ -6406,6 +6406,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-arrow { opacity: 1; transform: translateX(0); color: #111; }
       .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx,
       .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-idx { color: #111; }
+      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-text,
+      .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-text { font-weight: 700; }
       .vk-flow2-row-idx { font-size: 10.5px; letter-spacing: 0.06em; color: #828a98; font-family: ui-monospace, "JetBrains Mono", monospace; font-weight: 500; transition: color .15s; }
       .vk-flow2-row-text { font-weight: 500; letter-spacing: -0.005em; }
       .vk-flow2-row-arrow { color: #828a98; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; display: inline-flex; justify-content: flex-end; }
