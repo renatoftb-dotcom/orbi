@@ -11498,9 +11498,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   function handleVoltar() {
     // Em modo "ver", nunca pergunta — só volta
     if (modoVer) { onVoltar(); return; }
-    // Se já existe orcBase (edição), deixa voltar direto sem perguntar
-    if (orcBase?.id) { onVoltar(); return; }
-    // Novo orçamento: pergunta se tem algo preenchido
+    // Se já tem proposta enviada (consolidado), volta direto sem perguntar.
+    // Importante: ter `id` sozinho não basta — "Gerar Orçamento" auto-salva
+    // o orçamento com id antes da proposta ser de fato enviada, então o
+    // rascunho com id ainda precisa disparar o modal.
+    if (orcBase?.id && orcBase?.propostas?.length > 0) { onVoltar(); return; }
+    // Novo orçamento ou rascunho com id: pergunta se tem algo preenchido
     if (temDadosPreenchidos()) {
       pendingNavRef.current = null; // voltar normal = usa onVoltar
       setShowSaveDialog(true);
@@ -11542,8 +11545,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // O callback navegacaoPendente será executado depois que o usuário decidir.
   useEffect(() => {
     const handler = (navegacaoPendente) => {
-      // Modo ver ou edição: deixa trocar direto (nada pra salvar)
-      if (modoVer || orcBase?.id) return false;
+      // Modo ver ou orçamento já consolidado (com proposta enviada): deixa trocar direto
+      if (modoVer || (orcBase?.id && orcBase?.propostas?.length > 0)) return false;
       if (!temDadosPreenchidos()) return false;
       // Há dados não salvos: mostra modal e guarda a nav pra depois
       pendingNavRef.current = navegacaoPendente;
@@ -11558,7 +11561,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         window.__vickeOrcDirtyPrompt = null;
       }
     };
-  }, [modoVer, orcBase?.id, qtds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [modoVer, orcBase?.id, orcBase?.propostas?.length, qtds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wrapRef = useRef(null);
 
