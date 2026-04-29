@@ -15106,6 +15106,40 @@ function Admin({ usuario, data, save, initialTab }) {
   const [manutErro, setManutErro]       = useState(null);
   const [confirmManut, setConfirmManut] = useState(false);
 
+  // Injeta CSS mobile global — afeta classes vk-adm-* aplicadas nos painéis.
+  // Mais simples que propagar isMobile pra cada subcomponente. Roda 1x no mount.
+  useEffect(() => {
+    if (document.getElementById("vicke-admin-mobile-fix")) return;
+    const style = document.createElement("style");
+    style.id = "vicke-admin-mobile-fix";
+    style.textContent = `
+      @media (max-width: 767px) {
+        .vk-adm-wrap { max-width: 100% !important; }
+        .vk-adm-header { padding: 16px 14px !important; }
+        .vk-adm-titulo { font-size: 16px !important; }
+        .vk-adm-abas { padding: 0 14px !important; gap: 0 !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+        .vk-adm-aba { padding: 10px 12px !important; font-size: 12px !important; white-space: nowrap !important; flex-shrink: 0 !important; }
+        .vk-adm-body { padding: 16px 14px !important; }
+        .vk-adm-body-narrow { padding: 16px 14px !important; }
+        .vk-adm-tabela-mobile { display: block !important; border: none !important; }
+        .vk-adm-tabela-mobile thead { display: none !important; }
+        .vk-adm-tabela-mobile tbody { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+        .vk-adm-tabela-mobile tr { display: flex !important; flex-direction: column !important; padding: 12px 14px !important; border: 1px solid #e5e7eb !important; border-radius: 10px !important; background: #fff !important; }
+        .vk-adm-tabela-mobile td { display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 4px 0 !important; border: none !important; gap: 12px !important; }
+        .vk-adm-tabela-mobile td::before {
+          content: attr(data-label);
+          font-size: 10px; font-weight: 700; color: #9ca3af;
+          text-transform: uppercase; letter-spacing: 0.5px;
+          flex-shrink: 0;
+        }
+        .vk-adm-tabela-mobile td[data-label=""]::before { display: none; }
+        .vk-adm-detalhe-grid { grid-template-columns: 1fr 1fr !important; }
+        .vk-adm-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
   // Estados CUB (Custo Unitário Básico)
   const [cubStatus, setCubStatus]       = useState(null);
   const [cubValores, setCubValores]     = useState(null);
@@ -15206,7 +15240,7 @@ function Admin({ usuario, data, save, initialTab }) {
 
   // ── ABA MANUTENÇÃO ────────────────────────────────────────────
   const renderManutencao = () => (
-    <div style={S.bodyNarrow}>
+    <div style={S.bodyNarrow} className="vk-adm-body-narrow">
       <div style={S.secao}>
         <div style={S.secTit}>Manutenção automática</div>
         <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
@@ -15285,7 +15319,7 @@ function Admin({ usuario, data, save, initialTab }) {
   }
 
   const renderCUB = () => (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
 
       {/* Cabeçalho com descrição */}
       <div style={{ marginBottom:24, fontSize:13, color:"#6b7280", lineHeight:1.6 }}>
@@ -15481,18 +15515,18 @@ function Admin({ usuario, data, save, initialTab }) {
 
   // ── ABA EMPRESAS ─────────────────────────────────────────────
   return (
-    <div style={S.wrap}>
-      <div style={S.header}>
-        <div style={{ display:"flex", alignItems:"center" }}>
-          <h2 style={S.titulo}>Administração do Sistema</h2>
+    <div style={S.wrap} className="vk-adm-wrap">
+      <div style={S.header} className="vk-adm-header">
+        <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+          <h2 style={S.titulo} className="vk-adm-titulo">Administração do Sistema</h2>
           <span style={S.tag}>Master</span>
         </div>
         <div style={S.sub}>Acesso restrito · Usuário: {usuario?.nome || "—"}</div>
       </div>
 
-      <div style={S.abas}>
+      <div style={S.abas} className="vk-adm-abas">
         {[["manutencao","Manutenção"],["cub","CUB"],["empresas","Empresas"],["usuarios","Usuários Master"],["feedback","Feedback"]].map(([key,lbl]) => (
-          <button key={key} style={S.aba(aba===key)} onClick={() => setAba(key)}>{lbl}</button>
+          <button key={key} style={S.aba(aba===key)} className="vk-adm-aba" onClick={() => setAba(key)}>{lbl}</button>
         ))}
       </div>
 
@@ -15632,7 +15666,7 @@ function PainelEmpresas({ S }) {
   }
 
   return (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
           <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Empresas cadastradas</div>
@@ -15655,7 +15689,7 @@ function PainelEmpresas({ S }) {
 
       {!loading && empresas.length > 0 && (
         <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
-          <table style={S.tabela}>
+          <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
                 <th style={S.th}>Nome</th>
@@ -15669,20 +15703,20 @@ function PainelEmpresas({ S }) {
             <tbody>
               {empresas.map(e => (
                 <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setEmpresaSelecionada(e)}>
-                  <td style={S.td}>
+                  <td style={S.td} data-label="Nome">
                     <div style={{ fontWeight:600, color:"#111" }}>{e.nome}</div>
                     <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{e.plano || "gratuito"}</div>
                   </td>
-                  <td style={{ ...S.td, color:"#6b7280" }}>{e.cnpj_cpf || "—"}</td>
-                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }}>
+                  <td style={{ ...S.td, color:"#6b7280" }} data-label="CNPJ / CPF">{e.cnpj_cpf || "—"}</td>
+                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Usuários">
                     {e.usuarios_ativos || 0}
                     {e.usuarios_total > e.usuarios_ativos && (
                       <span style={{ color:"#d1d5db", marginLeft:4 }}>/ {e.usuarios_total}</span>
                     )}
                   </td>
-                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }}>{e.orcamentos_total || 0}</td>
-                  <td style={{ ...S.td, color:"#6b7280", fontSize:12 }}>{formatarDataHora(e.ultimo_login_empresa)}</td>
-                  <td style={S.td}>
+                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Orçamentos">{e.orcamentos_total || 0}</td>
+                  <td style={{ ...S.td, color:"#6b7280", fontSize:12 }} data-label="Último login">{formatarDataHora(e.ultimo_login_empresa)}</td>
+                  <td style={S.td} data-label="Status">
                     <span style={e.ativo ? S.badgeAtiva : S.badgeInativa}>
                       {e.ativo ? "Ativa" : "Inativa"}
                     </span>
@@ -15756,7 +15790,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   // Caso normal (vindo da listagem): pré-carregado preenche enquanto fetch corre.
   if (!data && carregando) {
     return (
-      <div style={S.body}>
+      <div style={S.body} className="vk-adm-body">
         <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
         <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13 }}>
           <div style={{
@@ -15773,7 +15807,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
 
   if (erro && !data) {
     return (
-      <div style={S.body}>
+      <div style={S.body} className="vk-adm-body">
         <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
         <div style={{ background:"#fef2f2", border:"1px solid #fecaca", color:"#991b1b", borderRadius:9, padding:"12px 16px", fontSize:13 }}>
           {erro}
@@ -15788,7 +15822,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   const c = data.counts || {};
 
   return (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
       {/* ── Voltar ── */}
       <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
 
@@ -15889,7 +15923,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           <div style={S.vazio}>Nenhum usuário cadastrado.</div>
         ) : (
           <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
-            <table style={S.tabela}>
+            <table style={S.tabela} className="vk-adm-tabela-mobile">
               <thead>
                 <tr>
                   <th style={S.th}>Nome</th>
@@ -15903,7 +15937,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
               <tbody>
                 {data.usuarios.map(u => (
                   <tr key={u.id}>
-                    <td style={S.td}>
+                    <td style={S.td} data-label="Nome">
                       <div style={{ fontWeight:500, color:"#111" }}>{u.nome}</div>
                       {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
                       {u.precisa_trocar_senha && (
@@ -15912,20 +15946,20 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                         </div>
                       )}
                     </td>
-                    <td style={{ ...S.td, color:"#6b7280" }}>{u.email}</td>
-                    <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }}>{u.nivel || "—"}</td>
-                    <td style={{ ...S.td, color:"#6b7280", fontSize:12 }}>{fmtDataHora(u.ultimo_login)}</td>
-                    <td style={S.td}>
+                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Email">{u.email}</td>
+                    <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }} data-label="Nível">{u.nivel || "—"}</td>
+                    <td style={{ ...S.td, color:"#6b7280", fontSize:12 }} data-label="Último login">{fmtDataHora(u.ultimo_login)}</td>
+                    <td style={S.td} data-label="Status">
                       <span style={u.ativo ? S.badgeAtiva : S.badgeInativa}>
                         {u.ativo ? "Ativo" : "Inativo"}
                       </span>
                     </td>
-                    <td style={{ ...S.td, textAlign:"right" }}>
+                    <td style={{ ...S.td, textAlign:"right" }} data-label="">
                       {/* Botões de ação. Master é protegido (só edita via tela própria
                           de "Usuários master"). Para escritorio: Editar sempre disponível,
                           Resetar senha só pra usuários ativos (sem sentido resetar inativo). */}
                       {u.perfil !== "master" && (
-                        <div style={{ display:"inline-flex", gap:6, justifyContent:"flex-end" }}>
+                        <div style={{ display:"inline-flex", gap:6, justifyContent:"flex-end", flexWrap:"wrap" }}>
                           <button
                             onClick={() => setUsuarioParaEditar(u)}
                             title="Editar usuário"
@@ -17026,7 +17060,7 @@ function PainelFeedback({ S }) {
   }
 
   return (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18, gap:16, flexWrap:"wrap" }}>
         <div>
           <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Caixa de Feedback</div>
@@ -17327,7 +17361,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
   const noLimite = masterAtivos >= limite;
 
   return (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
           <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Usuários master</div>
@@ -17360,7 +17394,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
 
       {!loading && usuarios.length > 0 && (
         <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
-          <table style={S.tabela}>
+          <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
                 <th style={S.th}>Nome</th>
@@ -17375,7 +17409,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                 const ehVoce = u.id === usuarioLogado?.id;
                 return (
                   <tr key={u.id}>
-                    <td style={S.td}>
+                    <td style={S.td} data-label="Nome">
                       <div style={{ fontWeight:600, color:"#111" }}>
                         {u.nome}
                         {ehVoce && (
@@ -17383,16 +17417,16 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                         )}
                       </div>
                     </td>
-                    <td style={{ ...S.td, color:"#6b7280" }}>{u.email}</td>
-                    <td style={{ ...S.td, color:"#6b7280" }}>
+                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Email">{u.email}</td>
+                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Criado em">
                       {u.criado_em ? new Date(u.criado_em).toLocaleDateString("pt-BR") : "—"}
                     </td>
-                    <td style={S.td}>
+                    <td style={S.td} data-label="Status">
                       <span style={u.ativo ? S.badgeAtiva : S.badgeInativa}>
                         {u.ativo ? "Ativo" : "Inativo"}
                       </span>
                     </td>
-                    <td style={{ ...S.td, textAlign:"right" }}>
+                    <td style={{ ...S.td, textAlign:"right" }} data-label="">
                       {!ehVoce && (
                         <button
                           style={{ ...S.btnSec, color:"#6b7280", padding:"5px 12px", fontSize:12 }}
@@ -18995,6 +19029,16 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   const [loading, setLoad]  = useState(true);
   const [erro, setErro]     = useState(null);
 
+  // Detecta mobile pra ajustes de layout (padding, grids).
+  const [isMobile, setIsMobile] = useState(() => {
+    try { return window.innerWidth < 768; } catch { return false; }
+  });
+  useEffect(() => {
+    function onResize() { try { setIsMobile(window.innerWidth < 768); } catch {} }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // Carrega dashboard. Função separada pra reutilizar no refresh manual.
   async function carregar() {
     try {
@@ -19032,9 +19076,9 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   ];
 
   return (
-    <div style={{ padding:"32px 32px 60px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", maxWidth:1100, margin:"0 auto" }}>
-      <div style={{ marginBottom:28 }}>
-        <div style={{ fontSize:24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
+    <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", maxWidth:1100, margin:"0 auto" }}>
+      <div style={{ marginBottom: isMobile ? 18 : 28 }}>
+        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
         <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
       </div>
 
@@ -19045,7 +19089,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
       )}
 
       {/* ── 4 Cards de números ── */}
-      <DashboardCards counts={dash?.counts} loading={loading} setAba={setAba} tentarTrocar={tentarTrocar} />
+      <DashboardCards counts={dash?.counts} loading={loading} setAba={setAba} tentarTrocar={tentarTrocar} isMobile={isMobile} />
 
       {/* ── Navegação (acesso rápido sempre acima da dobra) ──
           Movido pra cima do feed: convenção SaaS (Linear/Vercel/Stripe) é
@@ -19053,23 +19097,27 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
           empresas crescendo, feed pode esticar muito — não pode empurrar
           os cards de navegação pra fora da tela. */}
       <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8 }}>Acesso rápido</div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12, marginBottom:32 }}>
+      {/* Mobile: 2 colunas fixas (cabe 2 cards de ~150px em 375px de viewport).
+          Desktop: auto-fill com mínimo 200px (3-6 colunas conforme largura). */}
+      <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: isMobile ? 8 : 12, marginBottom:32 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor="#e5e7eb"; }}>
+            style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
+            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#111"; }}
+            onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#e5e7eb"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
-              <IconeMaster nome={m.icon} tamanho={18} cor="#374151" />
-              <div style={{ fontSize:13, fontWeight:600, color:"#111" }}>{m.label}</div>
+              <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#111" }}>{m.label}</div>
             </div>
-            <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
+            {!isMobile && (
+              <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
+            )}
           </button>
         ))}
       </div>
 
       {/* ── Feed de atividade recente ── */}
-      <DashboardFeed feed={dash?.feed} loading={loading} />
+      <DashboardFeed feed={dash?.feed} loading={loading} isMobile={isMobile} />
     </div>
   );
 }
@@ -19077,7 +19125,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
 // 4 Cards de números. Cada card é clicável quando faz sentido (ex: mensagens
 // não-lidas leva pra caixa; signups leva pra empresas). Card de logins não tem
 // destino útil no momento, fica não-clicável.
-function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
+function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
   const c = counts || {};
   const goto = (aba) => { const fn = () => setAba(aba); if (tentarTrocar) tentarTrocar(fn); else fn(); };
 
@@ -19116,7 +19164,10 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
   ];
 
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12, marginBottom:28 }}>
+    // Mobile: 2 colunas fixas (5 cards => 2-2-1, pode ser feio mas é menos pior
+    // que tentar empilhar tudo em 1 coluna gigante).
+    // Desktop: auto-fit com mínimo 200px (5 cards lado a lado em telas largas).
+    <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(200px, 1fr))", gap: isMobile ? 8 : 12, marginBottom: isMobile ? 20 : 28 }}>
       {items.map((it, i) => (
         <div
           key={i}
@@ -19124,20 +19175,20 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
           style={{
             background:"#fff",
             border: it.destaque ? "1px solid #f59e0b" : "1px solid #e5e7eb",
-            borderRadius:12, padding:"16px 18px",
+            borderRadius:12, padding: isMobile ? "12px 12px" : "16px 18px",
             cursor: it.onClick ? "pointer" : "default",
             transition:"border-color 0.12s",
           }}
-          onMouseEnter={e => { if (it.onClick) e.currentTarget.style.borderColor = "#111"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
-          <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:8 }}>
+          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#111"; }}
+          onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
+          <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {it.label}
           </div>
-          <div style={{ fontSize:28, fontWeight:600, color:"#111", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
+          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#111", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
             {it.value}
           </div>
           {it.sub && (
-            <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:4 }}>{it.sub}</div>
+            <div style={{ fontSize: isMobile ? 10.5 : 11.5, color:"#9ca3af", marginTop:4, lineHeight:1.3 }}>{it.sub}</div>
           )}
         </div>
       ))}
@@ -19152,9 +19203,9 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
 // audit_log acumula. Scroll interno evita empurrar o resto da página.
 // 480px caem ~9-10 linhas de feed comodamente, suficiente pra ver atividade
 // recente sem sobrecarregar.
-function DashboardFeed({ feed, loading }) {
+function DashboardFeed({ feed, loading, isMobile }) {
   return (
-    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px 18px" }}>
+    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "12px 14px" : "16px 18px" }}>
       <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
         Atividade recente
       </div>
@@ -19167,7 +19218,9 @@ function DashboardFeed({ feed, loading }) {
       {!loading && feed && feed.length > 0 && (
         <div style={{
           display:"flex", flexDirection:"column",
-          maxHeight:480, overflowY:"auto",
+          // Mobile: maxHeight menor (320px ~ 6 linhas) pra não engolir tela toda.
+          // Desktop: 480px ~ 9 linhas — espaço suficiente sem sobrecarregar.
+          maxHeight: isMobile ? 320 : 480, overflowY:"auto",
           // Compensação visual pra scroll: padding direito pra scrollbar
           // não colar na borda do conteúdo.
           paddingRight:6, marginRight:-6,

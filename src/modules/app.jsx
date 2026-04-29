@@ -94,6 +94,16 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   const [loading, setLoad]  = useState(true);
   const [erro, setErro]     = useState(null);
 
+  // Detecta mobile pra ajustes de layout (padding, grids).
+  const [isMobile, setIsMobile] = useState(() => {
+    try { return window.innerWidth < 768; } catch { return false; }
+  });
+  useEffect(() => {
+    function onResize() { try { setIsMobile(window.innerWidth < 768); } catch {} }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   // Carrega dashboard. Função separada pra reutilizar no refresh manual.
   async function carregar() {
     try {
@@ -131,9 +141,9 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   ];
 
   return (
-    <div style={{ padding:"32px 32px 60px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", maxWidth:1100, margin:"0 auto" }}>
-      <div style={{ marginBottom:28 }}>
-        <div style={{ fontSize:24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
+    <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", maxWidth:1100, margin:"0 auto" }}>
+      <div style={{ marginBottom: isMobile ? 18 : 28 }}>
+        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
         <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
       </div>
 
@@ -144,7 +154,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
       )}
 
       {/* ── 4 Cards de números ── */}
-      <DashboardCards counts={dash?.counts} loading={loading} setAba={setAba} tentarTrocar={tentarTrocar} />
+      <DashboardCards counts={dash?.counts} loading={loading} setAba={setAba} tentarTrocar={tentarTrocar} isMobile={isMobile} />
 
       {/* ── Navegação (acesso rápido sempre acima da dobra) ──
           Movido pra cima do feed: convenção SaaS (Linear/Vercel/Stripe) é
@@ -152,23 +162,27 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
           empresas crescendo, feed pode esticar muito — não pode empurrar
           os cards de navegação pra fora da tela. */}
       <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8 }}>Acesso rápido</div>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12, marginBottom:32 }}>
+      {/* Mobile: 2 colunas fixas (cabe 2 cards de ~150px em 375px de viewport).
+          Desktop: auto-fill com mínimo 200px (3-6 colunas conforme largura). */}
+      <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: isMobile ? 8 : 12, marginBottom:32 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor="#e5e7eb"; }}>
+            style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
+            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#111"; }}
+            onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#e5e7eb"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
-              <IconeMaster nome={m.icon} tamanho={18} cor="#374151" />
-              <div style={{ fontSize:13, fontWeight:600, color:"#111" }}>{m.label}</div>
+              <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#111" }}>{m.label}</div>
             </div>
-            <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
+            {!isMobile && (
+              <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
+            )}
           </button>
         ))}
       </div>
 
       {/* ── Feed de atividade recente ── */}
-      <DashboardFeed feed={dash?.feed} loading={loading} />
+      <DashboardFeed feed={dash?.feed} loading={loading} isMobile={isMobile} />
     </div>
   );
 }
@@ -176,7 +190,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
 // 4 Cards de números. Cada card é clicável quando faz sentido (ex: mensagens
 // não-lidas leva pra caixa; signups leva pra empresas). Card de logins não tem
 // destino útil no momento, fica não-clicável.
-function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
+function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
   const c = counts || {};
   const goto = (aba) => { const fn = () => setAba(aba); if (tentarTrocar) tentarTrocar(fn); else fn(); };
 
@@ -215,7 +229,10 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
   ];
 
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:12, marginBottom:28 }}>
+    // Mobile: 2 colunas fixas (5 cards => 2-2-1, pode ser feio mas é menos pior
+    // que tentar empilhar tudo em 1 coluna gigante).
+    // Desktop: auto-fit com mínimo 200px (5 cards lado a lado em telas largas).
+    <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(200px, 1fr))", gap: isMobile ? 8 : 12, marginBottom: isMobile ? 20 : 28 }}>
       {items.map((it, i) => (
         <div
           key={i}
@@ -223,20 +240,20 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
           style={{
             background:"#fff",
             border: it.destaque ? "1px solid #f59e0b" : "1px solid #e5e7eb",
-            borderRadius:12, padding:"16px 18px",
+            borderRadius:12, padding: isMobile ? "12px 12px" : "16px 18px",
             cursor: it.onClick ? "pointer" : "default",
             transition:"border-color 0.12s",
           }}
-          onMouseEnter={e => { if (it.onClick) e.currentTarget.style.borderColor = "#111"; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
-          <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:8 }}>
+          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#111"; }}
+          onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
+          <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {it.label}
           </div>
-          <div style={{ fontSize:28, fontWeight:600, color:"#111", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
+          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#111", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
             {it.value}
           </div>
           {it.sub && (
-            <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:4 }}>{it.sub}</div>
+            <div style={{ fontSize: isMobile ? 10.5 : 11.5, color:"#9ca3af", marginTop:4, lineHeight:1.3 }}>{it.sub}</div>
           )}
         </div>
       ))}
@@ -251,9 +268,9 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar }) {
 // audit_log acumula. Scroll interno evita empurrar o resto da página.
 // 480px caem ~9-10 linhas de feed comodamente, suficiente pra ver atividade
 // recente sem sobrecarregar.
-function DashboardFeed({ feed, loading }) {
+function DashboardFeed({ feed, loading, isMobile }) {
   return (
-    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"16px 18px" }}>
+    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "12px 14px" : "16px 18px" }}>
       <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
         Atividade recente
       </div>
@@ -266,7 +283,9 @@ function DashboardFeed({ feed, loading }) {
       {!loading && feed && feed.length > 0 && (
         <div style={{
           display:"flex", flexDirection:"column",
-          maxHeight:480, overflowY:"auto",
+          // Mobile: maxHeight menor (320px ~ 6 linhas) pra não engolir tela toda.
+          // Desktop: 480px ~ 9 linhas — espaço suficiente sem sobrecarregar.
+          maxHeight: isMobile ? 320 : 480, overflowY:"auto",
           // Compensação visual pra scroll: padding direito pra scrollbar
           // não colar na borda do conteúdo.
           paddingRight:6, marginRight:-6,

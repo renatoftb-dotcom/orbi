@@ -22,6 +22,40 @@ function Admin({ usuario, data, save, initialTab }) {
   const [manutErro, setManutErro]       = useState(null);
   const [confirmManut, setConfirmManut] = useState(false);
 
+  // Injeta CSS mobile global — afeta classes vk-adm-* aplicadas nos painéis.
+  // Mais simples que propagar isMobile pra cada subcomponente. Roda 1x no mount.
+  useEffect(() => {
+    if (document.getElementById("vicke-admin-mobile-fix")) return;
+    const style = document.createElement("style");
+    style.id = "vicke-admin-mobile-fix";
+    style.textContent = `
+      @media (max-width: 767px) {
+        .vk-adm-wrap { max-width: 100% !important; }
+        .vk-adm-header { padding: 16px 14px !important; }
+        .vk-adm-titulo { font-size: 16px !important; }
+        .vk-adm-abas { padding: 0 14px !important; gap: 0 !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+        .vk-adm-aba { padding: 10px 12px !important; font-size: 12px !important; white-space: nowrap !important; flex-shrink: 0 !important; }
+        .vk-adm-body { padding: 16px 14px !important; }
+        .vk-adm-body-narrow { padding: 16px 14px !important; }
+        .vk-adm-tabela-mobile { display: block !important; border: none !important; }
+        .vk-adm-tabela-mobile thead { display: none !important; }
+        .vk-adm-tabela-mobile tbody { display: flex !important; flex-direction: column !important; gap: 8px !important; }
+        .vk-adm-tabela-mobile tr { display: flex !important; flex-direction: column !important; padding: 12px 14px !important; border: 1px solid #e5e7eb !important; border-radius: 10px !important; background: #fff !important; }
+        .vk-adm-tabela-mobile td { display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 4px 0 !important; border: none !important; gap: 12px !important; }
+        .vk-adm-tabela-mobile td::before {
+          content: attr(data-label);
+          font-size: 10px; font-weight: 700; color: #9ca3af;
+          text-transform: uppercase; letter-spacing: 0.5px;
+          flex-shrink: 0;
+        }
+        .vk-adm-tabela-mobile td[data-label=""]::before { display: none; }
+        .vk-adm-detalhe-grid { grid-template-columns: 1fr 1fr !important; }
+        .vk-adm-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+      }
+    `;
+    document.head.appendChild(style);
+  }, []);
+
   // Estados CUB (Custo Unitário Básico)
   const [cubStatus, setCubStatus]       = useState(null);
   const [cubValores, setCubValores]     = useState(null);
@@ -122,7 +156,7 @@ function Admin({ usuario, data, save, initialTab }) {
 
   // ── ABA MANUTENÇÃO ────────────────────────────────────────────
   const renderManutencao = () => (
-    <div style={S.bodyNarrow}>
+    <div style={S.bodyNarrow} className="vk-adm-body-narrow">
       <div style={S.secao}>
         <div style={S.secTit}>Manutenção automática</div>
         <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
@@ -201,7 +235,7 @@ function Admin({ usuario, data, save, initialTab }) {
   }
 
   const renderCUB = () => (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
 
       {/* Cabeçalho com descrição */}
       <div style={{ marginBottom:24, fontSize:13, color:"#6b7280", lineHeight:1.6 }}>
@@ -397,18 +431,18 @@ function Admin({ usuario, data, save, initialTab }) {
 
   // ── ABA EMPRESAS ─────────────────────────────────────────────
   return (
-    <div style={S.wrap}>
-      <div style={S.header}>
-        <div style={{ display:"flex", alignItems:"center" }}>
-          <h2 style={S.titulo}>Administração do Sistema</h2>
+    <div style={S.wrap} className="vk-adm-wrap">
+      <div style={S.header} className="vk-adm-header">
+        <div style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:8 }}>
+          <h2 style={S.titulo} className="vk-adm-titulo">Administração do Sistema</h2>
           <span style={S.tag}>Master</span>
         </div>
         <div style={S.sub}>Acesso restrito · Usuário: {usuario?.nome || "—"}</div>
       </div>
 
-      <div style={S.abas}>
+      <div style={S.abas} className="vk-adm-abas">
         {[["manutencao","Manutenção"],["cub","CUB"],["empresas","Empresas"],["usuarios","Usuários Master"],["feedback","Feedback"]].map(([key,lbl]) => (
-          <button key={key} style={S.aba(aba===key)} onClick={() => setAba(key)}>{lbl}</button>
+          <button key={key} style={S.aba(aba===key)} className="vk-adm-aba" onClick={() => setAba(key)}>{lbl}</button>
         ))}
       </div>
 
@@ -548,7 +582,7 @@ function PainelEmpresas({ S }) {
   }
 
   return (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
           <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Empresas cadastradas</div>
@@ -571,7 +605,7 @@ function PainelEmpresas({ S }) {
 
       {!loading && empresas.length > 0 && (
         <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
-          <table style={S.tabela}>
+          <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
                 <th style={S.th}>Nome</th>
@@ -585,20 +619,20 @@ function PainelEmpresas({ S }) {
             <tbody>
               {empresas.map(e => (
                 <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setEmpresaSelecionada(e)}>
-                  <td style={S.td}>
+                  <td style={S.td} data-label="Nome">
                     <div style={{ fontWeight:600, color:"#111" }}>{e.nome}</div>
                     <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{e.plano || "gratuito"}</div>
                   </td>
-                  <td style={{ ...S.td, color:"#6b7280" }}>{e.cnpj_cpf || "—"}</td>
-                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }}>
+                  <td style={{ ...S.td, color:"#6b7280" }} data-label="CNPJ / CPF">{e.cnpj_cpf || "—"}</td>
+                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Usuários">
                     {e.usuarios_ativos || 0}
                     {e.usuarios_total > e.usuarios_ativos && (
                       <span style={{ color:"#d1d5db", marginLeft:4 }}>/ {e.usuarios_total}</span>
                     )}
                   </td>
-                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }}>{e.orcamentos_total || 0}</td>
-                  <td style={{ ...S.td, color:"#6b7280", fontSize:12 }}>{formatarDataHora(e.ultimo_login_empresa)}</td>
-                  <td style={S.td}>
+                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Orçamentos">{e.orcamentos_total || 0}</td>
+                  <td style={{ ...S.td, color:"#6b7280", fontSize:12 }} data-label="Último login">{formatarDataHora(e.ultimo_login_empresa)}</td>
+                  <td style={S.td} data-label="Status">
                     <span style={e.ativo ? S.badgeAtiva : S.badgeInativa}>
                       {e.ativo ? "Ativa" : "Inativa"}
                     </span>
@@ -672,7 +706,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   // Caso normal (vindo da listagem): pré-carregado preenche enquanto fetch corre.
   if (!data && carregando) {
     return (
-      <div style={S.body}>
+      <div style={S.body} className="vk-adm-body">
         <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
         <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13 }}>
           <div style={{
@@ -689,7 +723,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
 
   if (erro && !data) {
     return (
-      <div style={S.body}>
+      <div style={S.body} className="vk-adm-body">
         <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
         <div style={{ background:"#fef2f2", border:"1px solid #fecaca", color:"#991b1b", borderRadius:9, padding:"12px 16px", fontSize:13 }}>
           {erro}
@@ -704,7 +738,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
   const c = data.counts || {};
 
   return (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
       {/* ── Voltar ── */}
       <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
 
@@ -805,7 +839,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
           <div style={S.vazio}>Nenhum usuário cadastrado.</div>
         ) : (
           <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
-            <table style={S.tabela}>
+            <table style={S.tabela} className="vk-adm-tabela-mobile">
               <thead>
                 <tr>
                   <th style={S.th}>Nome</th>
@@ -819,7 +853,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
               <tbody>
                 {data.usuarios.map(u => (
                   <tr key={u.id}>
-                    <td style={S.td}>
+                    <td style={S.td} data-label="Nome">
                       <div style={{ fontWeight:500, color:"#111" }}>{u.nome}</div>
                       {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
                       {u.precisa_trocar_senha && (
@@ -828,20 +862,20 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                         </div>
                       )}
                     </td>
-                    <td style={{ ...S.td, color:"#6b7280" }}>{u.email}</td>
-                    <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }}>{u.nivel || "—"}</td>
-                    <td style={{ ...S.td, color:"#6b7280", fontSize:12 }}>{fmtDataHora(u.ultimo_login)}</td>
-                    <td style={S.td}>
+                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Email">{u.email}</td>
+                    <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }} data-label="Nível">{u.nivel || "—"}</td>
+                    <td style={{ ...S.td, color:"#6b7280", fontSize:12 }} data-label="Último login">{fmtDataHora(u.ultimo_login)}</td>
+                    <td style={S.td} data-label="Status">
                       <span style={u.ativo ? S.badgeAtiva : S.badgeInativa}>
                         {u.ativo ? "Ativo" : "Inativo"}
                       </span>
                     </td>
-                    <td style={{ ...S.td, textAlign:"right" }}>
+                    <td style={{ ...S.td, textAlign:"right" }} data-label="">
                       {/* Botões de ação. Master é protegido (só edita via tela própria
                           de "Usuários master"). Para escritorio: Editar sempre disponível,
                           Resetar senha só pra usuários ativos (sem sentido resetar inativo). */}
                       {u.perfil !== "master" && (
-                        <div style={{ display:"inline-flex", gap:6, justifyContent:"flex-end" }}>
+                        <div style={{ display:"inline-flex", gap:6, justifyContent:"flex-end", flexWrap:"wrap" }}>
                           <button
                             onClick={() => setUsuarioParaEditar(u)}
                             title="Editar usuário"
@@ -1942,7 +1976,7 @@ function PainelFeedback({ S }) {
   }
 
   return (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18, gap:16, flexWrap:"wrap" }}>
         <div>
           <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Caixa de Feedback</div>
@@ -2243,7 +2277,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
   const noLimite = masterAtivos >= limite;
 
   return (
-    <div style={S.body}>
+    <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
           <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Usuários master</div>
@@ -2276,7 +2310,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
 
       {!loading && usuarios.length > 0 && (
         <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
-          <table style={S.tabela}>
+          <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
                 <th style={S.th}>Nome</th>
@@ -2291,7 +2325,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                 const ehVoce = u.id === usuarioLogado?.id;
                 return (
                   <tr key={u.id}>
-                    <td style={S.td}>
+                    <td style={S.td} data-label="Nome">
                       <div style={{ fontWeight:600, color:"#111" }}>
                         {u.nome}
                         {ehVoce && (
@@ -2299,16 +2333,16 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                         )}
                       </div>
                     </td>
-                    <td style={{ ...S.td, color:"#6b7280" }}>{u.email}</td>
-                    <td style={{ ...S.td, color:"#6b7280" }}>
+                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Email">{u.email}</td>
+                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Criado em">
                       {u.criado_em ? new Date(u.criado_em).toLocaleDateString("pt-BR") : "—"}
                     </td>
-                    <td style={S.td}>
+                    <td style={S.td} data-label="Status">
                       <span style={u.ativo ? S.badgeAtiva : S.badgeInativa}>
                         {u.ativo ? "Ativo" : "Inativo"}
                       </span>
                     </td>
-                    <td style={{ ...S.td, textAlign:"right" }}>
+                    <td style={{ ...S.td, textAlign:"right" }} data-label="">
                       {!ehVoce && (
                         <button
                           style={{ ...S.btnSec, color:"#6b7280", padding:"5px 12px", fontSize:12 }}
