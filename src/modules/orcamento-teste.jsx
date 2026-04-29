@@ -8051,6 +8051,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   que o scroll não seja reajustado ao selecionar (o próximo cômodo
                   sobe exatamente pra posição do cursor). */}
               {(() => {
+                // Folga só em desktop. Em mobile não tem cursor/hover,
+                // então essa altura compensatória só cria espaço vazio
+                // que faz o card de cômodos parecer enorme com poucos itens
+                // (e o Resumo fica longe lá embaixo).
+                if (isMobileOrc) return null;
                 const gruposVisiveis = Object.entries(configAtual.grupos).filter(([g]) => {
                   const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                   if (isTerrea && g === "Outros") return false;
