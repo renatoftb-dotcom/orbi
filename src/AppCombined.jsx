@@ -11562,9 +11562,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const wrapRef = useRef(null);
 
-  // Detecta viewport mobile (<768px). Usado pra:
-  // - Renderizar stepper sticky em mobile (●━●━●━○━○━○) durante e após perguntas
-  // - O CSS injetado globalmente cobre o resto (pílulas verticais, cards limpos, etc)
+  // Detecta viewport mobile (<768px). Usado pra renderizar stepper sticky e
+  // alguns ajustes no JSX. CSS injetado globalmente cobre o resto.
   const [isMobileOrc, setIsMobileOrc] = useState(() => {
     try { return window.innerWidth < 768; } catch { return false; }
   });
@@ -12096,7 +12095,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       /* Input texto pra "Referência" (primeira pergunta) */
       .vk-flow2-input-wrap { margin-top: 24px; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; }
-      .vk-flow2-input { box-sizing: border-box; width: 100%; max-width: 460px; padding: 14px 18px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; background: #fff; font-family: inherit; font-size: 15px; color: #111; outline: none; transition: border-color .15s, box-shadow .15s, background .25s, color .25s; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
+      .vk-flow2-input { width: 100%; max-width: 460px; padding: 14px 18px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; background: #fff; font-family: inherit; font-size: 15px; color: #111; outline: none; transition: border-color .15s, box-shadow .15s, background .25s, color .25s; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
       .vk-flow2-input:focus { border-color: #111; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
       .vk-flow2-input.is-chosen { background: #111; color: #fff; border-color: #111; animation: flow2OptChosen .55s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
       .vk-flow2-input::placeholder { color: #828a98; }
@@ -12122,209 +12121,139 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-row.is-fading { opacity: 0; height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; overflow: hidden; transition: all .35s cubic-bezier(0.32, 0.72, 0, 1); }
 
       /* ════════════════════════════════════════════════════════════════ */
-      /* MOBILE (< 768px) — refinamentos estéticos do orçamento           */
+      /* MOBILE (< 768px) — orçamento responsivo                          */
       /* ════════════════════════════════════════════════════════════════ */
       @media (max-width: 767px) {
-        /* Container raiz */
+        /* Bloqueia overflow horizontal global e força box-sizing border-box
+           em todos os elementos do orçamento (resolve width:100% + padding) */
         html, body { overflow-x: hidden !important; max-width: 100vw !important; }
         [data-vk-orc-wrap] { padding: 12px 14px 60px !important; max-width: 100vw !important; overflow-x: hidden !important; }
-        /* Border-box em tudo dentro do wrap mobile pra prevenir overflows
-           causados por width:100% + padding/border (problema clássico CSS) */
         [data-vk-orc-wrap] *,
         [data-vk-orc-wrap] *::before,
-        [data-vk-orc-wrap] *::after {
-          box-sizing: border-box !important;
-        }
+        [data-vk-orc-wrap] *::after { box-sizing: border-box !important; }
 
-        /* ── Stepper sticky no topo ── */
+        /* ── Stepper sticky no topo (●━●━●━○━○━○) ── */
+        /* Fundo branco SÓLIDO + borda inferior firme — parece progress bar real */
         .vk-orc-stepper {
           position: sticky; top: 0; z-index: 50;
           margin: 0 -14px 14px;
-          padding: 10px 16px 9px;
-          background: rgba(255,255,255,0.94);
-          backdrop-filter: blur(8px);
-          -webkit-backdrop-filter: blur(8px);
-          border-bottom: 1px solid #f3f4f6;
-          display: flex; align-items: center; gap: 4px;
+          padding: 14px 18px 12px;
+          background: #fff;
+          border-bottom: 1px solid #e5e7eb;
+          display: flex; align-items: center; gap: 6px;
         }
         .vk-orc-step-node {
-          display: flex; flex-direction: column; align-items: center; gap: 3px;
-          flex: 0 0 auto; padding: 2px 0; cursor: pointer;
+          display: flex; flex-direction: column; align-items: center; gap: 4px;
+          flex: 0 0 auto; padding: 0; cursor: pointer;
           background: transparent; border: 0; font-family: inherit;
+          min-width: 22px;
         }
         .vk-orc-step-dot {
-          width: 9px; height: 9px; border-radius: 50%;
-          background: #e5e7eb; transition: all .2s;
+          width: 11px; height: 11px; border-radius: 50%;
+          background: #fff; border: 2px solid #d1d5db;
+          transition: all .2s;
         }
-        .vk-orc-step-node.is-done .vk-orc-step-dot { background: #111; }
+        .vk-orc-step-node.is-done .vk-orc-step-dot {
+          background: #111; border-color: #111;
+        }
         .vk-orc-step-node.is-current .vk-orc-step-dot {
-          background: #111; box-shadow: 0 0 0 3px rgba(30,58,138,0.15);
+          background: #fff; border-color: #111;
+          box-shadow: 0 0 0 3px rgba(17,17,17,0.12);
         }
         .vk-orc-step-num {
-          font-size: 9.5px; color: #9ca3af; font-weight: 600;
-          font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+          font-size: 10px; color: #9ca3af; font-weight: 600;
+          font-variant-numeric: tabular-nums;
         }
         .vk-orc-step-node.is-done .vk-orc-step-num,
         .vk-orc-step-node.is-current .vk-orc-step-num { color: #111; }
         .vk-orc-step-line {
           flex: 1; height: 2px; background: #e5e7eb; min-width: 8px;
-          transition: background .2s;
+          transition: background .2s; align-self: center;
+          margin-top: -10px; /* alinha visualmente com o centro da bolinha */
         }
         .vk-orc-step-line.is-done { background: #111; }
 
-        /* ── Cabeçalho da identificação compacto ── */
+        /* ── Cabeçalho da identificação ── */
         [data-vk-orc-id-header] { margin-bottom: 12px !important; max-width: 100% !important; }
-        [data-vk-orc-id-nome] { font-size: 18px !important; padding: 0 !important; }
 
-        /* ── Barra de toggles (Arq/Eng/Marc/Imp/Repetição) — vertical hierárquico ── */
+        /* ── Toolbar (Arq/Eng/Marc/Imposto/Repetição) — vertical hierárquico ── */
+        /* MANTÉM background bege original — só empilha vertical com divisores */
         [data-vk-orc-toolbar] {
           flex-direction: column !important; align-items: stretch !important;
-          gap: 0 !important; padding: 4px 0 !important;
-          background: #fff !important; border: 1px solid #d1d5db !important;
-          border-radius: 10px !important; max-width: 100% !important;
-          overflow: hidden;
+          gap: 0 !important; padding: 4px 14px !important;
+          max-width: 100% !important;
         }
         [data-vk-orc-toolbar] > label,
         [data-vk-orc-toolbar] > div {
-          padding: 11px 14px !important;
-          border-bottom: 1px solid #f3f4f6;
+          padding: 11px 0 !important;
+          border-bottom: 1px solid #e5e7eb;
+          width: 100%;
+          justify-content: flex-start !important;
         }
         [data-vk-orc-toolbar] > *:last-child { border-bottom: 0 !important; }
+        /* Bloco de Repetição: remove o border-left vertical (em mobile fica top) */
         [data-vk-orc-toolbar] > div[style*="border-left"] {
-          border-left: 0 !important; padding-left: 14px !important;
-          margin-left: 0 !important; justify-content: space-between;
+          border-left: 0 !important; padding-left: 0 !important;
+          margin-left: 0 !important;
         }
 
-        /* ── Card de pergunta ── */
+        /* ── Card de pergunta (área central) ── */
         .vk-flow-shell { grid-template-columns: 1fr !important; gap: 12px !important; max-width: 100% !important; }
         .vk-flow-stage { padding: 4px 0 12px 0 !important; }
         .vk-trilha-rail { display: none !important; }
-        .vk-flow2-title { font-size: 22px !important; line-height: 1.25 !important; }
         .vk-flow2-card { max-width: 100% !important; }
-        .vk-flow2-input { max-width: 100% !important; padding: 12px 14px !important; }
+        .vk-flow2-title { font-size: 22px !important; line-height: 1.25 !important; }
+        .vk-flow2-input { box-sizing: border-box; max-width: 100% !important; padding: 12px 14px !important; }
         .vk-flow2-hint { max-width: 100% !important; }
         .vk-flow2-table { margin-top: 14px !important; }
         .vk-flow2-row { padding: 14px !important; gap: 10px !important; }
 
-        /* ── Card "Configuração" (vk-trilha-h) — pílulas verticais full-width ── */
+        /* ── Trilha horizontal (pílulas Configuração) — wrap em mobile ── */
+        /* MANTÉM o visual original (background, borda, dot, label) — só ajusta layout.
+           Usa flex-wrap em vez de grid pra que os .vk-trilha-h-sep com display:none
+           não criem slots vazios (problema clássico do grid). Cada pílula ocupa
+           ~calc(50% - 4px) — 2 cabem por linha. Última pílula sozinha estica. */
         .vk-trilha-h {
-          display: flex !important; flex-direction: column !important;
-          gap: 0 !important; padding: 4px 0 !important; margin-bottom: 14px !important;
-          background: #fff !important; border: 1px solid #d1d5db !important;
-          border-radius: 10px !important; overflow: hidden;
+          display: flex !important;
+          flex-wrap: wrap !important;
+          gap: 8px !important;
+          padding: 4px 0 !important;
+          margin-bottom: 14px !important;
         }
         .vk-trilha-h-sep { display: none !important; }
         .vk-trilha-h-node {
-          width: 100% !important; box-sizing: border-box !important;
-          justify-content: space-between !important;
-          padding: 11px 14px !important; gap: 10px !important;
-          border: 0 !important; border-bottom: 1px solid #f3f4f6 !important;
-          border-radius: 0 !important; background: #fff !important;
-          min-width: 0 !important;
+          flex: 1 1 calc(50% - 4px) !important;
+          min-width: calc(50% - 4px) !important;
+          max-width: 100% !important;
+          justify-content: flex-start !important;
+          padding: 8px 11px !important;
+          gap: 6px !important;
         }
-        .vk-trilha-h:last-child .vk-trilha-h-node:last-child,
-        .vk-trilha-h-node:last-child { border-bottom: 0 !important; }
-        .vk-trilha-h-node.is-open { background: #fafaf7 !important; }
-        .vk-trilha-h-key { display: none !important; }
-        .vk-trilha-h-dot { display: none !important; }
+        /* Caso ímpar (5 pílulas) — última estica sozinha na 3ª linha */
+        .vk-trilha-h-key {
+          font-size: 9px !important;
+          flex-shrink: 0;
+        }
         .vk-trilha-h-val {
-          font-size: 14px !important; font-weight: 500 !important;
-          flex: 1 !important;
-          overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;
+          font-size: 13px !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          white-space: nowrap !important;
+          min-width: 0 !important;
+          flex: 1;
         }
-        .vk-trilha-h-caret { font-size: 10px !important; color: #9ca3af !important; margin-left: 0 !important; }
 
         /* ── Cômodos + Resumo: 1 coluna empilhada ── */
         [data-vk-orc-comodos-shell] {
-          grid-template-columns: 1fr !important; gap: 14px !important; max-width: 100% !important;
+          grid-template-columns: 1fr !important;
+          gap: 14px !important;
+          max-width: 100% !important;
         }
         [data-vk-orc-resumo-col] { position: static !important; top: auto !important; }
         [data-vk-orc-comodos-card] {
-          max-height: none !important; overflow-y: visible !important;
-          padding: 4px 8px !important; border: 0 !important; background: transparent !important;
-        }
-
-        /* ── Cabeçalhos de grupo (Áreas Sociais, Serviço, etc) ── */
-        /* Em mobile: sem fundo bege, separador horizontal antes, texto bold */
-        [data-vk-grupo-hdr] {
-          background: transparent !important;
-          border: 0 !important;
-          border-top: 1px solid #f3f4f6 !important;
-          border-radius: 0 !important;
-          padding: 14px 0 6px !important;
-          margin: 4px 0 !important;
-        }
-        [data-vk-grupo-hdr]:first-of-type,
-        [data-vk-orc-comodos-card] > div:first-child [data-vk-grupo-hdr] {
-          border-top: 0 !important;
-          padding-top: 6px !important;
-        }
-        [data-vk-grupo-hdr] [data-vk-grupo-label] {
-          font-size: 11px !important;
-          color: #111 !important;
-          font-weight: 700 !important;
-          letter-spacing: 0.08em !important;
-        }
-        [data-vk-grupo-hdr] [data-vk-grupo-resetar] {
-          background: transparent !important; border: 0 !important;
-          color: #9ca3af !important; font-size: 11px !important;
-          text-decoration: underline; padding: 0 !important;
-        }
-        [data-vk-grupo-hdr] [data-vk-grupo-totais] {
-          font-size: 11px !important;
-          color: #6b7280 !important;
-        }
-
-        /* ── Cômodos selecionados — lista limpa em coluna única ── */
-        [data-vk-comodos-escolhidos] {
-          display: flex !important;
-          flex-direction: column !important;
-          flex-wrap: nowrap !important;
-          gap: 0 !important;
-          padding-top: 0 !important;
-          margin-top: 4px !important;
-          border-top: 0 !important;
-        }
-        [data-vk-comodo-chip] {
-          display: flex !important;
-          flex-direction: row !important;
-          align-items: center !important;
-          justify-content: space-between !important;
-          gap: 10px !important;
-          width: 100% !important;
-          flex: 1 1 auto !important;
-          background: transparent !important;
-          border: 0 !important;
-          border-bottom: 1px solid #f3f4f6 !important;
-          border-radius: 0 !important;
-          padding: 10px 4px !important;
-          font-size: 14px !important;
-          white-space: nowrap !important;
-          overflow: hidden;
-        }
-        [data-vk-comodo-chip]:last-child { border-bottom: 0 !important; }
-        [data-vk-comodo-chip] strong {
-          font-weight: 700 !important;
-          color: #111 !important;
-          font-size: 14px !important;
-          flex-shrink: 0;
-        }
-        [data-vk-comodo-chip] > span:nth-child(2) {
-          flex: 1 !important;
-          color: #111 !important;
-          font-weight: 400 !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          margin-left: -4px;
-        }
-        [data-vk-comodo-chip] .comodo-m2 {
-          font-size: 11.5px !important;
-          color: #9ca3af !important;
-          flex-shrink: 0;
-        }
-        /* Remove o "·" separador antes do m² em mobile (visualmente desnecessário) */
-        [data-vk-comodo-chip] .comodo-m2::before {
-          content: "" !important;
+          max-height: none !important;
+          overflow-y: visible !important;
+          padding: 4px 8px !important;
         }
       }
     `;
@@ -12835,7 +12764,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         const proximaPendente = ordem.find(k => !VALS_EXT[k]);
         const etapaAtual = etapaEditando || proximaPendente;
         const LABELS_STP = { referencia:"Ref.", tipoObra:"Obra", tipoProjeto:"Projeto", padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
-        // Constrói lista plana alternando node + linha (sem usar React.Fragment, que requer
+        // Lista plana alternando node + linha (sem React.Fragment, que requer
         // import explícito; sintaxe <> não aceita keys).
         const items = [];
         ordem.forEach((k, i) => {
@@ -12853,7 +12782,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               aria-label={titulo}
               onClick={() => {
                 if (done) {
-                  // Click em etapa concluída = abre edição
                   if (k === "referencia") setReferenciaTemp(referencia);
                   setEtapaEditando(etapaEditando === k ? null : k);
                 }
@@ -12885,7 +12813,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Identificação ── */}
       <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:18, maxWidth:600 }} data-vk-orc-id-header>
-        <div style={{ fontSize:21, fontWeight:700, color:"#111", padding:"4px 0" }} data-vk-orc-id-nome>{clienteNome || "—"}</div>
+        <div style={{ fontSize:21, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
         {/* Referência editável inline abaixo do nome — só aparece após preencher na primeira pergunta */}
         {referencia && (
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -13496,7 +13424,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         MozAppearance:"textfield",
                       }}
                     />
-                    {[0,1,2,3,4,5,6].map(n => {
+                    {(isMobileOrc ? [0,1,2,3,4] : [0,1,2,3,4,5,6]).map(n => {
                       const isSel = n > 0 && q === n;
                       const isKbFoc = comodoAberto === nome && comodoQtdFocada === n;
                       return (
@@ -13545,20 +13473,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               return (
                 <div key={grupo} style={{ marginBottom:14 }}>
                   {/* Header: retângulo cinza com bordas arredondadas */}
-                  <div data-vk-grupo-hdr style={{
+                  <div style={{
                     display:"flex", alignItems:"center", gap:10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
                     padding:"5px 10px",
                     marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
                   }}>
-                    <span data-vk-grupo-label style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
+                    <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
                     {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
                     {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
                       <button
                         type="button"
-                        data-vk-grupo-resetar
                         onClick={e => {
                           e.stopPropagation();
                           setQtds({});
@@ -13695,7 +13622,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     )}
 
                     {qtdGrupo > 0 && (
-                      <span data-vk-grupo-totais style={{ fontSize:11, color:"#9ca3af" }}>
+                      <span style={{ fontSize:11, color:"#9ca3af" }}>
                         <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
                       </span>
                     )}
@@ -13720,31 +13647,49 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
+                            // MOBILE: o seletor [input] 0 1 2 3 4 fica VISÍVEL inline
+                            // só no PRIMEIRO cômodo da fila global (em ordem de
+                            // todos os grupos). Os demais aparecem com nome só,
+                            // esperando a vez. Conforme o usuário define a qty,
+                            // o cômodo sai dos disponíveis e o seletor migra pro
+                            // próximo. UX sequencial guiada que substitui hover.
+                            let mostrarSeletor = false;
+                            if (isMobileOrc) {
+                              const flat = comodosFlatRef.current || [];
+                              mostrarSeletor = flat.indexOf(nome) === 0;
+                            }
                             return (
                               <div key={nome}
                                 data-comodo-wrap
                                 data-comodo-nome={nome}
-                                onMouseEnter={() => abrirComodo(nome)}
-                                onMouseLeave={agendarFecharComodo}
+                                onMouseEnter={isMobileOrc ? undefined : () => abrirComodo(nome)}
+                                onMouseLeave={isMobileOrc ? undefined : agendarFecharComodo}
                                 style={{
                                   position:"relative",
                                   display:"flex", alignItems:"center",
-                                  padding:"6px 10px", fontSize:14.5,
-                                  color: isOpen ? "#111" : "#6b7280",
+                                  padding: isMobileOrc ? "8px 6px" : "6px 10px",
+                                  fontSize: isMobileOrc ? 14 : 14.5,
+                                  color: isOpen || (isMobileOrc && mostrarSeletor) ? "#111" : "#6b7280",
                                   background: isOpen ? "#f4f5f7" : "transparent",
                                   borderRadius:6,
                                   userSelect:"none",
                                   transition:"color 0.15s, background 0.15s",
                                   minHeight:34,
+                                  gap: isMobileOrc ? 8 : 0,
                                 }}>
-                                <span style={{ flex:1, fontWeight: isOpen ? 500 : 400, minWidth:0, whiteSpace:"nowrap" }}>
+                                <span style={{
+                                  flex:1,
+                                  fontWeight: (isMobileOrc && mostrarSeletor) ? 600 : (isOpen ? 500 : 400),
+                                  minWidth:0,
+                                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                                }}>
                                   {nome}
                                   {(nome === "Suíte" || nome === "Dormitório") && (
                                     <span style={{ fontSize:10.5, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
                                   )}
                                 </span>
                                 <span style={{ flexShrink:0, display:"flex", alignItems:"center" }}>
-                                  {renderControles(nome, false)}
+                                  {renderControles(nome, mostrarSeletor)}
                                 </span>
                               </div>
                             );
@@ -13756,7 +13701,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
                   {/* Escolhidos — SEMPRE visíveis, mesmo com grupo recolhido */}
                   {escolhidos.length > 0 && (
-                    <div data-vk-comodos-escolhidos style={{
+                    <div style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
                       gap:"8px 8px",
                       paddingTop: (!recolhido && disponiveis.length > 0) ? 10 : 0,
@@ -13769,7 +13714,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         const m2Total = getArea(nome) * q;
                         return (
                           <span key={nome}
-                            data-vk-comodo-chip
                             onClick={() => removerComodo(nome)}
                             title="Clique para remover"
                             className="comodo-escolhido"
