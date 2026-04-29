@@ -6390,7 +6390,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       /* Input texto pra "Referência" (primeira pergunta) */
       .vk-flow2-input-wrap { margin-top: 24px; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; }
-      .vk-flow2-input { width: 100%; max-width: 460px; padding: 14px 18px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; background: #fff; font-family: inherit; font-size: 15px; color: #111; outline: none; transition: border-color .15s, box-shadow .15s, background .25s, color .25s; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
+      .vk-flow2-input { box-sizing: border-box; width: 100%; max-width: 460px; padding: 14px 18px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; background: #fff; font-family: inherit; font-size: 15px; color: #111; outline: none; transition: border-color .15s, box-shadow .15s, background .25s, color .25s; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
       .vk-flow2-input:focus { border-color: #111; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
       .vk-flow2-input.is-chosen { background: #111; color: #fff; border-color: #111; animation: flow2OptChosen .55s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
       .vk-flow2-input::placeholder { color: #828a98; }
@@ -6422,6 +6422,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         /* Container raiz */
         html, body { overflow-x: hidden !important; max-width: 100vw !important; }
         [data-vk-orc-wrap] { padding: 12px 14px 60px !important; max-width: 100vw !important; overflow-x: hidden !important; }
+        /* Border-box em tudo dentro do wrap mobile pra prevenir overflows
+           causados por width:100% + padding/border (problema clássico CSS) */
+        [data-vk-orc-wrap] *,
+        [data-vk-orc-wrap] *::before,
+        [data-vk-orc-wrap] *::after {
+          box-sizing: border-box !important;
+        }
 
         /* ── Stepper sticky no topo ── */
         .vk-orc-stepper {
