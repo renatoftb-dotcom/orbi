@@ -51,6 +51,18 @@ function Admin({ usuario, data, save, initialTab }) {
         .vk-adm-tabela-mobile td[data-label=""]::before { display: none; }
         .vk-adm-detalhe-grid { grid-template-columns: 1fr 1fr !important; }
         .vk-adm-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+
+        /* CUB-specific mobile tweaks */
+        .vk-cub-acoes { flex-direction: column !important; align-items: stretch !important; gap: 8px !important; }
+        .vk-cub-acoes button { width: 100% !important; padding: 12px 14px !important; }
+        .vk-cub-filtro-row { flex-direction: column !important; align-items: stretch !important; gap: 10px !important; }
+        .vk-cub-filtro-row select { width: 100% !important; }
+
+        /* Botão "Atualizar só XX" dentro dos cards de status — full-width no mobile */
+        .vk-adm-tabela-mobile td[data-label="Ações"] button { width: 100% !important; padding: 10px 12px !important; font-size: 13px !important; }
+
+        /* Valor R$/m² em destaque no mobile */
+        .vk-adm-tabela-mobile td[data-label="Valor R$/m²"] { font-size: 16px !important; color: #111827 !important; }
       }
     `;
     document.head.appendChild(style);
@@ -257,7 +269,7 @@ function Admin({ usuario, data, save, initialTab }) {
       )}
 
       {/* Botão de ação */}
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:32 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:32, flexWrap:"wrap" }} className="vk-cub-acoes">
         <button
           onClick={() => executarColetaCub()}
           disabled={cubAtualizando}
@@ -277,7 +289,7 @@ function Admin({ usuario, data, save, initialTab }) {
         ) : !cubStatus || cubStatus.length === 0 ? (
           <div style={S.vazio}>Nenhum estado configurado</div>
         ) : (
-          <table style={S.tabela}>
+          <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
                 <th style={S.th}>Estado</th>
@@ -300,11 +312,11 @@ function Admin({ usuario, data, save, initialTab }) {
                                   : "Nunca coletado";
                 return (
                   <tr key={s.estado}>
-                    <td style={{ ...S.td, fontWeight:700 }}>{s.estado}</td>
-                    <td style={S.td}>{s.qtd_valores}</td>
-                    <td style={S.td}>{fmtCubMes(s.mes_mais_recente)}</td>
-                    <td style={{ ...S.td, fontSize:12, color:"#6b7280" }}>{fmtCubDate(s.ultima_atualizacao)}</td>
-                    <td style={S.td}>
+                    <td style={{ ...S.td, fontWeight:700 }} data-label="Estado">{s.estado}</td>
+                    <td style={S.td} data-label="Valores ativos">{s.qtd_valores}</td>
+                    <td style={S.td} data-label="Mês">{fmtCubMes(s.mes_mais_recente)}</td>
+                    <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Última atualização">{fmtCubDate(s.ultima_atualizacao)}</td>
+                    <td style={S.td} data-label="Status">
                       <span style={statusBadge}>{statusLabel}</span>
                       {s.ultimo_erro && (
                         <div style={{ fontSize:10.5, color:"#991b1b", marginTop:4, fontStyle:"italic", maxWidth:240, lineHeight:1.4 }}>
@@ -312,7 +324,7 @@ function Admin({ usuario, data, save, initialTab }) {
                         </div>
                       )}
                     </td>
-                    <td style={S.td}>
+                    <td style={S.td} data-label="Ações">
                       <button
                         onClick={() => executarColetaCub([s.estado])}
                         disabled={cubAtualizando}
@@ -330,7 +342,7 @@ function Admin({ usuario, data, save, initialTab }) {
 
       {/* Tabela de valores */}
       <div style={S.secao}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:12 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:12 }} className="vk-cub-filtro-row">
           <div style={{ ...S.secTit, marginBottom:0 }}>Valores atuais</div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <span style={{ fontSize:12, color:"#6b7280" }}>Filtrar:</span>
@@ -348,7 +360,7 @@ function Admin({ usuario, data, save, initialTab }) {
             Nenhum valor coletado ainda. Clique em "Atualizar CUB agora" pra disparar a primeira coleta.
           </div>
         ) : (
-          <table style={S.tabela}>
+          <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
                 <th style={S.th}>Estado</th>
@@ -365,15 +377,15 @@ function Admin({ usuario, data, save, initialTab }) {
                 .filter(v => !cubFiltroEstado || v.estado === cubFiltroEstado)
                 .map((v, idx) => (
                 <tr key={`${v.estado}-${v.categoria}-${v.padrao}-${v.com_desonera}-${idx}`}>
-                  <td style={{ ...S.td, fontWeight:600 }}>{v.estado}</td>
-                  <td style={S.td}>{v.categoria}</td>
-                  <td style={S.td}>{v.padrao}</td>
-                  <td style={S.td}>{v.com_desonera ? "Sim" : "Não"}</td>
-                  <td style={{ ...S.td, textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:600 }}>
+                  <td style={{ ...S.td, fontWeight:600 }} data-label="Estado">{v.estado}</td>
+                  <td style={S.td} data-label="Categoria">{v.categoria}</td>
+                  <td style={S.td} data-label="Padrão">{v.padrao}</td>
+                  <td style={S.td} data-label="Desoneração">{v.com_desonera ? "Sim" : "Não"}</td>
+                  <td style={{ ...S.td, textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:600 }} data-label="Valor R$/m²">
                     R$ {fmtCubMoney(v.valor_m2)}
                   </td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }}>{fmtCubMes(v.mes_referencia)}</td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }}>{v.fonte}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Mês">{fmtCubMes(v.mes_referencia)}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Fonte">{v.fonte}</td>
                 </tr>
               ))}
             </tbody>
@@ -387,7 +399,7 @@ function Admin({ usuario, data, save, initialTab }) {
         {!cubLogs || cubLogs.length === 0 ? (
           <div style={S.vazio}>Nenhuma coleta executada ainda.</div>
         ) : (
-          <table style={S.tabela}>
+          <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
                 <th style={S.th}>Quando</th>
@@ -402,10 +414,10 @@ function Admin({ usuario, data, save, initialTab }) {
             <tbody>
               {cubLogs.map(log => (
                 <tr key={log.id}>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280", whiteSpace:"nowrap" }}>{fmtCubDate(log.executado_em)}</td>
-                  <td style={{ ...S.td, fontWeight:600 }}>{log.estado}</td>
-                  <td style={{ ...S.td, fontSize:12 }}>{log.fonte}</td>
-                  <td style={S.td}>
+                  <td style={{ ...S.td, fontSize:12, color:"#6b7280", whiteSpace:"nowrap" }} data-label="Quando">{fmtCubDate(log.executado_em)}</td>
+                  <td style={{ ...S.td, fontWeight:600 }} data-label="Estado">{log.estado}</td>
+                  <td style={{ ...S.td, fontSize:12 }} data-label="Fonte">{log.fonte}</td>
+                  <td style={S.td} data-label="Status">
                     <span style={
                       log.status === "sucesso" ? { ...S.badgeAtiva, background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0" }
                       : log.status === "falha" ? S.badgeInativa
@@ -414,9 +426,9 @@ function Admin({ usuario, data, save, initialTab }) {
                       {log.status}
                     </span>
                   </td>
-                  <td style={S.td}>{log.valores_qtd ?? "—"}</td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }}>{log.duracao_ms ? `${log.duracao_ms}ms` : "—"}</td>
-                  <td style={{ ...S.td, fontSize:11, color:"#991b1b", maxWidth:340 }}>
+                  <td style={S.td} data-label="Valores">{log.valores_qtd ?? "—"}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Duração">{log.duracao_ms ? `${log.duracao_ms}ms` : "—"}</td>
+                  <td style={{ ...S.td, fontSize:11, color:"#991b1b", maxWidth:340 }} data-label="Erro">
                     {log.erro_msg || "—"}
                   </td>
                 </tr>
