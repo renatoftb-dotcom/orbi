@@ -11562,11 +11562,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const wrapRef = useRef(null);
 
-  // Detecta mobile (<768px). Em mobile, a UX dos cômodos muda:
-  // - Sem hover (não tem mouse), o seletor de quantidade fica sempre visível
-  //   apenas pro PRIMEIRO cômodo disponível (resto espera a vez).
-  // - Botões limitados a 0-4 (em vez de 0-6).
-  // - Layout enquadrado, sem scroll horizontal e sem overflow vertical separado.
+  // Detecta viewport mobile (<768px). Usado pra:
+  // - Renderizar stepper sticky em mobile (●━●━●━○━○━○) durante e após perguntas
+  // - O CSS injetado globalmente cobre o resto (pílulas verticais, cards limpos, etc)
   const [isMobileOrc, setIsMobileOrc] = useState(() => {
     try { return window.innerWidth < 768; } catch { return false; }
   });
@@ -12028,14 +12026,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       /* ===== TRILHA VERTICAL LATERAL DIREITA ===== */
       .vk-flow-shell { display: grid; grid-template-columns: 540px 240px; gap: 32px; max-width: 880px; }
       .vk-flow-stage { padding: 8px 24px 24px 0; }
-      /* Mobile: shell vira 1 coluna. Pergunta ocupa largura toda; trilha
-         lateral some (a horizontal acima do título já dá o contexto de
-         progresso pro usuário). */
-      @media (max-width: 767px) {
-        .vk-flow-shell { grid-template-columns: 1fr; gap: 12px; max-width: 100%; }
-        .vk-flow-stage { padding: 4px 0 12px 0; }
-        .vk-trilha-rail { display: none; }
-      }
       .vk-trilha-rail { background: transparent; border-left: 0; padding: 24px 28px 32px 8px; position: relative; align-self: stretch; }
       .vk-trilha-rail-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #828a98; font-weight: 600; margin-bottom: 20px; }
 
@@ -12131,34 +12121,204 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-row.is-chosen .vk-flow2-row-arrow { color: #fff; opacity: 1; transform: translateX(0); }
       .vk-flow2-row.is-fading { opacity: 0; height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; overflow: hidden; transition: all .35s cubic-bezier(0.32, 0.72, 0, 1); }
 
-      /* ===== Mobile: ajustes globais do formulário de orçamento ===== */
+      /* ════════════════════════════════════════════════════════════════ */
+      /* MOBILE (< 768px) — refinamentos estéticos do orçamento           */
+      /* ════════════════════════════════════════════════════════════════ */
       @media (max-width: 767px) {
-        /* Bloqueia scroll horizontal em qualquer nível —
-           se algum elemento estourar a largura, fica oculto em vez de criar scroll lateral */
+        /* Container raiz */
         html, body { overflow-x: hidden !important; max-width: 100vw !important; }
-        /* Reduz padding lateral pro conteúdo respirar mais */
-        .vk-orc-wrap { padding: 12px 14px !important; max-width: 100vw !important; overflow-x: hidden !important; }
-        /* Título da pergunta menor pra caber em tela pequena */
+        [data-vk-orc-wrap] { padding: 12px 14px 60px !important; max-width: 100vw !important; overflow-x: hidden !important; }
+
+        /* ── Stepper sticky no topo ── */
+        .vk-orc-stepper {
+          position: sticky; top: 0; z-index: 50;
+          margin: 0 -14px 14px;
+          padding: 10px 16px 9px;
+          background: rgba(255,255,255,0.94);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          border-bottom: 1px solid #f3f4f6;
+          display: flex; align-items: center; gap: 4px;
+        }
+        .vk-orc-step-node {
+          display: flex; flex-direction: column; align-items: center; gap: 3px;
+          flex: 0 0 auto; padding: 2px 0; cursor: pointer;
+          background: transparent; border: 0; font-family: inherit;
+        }
+        .vk-orc-step-dot {
+          width: 9px; height: 9px; border-radius: 50%;
+          background: #e5e7eb; transition: all .2s;
+        }
+        .vk-orc-step-node.is-done .vk-orc-step-dot { background: #111; }
+        .vk-orc-step-node.is-current .vk-orc-step-dot {
+          background: #111; box-shadow: 0 0 0 3px rgba(30,58,138,0.15);
+        }
+        .vk-orc-step-num {
+          font-size: 9.5px; color: #9ca3af; font-weight: 600;
+          font-variant-numeric: tabular-nums; letter-spacing: 0.02em;
+        }
+        .vk-orc-step-node.is-done .vk-orc-step-num,
+        .vk-orc-step-node.is-current .vk-orc-step-num { color: #111; }
+        .vk-orc-step-line {
+          flex: 1; height: 2px; background: #e5e7eb; min-width: 8px;
+          transition: background .2s;
+        }
+        .vk-orc-step-line.is-done { background: #111; }
+
+        /* ── Cabeçalho da identificação compacto ── */
+        [data-vk-orc-id-header] { margin-bottom: 12px !important; max-width: 100% !important; }
+        [data-vk-orc-id-nome] { font-size: 18px !important; padding: 0 !important; }
+
+        /* ── Barra de toggles (Arq/Eng/Marc/Imp/Repetição) — vertical hierárquico ── */
+        [data-vk-orc-toolbar] {
+          flex-direction: column !important; align-items: stretch !important;
+          gap: 0 !important; padding: 4px 0 !important;
+          background: #fff !important; border: 1px solid #d1d5db !important;
+          border-radius: 10px !important; max-width: 100% !important;
+          overflow: hidden;
+        }
+        [data-vk-orc-toolbar] > label,
+        [data-vk-orc-toolbar] > div {
+          padding: 11px 14px !important;
+          border-bottom: 1px solid #f3f4f6;
+        }
+        [data-vk-orc-toolbar] > *:last-child { border-bottom: 0 !important; }
+        [data-vk-orc-toolbar] > div[style*="border-left"] {
+          border-left: 0 !important; padding-left: 14px !important;
+          margin-left: 0 !important; justify-content: space-between;
+        }
+
+        /* ── Card de pergunta ── */
+        .vk-flow-shell { grid-template-columns: 1fr !important; gap: 12px !important; max-width: 100% !important; }
+        .vk-flow-stage { padding: 4px 0 12px 0 !important; }
+        .vk-trilha-rail { display: none !important; }
         .vk-flow2-title { font-size: 22px !important; line-height: 1.25 !important; }
         .vk-flow2-card { max-width: 100% !important; }
         .vk-flow2-input { max-width: 100% !important; padding: 12px 14px !important; }
         .vk-flow2-hint { max-width: 100% !important; }
         .vk-flow2-table { margin-top: 14px !important; }
         .vk-flow2-row { padding: 14px !important; gap: 10px !important; }
-        /* Trilha horizontal: chips menores e quebram linha mais cedo */
-        .vk-trilha-h { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 6px !important; padding: 4px 0 !important; margin-bottom: 12px !important; }
-        .vk-trilha-h-node { padding: 6px 10px !important; width: 100% !important; box-sizing: border-box !important; justify-content: flex-start !important; min-width: 0 !important; }
-        .vk-trilha-h-val { font-size: 12px !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; min-width: 0 !important; }
-        .vk-trilha-h-key { font-size: 9px !important; }
-        /* Separador horizontal some em mobile (o grid já dá a separação visual) */
+
+        /* ── Card "Configuração" (vk-trilha-h) — pílulas verticais full-width ── */
+        .vk-trilha-h {
+          display: flex !important; flex-direction: column !important;
+          gap: 0 !important; padding: 4px 0 !important; margin-bottom: 14px !important;
+          background: #fff !important; border: 1px solid #d1d5db !important;
+          border-radius: 10px !important; overflow: hidden;
+        }
         .vk-trilha-h-sep { display: none !important; }
-        /* Cômodos + Resumo: vira 1 coluna empilhada.
-           Resumo perde sticky (não funciona bem em coluna única em mobile). */
-        .vk-orc-comodos-shell { grid-template-columns: 1fr !important; gap: 14px !important; max-width: 100% !important; }
-        .vk-orc-resumo-col { position: static !important; top: auto !important; }
-        /* Card de cômodos: remove altura fixa e overflow interno em mobile.
-           A página inteira rola normal — sem scroll vertical separado pro card. */
-        .vk-orc-comodos-card { max-height: none !important; overflow-y: visible !important; padding: 6px 8px !important; }
+        .vk-trilha-h-node {
+          width: 100% !important; box-sizing: border-box !important;
+          justify-content: space-between !important;
+          padding: 11px 14px !important; gap: 10px !important;
+          border: 0 !important; border-bottom: 1px solid #f3f4f6 !important;
+          border-radius: 0 !important; background: #fff !important;
+          min-width: 0 !important;
+        }
+        .vk-trilha-h:last-child .vk-trilha-h-node:last-child,
+        .vk-trilha-h-node:last-child { border-bottom: 0 !important; }
+        .vk-trilha-h-node.is-open { background: #fafaf7 !important; }
+        .vk-trilha-h-key { display: none !important; }
+        .vk-trilha-h-dot { display: none !important; }
+        .vk-trilha-h-val {
+          font-size: 14px !important; font-weight: 500 !important;
+          flex: 1 !important;
+          overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important;
+        }
+        .vk-trilha-h-caret { font-size: 10px !important; color: #9ca3af !important; margin-left: 0 !important; }
+
+        /* ── Cômodos + Resumo: 1 coluna empilhada ── */
+        [data-vk-orc-comodos-shell] {
+          grid-template-columns: 1fr !important; gap: 14px !important; max-width: 100% !important;
+        }
+        [data-vk-orc-resumo-col] { position: static !important; top: auto !important; }
+        [data-vk-orc-comodos-card] {
+          max-height: none !important; overflow-y: visible !important;
+          padding: 4px 8px !important; border: 0 !important; background: transparent !important;
+        }
+
+        /* ── Cabeçalhos de grupo (Áreas Sociais, Serviço, etc) ── */
+        /* Em mobile: sem fundo bege, separador horizontal antes, texto bold */
+        [data-vk-grupo-hdr] {
+          background: transparent !important;
+          border: 0 !important;
+          border-top: 1px solid #f3f4f6 !important;
+          border-radius: 0 !important;
+          padding: 14px 0 6px !important;
+          margin: 4px 0 !important;
+        }
+        [data-vk-grupo-hdr]:first-of-type,
+        [data-vk-orc-comodos-card] > div:first-child [data-vk-grupo-hdr] {
+          border-top: 0 !important;
+          padding-top: 6px !important;
+        }
+        [data-vk-grupo-hdr] [data-vk-grupo-label] {
+          font-size: 11px !important;
+          color: #111 !important;
+          font-weight: 700 !important;
+          letter-spacing: 0.08em !important;
+        }
+        [data-vk-grupo-hdr] [data-vk-grupo-resetar] {
+          background: transparent !important; border: 0 !important;
+          color: #9ca3af !important; font-size: 11px !important;
+          text-decoration: underline; padding: 0 !important;
+        }
+        [data-vk-grupo-hdr] [data-vk-grupo-totais] {
+          font-size: 11px !important;
+          color: #6b7280 !important;
+        }
+
+        /* ── Cômodos selecionados — lista limpa em coluna única ── */
+        [data-vk-comodos-escolhidos] {
+          display: flex !important;
+          flex-direction: column !important;
+          flex-wrap: nowrap !important;
+          gap: 0 !important;
+          padding-top: 0 !important;
+          margin-top: 4px !important;
+          border-top: 0 !important;
+        }
+        [data-vk-comodo-chip] {
+          display: flex !important;
+          flex-direction: row !important;
+          align-items: center !important;
+          justify-content: space-between !important;
+          gap: 10px !important;
+          width: 100% !important;
+          flex: 1 1 auto !important;
+          background: transparent !important;
+          border: 0 !important;
+          border-bottom: 1px solid #f3f4f6 !important;
+          border-radius: 0 !important;
+          padding: 10px 4px !important;
+          font-size: 14px !important;
+          white-space: nowrap !important;
+          overflow: hidden;
+        }
+        [data-vk-comodo-chip]:last-child { border-bottom: 0 !important; }
+        [data-vk-comodo-chip] strong {
+          font-weight: 700 !important;
+          color: #111 !important;
+          font-size: 14px !important;
+          flex-shrink: 0;
+        }
+        [data-vk-comodo-chip] > span:nth-child(2) {
+          flex: 1 !important;
+          color: #111 !important;
+          font-weight: 400 !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
+          margin-left: -4px;
+        }
+        [data-vk-comodo-chip] .comodo-m2 {
+          font-size: 11.5px !important;
+          color: #9ca3af !important;
+          flex-shrink: 0;
+        }
+        /* Remove o "·" separador antes do m² em mobile (visualmente desnecessário) */
+        [data-vk-comodo-chip] .comodo-m2::before {
+          content: "" !important;
+        }
       }
     `;
     document.head.appendChild(s);
@@ -12287,12 +12447,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   function toggleGrupo(grupo) {
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
-  // Em mobile, todos os grupos ficam sempre abertos — UX sequencial guiada
-  // funciona melhor com tudo visível pro usuário ver o que vem depois.
-  function isGrupoAberto(grupo) {
-    if (isMobileOrc) return true;
-    return gruposAbertos[grupo] !== false;
-  }
+  function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -12663,7 +12818,55 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }
 
   return (
-    <div style={C.wrap} className="vk-orc-wrap" ref={wrapRef}>
+    <div style={C.wrap} ref={wrapRef} data-vk-orc-wrap>
+
+      {/* ── Stepper sticky em mobile (●━●━●━○━○━○) ── */}
+      {isMobileOrc && (() => {
+        const ordem = ["referencia", "tipoObra", "tipoProjeto"];
+        if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
+        const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
+        const proximaPendente = ordem.find(k => !VALS_EXT[k]);
+        const etapaAtual = etapaEditando || proximaPendente;
+        const LABELS_STP = { referencia:"Ref.", tipoObra:"Obra", tipoProjeto:"Projeto", padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
+        // Constrói lista plana alternando node + linha (sem usar React.Fragment, que requer
+        // import explícito; sintaxe <> não aceita keys).
+        const items = [];
+        ordem.forEach((k, i) => {
+          const val = VALS_EXT[k];
+          const done = !!val && etapaAtual !== k;
+          const current = etapaAtual === k;
+          const cls = "vk-orc-step-node" + (done ? " is-done" : "") + (current ? " is-current" : "");
+          const titulo = `${LABELS_STP[k] || k}${val ? ": " + val : ""}`;
+          items.push(
+            <button
+              key={"node-" + k}
+              type="button"
+              className={cls}
+              title={titulo}
+              aria-label={titulo}
+              onClick={() => {
+                if (done) {
+                  // Click em etapa concluída = abre edição
+                  if (k === "referencia") setReferenciaTemp(referencia);
+                  setEtapaEditando(etapaEditando === k ? null : k);
+                }
+              }}>
+              <span className="vk-orc-step-dot" aria-hidden="true"></span>
+              <span className="vk-orc-step-num">{i + 1}</span>
+            </button>
+          );
+          if (i < ordem.length - 1) {
+            items.push(
+              <span key={"line-" + k} className={"vk-orc-step-line" + (done ? " is-done" : "")} aria-hidden="true"></span>
+            );
+          }
+        });
+        return (
+          <div className="vk-orc-stepper" role="navigation" aria-label="Progresso">
+            {items}
+          </div>
+        );
+      })()}
 
       {/* ── Botão Voltar ── */}
       <div style={{ marginBottom:16 }}>
@@ -12674,8 +12877,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       </div>
 
       {/* ── Identificação ── */}
-      <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:18, maxWidth:600 }}>
-        <div style={{ fontSize:21, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
+      <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:18, maxWidth:600 }} data-vk-orc-id-header>
+        <div style={{ fontSize:21, fontWeight:700, color:"#111", padding:"4px 0" }} data-vk-orc-id-nome>{clienteNome || "—"}</div>
         {/* Referência editável inline abaixo do nome — só aparece após preencher na primeira pergunta */}
         {referencia && (
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -12732,7 +12935,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       </div>
 
       {/* ── Barra de toggles (Arq/Eng/Marc + Imposto + Repetição) — sempre visível ── */}
-      <div style={{
+      <div data-vk-orc-toolbar style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
         padding:"12px 16px", marginBottom:16, maxWidth:1100,
         background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
@@ -13101,13 +13304,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
-        <div className="vk-orc-comodos-shell" style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
+        <div data-vk-orc-comodos-shell style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
           marginTop:0,
           maxWidth:1100,
         }}>
 
-          <div className="vk-orc-comodos-card" style={{
+          <div data-vk-orc-comodos-card style={{
             background:"#fff",
             border:"1px solid #e5e7eb",
             borderRadius:10,
@@ -13149,12 +13352,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               const renderControles = (nome, sempreVisivel) => {
                 const q = qtds[nome] || 0;
                 const isOpen = comodoAberto === nome;
-                // Em mobile, sempreVisivel decide pra cada cômodo (chamado decide).
-                // Em desktop, mantém lógica original (visível só em hover).
                 const visivel = sempreVisivel || isOpen;
+                // Só renderiza quando visível — quando fechado, não ocupa espaço no layout
                 if (!visivel) return null;
-                // Em mobile: botões 0-4 (limite). Em desktop: 0-6 (compatibilidade).
-                const numerosBotoes = isMobileOrc ? [0,1,2,3,4] : [0,1,2,3,4,5,6];
                 return (
                   <span key={nome+"-ctrls"}
                     style={{
@@ -13190,14 +13390,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
                       }}
                       onBlur={e => {
-                        // No mobile (iOS/Android), o teclado numérico não tem
-                        // botão "Enter" — usuário fecha o teclado tocando "OK",
-                        // "Concluído" ou fora do input, o que dispara blur (não keydown).
-                        // Aplica a quantidade aqui pra não perder o valor digitado.
-                        const v = parseInt(e.currentTarget.value) || 0;
-                        if (v > 0) {
-                          setQtdAbs(nome, v);
-                        }
+                        // Se o foco saiu do input mas continua na navegação por teclado,
+                        // não fechar o popup. Só limpar travado se realmente perdeu foco geral.
                         setTravado(false);
                       }}
                       onKeyDown={e => {
@@ -13295,7 +13489,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         MozAppearance:"textfield",
                       }}
                     />
-                    {numerosBotoes.map(n => {
+                    {[0,1,2,3,4,5,6].map(n => {
                       const isSel = n > 0 && q === n;
                       const isKbFoc = comodoAberto === nome && comodoQtdFocada === n;
                       return (
@@ -13339,27 +13533,25 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 );
               };
 
-              // Em mobile, "recolhido" não vale — precisamos garantir que
-              // o primeiro cômodo da fila apareça mesmo se o grupo dele estiver
-              // marcado como recolhido pelo usuário.
-              const recolhido = !isMobileOrc && !isGrupoAberto(grupo);
+              const recolhido = !isGrupoAberto(grupo);
 
               return (
                 <div key={grupo} style={{ marginBottom:14 }}>
                   {/* Header: retângulo cinza com bordas arredondadas */}
-                  <div style={{
+                  <div data-vk-grupo-hdr style={{
                     display:"flex", alignItems:"center", gap:10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
                     padding:"5px 10px",
                     marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
                   }}>
-                    <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
+                    <span data-vk-grupo-label style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
                     {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
                     {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
                       <button
                         type="button"
+                        data-vk-grupo-resetar
                         onClick={e => {
                           e.stopPropagation();
                           setQtds({});
@@ -13496,7 +13688,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     )}
 
                     {qtdGrupo > 0 && (
-                      <span style={{ fontSize:11, color:"#9ca3af" }}>
+                      <span data-vk-grupo-totais style={{ fontSize:11, color:"#9ca3af" }}>
                         <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
                       </span>
                     )}
@@ -13516,63 +13708,36 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
                   {!recolhido && disponiveis.length > 0 && (
                     <>
-                      {/* Disponíveis — nome à esquerda, controles flutuantes à direita ao hover.
-                          MOBILE: todos os cômodos VISÍVEIS, mas o seletor [0 1 2 3 4]
-                          aparece só no PRIMEIRO da fila (ordem global flat).
-                          Conforme o usuário define, o cômodo sai da lista de disponíveis
-                          e o seletor migra pro próximo. UX sequencial guiada. */}
-                      <div style={{ marginTop:4, maxWidth: isMobileOrc ? "100%" : 380 }}>
+                      {/* Disponíveis — nome à esquerda, controles flutuantes à direita ao hover */}
+                      <div style={{ marginTop:4, maxWidth:380 }}>
                         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
-                            // Decide se o seletor [input] 0 1 2 3 4 fica VISÍVEL inline,
-                            // ou se ele só aparece em hover (comportamento desktop antigo).
-                            // - Desktop: false (default) → seletor só aparece no hover
-                            //   sobre o cômodo, via o state `comodoAberto` (renderControles
-                            //   internamente verifica `isOpen` e decide).
-                            // - Mobile: só o PRIMEIRO da fila global tem seletor visível.
-                            //   Os demais cômodos aparecem com nome só, esperando a vez.
-                            let mostrarSeletor = false;
-                            if (isMobileOrc) {
-                              const flat = comodosFlatRef.current || [];
-                              mostrarSeletor = flat.indexOf(nome) === 0;
-                            }
                             return (
                               <div key={nome}
                                 data-comodo-wrap
                                 data-comodo-nome={nome}
-                                onMouseEnter={isMobileOrc ? undefined : () => abrirComodo(nome)}
-                                onMouseLeave={isMobileOrc ? undefined : agendarFecharComodo}
+                                onMouseEnter={() => abrirComodo(nome)}
+                                onMouseLeave={agendarFecharComodo}
                                 style={{
                                   position:"relative",
                                   display:"flex", alignItems:"center",
-                                  flexWrap:"nowrap", // mantém nome + seletor na mesma linha sempre
-                                  padding: isMobileOrc ? "8px 6px" : "6px 10px",
-                                  fontSize: isMobileOrc ? 14 : 14.5,
-                                  // Em mobile, só o cômodo "ativo" (com seletor) tem destaque visual.
-                                  // Os outros ficam cinza pra deixar claro que estão aguardando a vez.
-                                  color: isOpen || (isMobileOrc && mostrarSeletor) ? "#111" : (isMobileOrc ? "#6b7280" : "#6b7280"),
+                                  padding:"6px 10px", fontSize:14.5,
+                                  color: isOpen ? "#111" : "#6b7280",
                                   background: isOpen ? "#f4f5f7" : "transparent",
                                   borderRadius:6,
                                   userSelect:"none",
                                   transition:"color 0.15s, background 0.15s",
                                   minHeight:34,
-                                  gap: isMobileOrc ? 8 : 0,
                                 }}>
-                                <span style={{
-                                  flex:1, // cresce conforme tem espaço, sem forçar 100%
-                                  fontWeight: (isMobileOrc && mostrarSeletor) ? 600 : (isOpen ? 500 : 400),
-                                  minWidth:0,
-                                  // truncar com ... se nome for muito longo (cabe seletor ao lado)
-                                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                                }}>
+                                <span style={{ flex:1, fontWeight: isOpen ? 500 : 400, minWidth:0, whiteSpace:"nowrap" }}>
                                   {nome}
                                   {(nome === "Suíte" || nome === "Dormitório") && (
                                     <span style={{ fontSize:10.5, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
                                   )}
                                 </span>
                                 <span style={{ flexShrink:0, display:"flex", alignItems:"center" }}>
-                                  {renderControles(nome, mostrarSeletor)}
+                                  {renderControles(nome, false)}
                                 </span>
                               </div>
                             );
@@ -13584,7 +13749,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
                   {/* Escolhidos — SEMPRE visíveis, mesmo com grupo recolhido */}
                   {escolhidos.length > 0 && (
-                    <div style={{
+                    <div data-vk-comodos-escolhidos style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
                       gap:"8px 8px",
                       paddingTop: (!recolhido && disponiveis.length > 0) ? 10 : 0,
@@ -13597,6 +13762,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         const m2Total = getArea(nome) * q;
                         return (
                           <span key={nome}
+                            data-vk-comodo-chip
                             onClick={() => removerComodo(nome)}
                             title="Clique para remover"
                             className="comodo-escolhido"
@@ -13631,12 +13797,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   que o scroll não seja reajustado ao selecionar (o próximo cômodo
                   sobe exatamente pra posição do cursor). */}
               {(() => {
-                // Folga é necessária no DESKTOP pra manter scroll estável
-                // ao selecionar cômodo (próximo sobe exatamente pra posição
-                // do cursor). Em mobile não tem hover/cursor preciso, e a
-                // folga só cria gap enorme entre os cômodos e o resumo —
-                // pula em mobile.
-                if (isMobileOrc) return null;
                 const gruposVisiveis = Object.entries(configAtual.grupos).filter(([g]) => {
                   const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                   if (isTerrea && g === "Outros") return false;
@@ -13653,7 +13813,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           </div>
 
           {/* Resumo Cálculo — só aparece quando tem cômodos */}
-          <div className="vk-orc-resumo-col" style={{ position:"sticky", top:24 }}>
+          <div data-vk-orc-resumo-col style={{ position:"sticky", top:24 }}>
             {temComodos && calculo && (
               <div>
                 <div style={C.resumoBox}>
