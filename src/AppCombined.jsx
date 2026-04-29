@@ -12115,7 +12115,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       .vk-flow2-row-idx { font-size: 10.5px; letter-spacing: 0.06em; color: #828a98; font-family: ui-monospace, "JetBrains Mono", monospace; font-weight: 500; transition: color .15s; }
       .vk-flow2-row-text { font-weight: 500; letter-spacing: -0.005em; }
       .vk-flow2-row-arrow { color: #828a98; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; display: inline-flex; justify-content: flex-end; }
-      .vk-flow2-row.is-chosen { background: #111; color: #fff; animation: flow2OptChosen .55s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .vk-flow2-row.is-chosen { background: #111; color: #fff; font-weight: 700; animation: flow2OptChosen .55s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
+      .vk-flow2-row.is-chosen .vk-flow2-row-text { font-weight: 700; }
       .vk-flow2-row.is-chosen .vk-flow2-row-idx { color: rgba(255,255,255,0.5); }
       .vk-flow2-row.is-chosen .vk-flow2-row-arrow { color: #fff; opacity: 1; transform: translateX(0); }
       .vk-flow2-row.is-fading { opacity: 0; height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; overflow: hidden; transition: all .35s cubic-bezier(0.32, 0.72, 0, 1); }
@@ -12222,14 +12223,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         }
         .vk-trilha-h-sep { display: none !important; }
         .vk-trilha-h-node {
-          flex: 1 1 calc(50% - 4px) !important;
+          /* flex-grow: 0 evita que a última pílula sozinha (caso ímpar) estique
+             pra preencher a linha toda. Mantém todas com largura uniforme. */
+          flex: 0 1 calc(50% - 4px) !important;
           min-width: calc(50% - 4px) !important;
-          max-width: 100% !important;
+          max-width: calc(50% - 4px) !important;
           justify-content: flex-start !important;
           padding: 8px 11px !important;
           gap: 6px !important;
         }
-        /* Caso ímpar (5 pílulas) — última estica sozinha na 3ª linha */
         .vk-trilha-h-key {
           font-size: 9px !important;
           flex-shrink: 0;
