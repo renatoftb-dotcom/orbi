@@ -6542,12 +6542,20 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         }
 
         /* ── Cômodos + Resumo: 1 coluna empilhada ── */
+        /* Resumo Cálculo cola logo após os cômodos (gap 0).
+           Lista de cômodos termina e o resumo começa imediatamente — sem
+           espaço grande no meio. Padding-bottom do wrap reduzido pra
+           resumo+botão ficarem perto do fim da página, não enfiados lá embaixo. */
+        [data-vk-orc-wrap] { padding-bottom: 16px !important; }
         [data-vk-orc-comodos-shell] {
           grid-template-columns: 1fr !important;
-          gap: 14px !important;
+          gap: 0 !important;
           max-width: 100% !important;
         }
-        [data-vk-orc-resumo-col] { position: static !important; top: auto !important; }
+        [data-vk-orc-resumo-col] {
+          position: static !important; top: auto !important;
+          margin-top: 8px !important;
+        }
         [data-vk-orc-comodos-card] {
           max-height: none !important;
           overflow-y: visible !important;
@@ -7951,11 +7959,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                             // esperando a vez. Conforme o usuário define a qty,
                             // o cômodo sai dos disponíveis e o seletor migra pro
                             // próximo. UX sequencial guiada que substitui hover.
-                            let mostrarSeletor = false;
-                            if (isMobileOrc) {
-                              const flat = comodosFlatRef.current || [];
-                              mostrarSeletor = flat.indexOf(nome) === 0;
-                            }
+                            const primeiroDaFila = (comodosFlatRef.current && comodosFlatRef.current[0]) || null;
+                            const mostrarSeletor = isMobileOrc && nome === primeiroDaFila;
                             return (
                               <div key={nome}
                                 data-comodo-wrap
