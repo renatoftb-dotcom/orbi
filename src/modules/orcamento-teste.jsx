@@ -5859,7 +5859,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const wrapRef = useRef(null);
 
-  // Detecta viewport mobile (<768px). Usado pra renderizar stepper sticky e
+  // Detecta viewport mobile (<768px). Usado pra ajustes de layout e
   // alguns ajustes no JSX. CSS injetado globalmente cobre o resto.
   const [isMobileOrc, setIsMobileOrc] = useState(() => {
     try { return window.innerWidth < 768; } catch { return false; }
@@ -6432,70 +6432,71 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         [data-vk-orc-wrap] *::before,
         [data-vk-orc-wrap] *::after { box-sizing: border-box !important; }
 
-        /* ── Stepper sticky no topo (●━●━●━○━○━○) ── */
-        /* Fundo branco SÓLIDO + borda inferior firme — parece progress bar real */
-        .vk-orc-stepper {
-          position: sticky; top: 0; z-index: 50;
-          margin: 0 -14px 14px;
-          padding: 14px 18px 12px;
-          background: #fff;
-          border-bottom: 1px solid #e5e7eb;
-          display: flex; align-items: center; gap: 6px;
+        /* ── Toolbar (Arq/Eng/Marc/Imposto/Repetição) — chips horizontais (Layout C) ── */
+        /* Remove fundo bege, transforma toggles em chips ativo/inativo.
+           O switch redondo (primeiro <span> de cada label) é escondido e o label
+           inteiro vira um pill: preto+branco quando ativo, branco+borda cinza
+           quando inativo. Repetição mantém os botões ± mas sem o border-left. */
+        [data-vk-orc-toolbar] {
+          background: transparent !important;
+          border: 0 !important;
+          padding: 0 !important;
+          margin-bottom: 10px !important;
+          gap: 6px !important;
+          flex-wrap: wrap !important;
+          align-items: center !important;
+          max-width: 100% !important;
         }
-        .vk-orc-step-node {
-          display: flex; flex-direction: column; align-items: center; gap: 4px;
-          flex: 0 0 auto; padding: 0; cursor: pointer;
-          background: transparent; border: 0; font-family: inherit;
-          min-width: 22px;
+        /* Esconde o switch (1º span dentro do label) — sobra só o texto, que vira chip */
+        [data-vk-orc-toolbar] > label > span:first-child { display: none !important; }
+        /* Label vira chip */
+        [data-vk-orc-toolbar] > label {
+          gap: 0 !important;
+          padding: 5px 11px !important;
+          border-radius: 999px !important;
+          border: 1px solid #d0d4db !important;
+          background: #fff !important;
+          font-size: 12px !important;
+          line-height: 1.2 !important;
+          transition: background .12s, border-color .12s, color .12s !important;
         }
-        .vk-orc-step-dot {
-          width: 11px; height: 11px; border-radius: 50%;
-          background: #fff; border: 2px solid #d1d5db;
-          transition: all .2s;
+        /* Texto do chip */
+        [data-vk-orc-toolbar] > label > span:nth-child(2) {
+          font-size: 12px !important;
+          font-weight: 500 !important;
+          color: #828a98 !important;
         }
-        .vk-orc-step-node.is-done .vk-orc-step-dot {
-          background: #111; border-color: #111;
+        /* Estado ATIVO: o <span> do texto tem font-weight 600 quando o toggle está on.
+           Detecto via [style*="font-weight: 600"] no span, e estilizo o label pai. */
+        [data-vk-orc-toolbar] > label:has(> span:nth-child(2)[style*="font-weight: 600"]) {
+          background: #111 !important;
+          border-color: #111 !important;
         }
-        .vk-orc-step-node.is-current .vk-orc-step-dot {
-          background: #fff; border-color: #111;
-          box-shadow: 0 0 0 3px rgba(17,17,17,0.12);
+        [data-vk-orc-toolbar] > label:has(> span:nth-child(2)[style*="font-weight: 600"]) > span:nth-child(2) {
+          color: #fff !important;
         }
-        .vk-orc-step-num {
-          font-size: 10px; color: #9ca3af; font-weight: 600;
-          font-variant-numeric: tabular-nums;
+        /* Input de alíquota (aparece quando Imposto ativo) — ajusta pra ficar inline */
+        [data-vk-orc-toolbar] > div:not([style*="border-left"]) {
+          padding: 0 !important;
+          gap: 4px !important;
         }
-        .vk-orc-step-node.is-done .vk-orc-step-num,
-        .vk-orc-step-node.is-current .vk-orc-step-num { color: #111; }
-        .vk-orc-step-line {
-          flex: 1; height: 2px; background: #e5e7eb; min-width: 8px;
-          transition: background .2s; align-self: center;
-          margin-top: -10px; /* alinha visualmente com o centro da bolinha */
+        /* Bloco de Repetição: remove border-left, vira chip-like inline */
+        [data-vk-orc-toolbar] > div[style*="border-left"] {
+          border-left: 0 !important;
+          padding: 4px 6px !important;
+          margin-left: 0 !important;
+          gap: 4px !important;
+          border: 1px solid #d0d4db !important;
+          border-radius: 999px !important;
+          background: #fff !important;
         }
-        .vk-orc-step-line.is-done { background: #111; }
+        [data-vk-orc-toolbar] > div[style*="border-left"] > span {
+          font-size: 11px !important;
+          color: #828a98 !important;
+        }
 
         /* ── Cabeçalho da identificação ── */
         [data-vk-orc-id-header] { margin-bottom: 12px !important; max-width: 100% !important; }
-
-        /* ── Toolbar (Arq/Eng/Marc/Imposto/Repetição) — vertical hierárquico ── */
-        /* MANTÉM background bege original — só empilha vertical com divisores */
-        [data-vk-orc-toolbar] {
-          flex-direction: column !important; align-items: stretch !important;
-          gap: 0 !important; padding: 4px 14px !important;
-          max-width: 100% !important;
-        }
-        [data-vk-orc-toolbar] > label,
-        [data-vk-orc-toolbar] > div {
-          padding: 11px 0 !important;
-          border-bottom: 1px solid #e5e7eb;
-          width: 100%;
-          justify-content: flex-start !important;
-        }
-        [data-vk-orc-toolbar] > *:last-child { border-bottom: 0 !important; }
-        /* Bloco de Repetição: remove o border-left vertical (em mobile fica top) */
-        [data-vk-orc-toolbar] > div[style*="border-left"] {
-          border-left: 0 !important; padding-left: 0 !important;
-          margin-left: 0 !important;
-        }
 
         /* ── Card de pergunta (área central) ── */
         .vk-flow-shell { grid-template-columns: 1fr !important; gap: 12px !important; max-width: 100% !important; }
@@ -6508,41 +6509,51 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         .vk-flow2-table { margin-top: 14px !important; }
         .vk-flow2-row { padding: 14px !important; gap: 10px !important; }
 
-        /* ── Trilha horizontal (pílulas Configuração) — wrap em mobile ── */
-        /* MANTÉM o visual original (background, borda, dot, label) — só ajusta layout.
-           Usa flex-wrap em vez de grid pra que os .vk-trilha-h-sep com display:none
-           não criem slots vazios (problema clássico do grid). Cada pílula ocupa
-           ~calc(50% - 4px) — 2 cabem por linha. Última pílula sozinha estica. */
+        /* ── Trilha horizontal (Configuração) — grid 2 colunas, label/valor empilhados (Layout C) ── */
+        /* Visual mais clean: vira mini-cards com fundo cinza claro, sem pílula
+           arredondada. Label fica em cima (uppercase pequeno), valor embaixo
+           (negrito). 2 colunas. Última sozinha estica pra ocupar a linha. */
         .vk-trilha-h {
-          display: flex !important;
-          flex-wrap: wrap !important;
-          gap: 8px !important;
-          padding: 4px 0 !important;
+          display: grid !important;
+          grid-template-columns: 1fr 1fr !important;
+          gap: 6px !important;
+          padding: 0 !important;
           margin-bottom: 14px !important;
         }
         .vk-trilha-h-sep { display: none !important; }
         .vk-trilha-h-node {
-          /* flex-grow: 0 evita que a última pílula sozinha (caso ímpar) estique
-             pra preencher a linha toda. Mantém todas com largura uniforme. */
-          flex: 0 1 calc(50% - 4px) !important;
-          min-width: calc(50% - 4px) !important;
-          max-width: calc(50% - 4px) !important;
-          justify-content: flex-start !important;
-          padding: 8px 11px !important;
-          gap: 6px !important;
+          flex-direction: column !important;
+          align-items: flex-start !important;
+          justify-content: center !important;
+          gap: 1px !important;
+          padding: 6px 10px !important;
+          border-radius: 6px !important;
+          border: 0 !important;
+          background: #f3f4f6 !important;
+          min-width: 0 !important;
         }
+        /* Última sozinha (caso ímpar) ocupa a linha toda */
+        .vk-trilha-h-node:last-child:nth-child(odd) {
+          grid-column: span 2;
+        }
+        .vk-trilha-h-dot { display: none !important; }
         .vk-trilha-h-key {
           font-size: 9px !important;
-          flex-shrink: 0;
+          letter-spacing: 0.08em !important;
+          color: #828a98 !important;
+          font-weight: 600 !important;
         }
         .vk-trilha-h-val {
           font-size: 13px !important;
+          font-weight: 600 !important;
+          color: #111 !important;
           overflow: hidden !important;
           text-overflow: ellipsis !important;
           white-space: nowrap !important;
           min-width: 0 !important;
-          flex: 1;
+          width: 100% !important;
         }
+        .vk-trilha-h-caret { display: none !important; }
 
         /* ── Cômodos + Resumo: 1 coluna empilhada ── */
         /* Resumo Cálculo cola logo após os cômodos (gap 0).
@@ -7064,53 +7075,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   return (
     <div style={C.wrap} ref={wrapRef} data-vk-orc-wrap>
-
-      {/* ── Stepper sticky em mobile (●━●━●━○━○━○) ── */}
-      {isMobileOrc && (() => {
-        const ordem = ["referencia", "tipoObra", "tipoProjeto"];
-        if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
-        const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
-        const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-        const etapaAtual = etapaEditando || proximaPendente;
-        const LABELS_STP = { referencia:"Ref.", tipoObra:"Obra", tipoProjeto:"Projeto", padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
-        // Lista plana alternando node + linha (sem React.Fragment, que requer
-        // import explícito; sintaxe <> não aceita keys).
-        const items = [];
-        ordem.forEach((k, i) => {
-          const val = VALS_EXT[k];
-          const done = !!val && etapaAtual !== k;
-          const current = etapaAtual === k;
-          const cls = "vk-orc-step-node" + (done ? " is-done" : "") + (current ? " is-current" : "");
-          const titulo = `${LABELS_STP[k] || k}${val ? ": " + val : ""}`;
-          items.push(
-            <button
-              key={"node-" + k}
-              type="button"
-              className={cls}
-              title={titulo}
-              aria-label={titulo}
-              onClick={() => {
-                if (done) {
-                  if (k === "referencia") setReferenciaTemp(referencia);
-                  setEtapaEditando(etapaEditando === k ? null : k);
-                }
-              }}>
-              <span className="vk-orc-step-dot" aria-hidden="true"></span>
-              <span className="vk-orc-step-num">{i + 1}</span>
-            </button>
-          );
-          if (i < ordem.length - 1) {
-            items.push(
-              <span key={"line-" + k} className={"vk-orc-step-line" + (done ? " is-done" : "")} aria-hidden="true"></span>
-            );
-          }
-        });
-        return (
-          <div className="vk-orc-stepper" role="navigation" aria-label="Progresso">
-            {items}
-          </div>
-        );
-      })()}
 
       {/* ── Botão Voltar ── */}
       <div style={{ marginBottom:16 }}>
