@@ -12474,6 +12474,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
   function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
+  // Helpers para colapsar/expandir TODOS os grupos de uma vez via setinha global
+  // no canto do card de cômodos. Útil pra esconder a lista toda e ver só o resumo
+  // enquanto altera variáveis (toggles, configuração).
+  function fecharTodosGrupos() {
+    if (!configAtual?.grupos) return;
+    const next = {};
+    Object.keys(configAtual.grupos).forEach(g => { next[g] = false; });
+    setGruposAbertos(next);
+  }
+  function abrirTodosGrupos() { setGruposAbertos({}); }
+  // True quando TODOS os grupos visíveis estão fechados
+  const todosGruposFechados = (() => {
+    if (!configAtual?.grupos) return false;
+    const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
+    const visiveis = Object.keys(configAtual.grupos).filter(g => !(isTerrea && g === "Outros"));
+    if (visiveis.length === 0) return false;
+    return visiveis.every(g => gruposAbertos[g] === false);
+  })();
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -13317,7 +13335,30 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             maxHeight:560,
             overflowY:"auto",
             padding:"4px 12px",
+            position:"relative",
           }}>
+            {/* Setinha global pra recolher/expandir TODOS os grupos.
+                Posicionada no canto superior direito do card. Só aparece quando há
+                pelo menos 1 cômodo selecionado (sem cômodos não há nada útil pra
+                recolher e mostrar resumo). */}
+            {Object.keys(qtds).some(n => qtds[n] > 0) && (
+              <button
+                type="button"
+                onClick={() => { todosGruposFechados ? abrirTodosGrupos() : fecharTodosGrupos(); }}
+                title={todosGruposFechados ? "Expandir todos os grupos" : "Recolher todos os grupos"}
+                aria-label={todosGruposFechados ? "Expandir todos os grupos" : "Recolher todos os grupos"}
+                style={{
+                  position:"absolute", top:8, right:10, zIndex:5,
+                  width:24, height:24, border:"none", background:"transparent",
+                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                  padding:0, fontFamily:"inherit",
+                }}>
+                <svg width="14" height="14" viewBox="0 0 12 12" fill="none"
+                  style={{ transform: todosGruposFechados ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s" }}>
+                  <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
 
 
             {/* Container 1 coluna */}
