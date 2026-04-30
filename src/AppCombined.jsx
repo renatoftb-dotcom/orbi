@@ -1334,7 +1334,32 @@ const api = {
 // ── Carrega todos os dados de uma vez ──────────────────────────
 // Substitui o DB.get("obramanager-v1") do sistema antigo.
 // Escritório agora vem com logo embutido (um só request).
-async function loadAllData() {
+// Sprint 3: também carrega CUB (Baixo/Normal/Alto) do estado da empresa
+// em paralelo, pra ficar disponível no orçamento desde o boot.
+// Se estado for null (empresa sem onboarding), pula a busca do CUB
+// — orçamento usa fallback R$ 45 fixo nesse caso.
+async function loadAllData(estado = null) {
+  // Promises base (sempre carregadas)
+  const promisesBase = [
+    api.clientes.list(),
+    api.fornecedores.list(),
+    api.materiais.list(),
+    api.obras.list(),
+    api.lancamentos.list(),
+    api.orcamentos.list(),
+    api.receitas.list(),
+    api.escritorio.get(),
+  ];
+
+  // Promises do CUB (só se estado disponível).
+  // Falhas individuais não derrubam o boot — usamos .catch(() => null)
+  // pra cada uma. Se CUB do estado não existir no banco, segue sem ele.
+  const cubPromises = estado ? [
+    api.cub.atual(estado, "R-1", "Baixo").catch(() => null),
+    api.cub.atual(estado, "R-1", "Normal").catch(() => null),
+    api.cub.atual(estado, "R-1", "Alto").catch(() => null),
+  ] : [Promise.resolve(null), Promise.resolve(null), Promise.resolve(null)];
+
   const [
     clientes,
     fornecedores,
@@ -1344,16 +1369,23 @@ async function loadAllData() {
     orcamentosProjeto,
     receitasFinanceiro,
     escritorio,
-  ] = await Promise.all([
-    api.clientes.list(),
-    api.fornecedores.list(),
-    api.materiais.list(),
-    api.obras.list(),
-    api.lancamentos.list(),
-    api.orcamentos.list(),
-    api.receitas.list(),
-    api.escritorio.get(),
-  ]);
+    cubBaixo,
+    cubNormal,
+    cubAlto,
+  ] = await Promise.all([...promisesBase, ...cubPromises]);
+
+  // Monta objeto cub. Cada nível pode ser null individualmente se a API
+  // daquele padrão falhar (ex: tem Normal mas não tem Alto pro estado).
+  // getPrecoBaseDinamico já lida com isso retornando fallback fixo.
+  let cub = null;
+  if (estado && (cubBaixo || cubNormal || cubAlto)) {
+    cub = {
+      estado,
+      Baixo: cubBaixo,
+      Normal: cubNormal,
+      Alto: cubAlto,
+    };
+  }
 
   return {
     clientes,
@@ -1365,6 +1397,7 @@ async function loadAllData() {
     receitasFinanceiro,
     // escritorio já vem com { ...dados, logo } do backend
     escritorio: escritorio || {},
+    cub,
   };
 }
 
