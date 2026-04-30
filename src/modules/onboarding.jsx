@@ -87,7 +87,9 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     if (!estado) { setCubEstado(null); setCubErro(null); return; }
     setCubEstado(null);
     setCubErro(null);
-    api.cub.atual(estado, "Normal")
+    // CUB R-1 padrão Normal (médio) do estado escolhido — usado pra mostrar
+    // o exemplo de honorário na tela de calibragem.
+    api.cub.atual(estado, "R-1", "Normal")
       .then(setCubEstado)
       .catch(e => setCubErro(e.message || "Falha ao carregar CUB"));
   }, [estado]);
