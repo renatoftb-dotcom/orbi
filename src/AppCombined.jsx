@@ -11565,6 +11565,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const wrapRef = useRef(null);
 
+  // Controla foco automático do input "Referência": foca uma vez ao montar
+  // e nunca mais re-foca em re-renders. Sem isso, qualquer re-render no app
+  // (clicar em chip de Imposto, Repetição, etc) rouba o foco de outros inputs
+  // pra cá, porque o ref callback executava em todo render.
+  // Reseta quando o input desmonta (sai da pergunta de Referência).
+  const referenciaInputFocadoRef = useRef(false);
+
   // Detecta viewport mobile (<768px). Usado pra ajustes de layout e
   // alguns ajustes no JSX. CSS injetado globalmente cobre o resto.
   const [isMobileOrc, setIsMobileOrc] = useState(() => {
@@ -12467,6 +12474,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
   function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
+  // Helpers para colapsar/expandir todos os grupos de uma vez.
+  // Útil pra deixar só o resumo + variáveis visíveis e ir alterando enquanto
+  // observa os valores recalculando.
+  function fecharTodosGrupos() {
+    if (!configAtual?.grupos) return;
+    const next = {};
+    Object.keys(configAtual.grupos).forEach(g => { next[g] = false; });
+    setGruposAbertos(next);
+  }
+  function abrirTodosGrupos() { setGruposAbertos({}); }
+  // True quando TODOS os grupos visíveis estão fechados
+  const todosGruposFechados = (() => {
+    if (!configAtual?.grupos) return false;
+    const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
+    const visiveis = Object.keys(configAtual.grupos).filter(g => !(isTerrea && g === "Outros"));
+    if (visiveis.length === 0) return false;
+    return visiveis.every(g => gruposAbertos[g] === false);
+  })();
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -13104,9 +13129,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     <div className="vk-flow2-input-wrap">
                       <input
                         ref={el => {
-                          if (el && !opcaoEscolhida && document.activeElement !== el) {
-                            // Foco automático ao entrar na etapa
-                            setTimeout(() => { try { el.focus(); } catch {} }, 50);
+                          if (el) {
+                            // Foca apenas na primeira vez que o input monta nesta etapa.
+                            // Re-renders subsequentes (toques em outros chips) NÃO devem
+                            // re-focar — isso roubaria o foco do input clicado.
+                            if (!opcaoEscolhida && !referenciaInputFocadoRef.current) {
+                              referenciaInputFocadoRef.current = true;
+                              setTimeout(() => { try { el.focus(); } catch {} }, 50);
+                            }
+                          } else {
+                            // Input desmontou (saiu da etapa de Referência) — reseta
+                            // pra que ao voltar nessa etapa, foque novamente.
+                            referenciaInputFocadoRef.current = false;
                           }
                         }}
                         className={"vk-flow2-input" + (opcaoEscolhida ? " is-chosen" : "")}
@@ -13546,6 +13580,39 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           e.currentTarget.style.background = "transparent";
                         }}>
                         Resetar
+                      </button>
+                    )}
+                    {/* Recolher tudo / Expandir tudo — só aparece no primeiro grupo,
+                        e somente quando há pelo menos 1 cômodo selecionado (caso
+                        contrário, não faz sentido recolher — não há resumo pra ver).
+                        Permite ver só as variáveis (toggles + configuração) e o
+                        resumo, alterando os parâmetros e vendo o impacto sem precisar
+                        rolar pelos cômodos. */}
+                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (todosGruposFechados) abrirTodosGrupos();
+                          else fecharTodosGrupos();
+                        }}
+                        title={todosGruposFechados ? "Expandir todos os grupos" : "Recolher todos os grupos"}
+                        style={{
+                          background:"transparent", border:"1px solid #d0d4db",
+                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
+                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
+                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
+                          flexShrink:0,
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = "#111";
+                          e.currentTarget.style.color = "#111";
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = "#d0d4db";
+                          e.currentTarget.style.color = "#6b7280";
+                        }}>
+                        {todosGruposFechados ? "Expandir tudo" : "Recolher tudo"}
                       </button>
                     )}
                     <span style={{ flex:1 }} />
