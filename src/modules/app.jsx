@@ -1351,20 +1351,19 @@ export default function ModuloClientesFornecedores() {
           setUsuario(usrAtualizado);
           try { localStorage.setItem("vicke-user", JSON.stringify(usrAtualizado)); } catch {}
 
-          // Pré-preenche o estado no endereço do escritório se ainda estiver
-          // vazio. Evita que o usuário tenha que digitar de novo a mesma info
-          // que acabou de informar no onboarding.
-          if (estadoOnboarding && data?.escritorio) {
-            const enderecoAtual = data.escritorio.endereco || {};
-            if (!enderecoAtual.estado) {
-              const escritorioAtualizado = {
-                ...data.escritorio,
-                endereco: { ...enderecoAtual, estado: estadoOnboarding },
-              };
-              save({ ...data, escritorio: escritorioAtualizado }).catch(e => {
-                console.error("Falha ao pré-preencher estado:", e);
-              });
-            }
+          // Pré-preenche o estado no escritório se ainda estiver vazio.
+          // Estrutura do data.escritorio é FLAT (cfg.estado, cfg.cidade, cfg.endereco
+          // são todos campos de primeiro nível) — não aninhado em endereco.estado.
+          // Evita que o usuário tenha que digitar de novo a mesma info que acabou
+          // de informar no onboarding.
+          if (estadoOnboarding && data?.escritorio && !data.escritorio.estado) {
+            const escritorioAtualizado = {
+              ...data.escritorio,
+              estado: estadoOnboarding,
+            };
+            save({ ...data, escritorio: escritorioAtualizado }).catch(e => {
+              console.error("Falha ao pré-preencher estado:", e);
+            });
           }
 
           // Redireciona pra aba Escritório pra completar cadastro completo
