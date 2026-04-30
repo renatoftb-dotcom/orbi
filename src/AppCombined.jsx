@@ -20001,22 +20001,60 @@ function OrcamentoConfig({ usuario, data }) {
   const _API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
     || "https://orbi-production-5f5c.up.railway.app";
 
+  // Dados frescos do servidor. Não confiamos no localStorage `vicke-user`
+  // porque ele pode estar desatualizado (ex: após onboarding que não
+  // refetchou). Sempre vai buscar /auth/me ao montar a aba.
+  const [me, setMe]               = useState(null);
+  const [meLoading, setMeLoading] = useState(true);
+  const [meErro, setMeErro]       = useState(null);
+
+  async function carregarMe() {
+    setMeLoading(true);
+    setMeErro(null);
+    try {
+      const token = localStorage.getItem("vicke-token");
+      if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+      const res = await fetch(`${_API_URL}/auth/me`, {
+        headers: { "Authorization": `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error || "Falha ao carregar dados");
+      setMe(json.data);
+    } catch (e) {
+      setMeErro(e.message);
+    } finally {
+      setMeLoading(false);
+    }
+  }
+
+  useEffect(() => { carregarMe(); /* eslint-disable-next-line */ }, []);
+
   // Permissão pra disparar o reset: master OU admin (backend valida também,
   // mas escondemos o botão dos outros perfis pra não confundir).
+  // Usa `usuario` (props) que já está disponível imediatamente — sem esperar
+  // o /auth/me — pra decidir se mostra o botão ou o aviso amigável.
   const podeResetar = usuario?.perfil === "master" || usuario?.nivel === "admin";
 
   // ID da empresa-alvo. Por enquanto o reset só age sobre a própria empresa
   // do usuário (claim empresa_id do JWT). Master que precisar resetar outra
   // empresa continua usando o drill-in do Admin ou o console.
-  const empresaId = usuario?.empresa_id;
+  const empresaId = me?.empresa_id ?? usuario?.empresa_id;
 
-  // Dados de calibragem atuais (vindo do data.escritorio ou direto do JWT).
-  // Mostra de forma compacta pra usuário ter contexto antes de apertar reset.
-  const cfg = data?.escritorio || {};
-  const pctCalibrado     = cfg.pct_calibrado ?? usuario?.pct_calibrado ?? null;
-  const profissao        = cfg.profissao    ?? usuario?.profissao    ?? null;
-  const padraoProjetos   = cfg.padrao_projetos ?? usuario?.padrao_projetos ?? null;
-  const estado           = cfg.estado       ?? usuario?.estado       ?? null;
+  // Dados de calibragem atuais. Prioriza `me` (fresco do /auth/me); cai pra
+  // `usuario` enquanto carrega. Após o fetch, sempre exibe valores atuais.
+  const fonte             = me || usuario || {};
+  const pctCalibrado      = fonte.pct_calibrado;
+  const pctMatriz         = fonte.pct_matriz_calculado;
+  // pct_efetivo: o que de fato vale pro pricing. Se calibrou, usa calibrado;
+  // se não, usa o calculado pela matriz.
+  const pctEfetivo        = pctCalibrado ?? pctMatriz ?? null;
+  const profissao         = fonte.profissao;
+  const padraoProjetos    = fonte.padrao_projetos;
+  const estado            = fonte.estado;
+
+  // Labels amigáveis pros valores brutos do banco
+  const labelProfissao = { arquiteto: "Arquiteto(a)", engenheiro: "Engenheiro(a)" };
+  const labelPadrao    = { simples: "Simples", medio: "Médio", alto: "Alto", luxo: "Luxo" };
 
   async function executarReset() {
     if (!empresaId) {
@@ -20115,12 +20153,30 @@ function OrcamentoConfig({ usuario, data }) {
       <div style={S.body}>
         <div style={S.secao}>
           <div style={S.secTitulo}>Calibragem atual</div>
+
+          {meErro && (
+            <div style={{ ...S.avisoSemPerm, marginBottom: 12 }}>
+              Não foi possível carregar os dados frescos: {meErro}.
+              {" "}<a href="#" onClick={(e) => { e.preventDefault(); carregarMe(); }} style={{ color:"#92400e", fontWeight:600 }}>Tentar novamente</a>
+            </div>
+          )}
+
           <div style={S.grid2}>
-            <Campo label="Profissão"        valor={profissao} />
-            <Campo label="Padrão dos projetos" valor={padraoProjetos} />
-            <Campo label="Estado"           valor={estado} />
-            <Campo label="Pct calibrado"    valor={pctCalibrado != null ? `${(pctCalibrado * 100).toFixed(3)}%` : null} />
+            <Campo label="Profissão"           valor={labelProfissao[profissao] || profissao} />
+            <Campo label="Padrão dos projetos" valor={labelPadrao[padraoProjetos] || padraoProjetos} />
+            <Campo label="Estado"              valor={estado} />
+            <Campo
+              label="Preço base aplicado"
+              valor={
+                pctEfetivo != null
+                  ? `${(pctEfetivo * 100).toFixed(3)}%${pctCalibrado != null ? " (calibrado)" : " (matriz)"}`
+                  : null
+              }
+            />
           </div>
+          {meLoading && (
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:12 }}>Atualizando…</div>
+          )}
         </div>
 
         <div style={S.secao}>
@@ -20134,7 +20190,7 @@ function OrcamentoConfig({ usuario, data }) {
           ) : (
             <>
               <div style={S.aviso}>
-                Apaga as respostas do onboarding e o <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_calibrado</code> da empresa.
+                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_calibrado</code>) da empresa.
                 Você será deslogado e, no próximo login, refará o onboarding do zero.
                 Clientes, projetos e orçamentos <strong>não</strong> são afetados.
               </div>
@@ -21519,17 +21575,39 @@ export default function ModuloClientesFornecedores() {
       <>
       <TelaOnboarding
         usuario={usuario}
-        onConcluido={(estadoOnboarding) => {
-          // Backend zerou precisa_fazer_onboarding. Atualiza state local
-          // (incluindo o `estado` salvo no onboarding pra que loadAllData
-          // já busque o CUB correto na próxima vez que rodar).
-          const usrAtualizado = {
-            ...usuario,
-            precisa_fazer_onboarding: false,
-            estado: estadoOnboarding || usuario.estado || null,
-          };
-          setUsuario(usrAtualizado);
-          try { localStorage.setItem("vicke-user", JSON.stringify(usrAtualizado)); } catch {}
+        onConcluido={async (estadoOnboarding) => {
+          // Backend zerou precisa_fazer_onboarding e gravou as respostas
+          // (profissao, padrao_projetos, pct_matriz_calculado, etc).
+          // Refaz /auth/me pra trazer TODOS os campos atualizados — fazer
+          // merge manual aqui esquece de copiar campos novos e deixa o
+          // localStorage desatualizado (componentes que leem de lá vêem
+          // null em profissao/padrao/pct_calibrado).
+          try {
+            const _API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+              || "https://orbi-production-5f5c.up.railway.app";
+            const token = localStorage.getItem("vicke-token");
+            const res = await fetch(`${_API_URL}/auth/me`, {
+              headers: { "Authorization": `Bearer ${token}` },
+            });
+            const json = await res.json();
+            if (json?.ok && json?.data) {
+              setUsuario(json.data);
+              try { localStorage.setItem("vicke-user", JSON.stringify(json.data)); } catch {}
+            } else {
+              throw new Error(json?.error || "Falha ao recarregar dados do usuário");
+            }
+          } catch (e) {
+            // Fallback: se /auth/me falhar (rede ruim), aplica merge mínimo
+            // pra pelo menos sair da tela de onboarding. Próximo refresh corrige.
+            console.error("Falha ao refetch /auth/me após onboarding:", e);
+            const usrFallback = {
+              ...usuario,
+              precisa_fazer_onboarding: false,
+              estado: estadoOnboarding || usuario.estado || null,
+            };
+            setUsuario(usrFallback);
+            try { localStorage.setItem("vicke-user", JSON.stringify(usrFallback)); } catch {}
+          }
 
           // Pré-preenche o estado no escritório se ainda estiver vazio.
           // Estrutura do data.escritorio é FLAT (cfg.estado, cfg.cidade, cfg.endereco

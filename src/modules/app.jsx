@@ -1356,17 +1356,39 @@ export default function ModuloClientesFornecedores() {
       <>
       <TelaOnboarding
         usuario={usuario}
-        onConcluido={(estadoOnboarding) => {
-          // Backend zerou precisa_fazer_onboarding. Atualiza state local
-          // (incluindo o `estado` salvo no onboarding pra que loadAllData
-          // já busque o CUB correto na próxima vez que rodar).
-          const usrAtualizado = {
-            ...usuario,
-            precisa_fazer_onboarding: false,
-            estado: estadoOnboarding || usuario.estado || null,
-          };
-          setUsuario(usrAtualizado);
-          try { localStorage.setItem("vicke-user", JSON.stringify(usrAtualizado)); } catch {}
+        onConcluido={async (estadoOnboarding) => {
+          // Backend zerou precisa_fazer_onboarding e gravou as respostas
+          // (profissao, padrao_projetos, pct_matriz_calculado, etc).
+          // Refaz /auth/me pra trazer TODOS os campos atualizados — fazer
+          // merge manual aqui esquece de copiar campos novos e deixa o
+          // localStorage desatualizado (componentes que leem de lá vêem
+          // null em profissao/padrao/pct_calibrado).
+          try {
+            const _API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+              || "https://orbi-production-5f5c.up.railway.app";
+            const token = localStorage.getItem("vicke-token");
+            const res = await fetch(`${_API_URL}/auth/me`, {
+              headers: { "Authorization": `Bearer ${token}` },
+            });
+            const json = await res.json();
+            if (json?.ok && json?.data) {
+              setUsuario(json.data);
+              try { localStorage.setItem("vicke-user", JSON.stringify(json.data)); } catch {}
+            } else {
+              throw new Error(json?.error || "Falha ao recarregar dados do usuário");
+            }
+          } catch (e) {
+            // Fallback: se /auth/me falhar (rede ruim), aplica merge mínimo
+            // pra pelo menos sair da tela de onboarding. Próximo refresh corrige.
+            console.error("Falha ao refetch /auth/me após onboarding:", e);
+            const usrFallback = {
+              ...usuario,
+              precisa_fazer_onboarding: false,
+              estado: estadoOnboarding || usuario.estado || null,
+            };
+            setUsuario(usrFallback);
+            try { localStorage.setItem("vicke-user", JSON.stringify(usrFallback)); } catch {}
+          }
 
           // Pré-preenche o estado no escritório se ainda estiver vazio.
           // Estrutura do data.escritorio é FLAT (cfg.estado, cfg.cidade, cfg.endereco
