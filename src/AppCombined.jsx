@@ -12172,6 +12172,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           font-weight: 500 !important;
           color: #828a98 !important;
         }
+        /* Marcador "+" ANTES do texto quando inativo */
+        [data-vk-orc-toolbar] > label > span:nth-child(2)::before {
+          content: "+ ";
+          font-weight: 500;
+        }
         /* Estado ATIVO: o <span> do texto tem font-weight 600 quando o toggle está on.
            Detecto via [style*="font-weight: 600"] no span, e estilizo o label pai. */
         [data-vk-orc-toolbar] > label:has(> span:nth-child(2)[style*="font-weight: 600"]) {
@@ -12180,6 +12185,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         }
         [data-vk-orc-toolbar] > label:has(> span:nth-child(2)[style*="font-weight: 600"]) > span:nth-child(2) {
           color: #fff !important;
+        }
+        /* Marcador "✓" no estado ativo (substitui o "+") */
+        [data-vk-orc-toolbar] > label:has(> span:nth-child(2)[style*="font-weight: 600"]) > span:nth-child(2)::before {
+          content: "✓ ";
+          font-weight: 600;
         }
         /* Input de alíquota (aparece quando Imposto ativo) — ajusta pra ficar inline */
         [data-vk-orc-toolbar] > div:not([style*="border-left"]) {
@@ -12237,6 +12247,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           border: 0 !important;
           background: #f3f4f6 !important;
           min-width: 0 !important;
+          text-align: left !important;
         }
         /* Última sozinha (caso ímpar) ocupa a linha toda */
         .vk-trilha-h-node:last-child:nth-child(odd) {
@@ -12258,6 +12269,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           white-space: nowrap !important;
           min-width: 0 !important;
           width: 100% !important;
+          text-align: left !important;
         }
         .vk-trilha-h-caret { display: none !important; }
 
@@ -12859,8 +12871,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           { key:"incluiEng",        val:incluiEng,        set:setIncluiEng,        label:"Engenharia"   },
           { key:"incluiMarcenaria", val:incluiMarcenaria, set:setIncluiMarcenaria, label:"Marcenaria"   },
         ].map(({ key, val, set, label }) => (
-          <label key={key} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
-            <span onClick={() => set(v => !v)} style={{
+          <label key={key} onClick={() => set(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
+            <span style={{
               position:"relative", display:"inline-block",
               width:36, height:20, borderRadius:10, flexShrink:0,
               background: val ? "#111" : "#d1d5db",
@@ -12882,8 +12894,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         ))}
 
         {/* Toggle Imposto + input de alíquota (só quando ligado) */}
-        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
-          <span onClick={() => setTemImposto(v => !v)} style={{
+        <label onClick={() => setTemImposto(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
+          <span style={{
             position:"relative", display:"inline-block",
             width:36, height:20, borderRadius:10, flexShrink:0,
             background: temImposto ? "#111" : "#d1d5db",
