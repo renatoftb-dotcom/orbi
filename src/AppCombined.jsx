@@ -20066,6 +20066,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "escritorio":
       // Engrenagem / settings outline (mesmo ícone que manutenção mas menor uso)
       return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
+    case "orcamento":
+      // Calculadora outline — usado na aba "Orçamento" da seção Configuração
+      return (<svg {...props}><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="6" x2="16" y2="6"/><line x1="8" y1="10" x2="8" y2="10"/><line x1="12" y1="10" x2="12" y2="10"/><line x1="16" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/><line x1="8" y1="18" x2="8" y2="18"/><line x1="12" y1="18" x2="12" y2="18"/><line x1="16" y1="18" x2="16" y2="18"/></svg>);
     default:
       return null;
   }
@@ -21677,6 +21680,19 @@ export default function ModuloClientesFornecedores() {
                 </span>
               </button>
             )}
+            {/* Aba "Orçamento" — configurações de pricing/calibragem.
+                Visível pra todos os perfis (botão interno é que valida permissão).
+                Master também vê — útil pra Vicke caso queira testar o fluxo. */}
+            <button style={itemStyle(aba==="orcamento")}
+              title={colapsadaEf ? "Orçamento" : undefined}
+              onMouseEnter={e => { if(aba!=="orcamento") e.currentTarget.style.background="#f9fafb"; }}
+              onMouseLeave={e => { if(aba!=="orcamento") e.currentTarget.style.background="transparent"; }}
+              onClick={() => { tentarTrocar(() => { setAba("orcamento"); setOrcamentoTelaCheia(null); }); }}>
+              <span style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <IconeMaster nome="orcamento" tamanho={16} cor={aba==="orcamento" ? "#111" : "#6b7280"} />
+                {!colapsadaEf && "Orçamento"}
+              </span>
+            </button>
             {/* Botão Escritório do Master (gerenciar dados da Vicke). Mantido aqui
                 discretamente — uso raro mas existe. */}
             {isMaster && (
@@ -21856,6 +21872,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
+          {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
           {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}
