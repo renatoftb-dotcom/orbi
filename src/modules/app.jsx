@@ -1132,7 +1132,10 @@ export default function ModuloClientesFornecedores() {
     };
   }, [usuario?.id, token]);
 
-  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
+  // loadData roda quando autenticado vira true OU quando o estado da empresa
+  // muda (ex: usuário acaba de concluir onboarding e o usuario.estado passou
+  // de null pra "SP" — precisa recarregar dados pra trazer o CUB do estado).
+  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado, usuario?.estado]);
 
   useEffect(() => {
     if (aba === "projetos") setAba("projetos:etapas");
@@ -1209,9 +1212,20 @@ export default function ModuloClientesFornecedores() {
   async function loadData() {
     try {
       // Passa estado da empresa pra loadAllData buscar o CUB em paralelo
-      // (Sprint 3). Se empresa não tem estado (sem onboarding), passa null
-      // e loadAllData pula a busca do CUB — orçamento usa fallback R$ 45.
-      const saved = await loadAllData(usuario?.estado || null);
+      // (Sprint 3). Lê do localStorage como fonte primária — usuario state
+      // pode estar null/stale no primeiro loadData() pós-login (closure
+      // capturou null antes do setUsuario propagar pro React).
+      // Localstorage é setado SINCRONO no handleLogin/bootstrap antes do
+      // setAutenticado disparar este effect. Fallback pro state cobre o caso
+      // de loadData ser chamado de novo depois (botão "Tentar novamente").
+      let estadoEmpresa = null;
+      try {
+        const usrStored = JSON.parse(localStorage.getItem("vicke-user") || "null");
+        estadoEmpresa = usrStored?.estado || usuario?.estado || null;
+      } catch {
+        estadoEmpresa = usuario?.estado || null;
+      }
+      const saved = await loadAllData(estadoEmpresa);
       setData(saved);
       setBackendOffline(false);
     }
