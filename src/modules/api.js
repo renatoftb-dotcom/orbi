@@ -183,10 +183,34 @@ const api = {
     cub: {
       list:      ()           => get("/api/cub"),                    // todos os valores
       listEstado:(uf)         => get(`/api/cub/${uf}`),              // valores de um estado
+      // Valor atual (mais recente) pra uma combinação estado/categoria/padrão.
+      // Usado no onboarding (mostra exemplo de cálculo) e no orçamento (Sprint 3).
+      // Padrão default = "Normal" (NBR 12721); UI pode mostrar como "Médio".
+      atual:     (estado, categoria = "R-1", padrao = "Normal") =>
+                   get(`/api/cub/atual?estado=${encodeURIComponent(estado)}&categoria=${encodeURIComponent(categoria)}&padrao=${encodeURIComponent(padrao)}`),
       atualizar: (estados)    => post("/admin/cub/atualizar", estados ? { estados } : {}),
       log:       (limit = 50) => get(`/admin/cub/log?limit=${limit}`),
       status:    ()           => get("/admin/cub/status"),
     },
+  },
+
+  // ── ONBOARDING (Sprint 3 — modelo pricing baseado em CUB) ──
+  // Tela bloqueante pra empresas novas: 6 perguntas + estado + calibragem.
+  // Resultado: pct_matriz_calculado / pct_calibrado salvos na empresa.
+  onboarding: {
+    // Retorna a matriz de ratings (faixas + labels) pra renderizar opções.
+    matriz:   ()       => get("/api/onboarding/matriz"),
+    // Body: { profissao, porte, experiencia, referencia, padrao_projetos,
+    //         capital, estado, valor_calibrado? }
+    concluir: (dados)  => post("/api/onboarding/concluir", dados),
+  },
+
+  // ── CUB top-level (atalho pra usar fora do contexto admin) ──
+  // Permite api.cub.atual(...) sem ter que digitar api.admin.cub.atual.
+  // Usado pelo onboarding e pelo orçamento (Sprint 3).
+  cub: {
+    atual: (estado, categoria = "R-1", padrao = "Normal") =>
+             get(`/api/cub/atual?estado=${encodeURIComponent(estado)}&categoria=${encodeURIComponent(categoria)}&padrao=${encodeURIComponent(padrao)}`),
   },
 
   // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────

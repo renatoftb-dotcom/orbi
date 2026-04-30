@@ -1325,6 +1325,32 @@ export default function ModuloClientesFornecedores() {
     );
   }
 
+  // Onboarding obrigatório (Sprint 3) → empresa nova precisa configurar perfil
+  // antes de usar o app. Bloqueia tudo até concluir. Aparece DEPOIS da troca
+  // de senha (admin pode ter resetado pra um usuário de empresa nova — primeiro
+  // troca senha, depois onboarding). Empresas existentes têm o flag = false e
+  // pulam direto pro app.
+  // Master nunca cai aqui (perfil "master" não tem onboarding de pricing).
+  if (usuario?.precisa_fazer_onboarding && usuario?.perfil !== "master") {
+    return (
+      <>
+      <TelaOnboarding
+        usuario={usuario}
+        onConcluido={() => {
+          // Backend zerou precisa_fazer_onboarding. Atualiza state local.
+          const usrAtualizado = { ...usuario, precisa_fazer_onboarding: false };
+          setUsuario(usrAtualizado);
+          try { localStorage.setItem("vicke-user", JSON.stringify(usrAtualizado)); } catch {}
+        }}
+        onLogout={handleLogout}
+      />
+      <DialogosHost />
+      <VersionWatcher />
+      {conflitoModal}
+      </>
+    );
+  }
+
   if (loading) return (
     <>
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
