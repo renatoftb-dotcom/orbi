@@ -12497,6 +12497,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   };
 
   const [gruposAbertos, setGruposAbertos] = useState({});
+  // Recolhe o card inteiro de cômodos (esconde headers e listas) — útil pra
+  // dar mais espaço ao resumo enquanto altera variáveis (toggles, configuração).
+  const [cardComodosRecolhido, setCardComodosRecolhido] = useState(false);
   // Cômodo com popup visível (via hover OU via click no input)
   const [comodoAberto, setComodoAberto] = useState(null);
   // Navegação por teclado: índice da quantidade (0-6) destacada visualmente.
@@ -13445,11 +13448,39 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             background:"#fff",
             border:"1px solid #e5e7eb",
             borderRadius:10,
-            maxHeight:560,
-            overflowY:"auto",
+            maxHeight: cardComodosRecolhido ? "none" : 560,
+            overflowY: cardComodosRecolhido ? "visible" : "auto",
             padding:"4px 12px",
           }}>
+            {/* Header com setinha pra recolher/expandir TODO o card de cômodos.
+                Só aparece quando há pelo menos 1 cômodo selecionado — assim o usuário
+                pode esconder a lista inteira (headers + cômodos) e focar nas variáveis
+                e no resumo, sem precisar rolar. */}
+            {Object.keys(qtds).some(n => qtds[n] > 0) && (
+              <button
+                type="button"
+                onClick={() => setCardComodosRecolhido(v => !v)}
+                title={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
+                aria-label={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
+                style={{
+                  display:"flex", alignItems:"center", justifyContent:"space-between",
+                  width:"100%", padding:"8px 4px",
+                  background:"transparent", border:"none",
+                  cursor:"pointer", fontFamily:"inherit",
+                  borderBottom: cardComodosRecolhido ? "none" : "1px solid #f4f5f7",
+                  marginBottom: cardComodosRecolhido ? 0 : 4,
+                }}>
+                <span style={{ fontSize:11, fontWeight:600, color:"#828a98", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                  Cômodos
+                </span>
+                <svg width="14" height="14" viewBox="0 0 12 12" fill="none"
+                  style={{ transform: cardComodosRecolhido ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s", flexShrink:0 }}>
+                  <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+            )}
 
+            {!cardComodosRecolhido && (<>
 
             {/* Container 1 coluna */}
             <div>
@@ -13992,6 +14023,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 return folga > 0 ? <div style={{ height: folga, flexShrink: 0 }} aria-hidden="true" /> : null;
               })()}
             </div>
+            </>)}
           </div>
 
           {/* Resumo Cálculo — só aparece quando tem cômodos */}
