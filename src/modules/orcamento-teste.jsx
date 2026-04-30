@@ -3522,12 +3522,12 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Arquitetura</span>
               {totalGeral > 0 && (
-                <span style={{ fontSize:11, fontWeight:600, color:"#6b7280", padding:"2px 7px", background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:999 }}>
+                <span style={{ fontSize:11, fontWeight:500, color:"#9ca3af" }}>
                   {Math.round(calculo.precoArq / totalGeral * 100)}%
                 </span>
               )}
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div data-vk-resumo-vals style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:14.5, fontWeight:700, color:"#111" }}>{fmt2(calculo.precoArq)}</span>
               <span style={{ fontSize:12, color:"#828a98" }}>R$ {fmtNum(calculo.precoM2Arq)}/m²</span>
               {hasRep && (
@@ -3561,12 +3561,12 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Engenharia</span>
               {totalGeral > 0 && (
-                <span style={{ fontSize:11, fontWeight:600, color:"#6b7280", padding:"2px 7px", background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:999 }}>
+                <span style={{ fontSize:11, fontWeight:500, color:"#9ca3af" }}>
                   {Math.round(calculo.precoEng / totalGeral * 100)}%
                 </span>
               )}
             </div>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div data-vk-resumo-vals style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:14.5, fontWeight:700, color:"#111" }}>{fmt2(calculo.precoEng)}</span>
               <span style={{ fontSize:12, color:"#828a98" }}>R$ {fmtNum(calculo.precoM2Eng)}/m²</span>
               {hasRep && (
@@ -6485,24 +6485,58 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           content: "✓ ";
           font-weight: 600;
         }
-        /* Input de alíquota (aparece quando Imposto ativo) — ajusta pra ficar inline */
+        /* Div da alíquota (aparece quando Imposto ativo) — anula marginLeft:-8 do JSX
+           que causa sobreposição com o label do Imposto e bloqueia toques no input.
+           position:relative + z-index garante que o input fica acima de qualquer
+           elemento próximo e recebe os toques diretamente. */
         [data-vk-orc-toolbar] > div:not([style*="border-left"]) {
+          margin-left: 0 !important;
           padding: 0 !important;
           gap: 4px !important;
+          position: relative !important;
+          z-index: 2 !important;
+        }
+        /* Input/span da alíquota: aumenta área de toque pra ficar fácil em mobile.
+           Default no JSX tem padding minúsculo (1px 4px), no mobile precisa de mais. */
+        [data-vk-orc-toolbar] > div:not([style*="border-left"]) input,
+        [data-vk-orc-toolbar] > div:not([style*="border-left"]) > span {
+          padding: 6px 10px !important;
+          font-size: 14px !important;
+          min-height: 32px !important;
         }
         /* Bloco de Repetição: remove border-left, vira chip-like inline */
         [data-vk-orc-toolbar] > div[style*="border-left"] {
           border-left: 0 !important;
           padding: 4px 6px !important;
           margin-left: 0 !important;
-          gap: 4px !important;
+          gap: 6px !important;
           border: 1px solid #d0d4db !important;
           border-radius: 999px !important;
           background: #fff !important;
         }
-        [data-vk-orc-toolbar] > div[style*="border-left"] > span {
+        /* Apenas o label "Repetição" fica compacto (1º span direto) */
+        [data-vk-orc-toolbar] > div[style*="border-left"] > span:first-child {
           font-size: 11px !important;
           color: #828a98 !important;
+        }
+        /* Botões − e + (aumenta área de toque) */
+        [data-vk-orc-toolbar] > div[style*="border-left"] > button {
+          width: 28px !important;
+          height: 28px !important;
+          font-size: 16px !important;
+        }
+        /* Número clicável (vira chip de toque) e input quando editando.
+           Mais espaço pra digitar valores grandes (ex: 12, 25). */
+        [data-vk-orc-toolbar] > div[style*="border-left"] > span:not(:first-child),
+        [data-vk-orc-toolbar] > div[style*="border-left"] input {
+          font-size: 14px !important;
+          min-height: 28px !important;
+          min-width: 32px !important;
+          padding: 4px 8px !important;
+          text-align: center !important;
+        }
+        [data-vk-orc-toolbar] > div[style*="border-left"] input {
+          width: 56px !important;
         }
 
         /* ── Cabeçalho da identificação ── */
@@ -6581,6 +6615,17 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         [data-vk-orc-resumo-col] {
           position: static !important; top: auto !important;
           margin-top: 8px !important;
+        }
+        /* Resumo Arq/Eng: valor + R$/m² quebram em coluna no mobile pra não apertar
+           quando o número é grande (ex: R$ 187.307,38 + R$ 27,70/m²). Alinhados à
+           direita pra manter a leitura padrão de "valor à direita". */
+        [data-vk-orc-resumo-col] [data-vk-resumo-vals] {
+          flex-direction: column !important;
+          align-items: flex-end !important;
+          gap: 2px !important;
+        }
+        [data-vk-orc-resumo-col] [data-vk-resumo-vals] > span {
+          white-space: nowrap !important;
         }
         [data-vk-orc-comodos-card] {
           max-height: none !important;
