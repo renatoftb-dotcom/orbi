@@ -12384,6 +12384,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   };
 
   const [gruposAbertos, setGruposAbertos] = useState({});
+  // Recolhe o card inteiro de cômodos (esconde headers e listas) — útil pra
+  // dar mais espaço ao resumo enquanto altera variáveis (toggles, configuração).
+  const [cardComodosRecolhido, setCardComodosRecolhido] = useState(false);
   // Cômodo com popup visível (via hover OU via click no input)
   const [comodoAberto, setComodoAberto] = useState(null);
   // Navegação por teclado: índice da quantidade (0-6) destacada visualmente.
@@ -12474,24 +12477,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
   function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
-  // Helpers para colapsar/expandir TODOS os grupos de uma vez via setinha global
-  // no canto do card de cômodos. Útil pra esconder a lista toda e ver só o resumo
-  // enquanto altera variáveis (toggles, configuração).
-  function fecharTodosGrupos() {
-    if (!configAtual?.grupos) return;
-    const next = {};
-    Object.keys(configAtual.grupos).forEach(g => { next[g] = false; });
-    setGruposAbertos(next);
-  }
-  function abrirTodosGrupos() { setGruposAbertos({}); }
-  // True quando TODOS os grupos visíveis estão fechados
-  const todosGruposFechados = (() => {
-    if (!configAtual?.grupos) return false;
-    const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
-    const visiveis = Object.keys(configAtual.grupos).filter(g => !(isTerrea && g === "Outros"));
-    if (visiveis.length === 0) return false;
-    return visiveis.every(g => gruposAbertos[g] === false);
-  })();
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -13332,34 +13317,39 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             background:"#fff",
             border:"1px solid #e5e7eb",
             borderRadius:10,
-            maxHeight:560,
-            overflowY:"auto",
+            maxHeight: cardComodosRecolhido ? "none" : 560,
+            overflowY: cardComodosRecolhido ? "visible" : "auto",
             padding:"4px 12px",
-            position:"relative",
           }}>
-            {/* Setinha global pra recolher/expandir TODOS os grupos.
-                Posicionada no canto superior direito do card. Só aparece quando há
-                pelo menos 1 cômodo selecionado (sem cômodos não há nada útil pra
-                recolher e mostrar resumo). */}
+            {/* Header com setinha pra recolher/expandir TODO o card de cômodos.
+                Só aparece quando há pelo menos 1 cômodo selecionado — assim o usuário
+                pode esconder a lista inteira (headers + cômodos) e focar nas variáveis
+                e no resumo, sem precisar rolar. */}
             {Object.keys(qtds).some(n => qtds[n] > 0) && (
               <button
                 type="button"
-                onClick={() => { todosGruposFechados ? abrirTodosGrupos() : fecharTodosGrupos(); }}
-                title={todosGruposFechados ? "Expandir todos os grupos" : "Recolher todos os grupos"}
-                aria-label={todosGruposFechados ? "Expandir todos os grupos" : "Recolher todos os grupos"}
+                onClick={() => setCardComodosRecolhido(v => !v)}
+                title={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
+                aria-label={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
                 style={{
-                  position:"absolute", top:8, right:10, zIndex:5,
-                  width:24, height:24, border:"none", background:"transparent",
-                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                  padding:0, fontFamily:"inherit",
+                  display:"flex", alignItems:"center", justifyContent:"space-between",
+                  width:"100%", padding:"8px 4px",
+                  background:"transparent", border:"none",
+                  cursor:"pointer", fontFamily:"inherit",
+                  borderBottom: cardComodosRecolhido ? "none" : "1px solid #f4f5f7",
+                  marginBottom: cardComodosRecolhido ? 0 : 4,
                 }}>
+                <span style={{ fontSize:11, fontWeight:600, color:"#828a98", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                  Cômodos
+                </span>
                 <svg width="14" height="14" viewBox="0 0 12 12" fill="none"
-                  style={{ transform: todosGruposFechados ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s" }}>
+                  style={{ transform: cardComodosRecolhido ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s", flexShrink:0 }}>
                   <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
             )}
 
+            {!cardComodosRecolhido && (<>
 
             {/* Container 1 coluna */}
             <div>
@@ -13869,6 +13859,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 return folga > 0 ? <div style={{ height: folga, flexShrink: 0 }} aria-hidden="true" /> : null;
               })()}
             </div>
+            </>)}
           </div>
 
           {/* Resumo Cálculo — só aparece quando tem cômodos */}
