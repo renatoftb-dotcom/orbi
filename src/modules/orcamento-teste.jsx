@@ -7282,7 +7282,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           <div style={{ display:"flex", alignItems:"center", gap:0, marginLeft:-8 }}>
             {editandoAliq ? (
               <input
-                autoFocus
+                ref={el => {
+                  if (el) {
+                    // Foco explícito: autoFocus no iOS Safari pode falhar quando o
+                    // elemento entra condicionalmente no DOM, fazendo o foco "vazar"
+                    // pra outros inputs visíveis (ex: input de Referência abaixo).
+                    el.focus();
+                    try { el.select(); } catch {}
+                  }
+                }}
                 type="number" min="0" max="100" step="0.5"
                 defaultValue={aliqImp}
                 onBlur={e => { const v = parseFloat(e.target.value)||0; setAliqImp(Math.max(0, Math.min(100, v))); setEditandoAliq(false); }}
@@ -7312,7 +7320,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
             {editandoRep ? (
               <input
-                autoFocus
+                ref={el => {
+                  if (el) {
+                    el.focus();
+                    try { el.select(); } catch {}
+                  }
+                }}
                 type="number" min="0"
                 defaultValue={qtdRep}
                 onBlur={e => { const v = parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); }}
@@ -7424,16 +7437,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       <input
                         ref={el => {
                           if (el) {
-                            // Foca apenas na primeira vez que o input monta nesta etapa.
-                            // Re-renders subsequentes (toques em outros chips) NÃO devem
-                            // re-focar — isso roubaria o foco do input clicado.
-                            if (!opcaoEscolhida && !referenciaInputFocadoRef.current) {
+                            // Foca apenas na primeira vez que o input monta nesta etapa,
+                            // E SOMENTE no desktop. No mobile, auto-focus é confuso (teclado
+                            // abre sem o usuário pedir) e pior, rouba o foco quando o
+                            // usuário toca em outros campos editáveis (alíquota, repetição).
+                            // No mobile o usuário simplesmente toca no input pra editar.
+                            if (!isMobileOrc && !opcaoEscolhida && !referenciaInputFocadoRef.current) {
                               referenciaInputFocadoRef.current = true;
                               setTimeout(() => { try { el.focus(); } catch {} }, 50);
                             }
                           } else {
-                            // Input desmontou (saiu da etapa de Referência) — reseta
-                            // pra que ao voltar nessa etapa, foque novamente.
                             referenciaInputFocadoRef.current = false;
                           }
                         }}
