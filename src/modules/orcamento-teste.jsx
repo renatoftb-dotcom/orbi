@@ -362,6 +362,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         onVoltar={voltarParaLista}
         modoAbertura={modoAbertura}
         escritorio={data?.escritorio || {}}
+        usuario={data?._usuario}
+        cub={data?.cub}
       />
     );
   }
@@ -5589,7 +5591,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
   );
 }
 
-function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio }) {
+function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio, usuario, cub }) {
   // Normaliza escritorio (defaults vazios se algo faltar)
   const esc = escritorio || {};
   // Primeiro responsável técnico serve como responsável padrão na proposta.
@@ -6086,7 +6088,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!isComercial && (!tamanho || !padrao)) return null;
     const { comodos: COMODOS_USE } = configAtual;
     const tcfg = getTipoConfig(tipoParaConfig(tipoProjeto));
-    const pb = tcfg.precoBase;
+    // Sprint 3: precoBase agora é dinâmico (CUB × pct_efetivo da empresa).
+    // Se onboarding incompleto OU sem CUB do estado, cai no fallback fixo
+    // (getPrecoBaseDinamico devolve tcfg.precoBase com modo:"fixo").
+    // Padrão Médio do projeto = Normal do CUB (NBR 12721).
+    const _precoBaseInfo = getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub);
+    const pb = _precoBaseInfo.precoBase;
 
     if (isComercial) {
       const nomesLoja   = Object.keys(COMODOS_GALERIA_LOJA);
@@ -6296,7 +6303,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       acrescimoCirk: tcfg.acrescimoCirk,
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
     };
-  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo]);
+  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo, usuario, cub]);
 
   const temComodos = isComercial
     ? Object.entries(grupoQtds).some(([g, gq]) => gq > 0 && Object.keys(qtds).some(nome => grupoDeComodo[nome] === g && (qtds[nome]||0) > 0))
@@ -6678,9 +6685,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   };
 
   const [gruposAbertos, setGruposAbertos] = useState({});
-  // Recolhe o card inteiro de cômodos (esconde headers e listas) — útil pra
-  // dar mais espaço ao resumo enquanto altera variáveis (toggles, configuração).
-  const [cardComodosRecolhido, setCardComodosRecolhido] = useState(false);
   // Cômodo com popup visível (via hover OU via click no input)
   const [comodoAberto, setComodoAberto] = useState(null);
   // Navegação por teclado: índice da quantidade (0-6) destacada visualmente.
@@ -6771,6 +6775,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
   function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
+  // Helpers para colapsar/expandir todos os grupos de uma vez.
+  // Útil pra deixar só o resumo + variáveis visíveis e ir alterando enquanto
+  // observa os valores recalculando.
+  function fecharTodosGrupos() {
+    if (!configAtual?.grupos) return;
+    const next = {};
+    Object.keys(configAtual.grupos).forEach(g => { next[g] = false; });
+    setGruposAbertos(next);
+  }
+  function abrirTodosGrupos() { setGruposAbertos({}); }
+  // True quando TODOS os grupos visíveis estão fechados
+  const todosGruposFechados = (() => {
+    if (!configAtual?.grupos) return false;
+    const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
+    const visiveis = Object.keys(configAtual.grupos).filter(g => !(isTerrea && g === "Outros"));
+    if (visiveis.length === 0) return false;
+    return visiveis.every(g => gruposAbertos[g] === false);
+  })();
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -7611,39 +7633,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             background:"#fff",
             border:"1px solid #e5e7eb",
             borderRadius:10,
-            maxHeight: cardComodosRecolhido ? "none" : 560,
-            overflowY: cardComodosRecolhido ? "visible" : "auto",
+            maxHeight:560,
+            overflowY:"auto",
             padding:"4px 12px",
           }}>
-            {/* Header com setinha pra recolher/expandir TODO o card de cômodos.
-                Só aparece quando há pelo menos 1 cômodo selecionado — assim o usuário
-                pode esconder a lista inteira (headers + cômodos) e focar nas variáveis
-                e no resumo, sem precisar rolar. */}
-            {Object.keys(qtds).some(n => qtds[n] > 0) && (
-              <button
-                type="button"
-                onClick={() => setCardComodosRecolhido(v => !v)}
-                title={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
-                aria-label={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
-                style={{
-                  display:"flex", alignItems:"center", justifyContent:"space-between",
-                  width:"100%", padding:"8px 4px",
-                  background:"transparent", border:"none",
-                  cursor:"pointer", fontFamily:"inherit",
-                  borderBottom: cardComodosRecolhido ? "none" : "1px solid #f4f5f7",
-                  marginBottom: cardComodosRecolhido ? 0 : 4,
-                }}>
-                <span style={{ fontSize:11, fontWeight:600, color:"#828a98", textTransform:"uppercase", letterSpacing:"0.08em" }}>
-                  Cômodos
-                </span>
-                <svg width="14" height="14" viewBox="0 0 12 12" fill="none"
-                  style={{ transform: cardComodosRecolhido ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s", flexShrink:0 }}>
-                  <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            )}
 
-            {!cardComodosRecolhido && (<>
 
             {/* Container 1 coluna */}
             <div>
@@ -7867,7 +7861,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     display:"flex", alignItems:"center", gap:10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
                     padding:"5px 10px",
-                    marginBottom: recolhido ? 0 : 8,
+                    marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
                   }}>
                     <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
@@ -7900,6 +7894,39 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           e.currentTarget.style.background = "transparent";
                         }}>
                         Resetar
+                      </button>
+                    )}
+                    {/* Recolher tudo / Expandir tudo — só aparece no primeiro grupo,
+                        e somente quando há pelo menos 1 cômodo selecionado (caso
+                        contrário, não faz sentido recolher — não há resumo pra ver).
+                        Permite ver só as variáveis (toggles + configuração) e o
+                        resumo, alterando os parâmetros e vendo o impacto sem precisar
+                        rolar pelos cômodos. */}
+                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (todosGruposFechados) abrirTodosGrupos();
+                          else fecharTodosGrupos();
+                        }}
+                        title={todosGruposFechados ? "Expandir todos os grupos" : "Recolher todos os grupos"}
+                        style={{
+                          background:"transparent", border:"1px solid #d0d4db",
+                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
+                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
+                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
+                          flexShrink:0,
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = "#111";
+                          e.currentTarget.style.color = "#111";
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = "#d0d4db";
+                          e.currentTarget.style.color = "#6b7280";
+                        }}>
+                        {todosGruposFechados ? "Expandir tudo" : "Recolher tudo"}
                       </button>
                     )}
                     <span style={{ flex:1 }} />
@@ -8086,8 +8113,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     </>
                   )}
 
-                  {/* Escolhidos — escondidos quando grupo recolhido (igual aos disponíveis) */}
-                  {!recolhido && escolhidos.length > 0 && (
+                  {/* Escolhidos — SEMPRE visíveis, mesmo com grupo recolhido */}
+                  {escolhidos.length > 0 && (
                     <div style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
                       gap:"8px 8px",
@@ -8153,7 +8180,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 return folga > 0 ? <div style={{ height: folga, flexShrink: 0 }} aria-hidden="true" /> : null;
               })()}
             </div>
-            </>)}
           </div>
 
           {/* Resumo Cálculo — só aparece quando tem cômodos */}

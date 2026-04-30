@@ -1803,6 +1803,8 @@ export default function ModuloClientesFornecedores() {
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
               escritorio={data.escritorio || {}}
+              usuario={usuario}
+              cub={data?.cub}
               modoVer={orcamentoTelaCheia.modo === "ver"}
               modoAbertura={orcamentoTelaCheia.modo}
               onSalvar={async (orc) => {
@@ -1852,7 +1854,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "home" && !isMaster && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
-          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={{ ...data, _usuario: usuario }} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}

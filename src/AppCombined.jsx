@@ -351,7 +351,11 @@ function getComodosConfig(tipo) {
   return { comodos: COMODOS, grupos: GRUPOS_COMODOS, storageKey: CUSTOM_CONFIG_KEY };
 }
 
-var INDICE_PADRAO = { Alto:0.5, Médio:0.2, Baixo:-0.2 };
+// INDICE_PADRAO — Sprint 3: valores reduzidos pra deixar o CUB do estado/padrão
+// como principal driver de preço (CUB já tem Baixo/Normal/Alto diferenciados).
+// Antes era ±0.5/±0.2 (variação grande); agora ±0.1 (apenas um traço sutil pra
+// alto vs baixo padrão). Total de variação ≤ 20% no projeto típico.
+var INDICE_PADRAO = { Alto:0.1, Médio:0, Baixo:-0.1 };
 // Storage key para customizações globais
 var CUSTOM_CONFIG_KEY = "obramanager-config-v1";
 // Carrega customizações salvas (medidas/índices editados pelo usuário)
@@ -430,6 +434,51 @@ function getTipoConfig(tipo) {
             : tipo === "Galpão"  ? "Galpao"
             : (tipo || "Residencial");
   return TIPO_CONFIG[key] || TIPO_CONFIG.Residencial;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PREÇO BASE DINÂMICO (Sprint 3 — modelo CUB)
+// ═══════════════════════════════════════════════════════════════
+// Calcula o preço base por m² de arquitetura usando:
+//   precoBase = pct_efetivo × CUB[estado][R-1][padrão_normalizado]
+//
+// pct_efetivo: pct_calibrado se preenchido (calibragem pessoal do usuário),
+//              senão pct_matriz_calculado (calculado pelo onboarding).
+//
+// Padrão do PROJETO ("Alto", "Médio", "Baixo") → padrão do CUB ("Alto", "Normal", "Baixo")
+// Mapeamento: Médio → Normal (oficial NBR 12721, mas UI mostra "Médio").
+//
+// Empresas SEM onboarding completo (sem usuario.pct_*  ou sem data.cub):
+//   → fallback pro precoBase fixo do TIPO_CONFIG (R$ 45 / R$ 32).
+//
+// Parâmetros:
+//   tipoProjeto: "Residencial", "Clínica", "Conj. Comercial", "Galpão"
+//   padrao:      "Alto" | "Médio" | "Baixo" (padrão do projeto, NÃO do CUB)
+//   usuario:     objeto do JWT (com pct_calibrado, pct_matriz_calculado, estado)
+//   cub:         data.cub do loadAllData (objeto { estado, Baixo, Normal, Alto })
+//
+// Retorna: { precoBase, modo } — modo "dinamico" ou "fixo"
+// ═══════════════════════════════════════════════════════════════
+function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
+  const tcfg = getTipoConfig(tipoProjeto === "Clínica" ? "Clinica"
+                          : tipoProjeto === "Galpão" ? "Galpao"
+                          : (tipoProjeto || "Residencial"));
+  const fallback = { precoBase: tcfg.precoBase, modo: "fixo" };
+
+  // Sem dados de pricing → fallback fixo (orçamento ainda funciona).
+  if (!usuario || !cub) return fallback;
+  const pct = (usuario.pct_calibrado != null && usuario.pct_calibrado > 0)
+    ? usuario.pct_calibrado
+    : usuario.pct_matriz_calculado;
+  if (!pct || pct <= 0) return fallback;
+
+  // Padrão Médio do projeto = Normal do CUB (NBR 12721).
+  const padraoCub = padrao === "Médio" ? "Normal" : padrao;
+  const cubObj = cub[padraoCub];
+  if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) return fallback;
+
+  const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub };
 }
 var fmt = (v) => (v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 var fmtM2 = (v) => `${(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})} m²`;
@@ -6092,6 +6141,8 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         onVoltar={voltarParaLista}
         modoAbertura={modoAbertura}
         escritorio={data?.escritorio || {}}
+        usuario={data?._usuario}
+        cub={data?.cub}
       />
     );
   }
@@ -11319,7 +11370,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
   );
 }
 
-function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio }) {
+function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio, usuario, cub }) {
   // Normaliza escritorio (defaults vazios se algo faltar)
   const esc = escritorio || {};
   // Primeiro responsável técnico serve como responsável padrão na proposta.
@@ -11816,7 +11867,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!isComercial && (!tamanho || !padrao)) return null;
     const { comodos: COMODOS_USE } = configAtual;
     const tcfg = getTipoConfig(tipoParaConfig(tipoProjeto));
-    const pb = tcfg.precoBase;
+    // Sprint 3: precoBase agora é dinâmico (CUB × pct_efetivo da empresa).
+    // Se onboarding incompleto OU sem CUB do estado, cai no fallback fixo
+    // (getPrecoBaseDinamico devolve tcfg.precoBase com modo:"fixo").
+    // Padrão Médio do projeto = Normal do CUB (NBR 12721).
+    const _precoBaseInfo = getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub);
+    const pb = _precoBaseInfo.precoBase;
 
     if (isComercial) {
       const nomesLoja   = Object.keys(COMODOS_GALERIA_LOJA);
@@ -12026,7 +12082,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       acrescimoCirk: tcfg.acrescimoCirk,
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
     };
-  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo]);
+  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo, usuario, cub]);
 
   const temComodos = isComercial
     ? Object.entries(grupoQtds).some(([g, gq]) => gq > 0 && Object.keys(qtds).some(nome => grupoDeComodo[nome] === g && (qtds[nome]||0) > 0))
@@ -12408,9 +12464,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   };
 
   const [gruposAbertos, setGruposAbertos] = useState({});
-  // Recolhe o card inteiro de cômodos (esconde headers e listas) — útil pra
-  // dar mais espaço ao resumo enquanto altera variáveis (toggles, configuração).
-  const [cardComodosRecolhido, setCardComodosRecolhido] = useState(false);
   // Cômodo com popup visível (via hover OU via click no input)
   const [comodoAberto, setComodoAberto] = useState(null);
   // Navegação por teclado: índice da quantidade (0-6) destacada visualmente.
@@ -12501,6 +12554,24 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
   function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
+  // Helpers para colapsar/expandir todos os grupos de uma vez.
+  // Útil pra deixar só o resumo + variáveis visíveis e ir alterando enquanto
+  // observa os valores recalculando.
+  function fecharTodosGrupos() {
+    if (!configAtual?.grupos) return;
+    const next = {};
+    Object.keys(configAtual.grupos).forEach(g => { next[g] = false; });
+    setGruposAbertos(next);
+  }
+  function abrirTodosGrupos() { setGruposAbertos({}); }
+  // True quando TODOS os grupos visíveis estão fechados
+  const todosGruposFechados = (() => {
+    if (!configAtual?.grupos) return false;
+    const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
+    const visiveis = Object.keys(configAtual.grupos).filter(g => !(isTerrea && g === "Outros"));
+    if (visiveis.length === 0) return false;
+    return visiveis.every(g => gruposAbertos[g] === false);
+  })();
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -13341,39 +13412,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             background:"#fff",
             border:"1px solid #e5e7eb",
             borderRadius:10,
-            maxHeight: cardComodosRecolhido ? "none" : 560,
-            overflowY: cardComodosRecolhido ? "visible" : "auto",
+            maxHeight:560,
+            overflowY:"auto",
             padding:"4px 12px",
           }}>
-            {/* Header com setinha pra recolher/expandir TODO o card de cômodos.
-                Só aparece quando há pelo menos 1 cômodo selecionado — assim o usuário
-                pode esconder a lista inteira (headers + cômodos) e focar nas variáveis
-                e no resumo, sem precisar rolar. */}
-            {Object.keys(qtds).some(n => qtds[n] > 0) && (
-              <button
-                type="button"
-                onClick={() => setCardComodosRecolhido(v => !v)}
-                title={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
-                aria-label={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
-                style={{
-                  display:"flex", alignItems:"center", justifyContent:"space-between",
-                  width:"100%", padding:"8px 4px",
-                  background:"transparent", border:"none",
-                  cursor:"pointer", fontFamily:"inherit",
-                  borderBottom: cardComodosRecolhido ? "none" : "1px solid #f4f5f7",
-                  marginBottom: cardComodosRecolhido ? 0 : 4,
-                }}>
-                <span style={{ fontSize:11, fontWeight:600, color:"#828a98", textTransform:"uppercase", letterSpacing:"0.08em" }}>
-                  Cômodos
-                </span>
-                <svg width="14" height="14" viewBox="0 0 12 12" fill="none"
-                  style={{ transform: cardComodosRecolhido ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s", flexShrink:0 }}>
-                  <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            )}
 
-            {!cardComodosRecolhido && (<>
 
             {/* Container 1 coluna */}
             <div>
@@ -13597,7 +13640,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     display:"flex", alignItems:"center", gap:10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
                     padding:"5px 10px",
-                    marginBottom: recolhido ? 0 : 8,
+                    marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
                   }}>
                     <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
@@ -13630,6 +13673,39 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           e.currentTarget.style.background = "transparent";
                         }}>
                         Resetar
+                      </button>
+                    )}
+                    {/* Recolher tudo / Expandir tudo — só aparece no primeiro grupo,
+                        e somente quando há pelo menos 1 cômodo selecionado (caso
+                        contrário, não faz sentido recolher — não há resumo pra ver).
+                        Permite ver só as variáveis (toggles + configuração) e o
+                        resumo, alterando os parâmetros e vendo o impacto sem precisar
+                        rolar pelos cômodos. */}
+                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
+                      <button
+                        type="button"
+                        onClick={e => {
+                          e.stopPropagation();
+                          if (todosGruposFechados) abrirTodosGrupos();
+                          else fecharTodosGrupos();
+                        }}
+                        title={todosGruposFechados ? "Expandir todos os grupos" : "Recolher todos os grupos"}
+                        style={{
+                          background:"transparent", border:"1px solid #d0d4db",
+                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
+                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
+                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
+                          flexShrink:0,
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.borderColor = "#111";
+                          e.currentTarget.style.color = "#111";
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.borderColor = "#d0d4db";
+                          e.currentTarget.style.color = "#6b7280";
+                        }}>
+                        {todosGruposFechados ? "Expandir tudo" : "Recolher tudo"}
                       </button>
                     )}
                     <span style={{ flex:1 }} />
@@ -13816,8 +13892,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     </>
                   )}
 
-                  {/* Escolhidos — escondidos quando grupo recolhido (igual aos disponíveis) */}
-                  {!recolhido && escolhidos.length > 0 && (
+                  {/* Escolhidos — SEMPRE visíveis, mesmo com grupo recolhido */}
+                  {escolhidos.length > 0 && (
                     <div style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
                       gap:"8px 8px",
@@ -13883,7 +13959,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 return folga > 0 ? <div style={{ height: folga, flexShrink: 0 }} aria-hidden="true" /> : null;
               })()}
             </div>
-            </>)}
           </div>
 
           {/* Resumo Cálculo — só aparece quando tem cômodos */}
@@ -21677,6 +21752,8 @@ export default function ModuloClientesFornecedores() {
               clienteWA={orcamentoTelaCheia.clienteOrc.contatos?.find(c=>c.whatsapp)?.telefone||""}
               orcBase={orcamentoTelaCheia.orcBase || null}
               escritorio={data.escritorio || {}}
+              usuario={usuario}
+              cub={data?.cub}
               modoVer={orcamentoTelaCheia.modo === "ver"}
               modoAbertura={orcamentoTelaCheia.modo}
               onSalvar={async (orc) => {
@@ -21726,7 +21803,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "home" && !isMaster && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
-          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={data} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
+          {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={{ ...data, _usuario: usuario }} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
