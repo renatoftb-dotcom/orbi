@@ -21,6 +21,7 @@ const ORDER = [
   "admin.jsx",
   "login.jsx",
   "mensagens.jsx",
+  "onboarding.jsx",
   "app.jsx",
 ];
 
