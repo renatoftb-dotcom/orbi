@@ -1208,7 +1208,10 @@ export default function ModuloClientesFornecedores() {
 
   async function loadData() {
     try {
-      const saved = await loadAllData();
+      // Passa estado da empresa pra loadAllData buscar o CUB em paralelo
+      // (Sprint 3). Se empresa não tem estado (sem onboarding), passa null
+      // e loadAllData pula a busca do CUB — orçamento usa fallback R$ 45.
+      const saved = await loadAllData(usuario?.estado || null);
       setData(saved);
       setBackendOffline(false);
     }
@@ -1336,11 +1339,39 @@ export default function ModuloClientesFornecedores() {
       <>
       <TelaOnboarding
         usuario={usuario}
-        onConcluido={() => {
-          // Backend zerou precisa_fazer_onboarding. Atualiza state local.
-          const usrAtualizado = { ...usuario, precisa_fazer_onboarding: false };
+        onConcluido={(estadoOnboarding) => {
+          // Backend zerou precisa_fazer_onboarding. Atualiza state local
+          // (incluindo o `estado` salvo no onboarding pra que loadAllData
+          // já busque o CUB correto na próxima vez que rodar).
+          const usrAtualizado = {
+            ...usuario,
+            precisa_fazer_onboarding: false,
+            estado: estadoOnboarding || usuario.estado || null,
+          };
           setUsuario(usrAtualizado);
           try { localStorage.setItem("vicke-user", JSON.stringify(usrAtualizado)); } catch {}
+
+          // Pré-preenche o estado no endereço do escritório se ainda estiver
+          // vazio. Evita que o usuário tenha que digitar de novo a mesma info
+          // que acabou de informar no onboarding.
+          if (estadoOnboarding && data?.escritorio) {
+            const enderecoAtual = data.escritorio.endereco || {};
+            if (!enderecoAtual.estado) {
+              const escritorioAtualizado = {
+                ...data.escritorio,
+                endereco: { ...enderecoAtual, estado: estadoOnboarding },
+              };
+              save({ ...data, escritorio: escritorioAtualizado }).catch(e => {
+                console.error("Falha ao pré-preencher estado:", e);
+              });
+            }
+          }
+
+          // Redireciona pra aba Escritório pra completar cadastro completo
+          // (logo, endereço, contatos, equipe). Mensagem explicando o porquê
+          // fica na tela de transição do onboarding.
+          setAba("escritorio");
+          setEscritorioKey(n => n + 1);
         }}
         onLogout={handleLogout}
       />

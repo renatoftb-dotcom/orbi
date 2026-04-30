@@ -72,6 +72,10 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
   const [salvando, setSalvando] = useState(false);
   const [erroSalvar, setErroSalvar] = useState(null);
 
+  // Após salvar com sucesso, mostra tela de transição com explicação do
+  // que vem em seguida (cadastro do escritório). Usuário clica e libera.
+  const [concluido, setConcluido] = useState(false);
+
   // Ref pra rolar o conteúdo conforme novas perguntas aparecem.
   const containerRef = useRef(null);
 
@@ -198,12 +202,27 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
         estado,
         valor_calibrado,
       });
-      onConcluido();
+      // Sucesso → mostra tela de transição. onConcluido() é chamado quando
+      // usuário clicar "Continuar para o cadastro" (ver TelaTransicao abaixo).
+      setConcluido(true);
     } catch (e) {
       setErroSalvar(e.message || "Falha ao salvar perfil");
     } finally {
       setSalvando(false);
     }
+  }
+
+  // Após salvar com sucesso, mostra tela de transição amigável que prepara
+  // o usuário pra próxima etapa (cadastro do escritório). Não usa o mesmo
+  // layout do questionário porque é momento de "respirar" e celebrar a
+  // conclusão antes de seguir.
+  if (concluido) {
+    return (
+      <TelaTransicao
+        usuarioNome={usuario?.nome}
+        onContinuar={() => onConcluido(estado)}
+      />
+    );
   }
 
   return (
@@ -573,6 +592,64 @@ function BlocoResultado({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// Tela exibida após onboarding concluído com sucesso. Prepara o usuário
+// pra próxima etapa (cadastro do escritório) explicando POR QUE essas
+// informações são necessárias — caso contrário cadastro parece
+// "burocrático demais" e usuário pode pular pela aba.
+function TelaTransicao({ usuarioNome, onContinuar }) {
+  const primeiroNome = (usuarioNome || "").split(" ")[0] || "";
+  return (
+    <div style={tela}>
+      <div style={{ width:"100%", maxWidth:520, padding:"60px 24px", textAlign:"center" }}>
+        {/* Ícone de sucesso (check em círculo preto) */}
+        <div style={{
+          width:56, height:56, borderRadius:"50%",
+          background:"#111", color:"#fff",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          margin:"0 auto 24px",
+        }}>
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12"/>
+          </svg>
+        </div>
+
+        <div style={{ fontSize:22, fontWeight:300, color:"#111", letterSpacing:-0.4, marginBottom:10 }}>
+          Tudo certo, {primeiroNome}!
+        </div>
+        <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.55, marginBottom:36 }}>
+          Seu perfil de pricing está configurado. Agora vamos completar o cadastro do seu escritório.
+        </div>
+
+        <div style={{
+          background:"#fafbfc",
+          border:"1px solid #f3f4f6",
+          borderRadius:10,
+          padding:"20px 22px",
+          textAlign:"left",
+          marginBottom:32,
+        }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>
+            Por que isso importa
+          </div>
+          <div style={{ fontSize:13, color:"#111", lineHeight:1.7 }}>
+            Os dados do escritório (logo, endereço, contatos) aparecem nos seus orçamentos, propostas e PDFs enviados aos clientes. É a sua identidade visual no sistema.
+          </div>
+        </div>
+
+        <button
+          onClick={onContinuar}
+          style={{
+            ...btnPrimario,
+            width:"100%", maxWidth:320,
+            padding:"13px 20px", fontSize:14,
+          }}>
+          Continuar para o cadastro →
+        </button>
+      </div>
     </div>
   );
 }
