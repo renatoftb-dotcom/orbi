@@ -12258,6 +12258,15 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         [data-vk-orc-wrap] *::before,
         [data-vk-orc-wrap] *::after { box-sizing: border-box !important; }
 
+        /* Anti-tremida ao escolher opção em mobile: remove o stagger (delay
+           incremental por item) e a animação de entrada, que combinados com o
+           fade-out e mudança de altura geram um efeito visual estranho onde as
+           opções "somem uma a uma". No mobile fica tudo síncrono — escolheu,
+           todas as outras somem juntas suavemente, depois entra a próxima
+           pergunta. */
+        .vk-flow2-row { animation: none !important; animation-delay: 0ms !important; }
+        .vk-flow2-row.is-fading { transition: opacity .25s ease, height .25s ease, padding .25s ease !important; }
+
         /* ── Toolbar (Arq/Eng/Marc/Imposto/Repetição) — chips horizontais (Layout C) ── */
         /* Remove fundo bege, transforma toggles em chips ativo/inativo.
            O switch redondo (primeiro <span> de cada label) é escondido e o label
