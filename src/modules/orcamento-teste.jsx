@@ -6415,6 +6415,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       /* Tabela de opções */
       .vk-flow2-table { margin-top: 20px; border: 1px solid rgba(0,0,0,0.10); border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 12px 28px -16px rgba(0,0,0,0.10); }
       .vk-flow2-table-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 500; }
+      /* No desktop, mostra "OPÇÕES" no header da tabela (a pergunta já aparece
+         no <h2> acima). A pergunta dentro do header é só pra mobile. */
+      .vk-flow2-table-head-question { display: none; }
       .vk-flow2-row { display: grid; grid-template-columns: 32px 1fr 22px; align-items: center; gap: 14px; padding: 13px 16px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; text-align: left; font-family: inherit; font-size: 14px; color: #111; transition: background .15s ease; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; width: 100%; }
       .vk-flow2-row:last-child { border-bottom: 0; }
       .vk-flow2-row:hover:not(:disabled) { background: #fafaf7; }
@@ -6570,10 +6573,28 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         .vk-flow-stage { padding: 4px 0 12px 0 !important; }
         .vk-trilha-rail { display: none !important; }
         .vk-flow2-card { max-width: 100% !important; }
-        .vk-flow2-title { font-size: 22px !important; line-height: 1.25 !important; }
+        /* No mobile, esconde o título grande e a descrição abaixo da pergunta —
+           a pergunta vai aparecer dentro do header da tabela de opções
+           (substituindo o "OPÇÕES"). UI fica mais compacta no celular.
+           Aplica APENAS em etapas com tabela de opções (is-options); na etapa de
+           Referência, o título/hint continuam visíveis pq não há tabela. */
+        .vk-flow2-card.is-options .vk-flow2-title { display: none !important; }
+        .vk-flow2-card.is-options .vk-flow2-hint { display: none !important; }
         .vk-flow2-input { box-sizing: border-box; max-width: 100% !important; padding: 12px 14px !important; }
-        .vk-flow2-hint { max-width: 100% !important; }
         .vk-flow2-table { margin-top: 14px !important; }
+        /* Mobile: header da tabela mostra a pergunta no lugar de "OPÇÕES" */
+        .vk-flow2-table-head-label { display: none !important; }
+        .vk-flow2-table-head-question {
+          display: inline !important;
+          font-size: 12px !important;
+          letter-spacing: 0 !important;
+          text-transform: none !important;
+          color: #111 !important;
+          font-weight: 600 !important;
+          line-height: 1.3 !important;
+        }
+        /* Aumenta o padding do header pra acomodar a pergunta com ar visual */
+        .vk-flow2-table-head { padding: 12px 14px !important; }
         .vk-flow2-row { padding: 14px !important; gap: 10px !important; }
 
         /* ── Trilha horizontal (Configuração) — grid 2 colunas, label/valor empilhados (Layout C) ── */
@@ -7436,7 +7457,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             {/* ─── ÁREA CENTRAL ─── */}
             <div className="vk-flow-stage">
               {etapaAtual && (
-                <div className="vk-flow2-card" key={"card-" + etapaAtual + "-" + opcaoEscolhida}>
+                <div className={"vk-flow2-card" + (etapaAtual !== "referencia" ? " is-options" : "")} key={"card-" + etapaAtual + "-" + opcaoEscolhida}>
                   <div className="vk-flow2-progress">
                     PERGUNTA {String(stepIdx + 1).padStart(2, "0")} / {String(ordem.length).padStart(2, "0")}
                   </div>
@@ -7492,7 +7513,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     /* Tabela de opções */
                     <div className="vk-flow2-table">
                       <div className="vk-flow2-table-head">
-                        <span>OPÇÕES</span>
+                        {/* No mobile, mostra a pergunta aqui (substitui o "OPÇÕES")
+                            já que o título grande acima é escondido. No desktop,
+                            mostra "OPÇÕES" como sempre, e a pergunta fica no h2 acima. */}
+                        <span className="vk-flow2-table-head-label">OPÇÕES</span>
+                        <span className="vk-flow2-table-head-question">{TITLES[etapaAtual]}</span>
                         <span>{(OPCOES[etapaAtual] || []).length}</span>
                       </div>
                       {(OPCOES[etapaAtual] || []).map((op, i) => {
