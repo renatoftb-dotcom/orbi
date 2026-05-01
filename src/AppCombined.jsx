@@ -12583,13 +12583,35 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // volta a ser exibido no primeiro da fila (próximo na sequência natural).
   const [comodoSelecionadoMobile, setComodoSelecionadoMobile] = useState(null);
   // Reseta o cômodo selecionado mobile quando ele sai de disponíveis (qty > 0
-  // ou foi tocado/escolhido). Assim o seletor volta automaticamente pro primeiro
-  // da fila (próximo na sequência natural), conforme combinado.
+  // ou foi tocado/escolhido). O seletor migra automaticamente pro PRÓXIMO cômodo
+  // ABAIXO na sequência natural — independente de qual era o ativo, sempre vai
+  // pro de baixo. Implementação: como a lista flat preserva a ordem natural e o
+  // cômodo selecionado já foi removido dela, o item no mesmo índice antigo na
+  // nova lista É exatamente o próximo abaixo. Se o selecionado era o último,
+  // pega o último disponível.
+  const indiceAnteriorRef = useRef(null);
+  useEffect(() => {
+    // Captura o índice ANTIGO do cômodo selecionado, ANTES dele sair da lista.
+    if (comodoSelecionadoMobile && comodosFlatRef.current) {
+      const idx = comodosFlatRef.current.indexOf(comodoSelecionadoMobile);
+      if (idx >= 0) indiceAnteriorRef.current = idx;
+    }
+  }, [comodoSelecionadoMobile]);
   useEffect(() => {
     if (!comodoSelecionadoMobile) return;
     const saiuDeDisponiveis = (qtds[comodoSelecionadoMobile] || 0) > 0
       || comodosTocados.has(comodoSelecionadoMobile);
-    if (saiuDeDisponiveis) setComodoSelecionadoMobile(null);
+    if (!saiuDeDisponiveis) return;
+    // Saiu de disponíveis. Pega o próximo na sequência (mesmo índice na lista nova).
+    const flat = comodosFlatRef.current || [];
+    const idx = indiceAnteriorRef.current;
+    if (flat.length === 0 || idx === null) {
+      setComodoSelecionadoMobile(null);
+      return;
+    }
+    const proximo = flat[idx] || flat[flat.length - 1] || null;
+    setComodoSelecionadoMobile(proximo);
+    indiceAnteriorRef.current = null;
   }, [qtds, comodosTocados, comodoSelecionadoMobile]);
   // Navegação por teclado: índice da quantidade (0-6) destacada visualmente.
   // Não confirma sozinho — só Enter confirma. Tab também navega mas não confirma.
