@@ -7991,7 +7991,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     display:"flex", alignItems:"center", gap:10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
                     padding:"5px 10px",
-                    marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
+                    marginBottom: recolhido ? 0 : 8,
                   }}>
                     <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
@@ -8222,8 +8222,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     </>
                   )}
 
-                  {/* Escolhidos — SEMPRE visíveis, mesmo com grupo recolhido */}
-                  {escolhidos.length > 0 && (
+                  {/* Escolhidos — escondidos quando o grupo está recolhido.
+                      (Antes ficavam sempre visíveis, mas isso fazia o chevron
+                      parecer não funcionar quando todos os cômodos do grupo
+                      estavam definidos: a setinha mudava de estado mas nada
+                      visualmente mudava na tela.) */}
+                  {!recolhido && escolhidos.length > 0 && (
                     <div style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
                       gap:"8px 8px",
