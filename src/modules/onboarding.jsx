@@ -30,7 +30,18 @@ const ESTADOS_DISPONIVEIS = [
 // mantemos esses fallbacks caso a API esteja indisponível por algum motivo.
 const ORDEM_PORTE = ["1-3", "4-10", "11-30", "30+"];
 const ORDEM_EXPERIENCIA = ["0-2", "3-5", "6-10", "11-20", "20+"];
-const ORDEM_REFERENCIA = ["ainda_nao", "cidade", "micro_regiao", "nacional", "internacional"];
+// "Referência no mercado" foi renomeada pra "Momento atual da carreira" — escala
+// de 7 níveis cobrindo do iniciante ao referência internacional. O nome do
+// campo no DB continua sendo `referencia` pra evitar migration de schema.
+const ORDEM_REFERENCIA = [
+  "iniciando",
+  "alguns_projetos",
+  "projetos_crescendo",
+  "referencia_cidade",
+  "referencia_alem",
+  "nacional",
+  "internacional",
+];
 const ORDEM_PADRAO = ["baixo", "medio", "alto"];
 
 // Casa exemplo usada na calibragem (deve bater com o que o backend usa
@@ -280,19 +291,21 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
           </PerguntaBlock>
         )}
 
-        {/* ── 4. Referência ── */}
+        {/* ── 4. Momento atual da carreira ── */}
         {experiencia && (
           <PerguntaBlock
-            pergunta="Você é uma referência profissional na sua área?"
-            sub="Não precisa ser premiado ou estar na mídia — basta ser reconhecido pela comunidade onde atua."
+            pergunta="Em que momento da sua carreira você está?"
+            sub="Pense no estágio atual, não no que pretende alcançar — você poderá refazer essa calibragem quando seu momento mudar."
           >
-            {ORDEM_REFERENCIA.map(k => (
-              <Opcao key={k}
-                label={matriz.referencia[k].label}
-                selecionada={referencia === k}
-                onClick={() => setReferencia(k)}
-              />
-            ))}
+            {ORDEM_REFERENCIA
+              .filter(k => matriz.referencia?.[k])  // resilência: ignora itens que sumiram da matriz (em vez de quebrar a tela)
+              .map(k => (
+                <Opcao key={k}
+                  label={matriz.referencia[k].label}
+                  selecionada={referencia === k}
+                  onClick={() => setReferencia(k)}
+                />
+              ))}
           </PerguntaBlock>
         )}
 
