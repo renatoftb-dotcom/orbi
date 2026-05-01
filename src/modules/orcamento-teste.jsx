@@ -7797,7 +7797,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               const renderControles = (nome, sempreVisivel) => {
                 const q = qtds[nome] || 0;
                 const isOpen = comodoAberto === nome;
-                const visivel = sempreVisivel || isOpen;
+                // Em mobile, IGNORA isOpen: a UX mobile usa o seletor inline
+                // (sempreVisivel) e não o popup hover. Sem isso, o comodoAberto
+                // que ficou setado de uma interação anterior aparece como seletor
+                // num cômodo errado simultaneamente ao novo (bug "dois selecionados").
+                const visivel = sempreVisivel || (!isMobileOrc && isOpen);
                 // Só renderiza quando visível — quando fechado, não ocupa espaço no layout
                 if (!visivel) return null;
                 return (
@@ -8173,7 +8177,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                               <div key={nome}
                                 data-comodo-wrap
                                 data-comodo-nome={nome}
-                                onClick={isMobileOrc && !mostrarSeletor ? () => setComodoSelecionadoMobile(nome) : undefined}
+                                onClick={isMobileOrc && !mostrarSeletor ? (e) => {
+                                  e.stopPropagation();
+                                  setComodoSelecionadoMobile(nome);
+                                  // Limpa comodoAberto pra evitar seletor "fantasma" em outro
+                                  // cômodo (residual de interações anteriores).
+                                  setComodoAberto(null);
+                                } : undefined}
                                 onMouseEnter={isMobileOrc ? undefined : () => abrirComodo(nome)}
                                 onMouseLeave={isMobileOrc ? undefined : agendarFecharComodo}
                                 style={{
