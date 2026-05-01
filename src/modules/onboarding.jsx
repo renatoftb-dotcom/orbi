@@ -44,10 +44,79 @@ const ORDEM_REFERENCIA = [
 ];
 const ORDEM_PADRAO = ["baixo", "medio", "alto"];
 
-// Casa exemplo usada na calibragem (deve bater com o que o backend usa
-// pra calcular pct_calibrado reverso).
-const AREA_EXEMPLO = 159.56; // 160m² aproximado (com 25% de circulação sobre cômodos típicos)
-const FATOR_EXEMPLO = 1.59;  // 1 + indiceComodos típico (0.59)
+// ════════════════════════════════════════════════════════════════
+// CASA EXEMPLO — usada pra calibragem e simulação
+// ════════════════════════════════════════════════════════════════
+// Composição "típica" residencial padrão Médio. DEVE BATER com a CASA_EXEMPLO
+// definida no backend (server.js). Se mudar uma, mudar a outra — senão o
+// pct_calibrado reverso vai sair errado quando o usuário calibrar.
+//
+// Espelha a estrutura do app real: índices de cômodos vêm de COMODOS de
+// shared.jsx, áreas são as do tamanho "Médio".
+const CASA_EXEMPLO = {
+  comodos: [
+    { nome: "Suíte Master",   qtd: 1, indice: 0.05, area: 32.50 }, // 5 × 6.5
+    { nome: "Suíte",          qtd: 2, indice: 0.05, area: 25.30 }, // 4.6 × 5.5
+    { nome: "Living",         qtd: 1, indice: 0.05, area: 32.00 }, // 8 × 4
+    { nome: "Sala de jantar", qtd: 1, indice: 0.05, area: 12.00 }, // 4 × 3
+    { nome: "Cozinha",        qtd: 1, indice: 0.08, area: 12.00 }, // 4 × 3
+    { nome: "Lavabo",         qtd: 1, indice: 0.05, area:  2.80 }, // 2 × 1.4
+    { nome: "Lavanderia",     qtd: 1, indice: 0.05, area:  6.00 }, // 3 × 2
+    { nome: "Garagem",        qtd: 2, indice: 0.03, area: 15.60 }, // 5.2 × 3
+  ],
+  acrescimoCirk: 0.25,
+  faixasDesconto: [
+    { ate: 200,      desconto: 0.00 },
+    { ate: 300,      desconto: 0.30 },
+    { ate: 400,      desconto: 0.35 },
+    { ate: 500,      desconto: 0.40 },
+    { ate: 600,      desconto: 0.45 },
+    { ate: Infinity, desconto: 0.50 },
+  ],
+};
+
+// Calcula honorário da casa exemplo dado o precoBase (R$/m²). Reproduz
+// fielmente a fórmula do orcamento-teste.jsx (indiceComodos somado, fator
+// multiplicador, faixas de desconto progressivas). Padrão Médio = indicePadrao 0.
+function calcularCasaExemplo(precoBase) {
+  let indiceComodos = 0;
+  let areaBruta = 0;
+  for (const c of CASA_EXEMPLO.comodos) {
+    indiceComodos += c.indice * c.qtd;
+    areaBruta     += c.area   * c.qtd;
+  }
+  indiceComodos = Math.round(indiceComodos * 1000) / 1000;
+  const areaTotal = Math.round(areaBruta * (1 + CASA_EXEMPLO.acrescimoCirk) * 100) / 100;
+  const fatorMult = Math.round((1 + indiceComodos + 0) * 1000) / 1000;
+  const precoM2Ef = precoBase * fatorMult;
+
+  const faixas = [];
+  let acum = 0, rest = areaTotal, total = 0;
+  for (const f of CASA_EXEMPLO.faixasDesconto) {
+    const chunk = Math.min(rest, f.ate - acum);
+    if (chunk <= 0) break;
+    const valorChunk = chunk * precoM2Ef * (1 - f.desconto);
+    total += valorChunk;
+    faixas.push({
+      m2: Math.round(chunk * 100) / 100,
+      desconto: f.desconto,
+      precoM2Efetivo: Math.round(precoM2Ef * (1 - f.desconto) * 100) / 100,
+      subtotal: Math.round(valorChunk * 100) / 100,
+    });
+    rest -= chunk; acum += chunk;
+    if (rest <= 0) break;
+  }
+
+  return {
+    areaBruta:     Math.round(areaBruta * 100) / 100,
+    areaTotal,
+    indiceComodos,
+    fatorMult,
+    precoM2:       Math.round(precoM2Ef * 100) / 100, // R$/m² cheio (sem desconto)
+    faixas,
+    honorario:     Math.round(total * 100) / 100,
+  };
+}
 
 // Limites pra disparar aviso de "valor absurdo" na calibragem.
 const RATIO_MUITO_BAIXO = 0.5;  // valor < 50% do calculado
@@ -141,25 +210,41 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
          + (matriz.capital?.[String(capital)]?.rating || 0);
   }, [matriz, profissao, porte, experiencia, referencia, padrao, capital, todasRespondidas]);
 
-  // Honorário arquitetura pra casa exemplo (160m² padrão Normal/Médio)
-  // usando o pct calculado e CUB do estado.
-  const honorarioCalculado = useMemo(() => {
+  // Cálculo completo da casa exemplo (3 suítes, sala estar+jantar, cozinha,
+  // lavabo, lavanderia, garagem 2 vagas — Médio padrão). Inclui faixas de
+  // desconto, igual ao orçamento real. Preço base = pctMatriz × CUB R-1 Normal.
+  const casaCalc = useMemo(() => {
     if (pctMatriz === null || !cubEstado) return null;
-    return AREA_EXEMPLO * FATOR_EXEMPLO * pctMatriz * cubEstado.valor_m2;
+    const precoBase = pctMatriz * cubEstado.valor_m2;
+    return calcularCasaExemplo(precoBase);
   }, [pctMatriz, cubEstado]);
+  const honorarioCalculado = casaCalc?.honorario ?? null;
 
-  // Análise da calibragem: comparar valor digitado com calculado.
+  // Análise da calibragem: valor digitado vs calculado. Como a fórmula nova
+  // tem faixas de desconto não-lineares, o pct_calibrado reverso é encontrado
+  // por bisseção (igual ao backend faz).
   const analiseCalibragem = useMemo(() => {
-    if (aceitouCalculado !== false || !valorCalibragem || !honorarioCalculado) return null;
+    if (aceitouCalculado !== false || !valorCalibragem || !honorarioCalculado || !cubEstado) return null;
     const v = parseFloat(String(valorCalibragem).replace(/[^\d,.-]/g, "").replace(",", "."));
     if (!v || v <= 0) return { invalido: true };
+
+    // Bisseção: encontra pct tal que calcularCasaExemplo(pct * cub).honorario === v
+    let lo = 0.001, hi = 0.20;
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2;
+      const honor = calcularCasaExemplo(mid * cubEstado.valor_m2).honorario;
+      if (honor < v) lo = mid; else hi = mid;
+      if (Math.abs(honor - v) < 1) break;
+    }
+    const pctCalibrado = (lo + hi) / 2;
+
     const ratio = v / honorarioCalculado;
     return {
       valor: v,
       ratio,
       muitoBaixo: ratio < RATIO_MUITO_BAIXO,
-      muitoAlto: ratio > RATIO_MUITO_ALTO,
-      pctCalibrado: v / (AREA_EXEMPLO * FATOR_EXEMPLO * cubEstado.valor_m2),
+      muitoAlto:  ratio > RATIO_MUITO_ALTO,
+      pctCalibrado,
     };
   }, [valorCalibragem, honorarioCalculado, aceitouCalculado, cubEstado]);
 
@@ -360,6 +445,7 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
             pctMatriz={pctMatriz}
             cubEstado={cubEstado}
             cubErro={cubErro}
+            casaCalc={casaCalc}
             honorarioCalculado={honorarioCalculado}
             aceitouCalculado={aceitouCalculado}
             setAceitouCalculado={setAceitouCalculado}
@@ -469,7 +555,7 @@ function Opcao({ label, selecionada, onClick }) {
 
 // Bloco final: resumo + calibragem.
 function BlocoResultado({
-  pctMatriz, cubEstado, cubErro, honorarioCalculado,
+  pctMatriz, cubEstado, cubErro, casaCalc, honorarioCalculado,
   aceitouCalculado, setAceitouCalculado,
   valorCalibragem, setValorCalibragem, analiseCalibragem,
   confirmandoAbsurdo, setConfirmandoAbsurdo,
@@ -482,7 +568,7 @@ function BlocoResultado({
       </div>
     );
   }
-  if (!cubEstado || honorarioCalculado === null) {
+  if (!cubEstado || honorarioCalculado === null || !casaCalc) {
     return (
       <div style={{ marginTop:32, fontSize:13, color:"#9ca3af" }}>
         Calculando…
@@ -490,7 +576,17 @@ function BlocoResultado({
     );
   }
 
-  const pctPct = (pctMatriz * 100).toFixed(2);
+  const pctPct     = (pctMatriz * 100).toFixed(2).replace(".", ",");
+  const precoBase  = pctMatriz * cubEstado.valor_m2;
+
+  // Estilos compartilhados
+  const linhaCalc = {
+    display:"flex", justifyContent:"space-between", alignItems:"baseline",
+    padding:"7px 0", fontSize:13, fontVariantNumeric:"tabular-nums",
+  };
+  const linhaCalcLabel = { color:"#6b7280" };
+  const linhaCalcValor = { color:"#111", fontWeight:500 };
+  const sep = { borderTop:"1px dashed #e5e7eb", margin:"4px 0" };
 
   return (
     <div style={{
@@ -504,22 +600,54 @@ function BlocoResultado({
       </div>
 
       <div style={{ fontSize:15, fontWeight:500, color:"#111", marginBottom:6, lineHeight:1.4 }}>
-        Pelo seu perfil, você cobraria <strong>{moeda(honorarioCalculado)}</strong> por uma casa típica.
+        Pelo seu perfil, você cobraria <strong>{moeda(honorarioCalculado)}</strong> por uma casa típica de {casaCalc.areaTotal.toLocaleString("pt-BR")}m².
       </div>
       <div style={{ fontSize:12.5, color:"#9ca3af", marginBottom:18, lineHeight:1.55 }}>
-        Casa de 160m² padrão médio · {pctPct}% do CUB do seu estado · honorário de arquitetura (sem engenharia)
+        3 suítes · sala estar/jantar · cozinha · lavabo · lavanderia · 2 vagas · padrão médio
       </div>
 
-      {/* Tabela compacta de detalhamento */}
-      <div style={{ background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius:8, padding:"12px 14px", marginBottom:20 }}>
-        <table style={{ width:"100%", fontSize:12.5, fontVariantNumeric:"tabular-nums" }}>
-          <tbody>
-            <tr><td style={tdLabel}>Perfil calculado</td><td style={tdValor}>{pctPct}% do CUB</td></tr>
-            <tr><td style={tdLabel}>CUB R-1 Normal ({cubEstado.estado})</td><td style={tdValor}>{moeda(cubEstado.valor_m2)}/m²</td></tr>
-            <tr><td style={tdLabel}>Preço base</td><td style={tdValor}>{moeda(pctMatriz * cubEstado.valor_m2)}/m²</td></tr>
-            <tr><td style={tdLabel}>Honorário (160m²)</td><td style={{ ...tdValor, fontWeight:600 }}>{moeda(honorarioCalculado)}</td></tr>
-          </tbody>
-        </table>
+      {/* Breakdown decomposto: preço base → fator complexidade → preço/m² → área → faixas → total */}
+      <div style={{ background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius:8, padding:"14px 16px", marginBottom:20 }}>
+        <div style={linhaCalc}>
+          <span style={linhaCalcLabel}>Preço base ({pctPct}% × CUB R-1 Normal {cubEstado.estado})</span>
+          <span style={linhaCalcValor}>{moeda(precoBase)}/m²</span>
+        </div>
+        <div style={linhaCalc}>
+          <span style={linhaCalcLabel}>× Índice de complexidade</span>
+          <span style={linhaCalcValor}>{casaCalc.fatorMult.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:3 })}</span>
+        </div>
+        <div style={{ ...linhaCalc, borderTop:"1px solid #e5e7eb", marginTop:4, paddingTop:9 }}>
+          <span style={{ ...linhaCalcLabel, color:"#111", fontWeight:500 }}>= Preço por m² (cheio)</span>
+          <span style={{ ...linhaCalcValor, fontWeight:600 }}>{moeda(casaCalc.precoM2)}/m²</span>
+        </div>
+
+        <div style={sep} />
+
+        {/* Faixas de desconto progressivo. Casa de 224m² geralmente tem 2 faixas:
+            0-200 sem desconto + 200-224 com 30% off (ou só 1 faixa se for ≤200). */}
+        {casaCalc.faixas.map((f, i) => (
+          <div key={i} style={linhaCalc}>
+            <span style={linhaCalcLabel}>
+              {f.m2.toLocaleString("pt-BR")}m² × {moeda(f.precoM2Efetivo)}/m²
+              {f.desconto > 0 && (
+                <span style={{ color:"#9ca3af", fontSize:11.5, marginLeft:6 }}>
+                  (excedente: −{(f.desconto * 100).toFixed(0)}%)
+                </span>
+              )}
+            </span>
+            <span style={linhaCalcValor}>{moeda(f.subtotal)}</span>
+          </div>
+        ))}
+
+        <div style={{ ...linhaCalc, borderTop:"1px solid #e5e7eb", marginTop:6, paddingTop:9, fontSize:14 }}>
+          <span style={{ color:"#111", fontWeight:600 }}>Honorário total</span>
+          <span style={{ color:"#111", fontWeight:700 }}>{moeda(honorarioCalculado)}</span>
+        </div>
+      </div>
+
+      <div style={{ fontSize:12, color:"#9ca3af", lineHeight:1.55, marginBottom:18 }}>
+        Esse é apenas um exemplo — projetos maiores têm desconto progressivo,
+        e mais cômodos ou padrão alto aumentam o índice de complexidade.
       </div>
 
       <div style={{ fontSize:14, color:"#111", marginBottom:12 }}>
@@ -548,7 +676,7 @@ function BlocoResultado({
           animation:"vk-onb-fade-in 0.3s ease-out",
         }}>
           <div style={{ fontSize:13, color:"#111", marginBottom:8 }}>
-            Quanto você cobraria por essa casa de 160m² padrão médio?
+            Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
           </div>
           <div style={{ position:"relative" }}>
             <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#9ca3af", pointerEvents:"none" }}>R$</span>
@@ -583,7 +711,7 @@ function BlocoResultado({
               </div>
               <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5, marginBottom:10 }}>
                 {moeda(analiseCalibragem.valor)} é {analiseCalibragem.ratio.toFixed(1)}× {analiseCalibragem.muitoAlto ? "maior" : "menor"} que o calculado pelo seu perfil ({moeda(honorarioCalculado)}).
-                Equivale a {(analiseCalibragem.pctCalibrado * 100).toFixed(2)}% do CUB.
+                Equivale a {(analiseCalibragem.pctCalibrado * 100).toFixed(2).replace(".", ",")}% do CUB.
               </div>
               <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#111", cursor:"pointer" }}>
                 <input
@@ -600,7 +728,7 @@ function BlocoResultado({
           {/* Análise normal (sem aviso) */}
           {analiseCalibragem && !analiseCalibragem.invalido && !analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto && (
             <div style={{ marginTop:12, fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
-              {moeda(analiseCalibragem.valor)} equivale a <strong style={{ color:"#111" }}>{(analiseCalibragem.pctCalibrado * 100).toFixed(2)}% do CUB</strong>. Esse será o seu novo preço base.
+              {moeda(analiseCalibragem.valor)} equivale a <strong style={{ color:"#111" }}>{(analiseCalibragem.pctCalibrado * 100).toFixed(2).replace(".", ",")}% do CUB</strong>. Esse será o seu novo preço base.
             </div>
           )}
         </div>
