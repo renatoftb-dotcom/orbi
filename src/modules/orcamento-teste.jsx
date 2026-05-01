@@ -6585,17 +6585,33 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         /* Mobile: header da tabela mostra a pergunta no lugar de "OPÇÕES" */
         .vk-flow2-table-head-label { display: none !important; }
         .vk-flow2-table-head-question {
-          display: inline !important;
-          font-size: 12px !important;
+          display: inline-block !important;
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+          padding-right: 10px !important;
+          font-size: 15px !important;
           letter-spacing: 0 !important;
           text-transform: none !important;
           color: #111 !important;
           font-weight: 600 !important;
           line-height: 1.3 !important;
+          white-space: nowrap !important;
+          overflow: hidden !important;
+          text-overflow: ellipsis !important;
         }
-        /* Aumenta o padding do header pra acomodar a pergunta com ar visual */
-        .vk-flow2-table-head { padding: 12px 14px !important; }
+        /* Aumenta o padding do header pra acomodar a pergunta com ar visual.
+           Garante que o contador (irmão direito) não seja espremido nem ultrapasse
+           a borda direita do card. */
+        .vk-flow2-table-head { padding: 12px 14px !important; gap: 8px !important; }
+        .vk-flow2-table-head > span:last-child { flex-shrink: 0 !important; }
         .vk-flow2-row { padding: 14px !important; gap: 10px !important; }
+        /* Reforça o colapso das opções não-escolhidas: sem isso, em mobile a
+           caixa fica com altura "fantasma" depois da escolha (espaço vazio). */
+        .vk-flow2-row.is-fading {
+          min-height: 0 !important;
+          max-height: 0 !important;
+          margin: 0 !important;
+        }
 
         /* ── Trilha horizontal (Configuração) — grid 2 colunas, label/valor empilhados (Layout C) ── */
         /* Visual mais clean: vira mini-cards com fundo cinza claro, sem pílula
