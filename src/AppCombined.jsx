@@ -12269,6 +12269,23 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
            pergunta. */
         .vk-flow2-row { animation: none !important; animation-delay: 0ms !important; }
         .vk-flow2-row.is-fading { transition: opacity .25s ease, height .25s ease, padding .25s ease !important; }
+        /* Em mobile, neutraliza :hover (que fica "pegajoso" em touch — o browser
+           mantém o estado do último elemento tocado, fazendo a primeira opção
+           do próximo card aparecer pré-destacada). Também neutraliza is-focused
+           (keyboard nav não faz sentido em mobile). Só is-chosen (opção que o
+           usuário tocou de fato) muda visual. */
+        .vk-flow2-row:hover:not(:disabled) { background: transparent !important; }
+        .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-text { font-weight: 500 !important; }
+        .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-arrow { opacity: 0 !important; transform: translateX(-4px) !important; }
+        .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx { color: #828a98 !important; }
+        .vk-flow2-row.is-focused:not(:disabled) { background: transparent !important; }
+        .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-text { font-weight: 500 !important; }
+        .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-arrow { opacity: 0 !important; transform: translateX(-4px) !important; }
+        .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-idx { color: #828a98 !important; }
+        /* Remove outline de focus (auto-focus do navegador no primeiro botão
+           pode marcar visualmente a primeira opção do novo card). */
+        .vk-flow2-row:focus,
+        .vk-flow2-row:focus-visible { outline: none !important; }
 
         /* ── Toolbar (Arq/Eng/Marc/Imposto/Repetição) — chips horizontais (Layout C) ── */
         /* Remove fundo bege, transforma toggles em chips ativo/inativo.
@@ -12559,6 +12576,21 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [cardComodosRecolhido, setCardComodosRecolhido] = useState(false);
   // Cômodo com popup visível (via hover OU via click no input)
   const [comodoAberto, setComodoAberto] = useState(null);
+  // MOBILE: cômodo onde o seletor [input] 0 1 2 3 4 está exibido inline.
+  // null = comportamento default (primeiro da fila). Setado quando o usuário
+  // toca em qualquer outro cômodo da lista de disponíveis pra "pular" pra ele.
+  // Quando o cômodo sai de disponíveis (qty > 0), reseta pra null e o seletor
+  // volta a ser exibido no primeiro da fila (próximo na sequência natural).
+  const [comodoSelecionadoMobile, setComodoSelecionadoMobile] = useState(null);
+  // Reseta o cômodo selecionado mobile quando ele sai de disponíveis (qty > 0
+  // ou foi tocado/escolhido). Assim o seletor volta automaticamente pro primeiro
+  // da fila (próximo na sequência natural), conforme combinado.
+  useEffect(() => {
+    if (!comodoSelecionadoMobile) return;
+    const saiuDeDisponiveis = (qtds[comodoSelecionadoMobile] || 0) > 0
+      || comodosTocados.has(comodoSelecionadoMobile);
+    if (saiuDeDisponiveis) setComodoSelecionadoMobile(null);
+  }, [qtds, comodosTocados, comodoSelecionadoMobile]);
   // Navegação por teclado: índice da quantidade (0-6) destacada visualmente.
   // Não confirma sozinho — só Enter confirma. Tab também navega mas não confirma.
   const [comodoQtdFocada, setComodoQtdFocada] = useState(null);
@@ -13916,18 +13948,22 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
-                            // MOBILE: o seletor [input] 0 1 2 3 4 fica VISÍVEL inline
-                            // só no PRIMEIRO cômodo da fila global (em ordem de
-                            // todos os grupos). Os demais aparecem com nome só,
-                            // esperando a vez. Conforme o usuário define a qty,
-                            // o cômodo sai dos disponíveis e o seletor migra pro
-                            // próximo. UX sequencial guiada que substitui hover.
+                            // MOBILE: o seletor [input] 0 1 2 3 4 fica VISÍVEL inline.
+                            // Por padrão aparece no PRIMEIRO cômodo da fila global
+                            // (em ordem de todos os grupos). Mas o usuário pode tocar
+                            // em qualquer outro cômodo pra "pular" e selecionar quantidade
+                            // direto nele — esse fica em comodoSelecionadoMobile.
+                            // Quando a qty é definida e o cômodo sai de disponíveis,
+                            // o seletor reseta pra null → volta pro primeiro da fila
+                            // (próximo na sequência natural).
                             const primeiroDaFila = (comodosFlatRef.current && comodosFlatRef.current[0]) || null;
-                            const mostrarSeletor = isMobileOrc && nome === primeiroDaFila;
+                            const ativoMobile = comodoSelecionadoMobile || primeiroDaFila;
+                            const mostrarSeletor = isMobileOrc && nome === ativoMobile;
                             return (
                               <div key={nome}
                                 data-comodo-wrap
                                 data-comodo-nome={nome}
+                                onClick={isMobileOrc && !mostrarSeletor ? () => setComodoSelecionadoMobile(nome) : undefined}
                                 onMouseEnter={isMobileOrc ? undefined : () => abrirComodo(nome)}
                                 onMouseLeave={isMobileOrc ? undefined : agendarFecharComodo}
                                 style={{
@@ -13942,6 +13978,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                                   transition:"color 0.15s, background 0.15s",
                                   minHeight:34,
                                   gap: isMobileOrc ? 8 : 0,
+                                  cursor: isMobileOrc && !mostrarSeletor ? "pointer" : "default",
                                 }}>
                                 <span style={{
                                   flex:1,
