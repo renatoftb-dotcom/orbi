@@ -6646,6 +6646,17 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           overflow-y: visible !important;
           padding: 4px 8px !important;
         }
+        /* Header do grupo (Áreas Sociais, Serviço, etc) — em mobile, reduz gap
+           e padding pra caber label + Resetar + "X amb · Y m²" + chevron numa linha. */
+        [data-vk-grupo-header] {
+          gap: 6px !important;
+          padding: 5px 8px !important;
+        }
+        /* Botão Resetar mobile: mais compacto */
+        [data-vk-grupo-resetar] {
+          padding: 1px 6px !important;
+          font-size: 9px !important;
+        }
       }
     `;
     document.head.appendChild(s);
@@ -6778,24 +6789,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setGruposAbertos(prev => ({ ...prev, [grupo]: prev[grupo] === false ? true : false }));
   }
   function isGrupoAberto(grupo) { return gruposAbertos[grupo] !== false; }
-  // Helpers para colapsar/expandir todos os grupos de uma vez.
-  // Útil pra deixar só o resumo + variáveis visíveis e ir alterando enquanto
-  // observa os valores recalculando.
-  function fecharTodosGrupos() {
-    if (!configAtual?.grupos) return;
-    const next = {};
-    Object.keys(configAtual.grupos).forEach(g => { next[g] = false; });
-    setGruposAbertos(next);
-  }
-  function abrirTodosGrupos() { setGruposAbertos({}); }
-  // True quando TODOS os grupos visíveis estão fechados
-  const todosGruposFechados = (() => {
-    if (!configAtual?.grupos) return false;
-    const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
-    const visiveis = Object.keys(configAtual.grupos).filter(g => !(isTerrea && g === "Outros"));
-    if (visiveis.length === 0) return false;
-    return visiveis.every(g => gruposAbertos[g] === false);
-  })();
 
   function setQtd(nome, delta) {
     setQtds(prev => ({ ...prev, [nome]: Math.max(0, (prev[nome] || 0) + delta) }));
@@ -7641,11 +7634,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             padding:"4px 12px",
           }}>
             {/* Header com setinha pra recolher/expandir TODO o card de cômodos.
-                Só aparece quando há pelo menos 1 cômodo selecionado — assim o usuário
-                pode esconder a lista inteira (headers + cômodos) e focar nas variáveis
-                e no resumo, sem precisar rolar. */}
-            {Object.keys(qtds).some(n => qtds[n] > 0) && (
-              <button
+                Aparece sempre que a seção de cômodos está visível, mesmo sem
+                quantidade preenchida. Permite esconder a lista inteira (headers +
+                cômodos) e focar nas variáveis e no resumo, sem precisar rolar. */}
+            <button
                 type="button"
                 onClick={() => setCardComodosRecolhido(v => !v)}
                 title={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
@@ -7666,7 +7658,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </button>
-            )}
 
             {!cardComodosRecolhido && (<>
 
@@ -7888,7 +7879,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               return (
                 <div key={grupo} style={{ marginBottom:14 }}>
                   {/* Header: retângulo cinza com bordas arredondadas */}
-                  <div style={{
+                  <div data-vk-grupo-header style={{
                     display:"flex", alignItems:"center", gap:10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
                     padding:"5px 10px",
@@ -7901,6 +7892,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
                       <button
                         type="button"
+                        data-vk-grupo-resetar
                         onClick={e => {
                           e.stopPropagation();
                           setQtds({});
@@ -7925,39 +7917,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           e.currentTarget.style.background = "transparent";
                         }}>
                         Resetar
-                      </button>
-                    )}
-                    {/* Recolher tudo / Expandir tudo — só aparece no primeiro grupo,
-                        e somente quando há pelo menos 1 cômodo selecionado (caso
-                        contrário, não faz sentido recolher — não há resumo pra ver).
-                        Permite ver só as variáveis (toggles + configuração) e o
-                        resumo, alterando os parâmetros e vendo o impacto sem precisar
-                        rolar pelos cômodos. */}
-                    {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
-                      <button
-                        type="button"
-                        onClick={e => {
-                          e.stopPropagation();
-                          if (todosGruposFechados) abrirTodosGrupos();
-                          else fecharTodosGrupos();
-                        }}
-                        title={todosGruposFechados ? "Expandir todos os grupos" : "Recolher todos os grupos"}
-                        style={{
-                          background:"transparent", border:"1px solid #d0d4db",
-                          color:"#6b7280", fontSize:10, fontFamily:"inherit",
-                          cursor:"pointer", padding:"1px 8px", borderRadius:4,
-                          transition:"all 0.15s", fontWeight:500, lineHeight:1.4,
-                          flexShrink:0,
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.borderColor = "#111";
-                          e.currentTarget.style.color = "#111";
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.borderColor = "#d0d4db";
-                          e.currentTarget.style.color = "#6b7280";
-                        }}>
-                        {todosGruposFechados ? "Expandir tudo" : "Recolher tudo"}
                       </button>
                     )}
                     <span style={{ flex:1 }} />
@@ -8070,7 +8029,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     )}
 
                     {qtdGrupo > 0 && (
-                      <span style={{ fontSize:11, color:"#9ca3af" }}>
+                      <span style={{ fontSize:11, color:"#9ca3af", whiteSpace:"nowrap", flexShrink:0 }}>
                         <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
                       </span>
                     )}
