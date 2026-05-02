@@ -19748,12 +19748,11 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
   return (
     <div ref={containerRef} style={tela}>
       {/* Largura adapta ao modo: 560 pro questionário (perguntas centralizadas e
-          legíveis), expande pra 1180 quando resultado aparece (precisa de
-          espaço pra resumo lateral + tabela + gráfico full-width). */}
+          legíveis), expande pra 960 quando resultado aparece. */}
       <div style={{
         width:"100%",
-        maxWidth: todasRespondidas ? 1180 : 560,
-        padding: todasRespondidas ? "32px 32px 40px" : "40px 20px 80px",
+        maxWidth: todasRespondidas ? 960 : 560,
+        padding: todasRespondidas ? "32px 24px 40px" : "40px 20px 80px",
         transition:"max-width 0.3s ease",
       }}>
 
@@ -19997,8 +19996,9 @@ function Opcao({ label, selecionada, onClick }) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Bloco final: análise digitando + tabela + waterfall + resumo lateral
-// Otimizado pra caber numa tela única (~720-800px de altura).
+// Bloco final: 2 etapas.
+//   Etapa 1: análise digitando + botão "Próximo"
+//   Etapa 2: tabela compacta + gráfico waterfall + pergunta calibragem
 // ════════════════════════════════════════════════════════════════
 function BlocoResultado({
   pctMatriz, cubEstado, cubErro, casaCalc, honorarioCalculado,
@@ -20007,6 +20007,15 @@ function BlocoResultado({
   confirmandoAbsurdo, setConfirmandoAbsurdo,
   respostas, setters, matriz,
 }) {
+  // Etapa atual: 1 = só texto, 2 = simulação completa
+  const [etapa, setEtapa] = useState(1);
+
+  // Quando o casaCalc muda (usuário editou padrão pelo resumo lateral, p.ex.),
+  // volta pra etapa 1 pra a apresentação reiniciar com o texto novo.
+  useEffect(() => {
+    setEtapa(1);
+  }, [casaCalc?.honorario]);
+
   if (cubErro) {
     return (
       <div style={{ marginTop:32, padding:"16px 18px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8 }}>
@@ -20033,19 +20042,101 @@ function BlocoResultado({
         </div>
       </div>
 
-      {/* Linha 1: resumo lateral + tabela */}
+      {/* Linha 1 (sempre visível): resumo lateral + área central que muda por etapa */}
       <div style={{
         display:"grid",
-        gridTemplateColumns:"minmax(0, 240px) minmax(0, 1fr)",
+        gridTemplateColumns:"minmax(0, 220px) minmax(0, 1fr)",
         gap:18,
-        marginBottom:14,
+        marginBottom: etapa === 1 ? 0 : 14,
       }} className="vk-onb-grid">
         <ResumoLateral respostas={respostas} setters={setters} matriz={matriz} />
-        <ColunaCentral casaCalc={casaCalc} />
+
+        {etapa === 1 ? (
+          <EtapaTexto casaCalc={casaCalc} onProximo={() => setEtapa(2)} />
+        ) : (
+          <TabelaCasaExemplo casaCalc={casaCalc} />
+        )}
       </div>
 
-      {/* Linha 2: gráfico waterfall (full-width, fundo transparente) */}
-      <Waterfall casaCalc={casaCalc} honorarioCalculado={honorarioCalculado} />
+      {/* Linha 2 (só na etapa 2): gráfico waterfall full-width + pergunta */}
+      {etapa === 2 && (
+        <>
+          <Waterfall casaCalc={casaCalc} honorarioCalculado={honorarioCalculado} />
+
+          {/* Pergunta: estilo IDÊNTICO ao das perguntas do questionário (PerguntaBlock + Opcao empilhada) */}
+          <div style={{ marginTop:18, animation:"vk-onb-fade-in 0.3s ease-out" }}>
+            <PerguntaBlock pergunta="Esse valor está alinhado com o que você cobraria?">
+              <Opcao
+                label="Sim, esse valor está bom"
+                selecionada={aceitouCalculado === true}
+                onClick={() => { setAceitouCalculado(true); setValorCalibragem(""); setConfirmandoAbsurdo(false); }}
+              />
+              <Opcao
+                label="Quero ajustar — eu cobraria valor diferente"
+                selecionada={aceitouCalculado === false}
+                onClick={() => setAceitouCalculado(false)}
+              />
+            </PerguntaBlock>
+
+            {aceitouCalculado === false && (
+              <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
+                <div style={{ fontSize:13, color:"#111", marginBottom:8 }}>
+                  Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
+                </div>
+                <div style={{ position:"relative", maxWidth:360 }}>
+                  <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#9ca3af", pointerEvents:"none" }}>R$</span>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={valorCalibragem}
+                    onChange={e => setValorCalibragem(e.target.value)}
+                    placeholder="20.000,00"
+                    autoFocus
+                    style={{
+                      width:"100%", boxSizing:"border-box",
+                      border:"1px solid #e5e7eb", borderRadius:8,
+                      padding:"11px 14px 11px 38px",
+                      fontSize:14, fontFamily:"inherit", outline:"none",
+                      fontVariantNumeric:"tabular-nums",
+                    }}
+                  />
+                </div>
+
+                {analiseCalibragem && !analiseCalibragem.invalido && (analiseCalibragem.muitoBaixo || analiseCalibragem.muitoAlto) && (
+                  <div style={{
+                    marginTop:14, padding:"12px 14px",
+                    background: analiseCalibragem.muitoAlto ? "#fffbeb" : "#fef2f2",
+                    border: analiseCalibragem.muitoAlto ? "1px solid #fde68a" : "1px solid #fecaca",
+                    borderRadius:8, maxWidth:560,
+                  }}>
+                    <div style={{ fontSize:12.5, fontWeight:600, color: analiseCalibragem.muitoAlto ? "#92400e" : "#991b1b", marginBottom:6 }}>
+                      {analiseCalibragem.muitoAlto ? "Valor parece muito alto" : "Valor parece muito baixo"}
+                    </div>
+                    <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5, marginBottom:10 }}>
+                      {moeda(analiseCalibragem.valor)} é {analiseCalibragem.ratio.toFixed(1)}× {analiseCalibragem.muitoAlto ? "maior" : "menor"} que o sugerido pela análise ({moeda(honorarioCalculado)}).
+                    </div>
+                    <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#111", cursor:"pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={confirmandoAbsurdo}
+                        onChange={e => setConfirmandoAbsurdo(e.target.checked)}
+                        style={{ cursor:"pointer" }}
+                      />
+                      Confirmo que quero usar esse valor mesmo assim
+                    </label>
+                  </div>
+                )}
+
+                {analiseCalibragem && !analiseCalibragem.invalido && !analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto && (
+                  <div style={{ marginTop:12, fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
+                    {moeda(analiseCalibragem.valor)} será o seu novo preço de referência.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </>
+      )}
 
       {/* CSS — animações + responsivo + cursor digitando */}
       <style>{`
@@ -20065,98 +20156,84 @@ function BlocoResultado({
           50%, 100% { opacity:0; }
         }
       `}</style>
-
-      {/* Pergunta de calibragem — compacta */}
-      <div style={{ marginTop:16, paddingTop:14, borderTop:"1px solid #f3f4f6" }}>
-        <div style={{ fontSize:13, color:"#111", marginBottom:10, fontWeight:500 }}>
-          Esse valor está alinhado com o que você cobraria?
-        </div>
-        <div style={{ display:"flex", flexDirection:"row", gap:8, flexWrap:"wrap" }} className="vk-onb-opts">
-          <div style={{ flex:"1 1 240px" }}>
-            <Opcao
-              label="Sim, esse valor está bom"
-              selecionada={aceitouCalculado === true}
-              onClick={() => { setAceitouCalculado(true); setValorCalibragem(""); setConfirmandoAbsurdo(false); }}
-            />
-          </div>
-          <div style={{ flex:"1 1 240px" }}>
-            <Opcao
-              label="Quero ajustar — eu cobraria valor diferente"
-              selecionada={aceitouCalculado === false}
-              onClick={() => setAceitouCalculado(false)}
-            />
-          </div>
-        </div>
-
-        {aceitouCalculado === false && (
-          <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
-            <div style={{ fontSize:12.5, color:"#111", marginBottom:6 }}>
-              Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
-            </div>
-            <div style={{ position:"relative", maxWidth:360 }}>
-              <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#9ca3af", pointerEvents:"none" }}>R$</span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={valorCalibragem}
-                onChange={e => setValorCalibragem(e.target.value)}
-                placeholder="20.000,00"
-                autoFocus
-                style={{
-                  width:"100%", boxSizing:"border-box",
-                  border:"1px solid #e5e7eb", borderRadius:8,
-                  padding:"10px 14px 10px 38px",
-                  fontSize:14, fontFamily:"inherit", outline:"none",
-                  fontVariantNumeric:"tabular-nums",
-                }}
-              />
-            </div>
-
-            {analiseCalibragem && !analiseCalibragem.invalido && (analiseCalibragem.muitoBaixo || analiseCalibragem.muitoAlto) && (
-              <div style={{
-                marginTop:10, padding:"10px 12px",
-                background: analiseCalibragem.muitoAlto ? "#fffbeb" : "#fef2f2",
-                border: analiseCalibragem.muitoAlto ? "1px solid #fde68a" : "1px solid #fecaca",
-                borderRadius:8, maxWidth:560,
-              }}>
-                <div style={{ fontSize:12, fontWeight:600, color: analiseCalibragem.muitoAlto ? "#92400e" : "#991b1b", marginBottom:4 }}>
-                  {analiseCalibragem.muitoAlto ? "Valor parece muito alto" : "Valor parece muito baixo"}
-                </div>
-                <div style={{ fontSize:11.5, color:"#6b7280", lineHeight:1.5, marginBottom:8 }}>
-                  {moeda(analiseCalibragem.valor)} é {analiseCalibragem.ratio.toFixed(1)}× {analiseCalibragem.muitoAlto ? "maior" : "menor"} que o sugerido pela análise ({moeda(honorarioCalculado)}).
-                </div>
-                <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"#111", cursor:"pointer" }}>
-                  <input
-                    type="checkbox"
-                    checked={confirmandoAbsurdo}
-                    onChange={e => setConfirmandoAbsurdo(e.target.checked)}
-                    style={{ cursor:"pointer" }}
-                  />
-                  Confirmo que quero usar esse valor mesmo assim
-                </label>
-              </div>
-            )}
-
-            {analiseCalibragem && !analiseCalibragem.invalido && !analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto && (
-              <div style={{ marginTop:8, fontSize:11.5, color:"#6b7280", lineHeight:1.5 }}>
-                {moeda(analiseCalibragem.valor)} será o seu novo preço de referência.
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
 // ───────────────────────────────────────────────────────────────
-// ColunaCentral: texto digitando + tabela da casa, lado a lado do resumo.
+// EtapaTexto: bloco da etapa 1 — texto digitando + botão "Próximo"
+// Texto fica ao lado do resumo lateral, ocupando a coluna direita.
 // ───────────────────────────────────────────────────────────────
-function ColunaCentral({ casaCalc }) {
+function EtapaTexto({ casaCalc, onProximo }) {
+  // Texto pedido pelo usuário — versão analítica e direta. Substitui {valor}
+  // pela R$ do preço base.
+  const textoAnalise = useMemo(() => {
+    return `Cruzamos seu perfil de carreira, porte de escritório, padrão de projetos e localização com a base VICKE de mercado. O preço base sugerido é ${moeda(casaCalc.precoBase)} por m² — ele varia com a complexidade do projeto, sobe com padrão alto e tem desconto progressivo em obras maiores. Veja como isso se aplica numa casa típica:`;
+  }, [casaCalc.precoBase]);
+
+  const [chars, setChars] = useState(0);
+  const [terminou, setTerminou] = useState(false);
+
+  useEffect(() => {
+    setChars(0);
+    setTerminou(false);
+  }, [textoAnalise]);
+
+  useEffect(() => {
+    if (chars >= textoAnalise.length) { setTerminou(true); return; }
+    const t = setTimeout(() => setChars(c => c + 1), 22);
+    return () => clearTimeout(t);
+  }, [chars, textoAnalise]);
+
+  const handleSkip = () => {
+    if (!terminou) { setChars(textoAnalise.length); setTerminou(true); }
+  };
+
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <AnaliseTexto casaCalc={casaCalc} />
-      <TabelaCasaExemplo casaCalc={casaCalc} />
+    <div style={{ display:"flex", flexDirection:"column", justifyContent:"space-between", minHeight:200 }}>
+      <div
+        onClick={handleSkip}
+        style={{
+          fontSize:14, color:"#111", lineHeight:1.7,
+          cursor: terminou ? "default" : "pointer",
+        }}>
+        {textoAnalise.slice(0, chars)}
+        {!terminou && (
+          <span style={{
+            display:"inline-block",
+            width:2, height:"1em",
+            background:"#111",
+            verticalAlign:"text-bottom",
+            marginLeft:2,
+            animation:"vk-cursor-blink 1s steps(2) infinite",
+          }} />
+        )}
+      </div>
+
+      {/* Botão "Próximo" — só habilita quando o texto termina de digitar */}
+      <div style={{ marginTop:18, animation: terminou ? "vk-fade-up 0.3s ease-out" : "none", opacity: terminou ? 1 : 0, transition:"opacity 0.3s" }}>
+        <button
+          onClick={onProximo}
+          disabled={!terminou}
+          style={{
+            background:"#111", color:"#fff",
+            border:"none", borderRadius:8,
+            padding:"11px 22px",
+            fontSize:13, fontWeight:600,
+            cursor: terminou ? "pointer" : "default",
+            fontFamily:"inherit",
+            display:"inline-flex", alignItems:"center", gap:8,
+            transition:"background 0.15s",
+          }}
+          onMouseEnter={e => terminou && (e.currentTarget.style.background = "#000")}
+          onMouseLeave={e => terminou && (e.currentTarget.style.background = "#111")}>
+          Próximo
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="5" y1="12" x2="19" y2="12"/>
+            <polyline points="12 5 19 12 12 19"/>
+          </svg>
+        </button>
+      </div>
     </div>
   );
 }
@@ -20239,55 +20316,6 @@ function ResumoLateral({ respostas, setters, matriz }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ───────────────────────────────────────────────────────────────
-// AnaliseTexto: texto curto digitando (sem o card da tabela aqui).
-// ───────────────────────────────────────────────────────────────
-function AnaliseTexto({ casaCalc }) {
-  const textoAnalise = useMemo(() => {
-    return `Sua composição de perfil é compatível com escritórios que aplicam ${moeda(casaCalc.precoBase)} por m² como referência. A simulação abaixo mostra como esse valor se comporta numa casa típica:`;
-  }, [casaCalc.precoBase]);
-
-  const [chars, setChars] = useState(0);
-  const [terminou, setTerminou] = useState(false);
-
-  useEffect(() => {
-    setChars(0);
-    setTerminou(false);
-  }, [textoAnalise]);
-
-  useEffect(() => {
-    if (chars >= textoAnalise.length) { setTerminou(true); return; }
-    const t = setTimeout(() => setChars(c => c + 1), 22);
-    return () => clearTimeout(t);
-  }, [chars, textoAnalise]);
-
-  const handleSkip = () => {
-    if (!terminou) { setChars(textoAnalise.length); setTerminou(true); }
-  };
-
-  return (
-    <div
-      onClick={handleSkip}
-      style={{
-        fontSize:13.5, color:"#111", lineHeight:1.55,
-        cursor: terminou ? "default" : "pointer",
-        minHeight: 60,
-      }}>
-      {textoAnalise.slice(0, chars)}
-      {!terminou && (
-        <span style={{
-          display:"inline-block",
-          width:2, height:"1em",
-          background:"#111",
-          verticalAlign:"text-bottom",
-          marginLeft:2,
-          animation:"vk-cursor-blink 1s steps(2) infinite",
-        }} />
-      )}
     </div>
   );
 }
@@ -20393,12 +20421,12 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
       delta: honorarioCalculado, acumulado: honorarioCalculado },
   ];
 
-  // Dimensões reduzidas pra caber sem scroll. Mais largo, menos alto.
-  const W = 920, H = 240;
-  const padTop = 32, padBot = 64, padLeft = 16, padRight = 16;
+  // Dimensões compactas (cabe sem scroll na tela única)
+  const W = 720, H = 210;
+  const padTop = 28, padBot = 56, padLeft = 16, padRight = 16;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
-  const barW = Math.min(80, innerW / steps.length - 24);
+  const barW = Math.min(72, innerW / steps.length - 22);
   const gap  = (innerW - barW * steps.length) / (steps.length - 1);
 
   const maxValor = Math.max(honorComPadrao, honorarioCalculado, honorBaseSemFator);
@@ -20472,8 +20500,10 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   }}
                 />
 
-                {/* Linha pontilhada conectando topo da barra anterior à atual */}
-                {i > 0 && i < steps.length - 1 && visivel && (
+                {/* Linha pontilhada conectando topo da barra anterior à atual.
+                    A barra "total" puxa do topo do acumulado anterior até o topo dela
+                    própria (que é igual ao acumulado), fechando visualmente o waterfall. */}
+                {i > 0 && visivel && (
                   <line
                     x1={x - gap}
                     y1={isTotal ? yBase - yScale(s.acumulado) : (s.tipo === "sub" ? topY : baseY)}
