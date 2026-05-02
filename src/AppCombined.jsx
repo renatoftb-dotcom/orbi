@@ -9909,7 +9909,105 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
   );
 }
 
-function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao }) {
+// ═══════════════════════════════════════════════════════════════
+// SISTEMA DE TEMPLATES DE PROPOSTA
+//
+// Catálogo de layouts disponíveis na barra do topo. Por enquanto só
+// "Editorial" está ativo — quando novos templates forem implementados
+// (Arquitetônico, Premium, etc.), adicionar entradas aqui apontando
+// para o componente viewer correspondente via `comp`.
+//
+// `templateId` é persistido no snapshot da proposta (ver
+// buildPropostaSnapshot). Propostas antigas sem templateId caem no
+// default "01-editorial".
+// ═══════════════════════════════════════════════════════════════
+const TEMPLATES_PROPOSTA = [
+  { id:"01-editorial", label:"Editorial", desc:"Layout atual, totalmente editável", accent:"#111827" },
+  // Roadmap (descomentar quando implementado, junto com viewer no switch abaixo):
+  // { id:"02-arquitetonico", label:"Arquitetônico", desc:"Prancha técnica, monoespaçada", accent:"#1e3a8a" },
+];
+
+// Barra de seleção de templates — sticky no topo do preview.
+// Esconde quando lockEdicao (proposta finalizada/visualização readonly)
+// OU quando só há 1 template ativo (não tem o que escolher).
+// Quando o 2º template for adicionado em TEMPLATES_PROPOSTA, a barra
+// aparece automaticamente.
+function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
+  if (lockEdicao) return null;
+  if (TEMPLATES_PROPOSTA.length <= 1) return null;
+  return (
+    <div style={{
+      position:"sticky", top:0, zIndex:20, background:"#fff",
+      borderBottom:"1px solid #e5e7eb", padding:"10px 16px",
+      display:"flex", alignItems:"center", gap:10, overflowX:"auto",
+      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+    }}>
+      <span style={{
+        fontSize:10, fontWeight:600, color:"#6b7280",
+        textTransform:"uppercase", letterSpacing:"0.08em",
+        flexShrink:0, marginRight:4,
+      }}>
+        Layout:
+      </span>
+      {TEMPLATES_PROPOSTA.map(t => {
+        const ativo = templateId === t.id;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            style={{
+              flexShrink:0, padding:"6px 12px",
+              border: ativo ? `2px solid ${t.accent}` : "1px solid #e5e7eb",
+              background: ativo ? `${t.accent}10` : "#fff",
+              borderRadius:6, cursor:"pointer", fontSize:12, fontFamily:"inherit",
+              fontWeight: ativo ? 600 : 500,
+              color: ativo ? t.accent : "#374151",
+              display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1,
+              minWidth:130, transition:"all 0.15s",
+            }}>
+            <span style={{ fontSize:12, fontWeight:600 }}>{t.label}</span>
+            <span style={{ fontSize:9.5, color: ativo ? t.accent : "#9ca3af", fontWeight:400 }}>
+              {t.desc}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// Wrapper PropostaPreview — decide qual template renderizar com base
+// em `templateId` (vindo do snapshot, do data ou default "01-editorial").
+// Hoje só Editorial existe; quando novos viewers forem criados, switch
+// aqui abaixo cresce. Editorial é sempre o fallback seguro.
+function PropostaPreview(props) {
+  const safeData = props.data || {};
+  const initialTpl = props.propostaSnapshot?.templateId || safeData.templateId || "01-editorial";
+  const [templateId, setTemplateId] = useState(initialTpl);
+
+  // Seleção de viewer. Por enquanto só Editorial. Quando implementar
+  // novos templates, adicionar aqui:
+  //   templateId === "02-arquitetonico" ? PropostaTemplateArquitetonico :
+  //   templateId === "03-premium"       ? PropostaTemplatePremium :
+  //   ...
+  //   PropostaPreviewEditorial; // fallback
+  const renderEditorial = (
+    <PropostaPreviewEditorial {...props} templateId={templateId} />
+  );
+
+  return (
+    <div>
+      <TemplateBarProposta
+        templateId={templateId}
+        onChange={setTemplateId}
+        lockEdicao={props.lockEdicao}
+      />
+      {renderEditorial}
+    </div>
+  );
+}
+
+function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao, templateId }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -10423,6 +10521,10 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
     return {
       versao: null, // definido pelo caller
       enviadaEm: new Date().toISOString(),
+      // Template visual escolhido (Editorial, Arquitetônico, etc.).
+      // Persistido pra que ao reabrir a proposta abra no mesmo layout.
+      // Default "01-editorial" mantém compat com propostas antigas.
+      templateId: templateId || "01-editorial",
       // Dados base do cálculo (para recriar preview idêntico)
       tipoProjeto, tipoObra, padrao, tipologia, tamanho,
       clienteNome, referencia: data.referencia || "",
