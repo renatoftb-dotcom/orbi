@@ -19896,6 +19896,7 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
             respostas={{ profissao, porte, experiencia, referencia, padrao, capital, estado }}
             setters={{ setProfissao, setPorte, setExperiencia, setReferencia, setPadrao, setCapital, setEstado }}
             matriz={matriz}
+            containerRef={containerRef}
           />
         )}
 
@@ -20005,7 +20006,7 @@ function BlocoResultado({
   aceitouCalculado, setAceitouCalculado,
   valorCalibragem, setValorCalibragem, analiseCalibragem,
   confirmandoAbsurdo, setConfirmandoAbsurdo,
-  respostas, setters, matriz,
+  respostas, setters, matriz, containerRef,
 }) {
   // Etapa atual: 1 = só texto, 2 = simulação completa
   const [etapa, setEtapa] = useState(1);
@@ -20015,6 +20016,24 @@ function BlocoResultado({
   useEffect(() => {
     setEtapa(1);
   }, [casaCalc?.honorario]);
+
+  // Auto-scroll: sempre que conteúdo novo aparece (etapa 2 montada, ou input
+  // de calibragem aberto após "Quero ajustar"), rola o container até o final
+  // pra mostrar pro usuário que tem mais informação. Espera 1 frame pro DOM
+  // atualizar e calcular scrollHeight corretamente antes de rolar.
+  useEffect(() => {
+    if (!containerRef?.current) return;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (containerRef.current) {
+          containerRef.current.scrollTo({
+            top: containerRef.current.scrollHeight,
+            behavior: "smooth",
+          });
+        }
+      });
+    });
+  }, [etapa, aceitouCalculado, containerRef]);
 
   if (cubErro) {
     return (
@@ -20033,38 +20052,37 @@ function BlocoResultado({
   return (
     <div style={{ animation:"vk-onb-fade-in 0.4s ease-out" }}>
       {/* Header da apresentação */}
-      <div style={{ marginBottom:14 }}>
+      <div style={{ marginBottom: etapa === 1 ? 24 : 10 }}>
         <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, marginBottom:4 }}>
           VICKE · Análise Inteligente
         </div>
-        <div style={{ fontSize:20, fontWeight:300, color:"#111", letterSpacing:-0.4, lineHeight:1.2 }}>
+        <div style={{ fontSize: etapa === 1 ? 22 : 17, fontWeight:300, color:"#111", letterSpacing:-0.4, lineHeight:1.2 }}>
           Resultado da sua calibragem
         </div>
       </div>
 
-      {/* Linha 1 (sempre visível): resumo lateral + área central que muda por etapa */}
-      <div style={{
-        display:"grid",
-        gridTemplateColumns:"minmax(0, 220px) minmax(0, 1fr)",
-        gap:18,
-        marginBottom: etapa === 1 ? 0 : 14,
-      }} className="vk-onb-grid">
-        <ResumoLateral respostas={respostas} setters={setters} matriz={matriz} />
-
-        {etapa === 1 ? (
-          <EtapaTexto casaCalc={casaCalc} onProximo={() => setEtapa(2)} />
-        ) : (
-          <TabelaCasaExemplo casaCalc={casaCalc} />
-        )}
-      </div>
-
-      {/* Linha 2 (só na etapa 2): gráfico waterfall full-width + pergunta */}
-      {etapa === 2 && (
+      {/* Etapa 1: layout limpo, sem resumo lateral. Texto centralizado pra
+          foco total na apresentação inicial. */}
+      {etapa === 1 ? (
+        <EtapaTexto casaCalc={casaCalc} onProximo={() => setEtapa(2)} />
+      ) : (
         <>
+          {/* Linha 1: resumo lateral + tabela */}
+          <div style={{
+            display:"grid",
+            gridTemplateColumns:"minmax(0, 220px) minmax(0, 1fr)",
+            gap:14,
+            marginBottom:10,
+          }} className="vk-onb-grid">
+            <ResumoLateral respostas={respostas} setters={setters} matriz={matriz} />
+            <TabelaCasaExemplo casaCalc={casaCalc} />
+          </div>
+
+          {/* Linha 2: gráfico waterfall */}
           <Waterfall casaCalc={casaCalc} honorarioCalculado={honorarioCalculado} />
 
-          {/* Pergunta: estilo IDÊNTICO ao das perguntas do questionário (PerguntaBlock + Opcao empilhada) */}
-          <div style={{ marginTop:18, animation:"vk-onb-fade-in 0.3s ease-out" }}>
+          {/* Pergunta de calibragem — IDÊNTICA ao estilo do questionário */}
+          <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
             <PerguntaBlock pergunta="Esse valor está alinhado com o que você cobraria?">
               <Opcao
                 label="Sim, esse valor está bom"
@@ -20189,13 +20207,23 @@ function EtapaTexto({ casaCalc, onProximo }) {
     if (!terminou) { setChars(textoAnalise.length); setTerminou(true); }
   };
 
+  // Layout: centralizado horizontalmente, max-width pra leitura confortável.
+  // Sem resumo lateral — foco total no texto da apresentação.
   return (
-    <div style={{ display:"flex", flexDirection:"column", justifyContent:"space-between", minHeight:200 }}>
+    <div style={{
+      display:"flex", flexDirection:"column",
+      justifyContent:"center", alignItems:"center",
+      minHeight: 360,
+      padding: "20px 0",
+    }}>
       <div
         onClick={handleSkip}
         style={{
-          fontSize:14, color:"#111", lineHeight:1.7,
+          fontSize:16, color:"#111", lineHeight:1.7,
+          maxWidth: 760,
+          textAlign:"left",
           cursor: terminou ? "default" : "pointer",
+          marginBottom: 28,
         }}>
         {textoAnalise.slice(0, chars)}
         {!terminou && (
@@ -20211,14 +20239,20 @@ function EtapaTexto({ casaCalc, onProximo }) {
       </div>
 
       {/* Botão "Próximo" — só habilita quando o texto termina de digitar */}
-      <div style={{ marginTop:18, animation: terminou ? "vk-fade-up 0.3s ease-out" : "none", opacity: terminou ? 1 : 0, transition:"opacity 0.3s" }}>
+      <div style={{
+        animation: terminou ? "vk-fade-up 0.3s ease-out" : "none",
+        opacity: terminou ? 1 : 0,
+        transition:"opacity 0.3s",
+        alignSelf:"flex-start",
+        maxWidth:760, width:"100%",
+      }}>
         <button
           onClick={onProximo}
           disabled={!terminou}
           style={{
             background:"#111", color:"#fff",
             border:"none", borderRadius:8,
-            padding:"11px 22px",
+            padding:"12px 24px",
             fontSize:13, fontWeight:600,
             cursor: terminou ? "pointer" : "default",
             fontFamily:"inherit",
@@ -20285,7 +20319,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
       <div style={{
         background:"#111",
         color:"#fff",
-        padding:"9px 14px",
+        padding:"7px 12px",
         fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
       }}>
         Suas respostas
@@ -20297,8 +20331,8 @@ function ResumoLateral({ respostas, setters, matriz }) {
           <div key={l.campo}
                onClick={() => handleEditar(l.campo)}
                style={{
-                 display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
-                 padding:"7px 14px",
+                 display:"flex", alignItems:"center", justifyContent:"space-between", gap:8,
+                 padding:"5px 12px",
                  background: i % 2 === 0 ? "#fff" : "#fafbfc",
                  borderTop: i === 0 ? "none" : "1px solid #f3f4f6",
                  cursor:"pointer",
@@ -20307,10 +20341,10 @@ function ResumoLateral({ respostas, setters, matriz }) {
                onMouseEnter={e => e.currentTarget.style.background = "#f3f4f6"}
                onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafbfc"}
                title="Clique pra refazer a partir desta">
-            <div style={{ fontSize:9.5, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, fontWeight:700, flexShrink:0, minWidth:70 }}>
+            <div style={{ fontSize:9, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, fontWeight:700, flexShrink:0, minWidth:60 }}>
               {l.label}
             </div>
-            <div style={{ fontSize:11.5, color:"#111", lineHeight:1.3, fontWeight:500, textAlign:"right" }}>
+            <div style={{ fontSize:11, color:"#111", lineHeight:1.25, fontWeight:500, textAlign:"right" }}>
               {l.valor}
             </div>
           </div>
@@ -20349,14 +20383,14 @@ function TabelaCasaExemplo({ casaCalc }) {
       {/* Header preto/branco */}
       <div style={{
         background:"#111", color:"#fff",
-        padding:"9px 16px",
+        padding:"7px 14px",
         fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
       }}>
         Casa simulada
       </div>
 
       {/* Subtítulo: lista de cômodos */}
-      <div style={{ padding:"8px 16px", fontSize:11.5, color:"#374151", lineHeight:1.5, background:"#fafbfc", borderBottom:"1px solid #f3f4f6" }}>
+      <div style={{ padding:"6px 14px", fontSize:11, color:"#374151", lineHeight:1.4, background:"#fafbfc", borderBottom:"1px solid #f3f4f6" }}>
         3 suítes (1 master) · sala de estar · sala de jantar · cozinha · lavabo · lavanderia · 2 vagas garagem
       </div>
 
@@ -20365,10 +20399,10 @@ function TabelaCasaExemplo({ casaCalc }) {
         {linhas.map((l, i) => (
           <div key={i} style={{
             display:"flex", justifyContent:"space-between", alignItems:"baseline",
-            padding: l.destaque ? "10px 16px" : "7px 16px",
+            padding: l.destaque ? "7px 14px" : "5px 14px",
             background: l.destaque ? "#f3f4f6" : (i % 2 === 0 ? "#fff" : "#fafbfc"),
             borderTop: l.divisor ? "1px solid #e5e7eb" : (i === 0 ? "none" : "1px solid #f9fafb"),
-            fontSize: l.destaque ? 13.5 : 12.5,
+            fontSize: l.destaque ? 13 : 12,
             fontVariantNumeric:"tabular-nums",
           }}>
             <span style={{ color: l.destaque ? "#111" : "#6b7280", fontWeight: l.destaque ? 700 : 500 }}>
@@ -20421,12 +20455,14 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
       delta: honorarioCalculado, acumulado: honorarioCalculado },
   ];
 
-  // Dimensões compactas (cabe sem scroll na tela única)
-  const W = 720, H = 210;
-  const padTop = 28, padBot = 56, padLeft = 16, padRight = 16;
+  // Dimensões compactas. padLeft/padRight maiores que o necessário pras barras
+  // pra que os textos centralizados acima/abaixo das barras das pontas (ex.
+  // "R$ 90,30/m² × 223,88m²") não cortem nas bordas do SVG.
+  const W = 720, H = 170;
+  const padTop = 26, padBot = 50, padLeft = 60, padRight = 60;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
-  const barW = Math.min(72, innerW / steps.length - 22);
+  const barW = Math.min(64, innerW / steps.length - 22);
   const gap  = (innerW - barW * steps.length) / (steps.length - 1);
 
   const maxValor = Math.max(honorComPadrao, honorarioCalculado, honorBaseSemFator);
@@ -20465,16 +20501,16 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
       {/* Header preto/branco */}
       <div style={{
         background:"#111", color:"#fff",
-        padding:"9px 16px",
+        padding:"7px 14px",
         fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
         borderRadius:"10px 10px 0 0",
-        marginBottom:4,
+        marginBottom:2,
       }}>
         Como chegamos no valor
       </div>
 
       {/* SVG sem fundo — herda o background da tela */}
-      <div style={{ width:"100%", padding:"4px 0 0" }}>
+      <div style={{ width:"100%", padding:"2px 0 0" }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
           {/* Linha de base sutil */}
           <line x1={padLeft} y1={yBase} x2={W - padRight} y2={yBase} stroke="#e5e7eb" strokeWidth="1" />
@@ -20487,13 +20523,25 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
             const cor = COR[s.tipo] || COR.base;
             const visivel = i < stepRevelado;
             const isTotal = s.tipo === "total";
+            const isSub   = s.tipo === "sub";
+
+            // Path da barra com cantos arredondados só de UM lado (topo pra
+            // barras normais; fundo pra barras "sub" que crescem pra baixo).
+            // Estilo "pílula cortada" — igual ao gráfico de orçamentos do
+            // dashboard. Raio adapta à largura da barra (limita a min(altura/2, 12)).
+            const r = Math.min(barW * 0.18, altura * 0.5, 12);
+            const barPath = isSub
+              // Sub: cantos inferiores arredondados, topo reto
+              ? `M ${x},${topY} L ${x + barW},${topY} L ${x + barW},${topY + altura - r} Q ${x + barW},${topY + altura} ${x + barW - r},${topY + altura} L ${x + r},${topY + altura} Q ${x},${topY + altura} ${x},${topY + altura - r} Z`
+              // Normal/total: cantos superiores arredondados, fundo reto
+              : `M ${x + r},${topY} L ${x + barW - r},${topY} Q ${x + barW},${topY} ${x + barW},${topY + r} L ${x + barW},${topY + altura} L ${x},${topY + altura} L ${x},${topY + r} Q ${x},${topY} ${x + r},${topY} Z`;
 
             return (
               <g key={i} style={{ opacity: visivel ? 1 : 0, transition: "opacity 0.35s" }}>
                 {/* Barra com animação suave (700ms, easing bouncy) */}
-                <rect
-                  x={x} y={topY} width={barW} height={altura}
-                  fill={cor} rx={3}
+                <path
+                  d={barPath}
+                  fill={cor}
                   style={{
                     transformOrigin: `${x + barW/2}px ${baseY}px`,
                     animation: visivel ? `vk-bar-grow 0.7s cubic-bezier(0.34, 1.4, 0.64, 1)` : "none",
