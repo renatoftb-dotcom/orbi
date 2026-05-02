@@ -362,8 +362,6 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         onVoltar={voltarParaLista}
         modoAbertura={modoAbertura}
         escritorio={data?.escritorio || {}}
-        usuario={data?._usuario}
-        cub={data?.cub}
       />
     );
   }
@@ -3365,13 +3363,13 @@ function AreaDetalhe({ calculo, fmtNum }) {
   return (
     <div style={{ background:"#f4f5f7", border:"1px solid #dde0e5", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" }}>
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
-        <span style={{ fontSize:13, color:"#828a98" }}>Área útil</span>
-        <span style={{ fontSize:14, color:"#374151" }}>{fmt2(calculo.areaBruta)} m²</span>
+        <span style={{ fontSize:12, color:"#828a98" }}>Área útil</span>
+        <span style={{ fontSize:13, color:"#374151" }}>{fmt2(calculo.areaBruta)} m²</span>
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-        <span style={{ fontSize:13, color:"#828a98" }}>Área total (+circ.)</span>
+        <span style={{ fontSize:12, color:"#828a98" }}>Área total (+circ.)</span>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>{fmt2(calculo.areaTotal)} m²</span>
+          <span style={{ fontSize:13, fontWeight:600, color:"#111" }}>{fmt2(calculo.areaTotal)} m²</span>
           <span onClick={() => setAberto(v => !v)}
             style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none", lineHeight:1 }}>
             {aberto ? "▲" : "▼"}
@@ -3468,132 +3466,59 @@ function AreaDetalhe({ calculo, fmtNum }) {
   );
 }
 
-function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
-  const [arqAberto, setArqAberto] = useState(false);
-  const [engAberto, setEngAberto] = useState(false);
+function ResumoDetalhes({ calculo, fmtNum, C }) {
+  const [repAberto, setRepAberto] = useState(false);
   const fmt2   = (v) => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
+  const m2str  = (v, area) => area > 0 ? ` (R$ ${fmtNum(Math.round(v / area * 100) / 100)}/m²)` : "";
   const hasRep = calculo.nRep > 1;
-  const totalGeral = calculo.precoArq + calculo.precoEng;
-  const m2Total = calculo.areaTot > 0 ? Math.round(totalGeral / calculo.areaTot * 100) / 100 : 0;
-
-  // Imposto inside-out: total já é o líquido; bruto = liquido / (1 - aliq/100)
-  const aliq = aliqImp || 16;
-  const totalComImp = temImposto && totalGeral > 0
-    ? Math.round(totalGeral / (1 - aliq/100) * 100) / 100
-    : totalGeral;
-  const valorImposto = totalComImp - totalGeral;
-
-  // Ícone "grupo" SVG inline (people-icon)
-  const IconUnidades = ({ size = 13 }) => (
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" style={{ flexShrink:0 }}>
-      <circle cx="6" cy="5" r="2.2" stroke="#828a98" strokeWidth="1.3"/>
-      <path d="M2.5 12c0-1.8 1.6-3.2 3.5-3.2s3.5 1.4 3.5 3.2" stroke="#828a98" strokeWidth="1.3" strokeLinecap="round"/>
-      <circle cx="11.5" cy="4.5" r="1.6" stroke="#828a98" strokeWidth="1.2"/>
-      <path d="M9.5 11c.6-1.2 1.5-2 2.7-2 1.4 0 2.4.9 2.4 2.4" stroke="#828a98" strokeWidth="1.2" strokeLinecap="round"/>
-    </svg>
-  );
-
   return (
     <>
-      {/* TOTAL GERAL — destaque no topo */}
-      <div style={{ marginTop:0, marginBottom:14 }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
-          <div style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Total Geral</div>
-          {hasRep && (
-            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:13, color:"#828a98", fontWeight:500 }}>
-              <span>{calculo.nRep} unid · {fmtNum(calculo.areaTot)}/m²</span>
-            </div>
-          )}
-        </div>
-        <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
-          <span style={{ fontSize:22, fontWeight:700, color:"#111" }}>{fmt2(totalComImp)}</span>
-          <span style={{ fontSize:13, color:"#828a98" }}>R$ {fmtNum(calculo.areaTot > 0 ? Math.round(totalComImp / calculo.areaTot * 100) / 100 : 0)}/m²</span>
-        </div>
-        {/* Imposto inline — só quando temImposto E há valor */}
-        {temImposto && valorImposto > 0 && (
-          <div style={{ fontSize:11.5, color:"#dc2626", marginTop:4, fontWeight:500 }}>
-            inclui imposto ({aliq}%) — {fmt2(valorImposto)}
-          </div>
+      <div style={{ ...C.resumoSec, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span>Arquitetura</span>
+        {hasRep && (
+          <span onClick={() => setRepAberto(v => !v)} style={{ cursor:"pointer", fontSize:13, color:"#828a98", userSelect:"none" }}>
+            {repAberto ? "▲" : "▼"}
+          </span>
         )}
       </div>
-
-      {/* ARQUITETURA */}
-      {calculo.precoArq > 0 && (
-        <div style={{ paddingTop:14, borderTop:"1px solid #e5e7eb" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Arquitetura</span>
-              {totalGeral > 0 && (
-                <span style={{ fontSize:11, fontWeight:500, color:"#9ca3af" }}>
-                  {Math.round(calculo.precoArq / totalGeral * 100)}%
-                </span>
-              )}
+      <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
+        <span style={C.resumoVal}>{fmt2(calculo.precoArq)}</span>
+        <span style={C.resumoM2}>R$ {fmtNum(calculo.precoM2Arq)}/m²</span>
+      </div>
+      {hasRep && repAberto && (
+        <div style={{ marginTop:4, borderLeft:"2px solid #f3f4f6", paddingLeft:8 }}>
+          {calculo.unidades.map(u => (
+            <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#6b7280", marginTop:3 }}>
+              <span>Und {u.und}{u.und > 1 ? ` (${Math.round(calculo.pctRep * 100)}%)` : ""}</span>
+              <span>{fmt2(u.arq)}{m2str(u.arq, calculo.areaTotal)}</span>
             </div>
-            <div data-vk-resumo-vals style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:14.5, fontWeight:700, color:"#111" }}>{fmt2(calculo.precoArq)}</span>
-              <span style={{ fontSize:12, color:"#828a98" }}>R$ {fmtNum(calculo.precoM2Arq)}/m²</span>
-              {hasRep && (
-                <span onClick={() => setArqAberto(v => !v)} style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none", marginLeft:2 }}>
-                  {arqAberto ? "▲" : "▼"}
-                </span>
-              )}
-            </div>
-          </div>
-          {hasRep && arqAberto && (
-            <div style={{ marginTop:8, paddingLeft:10, borderLeft:"2px solid #e5e7eb", display:"flex", flexDirection:"column", gap:4 }}>
-              {calculo.unidades.map(u => {
-                const pct = u.und > 1 ? Math.round(calculo.pctRep * 100) : null;
-                const m2u = calculo.areaTotal > 0 ? Math.round(u.arq / calculo.areaTotal * 100) / 100 : 0;
-                return (
-                  <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#6b7280" }}>
-                    <span>Und {u.und}{pct ? ` (${pct}%)` : ""}</span>
-                    <span style={{ color:"#374151" }}>{fmt2(u.arq)} <span style={{ color:"#9ca3af", fontSize:11 }}>· {fmtNum(m2u)}/m²</span></span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          ))}
         </div>
       )}
-
-      {/* ENGENHARIA */}
-      {calculo.precoEng > 0 && (
-        <div style={{ paddingTop:14, marginTop:14, borderTop:"1px solid #e5e7eb" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Engenharia</span>
-              {totalGeral > 0 && (
-                <span style={{ fontSize:11, fontWeight:500, color:"#9ca3af" }}>
-                  {Math.round(calculo.precoEng / totalGeral * 100)}%
-                </span>
-              )}
+      <div style={{ ...C.resumoSec, marginTop:16, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span>Engenharia</span>
+      </div>
+      <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
+        <span style={C.resumoVal}>{fmt2(calculo.precoEng)}</span>
+        <span style={C.resumoM2}>R$ {fmtNum(calculo.precoM2Eng)}/m²</span>
+      </div>
+      {hasRep && repAberto && (
+        <div style={{ marginTop:4, borderLeft:"2px solid #f3f4f6", paddingLeft:8 }}>
+          {calculo.unidades.map(u => (
+            <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#6b7280", marginTop:3 }}>
+              <span>Und {u.und}{u.und > 1 ? ` (${Math.round(calculo.pctRep * 100)}%)` : ""}</span>
+              <span>{fmt2(u.eng)}{m2str(u.eng, calculo.areaTotal)}</span>
             </div>
-            <div data-vk-resumo-vals style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:14.5, fontWeight:700, color:"#111" }}>{fmt2(calculo.precoEng)}</span>
-              <span style={{ fontSize:12, color:"#828a98" }}>R$ {fmtNum(calculo.precoM2Eng)}/m²</span>
-              {hasRep && (
-                <span onClick={() => setEngAberto(v => !v)} style={{ cursor:"pointer", fontSize:11, color:"#828a98", userSelect:"none", marginLeft:2 }}>
-                  {engAberto ? "▲" : "▼"}
-                </span>
-              )}
-            </div>
-          </div>
-          {hasRep && engAberto && (
-            <div style={{ marginTop:8, paddingLeft:10, borderLeft:"2px solid #e5e7eb", display:"flex", flexDirection:"column", gap:4 }}>
-              {calculo.unidades.map(u => {
-                const pct = u.und > 1 ? Math.round(calculo.pctRep * 100) : null;
-                const m2u = calculo.areaTotal > 0 ? Math.round(u.eng / calculo.areaTotal * 100) / 100 : 0;
-                return (
-                  <div key={u.und} style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:"#6b7280" }}>
-                    <span>Und {u.und}{pct ? ` (${pct}%)` : ""}</span>
-                    <span style={{ color:"#374151" }}>{fmt2(u.eng)} <span style={{ color:"#9ca3af", fontSize:11 }}>· {fmtNum(m2u)}/m²</span></span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          ))}
         </div>
       )}
+      <div style={{ marginTop:20, paddingTop:14, borderTop:"1px solid #dde0e5" }}>
+        <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6 }}>Total Geral</div>
+        <div style={{ display:"flex", alignItems:"baseline", gap:8, marginTop:4 }}>
+          <span style={{ fontSize:20, fontWeight:800, color:"#111" }}>{fmt2(calculo.precoArq + calculo.precoEng)}</span>
+          <span style={C.resumoM2}>R$ {fmtNum(calculo.areaTot > 0 ? Math.round((calculo.precoArq + calculo.precoEng) / calculo.areaTot * 100) / 100 : 0)}/m²</span>
+        </div>
+      </div>
     </>
   );
 }
@@ -4097,7 +4022,1014 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// TEMPLATES VIEWER ALTERNATIVOS
+//
+// Cada template recebe o mesmo shape `{ data, propostaSnapshot, lockEdicao }`
+// e renderiza visualmente a mesma proposta. São READ-ONLY (sem
+// controles de pagamento/etapas — pra editar, voltar ao Editorial).
+//
+// Para evitar duplicação, todos consomem `derivePropostaValores(data, snap)`
+// que retorna os mesmos valores calculados que o Editorial usa.
+// ═══════════════════════════════════════════════════════════════
+
+// Helper compartilhado: calcula valores derivados a partir do shape
+// achatado do `data` que chega no PropostaPreview. Idêntico à lógica
+// dos primeiros ~80 lines do Editorial — preserva fidelidade.
+function derivePropostaValores(data, snap) {
+  const safeData = data || {};
+  const calculo = safeData.calculo || {};
+  const incluiArq = safeData.incluiArq !== false;
+  const incluiEng = safeData.incluiEng !== false;
+
+  const tipoPgto    = snap?.tipoPgto    ?? safeData.tipoPgto    ?? "padrao";
+  const temImposto  = snap?.temImposto  ?? safeData.temImposto  ?? false;
+  const aliqImp     = snap?.aliqImp     ?? safeData.aliqImp     ?? 16;
+  const etapasPctRaw = snap?.etapasPct || safeData.etapasPct || [];
+  const etapasPct = etapasPctRaw.some(e => e.id === 5)
+    ? etapasPctRaw
+    : [...etapasPctRaw, { id:5, nome:"Engenharia", pct:0 }];
+  const etapasIsoladasArr = snap?.etapasIsoladas || safeData.etapasIsoladas || [];
+  const idsIsolados = new Set(etapasIsoladasArr);
+  const temIsoladas = idsIsolados.size > 0;
+
+  const arqEdit = (snap?.arqEdit != null) ? snap.arqEdit : (incluiArq ? (calculo.precoArq || 0) : 0);
+  const engEdit = (snap?.engEdit != null) ? snap.engEdit : (incluiEng ? (calculo.precoEng || 0) : 0);
+
+  const arqCI = incluiArq ? arqEdit : 0;
+  const engCI = incluiEng ? engEdit : 0;
+  const comImp = v => (temImposto && v > 0) ? Math.round(v / (1 - aliqImp/100) * 100) / 100 : v;
+
+  const totSIEdit = arqCI + engCI;
+  const totCIEdit = comImp(totSIEdit);
+  const impostoEdit = temImposto ? Math.round((totCIEdit - totSIEdit) * 100) / 100 : 0;
+  const arqCIEdit = comImp(arqCI);
+  const engCIEdit = comImp(engCI);
+
+  const etapasIsoladasObjs = temIsoladas ? etapasPct.filter(e => idsIsolados.has(e.id)) : [];
+  const pctTotalIsolado = etapasIsoladasObjs.reduce((s,e) => s + (e.id !== 5 ? e.pct : 0), 0);
+  const engIsolada = idsIsolados.has(5);
+  const engAtiva = incluiEng && (!temIsoladas || engIsolada);
+  const arqIsoladaSI = temIsoladas ? Math.round(arqCI * (pctTotalIsolado / 100) * 100) / 100 : 0;
+  const engSI = engAtiva ? engCI : 0;
+  const totSIBase = temIsoladas ? Math.round((arqIsoladaSI + engSI) * 100) / 100 : totSIEdit;
+  const totCIBase = temIsoladas ? comImp(totSIBase) : totCIEdit;
+
+  const areaTot = calculo.areaTot || calculo.areaTotal || 0;
+  const escritorio = safeData.escritorio || {};
+
+  // Resumo dos blocos de escopo (numerados)
+  const ESCOPO_BASE = [
+    { id:1, titulo:"Estudo de Viabilidade", isEng:false,
+      objetivo:"Analisar o potencial construtivo do terreno e verificar a viabilidade de implantação do empreendimento, considerando as condicionantes físicas, urbanísticas, legais e funcionais aplicáveis ao lote.",
+      itens:[
+        "Levantamento inicial e consolidação das informações técnicas do terreno",
+        "Análise documental e física do lote, incluindo matrícula, dimensões, topografia e características existentes",
+        "Consulta e interpretação dos parâmetros urbanísticos e restrições legais aplicáveis",
+        "Verificação da viabilidade construtiva e estimativa de área edificável",
+        "Avaliação da melhor ocupação do lote alinhada ao programa do cliente",
+      ],
+      entregaveis:[
+        "Estudo técnico de ocupação do terreno",
+        "Esquema conceitual de implantação",
+        "Estudo volumétrico em 3D e imagens conceituais",
+        "Relatório sintético de viabilidade",
+      ] },
+    { id:2, titulo:"Estudo Preliminar", isEng:false,
+      objetivo:"Desenvolver o conceito arquitetônico inicial, organizando os ambientes, a implantação e a linguagem estética do projeto.",
+      itens:[
+        "Reunião de briefing e entendimento das necessidades",
+        "Definição do programa de necessidades",
+        "Estudo de implantação no terreno",
+        "Desenvolvimento da concepção arquitetônica inicial",
+        "Definição preliminar de layout, fluxos, volumetria e linguagem estética",
+      ],
+      entregaveis:[
+        "Planta baixa preliminar",
+        "Estudo volumétrico / fachada conceitual",
+        "Implantação inicial",
+        "Imagens, croquis ou perspectivas conceituais",
+      ] },
+    { id:3, titulo:"Aprovação na Prefeitura", isEng:false,
+      objetivo:"Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.",
+      itens:[
+        "Adequação do projeto às exigências legais e urbanísticas do município",
+        "Elaboração dos desenhos técnicos exigidos para aprovação",
+        "Montagem da documentação técnica necessária",
+        "Apoio técnico durante o processo de aprovação",
+      ],
+      entregaveis:[
+        "Projeto legal para aprovação",
+        "Plantas, cortes, fachadas e implantação conforme exigência municipal",
+        "Quadros de áreas e documentação técnica para protocolo",
+      ] },
+    { id:4, titulo:"Projeto Executivo", isEng:false,
+      objetivo:"Desenvolver o projeto arquitetônico em nível detalhado para execução da obra.",
+      itens:[
+        "Desenvolvimento técnico completo do projeto aprovado",
+        "Detalhamento arquitetônico para obra",
+        "Definição precisa de dimensões, cotas, eixos, paginações, esquadrias e acabamentos",
+      ],
+      entregaveis:[
+        "Planta baixa executiva, locação e cobertura",
+        "Cortes e fachadas executivos",
+        "Planta de layout, esquadrias e pisos",
+        "Detalhamentos construtivos",
+      ] },
+    { id:5, titulo:"Projetos Complementares de Engenharia", isEng:true,
+      objetivo:"",
+      itens:[
+        "Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações",
+        "Elétrico: dimensionamento de cargas, circuitos, quadros e pontos",
+        "Hidrossanitário: distribuição de pontos de água/esgoto e dimensionamento",
+        "Compatibilização entre projetos arquitetônico e de engenharia",
+      ],
+      entregaveis:[] },
+  ];
+  const isPadrao = tipoPgto === "padrao";
+  const blocos = ESCOPO_BASE.filter(b => {
+    if (b.isEng) return engAtiva;
+    if (!incluiArq) return false;
+    if (b.id === 1 && isPadrao) return false;
+    if (temIsoladas && !idsIsolados.has(b.id)) return false;
+    return true;
+  });
+  let n = 0;
+  const escopo = blocos.map(b => {
+    if (!b.isEng) { n++; return { ...b, num: n }; }
+    return { ...b, num: n + 1 };
+  });
+
+  return {
+    incluiArq, incluiEng, temImposto, aliqImp,
+    arqCI, engCI, arqCIEdit, engCIEdit,
+    totSIEdit, totCIEdit, impostoEdit,
+    temIsoladas, arqIsoladaSI, engAtiva,
+    totSIBase, totCIBase,
+    areaTot, escritorio, escopo,
+  };
+}
+
+// Formatadores compartilhados (escopo de módulo, fora dos templates)
+const _fmtV = v => Number(v || 0).toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
+const _fmtN = v => Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
+
+// ───────────────────────────────────────────────────────────────
+// TEMPLATE 02 — Minimal Serif
+//
+// Tipografia ampla, muito branco, sem caixas.
+// Cliente como protagonista do topo, valores em peso medium.
+// Carrega Cormorant Garamond + Inter via Google Fonts.
+// ───────────────────────────────────────────────────────────────
+function PropostaTemplateMinimal({ data, propostaSnapshot, lockEdicao }) {
+  const D = data || {};
+  const S = derivePropostaValores(data, propostaSnapshot);
+  const C = "#1a1a1a", LT = "#9ca3af", MD = "#6b7280";
+  const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const hoje = new Date();
+  const dataStr = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
+  const validade = new Date(Date.now() + 15 * 86400000).toLocaleDateString("pt-BR");
+  const eyebrow = { fontFamily:"'Inter',sans-serif", fontSize:10, letterSpacing:"0.18em",
+    textTransform:"uppercase", color:LT, fontWeight:500 };
+  const sansBody = { fontFamily:"'Inter',sans-serif" };
+  const subTitulo = (S.incluiArq && S.engAtiva) ? "Proposta de Arquitetura e Engenharia"
+    : S.incluiArq ? "Proposta de Arquitetura" : "Proposta Comercial";
+  const respPrim = (S.escritorio.responsaveis && S.escritorio.responsaveis[0]) || {};
+  const respNome = respPrim.nome ? `Arq. ${respPrim.nome}` : "—";
+  const cauCidade = [respPrim.cau, S.escritorio.cidade].filter(Boolean).join(" · ");
+  return (
+    <div style={{ fontFamily:"'Cormorant Garamond',Georgia,serif", background:"#fafaf7",
+      minHeight:"100vh", color:C, fontSize:15 }}
+      className={lockEdicao ? "proposta-locked" : ""}>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" />
+      <div style={{ maxWidth:780, margin:"0 auto", padding:"80px 60px 100px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:64 }}>
+          {propostaSnapshot?.logoPreview || S.escritorio.logo ? (
+            <img src={propostaSnapshot?.logoPreview || S.escritorio.logo} alt="Logo"
+              style={{ height:36, maxWidth:140, objectFit:"contain" }} />
+          ) : (
+            <div style={eyebrow}>{S.escritorio.nome || "Escritório"}</div>
+          )}
+          <div style={{ ...eyebrow, textAlign:"right" }}>
+            {S.escritorio.cidade || ""} · {dataStr}
+          </div>
+        </div>
+        <div style={eyebrow}>{subTitulo}</div>
+        <h1 style={{ fontSize:56, fontWeight:500, margin:"8px 0 80px", lineHeight:1.05, letterSpacing:"-0.01em" }}>
+          {D.clienteNome || "Cliente"}
+        </h1>
+        <div style={{ marginBottom:64 }}>
+          <div style={{ ...eyebrow, marginBottom:24 }}>Investimento</div>
+          {S.incluiArq && (
+            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between",
+              paddingBottom:16, borderBottom:"1px solid #e8e6df", marginBottom:16 }}>
+              <span style={{ fontSize:20, fontWeight:500 }}>Arquitetura</span>
+              <span style={{ fontSize:32, fontWeight:500, letterSpacing:"-0.01em" }}>
+                {_fmtV(S.temIsoladas ? S.arqIsoladaSI : S.arqCI)}
+              </span>
+            </div>
+          )}
+          {S.engAtiva && (
+            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between",
+              paddingBottom:16, borderBottom:"1px solid #e8e6df", marginBottom:16 }}>
+              <span style={{ fontSize:20, fontWeight:500 }}>Engenharia</span>
+              <span style={{ fontSize:32, fontWeight:500, letterSpacing:"-0.01em" }}>{_fmtV(S.engCI)}</span>
+            </div>
+          )}
+          <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", paddingTop:12 }}>
+            <span style={eyebrow}>Total {S.temImposto ? "com impostos" : "sem impostos"}</span>
+            <span style={{ fontSize:40, fontWeight:500, letterSpacing:"-0.02em" }}>{_fmtV(S.totCIBase)}</span>
+          </div>
+        </div>
+        <div style={{ marginBottom:64 }}>
+          <div style={{ ...eyebrow, marginBottom:32 }}>Escopo</div>
+          {S.escopo.map(b => (
+            <div key={b.id} style={{ marginBottom:40 }}>
+              <h3 style={{ fontSize:24, fontWeight:500, margin:"0 0 12px", letterSpacing:"-0.01em" }}>
+                {b.num}. {b.titulo}
+              </h3>
+              {b.objetivo && (
+                <p style={{ fontSize:16, lineHeight:1.7, color:MD, margin:"0 0 16px" }}>{b.objetivo}</p>
+              )}
+              {b.itens.length > 0 && (
+                <div style={{ ...sansBody, fontSize:13, color:MD, lineHeight:1.85 }}>
+                  {b.itens.map((it,j) => (
+                    <div key={j} style={{ display:"flex", gap:12 }}>
+                      <span style={{ color:LT, minWidth:18 }}>—</span><span style={{ flex:1 }}>{it}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {b.entregaveis.length > 0 && (
+                <div style={{ marginTop:18 }}>
+                  <div style={{ ...eyebrow, fontSize:9, marginBottom:8 }}>Entregáveis</div>
+                  <div style={{ ...sansBody, fontSize:13, color:MD, lineHeight:1.85 }}>
+                    {b.entregaveis.map((it,j) => (
+                      <div key={j} style={{ display:"flex", gap:12 }}>
+                        <span style={{ color:LT, minWidth:18 }}>—</span><span style={{ flex:1 }}>{it}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop:96, paddingTop:32, borderTop:"1px solid #d6d3c7" }}>
+          <div style={{ ...eyebrow, marginBottom:40 }}>Aceite</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:64 }}>
+            <div>
+              <div style={{ fontSize:22, fontWeight:500, marginBottom:48 }}>{D.clienteNome || "—"}</div>
+              <div style={{ borderTop:"1px solid #1a1a1a", paddingTop:8, ...sansBody, fontSize:11, color:LT,
+                display:"flex", justifyContent:"space-between" }}>
+                <span>Cliente · Assinatura</span><span>___ / ___ / _____</span>
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize:22, fontWeight:500, marginBottom:4 }}>{respNome}</div>
+              <div style={{ ...sansBody, fontSize:12, color:MD, marginBottom:30 }}>{cauCidade || "—"}</div>
+              <div style={{ borderTop:"1px solid #1a1a1a", paddingTop:8, ...sansBody, fontSize:11, color:LT,
+                display:"flex", justifyContent:"space-between" }}>
+                <span>Responsável · Assinatura</span><span>{dataStr}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ marginTop:64, ...sansBody, fontSize:11, color:LT, letterSpacing:"0.04em",
+          display:"flex", justifyContent:"center", gap:14 }}>
+          <span>{S.escritorio.email || ""}</span><span>·</span>
+          <span>{S.escritorio.telefone || ""}</span><span>·</span>
+          <span>{S.escritorio.instagram || ""}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// TEMPLATE 03 — Arquitetônico (prancha técnica)
+// Monoespaçada, numeração 01/04, bordas duplas, navy
+// ───────────────────────────────────────────────────────────────
+function PropostaTemplateArquitetonico({ data, propostaSnapshot, lockEdicao }) {
+  const D = data || {};
+  const S = derivePropostaValores(data, propostaSnapshot);
+  const C = "#0f172a", LT = "#94a3b8", MD = "#475569", LN = "#cbd5e1", ACC = "#1e3a8a";
+  const hoje = new Date();
+  const dataIso = `${String(hoje.getDate()).padStart(2,"0")}.${String(hoje.getMonth()+1).padStart(2,"0")}.${hoje.getFullYear()}`;
+  const validade = new Date(Date.now() + 15 * 86400000).toLocaleDateString("pt-BR");
+  const mono = { fontFamily:"'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace" };
+  const numBlock = { ...mono, fontVariantNumeric:"tabular-nums" };
+  const subTitulo = "Proposta Comercial · Projetos de Arquitetura e Engenharia";
+  const respPrim = (S.escritorio.responsaveis && S.escritorio.responsaveis[0]) || {};
+  const respNome = respPrim.nome ? `Arq. ${respPrim.nome}` : "—";
+  const cauCidade = [respPrim.cau, S.escritorio.cidade].filter(Boolean).join(" · ");
+  const sections = [
+    { num:"01", titulo:"Cliente" },
+    { num:"02", titulo:"Investimento" },
+    { num:"03", titulo:"Escopo dos serviços" },
+    { num:"04", titulo:"Aceite" },
+  ];
+  const eyebrowMono = { ...mono, fontSize:9, letterSpacing:"0.15em", textTransform:"uppercase", color:LT };
+
+  return (
+    <div style={{ fontFamily:"'Inter',sans-serif", background:"#f8fafc", minHeight:"100vh", color:C, fontSize:13 }}
+      className={lockEdicao ? "proposta-locked" : ""}>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" />
+      <div style={{ maxWidth:880, margin:"0 auto", padding:"32px 40px 80px", background:"#fff", border:`1px solid ${LN}` }}>
+        {/* Carimbo de prancha */}
+        <div style={{ border:`1px solid ${C}`, padding:"10px 14px", marginBottom:28,
+          display:"grid", gridTemplateColumns:"1fr 140px 140px 100px", gap:0 }}>
+          <div style={{ paddingRight:14, borderRight:`1px solid ${LN}` }}>
+            <div style={eyebrowMono}>Escritório</div>
+            <div style={{ fontSize:13, fontWeight:600, marginTop:2 }}>{S.escritorio.nome || "—"}</div>
+          </div>
+          <div style={{ paddingLeft:14, paddingRight:14, borderRight:`1px solid ${LN}` }}>
+            <div style={eyebrowMono}>Data</div>
+            <div style={{ ...numBlock, fontSize:13, fontWeight:500, marginTop:2 }}>{dataIso}</div>
+          </div>
+          <div style={{ paddingLeft:14, paddingRight:14, borderRight:`1px solid ${LN}` }}>
+            <div style={eyebrowMono}>Validade</div>
+            <div style={{ ...numBlock, fontSize:13, fontWeight:500, marginTop:2 }}>{validade}</div>
+          </div>
+          <div style={{ paddingLeft:14 }}>
+            <div style={eyebrowMono}>Folha</div>
+            <div style={{ ...numBlock, fontSize:13, fontWeight:500, marginTop:2 }}>01/01</div>
+          </div>
+        </div>
+        <div style={{ ...mono, fontSize:10, letterSpacing:"0.2em", color:ACC, fontWeight:500, textTransform:"uppercase" }}>
+          {subTitulo}
+        </div>
+        <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"space-between",
+          marginTop:6, marginBottom:32, paddingBottom:14, borderBottom:`2px solid ${C}` }}>
+          <h1 style={{ fontSize:36, fontWeight:700, letterSpacing:"-0.02em", margin:0, lineHeight:1 }}>
+            {D.clienteNome || "Cliente"}
+          </h1>
+          {(propostaSnapshot?.logoPreview || S.escritorio.logo) && (
+            <img src={propostaSnapshot?.logoPreview || S.escritorio.logo} alt="Logo"
+              style={{ height:40, maxWidth:120, objectFit:"contain" }} />
+          )}
+        </div>
+        {/* Sumário das seções */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:0, marginBottom:32, border:`1px solid ${LN}` }}>
+          {sections.map((s,i) => (
+            <div key={s.num} style={{ padding:"10px 12px", borderRight: i<sections.length-1 ? `1px solid ${LN}` : "none" }}>
+              <div style={{ ...mono, fontSize:10, color:ACC, fontWeight:600 }}>{s.num} —</div>
+              <div style={{ fontSize:11, fontWeight:500, color:C, marginTop:2 }}>{s.titulo}</div>
+            </div>
+          ))}
+        </div>
+        {/* 01 — Cliente / Especificações */}
+        <SectionTec01 num="01" titulo="Cliente" mono={mono} acc={ACC}>
+          {[
+            { k:"Tipo", v:D.tipoProjeto },
+            { k:"Subtipo", v:D.tipoObra },
+            { k:"Padrão", v:D.padrao },
+            { k:"Tipologia", v:D.tipologia },
+          ].filter(x => x.v).length > 0 && (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:0, border:`1px solid ${LN}` }}>
+              {[
+                { k:"Tipo", v:D.tipoProjeto },
+                { k:"Subtipo", v:D.tipoObra },
+                { k:"Padrão", v:D.padrao },
+                { k:"Tipologia", v:D.tipologia },
+              ].filter(x => x.v).map((x,i,arr) => (
+                <div key={x.k} style={{ padding:"10px 12px", borderRight: i<arr.length-1 ? `1px solid ${LN}` : "none" }}>
+                  <div style={eyebrowMono}>{x.k}</div>
+                  <div style={{ fontSize:12, fontWeight:500, color:C, marginTop:2 }}>{x.v}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </SectionTec01>
+        {/* 02 — Investimento como ficha técnica */}
+        <SectionTec01 num="02" titulo="Investimento" mono={mono} acc={ACC}>
+          <table style={{ width:"100%", borderCollapse:"collapse", border:`1px solid ${LN}`, fontSize:13 }}>
+            <thead>
+              <tr style={{ background:"#f1f5f9" }}>
+                <th style={{ ...mono, fontSize:10, letterSpacing:"0.12em", textTransform:"uppercase",
+                  color:LT, fontWeight:500, textAlign:"left", padding:"8px 12px", borderBottom:`1px solid ${LN}` }}>Item</th>
+                <th style={{ ...mono, fontSize:10, letterSpacing:"0.12em", textTransform:"uppercase",
+                  color:LT, fontWeight:500, textAlign:"right", padding:"8px 12px", borderBottom:`1px solid ${LN}`, width:120 }}>R$/m²</th>
+                <th style={{ ...mono, fontSize:10, letterSpacing:"0.12em", textTransform:"uppercase",
+                  color:LT, fontWeight:500, textAlign:"right", padding:"8px 12px", borderBottom:`1px solid ${LN}`, width:160 }}>Valor</th>
+              </tr>
+            </thead>
+            <tbody>
+              {S.incluiArq && (
+                <tr style={{ borderBottom:`1px solid ${LN}` }}>
+                  <td style={{ padding:"10px 12px", fontWeight:500 }}>Projeto de Arquitetura</td>
+                  <td style={{ ...numBlock, padding:"10px 12px", textAlign:"right", color:MD }}>
+                    {S.areaTot > 0 ? _fmtN(Math.round((S.temIsoladas ? S.arqIsoladaSI : S.arqCI) / S.areaTot * 100) / 100) : "—"}
+                  </td>
+                  <td style={{ ...numBlock, padding:"10px 12px", textAlign:"right", fontWeight:600 }}>
+                    {_fmtV(S.temIsoladas ? S.arqIsoladaSI : S.arqCI)}
+                  </td>
+                </tr>
+              )}
+              {S.engAtiva && (
+                <tr style={{ borderBottom:`1px solid ${LN}` }}>
+                  <td style={{ padding:"10px 12px", fontWeight:500 }}>Projetos de Engenharia</td>
+                  <td style={{ ...numBlock, padding:"10px 12px", textAlign:"right", color:MD }}>
+                    {S.areaTot > 0 ? _fmtN(Math.round(S.engCI / S.areaTot * 100) / 100) : "—"}
+                  </td>
+                  <td style={{ ...numBlock, padding:"10px 12px", textAlign:"right", fontWeight:600 }}>{_fmtV(S.engCI)}</td>
+                </tr>
+              )}
+              {S.temImposto && (
+                <tr style={{ borderBottom:`1px solid ${LN}`, background:"#fafafa" }}>
+                  <td style={{ padding:"10px 12px", color:MD, fontStyle:"italic" }}>Impostos ({S.aliqImp}%)</td>
+                  <td></td>
+                  <td style={{ ...numBlock, padding:"10px 12px", textAlign:"right", color:MD }}>
+                    {_fmtV(S.temIsoladas ? Math.round((S.totCIBase - S.totSIBase) * 100) / 100 : S.impostoEdit)}
+                  </td>
+                </tr>
+              )}
+              <tr style={{ background:C, color:"#fff" }}>
+                <td style={{ padding:"12px", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.08em", fontSize:11 }}>Total</td>
+                <td></td>
+                <td style={{ ...numBlock, padding:"12px", textAlign:"right", fontWeight:700, fontSize:16 }}>{_fmtV(S.totCIBase)}</td>
+              </tr>
+            </tbody>
+          </table>
+        </SectionTec01>
+        {/* 03 — Escopo */}
+        <SectionTec01 num="03" titulo="Escopo dos serviços" mono={mono} acc={ACC}>
+          {S.escopo.map((b,i) => (
+            <div key={b.id} style={{ marginBottom:18, padding:"16px 18px", border:`1px solid ${LN}`, background:"#fcfcfc" }}>
+              <div style={{ display:"flex", alignItems:"baseline", gap:12, marginBottom:10 }}>
+                <span style={{ ...mono, fontSize:11, color:ACC, fontWeight:600 }}>
+                  {String(i+1).padStart(2,"0")} /
+                </span>
+                <span style={{ fontSize:14, fontWeight:600 }}>{b.titulo}</span>
+              </div>
+              {b.objetivo && (
+                <div style={{ fontSize:12, color:MD, lineHeight:1.65, marginBottom:10 }}>{b.objetivo}</div>
+              )}
+              {b.itens.length > 0 && (
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:"4px 16px", marginTop:10 }}>
+                  {b.itens.map((it,j) => (
+                    <div key={j} style={{ fontSize:11.5, color:MD, lineHeight:1.55, display:"flex", gap:6 }}>
+                      <span style={{ ...mono, color:LT, fontSize:10 }}>—</span><span style={{ flex:1 }}>{it}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {b.entregaveis.length > 0 && (
+                <div style={{ marginTop:12, paddingTop:10, borderTop:`1px dashed ${LN}` }}>
+                  <div style={{ ...mono, fontSize:9, letterSpacing:"0.15em", textTransform:"uppercase", color:ACC, marginBottom:6 }}>Entregáveis</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:"4px 16px" }}>
+                    {b.entregaveis.map((it,j) => (
+                      <div key={j} style={{ fontSize:11.5, color:MD, display:"flex", gap:6 }}>
+                        <span style={{ ...mono, color:LT, fontSize:10 }}>—</span><span style={{ flex:1 }}>{it}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </SectionTec01>
+        {/* 04 — Aceite */}
+        <SectionTec01 num="04" titulo="Aceite" mono={mono} acc={ACC}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:0, border:`1px solid ${LN}` }}>
+            <div style={{ padding:"16px 18px", borderRight:`1px solid ${LN}` }}>
+              <div style={eyebrowMono}>Cliente</div>
+              <div style={{ fontSize:14, fontWeight:600, margin:"8px 0 32px" }}>{D.clienteNome || "—"}</div>
+              <div style={{ borderTop:`1px solid ${C}`, paddingTop:6, ...mono, fontSize:10, color:LT,
+                display:"flex", justifyContent:"space-between" }}>
+                <span>Assinatura</span><span>___/___/______</span>
+              </div>
+            </div>
+            <div style={{ padding:"16px 18px" }}>
+              <div style={eyebrowMono}>Responsável técnico</div>
+              <div style={{ fontSize:14, fontWeight:600, marginTop:8 }}>{respNome}</div>
+              <div style={{ ...mono, fontSize:11, color:MD, marginBottom:16 }}>{cauCidade || "—"}</div>
+              <div style={{ borderTop:`1px solid ${C}`, paddingTop:6, ...mono, fontSize:10, color:LT,
+                display:"flex", justifyContent:"space-between" }}>
+                <span>Assinatura</span><span>{dataIso}</span>
+              </div>
+            </div>
+          </div>
+        </SectionTec01>
+        <div style={{ marginTop:40, paddingTop:12, borderTop:`1px solid ${LN}`, ...mono, fontSize:10, color:LT,
+          display:"flex", justifyContent:"space-between" }}>
+          <span>{S.escritorio.nome || "Escritório"} · {S.escritorio.cidade || ""}</span>
+          <span>{S.escritorio.email || ""} · {S.escritorio.telefone || ""}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SectionTec01({ num, titulo, mono, acc, children }) {
+  return (
+    <div style={{ marginBottom:28 }}>
+      <div style={{ display:"flex", alignItems:"baseline", gap:12, marginBottom:14,
+        paddingBottom:6, borderBottom:`1px solid ${acc}` }}>
+        <span style={{ ...mono, fontSize:11, fontWeight:600, color:acc, letterSpacing:"0.05em" }}>{num}</span>
+        <span style={{ fontSize:13, fontWeight:600, textTransform:"uppercase", letterSpacing:"0.06em" }}>{titulo}</span>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// TEMPLATE 04 — Premium / Boutique
+// Capa preta + dourado, serif Playfair, alto contraste
+// ───────────────────────────────────────────────────────────────
+function PropostaTemplatePremium({ data, propostaSnapshot, lockEdicao }) {
+  const D = data || {};
+  const S = derivePropostaValores(data, propostaSnapshot);
+  const BLACK = "#0a0a0a", ACC = "#c9a96b", LT = "#8a8a8a", MD = "#4a4a4a", LN = "#e8e8e8";
+  const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
+  const hoje = new Date();
+  const dataStr = `${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${hoje.getFullYear()}`;
+  const validade = new Date(Date.now() + 15 * 86400000).toLocaleDateString("pt-BR");
+  const sans = "'Inter',sans-serif", serif = "'Playfair Display','Cormorant Garamond',Georgia,serif";
+  const eyebrow = { fontFamily:sans, fontSize:9, letterSpacing:"0.25em", textTransform:"uppercase", fontWeight:500 };
+  const subTitulo = (S.incluiArq && S.engAtiva) ? "Proposta Comercial · Arquitetura & Engenharia"
+    : "Proposta Comercial · Arquitetura";
+  const respPrim = (S.escritorio.responsaveis && S.escritorio.responsaveis[0]) || {};
+  const respNome = respPrim.nome ? `Arq. ${respPrim.nome}` : "—";
+  const cauCidade = [respPrim.cau, S.escritorio.cidade].filter(Boolean).join(" · ");
+  return (
+    <div style={{ fontFamily:sans, background:"#fff", minHeight:"100vh", color:BLACK, fontSize:13 }}
+      className={lockEdicao ? "proposta-locked" : ""}>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:wght@400;500;600;700&display=swap" />
+      {/* CAPA preta */}
+      <div style={{ background:BLACK, color:"#fff", padding:"80px 60px 60px", maxWidth:880, margin:"0 auto" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:100 }}>
+          <div>
+            {(propostaSnapshot?.logoPreview || S.escritorio.logo) ? (
+              <img src={propostaSnapshot?.logoPreview || S.escritorio.logo} alt="Logo"
+                style={{ height:36, maxWidth:120, objectFit:"contain", filter:"brightness(0) invert(1)" }} />
+            ) : (
+              <div style={{ ...eyebrow, color:ACC }}>{S.escritorio.nome || "Escritório"}</div>
+            )}
+          </div>
+          <div style={{ ...eyebrow, color:ACC, textAlign:"right" }}>{dataStr}</div>
+        </div>
+        <div style={{ ...eyebrow, color:ACC, marginBottom:24 }}>{subTitulo}</div>
+        <h1 style={{ fontFamily:serif, fontSize:80, fontWeight:500, margin:0, lineHeight:1, letterSpacing:"-0.02em" }}>
+          {D.clienteNome || "Cliente"}
+        </h1>
+        <div style={{ marginTop:100, paddingTop:24, borderTop:`1px solid ${ACC}`,
+          display:"flex", justifyContent:"space-between" }}>
+          <div style={{ ...eyebrow, color:"#cccccc" }}>Cliente</div>
+          <div style={{ ...eyebrow, color:"#cccccc" }}>Válido até {validade}</div>
+        </div>
+      </div>
+      {/* INVESTIMENTO em hero claro */}
+      <div style={{ background:"#fafafa", padding:"80px 60px", maxWidth:880, margin:"0 auto" }}>
+        <div style={{ ...eyebrow, color:ACC, marginBottom:12 }}>Investimento</div>
+        <div style={{ fontFamily:serif, fontSize:64, fontWeight:500, letterSpacing:"-0.02em",
+          lineHeight:1, marginBottom:8 }}>{_fmtV(S.totCIBase)}</div>
+        <div style={{ fontSize:13, color:MD, marginBottom:40 }}>
+          {S.temImposto ? `Total com impostos (${S.aliqImp}%)` : "Total sem impostos"}
+        </div>
+        <div style={{ display:"grid",
+          gridTemplateColumns: S.incluiArq && S.engAtiva ? "1fr 1fr" : "1fr",
+          gap:32, paddingTop:32, borderTop:`1px solid ${LN}` }}>
+          {S.incluiArq && (
+            <div>
+              <div style={{ ...eyebrow, color:LT, marginBottom:8 }}>Arquitetura</div>
+              <div style={{ fontFamily:serif, fontSize:32, fontWeight:500, letterSpacing:"-0.01em" }}>
+                {_fmtV(S.temIsoladas ? S.arqIsoladaSI : S.arqCI)}
+              </div>
+              {S.areaTot > 0 && (
+                <div style={{ fontSize:12, color:LT, marginTop:4 }}>
+                  R$ {_fmtN(Math.round((S.temIsoladas ? S.arqIsoladaSI : S.arqCI) / S.areaTot * 100) / 100)}/m² · {_fmtN(S.areaTot)}m²
+                </div>
+              )}
+            </div>
+          )}
+          {S.engAtiva && (
+            <div>
+              <div style={{ ...eyebrow, color:LT, marginBottom:8 }}>Engenharia</div>
+              <div style={{ fontFamily:serif, fontSize:32, fontWeight:500, letterSpacing:"-0.01em" }}>
+                {_fmtV(S.engCI)}
+              </div>
+              {S.areaTot > 0 && (
+                <div style={{ fontSize:12, color:LT, marginTop:4 }}>
+                  R$ {_fmtN(Math.round(S.engCI / S.areaTot * 100) / 100)}/m²
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+      {/* ESCOPO */}
+      <div style={{ background:"#fff", padding:"80px 60px", maxWidth:880, margin:"0 auto" }}>
+        <div style={{ ...eyebrow, color:ACC, marginBottom:12 }}>O que inclui</div>
+        <h2 style={{ fontFamily:serif, fontSize:36, fontWeight:500, margin:"0 0 48px", letterSpacing:"-0.01em" }}>
+          Escopo dos serviços
+        </h2>
+        {S.escopo.map((b,i,arr) => (
+          <div key={b.id} style={{ marginBottom:48, paddingBottom:32,
+            borderBottom: i < arr.length-1 ? `1px solid ${LN}` : "none" }}>
+            <div style={{ display:"flex", alignItems:"baseline", gap:16 }}>
+              <span style={{ fontFamily:serif, fontSize:36, fontWeight:500, color:ACC, letterSpacing:"-0.02em", lineHeight:1 }}>
+                {String(i+1).padStart(2,"0")}
+              </span>
+              <h3 style={{ fontFamily:serif, fontSize:22, fontWeight:500, margin:0, letterSpacing:"-0.01em" }}>
+                {b.titulo}
+              </h3>
+            </div>
+            {b.objetivo && (
+              <p style={{ fontSize:14, lineHeight:1.7, color:MD, marginTop:16, marginBottom:20 }}>{b.objetivo}</p>
+            )}
+            {b.itens.length > 0 && (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:"8px 32px", marginTop:12 }}>
+                {b.itens.map((it,j) => (
+                  <div key={j} style={{ fontSize:12, color:MD, lineHeight:1.6, display:"flex", gap:10 }}>
+                    <span style={{ color:ACC, fontWeight:600, minWidth:20 }}>{String(j+1).padStart(2,"0")}</span>
+                    <span style={{ flex:1 }}>{it}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {b.entregaveis.length > 0 && (
+              <div style={{ marginTop:24, padding:20, background:"#fafafa", borderLeft:`2px solid ${ACC}` }}>
+                <div style={{ ...eyebrow, color:ACC, marginBottom:10 }}>Entregáveis</div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:"6px 24px" }}>
+                  {b.entregaveis.map((it,j) => (
+                    <div key={j} style={{ fontSize:12, color:MD, lineHeight:1.6 }}>{it}</div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      {/* ACEITE em fundo preto */}
+      <div style={{ background:BLACK, color:"#fff", padding:"80px 60px", maxWidth:880, margin:"0 auto" }}>
+        <div style={{ ...eyebrow, color:ACC, marginBottom:12 }}>Aceite</div>
+        <h2 style={{ fontFamily:serif, fontSize:36, fontWeight:500, margin:"0 0 48px", letterSpacing:"-0.01em" }}>
+          Vamos começar?
+        </h2>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:64 }}>
+          <div>
+            <div style={{ ...eyebrow, color:ACC, marginBottom:12 }}>Cliente</div>
+            <div style={{ fontFamily:serif, fontSize:22, fontWeight:500, marginBottom:56 }}>{D.clienteNome || "—"}</div>
+            <div style={{ borderTop:`1px solid ${ACC}`, paddingTop:8, ...eyebrow, color:"#cccccc",
+              display:"flex", justifyContent:"space-between" }}>
+              <span>Assinatura</span><span>___/___/______</span>
+            </div>
+          </div>
+          <div>
+            <div style={{ ...eyebrow, color:ACC, marginBottom:12 }}>Responsável Técnico</div>
+            <div style={{ fontFamily:serif, fontSize:22, fontWeight:500, marginBottom:4 }}>{respNome}</div>
+            <div style={{ fontSize:12, color:"#999", marginBottom:32 }}>{cauCidade || "—"}</div>
+            <div style={{ borderTop:`1px solid ${ACC}`, paddingTop:8, ...eyebrow, color:"#cccccc",
+              display:"flex", justifyContent:"space-between" }}>
+              <span>Assinatura</span><span>{dataStr}</span>
+            </div>
+          </div>
+        </div>
+        <div style={{ marginTop:80, paddingTop:24, borderTop:"1px solid #333", ...eyebrow, color:LT,
+          display:"flex", justifyContent:"space-between", flexWrap:"wrap", gap:16 }}>
+          <span>{S.escritorio.nome || "Escritório"}</span>
+          <span style={{ display:"flex", gap:16 }}>
+            <span>{S.escritorio.email || ""}</span>
+            <span>{S.escritorio.telefone || ""}</span>
+            <span>{S.escritorio.instagram || ""}</span>
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// TEMPLATE 05 — Compacto (1 página densa, 2 colunas)
+// Sidebar com investimento + especificações, main com escopo enxuto
+// ───────────────────────────────────────────────────────────────
+function PropostaTemplateCompacto({ data, propostaSnapshot, lockEdicao }) {
+  const D = data || {};
+  const S = derivePropostaValores(data, propostaSnapshot);
+  const C = "#1f2937", LT = "#9ca3af", MD = "#4b5563", LN = "#e5e7eb", ACC = "#0f766e";
+  const hoje = new Date();
+  const meses = ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"];
+  const dataCompacta = `${String(hoje.getDate()).padStart(2,"0")} ${meses[hoje.getMonth()]} ${hoje.getFullYear()}`;
+  const validade = new Date(Date.now() + 15 * 86400000).toLocaleDateString("pt-BR");
+  const subTitulo = (S.incluiArq && S.engAtiva)
+    ? "Proposta Comercial · Arquitetura & Engenharia"
+    : "Proposta Comercial";
+  const respPrim = (S.escritorio.responsaveis && S.escritorio.responsaveis[0]) || {};
+  const respNome = respPrim.nome ? `Arq. ${respPrim.nome}` : "—";
+  const cauCidade = [respPrim.cau, S.escritorio.cidade].filter(Boolean).join(" · ");
+  const eyebrow = { fontSize:9, letterSpacing:"0.12em", textTransform:"uppercase", color:LT, fontWeight:600 };
+
+  return (
+    <div style={{ fontFamily:"'Inter',sans-serif", background:"#f3f4f6", minHeight:"100vh", color:C, fontSize:12 }}
+      className={lockEdicao ? "proposta-locked" : ""}>
+      <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+      <div style={{ maxWidth:920, margin:"0 auto", padding:"24px 32px 60px",
+        background:"#fff", boxShadow:"0 1px 3px rgba(0,0,0,0.05)" }}>
+        {/* Header */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+          paddingBottom:14, borderBottom:`2px solid ${ACC}`, marginBottom:20 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+            {(propostaSnapshot?.logoPreview || S.escritorio.logo) ? (
+              <img src={propostaSnapshot?.logoPreview || S.escritorio.logo} alt="Logo"
+                style={{ height:32, maxWidth:100, objectFit:"contain" }} />
+            ) : (
+              <div style={{ fontSize:14, fontWeight:700, color:ACC }}>{S.escritorio.nome || "Escritório"}</div>
+            )}
+            <div style={{ width:1, height:24, background:LN }} />
+            <div style={eyebrow}>{subTitulo}</div>
+          </div>
+          <div style={{ ...eyebrow, color:MD, textAlign:"right" }}>
+            {dataCompacta} · Válido até {validade}
+          </div>
+        </div>
+        {/* Cliente + total */}
+        <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:16, marginBottom:22 }}>
+          <div>
+            <div style={eyebrow}>Cliente</div>
+            <div style={{ fontSize:30, fontWeight:700, color:C, letterSpacing:"-0.02em", marginTop:2 }}>
+              {D.clienteNome || "Cliente"}
+            </div>
+            {D.referencia && (
+              <div style={{ fontSize:12, color:MD, marginTop:4 }}>{D.referencia}</div>
+            )}
+          </div>
+          <div style={{ background:ACC, color:"#fff", padding:"14px 18px", borderRadius:6,
+            display:"flex", flexDirection:"column", justifyContent:"center" }}>
+            <div style={{ ...eyebrow, color:"rgba(255,255,255,0.7)", marginBottom:2 }}>
+              Total {S.temImposto ? `(c/ impostos ${S.aliqImp}%)` : "sem impostos"}
+            </div>
+            <div style={{ fontSize:32, fontWeight:700, letterSpacing:"-0.02em", lineHeight:1.1 }}>
+              {_fmtV(S.totCIBase)}
+            </div>
+            {S.areaTot > 0 && S.incluiArq && (
+              <div style={{ fontSize:11, color:"rgba(255,255,255,0.85)", marginTop:4 }}>
+                {_fmtN(S.areaTot)} m² · R$ {_fmtN(Math.round(S.totCIBase / S.areaTot * 100) / 100)}/m²
+              </div>
+            )}
+          </div>
+        </div>
+        {/* 2 colunas */}
+        <div style={{ display:"grid", gridTemplateColumns:"240px 1fr", gap:24 }}>
+          <div>
+            <div style={{ border:`1px solid ${LN}`, borderRadius:6, marginBottom:14 }}>
+              <div style={{ padding:"10px 12px", background:"#f9fafb", borderBottom:`1px solid ${LN}` }}>
+                <div style={{ fontSize:11, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                  Investimento
+                </div>
+              </div>
+              <div style={{ padding:"10px 12px" }}>
+                {S.incluiArq && (
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
+                    padding:"6px 0", borderBottom:`1px dashed ${LN}` }}>
+                    <span style={{ fontSize:11.5, color:MD }}>Arquitetura</span>
+                    <span style={{ fontSize:12.5, fontWeight:600, color:C }}>
+                      {_fmtV(S.temIsoladas ? S.arqIsoladaSI : S.arqCI)}
+                    </span>
+                  </div>
+                )}
+                {S.engAtiva && (
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
+                    padding:"6px 0", borderBottom:`1px dashed ${LN}` }}>
+                    <span style={{ fontSize:11.5, color:MD }}>Engenharia</span>
+                    <span style={{ fontSize:12.5, fontWeight:600, color:C }}>{_fmtV(S.engCI)}</span>
+                  </div>
+                )}
+                {S.temImposto && (
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
+                    padding:"6px 0", borderBottom:`1px dashed ${LN}` }}>
+                    <span style={{ fontSize:11, color:LT, fontStyle:"italic" }}>Impostos</span>
+                    <span style={{ fontSize:11, color:LT }}>
+                      {_fmtV(S.temIsoladas ? Math.round((S.totCIBase - S.totSIBase) * 100) / 100 : S.impostoEdit)}
+                    </span>
+                  </div>
+                )}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
+                  padding:"8px 0 0", marginTop:4 }}>
+                  <span style={{ fontSize:11, fontWeight:600, color:C, textTransform:"uppercase",
+                    letterSpacing:"0.05em" }}>Total</span>
+                  <span style={{ fontSize:14, fontWeight:700, color:ACC }}>{_fmtV(S.totCIBase)}</span>
+                </div>
+              </div>
+            </div>
+            <div style={{ border:`1px solid ${LN}`, borderRadius:6, marginBottom:14 }}>
+              <div style={{ padding:"10px 12px", background:"#f9fafb", borderBottom:`1px solid ${LN}` }}>
+                <div style={{ fontSize:11, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.05em" }}>
+                  Especificações
+                </div>
+              </div>
+              <div style={{ padding:"10px 12px", fontSize:11.5 }}>
+                {[
+                  { k:"Tipo",      v:D.tipoProjeto },
+                  { k:"Subtipo",   v:D.tipoObra    },
+                  { k:"Padrão",    v:D.padrao      },
+                  { k:"Tipologia", v:D.tipologia   },
+                  { k:"Tamanho",   v:D.tamanho     },
+                  { k:"Área",      v:S.areaTot > 0 ? `${_fmtN(S.areaTot)} m²` : null },
+                ].filter(x => x.v).map((x,i,arr) => (
+                  <div key={x.k} style={{ display:"flex", justifyContent:"space-between",
+                    padding:"4px 0", borderBottom: i < arr.length-1 ? `1px dashed ${LN}` : "none" }}>
+                    <span style={{ color:LT }}>{x.k}</span>
+                    <span style={{ color:C, fontWeight:500 }}>{x.v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{ fontSize:11, color:MD, lineHeight:1.7 }}>
+              <div style={{ ...eyebrow, marginBottom:6 }}>Contato</div>
+              <div style={{ fontSize:12, fontWeight:600, color:C }}>{respNome}</div>
+              <div>{cauCidade || "—"}</div>
+              <div>{S.escritorio.email || ""}</div>
+              <div>{S.escritorio.telefone || ""}</div>
+              <div>{S.escritorio.instagram || ""}</div>
+            </div>
+          </div>
+          <div>
+            <div style={{ ...eyebrow, color:ACC, marginBottom:8 }}>Escopo dos serviços</div>
+            {S.escopo.map((b,i,arr) => (
+              <div key={b.id} style={{ marginBottom:14, paddingBottom:10,
+                borderBottom: i < arr.length-1 ? `1px solid ${LN}` : "none" }}>
+                <div style={{ display:"flex", alignItems:"baseline", gap:8, marginBottom:4 }}>
+                  <span style={{ fontSize:11, fontWeight:700, color:ACC, minWidth:16 }}>
+                    {String(i+1).padStart(2,"0")}
+                  </span>
+                  <span style={{ fontSize:13, fontWeight:600, color:C }}>{b.titulo}</span>
+                </div>
+                {b.objetivo && (
+                  <div style={{ fontSize:11.5, color:MD, lineHeight:1.55, marginBottom:6, marginLeft:24 }}>
+                    {b.objetivo}
+                  </div>
+                )}
+                {b.itens.length > 0 && (
+                  <div style={{ marginLeft:24, fontSize:11, color:MD, lineHeight:1.55,
+                    columnCount:2, columnGap:16 }}>
+                    {b.itens.map((it,j) => (
+                      <div key={j} style={{ breakInside:"avoid", marginBottom:2, display:"flex", gap:5 }}>
+                        <span style={{ color:LT }}>•</span><span style={{ flex:1 }}>{it}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {b.entregaveis.length > 0 && (
+                  <div style={{ marginLeft:24, marginTop:6, padding:"6px 10px",
+                    background:"#f0fdfa", borderLeft:`2px solid ${ACC}`, fontSize:11, color:MD }}>
+                    <span style={{ fontWeight:600, color:ACC, marginRight:4 }}>Entrega:</span>
+                    {b.entregaveis.join(" · ")}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        {/* Aceite */}
+        <div style={{ marginTop:28, paddingTop:18, borderTop:`2px solid ${ACC}` }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32 }}>
+            <div>
+              <div style={eyebrow}>Cliente — Aceite</div>
+              <div style={{ fontSize:13, fontWeight:600, marginTop:4, marginBottom:24 }}>{D.clienteNome || "—"}</div>
+              <div style={{ borderTop:`1px solid ${C}`, paddingTop:4, fontSize:10, color:LT,
+                display:"flex", justifyContent:"space-between" }}>
+                <span>Assinatura</span><span>___/___/______</span>
+              </div>
+            </div>
+            <div>
+              <div style={eyebrow}>Responsável Técnico</div>
+              <div style={{ fontSize:13, fontWeight:600, marginTop:4 }}>{respNome}</div>
+              <div style={{ fontSize:11, color:LT, marginBottom:12 }}>{cauCidade || "—"}</div>
+              <div style={{ borderTop:`1px solid ${C}`, paddingTop:4, fontSize:10, color:LT,
+                display:"flex", justifyContent:"space-between" }}>
+                <span>Assinatura</span><span>{dataCompacta}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SISTEMA DE TEMPLATES DE PROPOSTA
+//
+// Catálogo de layouts disponíveis. O usuário escolhe pela barra
+// no topo do PropostaPreview (TemplateBar). Persistido em
+// data.templateId — gravado no orcBase via handleSalvarPropostaSnapshot.
+//
+// Editorial (atual) é o único com EDIÇÃO COMPLETA (controles de
+// pagamento, etapas, descontos). Os 4 alternativos são VIEWERS
+// que renderizam os mesmos dados em layouts visuais distintos.
+// Para editar valores, usuário volta ao Editorial.
+// ═══════════════════════════════════════════════════════════════
+const TEMPLATES_PROPOSTA = [
+  { id:"01-editorial",     label:"Editorial",     desc:"Tipografia limpa, layout linear",  accent:"#111827" },
+  { id:"02-minimal",       label:"Minimal",       desc:"Serifa elegante, muito branco",    accent:"#1a1a1a" },
+  { id:"03-arquitetonico", label:"Arquitetônico", desc:"Prancha técnica, monoespaçada",    accent:"#1e3a8a" },
+  { id:"04-premium",       label:"Premium",       desc:"Capa preta + dourado",             accent:"#c9a96b" },
+  { id:"05-compacto",      label:"Compacto",      desc:"1 página densa, 2 colunas",        accent:"#0f766e" },
+];
+
+// Barra de seleção de templates — sticky no topo do preview.
+// Esconde quando lockEdicao (proposta finalizada/visualização readonly).
+function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
+  if (lockEdicao) return null;
+  return (
+    <div style={{
+      position:"sticky", top:0, zIndex:20, background:"#fff",
+      borderBottom:"1px solid #e5e7eb", padding:"10px 16px",
+      display:"flex", alignItems:"center", gap:10, overflowX:"auto",
+      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+    }}>
+      <span style={{ fontSize:10, fontWeight:600, color:"#6b7280",
+        textTransform:"uppercase", letterSpacing:"0.08em", flexShrink:0, marginRight:4 }}>
+        Layout:
+      </span>
+      {TEMPLATES_PROPOSTA.map(t => {
+        const ativo = templateId === t.id;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            style={{
+              flexShrink:0, padding:"6px 12px",
+              border: ativo ? `2px solid ${t.accent}` : "1px solid #e5e7eb",
+              background: ativo ? `${t.accent}10` : "#fff",
+              borderRadius:6, cursor:"pointer", fontSize:12, fontFamily:"inherit",
+              fontWeight: ativo ? 600 : 500,
+              color: ativo ? t.accent : "#374151",
+              display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1,
+              minWidth:130, transition:"all 0.15s",
+            }}>
+            <span style={{ fontSize:12, fontWeight:600 }}>{t.label}</span>
+            <span style={{ fontSize:9.5, color: ativo ? t.accent : "#9ca3af", fontWeight:400 }}>
+              {t.desc}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PropostaPreview (wrapper)
+//
+// Decide qual template renderizar com base em data.templateId.
+// Por padrão delega ao Editorial original (=PropostaPreviewEditorial).
+// Os 4 alternativos são read-only visuais — qualquer edição de valor
+// exige voltar ao Editorial.
+// ═══════════════════════════════════════════════════════════════
 function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao }) {
+  const safeData = data || {};
+  const initialTpl = propostaSnapshot?.templateId || safeData.templateId || "01-editorial";
+  const [templateId, setTemplateId] = useState(initialTpl);
+
+  // Se template ativo é Editorial, delega tudo ao componente original
+  // (que tem todos os controles de edição). Caso contrário, mostra o
+  // viewer alternativo + barra de seleção sempre visível pra voltar.
+  if (templateId === "01-editorial") {
+    return (
+      <div>
+        <TemplateBarProposta templateId={templateId} onChange={setTemplateId} lockEdicao={lockEdicao} />
+        <PropostaPreviewEditorial
+          data={data} onVoltar={onVoltar} onSalvarProposta={onSalvarProposta}
+          propostaReadOnly={propostaReadOnly} propostaSnapshot={propostaSnapshot}
+          lockEdicao={lockEdicao}
+        />
+      </div>
+    );
+  }
+
+  const TplComp =
+    templateId === "02-minimal"       ? PropostaTemplateMinimal :
+    templateId === "03-arquitetonico" ? PropostaTemplateArquitetonico :
+    templateId === "04-premium"       ? PropostaTemplatePremium :
+    templateId === "05-compacto"      ? PropostaTemplateCompacto :
+    PropostaPreviewEditorial;
+
+  return (
+    <div>
+      <TemplateBarProposta templateId={templateId} onChange={setTemplateId} lockEdicao={lockEdicao} />
+      <TplComp data={data} propostaSnapshot={propostaSnapshot} lockEdicao={lockEdicao} />
+      {/* Aviso flutuante: "para editar valores, volte ao Editorial" */}
+      {!lockEdicao && (
+        <div style={{
+          position:"fixed", bottom:20, right:20, zIndex:30,
+          background:"#111827", color:"#fff", padding:"10px 14px",
+          borderRadius:8, fontSize:11, fontFamily:"'Helvetica Neue',sans-serif",
+          maxWidth:300, lineHeight:1.5, boxShadow:"0 4px 12px rgba(0,0,0,0.15)",
+        }}>
+          <div style={{ fontWeight:600, marginBottom:4 }}>Modo visualização</div>
+          <div style={{ color:"#cbd5e0" }}>
+            Para editar valores, etapas e descontos, volte ao layout <b>Editorial</b>.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaReadOnly, propostaSnapshot, lockEdicao }) {
   // NOTA: NÃO fazer `if (!data) return null` aqui — os hooks abaixo precisam ser
   // chamados em todo render (regra do React). Em vez disso, usamos optional chaining
   // e defaults em cada acesso a `data.xxx` e retornamos null só DEPOIS dos hooks.
@@ -5591,7 +6523,7 @@ function PropostaPreview({ data, onVoltar, onSalvarProposta, propostaReadOnly, p
   );
 }
 
-function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio, usuario, cub }) {
+function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio }) {
   // Normaliza escritorio (defaults vazios se algo faltar)
   const esc = escritorio || {};
   // Primeiro responsável técnico serve como responsável padrão na proposta.
@@ -5604,20 +6536,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [padrao,       setPadrao]       = useState(orcBase?.padrao      || null);
   const [tipologia,    setTipologia]    = useState(orcBase?.tipologia   || null);
   const [tamanho,      setTamanho]      = useState(orcBase?.tamanho     || null);
-  // Etapa que o usuário clicou pra editar (popover inline na trilha)
-  const [etapaEditando, setEtapaEditando] = useState(null);
-  // Opção que está sendo "escolhida" no momento (anima is-chosen + is-fading)
-  const [opcaoEscolhida, setOpcaoEscolhida] = useState(null);
-  // Índice da opção destacada via teclado (setas) — null = nenhum
-  const [opcaoFocada, setOpcaoFocada] = useState(null);
-  // Texto temporário do input de referência (commit no Enter/blur)
-  const [referenciaTemp, setReferenciaTemp] = useState(orcBase?.referencia || "");
-  // Flag: usuário está editando a referência inline (abaixo do nome do cliente)
-  const [editandoRefInline, setEditandoRefInline] = useState(false);
-  // Trilha horizontal: { key, top, left } da etapa com dropdown aberto (position fixed)
-  const [trilhaHPop, setTrilhaHPop] = useState(null);
-  // Índice da opção destacada via teclado no popover da trilha horizontal
-  const [trilhaHPopFocada, setTrilhaHPopFocada] = useState(null);
+  const [aberto,       setAberto]       = useState(null);
+  const [hoverDrop,    setHoverDrop]    = useState(null);
+  const [panelPos,     setPanelPos]     = useState({ top:0, left:0 });
   // Abre preview automaticamente quando:
   // - modoVer é true (legado)
   // - modoAbertura === "ver" ou "verProposta" (novo fluxo) E tem orçamento existente
@@ -5665,7 +6586,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   ]);
   const [qtdRep, setQtdRep] = useState(orcBase?.repeticao ? (orcBase?.nUnidades || 2) : 0);
   const [editandoRep, setEditandoRep] = useState(false);
-  const [editandoAliq, setEditandoAliq] = useState(false);
   const [editandoGrupoQtd, setEditandoGrupoQtd] = useState(null); // guarda o nome do grupo que está com input aberto
   const [etapasIsoladas, setEtapasIsoladas] = useState(new Set(orcBase?.etapasIsoladas || []));
   const [incluiArq,        setIncluiArq]        = useState(orcBase?.incluiArq        !== false);
@@ -5676,7 +6596,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!orcBase) return;
     // Ativa flag para evitar que useEffect de grupoParams sobrescreva durante sincronização
     sincronizandoOrcBase.current = true;
-    if (orcBase.referencia  !== undefined) { setReferencia(orcBase.referencia || ""); setReferenciaTemp(orcBase.referencia || ""); }
+    if (orcBase.referencia  !== undefined) setReferencia(orcBase.referencia || "");
     if (orcBase.subtipo     !== undefined) setTipoObra(orcBase.subtipo);
     if (orcBase.tipo        !== undefined) setTipoProjeto(orcBase.tipo);
     if (orcBase.padrao      !== undefined) setPadrao(orcBase.padrao);
@@ -5764,19 +6684,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!orcBase?.comodos) return {};
     return Object.fromEntries(orcBase.comodos.map(c => [c.nome, c.qtd]));
   });
-  // Cômodos que o usuário já interagiu — mesmo com qty=0, ficam em "escolhidos".
-  // Ao zerar via clique no botão "0", o cômodo permanece visível (com qty=0).
-  // Só sai dos escolhidos ao clicar no chip ou no ✕.
-  const [comodosTocados, setComodosTocados] = useState(() => {
-    if (!orcBase?.comodos) return new Set();
-    return new Set(orcBase.comodos.filter(c => c.qtd > 0).map(c => c.nome));
-  });
 
   const isEdicao = useRef(!!orcBase?.comodos?.length);
   useEffect(() => {
     if (isEdicao.current) { isEdicao.current = false; return; }
     setQtds({});
-    setComodosTocados(new Set());
   }, [tipoProjeto]);
 
   // ── Salvar como rascunho ao voltar ─────────────────────────
@@ -5794,12 +6706,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   function handleVoltar() {
     // Em modo "ver", nunca pergunta — só volta
     if (modoVer) { onVoltar(); return; }
-    // Se já tem proposta enviada (consolidado), volta direto sem perguntar.
-    // Importante: ter `id` sozinho não basta — "Gerar Orçamento" auto-salva
-    // o orçamento com id antes da proposta ser de fato enviada, então o
-    // rascunho com id ainda precisa disparar o modal.
-    if (orcBase?.id && orcBase?.propostas?.length > 0) { onVoltar(); return; }
-    // Novo orçamento ou rascunho com id: pergunta se tem algo preenchido
+    // Se já existe orcBase (edição), deixa voltar direto sem perguntar
+    if (orcBase?.id) { onVoltar(); return; }
+    // Novo orçamento: pergunta se tem algo preenchido
     if (temDadosPreenchidos()) {
       pendingNavRef.current = null; // voltar normal = usa onVoltar
       setShowSaveDialog(true);
@@ -5841,8 +6750,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // O callback navegacaoPendente será executado depois que o usuário decidir.
   useEffect(() => {
     const handler = (navegacaoPendente) => {
-      // Modo ver ou orçamento já consolidado (com proposta enviada): deixa trocar direto
-      if (modoVer || (orcBase?.id && orcBase?.propostas?.length > 0)) return false;
+      // Modo ver ou edição: deixa trocar direto (nada pra salvar)
+      if (modoVer || orcBase?.id) return false;
       if (!temDadosPreenchidos()) return false;
       // Há dados não salvos: mostra modal e guarda a nav pra depois
       pendingNavRef.current = navegacaoPendente;
@@ -5857,68 +6766,40 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         window.__vickeOrcDirtyPrompt = null;
       }
     };
-  }, [modoVer, orcBase?.id, orcBase?.propostas?.length, qtds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [modoVer, orcBase?.id, qtds]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const wrapRef = useRef(null);
-
-  // Controla foco automático do input "Referência": foca uma vez ao montar
-  // e nunca mais re-foca em re-renders. Sem isso, qualquer re-render no app
-  // (clicar em chip de Imposto, Repetição, etc) rouba o foco de outros inputs
-  // pra cá, porque o ref callback executava em todo render.
-  // Reseta quando o input desmonta (sai da pergunta de Referência).
-  const referenciaInputFocadoRef = useRef(false);
-
-  // Detecta viewport mobile (<768px). Usado pra ajustes de layout e
-  // alguns ajustes no JSX. CSS injetado globalmente cobre o resto.
-  const [isMobileOrc, setIsMobileOrc] = useState(() => {
-    try { return window.innerWidth < 768; } catch { return false; }
-  });
   useEffect(() => {
-    function onResize() { try { setIsMobileOrc(window.innerWidth < 768); } catch {} }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
-
-  useEffect(() => {
-    if (!etapaEditando && !abertoGrupo) return;
+    if (!aberto && !abertoGrupo) return;
     const h = e => {
       if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setEtapaEditando(null);
+        setAberto(null);
         setAbertoGrupo(null);
       }
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
-  }, [etapaEditando, abertoGrupo]);
+  }, [aberto, abertoGrupo]);
 
-  // Trilha horizontal: fecha popover ao clicar fora
+  // Reposiciona o painel dropdown ao fazer scroll/resize (para grudar no botão)
   useEffect(() => {
-    if (!trilhaHPop) return;
-    const h = e => {
-      if (e.target.closest(".vk-trilha-h-pop") || e.target.closest(`.vk-trilha-h-node[data-tk="${trilhaHPop.key}"]`)) return;
-      setTrilhaHPop(null);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, [trilhaHPop]);
-
-  // Trilha horizontal: reposiciona popover ao scroll/resize (position fixed gruda no botão)
-  useEffect(() => {
-    if (!trilhaHPop) return;
+    if (!aberto) return;
     const reposicionar = () => {
-      const btn = document.querySelector(`.vk-trilha-h-node[data-tk="${trilhaHPop.key}"]`);
+      const btn = document.querySelector(`[data-drop-btn="${aberto}"]`);
       if (btn) {
         const r = btn.getBoundingClientRect();
-        setTrilhaHPop(prev => prev ? { ...prev, top: r.bottom + 6, left: r.left } : null);
+        setPanelPos({ top: r.bottom + 6, left: r.left });
       }
     };
+    // capture: true captura scroll de qualquer elemento descendente
+    // (inclui containers internos com overflow:auto)
     document.addEventListener("scroll", reposicionar, true);
     window.addEventListener("resize", reposicionar);
     return () => {
       document.removeEventListener("scroll", reposicionar, true);
       window.removeEventListener("resize", reposicionar);
     };
-  }, [trilhaHPop?.key]);
+  }, [aberto]);
 
   const OPCOES = {
     tipoObra:    ["Construção nova", "Reforma"],
@@ -5927,57 +6808,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     tipologia:   ["Térreo", "Sobrado"],
     tamanho:     ["Grande", "Médio", "Pequeno", "Compacta"],
   };
-
-  // ── Navegação por teclado no popover da trilha horizontal (Tipo Obra/Padrão/etc) ──
-  useEffect(() => {
-    if (!trilhaHPop) {
-      setTrilhaHPopFocada(null);
-      return;
-    }
-    const opcoes = OPCOES[trilhaHPop.key] || [];
-    if (!opcoes.length) return;
-
-    // Foca a opção atualmente selecionada (ou primeira) ao abrir
-    const valAtual = trilhaHPop.key === "referencia" ? referencia : ({ tipoObra, tipoProjeto, padrao, tipologia, tamanho }[trilhaHPop.key]);
-    const idxAtual = opcoes.indexOf(valAtual);
-    setTrilhaHPopFocada(idxAtual >= 0 ? idxAtual : 0);
-
-    const handler = (e) => {
-      const tag = (document.activeElement?.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        e.stopPropagation();
-        setTrilhaHPopFocada(prev => prev === null ? 0 : (prev + 1) % opcoes.length);
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        e.stopPropagation();
-        setTrilhaHPopFocada(prev => prev === null ? opcoes.length - 1 : (prev - 1 + opcoes.length) % opcoes.length);
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        e.stopPropagation();
-        setTrilhaHPopFocada(idx => {
-          if (idx === null) return null;
-          const op = opcoes[idx];
-          if (op) {
-            const SETS_TR = { tipoObra:setTipoObra, tipoProjeto:setTipoProjeto, padrao:setPadrao, tipologia:setTipologia, tamanho:setTamanho };
-            if (SETS_TR[trilhaHPop.key]) SETS_TR[trilhaHPop.key](op);
-            setTrilhaHPop(null);
-          }
-          return null;
-        });
-      } else if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        setTrilhaHPop(null);
-        setTrilhaHPopFocada(null);
-      }
-    };
-    // capture: true pra rodar antes do handler dos cômodos (que está em window)
-    window.addEventListener("keydown", handler, true);
-    return () => window.removeEventListener("keydown", handler, true);
-  }, [trilhaHPop, referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho]);
 
   // Mapa de display: valor interno → label exibido APENAS após seleção (no fluxo horizontal).
   // Na lista de opções do dropdown, o valor interno é mantido ("Alto", "Médio", "Baixo").
@@ -5991,87 +6821,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const LABELS = { tipoObra:"Tipo Obra", tipoProjeto:"Tipo Projeto", padrao:"Padrão", tipologia:"Tipologia", tamanho:"Tamanho" };
   const SETS   = { tipoObra:setTipoObra, tipoProjeto:setTipoProjeto, padrao:setPadrao, tipologia:setTipologia, tamanho:setTamanho };
 
-  function selecionar(key, val) { SETS[key](val); setEtapaEditando(null); }
-
-  // Confirma a referência (Enter ou blur). Anima is-chosen no input antes de aplicar.
-  function confirmarReferencia() {
-    const val = referenciaTemp.trim();
-    if (!val) return; // referência é obrigatória
-    if (val === referencia) {
-      // Já estava com esse valor — só fecha edição se aberta
-      setEtapaEditando(null);
-      return;
-    }
-    // Anima usando o flag opcaoEscolhida (mesmo que pra opções)
-    setOpcaoEscolhida(val);
-    setTimeout(() => {
-      setReferencia(val);
-      setEtapaEditando(null);
-      setOpcaoEscolhida(null);
-    }, 450);
-  }
-
-  // ── Navegação por teclado nas perguntas (setas + Enter) ──
-  // Computa qual etapa está ativa (mesma lógica do IIFE de render).
-  // Não escuta na etapa "referencia" (input de texto cuida do Enter próprio).
-  useEffect(() => {
-    const ordem = ["referencia", "tipoObra", "tipoProjeto"];
-    if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
-
-    const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
-    const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-    const etapaAtual = etapaEditando || proximaPendente;
-
-    // Sem etapa ativa, etapa de referência (input texto), ou animando: ignora
-    if (!etapaAtual || etapaAtual === "referencia" || opcaoEscolhida) return;
-
-    const opcoes = OPCOES[etapaAtual] || [];
-    if (!opcoes.length) return;
-
-    const handler = (e) => {
-      // Não captura se foco está em input/textarea/etc
-      const tag = (document.activeElement?.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        setOpcaoFocada(prev => {
-          if (prev === null) return 0;
-          return (prev + 1) % opcoes.length;
-        });
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        setOpcaoFocada(prev => {
-          if (prev === null) return opcoes.length - 1;
-          return (prev - 1 + opcoes.length) % opcoes.length;
-        });
-      } else if (e.key === "Enter") {
-        if (opcaoFocadaRef.current === null) return;
-        e.preventDefault();
-        const op = opcoes[opcaoFocadaRef.current];
-        if (!op) return;
-        setOpcaoEscolhida(op);
-        setTimeout(() => {
-          SETS[etapaAtual](op);
-          setEtapaEditando(null);
-          setOpcaoEscolhida(null);
-          setOpcaoFocada(null);
-        }, 450);
-      } else if (e.key === "Escape") {
-        setOpcaoFocada(null);
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando, isComercial, opcaoEscolhida]);
-
-  // Reset opcaoFocada quando muda de etapa
-  const opcaoFocadaRef = useRef(null);
-  useEffect(() => { opcaoFocadaRef.current = opcaoFocada; }, [opcaoFocada]);
-  useEffect(() => {
-    setOpcaoFocada(null);
-  }, [tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando]);
+  function selecionar(key, val) { SETS[key](val); setAberto(null); setHoverDrop(null); }
 
   const grupoDeComodo = useMemo(() => {
     const map = {};
@@ -6088,12 +6838,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!isComercial && (!tamanho || !padrao)) return null;
     const { comodos: COMODOS_USE } = configAtual;
     const tcfg = getTipoConfig(tipoParaConfig(tipoProjeto));
-    // Sprint 3: precoBase agora é dinâmico (CUB × pct_efetivo da empresa).
-    // Se onboarding incompleto OU sem CUB do estado, cai no fallback fixo
-    // (getPrecoBaseDinamico devolve tcfg.precoBase com modo:"fixo").
-    // Padrão Médio do projeto = Normal do CUB (NBR 12721).
-    const _precoBaseInfo = getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub);
-    const pb = _precoBaseInfo.precoBase;
+    const pb = tcfg.precoBase;
 
     if (isComercial) {
       const nomesLoja   = Object.keys(COMODOS_GALERIA_LOJA);
@@ -6303,7 +7048,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       acrescimoCirk: tcfg.acrescimoCirk,
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
     };
-  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo, usuario, cub]);
+  }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo]);
 
   const temComodos = isComercial
     ? Object.entries(grupoQtds).some(([g, gq]) => gq > 0 && Object.keys(qtds).some(nome => grupoDeComodo[nome] === g && (qtds[nome]||0) > 0))
@@ -6315,421 +7060,31 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     s.id = "slide-up-style";
     s.textContent = `
       @keyframes slideUp { from { opacity:0; transform:translateY(32px); } to { opacity:1; transform:translateY(0); } }
+      @keyframes surgeHoriz { from { opacity:0; transform:translateX(-8px); } to { opacity:1; transform:translateX(0); } }
       input.no-spin::-webkit-outer-spin-button,
       input.no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
       input.no-spin { -moz-appearance: textfield; }
       .comodo-escolhido:hover { color: #dc2626 !important; text-decoration: line-through; text-decoration-color: #dc2626; }
       .comodo-escolhido:hover .comodo-m2 { color: #dc2626 !important; }
       .comodo-escolhido:hover strong { color: #dc2626 !important; }
-
-      /* ===== Fluxo vk-flow2 — perguntas sequenciais ===== */
-      @keyframes flow2NodeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes flow2CardIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes flow2OptIn  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-      @keyframes flow2OptChosen { 0% { transform: scale(1); } 35% { transform: scale(1.02); } 100% { transform: scale(1); } }
-      @keyframes flow2DotPulse {
-        0%, 100% { box-shadow: 0 0 0 4px #fff, 0 0 0 6px #111; }
-        50%      { box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(0,0,0,0); }
-      }
-      @keyframes nodeEditIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
-
-      /* ===== TRILHA VERTICAL LATERAL DIREITA ===== */
-      .vk-flow-shell { display: grid; grid-template-columns: 540px 240px; gap: 32px; max-width: 880px; }
-      .vk-flow-stage { padding: 8px 24px 24px 0; }
-      .vk-trilha-rail { background: transparent; border-left: 0; padding: 24px 28px 32px 8px; position: relative; align-self: stretch; }
-      .vk-trilha-rail-title { font-size: 9.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #828a98; font-weight: 600; margin-bottom: 20px; }
-
-      /* Trilha horizontal compacta (modo concluído) — sem fundo, sutil */
-      .vk-trilha-h { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px 0; margin-bottom: 18px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
-      .vk-trilha-h-node { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; cursor: pointer; transition: background .12s, border-color .12s; position: relative; border: 1px solid #e5e7eb; background: #fafaf7; font-family: inherit; }
-      .vk-trilha-h-node:hover { background: #fafaf7; border-color: #e5e7eb; }
-      .vk-trilha-h-node.is-open { background: #fafaf7; border-color: #c8cdd6; }
-      .vk-trilha-h-dot { width: 6px; height: 6px; border-radius: 50%; background: #111; flex-shrink: 0; }
-      .vk-trilha-h-key { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #828a98; font-weight: 600; }
-      .vk-trilha-h-val { font-size: 13px; font-weight: 700; color: #111; letter-spacing: -0.005em; }
-      .vk-trilha-h-caret { font-size: 8px; color: #828a98; margin-left: 1px; }
-      .vk-trilha-h-sep { width: 10px; height: 1px; background: rgba(0,0,0,0.12); }
-
-      /* Dropdown com position fixed (grudado no botão, não desencaixa no scroll) */
-      .vk-trilha-h-pop { position: fixed; z-index: 9999; min-width: 200px; background: #fff; border: 1px solid rgba(0,0,0,0.12); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 28px -8px rgba(0,0,0,0.18); animation: nodeEditIn .18s cubic-bezier(0.32, 0.72, 0, 1); }
-      .vk-trilha-h-pop-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 8px 12px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
-      .vk-trilha-h-pop-row:last-child { border-bottom: 0; }
-      .vk-trilha-h-pop-row:hover { background: #fafaf7; }
-      .vk-trilha-h-pop-row.is-focused-kb { background: #fafaf7; }
-      .vk-trilha-h-pop-row.is-selected { background: #111; color: #fff; }
-      .vk-trilha-h-pop-row.is-selected:hover,
-      .vk-trilha-h-pop-row.is-selected.is-focused-kb { background: #111; }
-      .vk-trilha-h-pop-bullet { width: 5px; height: 5px; border-radius: 50%; background: rgba(0,0,0,0.20); flex: 0 0 auto; }
-      .vk-trilha-h-pop-row.is-selected .vk-trilha-h-pop-bullet { background: #fff; }
-      .vk-trilha-list { position: relative; display: flex; flex-direction: column; gap: 22px; }
-      .vk-trilha-line { position: absolute; left: 9px; top: 10px; bottom: 10px; width: 1.5px; background: linear-gradient(to bottom, #c8cdd6 0%, #c8cdd6 60%, #e5e7eb 100%); z-index: 0; }
-
-      /* Cada nó */
-      .vk-trilha-node { display: grid; grid-template-columns: 22px 1fr; gap: 14px; align-items: flex-start; position: relative; cursor: default; animation: flow2NodeIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; }
-      .vk-trilha-node.is-done { cursor: pointer; }
-      .vk-trilha-node.is-done:hover .vk-trilha-val { color: #4b5563; }
-
-      /* Bolinha — preenchida pretas (done), anel duplo (active), vazada (future) */
-      .vk-trilha-dot { width: 10px; height: 10px; border-radius: 50%; background: #111; margin-top: 4px; margin-left: 5px; position: relative; z-index: 1; box-shadow: 0 0 0 4px #fff; flex-shrink: 0; transition: all .25s ease; }
-      .vk-trilha-dot-active { width: 14px; height: 14px; margin-top: 2px; margin-left: 3px; box-shadow: 0 0 0 4px #fff, 0 0 0 6px #111; animation: flow2DotPulse 2.4s infinite ease-in-out; }
-      .vk-trilha-dot-future { width: 9px; height: 9px; margin-top: 5px; margin-left: 6px; background: transparent; border: 1.5px solid #c8cdd6; box-shadow: 0 0 0 3px #fff; }
-
-      /* Texto */
-      .vk-trilha-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-      .vk-trilha-key { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 600; line-height: 1.2; }
-      .vk-trilha-val { font-size: 13px; font-weight: 700; color: #111; letter-spacing: -0.005em; line-height: 1.3; word-break: break-word; }
-      .vk-trilha-val-pending { color: #828a98; font-weight: 400; font-style: italic; font-size: 12.5px; }
-      .vk-trilha-caret { font-size: 8px; color: #828a98; margin-left: 4px; }
-      .vk-trilha-node-future .vk-trilha-key { color: rgba(0,0,0,0.30); }
-
-      /* Popover de edição inline (no rail) */
-      .vk-trilha-edit { position: absolute; top: 0; right: calc(100% + 8px); z-index: 100; min-width: 240px; background: #fff; border: 1px solid rgba(0,0,0,0.10); border-radius: 8px; overflow: hidden; box-shadow: 0 12px 28px -8px rgba(0,0,0,0.18); animation: nodeEditIn .25s cubic-bezier(0.32, 0.72, 0, 1); }
-      .vk-trilha-edit-head { padding: 7px 11px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 600; }
-      .vk-trilha-edit-row { display: flex; align-items: center; gap: 9px; width: 100%; padding: 9px 12px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.04); cursor: pointer; text-align: left; font-family: inherit; font-size: 12.5px; color: #111; transition: background .12s ease; }
-      .vk-trilha-edit-row:last-child { border-bottom: 0; }
-      .vk-trilha-edit-row:hover { background: #fafaf7; }
-      .vk-trilha-edit-row.is-selected { background: #111; color: #fff; }
-      .vk-trilha-edit-row.is-selected:hover { background: #111; }
-      .vk-trilha-edit-bullet { width: 5px; height: 5px; border-radius: 50%; background: rgba(0,0,0,0.20); flex: 0 0 auto; }
-      .vk-trilha-edit-row.is-selected .vk-trilha-edit-bullet { background: #fff; }
-      .vk-trilha-edit-input { width: 100%; padding: 9px 12px; border: 0; border-bottom: 1px solid rgba(0,0,0,0.06); background: transparent; font-family: inherit; font-size: 13px; color: #111; outline: none; }
-      .vk-trilha-edit-input:focus { background: #fafaf7; }
-      .vk-trilha-edit-actions { display: flex; justify-content: flex-end; padding: 8px 11px; gap: 6px; background: #fafaf7; }
-      .vk-trilha-edit-btn { font-size: 11px; padding: 5px 10px; border-radius: 4px; border: 1px solid #d0d4db; background: #fff; cursor: pointer; font-family: inherit; font-weight: 500; color: #6b7280; }
-      .vk-trilha-edit-btn-primary { background: #111; color: #fff; border-color: #111; }
-
-      /* Card central da pergunta atual */
-      .vk-flow2-card { width: 100%; max-width: 540px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
-      .vk-flow2-progress { margin-bottom: 14px; font-size: 10px; letter-spacing: 0.16em; color: #828a98; font-weight: 500; font-variant-numeric: tabular-nums; text-transform: uppercase; }
-      .vk-flow2-title { font-family: inherit; font-size: 26px; font-weight: 500; letter-spacing: -0.022em; line-height: 1.2; margin: 0; color: #111; }
-      .vk-flow2-hint { font-size: 13.5px; color: #6b7280; line-height: 1.55; margin-top: 8px; max-width: 460px; }
-
-      /* Input texto pra "Referência" (primeira pergunta) */
-      .vk-flow2-input-wrap { margin-top: 24px; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; }
-      .vk-flow2-input { width: 100%; max-width: 460px; padding: 14px 18px; border: 1px solid rgba(0,0,0,0.12); border-radius: 10px; background: #fff; font-family: inherit; font-size: 15px; color: #111; outline: none; transition: border-color .15s, box-shadow .15s, background .25s, color .25s; box-shadow: 0 1px 0 rgba(0,0,0,0.02); }
-      .vk-flow2-input:focus { border-color: #111; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
-      .vk-flow2-input.is-chosen { background: #111; color: #fff; border-color: #111; animation: flow2OptChosen .55s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
-      .vk-flow2-input::placeholder { color: #828a98; }
-      .vk-flow2-input-hint { font-size: 11.5px; color: #828a98; margin-top: 8px; letter-spacing: 0.02em; }
-
-      /* Tabela de opções */
-      .vk-flow2-table { margin-top: 20px; border: 1px solid rgba(0,0,0,0.10); border-radius: 10px; overflow: hidden; background: #fff; box-shadow: 0 1px 0 rgba(0,0,0,0.02), 0 12px 28px -16px rgba(0,0,0,0.10); }
-      .vk-flow2-table-head { display: flex; align-items: center; justify-content: space-between; padding: 9px 16px; background: #fafaf7; border-bottom: 1px solid rgba(0,0,0,0.06); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #828a98; font-weight: 500; }
-      /* No desktop, mostra "OPÇÕES" no header da tabela (a pergunta já aparece
-         no <h2> acima). A pergunta dentro do header é só pra mobile. */
-      .vk-flow2-table-head-question { display: none; }
-      .vk-flow2-row { display: grid; grid-template-columns: 32px 1fr 22px; align-items: center; gap: 14px; padding: 13px 16px; background: transparent; border: 0; border-bottom: 1px solid rgba(0,0,0,0.05); cursor: pointer; text-align: left; font-family: inherit; font-size: 14px; color: #111; transition: background .15s ease; animation: flow2OptIn .35s cubic-bezier(0.32, 0.72, 0, 1) both; width: 100%; }
-      .vk-flow2-row:last-child { border-bottom: 0; }
-      .vk-flow2-row:hover:not(:disabled) { background: #fafaf7; }
-      .vk-flow2-row.is-focused:not(:disabled) { background: #fafaf7; }
-      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-arrow,
-      .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-arrow { opacity: 1; transform: translateX(0); color: #111; }
-      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx,
-      .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-idx { color: #111; }
-      .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-text,
-      .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-text { font-weight: 700; }
-      .vk-flow2-row-idx { font-size: 10.5px; letter-spacing: 0.06em; color: #828a98; font-family: ui-monospace, "JetBrains Mono", monospace; font-weight: 500; transition: color .15s; }
-      .vk-flow2-row-text { font-weight: 500; letter-spacing: -0.005em; }
-      .vk-flow2-row-arrow { color: #828a98; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; display: inline-flex; justify-content: flex-end; }
-      .vk-flow2-row.is-chosen { background: #111; color: #fff; font-weight: 700; animation: flow2OptChosen .55s cubic-bezier(0.32, 0.72, 0, 1) forwards; }
-      .vk-flow2-row.is-chosen .vk-flow2-row-text { font-weight: 700; }
-      .vk-flow2-row.is-chosen .vk-flow2-row-idx { color: rgba(255,255,255,0.5); }
-      .vk-flow2-row.is-chosen .vk-flow2-row-arrow { color: #fff; opacity: 1; transform: translateX(0); }
-      .vk-flow2-row.is-fading { opacity: 0; height: 0; padding-top: 0; padding-bottom: 0; border-bottom-width: 0; overflow: hidden; transition: all .35s cubic-bezier(0.32, 0.72, 0, 1); }
-
-      /* ════════════════════════════════════════════════════════════════ */
-      /* MOBILE (< 768px) — orçamento responsivo                          */
-      /* ════════════════════════════════════════════════════════════════ */
-      @media (max-width: 767px) {
-        /* Bloqueia overflow horizontal global e força box-sizing border-box
-           em todos os elementos do orçamento (resolve width:100% + padding) */
-        html, body { overflow-x: hidden !important; max-width: 100vw !important; }
-        [data-vk-orc-wrap] { padding: 12px 14px 60px !important; max-width: 100vw !important; overflow-x: hidden !important; }
-        [data-vk-orc-wrap] *,
-        [data-vk-orc-wrap] *::before,
-        [data-vk-orc-wrap] *::after { box-sizing: border-box !important; }
-
-        /* Anti-tremida ao escolher opção em mobile: remove o stagger (delay
-           incremental por item) e a animação de entrada, que combinados com o
-           fade-out e mudança de altura geram um efeito visual estranho onde as
-           opções "somem uma a uma". No mobile fica tudo síncrono — escolheu,
-           todas as outras somem juntas suavemente, depois entra a próxima
-           pergunta. */
-        .vk-flow2-row { animation: none !important; animation-delay: 0ms !important; }
-        .vk-flow2-row.is-fading { transition: opacity .25s ease, height .25s ease, padding .25s ease !important; }
-        /* Em mobile, neutraliza :hover (que fica "pegajoso" em touch — o browser
-           mantém o estado do último elemento tocado, fazendo a primeira opção
-           do próximo card aparecer pré-destacada). Também neutraliza is-focused
-           (keyboard nav não faz sentido em mobile). Só is-chosen (opção que o
-           usuário tocou de fato) muda visual. */
-        .vk-flow2-row:hover:not(:disabled) { background: transparent !important; }
-        .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-text { font-weight: 500 !important; }
-        .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-arrow { opacity: 0 !important; transform: translateX(-4px) !important; }
-        .vk-flow2-row:hover:not(:disabled) .vk-flow2-row-idx { color: #828a98 !important; }
-        .vk-flow2-row.is-focused:not(:disabled) { background: transparent !important; }
-        .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-text { font-weight: 500 !important; }
-        .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-arrow { opacity: 0 !important; transform: translateX(-4px) !important; }
-        .vk-flow2-row.is-focused:not(:disabled) .vk-flow2-row-idx { color: #828a98 !important; }
-        /* Remove outline de focus (auto-focus do navegador no primeiro botão
-           pode marcar visualmente a primeira opção do novo card). */
-        .vk-flow2-row:focus,
-        .vk-flow2-row:focus-visible { outline: none !important; }
-
-        /* ── Toolbar (Arq/Eng/Marc/Imposto/Repetição) — chips horizontais (Layout C) ── */
-        /* Remove fundo bege, transforma toggles em chips ativo/inativo.
-           O switch redondo (primeiro <span> de cada label) é escondido e o label
-           inteiro vira um pill: preto+branco quando ativo, branco+borda cinza
-           quando inativo. Repetição mantém os botões ± mas sem o border-left. */
-        [data-vk-orc-toolbar] {
-          background: transparent !important;
-          border: 0 !important;
-          padding: 0 !important;
-          margin-bottom: 10px !important;
-          gap: 6px !important;
-          flex-wrap: wrap !important;
-          align-items: center !important;
-          max-width: 100% !important;
-        }
-        /* Esconde o switch (1º span dentro do label) — sobra só o texto, que vira chip */
-        [data-vk-orc-toolbar] > label > span:first-child { display: none !important; }
-        /* Label vira chip */
-        [data-vk-orc-toolbar] > label {
-          gap: 0 !important;
-          padding: 5px 11px !important;
-          border-radius: 999px !important;
-          border: 1px solid #d0d4db !important;
-          background: #fff !important;
-          font-size: 12px !important;
-          line-height: 1.2 !important;
-          transition: background .12s, border-color .12s, color .12s !important;
-        }
-        /* Texto do chip */
-        [data-vk-orc-toolbar] > label > span:nth-child(2) {
-          font-size: 12px !important;
-          font-weight: 500 !important;
-          color: #828a98 !important;
-        }
-        /* Marcador "+" ANTES do texto quando inativo */
-        [data-vk-orc-toolbar] > label > span:nth-child(2)::before {
-          content: "+ ";
-          font-weight: 500;
-        }
-        /* Estado ATIVO: o <span> do texto tem font-weight 600 quando o toggle está on.
-           Detecto via [style*="font-weight: 600"] no span, e estilizo o label pai. */
-        [data-vk-orc-toolbar] > label:has(> span:nth-child(2)[style*="font-weight: 600"]) {
-          background: #111 !important;
-          border-color: #111 !important;
-        }
-        [data-vk-orc-toolbar] > label:has(> span:nth-child(2)[style*="font-weight: 600"]) > span:nth-child(2) {
-          color: #fff !important;
-        }
-        /* Marcador "✓" no estado ativo (substitui o "+") */
-        [data-vk-orc-toolbar] > label:has(> span:nth-child(2)[style*="font-weight: 600"]) > span:nth-child(2)::before {
-          content: "✓ ";
-          font-weight: 600;
-        }
-        /* Div da alíquota (aparece quando Imposto ativo) — anula marginLeft:-8 do JSX
-           que causa sobreposição com o label do Imposto e bloqueia toques no input.
-           position:relative + z-index garante que o input fica acima de qualquer
-           elemento próximo e recebe os toques diretamente. */
-        [data-vk-orc-toolbar] > div:not([style*="border-left"]) {
-          margin-left: 0 !important;
-          padding: 0 !important;
-          gap: 4px !important;
-          position: relative !important;
-          z-index: 2 !important;
-        }
-        /* Input/span da alíquota: aumenta área de toque pra ficar fácil em mobile.
-           Default no JSX tem padding minúsculo (1px 4px), no mobile precisa de mais. */
-        [data-vk-orc-toolbar] > div:not([style*="border-left"]) input,
-        [data-vk-orc-toolbar] > div:not([style*="border-left"]) > span {
-          padding: 6px 10px !important;
-          font-size: 14px !important;
-          min-height: 32px !important;
-        }
-        /* Bloco de Repetição: remove border-left, vira chip-like inline */
-        [data-vk-orc-toolbar] > div[style*="border-left"] {
-          border-left: 0 !important;
-          padding: 4px 6px !important;
-          margin-left: 0 !important;
-          gap: 6px !important;
-          border: 1px solid #d0d4db !important;
-          border-radius: 999px !important;
-          background: #fff !important;
-        }
-        /* Apenas o label "Repetição" fica compacto (1º span direto) */
-        [data-vk-orc-toolbar] > div[style*="border-left"] > span:first-child {
-          font-size: 11px !important;
-          color: #828a98 !important;
-        }
-        /* Botões − e + (aumenta área de toque) */
-        [data-vk-orc-toolbar] > div[style*="border-left"] > button {
-          width: 28px !important;
-          height: 28px !important;
-          font-size: 16px !important;
-        }
-        /* Número clicável (vira chip de toque) e input quando editando.
-           Mais espaço pra digitar valores grandes (ex: 12, 25). */
-        [data-vk-orc-toolbar] > div[style*="border-left"] > span:not(:first-child),
-        [data-vk-orc-toolbar] > div[style*="border-left"] input {
-          font-size: 14px !important;
-          min-height: 28px !important;
-          min-width: 32px !important;
-          padding: 4px 8px !important;
-          text-align: center !important;
-        }
-        [data-vk-orc-toolbar] > div[style*="border-left"] input {
-          width: 56px !important;
-        }
-
-        /* ── Cabeçalho da identificação ── */
-        [data-vk-orc-id-header] { margin-bottom: 12px !important; max-width: 100% !important; }
-
-        /* ── Card de pergunta (área central) ── */
-        .vk-flow-shell { grid-template-columns: 1fr !important; gap: 12px !important; max-width: 100% !important; }
-        .vk-flow-stage { padding: 4px 0 12px 0 !important; }
-        .vk-trilha-rail { display: none !important; }
-        .vk-flow2-card { max-width: 100% !important; }
-        /* No mobile, esconde o título grande e a descrição abaixo da pergunta —
-           a pergunta vai aparecer dentro do header da tabela de opções
-           (substituindo o "OPÇÕES"). UI fica mais compacta no celular.
-           Aplica APENAS em etapas com tabela de opções (is-options); na etapa de
-           Referência, o título/hint continuam visíveis pq não há tabela. */
-        .vk-flow2-card.is-options .vk-flow2-title { display: none !important; }
-        .vk-flow2-card.is-options .vk-flow2-hint { display: none !important; }
-        .vk-flow2-input { box-sizing: border-box; max-width: 100% !important; padding: 12px 14px !important; }
-        .vk-flow2-table { margin-top: 14px !important; }
-        /* Mobile: header da tabela mostra a pergunta no lugar de "OPÇÕES" */
-        .vk-flow2-table-head-label { display: none !important; }
-        .vk-flow2-table-head-question {
-          display: inline-block !important;
-          flex: 1 1 auto !important;
-          min-width: 0 !important;
-          padding-right: 10px !important;
-          font-size: 15px !important;
-          letter-spacing: 0 !important;
-          text-transform: none !important;
-          color: #111 !important;
-          font-weight: 600 !important;
-          line-height: 1.3 !important;
-          white-space: nowrap !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-        }
-        /* Aumenta o padding do header pra acomodar a pergunta com ar visual.
-           Garante que o contador (irmão direito) não seja espremido nem ultrapasse
-           a borda direita do card. */
-        .vk-flow2-table-head { padding: 12px 14px !important; gap: 8px !important; }
-        .vk-flow2-table-head > span:last-child { flex-shrink: 0 !important; }
-        .vk-flow2-row { padding: 14px !important; gap: 10px !important; }
-        /* Reforça o colapso das opções não-escolhidas: sem isso, em mobile a
-           caixa fica com altura "fantasma" depois da escolha (espaço vazio). */
-        .vk-flow2-row.is-fading {
-          min-height: 0 !important;
-          max-height: 0 !important;
-          margin: 0 !important;
-        }
-
-        /* ── Trilha horizontal (Configuração) — grid 2 colunas, label/valor empilhados (Layout C) ── */
-        /* Visual mais clean: vira mini-cards com fundo cinza claro, sem pílula
-           arredondada. Label fica em cima (uppercase pequeno), valor embaixo
-           (negrito). 2 colunas. Última sozinha estica pra ocupar a linha. */
-        .vk-trilha-h {
-          display: grid !important;
-          grid-template-columns: 1fr 1fr !important;
-          gap: 6px !important;
-          padding: 0 !important;
-          margin-bottom: 14px !important;
-        }
-        .vk-trilha-h-sep { display: none !important; }
-        .vk-trilha-h-node {
-          flex-direction: column !important;
-          align-items: flex-start !important;
-          justify-content: center !important;
-          gap: 1px !important;
-          padding: 6px 10px !important;
-          border-radius: 6px !important;
-          border: 0 !important;
-          background: #f3f4f6 !important;
-          min-width: 0 !important;
-          text-align: left !important;
-        }
-        /* Última sozinha (caso ímpar) ocupa a linha toda */
-        .vk-trilha-h-node:last-child:nth-child(odd) {
-          grid-column: span 2;
-        }
-        .vk-trilha-h-dot { display: none !important; }
-        .vk-trilha-h-key {
-          font-size: 9px !important;
-          letter-spacing: 0.08em !important;
-          color: #828a98 !important;
-          font-weight: 600 !important;
-        }
-        .vk-trilha-h-val {
-          font-size: 13px !important;
-          font-weight: 600 !important;
-          color: #111 !important;
-          overflow: hidden !important;
-          text-overflow: ellipsis !important;
-          white-space: nowrap !important;
-          min-width: 0 !important;
-          width: 100% !important;
-          text-align: left !important;
-        }
-        .vk-trilha-h-caret { display: none !important; }
-
-        /* ── Cômodos + Resumo: 1 coluna empilhada ── */
-        /* Resumo Cálculo cola logo após os cômodos (gap 0).
-           Lista de cômodos termina e o resumo começa imediatamente — sem
-           espaço grande no meio. Padding-bottom do wrap reduzido pra
-           resumo+botão ficarem perto do fim da página, não enfiados lá embaixo. */
-        [data-vk-orc-wrap] { padding-bottom: 16px !important; }
-        [data-vk-orc-comodos-shell] {
-          grid-template-columns: 1fr !important;
-          gap: 0 !important;
-          max-width: 100% !important;
-        }
-        [data-vk-orc-resumo-col] {
-          position: static !important; top: auto !important;
-          margin-top: 8px !important;
-        }
-        /* Resumo Arq/Eng: valor + R$/m² quebram em coluna no mobile pra não apertar
-           quando o número é grande (ex: R$ 187.307,38 + R$ 27,70/m²). Alinhados à
-           direita pra manter a leitura padrão de "valor à direita". */
-        [data-vk-orc-resumo-col] [data-vk-resumo-vals] {
-          flex-direction: column !important;
-          align-items: flex-end !important;
-          gap: 2px !important;
-        }
-        [data-vk-orc-resumo-col] [data-vk-resumo-vals] > span {
-          white-space: nowrap !important;
-        }
-        [data-vk-orc-comodos-card] {
-          max-height: none !important;
-          overflow-y: visible !important;
-          padding: 4px 8px !important;
-        }
-        /* Header do grupo (Áreas Sociais, Serviço, etc) — em mobile, reduz gap
-           e padding pra caber label + Resetar + "X amb · Y m²" + chevron numa linha. */
-        [data-vk-grupo-header] {
-          gap: 6px !important;
-          padding: 5px 8px !important;
-        }
-        /* Botão Resetar mobile: mais compacto */
-        [data-vk-grupo-resetar] {
-          padding: 1px 6px !important;
-          font-size: 9px !important;
-        }
-      }
     `;
     document.head.appendChild(s);
   }, []);
 
   const C = {
-    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative", margin:0 },
+    wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative", maxWidth:1200, margin:"0 auto" },
     fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
     input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
+    dropWrap:   { position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:6 },
+    dropLbl:    { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center" },
+    dropBtn:    (open, hasVal) => ({ display:"flex", alignItems:"center", gap:6, background: hasVal&&!open?"#fff":"#fff", border:`1px solid ${open?"#111": hasVal?"#c0c5cf":"#333"}`, borderRadius:10, padding:"9px 14px", fontSize:11, color: null, cursor:"pointer", fontFamily:"inherit", minWidth:110, userSelect:"none", WebkitUserSelect:"none" }),
+    dropBtnTxt: (val) => ({ flex:1, textAlign:"center", color: val ? "#111" : "#828a98" }),
+    chevron:    (open) => ({ transition:"transform 0.15s", transform: open ? "rotate(180deg)" : "none", display:"flex", alignItems:"center" }),
+    dropPanel:  { position:"fixed", zIndex:9999, background:"#fff", border:"1px solid #333", borderRadius:10, boxShadow:"0 4px 16px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden" },
+    dropItem:   (sel) => ({ padding:"10px 16px", fontSize:14, cursor:"pointer", color:"#374151", background: sel ? "#eceef2" : "#fff", fontWeight: sel ? 600 : 400 }),
+    groupHdr:   { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12 },
+    sep:        { width:1, background:"#c8cdd6", alignSelf:"stretch", marginTop:22 },
     btnDefinir: { width:"100%", maxWidth:380, background:"#111", border:"1px solid #111", borderRadius:10, padding:"13px 0", fontSize:14, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
     aviso:      { fontSize:12, color:"#ef4444", textAlign:"center", marginTop:8 },
     comodoGrupoHdr: { fontSize:10, color:"#555e6b", textTransform:"uppercase", letterSpacing:1, marginBottom:8, marginTop:20, background:"#f0f1f4", border:"1px solid #b8bec8", borderRadius:6, padding:"6px 10px", display:"inline-block" },
@@ -6740,15 +7095,122 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     qtdBtn:     { width:26, height:26, borderRadius:6, border:"1px solid #888", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
     qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#828a98" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
-    resumoBox:  { background:"#fff", border:"1px solid #c8cdd6", borderRadius:10, padding:"16px 18px" },
-    resumoHdr:  { fontSize:11, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12, paddingBottom:10, borderBottom:"1px solid #e5e7eb" },
-    resumoSec:  { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
-    resumoVal:  { fontSize:19, fontWeight:700, color:"#111" },
-    resumoM2:   { fontSize:13, color:"#828a98", marginTop:2 },
+    resumoBox:  { background:"#fff", border:"1px solid #333", borderRadius:12, padding:"20px 20px" },
+    resumoHdr:  { fontSize:10, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:16, paddingBottom:12, borderBottom:"1px solid #b8bec8" },
+    resumoSec:  { fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
+    resumoVal:  { fontSize:18, fontWeight:700, color:"#111" },
+    resumoM2:   { fontSize:12, color:"#828a98", marginTop:2 },
     resumoLinha:{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:4 },
     resumoArea: { background:"#f0f1f4", border:"1px solid #c0c5cf", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" },
   };
 
+  function renderStep(id) {
+    const open = aberto === id;
+    const val  = VALS[id];
+    const lbl  = LABELS[id];
+    const btnRef = { current: null };
+    const hovered = hoverDrop === id;
+    const ativo = open || hovered;
+    return (
+      <div style={{ position:"relative" }} key={id}>
+        <button
+          ref={el => { btnRef.current = el; }}
+          data-drop-btn={id}
+          onMouseEnter={(e) => {
+            // Cancela qualquer fechamento pendente
+            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
+            setHoverDrop(id);
+            // Abre o dropdown automaticamente no hover
+            if (!open) {
+              const r = e.currentTarget.getBoundingClientRect();
+              setPanelPos({ top: r.bottom + 6, left: r.left });
+              setAberto(id);
+            }
+          }}
+          onMouseLeave={() => {
+            // Fecha com pequeno delay pra permitir mover o mouse pro painel
+            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
+            hoverCloseRef.current = setTimeout(() => {
+              setHoverDrop(null);
+              setAberto(null);
+            }, 120);
+          }}
+          style={{
+            ...C.dropBtn(open, !!val),
+            background: ativo ? "#eceef2" : (val ? "#f4f5f7" : "#fff"),
+          }}
+          onClick={(e) => {
+            // Tira o focus pra evitar highlight azul ao clicar
+            e.currentTarget.blur();
+            if (open) { setAberto(null); return; }
+            const r = e.currentTarget.getBoundingClientRect();
+            setPanelPos({ top: r.bottom + 6, left: r.left });
+            setAberto(id);
+          }}>
+          <span style={C.dropBtnTxt(val)}>
+            {val
+              ? <><span style={{ color:"#828a98", fontWeight:400 }}>{lbl}: </span><span style={{ fontWeight:600, color:"#111" }}>{val}</span></>
+              : <span style={{ color:"#828a98" }}>{lbl}</span>
+            }
+          </span>
+          <span style={C.chevron(open)}>
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
+              <path d="M2 4l4 4 4-4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </span>
+        </button>
+      </div>
+    );
+  }
+
+  // Renderiza um valor já escolhido como texto editável — hover reabre dropdown
+  function renderValor(id) {
+    const open = aberto === id;
+    const val  = VALS[id];
+    if (!val) return null;
+    const hovered = hoverDrop === id;
+    const ativo = open || hovered;
+    return (
+      <div style={{ position:"relative" }} key={id+"-valor"}>
+        <span
+          data-drop-btn={id}
+          onMouseEnter={(e) => {
+            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
+            setHoverDrop(id);
+            if (!open) {
+              const r = e.currentTarget.getBoundingClientRect();
+              setPanelPos({ top: r.bottom + 6, left: r.left });
+              setAberto(id);
+            }
+          }}
+          onMouseLeave={() => {
+            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
+            hoverCloseRef.current = setTimeout(() => {
+              setHoverDrop(null);
+              setAberto(null);
+            }, 120);
+          }}
+          onClick={(e) => {
+            if (open) { setAberto(null); return; }
+            const r = e.currentTarget.getBoundingClientRect();
+            setPanelPos({ top: r.bottom + 6, left: r.left });
+            setAberto(id);
+          }}
+          style={{
+            display:"inline-block",
+            fontSize:14, color:"#111", fontWeight:500,
+            cursor:"pointer", userSelect:"none", WebkitUserSelect:"none",
+            padding:"4px 10px", borderRadius:6,
+            background: ativo ? "#eceef2" : "transparent",
+            borderBottom: ativo ? "1px solid #c8cdd6" : "1px solid transparent",
+            transition: "background 0.2s ease, border-color 0.2s ease",
+            animation: "surgeHoriz 0.35s ease both",
+          }}>
+          {displayOpcao(id, val)}
+        </span>
+      </div>
+    );
+  }
 
   const GRUPO_DISPLAY = {
     "Por Loja":        "Loja",
@@ -6759,53 +7221,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   };
 
   const [gruposAbertos, setGruposAbertos] = useState({});
-  // Recolhe o card inteiro de cômodos (esconde headers e listas) — útil pra
-  // dar mais espaço ao resumo enquanto altera variáveis (toggles, configuração).
-  const [cardComodosRecolhido, setCardComodosRecolhido] = useState(false);
   // Cômodo com popup visível (via hover OU via click no input)
   const [comodoAberto, setComodoAberto] = useState(null);
-  // MOBILE: cômodo onde o seletor [input] 0 1 2 3 4 está exibido inline.
-  // null = comportamento default (primeiro da fila). Setado quando o usuário
-  // toca em qualquer outro cômodo da lista de disponíveis pra "pular" pra ele.
-  // Quando o cômodo sai de disponíveis (qty > 0), reseta pra null e o seletor
-  // volta a ser exibido no primeiro da fila (próximo na sequência natural).
-  const [comodoSelecionadoMobile, setComodoSelecionadoMobile] = useState(null);
-  // Reseta o cômodo selecionado mobile quando ele sai de disponíveis (qty > 0
-  // ou foi tocado/escolhido). O seletor migra automaticamente pro PRÓXIMO cômodo
-  // ABAIXO na sequência natural — independente de qual era o ativo, sempre vai
-  // pro de baixo. Implementação: como a lista flat preserva a ordem natural e o
-  // cômodo selecionado já foi removido dela, o item no mesmo índice antigo na
-  // nova lista É exatamente o próximo abaixo. Se o selecionado era o último,
-  // pega o último disponível.
-  const indiceAnteriorRef = useRef(null);
-  useEffect(() => {
-    // Captura o índice ANTIGO do cômodo selecionado, ANTES dele sair da lista.
-    if (comodoSelecionadoMobile && comodosFlatRef.current) {
-      const idx = comodosFlatRef.current.indexOf(comodoSelecionadoMobile);
-      if (idx >= 0) indiceAnteriorRef.current = idx;
-    }
-  }, [comodoSelecionadoMobile]);
-  useEffect(() => {
-    if (!comodoSelecionadoMobile) return;
-    const saiuDeDisponiveis = (qtds[comodoSelecionadoMobile] || 0) > 0
-      || comodosTocados.has(comodoSelecionadoMobile);
-    if (!saiuDeDisponiveis) return;
-    // Saiu de disponíveis. Pega o próximo na sequência (mesmo índice na lista nova).
-    const flat = comodosFlatRef.current || [];
-    const idx = indiceAnteriorRef.current;
-    if (flat.length === 0 || idx === null) {
-      setComodoSelecionadoMobile(null);
-      return;
-    }
-    const proximo = flat[idx] || flat[flat.length - 1] || null;
-    setComodoSelecionadoMobile(proximo);
-    indiceAnteriorRef.current = null;
-  }, [qtds, comodosTocados, comodoSelecionadoMobile]);
-  // Navegação por teclado: índice da quantidade (0-6) destacada visualmente.
-  // Não confirma sozinho — só Enter confirma. Tab também navega mas não confirma.
-  const [comodoQtdFocada, setComodoQtdFocada] = useState(null);
-  // Ref atualizada a cada render: lista plana de cômodos disponíveis em ordem (todos os grupos)
-  const comodosFlatRef = useRef([]);
   // Quando true, o popup está "travado" pelo clique no input:
   // - mouseLeave não fecha
   // - hover em outros cômodos é ignorado
@@ -6902,216 +7319,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       if (v === 0) delete next[nome]; else next[nome] = v;
       return next;
     });
-    // Marca como "tocado": permanece em escolhidos mesmo com qty=0
-    setComodosTocados(prev => {
-      const next = new Set(prev);
-      next.add(nome);
-      return next;
-    });
   }
-
-  // Remove totalmente: zera qty E tira de comodosTocados (volta pra disponíveis)
-  function removerComodo(nome) {
-    setQtds(prev => {
-      const next = { ...prev };
-      delete next[nome];
-      return next;
-    });
-    setComodosTocados(prev => {
-      const next = new Set(prev);
-      next.delete(nome);
-      return next;
-    });
-  }
-
-  // ── Navegação por teclado nos cômodos (setas + Tab + Enter) ──
-  // Refs pra ler valores mais recentes nos handlers
-  const comodoAbertoRef = useRef(null);
-  const comodoQtdFocadaRef = useRef(null);
-  const trilhaHPopRef = useRef(null);
-  useEffect(() => { comodoAbertoRef.current = comodoAberto; }, [comodoAberto]);
-  useEffect(() => { comodoQtdFocadaRef.current = comodoQtdFocada; }, [comodoQtdFocada]);
-  useEffect(() => { trilhaHPopRef.current = trilhaHPop; }, [trilhaHPop]);
-
-  // Computa se está na fase de cômodos (perguntas concluídas)
-  // Memoizado pra não recriar handler a cada render
-  useEffect(() => {
-    const ordem = ["referencia", "tipoObra", "tipoProjeto"];
-    if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
-    const VALS_EXT = { referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho };
-    const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-    const concluido = !proximaPendente && !etapaEditando;
-    if (!concluido || !configAtual) return;
-
-    // Sequência de navegação: 0,1,2,3,4,5,6,"input"
-    const SEQ = [0, 1, 2, 3, 4, 5, 6, "input"];
-
-    // Helper: scrollar pra que o cômodo fique visível
-    const scrollComodoEmFoco = (nome) => {
-      setTimeout(() => {
-        const el = document.querySelector(`[data-comodo-nome="${nome}"]`);
-        if (el && typeof el.scrollIntoView === "function") {
-          el.scrollIntoView({ block: "nearest", behavior: "smooth" });
-        }
-      }, 0);
-    };
-
-    const handler = (e) => {
-      const tag = (document.activeElement?.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-
-      // Não roda se popover da trilha horizontal está aberto (ele tem prioridade)
-      if (trilhaHPopRef.current) return;
-
-      const flat = comodosFlatRef.current;
-      if (!flat || flat.length === 0) return;
-
-      const aberto = comodoAbertoRef.current;
-      const qtdIdx = comodoQtdFocadaRef.current;
-      const idxAberto = aberto ? flat.indexOf(aberto) : -1;
-
-      // ── ↓ ──
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        if (idxAberto === -1) {
-          setComodoAberto(flat[0]);
-          setComodoQtdFocada(1);
-          scrollComodoEmFoco(flat[0]);
-        } else {
-          const proximo = flat[Math.min(idxAberto + 1, flat.length - 1)];
-          setComodoAberto(proximo);
-          setComodoQtdFocada(1);
-          scrollComodoEmFoco(proximo);
-        }
-        return;
-      }
-
-      // ── ↑ ──
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        if (idxAberto === -1) {
-          setComodoAberto(flat[0]);
-          setComodoQtdFocada(1);
-          scrollComodoEmFoco(flat[0]);
-        } else {
-          const anterior = flat[Math.max(idxAberto - 1, 0)];
-          setComodoAberto(anterior);
-          setComodoQtdFocada(1);
-          scrollComodoEmFoco(anterior);
-        }
-        return;
-      }
-
-      // Demais: precisam de cômodo aberto
-      if (!aberto) return;
-
-      // ── ← / → ── (entre 0,1,2,3,4,5,6,"input" — wrap)
-      if (e.key === "ArrowLeft") {
-        e.preventDefault();
-        setComodoQtdFocada(prev => {
-          if (prev === null) return SEQ[SEQ.length - 1];
-          const i = SEQ.indexOf(prev);
-          return SEQ[(i - 1 + SEQ.length) % SEQ.length];
-        });
-        return;
-      }
-      if (e.key === "ArrowRight") {
-        e.preventDefault();
-        setComodoQtdFocada(prev => {
-          if (prev === null) return SEQ[0];
-          const i = SEQ.indexOf(prev);
-          return SEQ[(i + 1) % SEQ.length];
-        });
-        return;
-      }
-
-      // ── Tab ──
-      // Navega entre números do mesmo cômodo. Se chega no fim do último cômodo,
-      // não faz preventDefault → navegador segue o foco natural pra próxima coisa da página.
-      if (e.key === "Tab" && !e.shiftKey) {
-        const i = qtdIdx === null ? -1 : SEQ.indexOf(qtdIdx);
-        if (i < SEQ.length - 1) {
-          // Vai pro próximo da sequência (incluindo "input")
-          e.preventDefault();
-          setComodoQtdFocada(SEQ[i + 1]);
-        } else {
-          // Está no "input" do cômodo atual → vai pro "0" do próximo cômodo
-          if (idxAberto < flat.length - 1) {
-            e.preventDefault();
-            setComodoAberto(flat[idxAberto + 1]);
-            setComodoQtdFocada(0);
-            scrollComodoEmFoco(flat[idxAberto + 1]);
-          }
-          // Senão (último cômodo + input): NÃO preventDefault → Tab natural sai da página
-          else {
-            setComodoAberto(null);
-            setComodoQtdFocada(null);
-          }
-        }
-        return;
-      }
-      if (e.key === "Tab" && e.shiftKey) {
-        const i = qtdIdx === null ? SEQ.length : SEQ.indexOf(qtdIdx);
-        if (i > 0) {
-          e.preventDefault();
-          setComodoQtdFocada(SEQ[i - 1]);
-        } else {
-          // Está no "0" do cômodo atual → vai pro "input" do cômodo de cima
-          if (idxAberto > 0) {
-            e.preventDefault();
-            setComodoAberto(flat[idxAberto - 1]);
-            setComodoQtdFocada("input");
-            scrollComodoEmFoco(flat[idxAberto - 1]);
-          }
-          // Senão (primeiro cômodo + 0): NÃO preventDefault → Shift+Tab natural sobe
-          else {
-            setComodoAberto(null);
-            setComodoQtdFocada(null);
-          }
-        }
-        return;
-      }
-
-      // ── Enter ──
-      // No "input": só sai do modo teclado (não confirma nada).
-      // Em número: aplica a quantidade focada e foca o "1" do próximo cômodo.
-      if (e.key === "Enter") {
-        if (qtdIdx === "input" || qtdIdx === null) {
-          // Não confirma nada
-          return;
-        }
-        e.preventDefault();
-        setQtdAbs(aberto, qtdIdx);
-        setTimeout(() => {
-          const novaFlat = comodosFlatRef.current;
-          if (!novaFlat || novaFlat.length === 0) {
-            setComodoAberto(null);
-            setComodoQtdFocada(null);
-            return;
-          }
-          // O cômodo aplicado (qtdIdx 0 ou >0) sempre vira "tocado" e sai da lista de disponíveis.
-          // Pegamos o próximo da lista atual na mesma posição.
-          const novoIdx = Math.min(idxAberto, novaFlat.length - 1);
-          const proximo = novaFlat[novoIdx];
-          setComodoAberto(proximo);
-          setComodoQtdFocada(1);
-          scrollComodoEmFoco(proximo);
-        }, 0);
-        return;
-      }
-
-      // ── Esc ──
-      if (e.key === "Escape") {
-        setComodoAberto(null);
-        setComodoQtdFocada(null);
-        return;
-      }
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [referencia, tipoObra, tipoProjeto, padrao, tipologia, tamanho, etapaEditando, isComercial, configAtual]);
-
 
   function getArea(nome) {
     if (!configAtual) return 0;
@@ -7259,7 +7467,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }
 
   return (
-    <div style={C.wrap} ref={wrapRef} data-vk-orc-wrap>
+    <div style={C.wrap} ref={wrapRef}>
 
       {/* ── Botão Voltar ── */}
       <div style={{ marginBottom:16 }}>
@@ -7270,525 +7478,121 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       </div>
 
       {/* ── Identificação ── */}
-      <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:18, maxWidth:600 }} data-vk-orc-id-header>
-        <div style={{ fontSize:21, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
-        {/* Referência editável inline abaixo do nome — só aparece após preencher na primeira pergunta */}
-        {referencia && (
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            {editandoRefInline ? (
-              <input
-                autoFocus
-                type="text"
-                value={referenciaTemp}
-                onChange={e => setReferenciaTemp(e.target.value)}
-                onKeyDown={e => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    if (referenciaTemp.trim()) {
-                      setReferencia(referenciaTemp.trim());
-                      setEditandoRefInline(false);
-                    }
-                  } else if (e.key === "Escape") {
-                    setReferenciaTemp(referencia);
-                    setEditandoRefInline(false);
-                  }
-                }}
-                onBlur={() => {
-                  if (referenciaTemp.trim()) {
-                    setReferencia(referenciaTemp.trim());
-                  } else {
-                    setReferenciaTemp(referencia);
-                  }
-                  setEditandoRefInline(false);
-                }}
-                style={{
-                  fontSize:14.5, fontWeight:500, color:"#111",
-                  border:"1px solid #c8cdd6", borderRadius:6,
-                  padding:"4px 10px", outline:"none", fontFamily:"inherit",
-                  minWidth:280, background:"#fff",
-                }}
-              />
-            ) : (
-              <span
-                onClick={() => { setReferenciaTemp(referencia); setEditandoRefInline(true); }}
-                style={{
-                  fontSize:14.5, fontWeight:500, color:"#374151",
-                  cursor:"pointer", padding:"4px 10px", borderRadius:6,
-                  border:"1px solid transparent",
-                  transition:"background 0.15s, border-color 0.15s",
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background="#f4f5f7"; e.currentTarget.style.borderColor="#e5e7eb"; }}
-                onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="transparent"; }}
-                title="Clique para editar">
-                {referencia}
-              </span>
-            )}
-          </div>
-        )}
+      <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:32 }}>
+        <div>
+          <div style={{ fontSize:20, fontWeight:700, color:"#111", padding:"4px 0" }}>{clienteNome || "—"}</div>
+        </div>
+        <div>
+          <span style={C.fieldLabel}>Referência</span>
+          <input style={C.input} placeholder="Nome do projeto, endereço ou bairro"
+            value={referencia} onChange={e => setReferencia(e.target.value)} />
+        </div>
       </div>
 
-      {/* ── Barra de toggles (Arq/Eng/Marc + Imposto + Repetição) — sempre visível ── */}
-      <div data-vk-orc-toolbar style={{
-        display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
-        padding:"12px 16px", marginBottom:16, maxWidth:1100,
-        background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
-      }}>
-        {[
-          { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
-          { key:"incluiEng",        val:incluiEng,        set:setIncluiEng,        label:"Engenharia"   },
-          { key:"incluiMarcenaria", val:incluiMarcenaria, set:setIncluiMarcenaria, label:"Marcenaria"   },
-        ].map(({ key, val, set, label }) => (
-          <label key={key} onClick={() => set(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
-            <span style={{
-              position:"relative", display:"inline-block",
-              width:36, height:20, borderRadius:10, flexShrink:0,
-              background: val ? "#111" : "#d1d5db",
-              transition:"background 0.2s",
-              cursor:"pointer",
-            }}>
-              <span style={{
-                position:"absolute", top:3, left: val ? 19 : 3,
-                width:14, height:14, borderRadius:"50%",
-                background:"#fff",
-                transition:"left 0.2s",
-                boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
-              }} />
-            </span>
-            <span style={{ fontSize:14, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
-              {label}
-            </span>
-          </label>
-        ))}
-
-        {/* Toggle Imposto + input de alíquota (só quando ligado) */}
-        <label onClick={() => setTemImposto(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
-          <span style={{
-            position:"relative", display:"inline-block",
-            width:36, height:20, borderRadius:10, flexShrink:0,
-            background: temImposto ? "#111" : "#d1d5db",
-            transition:"background 0.2s",
-            cursor:"pointer",
-          }}>
-            <span style={{
-              position:"absolute", top:3, left: temImposto ? 19 : 3,
-              width:14, height:14, borderRadius:"50%",
-              background:"#fff",
-              transition:"left 0.2s",
-              boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
-            }} />
-          </span>
-          <span style={{ fontSize:14, color: temImposto ? "#111" : "#828a98", fontWeight: temImposto ? 600 : 400, transition:"color 0.2s" }}>
-            Imposto
-          </span>
-        </label>
-        {temImposto && (
-          <div style={{ display:"flex", alignItems:"center", gap:0, marginLeft:-8 }}>
-            {editandoAliq ? (
-              <input
-                ref={el => {
-                  if (el) {
-                    // Foco explícito: autoFocus no iOS Safari pode falhar quando o
-                    // elemento entra condicionalmente no DOM, fazendo o foco "vazar"
-                    // pra outros inputs visíveis (ex: input de Referência abaixo).
-                    el.focus();
-                    try { el.select(); } catch {}
-                  }
-                }}
-                type="number" min="0" max="100" step="0.5"
-                defaultValue={aliqImp}
-                onBlur={e => { const v = parseFloat(e.target.value)||0; setAliqImp(Math.max(0, Math.min(100, v))); setEditandoAliq(false); }}
-                onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseFloat(e.target.value)||0; setAliqImp(Math.max(0, Math.min(100, v))); setEditandoAliq(false); } }}
-                className="no-spin"
-                style={{ width:48, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
-              />
-            ) : (
-              <span
-                onClick={() => setEditandoAliq(true)}
-                title="Clique para editar"
-                style={{
-                  fontSize:13, fontWeight:700, color:"#111",
-                  padding:"3px 8px", border:"1px solid #d0d4db", borderRadius:5,
-                  background:"#fff", cursor:"text",
-                }}>
-                {aliqImp}%
-              </span>
-            )}
-          </div>
-        )}
-
-        {tipoProjeto !== "Conj. Comercial" && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"1px solid #e5e7eb" }}>
-            <span style={{ fontSize:14, color:"#828a98" }}>Repetição</span>
-            <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
-              onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
-            {editandoRep ? (
-              <input
-                ref={el => {
-                  if (el) {
-                    el.focus();
-                    try { el.select(); } catch {}
-                  }
-                }}
-                type="number" min="0"
-                defaultValue={qtdRep}
-                onBlur={e => { const v = parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); }}
-                onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); } }}
-                className="no-spin"
-                style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
-              />
-            ) : (
-              <span
-                onClick={() => setEditandoRep(true)}
-                title="Clique para digitar"
-                style={{ fontSize:13, fontWeight: qtdRep > 0 ? 700 : 400, minWidth:16, textAlign:"center", color: qtdRep > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
-                {qtdRep}
-              </span>
-            )}
-            <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
-              onClick={() => setQtdRep(n => n + 1)}>+</button>
-          </div>
-        )}
-      </div>
-
-      {/* ── Fluxo sequencial: shell 2 colunas, card central + trilha lateral direita ── */}
+      {/* ── Fluxo sequencial de parâmetros (horizontal: botão ativo à esquerda + valores editáveis à direita) ── */}
       {(() => {
-        // Etapas em ordem. Referência é a 1ª. Tipologia/padrão/tamanho só se !isComercial.
-        const ordem = ["referencia", "tipoObra", "tipoProjeto"];
+        // Determina qual é a próxima etapa pendente (ordem: tipoObra → tipoProjeto → padrao → tipologia → tamanho)
+        // Pula etapas condicionais (padrao/tipologia/tamanho só se !isComercial)
+        const ordem = ["tipoObra", "tipoProjeto"];
         if (!isComercial) ordem.push("padrao", "tipologia", "tamanho");
-
-        // VALS expandido inclui referência
-        const VALS_EXT = { referencia, ...VALS };
-
-        // Etapa atual: a primeira sem valor, OU a etapa que o usuário clicou pra editar
-        const proximaPendente = ordem.find(k => !VALS_EXT[k]);
-        const etapaAtual = etapaEditando || proximaPendente;
-        const concluido = !proximaPendente && !etapaEditando;
-        const stepIdx = etapaAtual ? ordem.indexOf(etapaAtual) : ordem.length;
-
-        // Labels e hints
-        const LABELS_EXT = { referencia: "Referência", ...LABELS };
-        const TITLES = {
-          referencia:  "Dê uma referência a esse projeto",
-          tipoObra:    "Construção nova ou reforma?",
-          tipoProjeto: "Qual o tipo de projeto?",
-          padrao:      "Qual o padrão construtivo?",
-          tipologia:   "Qual a tipologia?",
-          tamanho:     "Qual o tamanho dos ambientes?",
-        };
-        const HINTS = {
-          referencia:  "Ex: nome da casa, endereço ou bairro.",
-          tipoObra:    "Define se é construção nova ou reforma de algo existente.",
-          tipoProjeto: "Cada tipo destrava um conjunto diferente de cômodos e variáveis.",
-          padrao:      "Define o índice de preço base do projeto.",
-          tipologia:   "Térreo (1 pavimento) ou sobrado (2+ pavimentos).",
-          tamanho:     "Define as medidas-padrão de cada cômodo.",
-        };
-
-        // Se já concluiu todas as etapas, renderiza só a trilha horizontal compacta
-        // (referência fica editável só pelo texto inline abaixo do nome do cliente)
-        if (concluido) {
-          // Remove "referencia" da trilha horizontal
-          const ordemH = ordem.filter(k => k !== "referencia");
-          return (
-            <div className="vk-trilha-h" style={{ maxWidth: 1100 }}>
-              {ordemH.flatMap((k, i) => {
-                const val = VALS_EXT[k];
-                const isOpen = trilhaHPop?.key === k;
-                const items = [
-                  <button
-                    key={k}
-                    type="button"
-                    className={"vk-trilha-h-node" + (isOpen ? " is-open" : "")}
-                    data-tk={k}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (isOpen) { setTrilhaHPop(null); return; }
-                      const r = e.currentTarget.getBoundingClientRect();
-                      setTrilhaHPop({ key: k, top: r.bottom + 6, left: r.left });
-                    }}
-                    title={`Editar ${LABELS_EXT[k]}`}>
-                    <span className="vk-trilha-h-dot"></span>
-                    <span className="vk-trilha-h-key">{LABELS_EXT[k]}</span>
-                    <span className="vk-trilha-h-val">{displayOpcao(k, val)}</span>
-                    <span className="vk-trilha-h-caret">▾</span>
-                  </button>
-                ];
-                if (i < ordemH.length - 1) {
-                  items.push(<span key={k + "-sep"} className="vk-trilha-h-sep"></span>);
-                }
-                return items;
-              })}
-            </div>
-          );
-        }
-
+        const proxima = ordem.find(k => !VALS[k]);
+        const concluido = !proxima;
         return (
-          <div className="vk-flow-shell">
-            {/* ─── ÁREA CENTRAL ─── */}
-            <div className="vk-flow-stage">
-              {etapaAtual && (
-                <div className={"vk-flow2-card" + (etapaAtual !== "referencia" ? " is-options" : "")} key={"card-" + etapaAtual + "-" + opcaoEscolhida}>
-                  <div className="vk-flow2-progress">
-                    PERGUNTA {String(stepIdx + 1).padStart(2, "0")} / {String(ordem.length).padStart(2, "0")}
-                  </div>
-                  <h2 className="vk-flow2-title">{TITLES[etapaAtual]}</h2>
-                  <p className="vk-flow2-hint">{HINTS[etapaAtual]}</p>
-
-                  {/* Input texto para "referencia" */}
-                  {etapaAtual === "referencia" ? (
-                    <div className="vk-flow2-input-wrap">
-                      <input
-                        ref={el => {
-                          if (el) {
-                            // Foca apenas na primeira vez que o input monta nesta etapa,
-                            // E SOMENTE no desktop. No mobile, auto-focus é confuso (teclado
-                            // abre sem o usuário pedir) e pior, rouba o foco quando o
-                            // usuário toca em outros campos editáveis (alíquota, repetição).
-                            // No mobile o usuário simplesmente toca no input pra editar.
-                            if (!isMobileOrc && !opcaoEscolhida && !referenciaInputFocadoRef.current) {
-                              referenciaInputFocadoRef.current = true;
-                              setTimeout(() => { try { el.focus(); } catch {} }, 50);
-                            }
-                          } else {
-                            referenciaInputFocadoRef.current = false;
-                          }
-                        }}
-                        className={"vk-flow2-input" + (opcaoEscolhida ? " is-chosen" : "")}
-                        type="text"
-                        placeholder="Ex: Casa de Praia, Residência Padovan, Bairro Vila Nova..."
-                        value={referenciaTemp}
-                        onChange={e => setReferenciaTemp(e.target.value)}
-                        disabled={!!opcaoEscolhida}
-                        onKeyDown={e => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            confirmarReferencia();
-                          } else if (e.key === "Escape") {
-                            setReferenciaTemp(referencia);
-                            setEtapaEditando(null);
-                          }
-                        }}
-                        onBlur={() => {
-                          // Só confirma no blur se tem conteúdo (referência é obrigatória)
-                          if (referenciaTemp.trim() && !opcaoEscolhida) {
-                            confirmarReferencia();
-                          }
-                        }}
-                      />
-                      <div className="vk-flow2-input-hint">
-                        Pressione <strong>Enter</strong> para confirmar ou clique fora do campo.
-                      </div>
-                    </div>
-                  ) : (
-                    /* Tabela de opções */
-                    <div className="vk-flow2-table">
-                      <div className="vk-flow2-table-head">
-                        {/* No mobile, mostra a pergunta aqui (substitui o "OPÇÕES")
-                            já que o título grande acima é escondido. No desktop,
-                            mostra "OPÇÕES" como sempre, e a pergunta fica no h2 acima. */}
-                        <span className="vk-flow2-table-head-label">OPÇÕES</span>
-                        <span className="vk-flow2-table-head-question">{TITLES[etapaAtual]}</span>
-                        <span>{(OPCOES[etapaAtual] || []).length}</span>
-                      </div>
-                      {(OPCOES[etapaAtual] || []).map((op, i) => {
-                        const isChosen = opcaoEscolhida === op;
-                        const isFading = !!opcaoEscolhida && !isChosen;
-                        const isFocused = opcaoFocada === i && !opcaoEscolhida;
-                        let cls = "vk-flow2-row";
-                        if (isChosen) cls += " is-chosen";
-                        if (isFading) cls += " is-fading";
-                        if (isFocused) cls += " is-focused";
-                        return (
-                          <button
-                            key={op}
-                            className={cls}
-                            style={{ animationDelay: `${i * 50}ms` }}
-                            disabled={!!opcaoEscolhida}
-                            onClick={() => {
-                              if (opcaoEscolhida) return;
-                              setOpcaoEscolhida(op);
-                              setTimeout(() => {
-                                SETS[etapaAtual](op);
-                                setEtapaEditando(null);
-                                setOpcaoEscolhida(null);
-                              }, 450);
-                            }}>
-                            <span className="vk-flow2-row-idx">{String(i + 1).padStart(2, "0")}</span>
-                            <span className="vk-flow2-row-text">{displayOpcao(etapaAtual, op)}</span>
-                            <span className="vk-flow2-row-arrow">→</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* ─── TRILHA VERTICAL LATERAL DIREITA ─── */}
-            <aside className="vk-trilha-rail">
-              <div className="vk-trilha-rail-title">Definições do projeto</div>
-              <div className="vk-trilha-list">
-                <div className="vk-trilha-line"></div>
-                {ordem.map((k, i) => {
-                  const val = VALS_EXT[k];
-                  const isActive = etapaAtual === k;
-                  const isDone = !!val && !isActive;
-                  const isFuture = !val && !isActive;
-                  let dotCls = "vk-trilha-dot";
-                  if (isActive) dotCls += " vk-trilha-dot-active";
-                  else if (isFuture) dotCls += " vk-trilha-dot-future";
-
-                  return (
-                    <div
-                      key={k}
-                      className={"vk-trilha-node" + (isDone ? " is-done" : "") + (isFuture ? " vk-trilha-node-future" : "")}
-                      onClick={() => {
-                        if (!isDone) return;
-                        if (k === "referencia") setReferenciaTemp(referencia);
-                        setEtapaEditando(etapaEditando === k ? null : k);
-                      }}
-                      style={{ animationDelay: `${i * 60}ms` }}>
-                      <span className={dotCls}></span>
-                      <div className="vk-trilha-text">
-                        <span className="vk-trilha-key">{LABELS_EXT[k]}</span>
-                        <span className={val ? "vk-trilha-val" : "vk-trilha-val-pending"}>
-                          {val ? displayOpcao(k, val) : (isActive ? "aguardando..." : "—")}
-                          {isDone && <span className="vk-trilha-caret">▾</span>}
-                        </span>
-                      </div>
-
-                      {/* Popover de edição inline (lado esquerdo do nó) */}
-                      {etapaEditando === k && k !== "referencia" && (
-                        <div className="vk-trilha-edit" onClick={e => e.stopPropagation()}>
-                          <div className="vk-trilha-edit-head">EDITAR · {LABELS_EXT[k]}</div>
-                          {(OPCOES[k] || []).map(op => (
-                            <button
-                              key={op}
-                              className={"vk-trilha-edit-row" + (val === op ? " is-selected" : "")}
-                              onClick={() => {
-                                SETS[k](op);
-                                setEtapaEditando(null);
-                              }}>
-                              <span className="vk-trilha-edit-bullet"></span>
-                              <span style={{ flex:1, fontWeight:500 }}>{displayOpcao(k, op)}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                      {/* Popover de edição da Referência (input texto) */}
-                      {etapaEditando === k && k === "referencia" && (
-                        <div className="vk-trilha-edit" onClick={e => e.stopPropagation()}>
-                          <div className="vk-trilha-edit-head">EDITAR · REFERÊNCIA</div>
-                          <input
-                            className="vk-trilha-edit-input"
-                            autoFocus
-                            type="text"
-                            value={referenciaTemp}
-                            onChange={e => setReferenciaTemp(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === "Enter") {
-                                e.preventDefault();
-                                if (referenciaTemp.trim()) {
-                                  setReferencia(referenciaTemp.trim());
-                                  setEtapaEditando(null);
-                                }
-                              } else if (e.key === "Escape") {
-                                setReferenciaTemp(referencia);
-                                setEtapaEditando(null);
-                              }
-                            }}
-                          />
-                          <div className="vk-trilha-edit-actions">
-                            <button className="vk-trilha-edit-btn" onClick={() => { setReferenciaTemp(referencia); setEtapaEditando(null); }}>Cancelar</button>
-                            <button className="vk-trilha-edit-btn vk-trilha-edit-btn-primary"
-                              onClick={() => {
-                                if (referenciaTemp.trim()) {
-                                  setReferencia(referenciaTemp.trim());
-                                  setEtapaEditando(null);
-                                }
-                              }}>Salvar</button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+          <div style={{ display:"flex", alignItems:"center", gap:18, flexWrap:"wrap", minHeight:42 }}>
+            {/* Botão ativo à esquerda (ou "Concluído" quando tudo preenchido) */}
+            {proxima ? renderStep(proxima) : (
+              <div style={{
+                display:"inline-flex", alignItems:"center",
+                padding:"9px 18px", border:"1px solid #c0c5cf", borderRadius:10,
+                fontSize:11, background:"#f4f5f7", color:"#828a98",
+                minWidth:110, justifyContent:"center", userSelect:"none",
+              }}>
+                Concluído ✓
               </div>
-            </aside>
+            )}
+            {/* Valores escolhidos em ordem — cada um editável via hover */}
+            {ordem.map(k => VALS[k] ? renderValor(k) : null)}
           </div>
         );
       })()}
 
-
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
-        <div data-vk-orc-comodos-shell style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 400px", gap:32, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
-          marginTop:0,
-          maxWidth:1100,
+          marginTop:32,
         }}>
 
-          <div data-vk-orc-comodos-card style={{
-            background:"#fff",
-            border:"1px solid #e5e7eb",
-            borderRadius:10,
-            maxHeight: cardComodosRecolhido ? "none" : 560,
-            overflowY: cardComodosRecolhido ? "visible" : "auto",
-            padding:"4px 12px",
-          }}>
-            {/* Header com setinha pra recolher/expandir TODO o card de cômodos.
-                Aparece sempre que a seção de cômodos está visível, mesmo sem
-                quantidade preenchida. Permite esconder a lista inteira (headers +
-                cômodos) e focar nas variáveis e no resumo, sem precisar rolar. */}
-            <button
-                type="button"
-                onClick={() => setCardComodosRecolhido(v => !v)}
-                title={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
-                aria-label={cardComodosRecolhido ? "Mostrar cômodos" : "Esconder cômodos"}
-                style={{
-                  display:"flex", alignItems:"center", justifyContent:"space-between",
-                  width:"100%", padding:"8px 4px",
-                  background:"transparent", border:"none",
-                  cursor:"pointer", fontFamily:"inherit",
-                  borderBottom: cardComodosRecolhido ? "none" : "1px solid #f4f5f7",
-                  marginBottom: cardComodosRecolhido ? 0 : 4,
-                }}>
-                <span style={{ fontSize:11, fontWeight:600, color:"#828a98", textTransform:"uppercase", letterSpacing:"0.08em" }}>
-                  Cômodos
-                </span>
-                <svg width="14" height="14" viewBox="0 0 12 12" fill="none"
-                  style={{ transform: cardComodosRecolhido ? "rotate(180deg)" : "rotate(0)", transition:"transform 0.2s", flexShrink:0 }}>
-                  <path d="M2 8l4-4 4 4" stroke="#828a98" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
+          <div>
+            {/* Toggles de serviços */}
+            <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginBottom:12, alignItems:"center" }}>
+              {[
+                { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
+                { key:"incluiEng",        val:incluiEng,        set:setIncluiEng,        label:"Engenharia"   },
+                { key:"incluiMarcenaria", val:incluiMarcenaria, set:setIncluiMarcenaria, label:"Marcenaria"   },
+              ].map(({ key, val, set, label }) => (
+                <label key={key} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
+                  <span onClick={() => set(v => !v)} style={{
+                    position:"relative", display:"inline-block",
+                    width:36, height:20, borderRadius:10, flexShrink:0,
+                    background: val ? "#111" : "#d1d5db",
+                    transition:"background 0.2s",
+                    cursor:"pointer",
+                  }}>
+                    <span style={{
+                      position:"absolute", top:3, left: val ? 19 : 3,
+                      width:14, height:14, borderRadius:"50%",
+                      background:"#fff",
+                      transition:"left 0.2s",
+                      boxShadow:"0 1px 3px rgba(0,0,0,0.2)",
+                    }} />
+                  </span>
+                  <span style={{ fontSize:13, color: val ? "#111" : "#828a98", fontWeight: val ? 600 : 400, transition:"color 0.2s" }}>
+                    {label}
+                  </span>
+                </label>
+              ))}
+              {tipoProjeto !== "Conj. Comercial" && (
+                <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:8, borderLeft:"1px solid #e5e7eb" }}>
+                  <span style={{ fontSize:13, color:"#828a98" }}>Repetição</span>
+                  <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+                    onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
+                  {editandoRep ? (
+                    <input
+                      autoFocus
+                      type="number" min="0"
+                      defaultValue={qtdRep}
+                      onBlur={e => { const v = parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); }}
+                      onKeyDown={e => { if(e.key==="Enter"||e.key==="Escape"){ const v=parseInt(e.target.value)||0; setQtdRep(Math.max(0,v)); setEditandoRep(false); } }}
+                      className="no-spin"
+                      style={{ width:36, textAlign:"center", fontSize:13, fontWeight:600, border:"1px solid #333", borderRadius:5, padding:"1px 4px", outline:"none", fontFamily:"inherit", MozAppearance:"textfield" }}
+                    />
+                  ) : (
+                    <span
+                      onClick={() => setEditandoRep(true)}
+                      title="Clique para digitar"
+                      style={{ fontSize:13, fontWeight: qtdRep > 0 ? 700 : 400, minWidth:16, textAlign:"center", color: qtdRep > 0 ? "#111" : "#9ca3af", cursor:"text" }}>
+                      {qtdRep}
+                    </span>
+                  )}
+                  <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
+                    onClick={() => setQtdRep(n => n + 1)}>+</button>
+                </div>
+              )}
+            </div>
 
-            {!cardComodosRecolhido && (<>
+
 
             {/* Container 1 coluna */}
             <div>
-            {(() => {
-              // Popula ref com lista plana de cômodos disponíveis em ordem (pra navegação por teclado)
-              const flat = [];
-              Object.entries(configAtual.grupos).forEach(([grupo, nomes]) => {
-                const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
-                if (isTerrea && grupo === "Outros") return;
-                nomes.forEach(n => {
-                  if (!comodosTocados.has(n) && (qtds[n] || 0) === 0) flat.push(n);
-                });
-              });
-              comodosFlatRef.current = flat;
-              return null;
-            })()}
             {Object.entries(configAtual.grupos).filter(([grupo]) => {
                 const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                 if (isTerrea && grupo === "Outros") return false;
                 return true;
               }).map(([grupo, nomes]) => {
               // Split: escolhidos vs disponíveis
-              // Escolhidos: aparece se já foi tocado (mesmo que qty=0 agora)
-              const escolhidos  = nomes.filter(n => comodosTocados.has(n) || (qtds[n] || 0) > 0);
-              const disponiveis = nomes.filter(n => !comodosTocados.has(n) && (qtds[n] || 0) === 0);
+              const escolhidos  = nomes.filter(n => (qtds[n] || 0) > 0);
+              const disponiveis = nomes.filter(n => (qtds[n] || 0) === 0);
               const m2Grupo  = escolhidos.reduce((s,n) => s + getArea(n) * (qtds[n]||0), 0);
               const qtdGrupo = escolhidos.reduce((s,n) => s + (qtds[n]||0), 0);
 
@@ -7797,36 +7601,25 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               const renderControles = (nome, sempreVisivel) => {
                 const q = qtds[nome] || 0;
                 const isOpen = comodoAberto === nome;
-                // Em mobile, IGNORA isOpen: a UX mobile usa o seletor inline
-                // (sempreVisivel) e não o popup hover. Sem isso, o comodoAberto
-                // que ficou setado de uma interação anterior aparece como seletor
-                // num cômodo errado simultaneamente ao novo (bug "dois selecionados").
-                const visivel = sempreVisivel || (!isMobileOrc && isOpen);
+                const visivel = sempreVisivel || isOpen;
                 // Só renderiza quando visível — quando fechado, não ocupa espaço no layout
                 if (!visivel) return null;
                 return (
                   <span key={nome+"-ctrls"}
                     style={{
-                      display: "inline-flex", alignItems: "center", gap: 2,
+                      display: "inline-flex", alignItems: "center", gap: 1,
                       transition: "opacity 0.15s ease",
                       flexShrink: 0,
                       whiteSpace: "nowrap",
-                      background: "#fff",
-                      padding: "3px 5px",
-                      borderRadius: 6,
-                      border: "1px solid #e5e7eb",
-                      boxShadow: "0 2px 8px -2px rgba(0,0,0,0.08)",
+                      background: "transparent",
+                      padding: 0,
+                      borderRadius: 4,
+                      border: "none",
                       zIndex: 100,
                       position: "relative",
                     }}>
                     {/* Input em primeiro lugar */}
                     <input
-                      ref={el => {
-                        // Foca automaticamente quando o usuário navega via teclado até esse input
-                        if (el && comodoAberto === nome && comodoQtdFocada === "input" && document.activeElement !== el) {
-                          setTimeout(() => { try { el.focus(); el.select(); } catch {} }, 0);
-                        }
-                      }}
                       type="number" min="0"
                       defaultValue={q > 6 ? q : ""}
                       className="no-spin"
@@ -7834,143 +7627,56 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       onClick={e => e.stopPropagation()}
                       onFocus={e => {
                         setComodoAberto(nome);
-                        setComodoQtdFocada("input");
                         setTravado(true);
                         if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
                       }}
-                      onBlur={e => {
-                        // Se o foco saiu do input mas continua na navegação por teclado,
-                        // não fechar o popup. Só limpar travado se realmente perdeu foco geral.
-                        setTravado(false);
-                      }}
                       onKeyDown={e => {
                         if (e.key === "Enter") {
-                          e.stopPropagation();
                           const v = parseInt(e.currentTarget.value) || 0;
-                          if (v > 0) {
-                            setQtdAbs(nome, v);
-                            // Após aplicar, foca o "1" do próximo cômodo (mesma lógica do Enter no número)
-                            const flat = comodosFlatRef.current;
-                            const idx = flat ? flat.indexOf(nome) : -1;
-                            setTimeout(() => {
-                              const novaFlat = comodosFlatRef.current;
-                              if (!novaFlat || novaFlat.length === 0) {
-                                setComodoAberto(null);
-                                setComodoQtdFocada(null);
-                                return;
-                              }
-                              const novoIdx = Math.min(idx, novaFlat.length - 1);
-                              setComodoAberto(novaFlat[novoIdx]);
-                              setComodoQtdFocada(1);
-                            }, 0);
-                          }
-                          setTravado(false);
-                          e.currentTarget.blur();
-                        } else if (e.key === "Escape") {
-                          e.stopPropagation();
+                          if (v > 0) setQtdAbs(nome, v);
                           setTravado(false);
                           setComodoAberto(null);
-                          setComodoQtdFocada(null);
                           e.currentTarget.blur();
-                        } else if (e.key === "Tab") {
-                          e.preventDefault();
-                          e.stopPropagation();
+                        } else if (e.key === "Escape") {
+                          setTravado(false);
+                          setComodoAberto(null);
                           e.currentTarget.blur();
-                          const flat = comodosFlatRef.current;
-                          const idxAtual = flat ? flat.indexOf(nome) : -1;
-                          if (e.shiftKey) {
-                            // Shift+Tab no input → vai pro 6 do mesmo cômodo
-                            setComodoQtdFocada(6);
-                          } else {
-                            // Tab no input → próximo cômodo no 0
-                            if (idxAtual >= 0 && idxAtual < flat.length - 1) {
-                              setComodoAberto(flat[idxAtual + 1]);
-                              setComodoQtdFocada(0);
-                            } else {
-                              // último cômodo: sai
-                              setComodoAberto(null);
-                              setComodoQtdFocada(null);
-                            }
-                          }
-                        } else if (e.key === "ArrowLeft") {
-                          // ←: volta pro 6
-                          e.preventDefault();
-                          e.stopPropagation();
-                          e.currentTarget.blur();
-                          setComodoQtdFocada(6);
-                        } else if (e.key === "ArrowRight") {
-                          // →: vai pro 0 (wrap)
-                          e.preventDefault();
-                          e.stopPropagation();
-                          e.currentTarget.blur();
-                          setComodoQtdFocada(0);
-                        } else if (e.key === "ArrowDown") {
-                          // ↓: próximo cômodo, "1"
-                          e.preventDefault();
-                          e.stopPropagation();
-                          e.currentTarget.blur();
-                          const flat = comodosFlatRef.current;
-                          const idxAtual = flat ? flat.indexOf(nome) : -1;
-                          if (idxAtual >= 0 && idxAtual < flat.length - 1) {
-                            setComodoAberto(flat[idxAtual + 1]);
-                            setComodoQtdFocada(1);
-                          }
-                        } else if (e.key === "ArrowUp") {
-                          // ↑: cômodo anterior, "1"
-                          e.preventDefault();
-                          e.stopPropagation();
-                          e.currentTarget.blur();
-                          const flat = comodosFlatRef.current;
-                          const idxAtual = flat ? flat.indexOf(nome) : -1;
-                          if (idxAtual > 0) {
-                            setComodoAberto(flat[idxAtual - 1]);
-                            setComodoQtdFocada(1);
-                          }
                         }
                       }}
                       style={{
-                        width:32, height:26,
-                        border: (comodoAberto === nome && comodoQtdFocada === "input") ? "1px solid #111" : "1px solid #d1d5db",
-                        borderRadius:4,
-                        background:"#fff", fontSize:12.5, fontWeight:500, color:"#111",
-                        padding:"0 3px", textAlign:"center", outline:"none", fontFamily:"inherit",
-                        flexShrink:0, marginRight:3,
+                        width:28, height:22, border:"1px solid #d1d5db", borderRadius:4,
+                        background:"#fff", fontSize:11, fontWeight:500, color:"#111",
+                        padding:"0 2px", textAlign:"center", outline:"none", fontFamily:"inherit",
+                        flexShrink:0, marginRight:2,
                         MozAppearance:"textfield",
                       }}
                     />
-                    {(isMobileOrc ? [0,1,2,3,4] : [0,1,2,3,4,5,6]).map(n => {
-                      const isSel = n > 0 && q === n;
-                      const isKbFoc = comodoAberto === nome && comodoQtdFocada === n;
-                      return (
+                    {[1,2,3,4,5,6].map(n => (
                       <button key={n}
-                        onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); setComodoQtdFocada(null); }}
+                        onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); }}
                         style={{
-                          width:26, height:26,
-                          border: isKbFoc && !isSel ? "1px solid #111" : "1px solid transparent",
-                          borderRadius:4,
-                          background: isSel ? "#111" : "transparent",
-                          color: isSel ? "#fff" : "#374151",
-                          fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit",
+                          width:22, height:22, border:"1px solid transparent", borderRadius:4,
+                          background: q===n ? "#111" : "transparent",
+                          color: q===n ? "#fff" : "#6b7280",
+                          fontSize:11, fontWeight:500, cursor:"pointer", fontFamily:"inherit",
                           display:"inline-flex", alignItems:"center", justifyContent:"center",
                           flexShrink:0, padding:0,
                           transition:"all 0.1s",
-                          outline: "none",
                         }}
-                        onMouseEnter={e => { if (!isSel && !isKbFoc) { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#fff"; } }}
-                        onMouseLeave={e => { if (!isSel && !isKbFoc) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#374151"; } }}>
+                        onMouseEnter={e => { if (q !== n) { e.currentTarget.style.background = "#111"; e.currentTarget.style.color = "#fff"; } }}
+                        onMouseLeave={e => { if (q !== n) { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#6b7280"; } }}>
                         {n}
                       </button>
-                      );
-                    })}
+                    ))}
                     {q > 0 && (
                       <>
-                        <span style={{ width:1, height:16, background:"#d1d5db", margin:"0 3px", alignSelf:"center" }} />
+                        <span style={{ width:1, height:14, background:"#d1d5db", margin:"0 3px", alignSelf:"center" }} />
                         <button
-                          onClick={e => { e.stopPropagation(); removerComodo(nome); setTravado(false); setComodoAberto(null); }}
+                          onClick={e => { e.stopPropagation(); setQtdAbs(nome, 0); setTravado(false); setComodoAberto(null); }}
                           title="Remover"
                           style={{
-                            width:26, height:26, border:"1px solid transparent", borderRadius:4,
-                            background:"transparent", color:"#dc2626", fontSize:13.5,
+                            width:22, height:22, border:"1px solid transparent", borderRadius:4,
+                            background:"transparent", color:"#dc2626", fontSize:12,
                             display:"inline-flex", alignItems:"center", justifyContent:"center",
                             cursor:"pointer", fontFamily:"inherit", flexShrink:0, padding:0,
                           }}>
@@ -7987,24 +7693,22 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
               return (
                 <div key={grupo} style={{ marginBottom:14 }}>
                   {/* Header: retângulo cinza com bordas arredondadas */}
-                  <div data-vk-grupo-header style={{
+                  <div style={{
                     display:"flex", alignItems:"center", gap:10,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
                     padding:"5px 10px",
-                    marginBottom: recolhido ? 0 : 8,
+                    marginBottom: (recolhido && escolhidos.length === 0) ? 0 : 8,
                   }}>
-                    <span style={{ fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
+                    <span style={{ fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600, userSelect:"none", flexShrink:0 }}>
                       {isComercial ? (GRUPO_DISPLAY[grupo] || grupo) : grupo}
                     </span>
                     {/* Resetar — só aparece no primeiro grupo, reseta TODOS os cômodos */}
                     {grupo === "Áreas Sociais" && Object.keys(qtds).some(n => qtds[n] > 0) && (
                       <button
                         type="button"
-                        data-vk-grupo-resetar
                         onClick={e => {
                           e.stopPropagation();
                           setQtds({});
-                          setComodosTocados(new Set());
                           setGruposAbertos({});
                         }}
                         style={{
@@ -8137,7 +7841,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     )}
 
                     {qtdGrupo > 0 && (
-                      <span style={{ fontSize:11, color:"#9ca3af", whiteSpace:"nowrap", flexShrink:0 }}>
+                      <span style={{ fontSize:10, color:"#9ca3af" }}>
                         <strong style={{ color:"#111", fontWeight:600 }}>{qtdGrupo * (isComercial ? (grupoQtds[grupo]||1) : 1)}</strong> amb · <strong style={{ color:"#111", fontWeight:600 }}>{fmtNum(m2Grupo * (isComercial ? (grupoQtds[grupo]||1) : 1))}</strong> m²
                       </span>
                     )}
@@ -8157,62 +7861,54 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
                   {!recolhido && disponiveis.length > 0 && (
                     <>
-                      {/* Disponíveis — nome à esquerda, controles flutuantes à direita ao hover */}
-                      <div style={{ marginTop:4, maxWidth:380 }}>
-                        <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
+                      {/* Disponíveis — layout em 2 colunas padronizado: nome (fixo) + quantidades (fundo cinza) */}
+                      <div style={{ position:"relative", marginTop:4, maxWidth:380 }}>
+                        {/* Faixa de fundo da coluna de quantidades + título */}
+                        <div style={{
+                          position:"absolute", top:0, right:0, bottom:0,
+                          width:180,
+                          background:"#f4f5f7",
+                          borderRadius:6,
+                          zIndex:0,
+                        }}>
+                          <div style={{
+                            fontSize:9, color:"#6b7280",
+                            textTransform:"uppercase", letterSpacing:1, fontWeight:600,
+                            padding:"4px 10px", textAlign:"center",
+                            borderBottom:"1px solid #e5e7eb",
+                          }}>
+                            Quantidades
+                          </div>
+                        </div>
+                        {/* Lista */}
+                        <div style={{ display:"flex", flexDirection:"column", gap:2, position:"relative", zIndex:1, paddingTop:22 }}>
                           {disponiveis.map(nome => {
                             const isOpen = comodoAberto === nome;
-                            // MOBILE: o seletor [input] 0 1 2 3 4 fica VISÍVEL inline.
-                            // Por padrão aparece no PRIMEIRO cômodo da fila global
-                            // (em ordem de todos os grupos). Mas o usuário pode tocar
-                            // em qualquer outro cômodo pra "pular" e selecionar quantidade
-                            // direto nele — esse fica em comodoSelecionadoMobile.
-                            // Quando a qty é definida e o cômodo sai de disponíveis,
-                            // o seletor reseta pra null → volta pro primeiro da fila
-                            // (próximo na sequência natural).
-                            const primeiroDaFila = (comodosFlatRef.current && comodosFlatRef.current[0]) || null;
-                            const ativoMobile = comodoSelecionadoMobile || primeiroDaFila;
-                            const mostrarSeletor = isMobileOrc && nome === ativoMobile;
                             return (
                               <div key={nome}
                                 data-comodo-wrap
                                 data-comodo-nome={nome}
-                                onClick={isMobileOrc && !mostrarSeletor ? (e) => {
-                                  e.stopPropagation();
-                                  setComodoSelecionadoMobile(nome);
-                                  // Limpa comodoAberto pra evitar seletor "fantasma" em outro
-                                  // cômodo (residual de interações anteriores).
-                                  setComodoAberto(null);
-                                } : undefined}
-                                onMouseEnter={isMobileOrc ? undefined : () => abrirComodo(nome)}
-                                onMouseLeave={isMobileOrc ? undefined : agendarFecharComodo}
+                                onMouseEnter={() => abrirComodo(nome)}
+                                onMouseLeave={agendarFecharComodo}
                                 style={{
                                   position:"relative",
                                   display:"flex", alignItems:"center",
-                                  padding: isMobileOrc ? "8px 6px" : "6px 10px",
-                                  fontSize: isMobileOrc ? 14 : 14.5,
-                                  color: isOpen || (isMobileOrc && mostrarSeletor) ? "#111" : "#6b7280",
-                                  background: isOpen ? "#f4f5f7" : "transparent",
+                                  padding:"4px 8px", fontSize:13,
+                                  color: isOpen ? "#111" : "#6b7280",
+                                  background: isOpen ? "#e5e7eb" : "transparent",
                                   borderRadius:6,
                                   userSelect:"none",
                                   transition:"color 0.15s, background 0.15s",
-                                  minHeight:34,
-                                  gap: isMobileOrc ? 8 : 0,
-                                  cursor: isMobileOrc && !mostrarSeletor ? "pointer" : "default",
+                                  minHeight:28,
                                 }}>
-                                <span style={{
-                                  flex:1,
-                                  fontWeight: (isMobileOrc && mostrarSeletor) ? 600 : (isOpen ? 500 : 400),
-                                  minWidth:0,
-                                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                                }}>
+                                <span style={{ flex:1, fontWeight: isOpen ? 500 : 400, minWidth:0, whiteSpace:"nowrap" }}>
                                   {nome}
                                   {(nome === "Suíte" || nome === "Dormitório") && (
-                                    <span style={{ fontSize:10.5, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
+                                    <span style={{ fontSize:10, color:"#9ca3af", marginLeft:5, fontWeight:400 }}>(Sem Closet)</span>
                                   )}
                                 </span>
-                                <span style={{ flexShrink:0, display:"flex", alignItems:"center" }}>
-                                  {renderControles(nome, mostrarSeletor)}
+                                <span style={{ width:180, flexShrink:0, display:"flex", justifyContent:"center", alignItems:"center" }}>
+                                  {renderControles(nome, false)}
                                 </span>
                               </div>
                             );
@@ -8222,15 +7918,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     </>
                   )}
 
-                  {/* Escolhidos — escondidos quando o grupo está recolhido.
-                      (Antes ficavam sempre visíveis, mas isso fazia o chevron
-                      parecer não funcionar quando todos os cômodos do grupo
-                      estavam definidos: a setinha mudava de estado mas nada
-                      visualmente mudava na tela.) */}
-                  {!recolhido && escolhidos.length > 0 && (
+                  {/* Escolhidos — SEMPRE visíveis, mesmo com grupo recolhido */}
+                  {escolhidos.length > 0 && (
                     <div style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
-                      gap:"8px 8px",
+                      gap:"6px 14px",
                       paddingTop: (!recolhido && disponiveis.length > 0) ? 10 : 0,
                       marginTop:  (!recolhido && disponiveis.length > 0) ? 10 : 4,
                       borderTop:  (!recolhido && disponiveis.length > 0) ? "1px dashed #e5e7eb" : "none",
@@ -8241,27 +7933,26 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         const m2Total = getArea(nome) * q;
                         return (
                           <span key={nome}
-                            onClick={() => removerComodo(nome)}
+                            onClick={() => setQtdAbs(nome, 0)}
                             title="Clique para remover"
                             className="comodo-escolhido"
                             style={{
-                              display:"inline-flex", alignItems:"center", gap:6,
-                              fontSize:13.5, color:"#111", fontWeight:500,
+                              display:"inline-flex", alignItems:"center", gap:4,
+                              fontSize:13, color:"#111",
                               userSelect:"none",
                               whiteSpace:"nowrap",
                               flex:"0 0 auto",
                               cursor:"pointer",
-                              padding:"4px 10px",
-                              background:"#f4f5f7",
-                              border:"1px solid #e5e7eb",
-                              borderRadius:6,
-                              transition:"all 0.15s",
-                            }}
-                            onMouseEnter={e => { e.currentTarget.style.background="#fef2f2"; e.currentTarget.style.borderColor="#fecaca"; e.currentTarget.style.color="#dc2626"; }}
-                            onMouseLeave={e => { e.currentTarget.style.background="#f4f5f7"; e.currentTarget.style.borderColor="#e5e7eb"; e.currentTarget.style.color="#111"; }}>
-                            <strong style={{ fontWeight:700 }}>{q}</strong>
-                            <span>{nome}</span>
-                            <span className="comodo-m2" style={{ fontSize:11, color:"#9ca3af", fontWeight:400 }}>· {fmtNum(m2Total)} m²</span>
+                              transition:"color 0.15s",
+                            }}>
+                            <span>
+                              {nome}
+                              {(nome === "Suíte" || nome === "Dormitório") && (
+                                <span style={{ fontSize:10, color:"#9ca3af", marginLeft:4, fontWeight:400 }}>(Sem Closet)</span>
+                              )}
+                              {" "}<strong style={{ fontWeight:600 }}>{q}</strong>
+                              <span className="comodo-m2" style={{ fontSize:11, color:"#9ca3af", marginLeft:6, transition:"color 0.15s" }}>{fmtNum(m2Total)} m²</span>
+                            </span>
                           </span>
                         );
                       })}
@@ -8275,11 +7966,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   que o scroll não seja reajustado ao selecionar (o próximo cômodo
                   sobe exatamente pra posição do cursor). */}
               {(() => {
-                // Folga só em desktop. Em mobile não tem cursor/hover,
-                // então essa altura compensatória só cria espaço vazio
-                // que faz o card de cômodos parecer enorme com poucos itens
-                // (e o Resumo fica longe lá embaixo).
-                if (isMobileOrc) return null;
                 const gruposVisiveis = Object.entries(configAtual.grupos).filter(([g]) => {
                   const isTerrea = tipologia === "Térreo" || tipologia === "Térrea";
                   if (isTerrea && g === "Outros") return false;
@@ -8293,12 +7979,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 return folga > 0 ? <div style={{ height: folga, flexShrink: 0 }} aria-hidden="true" /> : null;
               })()}
             </div>
-            </>)}
           </div>
 
-          {/* Resumo Cálculo — só aparece quando tem cômodos */}
-          <div data-vk-orc-resumo-col style={{ position:"sticky", top:24 }}>
-            {temComodos && calculo && (
+          {/* Resumo Cálculo */}
+          <div style={{ position:"sticky", top:24 }}>
+            {temComodos && calculo ? (
               <div>
                 <div style={C.resumoBox}>
                   <div style={C.resumoHdr}>Resumo Cálculo</div>
@@ -8309,15 +7994,20 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     precoEng:   incluiEng ? calculo.precoEng : 0,
                     precoM2Arq: incluiArq ? calculo.precoM2Arq : 0,
                     precoM2Eng: incluiEng ? calculo.precoM2Eng : 0,
-                  }} fmtNum={fmtNum} C={C} temImposto={temImposto} aliqImp={aliqImp} />
+                  }} fmtNum={fmtNum} C={C} />
                 </div>
                 <button
-                  style={{ width:"100%", marginTop:10, background:"#111", color:"#fff", border:"1px solid #111", borderRadius:8, padding:"11px 16px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
-                  onMouseEnter={e => { e.currentTarget.style.background="#000"; }}
-                  onMouseLeave={e => { e.currentTarget.style.background="#111"; }}
+                  style={{ width:"100%", marginTop:12, background:"#f3f4f6", color:"#111", border:"1px solid #c8cdd6", borderRadius:10, padding:"13px 0", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
+                  onMouseEnter={e => { e.currentTarget.style.background="#e5e7eb"; e.currentTarget.style.borderColor="#d1d5db"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.borderColor="#e5e7eb"; }}
                   onClick={gerarProposta}>
-                  Gerar Orçamento →
+                  Gerar Orçamento
                 </button>
+              </div>
+            ) : (
+              <div style={{ ...C.resumoBox, textAlign:"center", padding:"32px 20px" }}>
+                <div style={{ fontSize:12, color:"#d1d5db" }}>Resumo Cálculo</div>
+                <div style={{ fontSize:11, color:"#e5e7eb", marginTop:8 }}>Preencha os ambientes</div>
               </div>
             )}
           </div>
@@ -8337,26 +8027,38 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         return null;
       })()}
 
-      {/* Popover global da trilha horizontal (position fixed, gruda no botão clicado) */}
-      {trilhaHPop && (
+
+      {aberto && (
         <div
-          className="vk-trilha-h-pop"
-          style={{ top: trilhaHPop.top, left: trilhaHPop.left }}
-          onClick={e => e.stopPropagation()}>
-          {(OPCOES[trilhaHPop.key] || []).map((op, i) => {
-            const sel = VALS[trilhaHPop.key] === op;
-            const focada = trilhaHPopFocada === i;
+          onMouseEnter={() => {
+            // Mantém aberto quando mouse entra no painel
+            if (hoverCloseRef.current) { clearTimeout(hoverCloseRef.current); hoverCloseRef.current = null; }
+          }}
+          onMouseLeave={() => {
+            // Fecha ao sair do painel (sem delay pois já saiu do botão também)
+            if (hoverCloseRef.current) clearTimeout(hoverCloseRef.current);
+            hoverCloseRef.current = setTimeout(() => {
+              setHoverDrop(null);
+              setAberto(null);
+            }, 80);
+          }}
+          style={{
+          position:"fixed",
+          top: panelPos.top, left: panelPos.left,
+          zIndex:9999,
+          background:"#fff", border:"1px solid #b0b7c3", borderRadius:10,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:160, overflow:"hidden",
+        }}>
+          {(OPCOES[aberto] || []).map(op => {
+            const val = VALS[aberto];
             return (
-              <button
-                key={op}
-                className={"vk-trilha-h-pop-row" + (sel ? " is-selected" : "") + (focada ? " is-focused-kb" : "")}
-                onClick={() => {
-                  SETS[trilhaHPop.key](op);
-                  setTrilhaHPop(null);
-                }}>
-                <span className="vk-trilha-h-pop-bullet"></span>
-                <span style={{ flex:1, fontWeight:500 }}>{displayOpcao(trilhaHPop.key, op)}</span>
-              </button>
+              <div key={op}
+                style={C.dropItem(val === op)}
+                onMouseEnter={e => { if (val !== op) e.currentTarget.style.background = "#f4f5f7"; }}
+                onMouseLeave={e => { if (val !== op) e.currentTarget.style.background = val === op ? "#efefef" : "#fff"; }}
+                onClick={() => selecionar(aberto, op)}>
+                {op}
+              </div>
             );
           })}
         </div>
