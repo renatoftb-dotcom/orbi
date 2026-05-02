@@ -344,7 +344,15 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
 
   return (
     <div ref={containerRef} style={tela}>
-      <div style={{ width:"100%", maxWidth:560, padding:"40px 20px 80px" }}>
+      {/* Largura adapta ao modo: 560 pro questionário (perguntas centralizadas e
+          legíveis), expande pra 1180 quando resultado aparece (precisa de
+          espaço pra resumo lateral + tabela + gráfico full-width). */}
+      <div style={{
+        width:"100%",
+        maxWidth: todasRespondidas ? 1180 : 560,
+        padding: todasRespondidas ? "32px 32px 40px" : "40px 20px 80px",
+        transition:"max-width 0.3s ease",
+      }}>
 
         {/* ── Cabeçalho — só aparece enquanto questionário ativo ── */}
         {!todasRespondidas && (
@@ -587,6 +595,7 @@ function Opcao({ label, selecionada, onClick }) {
 
 // ════════════════════════════════════════════════════════════════
 // Bloco final: análise digitando + tabela + waterfall + resumo lateral
+// Otimizado pra caber numa tela única (~720-800px de altura).
 // ════════════════════════════════════════════════════════════════
 function BlocoResultado({
   pctMatriz, cubEstado, cubErro, casaCalc, honorarioCalculado,
@@ -605,32 +614,34 @@ function BlocoResultado({
   }
   if (!cubEstado || honorarioCalculado === null || !casaCalc) {
     return (
-      <div style={{ marginTop:32, fontSize:13, color:"#9ca3af" }}>
-        Calculando…
-      </div>
+      <div style={{ marginTop:32, fontSize:13, color:"#9ca3af" }}>Calculando…</div>
     );
   }
 
   return (
-    <div style={{
-      animation:"vk-onb-fade-in 0.4s ease-out",
-    }}>
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:18 }}>
-        Resultado da análise
+    <div style={{ animation:"vk-onb-fade-in 0.4s ease-out" }}>
+      {/* Header da apresentação */}
+      <div style={{ marginBottom:14 }}>
+        <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, marginBottom:4 }}>
+          VICKE · Análise Inteligente
+        </div>
+        <div style={{ fontSize:20, fontWeight:300, color:"#111", letterSpacing:-0.4, lineHeight:1.2 }}>
+          Resultado da sua calibragem
+        </div>
       </div>
 
-      {/* Layout: resumo lateral fininho + texto/tabela à direita */}
+      {/* Linha 1: resumo lateral + tabela */}
       <div style={{
         display:"grid",
-        gridTemplateColumns:"minmax(0, 150px) minmax(0, 1fr)",
-        gap:20,
-        marginBottom:18,
+        gridTemplateColumns:"minmax(0, 240px) minmax(0, 1fr)",
+        gap:18,
+        marginBottom:14,
       }} className="vk-onb-grid">
         <ResumoLateral respostas={respostas} setters={setters} matriz={matriz} />
-        <AnaliseTexto casaCalc={casaCalc} />
+        <ColunaCentral casaCalc={casaCalc} />
       </div>
 
-      {/* Gráfico waterfall full-width (passa por baixo do resumo lateral) */}
+      {/* Linha 2: gráfico waterfall (full-width, fundo transparente) */}
       <Waterfall casaCalc={casaCalc} honorarioCalculado={honorarioCalculado} />
 
       {/* CSS — animações + responsivo + cursor digitando */}
@@ -652,90 +663,104 @@ function BlocoResultado({
         }
       `}</style>
 
-      <div style={{ fontSize:14, color:"#111", marginBottom:12, marginTop:24 }}>
-        Esse valor está alinhado com o que você cobraria?
-      </div>
-      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-        <Opcao
-          label="Sim, esse valor está bom"
-          selecionada={aceitouCalculado === true}
-          onClick={() => { setAceitouCalculado(true); setValorCalibragem(""); setConfirmandoAbsurdo(false); }}
-        />
-        <Opcao
-          label="Quero ajustar — eu cobraria valor diferente"
-          selecionada={aceitouCalculado === false}
-          onClick={() => setAceitouCalculado(false)}
-        />
-      </div>
-
-      {aceitouCalculado === false && (
-        <div style={{
-          marginTop:18, paddingTop:16,
-          borderTop:"1px dashed #e5e7eb",
-          animation:"vk-onb-fade-in 0.3s ease-out",
-        }}>
-          <div style={{ fontSize:13, color:"#111", marginBottom:8 }}>
-            Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
-          </div>
-          <div style={{ position:"relative" }}>
-            <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#9ca3af", pointerEvents:"none" }}>R$</span>
-            <input
-              type="text"
-              inputMode="decimal"
-              value={valorCalibragem}
-              onChange={e => setValorCalibragem(e.target.value)}
-              placeholder="20.000,00"
-              autoFocus
-              style={{
-                width:"100%", boxSizing:"border-box",
-                border:"1px solid #e5e7eb", borderRadius:8,
-                padding:"11px 14px 11px 38px",
-                fontSize:14, fontFamily:"inherit", outline:"none",
-                fontVariantNumeric:"tabular-nums",
-              }}
+      {/* Pergunta de calibragem — compacta */}
+      <div style={{ marginTop:16, paddingTop:14, borderTop:"1px solid #f3f4f6" }}>
+        <div style={{ fontSize:13, color:"#111", marginBottom:10, fontWeight:500 }}>
+          Esse valor está alinhado com o que você cobraria?
+        </div>
+        <div style={{ display:"flex", flexDirection:"row", gap:8, flexWrap:"wrap" }} className="vk-onb-opts">
+          <div style={{ flex:"1 1 240px" }}>
+            <Opcao
+              label="Sim, esse valor está bom"
+              selecionada={aceitouCalculado === true}
+              onClick={() => { setAceitouCalculado(true); setValorCalibragem(""); setConfirmandoAbsurdo(false); }}
             />
           </div>
-
-          {analiseCalibragem && !analiseCalibragem.invalido && (analiseCalibragem.muitoBaixo || analiseCalibragem.muitoAlto) && (
-            <div style={{
-              marginTop:14, padding:"12px 14px",
-              background: analiseCalibragem.muitoAlto ? "#fffbeb" : "#fef2f2",
-              border: analiseCalibragem.muitoAlto ? "1px solid #fde68a" : "1px solid #fecaca",
-              borderRadius:8,
-            }}>
-              <div style={{ fontSize:12.5, fontWeight:600, color: analiseCalibragem.muitoAlto ? "#92400e" : "#991b1b", marginBottom:6 }}>
-                {analiseCalibragem.muitoAlto ? "Valor parece muito alto" : "Valor parece muito baixo"}
-              </div>
-              <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5, marginBottom:10 }}>
-                {moeda(analiseCalibragem.valor)} é {analiseCalibragem.ratio.toFixed(1)}× {analiseCalibragem.muitoAlto ? "maior" : "menor"} que o valor sugerido pela análise ({moeda(honorarioCalculado)}).
-              </div>
-              <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#111", cursor:"pointer" }}>
-                <input
-                  type="checkbox"
-                  checked={confirmandoAbsurdo}
-                  onChange={e => setConfirmandoAbsurdo(e.target.checked)}
-                  style={{ cursor:"pointer" }}
-                />
-                Confirmo que quero usar esse valor mesmo assim
-              </label>
-            </div>
-          )}
-
-          {analiseCalibragem && !analiseCalibragem.invalido && !analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto && (
-            <div style={{ marginTop:12, fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
-              {moeda(analiseCalibragem.valor)} será o seu novo preço de referência.
-            </div>
-          )}
+          <div style={{ flex:"1 1 240px" }}>
+            <Opcao
+              label="Quero ajustar — eu cobraria valor diferente"
+              selecionada={aceitouCalculado === false}
+              onClick={() => setAceitouCalculado(false)}
+            />
+          </div>
         </div>
-      )}
+
+        {aceitouCalculado === false && (
+          <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
+            <div style={{ fontSize:12.5, color:"#111", marginBottom:6 }}>
+              Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
+            </div>
+            <div style={{ position:"relative", maxWidth:360 }}>
+              <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#9ca3af", pointerEvents:"none" }}>R$</span>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={valorCalibragem}
+                onChange={e => setValorCalibragem(e.target.value)}
+                placeholder="20.000,00"
+                autoFocus
+                style={{
+                  width:"100%", boxSizing:"border-box",
+                  border:"1px solid #e5e7eb", borderRadius:8,
+                  padding:"10px 14px 10px 38px",
+                  fontSize:14, fontFamily:"inherit", outline:"none",
+                  fontVariantNumeric:"tabular-nums",
+                }}
+              />
+            </div>
+
+            {analiseCalibragem && !analiseCalibragem.invalido && (analiseCalibragem.muitoBaixo || analiseCalibragem.muitoAlto) && (
+              <div style={{
+                marginTop:10, padding:"10px 12px",
+                background: analiseCalibragem.muitoAlto ? "#fffbeb" : "#fef2f2",
+                border: analiseCalibragem.muitoAlto ? "1px solid #fde68a" : "1px solid #fecaca",
+                borderRadius:8, maxWidth:560,
+              }}>
+                <div style={{ fontSize:12, fontWeight:600, color: analiseCalibragem.muitoAlto ? "#92400e" : "#991b1b", marginBottom:4 }}>
+                  {analiseCalibragem.muitoAlto ? "Valor parece muito alto" : "Valor parece muito baixo"}
+                </div>
+                <div style={{ fontSize:11.5, color:"#6b7280", lineHeight:1.5, marginBottom:8 }}>
+                  {moeda(analiseCalibragem.valor)} é {analiseCalibragem.ratio.toFixed(1)}× {analiseCalibragem.muitoAlto ? "maior" : "menor"} que o sugerido pela análise ({moeda(honorarioCalculado)}).
+                </div>
+                <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"#111", cursor:"pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={confirmandoAbsurdo}
+                    onChange={e => setConfirmandoAbsurdo(e.target.checked)}
+                    style={{ cursor:"pointer" }}
+                  />
+                  Confirmo que quero usar esse valor mesmo assim
+                </label>
+              </div>
+            )}
+
+            {analiseCalibragem && !analiseCalibragem.invalido && !analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto && (
+              <div style={{ marginTop:8, fontSize:11.5, color:"#6b7280", lineHeight:1.5 }}>
+                {moeda(analiseCalibragem.valor)} será o seu novo preço de referência.
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // ───────────────────────────────────────────────────────────────
-// ResumoLateral compacto — 7 respostas, fonte e padding reduzidos.
-// Cada linha clicável → limpa essa resposta + posteriores (volta o
-// questionário àquele ponto, já que !todasRespondidas oculta o resultado).
+// ColunaCentral: texto digitando + tabela da casa, lado a lado do resumo.
+// ───────────────────────────────────────────────────────────────
+function ColunaCentral({ casaCalc }) {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      <AnaliseTexto casaCalc={casaCalc} />
+      <TabelaCasaExemplo casaCalc={casaCalc} />
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// ResumoLateral — header preto/branco arredondado, linhas zebra,
+// tipografia hierárquica. Clique pra editar (limpa cascata).
 // ───────────────────────────────────────────────────────────────
 function ResumoLateral({ respostas, setters, matriz }) {
   const labelOu = (cat, key, fallback) => {
@@ -754,7 +779,6 @@ function ResumoLateral({ respostas, setters, matriz }) {
     { campo: "estado",      label: "Estado",      valor: respostas.estado || "—" },
   ];
 
-  // Limpa a resposta clicada + todas posteriores (cascata).
   const handleEditar = (campo) => {
     const cascata = {
       profissao:   ["setProfissao","setPorte","setExperiencia","setReferencia","setPadrao","setCapital","setEstado"],
@@ -770,32 +794,43 @@ function ResumoLateral({ respostas, setters, matriz }) {
 
   return (
     <div style={{
-      background:"#fafbfc",
-      border:"1px solid #f3f4f6",
+      background:"#fff",
+      border:"1px solid #e5e7eb",
       borderRadius:10,
-      padding:"12px 12px",
+      overflow:"hidden",  // pra header preto não vazar dos cantos arredondados
       alignSelf:"start",
+      boxShadow:"0 1px 2px rgba(0,0,0,0.03)",
     }}>
-      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.7, marginBottom:8, padding:"0 4px" }}>
+      {/* Header preto/branco */}
+      <div style={{
+        background:"#111",
+        color:"#fff",
+        padding:"9px 14px",
+        fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
+      }}>
         Suas respostas
       </div>
-      <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
-        {linhas.map((l) => (
+
+      {/* Linhas zebra (alterna #fff e #fafbfc), clicáveis pra editar */}
+      <div>
+        {linhas.map((l, i) => (
           <div key={l.campo}
                onClick={() => handleEditar(l.campo)}
                style={{
-                 padding:"5px 6px",
-                 borderRadius:5,
+                 display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
+                 padding:"7px 14px",
+                 background: i % 2 === 0 ? "#fff" : "#fafbfc",
+                 borderTop: i === 0 ? "none" : "1px solid #f3f4f6",
                  cursor:"pointer",
                  transition:"background 0.12s",
                }}
                onMouseEnter={e => e.currentTarget.style.background = "#f3f4f6"}
-               onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+               onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafbfc"}
                title="Clique pra refazer a partir desta">
-            <div style={{ fontSize:9.5, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.4, fontWeight:600, marginBottom:1 }}>
+            <div style={{ fontSize:9.5, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, fontWeight:700, flexShrink:0, minWidth:70 }}>
               {l.label}
             </div>
-            <div style={{ fontSize:11.5, color:"#111", lineHeight:1.3, fontWeight:500 }}>
+            <div style={{ fontSize:11.5, color:"#111", lineHeight:1.3, fontWeight:500, textAlign:"right" }}>
               {l.valor}
             </div>
           </div>
@@ -806,12 +841,9 @@ function ResumoLateral({ respostas, setters, matriz }) {
 }
 
 // ───────────────────────────────────────────────────────────────
-// AnaliseTexto: texto curto digitando + tabela compacta da simulação.
-// Texto e tabela ficam empilhados na coluna direita do resumo lateral.
+// AnaliseTexto: texto curto digitando (sem o card da tabela aqui).
 // ───────────────────────────────────────────────────────────────
 function AnaliseTexto({ casaCalc }) {
-  // Texto enxuto — versão B condensada. Detalhes da fórmula vão pra tabela
-  // e pro gráfico, não pro texto.
   const textoAnalise = useMemo(() => {
     return `Sua composição de perfil é compatível com escritórios que aplicam ${moeda(casaCalc.precoBase)} por m² como referência. A simulação abaixo mostra como esse valor se comporta numa casa típica:`;
   }, [casaCalc.precoBase]);
@@ -835,98 +867,108 @@ function AnaliseTexto({ casaCalc }) {
   };
 
   return (
-    <div>
-      {/* Texto digitando */}
-      <div
-        onClick={handleSkip}
-        style={{
-          fontSize:14, color:"#111", lineHeight:1.6,
-          marginBottom:14,
-          cursor: terminou ? "default" : "pointer",
-          minHeight: 80,
-        }}>
-        {textoAnalise.slice(0, chars)}
-        {!terminou && (
-          <span style={{
-            display:"inline-block",
-            width:2, height:"1em",
-            background:"#111",
-            verticalAlign:"text-bottom",
-            marginLeft:2,
-            animation:"vk-cursor-blink 1s steps(2) infinite",
-          }} />
-        )}
-      </div>
-
-      {/* Tabela compacta da casa exemplo — só aparece depois do texto */}
-      {terminou && <TabelaCasaExemplo casaCalc={casaCalc} />}
-    </div>
-  );
-}
-
-// Tabela compacta com a composição e métricas da casa simulada.
-function TabelaCasaExemplo({ casaCalc }) {
-  const labelPadrao = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
-
-  const linha = (label, valor, opts = {}) => (
-    <div style={{
-      display:"flex", justifyContent:"space-between", alignItems:"baseline",
-      padding:"6px 0",
-      fontSize:12.5,
-      borderTop: opts.divisor ? "1px solid #e5e7eb" : "none",
-      marginTop: opts.divisor ? 4 : 0,
-      paddingTop: opts.divisor ? 8 : 6,
-      fontVariantNumeric:"tabular-nums",
-    }}>
-      <span style={{ color: opts.destaque ? "#111" : "#6b7280", fontWeight: opts.destaque ? 600 : 400 }}>{label}</span>
-      <span style={{ color:"#111", fontWeight: opts.destaque ? 700 : 500 }}>{valor}</span>
-    </div>
-  );
-
-  return (
-    <div style={{
-      background:"#fafbfc",
-      border:"1px solid #f3f4f6",
-      borderRadius:10,
-      padding:"12px 16px",
-      animation:"vk-fade-up 0.4s ease-out",
-    }}>
-      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.7, marginBottom:6 }}>
-        Casa simulada
-      </div>
-      <div style={{ fontSize:12, color:"#374151", lineHeight:1.5, marginBottom:6 }}>
-        3 suítes (1 master) · sala de estar · sala de jantar · cozinha · lavabo · lavanderia · 2 vagas garagem
-      </div>
-
-      {linha("Área útil",                  `${casaCalc.areaBruta.toLocaleString("pt-BR")} m²`)}
-      {linha("+ 25% circ. + paredes",       `+${(casaCalc.areaTotal - casaCalc.areaBruta).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²`)}
-      {linha("Área total",                  `${casaCalc.areaTotal.toLocaleString("pt-BR")} m²`, { divisor: true })}
-      {linha("Padrão",                      labelPadrao[casaCalc.padrao] || casaCalc.padrao, { divisor: true })}
-      {linha("Preço base",                  `${moeda(casaCalc.precoBase)} / m²`)}
-      {linha("Preço por m² (com complexidade)", `${moeda(casaCalc.precoM2)} / m²`)}
-      {linha("Honorário total",             moeda(casaCalc.honorario), { divisor: true, destaque: true })}
+    <div
+      onClick={handleSkip}
+      style={{
+        fontSize:13.5, color:"#111", lineHeight:1.55,
+        cursor: terminou ? "default" : "pointer",
+        minHeight: 60,
+      }}>
+      {textoAnalise.slice(0, chars)}
+      {!terminou && (
+        <span style={{
+          display:"inline-block",
+          width:2, height:"1em",
+          background:"#111",
+          verticalAlign:"text-bottom",
+          marginLeft:2,
+          animation:"vk-cursor-blink 1s steps(2) infinite",
+        }} />
+      )}
     </div>
   );
 }
 
 // ───────────────────────────────────────────────────────────────
-// Waterfall: gráfico SVG full-width animado.
-// Etapas: Preço base → +Complexidade → ±Padrão → -Desconto → Total
-// Cores modernas: azul #3b82f6 (base/total), verde #22c55e (+), vermelho #ef4444 (−)
+// TabelaCasaExemplo: header preto, linhas zebra, tipografia hierárquica.
+// ───────────────────────────────────────────────────────────────
+function TabelaCasaExemplo({ casaCalc }) {
+  const labelPadrao = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
+
+  // Cada linha é uma tupla [label, valor, opcional={destaque, separador}]
+  const linhas = [
+    { label: "Área útil",                       valor: `${casaCalc.areaBruta.toLocaleString("pt-BR")} m²` },
+    { label: "+ 25% circ. + paredes",           valor: `+${(casaCalc.areaTotal - casaCalc.areaBruta).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²` },
+    { label: "Área total",                      valor: `${casaCalc.areaTotal.toLocaleString("pt-BR")} m²`, divisor: true },
+    { label: "Padrão",                          valor: labelPadrao[casaCalc.padrao] || casaCalc.padrao },
+    { label: "Preço base",                      valor: `${moeda(casaCalc.precoBase)} / m²` },
+    { label: "Preço por m² (com complexidade)", valor: `${moeda(casaCalc.precoM2)} / m²` },
+    { label: "Honorário total",                 valor: moeda(casaCalc.honorario), destaque: true, divisor: true },
+  ];
+
+  return (
+    <div style={{
+      background:"#fff",
+      border:"1px solid #e5e7eb",
+      borderRadius:10,
+      overflow:"hidden",
+      boxShadow:"0 1px 2px rgba(0,0,0,0.03)",
+      animation:"vk-fade-up 0.4s ease-out",
+    }}>
+      {/* Header preto/branco */}
+      <div style={{
+        background:"#111", color:"#fff",
+        padding:"9px 16px",
+        fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
+      }}>
+        Casa simulada
+      </div>
+
+      {/* Subtítulo: lista de cômodos */}
+      <div style={{ padding:"8px 16px", fontSize:11.5, color:"#374151", lineHeight:1.5, background:"#fafbfc", borderBottom:"1px solid #f3f4f6" }}>
+        3 suítes (1 master) · sala de estar · sala de jantar · cozinha · lavabo · lavanderia · 2 vagas garagem
+      </div>
+
+      {/* Linhas zebra */}
+      <div>
+        {linhas.map((l, i) => (
+          <div key={i} style={{
+            display:"flex", justifyContent:"space-between", alignItems:"baseline",
+            padding: l.destaque ? "10px 16px" : "7px 16px",
+            background: l.destaque ? "#f3f4f6" : (i % 2 === 0 ? "#fff" : "#fafbfc"),
+            borderTop: l.divisor ? "1px solid #e5e7eb" : (i === 0 ? "none" : "1px solid #f9fafb"),
+            fontSize: l.destaque ? 13.5 : 12.5,
+            fontVariantNumeric:"tabular-nums",
+          }}>
+            <span style={{ color: l.destaque ? "#111" : "#6b7280", fontWeight: l.destaque ? 700 : 500 }}>
+              {l.label}
+            </span>
+            <span style={{ color:"#111", fontWeight: l.destaque ? 700 : 600 }}>
+              {l.valor}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// Waterfall: SVG full-width, fundo transparente, header preto/branco.
+// Cores #3b82f6 (azul) / #22c55e (verde) / #ef4444 (vermelho).
+// Animação 700ms crescimento + 900ms entre barras.
 // ───────────────────────────────────────────────────────────────
 function Waterfall({ casaCalc, honorarioCalculado }) {
   const { areaTotal, indiceComodos, indicePadrao, precoBase } = casaCalc;
 
-  // Honorário em cada estágio (em R$ totais)
-  const honorBaseSemFator    = precoBase * areaTotal;                                  // só preço base × área
-  const honorComComplexidade = precoBase * (1 + indiceComodos) * areaTotal;            // + complexidade
-  const honorComPadrao       = precoBase * (1 + indiceComodos + indicePadrao) * areaTotal; // + padrão (sem desconto)
+  const honorBaseSemFator    = precoBase * areaTotal;
+  const honorComComplexidade = precoBase * (1 + indiceComodos) * areaTotal;
+  const honorComPadrao       = precoBase * (1 + indiceComodos + indicePadrao) * areaTotal;
   const totalDescontoFaixas  = honorComPadrao - honorarioCalculado;
 
   const parcelaComplexidade = honorComComplexidade - honorBaseSemFator;
   const parcelaPadrao       = honorComPadrao - honorComComplexidade;
 
-  // Steps. Padrão e desconto só aparecem se forem relevantes.
   const steps = [
     { tipo:"base",  label:"Preço base",      sub:`${moeda(precoBase)}/m² × ${areaTotal.toLocaleString("pt-BR")}m²`,
       delta: honorBaseSemFator, acumulado: honorBaseSemFator },
@@ -935,7 +977,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
     ...(Math.abs(parcelaPadrao) > 1 ? [{
       tipo: parcelaPadrao >= 0 ? "add" : "sub",
       label: parcelaPadrao >= 0 ? "+ Padrão alto" : "− Padrão baixo",
-      sub:   parcelaPadrao >= 0 ? "+10% sobre o subtotal" : "−10% sobre o subtotal",
+      sub:   parcelaPadrao >= 0 ? "+10% sobre subtotal" : "−10% sobre subtotal",
       delta: parcelaPadrao, acumulado: honorComPadrao,
     }] : []),
     ...(totalDescontoFaixas > 1 ? [{
@@ -948,24 +990,23 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
       delta: honorarioCalculado, acumulado: honorarioCalculado },
   ];
 
-  // Dimensões — full-width, mais alto pra dar espaço aos labels
-  const W = 720, H = 360;
-  const padTop = 40, padBot = 80, padLeft = 20, padRight = 20;
+  // Dimensões reduzidas pra caber sem scroll. Mais largo, menos alto.
+  const W = 920, H = 240;
+  const padTop = 32, padBot = 64, padLeft = 16, padRight = 16;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
-  const barW = Math.min(80, innerW / steps.length - 20);
+  const barW = Math.min(80, innerW / steps.length - 24);
   const gap  = (innerW - barW * steps.length) / (steps.length - 1);
 
-  // Escala vertical — usa o maior valor acumulado pra que mesmo o desconto caiba
   const maxValor = Math.max(honorComPadrao, honorarioCalculado, honorBaseSemFator);
   const yScale = (v) => innerH * (v / maxValor);
   const yBase = padTop + innerH;
 
-  // Paleta moderna (apps tipo Linear, Vercel)
+  // Paleta moderna (#3b82f6 azul, #22c55e verde, #ef4444 vermelho)
   const COR = {
-    base:  "#3b82f6",  // azul moderno
-    add:   "#22c55e",  // verde moderno
-    sub:   "#ef4444",  // vermelho moderno
+    base:  "#3b82f6",
+    add:   "#22c55e",
+    sub:   "#ef4444",
     total: "#3b82f6",
   };
 
@@ -985,16 +1026,24 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
 
   return (
     <div style={{
-      background:"#fff",
-      border:"1px solid #f3f4f6",
       borderRadius:10,
-      padding:"20px 16px",
+      overflow:"hidden",
       animation:"vk-fade-up 0.4s ease-out",
+      background:"transparent",  // fundo transparente conforme pedido
     }}>
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.7, marginBottom:8, padding:"0 4px" }}>
+      {/* Header preto/branco */}
+      <div style={{
+        background:"#111", color:"#fff",
+        padding:"9px 16px",
+        fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
+        borderRadius:"10px 10px 0 0",
+        marginBottom:4,
+      }}>
         Como chegamos no valor
       </div>
-      <div style={{ width:"100%" }}>
+
+      {/* SVG sem fundo — herda o background da tela */}
+      <div style={{ width:"100%", padding:"4px 0 0" }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
           {/* Linha de base sutil */}
           <line x1={padLeft} y1={yBase} x2={W - padRight} y2={yBase} stroke="#e5e7eb" strokeWidth="1" />
@@ -1009,18 +1058,11 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
             const isTotal = s.tipo === "total";
 
             return (
-              <g key={i} style={{
-                opacity: visivel ? 1 : 0,
-                transition: "opacity 0.35s",
-              }}>
-                {/* Barra com animação de crescimento (700ms) */}
+              <g key={i} style={{ opacity: visivel ? 1 : 0, transition: "opacity 0.35s" }}>
+                {/* Barra com animação suave (700ms, easing bouncy) */}
                 <rect
-                  x={x}
-                  y={topY}
-                  width={barW}
-                  height={altura}
-                  fill={cor}
-                  rx={3}
+                  x={x} y={topY} width={barW} height={altura}
+                  fill={cor} rx={3}
                   style={{
                     transformOrigin: `${x + barW/2}px ${baseY}px`,
                     animation: visivel ? `vk-bar-grow 0.7s cubic-bezier(0.34, 1.4, 0.64, 1)` : "none",
@@ -1039,24 +1081,24 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   />
                 )}
 
-                {/* Valor acima ou abaixo da barra (delay pra aparecer depois da barra crescer) */}
+                {/* Valor */}
                 <text
                   x={x + barW/2}
-                  y={s.tipo === "sub" ? baseY + altura + 18 : topY - 10}
+                  y={s.tipo === "sub" ? baseY + altura + 16 : topY - 8}
                   textAnchor="middle"
-                  fontSize="13" fontWeight="700"
+                  fontSize="12" fontWeight="700"
                   fill={cor}
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.5s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.tipo === "sub" ? "−" : ""}{moeda(Math.abs(s.delta))}
                 </text>
 
-                {/* Label da etapa (rótulo embaixo) */}
+                {/* Label */}
                 <text
                   x={x + barW/2}
-                  y={H - 44}
+                  y={H - 36}
                   textAnchor="middle"
-                  fontSize="11.5" fontWeight="600"
+                  fontSize="11" fontWeight="600"
                   fill="#374151"
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.55s both` : "none", opacity: visivel ? undefined : 0 }}>
@@ -1064,9 +1106,9 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                 </text>
                 <text
                   x={x + barW/2}
-                  y={H - 26}
+                  y={H - 20}
                   textAnchor="middle"
-                  fontSize="10.5"
+                  fontSize="10"
                   fill="#9ca3af"
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.6s both` : "none", opacity: visivel ? undefined : 0 }}>
