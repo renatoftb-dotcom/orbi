@@ -1273,12 +1273,12 @@ function TabelaCasaExemplo({ casaCalc }) {
       boxShadow:"0 1px 2px rgba(0,0,0,0.03)",
       animation:"vk-fade-up 0.4s ease-out",
     }}>
-      {/* Header preto/branco — CASA SIMULADA à esquerda, padrão à direita */}
+      {/* Header preto/branco — CASA SIMULADA · ALTO PADRÃO lado a lado */}
       <div style={{
         background:"#111", color:"#fff",
         padding:"7px 14px",
         fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
-        display:"flex", justifyContent:"space-between", alignItems:"center", gap:10,
+        display:"flex", alignItems:"center", gap:10,
       }}>
         <span>Casa simulada</span>
         {padraoLabel && (
@@ -1355,12 +1355,12 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   // Dimensões compactas. padLeft/padRight maiores que o necessário pras barras
   // pra que os textos centralizados acima/abaixo das barras das pontas (ex.
   // "R$ 90,30/m² × 223,88m²") não cortem nas bordas do SVG.
-  // padTop generoso: precisa caber o texto do valor (12px fonte + ~4px folga)
-  // ACIMA da barra mais alta. Como yScale usa innerH proporcional ao maxValor,
-  // a barra mais alta toca padTop — então precisamos de pelo menos 18-20px de
-  // padTop pra que o "R$ 5.792,22" caiba sem ser cortado pelo header.
-  const W = 720, H = 175;
-  const padTop = 36, padBot = 56, padLeft = 60, padRight = 60;
+  // padTop generoso (40px): o texto do valor (12px de fonte, ~14px de altura
+  // visual) fica em `topY - 10` acima da barra. Pra barra mais alta (topY ≈ padTop),
+  // sobram 40 - 10 - 14 = 16px de margem entre o topo do SVG e o topo do texto.
+  // Garante que nada corte mesmo com valores grandes ou alturas extremas.
+  const W = 720, H = 180;
+  const padTop = 40, padBot = 56, padLeft = 60, padRight = 60;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
   const barW = Math.min(54, innerW / steps.length - 24);
@@ -1464,15 +1464,17 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                 )}
 
                 {/* Valor — em preto pra contraste neutro com qualquer barra.
-                    A posição vertical é "clampada" pra nunca sair pra cima do
-                    padTop (caso a barra seja muito alta e topY chegue perto da
-                    borda superior). Min(topY - 8, padTop + 12) garante que o
-                    texto sempre tenha pelo menos 4px de folga em relação ao header. */}
+                    Posição vertical:
+                    - Sub: abaixo da barra (baseY + altura + 16)
+                    - Add/base/total: 10px ACIMA do topo da barra (sempre, sem clamp).
+                      Como `padTop` foi aumentado pra 36px, mesmo a barra mais
+                      alta (que toca padTop) ainda deixa 10px + altura do texto
+                      = ~22px de espaço acima dela, dentro do padTop. */}
                 <text
                   x={x + barW/2}
                   y={s.tipo === "sub"
                     ? baseY + altura + 16
-                    : Math.max(topY - 8, padTop + 12)}
+                    : topY - 10}
                   textAnchor="middle"
                   fontSize="12" fontWeight="700"
                   fill="#111"
