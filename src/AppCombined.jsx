@@ -19576,15 +19576,24 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
       .catch(e => setMatrizErro(e.message || "Falha ao carregar perguntas"));
   }, []);
 
+  // Indicador sutil de "atualizando referências de mercado" mostrado quando
+  // o usuário troca de estado pelo resumo lateral. Não limpa o cubEstado
+  // anterior — assim a UI não pisca em branco enquanto o fetch roda.
+  const [cubLoading, setCubLoading] = useState(false);
+
   // Busca CUB quando estado é selecionado (pra mostrar exemplo de cálculo).
   useEffect(() => {
-    if (!estado) { setCubEstado(null); setCubErro(null); return; }
-    setCubEstado(null);
+    if (!estado) { setCubEstado(null); setCubErro(null); setCubLoading(false); return; }
     setCubErro(null);
+    setCubLoading(true);
     // Carrega os 3 níveis de CUB R-1 (Baixo/Normal/Alto) do estado escolhido.
     // O padrão escolhido pelo usuário define qual será usado na simulação:
     // Baixo→Baixo, Médio→Normal, Alto→Alto. Carrega tudo de uma vez pra que
     // a UI possa alternar entre padrões sem fazer fetch novo.
+    //
+    // IMPORTANTE: NÃO setamos cubEstado(null) antes do fetch — assim a tela
+    // não pisca em branco quando o usuário troca de estado pelo resumo lateral.
+    // Mantemos o conteúdo antigo até o novo chegar, então substituímos.
     Promise.all([
       api.cub.atual(estado, "R-1", "Baixo"),
       api.cub.atual(estado, "R-1", "Normal"),
@@ -19593,7 +19602,8 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
       .then(([baixo, normal, alto]) => {
         setCubEstado({ estado, baixo, normal, alto });
       })
-      .catch(e => setCubErro(e.message || "Falha ao carregar referência de mercado"));
+      .catch(e => setCubErro(e.message || "Falha ao carregar referência de mercado"))
+      .finally(() => setCubLoading(false));
   }, [estado]);
 
   // Auto-scroll suave pro fim do conteúdo quando uma pergunta nova aparece.
@@ -19897,6 +19907,7 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
             setters={{ setProfissao, setPorte, setExperiencia, setReferencia, setPadrao, setCapital, setEstado }}
             matriz={matriz}
             containerRef={containerRef}
+            cubLoading={cubLoading}
           />
         )}
 
@@ -20006,7 +20017,7 @@ function BlocoResultado({
   aceitouCalculado, setAceitouCalculado,
   valorCalibragem, setValorCalibragem, analiseCalibragem,
   confirmandoAbsurdo, setConfirmandoAbsurdo,
-  respostas, setters, matriz, containerRef,
+  respostas, setters, matriz, containerRef, cubLoading,
 }) {
   // Etapa atual: 1 = só texto, 2 = simulação completa
   const [etapa, setEtapa] = useState(1);
@@ -20057,8 +20068,23 @@ function BlocoResultado({
         <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, flexShrink:0 }}>
           VICKE · Análise Inteligente
         </div>
-        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#111", letterSpacing:-0.4, lineHeight:1.2 }}>
+        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#111", letterSpacing:-0.4, lineHeight:1.2, display:"flex", alignItems:"center", gap:10 }}>
           Resultado da sua calibragem
+          {/* Indicador sutil quando troca de estado e CUB recarrega — evita
+              flash em branco. Spinner pequeno + texto delicado. */}
+          {cubLoading && etapa === 2 && (
+            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:"#9ca3af", fontStyle:"italic", fontWeight:400 }}>
+              <span style={{
+                display:"inline-block",
+                width:10, height:10,
+                border:"1.5px solid #e5e7eb",
+                borderTopColor:"#6b7280",
+                borderRadius:"50%",
+                animation:"vk-spin 0.8s linear infinite",
+              }} />
+              atualizando referências…
+            </span>
+          )}
         </div>
       </div>
 
@@ -20173,6 +20199,9 @@ function BlocoResultado({
         @keyframes vk-cursor-blink {
           0%, 49%   { opacity:1; }
           50%, 100% { opacity:0; }
+        }
+        @keyframes vk-spin {
+          to { transform: rotate(360deg); }
         }
       `}</style>
     </div>
@@ -20568,8 +20597,8 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   // Dimensões compactas. padLeft/padRight maiores que o necessário pras barras
   // pra que os textos centralizados acima/abaixo das barras das pontas (ex.
   // "R$ 90,30/m² × 223,88m²") não cortem nas bordas do SVG.
-  const W = 720, H = 145;
-  const padTop = 22, padBot = 44, padLeft = 60, padRight = 60;
+  const W = 720, H = 160;
+  const padTop = 22, padBot = 56, padLeft = 60, padRight = 60;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
   const barW = Math.min(54, innerW / steps.length - 24);
@@ -20707,41 +20736,68 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                 </text>
 
                 {/* Seta indicativa: só pra steps de variação (add/sub).
-                    Aparece à direita da barra, apontando pra cima (sobe, verde)
-                    ou pra baixo (desce, vermelho). Texto delicado embaixo. */}
+                    Aparece no espaço vazio entre a barra (que ficou pequena
+                    em add/sub porque é só a parcela) e o label de baixo.
+                    Inclinação 40°, texto em preto pra contraste. */}
                 {(s.tipo === "add" || s.tipo === "sub") && visivel && (() => {
-                  // Posição da seta: à direita da barra (deslocada do canto direito)
-                  const setaX = x + barW + 6;
-                  // Posição vertical da seta:
-                  //   - add (sobe): logo abaixo da linha de base, indo pra cima
-                  //   - sub (desce): logo acima da linha de base, indo pra baixo
-                  const setaY1 = s.tipo === "add" ? yBase - 4 : yBase - 18;
-                  const setaY2 = s.tipo === "add" ? yBase - 18 : yBase - 4;
+                  // Ângulo de 40° em radianos pra calcular as pontas
+                  const ang = 40 * Math.PI / 180;
+                  // Comprimento da diagonal da seta
+                  const len = 9;
+                  const dx = Math.cos(ang) * len;
+                  const dy = Math.sin(ang) * len;
+                  // Posição vertical: meio do espaço entre o fim da barra e o label
+                  // Na barra "add": baseY é em cima (barra cresce pra cima a partir
+                  // de baseY), e o label fica em H-36. O espaço vazio fica entre
+                  // baseY e H-36. Centro vertical = (baseY + H - 36) / 2
+                  // Mas como add/sub têm tamanhos diferentes, normalizamos pelo
+                  // ponto da linha de base (yBase).
+                  const meioY = (yBase + (H - 36)) / 2;
+
+                  // Ponto de origem da seta — alinha com o centro horizontal da barra
+                  const cx = x + barW / 2;
+                  // Linha começa um pouco à esquerda e abaixo (pra add) ou acima (pra sub)
+                  const x1 = cx - dx / 2;
+                  const x2 = cx + dx / 2;
+                  const y1 = s.tipo === "add" ? meioY + dy / 2 : meioY - dy / 2;
+                  const y2 = s.tipo === "add" ? meioY - dy / 2 : meioY + dy / 2;
                   const corSeta = s.tipo === "add" ? "#22c55e" : "#ef4444";
-                  const texto   = s.tipo === "add" ? "Preço sobe" : "Preço desce";
+                  const texto   = s.tipo === "add" ? "preço sobe" : "preço desce";
+
+                  // Cabeça da seta: triângulo na ponta (x2, y2)
+                  // Direção: pra add aponta pra cima-direita; pra sub aponta pra baixo-direita
+                  const ahLen = 4; // tamanho da cabeça
+                  // Vetor unitário da linha
+                  const ux = (x2 - x1) / len;
+                  const uy = (y2 - y1) / len;
+                  // Perpendicular
+                  const px = -uy;
+                  const py = ux;
+                  const ahx1 = x2 - ux * ahLen + px * ahLen * 0.6;
+                  const ahy1 = y2 - uy * ahLen + py * ahLen * 0.6;
+                  const ahx2 = x2 - ux * ahLen - px * ahLen * 0.6;
+                  const ahy2 = y2 - uy * ahLen - py * ahLen * 0.6;
+
                   return (
                     <g style={{ animation: `vk-fade-up 0.4s ease-out 0.65s both` }}>
-                      {/* Linha da seta (diagonal pra dar dinâmica) */}
+                      {/* Linha da seta */}
                       <line
-                        x1={setaX} y1={setaY1}
-                        x2={setaX + 14} y2={setaY2}
-                        stroke={corSeta} strokeWidth="1.5" strokeLinecap="round"
+                        x1={x1} y1={y1}
+                        x2={x2} y2={y2}
+                        stroke={corSeta} strokeWidth="1.3" strokeLinecap="round"
                       />
-                      {/* Cabeça da seta (triângulo) */}
+                      {/* Cabeça */}
                       <polygon
-                        points={
-                          s.tipo === "add"
-                            ? `${setaX + 14},${setaY2} ${setaX + 9},${setaY2 + 1} ${setaX + 12},${setaY2 + 5}`
-                            : `${setaX + 14},${setaY2} ${setaX + 9},${setaY2 - 1} ${setaX + 12},${setaY2 - 5}`
-                        }
+                        points={`${x2},${y2} ${ahx1},${ahy1} ${ahx2},${ahy2}`}
                         fill={corSeta}
                       />
-                      {/* Texto delicado embaixo da seta */}
+                      {/* Texto delicado em PRETO, abaixo da seta */}
                       <text
-                        x={setaX + 7}
-                        y={s.tipo === "add" ? setaY1 + 12 : setaY2 + 12}
-                        fontSize="9"
-                        fill={corSeta}
+                        x={cx}
+                        y={meioY + 12}
+                        textAnchor="middle"
+                        fontSize="8.5"
+                        fill="#111"
                         fontStyle="italic"
                         fontWeight="400"
                         fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif">
