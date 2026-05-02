@@ -19766,14 +19766,15 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     if (valorCalibradoConfirmado === null || valorCalibradoConfirmado <= 0) {
       return pctMatriz;
     }
-    // Bisseção: encontra pct tal que calcularCasaExemplo(pct * cub).honorario === valor
-    // (mesma lógica do backend, garante consistência com o que vai ser salvo)
+    // Bisseção: encontra pct tal que calcularCasaExemplo(pct * cub).honorario ≈ valor
+    // Tolerância centavos. O resíduo final (centavos) é corrigido pelo fator
+    // proporcional aplicado no casaCalc, garantindo display EXATO.
     let lo = 0.001, hi = 0.20;
-    for (let i = 0; i < 50; i++) {
+    for (let i = 0; i < 60; i++) {
       const mid = (lo + hi) / 2;
       const honor = calcularCasaExemplo(mid * cubAtualPorPadrao.valor_m2, padrao || "medio").honorario;
       if (honor < valorCalibradoConfirmado) lo = mid; else hi = mid;
-      if (Math.abs(honor - valorCalibradoConfirmado) < 1) break;
+      if (Math.abs(honor - valorCalibradoConfirmado) < 0.01) break;
     }
     return (lo + hi) / 2;
   }, [pctMatriz, cubAtualPorPadrao, padrao, valorCalibradoConfirmado]);
@@ -19781,8 +19782,37 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
   const casaCalc = useMemo(() => {
     if (pctEfetivo === null || !cubAtualPorPadrao) return null;
     const precoBase = pctEfetivo * cubAtualPorPadrao.valor_m2;
-    return calcularCasaExemplo(precoBase, padrao || "medio");
-  }, [pctEfetivo, cubAtualPorPadrao, padrao]);
+    const calc = calcularCasaExemplo(precoBase, padrao || "medio");
+
+    // GOAL SEEK PERFEITO (Opção C): se o usuário confirmou um valor exato,
+    // a bisseção encontra um pct que se aproxima MUITO mas tem resíduo de
+    // alguns centavos por causa dos arredondamentos internos da fórmula
+    // (Math.round em precoM2, em cada subtotal de faixa, etc).
+    //
+    // Pra garantir que o honorário final mostre EXATAMENTE o valor digitado,
+    // aplicamos um fator de correção proporcional em todos os valores
+    // monetários do calc. Isso preserva a consistência do waterfall:
+    // base × (1 + complexidade) × (1 ± padrão) − desconto = honorário.
+    //
+    // O fator é geralmente algo como 1.00003 — visualmente imperceptível,
+    // mas garante que a soma do waterfall bata centavo a centavo.
+    if (valorCalibradoConfirmado !== null && valorCalibradoConfirmado > 0 && calc.honorario > 0) {
+      const fator = valorCalibradoConfirmado / calc.honorario;
+      return {
+        ...calc,
+        precoBase: Math.round(calc.precoBase * fator * 100) / 100,
+        precoM2:   Math.round(calc.precoM2   * fator * 100) / 100,
+        faixas:    calc.faixas.map(f => ({
+          ...f,
+          precoM2Efetivo: Math.round(f.precoM2Efetivo * fator * 100) / 100,
+          subtotal:       Math.round(f.subtotal       * fator * 100) / 100,
+        })),
+        honorario: valorCalibradoConfirmado,  // EXATO
+      };
+    }
+
+    return calc;
+  }, [pctEfetivo, cubAtualPorPadrao, padrao, valorCalibradoConfirmado]);
   const honorarioCalculado = casaCalc?.honorario ?? null;
 
   // Análise da calibragem: detecta se o valor digitado é absurdo (muito baixo
@@ -20830,8 +20860,12 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   // Dimensões compactas. padLeft/padRight maiores que o necessário pras barras
   // pra que os textos centralizados acima/abaixo das barras das pontas (ex.
   // "R$ 90,30/m² × 223,88m²") não cortem nas bordas do SVG.
-  const W = 720, H = 160;
-  const padTop = 22, padBot = 56, padLeft = 60, padRight = 60;
+  // padTop generoso: precisa caber o texto do valor (12px fonte + ~4px folga)
+  // ACIMA da barra mais alta. Como yScale usa innerH proporcional ao maxValor,
+  // a barra mais alta toca padTop — então precisamos de pelo menos 18-20px de
+  // padTop pra que o "R$ 5.792,22" caiba sem ser cortado pelo header.
+  const W = 720, H = 175;
+  const padTop = 36, padBot = 56, padLeft = 60, padRight = 60;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
   const barW = Math.min(54, innerW / steps.length - 24);
@@ -20934,13 +20968,19 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   />
                 )}
 
-                {/* Valor */}
+                {/* Valor — em preto pra contraste neutro com qualquer barra.
+                    A posição vertical é "clampada" pra nunca sair pra cima do
+                    padTop (caso a barra seja muito alta e topY chegue perto da
+                    borda superior). Min(topY - 8, padTop + 12) garante que o
+                    texto sempre tenha pelo menos 4px de folga em relação ao header. */}
                 <text
                   x={x + barW/2}
-                  y={s.tipo === "sub" ? baseY + altura + 16 : topY - 8}
+                  y={s.tipo === "sub"
+                    ? baseY + altura + 16
+                    : Math.max(topY - 8, padTop + 12)}
                   textAnchor="middle"
                   fontSize="12" fontWeight="700"
-                  fill={cor}
+                  fill="#111"
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.5s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.tipo === "sub" ? "−" : ""}{moeda(Math.abs(s.delta))}
