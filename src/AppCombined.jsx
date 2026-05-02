@@ -20240,15 +20240,16 @@ function moeda(v) {
 // ═══════════════════════════════════════════════════════════════
 // Aba "Orçamento" da seção Configuração na sidebar. Por enquanto contém
 // apenas o botão de "Resetar e refazer calibragem" — dispara o endpoint
-// POST /admin/empresas/:id/reset-onboarding e força logout pra que o
-// próximo login caia no fluxo de onboarding limpo.
+// POST /admin/empresas/:id/reset-onboarding e em seguida refetcha /auth/me
+// pra que o app.jsx detecte precisa_fazer_onboarding=TRUE e renderize o
+// componente Onboarding direto, sem precisar de logout/login.
 //
 // Permissões:
 // - master e admin podem executar (backend já valida).
 // - Outros perfis (editor/visualizador) veem mensagem explicando que
 //   precisam de admin/master.
 
-function OrcamentoConfig({ usuario, data }) {
+function OrcamentoConfig({ usuario, data, setUsuario }) {
   const [executando, setExecutando] = useState(false);
 
   // URL base da API. Mesma lógica que escritorio.jsx e shared.jsx —
@@ -20355,7 +20356,7 @@ function OrcamentoConfig({ usuario, data }) {
       titulo: "Resetar e refazer calibragem?",
       mensagem:
         "Isso vai apagar as respostas do onboarding (profissão, porte, padrão, estado, capital) e o pct_calibrado da empresa. " +
-        "Você será deslogado e, no próximo login, cairá na tela de onboarding pra refazer a calibragem do zero.\n\n" +
+        "Você cairá direto na tela de onboarding pra refazer a calibragem — sem precisar fazer login de novo.\n\n" +
         "Os clientes, projetos, orçamentos e dados do escritório NÃO são afetados — apenas a calibragem de pricing.",
       confirmar: "Resetar calibragem",
       destrutivo: true,
@@ -20377,16 +20378,27 @@ function OrcamentoConfig({ usuario, data }) {
       const json = await res.json();
       if (!json.ok) throw new Error(json.error || "Falha ao resetar onboarding");
 
-      // Sucesso: tira o usuário da sessão pra forçar onboarding limpo no
-      // próximo login. Mensagem rápida antes de redirecionar pra login.
-      await dialogo.alertar({
-        titulo: "Calibragem resetada",
-        mensagem: "Faça login novamente pra refazer o onboarding.",
-        tipo: "sucesso",
+      // Sucesso: refetch /auth/me pra trazer estado atualizado (precisa_fazer_onboarding=true,
+      // campos zerados). Atualizar setUsuario faz o app.jsx detectar a flag e
+      // renderizar <Onboarding /> automaticamente — sem logout, sem reload.
+      // Se o usuário fechar a aba/navegador depois disso, o token ainda vale (não foi
+      // invalidado), mas ao reabrir, /auth/me vai retornar precisa_fazer_onboarding=true
+      // e ele vai cair no onboarding direto após login.
+      const meRes = await fetch(`${_API_URL}/auth/me`, {
+        headers: { "Authorization": `Bearer ${token}` },
       });
-      localStorage.removeItem("vicke-token");
-      localStorage.removeItem("vicke-user");
-      window.location.reload();
+      const meJson = await meRes.json();
+      if (!meJson.ok) throw new Error(meJson.error || "Falha ao recarregar dados do usuário");
+
+      // Atualiza state global + localStorage. React vai rerenderizar e o
+      // app.jsx vai detectar precisa_fazer_onboarding=true automaticamente.
+      if (typeof setUsuario === "function") {
+        setUsuario(meJson.data);
+      }
+      try { localStorage.setItem("vicke-user", JSON.stringify(meJson.data)); } catch {}
+      // Não precisa de modal de "sucesso" — a transição visual pra tela de
+      // onboarding já é o feedback. Se ficar muito instantâneo, dá pra
+      // adicionar um toast leve aqui no futuro.
     } catch (e) {
       dialogo.alertar({
         titulo: "Erro ao resetar calibragem",
@@ -20500,7 +20512,7 @@ function OrcamentoConfig({ usuario, data }) {
             <>
               <div style={S.aviso}>
                 Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_calibrado</code>) da empresa.
-                Você será deslogado e, no próximo login, refará o onboarding do zero.
+                Você cai direto na tela de onboarding pra refazer a calibragem — sem precisar fazer login novamente.
                 Clientes, projetos e orçamentos <strong>não</strong> são afetados.
               </div>
               <button
@@ -22440,7 +22452,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} />}
+          {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
           {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}

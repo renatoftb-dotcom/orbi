@@ -1912,7 +1912,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} />}
+          {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
           {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}
