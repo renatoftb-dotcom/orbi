@@ -152,7 +152,12 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
   // Calibragem: null = ainda não decidiu, true = aceita o calculado,
   // false = quer ajustar (mostra campo de input).
   const [aceitouCalculado, setAceitouCalculado] = useState(null);
-  const [valorCalibragem, setValorCalibragem]   = useState(""); // string do input
+  const [valorCalibragem, setValorCalibragem]   = useState(""); // string em digitação no input
+  // Valor calibrado CONFIRMADO (em number) — só seta quando o usuário aperta
+  // Enter ou clica fora do input. Esse é o valor que substitui o pct_matriz
+  // nos cálculos do gráfico/tabela. Enquanto o usuário digita, esse valor não
+  // muda — evita flicker e dá controle pro usuário.
+  const [valorCalibradoConfirmado, setValorCalibradoConfirmado] = useState(null);
   const [confirmandoAbsurdo, setConfirmandoAbsurdo] = useState(false);
 
   // Estado de salvamento.
@@ -245,19 +250,48 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     return { baixo: cubEstado.baixo, medio: cubEstado.normal, alto: cubEstado.alto }[padrao || "medio"];
   }, [cubEstado, padrao]);
 
-  const casaCalc = useMemo(() => {
+  // pct_efetivo: percentual aplicado nos cálculos do gráfico/tabela.
+  // - Se o usuário CONFIRMOU um valor calibrado (Enter/blur), faz bisseção
+  //   reversa pra encontrar o pct que produz esse valor → usa ele.
+  // - Senão, usa o pct_matriz (calculado das 7 respostas do questionário).
+  // Esse valor é o "preço base efetivo" do escritório — vai ser salvo no banco.
+  const pctEfetivo = useMemo(() => {
     if (pctMatriz === null || !cubAtualPorPadrao) return null;
-    const precoBase = pctMatriz * cubAtualPorPadrao.valor_m2;
+    // Se não houve calibração confirmada, usa pct_matriz puro
+    if (valorCalibradoConfirmado === null || valorCalibradoConfirmado <= 0) {
+      return pctMatriz;
+    }
+    // Bisseção: encontra pct tal que calcularCasaExemplo(pct * cub).honorario === valor
+    // (mesma lógica do backend, garante consistência com o que vai ser salvo)
+    let lo = 0.001, hi = 0.20;
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2;
+      const honor = calcularCasaExemplo(mid * cubAtualPorPadrao.valor_m2, padrao || "medio").honorario;
+      if (honor < valorCalibradoConfirmado) lo = mid; else hi = mid;
+      if (Math.abs(honor - valorCalibradoConfirmado) < 1) break;
+    }
+    return (lo + hi) / 2;
+  }, [pctMatriz, cubAtualPorPadrao, padrao, valorCalibradoConfirmado]);
+
+  const casaCalc = useMemo(() => {
+    if (pctEfetivo === null || !cubAtualPorPadrao) return null;
+    const precoBase = pctEfetivo * cubAtualPorPadrao.valor_m2;
     return calcularCasaExemplo(precoBase, padrao || "medio");
-  }, [pctMatriz, cubAtualPorPadrao, padrao]);
+  }, [pctEfetivo, cubAtualPorPadrao, padrao]);
   const honorarioCalculado = casaCalc?.honorario ?? null;
 
-  // Análise da calibragem: valor digitado vs calculado. Como a fórmula nova
-  // tem faixas de desconto não-lineares, o pct_calibrado reverso é encontrado
-  // por bisseção (igual ao backend faz). Usa o mesmo padrão+CUB da simulação.
+  // Análise da calibragem: detecta se o valor digitado é absurdo (muito baixo
+  // ou muito alto comparado ao calculado pela matriz). Usado pra mostrar
+  // warning vermelho/amarelo. SEMPRE compara contra o honorário da MATRIZ
+  // (não do calibrado), senão a comparação fica circular.
+  const honorarioMatriz = useMemo(() => {
+    if (pctMatriz === null || !cubAtualPorPadrao) return null;
+    return calcularCasaExemplo(pctMatriz * cubAtualPorPadrao.valor_m2, padrao || "medio").honorario;
+  }, [pctMatriz, cubAtualPorPadrao, padrao]);
+
   const analiseCalibragem = useMemo(() => {
-    if (aceitouCalculado !== false || !valorCalibragem || !honorarioCalculado || !cubAtualPorPadrao) return null;
-    const v = parseFloat(String(valorCalibragem).replace(/[^\d,.-]/g, "").replace(",", "."));
+    if (aceitouCalculado !== false || !valorCalibragem || !honorarioMatriz || !cubAtualPorPadrao) return null;
+    const v = parseFloat(String(valorCalibragem).replace(/\./g, "").replace(",", "."));
     if (!v || v <= 0) return { invalido: true };
 
     let lo = 0.001, hi = 0.20;
@@ -269,7 +303,7 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     }
     const pctCalibrado = (lo + hi) / 2;
 
-    const ratio = v / honorarioCalculado;
+    const ratio = v / honorarioMatriz;
     return {
       valor: v,
       ratio,
@@ -277,7 +311,7 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
       muitoAlto:  ratio > RATIO_MUITO_ALTO,
       pctCalibrado,
     };
-  }, [valorCalibragem, honorarioCalculado, aceitouCalculado, cubAtualPorPadrao, padrao]);
+  }, [valorCalibragem, honorarioMatriz, aceitouCalculado, cubAtualPorPadrao, padrao]);
 
   // Loading / erro inicial.
   if (matrizErro) {
@@ -496,6 +530,8 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
             setAceitouCalculado={setAceitouCalculado}
             valorCalibragem={valorCalibragem}
             setValorCalibragem={(v) => { setValorCalibragem(v); setConfirmandoAbsurdo(false); }}
+            valorCalibradoConfirmado={valorCalibradoConfirmado}
+            setValorCalibradoConfirmado={setValorCalibradoConfirmado}
             analiseCalibragem={analiseCalibragem}
             confirmandoAbsurdo={confirmandoAbsurdo}
             setConfirmandoAbsurdo={setConfirmandoAbsurdo}
@@ -604,6 +640,98 @@ function Opcao({ label, selecionada, onClick }) {
   );
 }
 
+// ───────────────────────────────────────────────────────────────
+// InputMoedaBR — input de moeda com formato brasileiro automático.
+//
+// Comportamento:
+// - Texto-instrução "Insira o valor R$" some quando usuário clica/digita.
+// - Enquanto digita, formata automaticamente: 52000 → 52.000,00
+// - Confirma valor (chama onConfirmar com number) quando usuário aperta
+//   Enter ou clica fora (blur). Antes disso, gráfico/tabela NÃO mudam.
+//
+// A formatação extrai apenas os dígitos do que foi digitado e divide por 100
+// pra interpretar os 2 últimos dígitos como centavos. Ex: digitar "52000"
+// vira 520,00 — incorreto. Pra corrigir, somente dígitos pra esquerda da
+// vírgula são interpretados como reais (ex: "52000" → 52.000,00). Implementa
+// abordagem "campo formatado" — usuário digita só números inteiros (R$) e
+// se quiser centavos, digita ",XX" no fim.
+// ───────────────────────────────────────────────────────────────
+function InputMoedaBR({ valor, setValor, onConfirmar }) {
+  const [focado, setFocado] = useState(false);
+
+  // Formata o valor digitado pra padrão BR.
+  // Estratégia: separa parte inteira (antes da vírgula/ponto) e decimal, formata
+  // a parte inteira com pontos a cada 3 dígitos. Aceita dígitos, ponto e vírgula.
+  // Exemplos:
+  //   "52000"      → "52.000"
+  //   "52000,5"    → "52.000,5"
+  //   "52000,50"   → "52.000,50"
+  //   "1234567,89" → "1.234.567,89"
+  function formatarBR(input) {
+    const limpo = String(input).replace(/[^\d,]/g, "");
+    const [inteira = "", decimal] = limpo.split(",");
+    const inteiraFmt = inteira.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+    return decimal !== undefined ? `${inteiraFmt},${decimal}` : inteiraFmt;
+  }
+
+  // Converte string formatada BR pra number (R$ 52.000,50 → 52000.5)
+  function parseBR(str) {
+    if (!str) return 0;
+    const limpo = String(str).replace(/\./g, "").replace(",", ".");
+    const n = parseFloat(limpo);
+    return isNaN(n) ? 0 : n;
+  }
+
+  function handleChange(e) {
+    setValor(formatarBR(e.target.value));
+  }
+
+  function confirmar() {
+    onConfirmar(parseBR(valor));
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      e.target.blur();   // dispara o blur que chama confirmar via onBlur
+    }
+  }
+
+  // Mostra texto-instrução só quando vazio E não focado.
+  // Quando vazio + focado, mostra só o cursor (input em branco).
+  const mostrarInstrucao = !valor && !focado;
+
+  return (
+    <div style={{ position:"relative", maxWidth:360 }}>
+      <span style={{
+        position:"absolute", left:14, top:"50%",
+        transform:"translateY(-50%)",
+        fontSize:13, color:"#9ca3af",
+        pointerEvents:"none",
+        fontVariantNumeric:"tabular-nums",
+      }}>R$</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={valor}
+        onChange={handleChange}
+        onFocus={() => setFocado(true)}
+        onBlur={() => { setFocado(false); confirmar(); }}
+        onKeyDown={handleKeyDown}
+        placeholder={mostrarInstrucao ? "Insira o valor" : ""}
+        autoFocus
+        style={{
+          width:"100%", boxSizing:"border-box",
+          border:"1px solid #e5e7eb", borderRadius:8,
+          padding:"11px 14px 11px 38px",
+          fontSize:14, fontFamily:"inherit", outline:"none",
+          fontVariantNumeric:"tabular-nums",
+        }}
+      />
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════
 // Bloco final: 2 etapas.
 //   Etapa 1: análise digitando + botão "Próximo"
@@ -612,7 +740,9 @@ function Opcao({ label, selecionada, onClick }) {
 function BlocoResultado({
   pctMatriz, cubEstado, cubErro, casaCalc, honorarioCalculado,
   aceitouCalculado, setAceitouCalculado,
-  valorCalibragem, setValorCalibragem, analiseCalibragem,
+  valorCalibragem, setValorCalibragem,
+  valorCalibradoConfirmado, setValorCalibradoConfirmado,
+  analiseCalibragem,
   confirmandoAbsurdo, setConfirmandoAbsurdo,
   respostas, setters, matriz, containerRef, cubLoading,
 }) {
@@ -711,7 +841,12 @@ function BlocoResultado({
               <Opcao
                 label="Sim, esse valor está bom"
                 selecionada={aceitouCalculado === true}
-                onClick={() => { setAceitouCalculado(true); setValorCalibragem(""); setConfirmandoAbsurdo(false); }}
+                onClick={() => {
+                  setAceitouCalculado(true);
+                  setValorCalibragem("");
+                  setValorCalibradoConfirmado(null);  // restaura cálculo da matriz
+                  setConfirmandoAbsurdo(false);
+                }}
               />
               <Opcao
                 label="Quero ajustar — eu cobraria valor diferente"
@@ -725,24 +860,14 @@ function BlocoResultado({
                 <div style={{ fontSize:13, color:"#111", marginBottom:8 }}>
                   Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
                 </div>
-                <div style={{ position:"relative", maxWidth:360 }}>
-                  <span style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", fontSize:13, color:"#9ca3af", pointerEvents:"none" }}>R$</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={valorCalibragem}
-                    onChange={e => setValorCalibragem(e.target.value)}
-                    placeholder="20.000,00"
-                    autoFocus
-                    style={{
-                      width:"100%", boxSizing:"border-box",
-                      border:"1px solid #e5e7eb", borderRadius:8,
-                      padding:"11px 14px 11px 38px",
-                      fontSize:14, fontFamily:"inherit", outline:"none",
-                      fontVariantNumeric:"tabular-nums",
-                    }}
-                  />
-                </div>
+                <InputMoedaBR
+                  valor={valorCalibragem}
+                  setValor={setValorCalibragem}
+                  onConfirmar={(numero) => {
+                    if (numero && numero > 0) setValorCalibradoConfirmado(numero);
+                    else setValorCalibradoConfirmado(null);
+                  }}
+                />
 
                 {analiseCalibragem && !analiseCalibragem.invalido && (analiseCalibragem.muitoBaixo || analiseCalibragem.muitoAlto) && (
                   <div style={{
@@ -1095,13 +1220,15 @@ function ResumoLateral({ respostas, setters, matriz }) {
 // ───────────────────────────────────────────────────────────────
 function TabelaCasaExemplo({ casaCalc }) {
   const labelPadrao = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
+  const padraoLabel = (labelPadrao[casaCalc.padrao] || casaCalc.padrao || "").toUpperCase();
 
   // Cada linha é uma tupla [label, valor, opcional={destaque, separador}]
+  // Linha "Padrão" foi removida da tabela — agora aparece no header à direita
+  // (CASA SIMULADA · ALTO PADRÃO) economizando espaço vertical.
   const linhas = [
     { label: "Área útil",                       valor: `${casaCalc.areaBruta.toLocaleString("pt-BR")} m²` },
     { label: "+ 25% circ. + paredes",           valor: `+${(casaCalc.areaTotal - casaCalc.areaBruta).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²` },
     { label: "Área total",                      valor: `${casaCalc.areaTotal.toLocaleString("pt-BR")} m²`, divisor: true },
-    { label: "Padrão",                          valor: labelPadrao[casaCalc.padrao] || casaCalc.padrao },
     { label: "Preço base",                      valor: `${moeda(casaCalc.precoBase)} / m²` },
     { label: "Preço por m² (com complexidade)", valor: `${moeda(casaCalc.precoM2)} / m²` },
     { label: "Honorário total",                 valor: moeda(casaCalc.honorario), destaque: true, divisor: true },
@@ -1116,13 +1243,17 @@ function TabelaCasaExemplo({ casaCalc }) {
       boxShadow:"0 1px 2px rgba(0,0,0,0.03)",
       animation:"vk-fade-up 0.4s ease-out",
     }}>
-      {/* Header preto/branco */}
+      {/* Header preto/branco — CASA SIMULADA à esquerda, padrão à direita */}
       <div style={{
         background:"#111", color:"#fff",
         padding:"7px 14px",
         fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
+        display:"flex", justifyContent:"space-between", alignItems:"center", gap:10,
       }}>
-        Casa simulada
+        <span>Casa simulada</span>
+        {padraoLabel && (
+          <span style={{ color:"#d1d5db", fontWeight:500 }}>· {padraoLabel} padrão</span>
+        )}
       </div>
 
       {/* Subtítulo: lista de cômodos */}
