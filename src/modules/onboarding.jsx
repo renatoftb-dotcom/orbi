@@ -1252,6 +1252,12 @@ function TabelaCasaExemplo({ casaCalc }) {
   const labelPadrao = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
   const padraoLabel = (labelPadrao[casaCalc.padrao] || casaCalc.padrao || "").toUpperCase();
 
+  // Debug temporário: log o padrão que chegou pra confirmar que o re-render
+  // está acontecendo. Pode remover depois.
+  if (typeof window !== "undefined") {
+    console.log("[TabelaCasaExemplo] padrão recebido:", casaCalc.padrao, "→ label:", padraoLabel);
+  }
+
   // Cada linha é uma tupla [label, valor, opcional={destaque, separador}]
   // Linha "Padrão" foi removida da tabela — agora aparece no header à direita
   // (CASA SIMULADA · ALTO PADRÃO) economizando espaço vertical.
@@ -1273,16 +1279,15 @@ function TabelaCasaExemplo({ casaCalc }) {
       boxShadow:"0 1px 2px rgba(0,0,0,0.03)",
       animation:"vk-fade-up 0.4s ease-out",
     }}>
-      {/* Header preto/branco — CASA SIMULADA · ALTO PADRÃO lado a lado */}
+      {/* Header preto/branco — CASA SIMULADA · MÉDIO PADRÃO em linha única */}
       <div style={{
         background:"#111", color:"#fff",
         padding:"7px 14px",
         fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
-        display:"flex", alignItems:"center", gap:10,
       }}>
-        <span>Casa simulada</span>
+        Casa simulada
         {padraoLabel && (
-          <span style={{ color:"#d1d5db", fontWeight:500 }}>· {padraoLabel} padrão</span>
+          <span style={{ color:"#d1d5db", fontWeight:500, marginLeft:8 }}>· {padraoLabel} padrão</span>
         )}
       </div>
 
