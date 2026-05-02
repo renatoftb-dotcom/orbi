@@ -20736,9 +20736,9 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                 </text>
 
                 {/* Seta indicativa: só pra steps de variação (add/sub).
-                    Aparece no espaço vazio entre a barra (que ficou pequena
-                    em add/sub porque é só a parcela) e o label de baixo.
-                    Inclinação 40°, texto em preto pra contraste. */}
+                    Posição: logo ABAIXO da barra de variação (que termina em
+                    `baseY` pra add ou `baseY` pra sub também), com folga pra
+                    não tocar o label inferior. Centralizada na barra. */}
                 {(s.tipo === "add" || s.tipo === "sub") && visivel && (() => {
                   // Ângulo de 40° em radianos pra calcular as pontas
                   const ang = 40 * Math.PI / 180;
@@ -20746,31 +20746,34 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   const len = 9;
                   const dx = Math.cos(ang) * len;
                   const dy = Math.sin(ang) * len;
-                  // Posição vertical: meio do espaço entre o fim da barra e o label
-                  // Na barra "add": baseY é em cima (barra cresce pra cima a partir
-                  // de baseY), e o label fica em H-36. O espaço vazio fica entre
-                  // baseY e H-36. Centro vertical = (baseY + H - 36) / 2
-                  // Mas como add/sub têm tamanhos diferentes, normalizamos pelo
-                  // ponto da linha de base (yBase).
-                  const meioY = (yBase + (H - 36)) / 2;
 
-                  // Ponto de origem da seta — alinha com o centro horizontal da barra
+                  // Posição vertical da seta: entre o PÉ visual da barra de
+                  // variação e a linha de base do gráfico (yBase).
+                  // - add: pé da barra = baseY (que está ACIMA de yBase). Seta
+                  //   no meio entre baseY e yBase.
+                  // - sub: pé da barra = baseY + altura (também ACIMA de yBase).
+                  //   Seta no meio entre (baseY + altura) e yBase.
+                  // Em ambos casos, a seta NÃO sobrepõe a barra e fica
+                  // claramente separada do label inferior.
+                  const peBarra = s.tipo === "sub" ? baseY + altura : baseY;
+                  const setaCentroY = (peBarra + yBase) / 2;
+
+                  // Centro horizontal da barra
                   const cx = x + barW / 2;
-                  // Linha começa um pouco à esquerda e abaixo (pra add) ou acima (pra sub)
+
+                  // Pontos da linha (inicia em baixo-esquerda, termina em cima-direita pra add;
+                  // ao contrário pra sub)
                   const x1 = cx - dx / 2;
                   const x2 = cx + dx / 2;
-                  const y1 = s.tipo === "add" ? meioY + dy / 2 : meioY - dy / 2;
-                  const y2 = s.tipo === "add" ? meioY - dy / 2 : meioY + dy / 2;
+                  const y1 = s.tipo === "add" ? setaCentroY + dy / 2 : setaCentroY - dy / 2;
+                  const y2 = s.tipo === "add" ? setaCentroY - dy / 2 : setaCentroY + dy / 2;
                   const corSeta = s.tipo === "add" ? "#22c55e" : "#ef4444";
                   const texto   = s.tipo === "add" ? "preço sobe" : "preço desce";
 
-                  // Cabeça da seta: triângulo na ponta (x2, y2)
-                  // Direção: pra add aponta pra cima-direita; pra sub aponta pra baixo-direita
-                  const ahLen = 4; // tamanho da cabeça
-                  // Vetor unitário da linha
+                  // Cabeça da seta
+                  const ahLen = 4;
                   const ux = (x2 - x1) / len;
                   const uy = (y2 - y1) / len;
-                  // Perpendicular
                   const px = -uy;
                   const py = ux;
                   const ahx1 = x2 - ux * ahLen + px * ahLen * 0.6;
@@ -20780,22 +20783,19 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
 
                   return (
                     <g style={{ animation: `vk-fade-up 0.4s ease-out 0.65s both` }}>
-                      {/* Linha da seta */}
                       <line
                         x1={x1} y1={y1}
                         x2={x2} y2={y2}
                         stroke={corSeta} strokeWidth="1.3" strokeLinecap="round"
                       />
-                      {/* Cabeça */}
                       <polygon
                         points={`${x2},${y2} ${ahx1},${ahy1} ${ahx2},${ahy2}`}
                         fill={corSeta}
                       />
-                      {/* Texto delicado em PRETO, abaixo da seta */}
+                      {/* Texto à direita da seta (não embaixo, pra não invadir o label) */}
                       <text
-                        x={cx}
-                        y={meioY + 12}
-                        textAnchor="middle"
+                        x={x2 + 4}
+                        y={s.tipo === "add" ? y2 + 3 : y2 + 3}
                         fontSize="8.5"
                         fill="#111"
                         fontStyle="italic"
