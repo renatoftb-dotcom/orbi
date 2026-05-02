@@ -20010,12 +20010,9 @@ function BlocoResultado({
 }) {
   // Etapa atual: 1 = só texto, 2 = simulação completa
   const [etapa, setEtapa] = useState(1);
-
-  // Quando o casaCalc muda (usuário editou padrão pelo resumo lateral, p.ex.),
-  // volta pra etapa 1 pra a apresentação reiniciar com o texto novo.
-  useEffect(() => {
-    setEtapa(1);
-  }, [casaCalc?.honorario]);
+  // Nota: NÃO resetamos etapa quando casaCalc muda. Edições inline pelo
+  // resumo lateral devem só atualizar os valores reativamente — gráfico,
+  // tabela e números recalculam sozinhos pelo useMemo do componente pai.
 
   // Auto-scroll: sempre que conteúdo novo aparece (etapa 2 montada, ou input
   // de calibragem aberto após "Quero ajustar"), rola o container até o final
@@ -20051,12 +20048,16 @@ function BlocoResultado({
 
   return (
     <div style={{ animation:"vk-onb-fade-in 0.4s ease-out" }}>
-      {/* Header da apresentação */}
-      <div style={{ marginBottom: etapa === 1 ? 24 : 10 }}>
-        <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, marginBottom:4 }}>
+      {/* Header da apresentação — kicker e título lado a lado pra economizar
+          altura. Em mobile (telas estreitas) volta a empilhar via CSS. */}
+      <div style={{
+        display:"flex", flexWrap:"wrap", alignItems:"baseline", gap:14,
+        marginBottom: etapa === 1 ? 24 : 8,
+      }} className="vk-onb-header">
+        <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, flexShrink:0 }}>
           VICKE · Análise Inteligente
         </div>
-        <div style={{ fontSize: etapa === 1 ? 22 : 17, fontWeight:300, color:"#111", letterSpacing:-0.4, lineHeight:1.2 }}>
+        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#111", letterSpacing:-0.4, lineHeight:1.2 }}>
           Resultado da sua calibragem
         </div>
       </div>
@@ -20071,8 +20072,8 @@ function BlocoResultado({
           <div style={{
             display:"grid",
             gridTemplateColumns:"minmax(0, 220px) minmax(0, 1fr)",
-            gap:14,
-            marginBottom:10,
+            gap:12,
+            marginBottom:6,
           }} className="vk-onb-grid">
             <ResumoLateral respostas={respostas} setters={setters} matriz={matriz} />
             <TabelaCasaExemplo casaCalc={casaCalc} />
@@ -20082,7 +20083,7 @@ function BlocoResultado({
           <Waterfall casaCalc={casaCalc} honorarioCalculado={honorarioCalculado} />
 
           {/* Pergunta de calibragem — IDÊNTICA ao estilo do questionário */}
-          <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
+          <div style={{ marginTop:4, animation:"vk-onb-fade-in 0.3s ease-out" }}>
             <PerguntaBlock pergunta="Esse valor está alinhado com o que você cobraria?">
               <Opcao
                 label="Sim, esse valor está bom"
@@ -20207,23 +20208,21 @@ function EtapaTexto({ casaCalc, onProximo }) {
     if (!terminou) { setChars(textoAnalise.length); setTerminou(true); }
   };
 
-  // Layout: centralizado horizontalmente, max-width pra leitura confortável.
-  // Sem resumo lateral — foco total no texto da apresentação.
+  // Layout: alinhado à esquerda como o resto da página (texto justificado).
+  // O "C" de "Cruzamos" começa alinhado verticalmente com o "R" de "Resultado".
   return (
     <div style={{
-      display:"flex", flexDirection:"column",
-      justifyContent:"center", alignItems:"center",
-      minHeight: 360,
-      padding: "20px 0",
+      padding: "8px 0 32px",
     }}>
       <div
         onClick={handleSkip}
         style={{
           fontSize:16, color:"#111", lineHeight:1.7,
           maxWidth: 760,
-          textAlign:"left",
+          textAlign:"justify",
+          textAlignLast:"left",
           cursor: terminou ? "default" : "pointer",
-          marginBottom: 28,
+          marginBottom: 24,
         }}>
         {textoAnalise.slice(0, chars)}
         {!terminou && (
@@ -20243,8 +20242,6 @@ function EtapaTexto({ casaCalc, onProximo }) {
         animation: terminou ? "vk-fade-up 0.3s ease-out" : "none",
         opacity: terminou ? 1 : 0,
         transition:"opacity 0.3s",
-        alignSelf:"flex-start",
-        maxWidth:760, width:"100%",
       }}>
         <button
           onClick={onProximo}
@@ -20273,47 +20270,104 @@ function EtapaTexto({ casaCalc, onProximo }) {
 }
 
 // ───────────────────────────────────────────────────────────────
-// ResumoLateral — header preto/branco arredondado, linhas zebra,
-// tipografia hierárquica. Clique pra editar (limpa cascata).
+// ResumoLateral — header preto/branco arredondado, linhas zebra.
+// Clicar num campo abre um popover com as opções daquele campo,
+// permitindo alterar SEM zerar as respostas posteriores.
+// Atualização do gráfico/tabela é automática (state reativo).
 // ───────────────────────────────────────────────────────────────
 function ResumoLateral({ respostas, setters, matriz }) {
+  // Campo atualmente sendo editado (null = nenhum). Quando setado, mostra
+  // popover com opções daquele campo. Clicar numa opção atualiza o setter
+  // correspondente e fecha o popover.
+  const [editando, setEditando] = useState(null);
+
+  // Fecha popover ao clicar fora
+  useEffect(() => {
+    if (!editando) return;
+    const onDocClick = (e) => {
+      // Só fecha se o click foi fora de qualquer elemento do resumo lateral
+      if (!e.target.closest("[data-resumo-lateral]")) {
+        setEditando(null);
+      }
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [editando]);
+
   const labelOu = (cat, key, fallback) => {
     if (key === null || key === undefined) return fallback || "—";
     const k = typeof key === "boolean" ? String(key) : key;
     return matriz?.[cat]?.[k]?.label || fallback || String(key);
   };
 
+  // Cada linha: campo no banco + label exibida + valor formatado + ordem das
+  // opções na hora de editar + setter pra aplicar a mudança.
+  // Importante: ORDEM das opções deve bater com ORDEM_* do questionário pra
+  // experiência consistente (do menos pro mais "alto").
   const linhas = [
-    { campo: "profissao",   label: "Profissão",   valor: labelOu("profissao", respostas.profissao) },
-    { campo: "porte",       label: "Porte",       valor: labelOu("porte", respostas.porte) },
-    { campo: "experiencia", label: "Experiência", valor: labelOu("experiencia", respostas.experiencia) },
-    { campo: "referencia",  label: "Momento",     valor: labelOu("referencia", respostas.referencia) },
-    { campo: "padrao",      label: "Padrão",      valor: labelOu("padrao_projetos", respostas.padrao) },
-    { campo: "capital",     label: "Localização", valor: labelOu("capital", respostas.capital) },
-    { campo: "estado",      label: "Estado",      valor: respostas.estado || "—" },
+    {
+      campo: "profissao", label: "Profissão",
+      valor: labelOu("profissao", respostas.profissao),
+      opcoes: ["arquiteto", "engenheiro"],
+      catMatriz: "profissao",
+      setter: setters.setProfissao,
+    },
+    {
+      campo: "porte", label: "Porte",
+      valor: labelOu("porte", respostas.porte),
+      opcoes: ["1-3", "4-10", "11-30", "30+"],
+      catMatriz: "porte",
+      setter: setters.setPorte,
+    },
+    {
+      campo: "experiencia", label: "Experiência",
+      valor: labelOu("experiencia", respostas.experiencia),
+      opcoes: ["0-2", "3-5", "6-10", "11-20", "20+"],
+      catMatriz: "experiencia",
+      setter: setters.setExperiencia,
+    },
+    {
+      campo: "referencia", label: "Momento",
+      valor: labelOu("referencia", respostas.referencia),
+      opcoes: ["iniciando", "alguns_projetos", "projetos_crescendo", "referencia_cidade", "referencia_alem", "nacional", "internacional"],
+      catMatriz: "referencia",
+      setter: setters.setReferencia,
+    },
+    {
+      campo: "padrao", label: "Padrão",
+      valor: labelOu("padrao_projetos", respostas.padrao),
+      opcoes: ["baixo", "medio", "alto"],
+      catMatriz: "padrao_projetos",
+      setter: setters.setPadrao,
+    },
+    {
+      campo: "capital", label: "Localização",
+      valor: labelOu("capital", respostas.capital),
+      // capital é boolean — armazenamos a chave como "true"/"false"
+      opcoes: ["true", "false"],
+      catMatriz: "capital",
+      setter: (v) => setters.setCapital(v === "true"),
+      valorAtual: String(respostas.capital),
+    },
+    {
+      campo: "estado", label: "Estado",
+      valor: respostas.estado || "—",
+      // Estado: lista hardcoded (não tem matriz — labels são as siglas)
+      opcoes: ["SP", "RJ", "MG", "SC"],
+      catMatriz: null,
+      setter: setters.setEstado,
+    },
   ];
 
-  const handleEditar = (campo) => {
-    const cascata = {
-      profissao:   ["setProfissao","setPorte","setExperiencia","setReferencia","setPadrao","setCapital","setEstado"],
-      porte:       ["setPorte","setExperiencia","setReferencia","setPadrao","setCapital","setEstado"],
-      experiencia: ["setExperiencia","setReferencia","setPadrao","setCapital","setEstado"],
-      referencia:  ["setReferencia","setPadrao","setCapital","setEstado"],
-      padrao:      ["setPadrao","setCapital","setEstado"],
-      capital:     ["setCapital","setEstado"],
-      estado:      ["setEstado"],
-    };
-    (cascata[campo] || []).forEach(s => setters[s] && setters[s](null));
-  };
-
   return (
-    <div style={{
+    <div data-resumo-lateral style={{
       background:"#fff",
       border:"1px solid #e5e7eb",
       borderRadius:10,
-      overflow:"hidden",  // pra header preto não vazar dos cantos arredondados
+      overflow:"visible",  // popover precisa vazar pra fora
       alignSelf:"start",
       boxShadow:"0 1px 2px rgba(0,0,0,0.03)",
+      position:"relative",  // popover ancora aqui
     }}>
       {/* Header preto/branco */}
       <div style={{
@@ -20321,34 +20375,90 @@ function ResumoLateral({ respostas, setters, matriz }) {
         color:"#fff",
         padding:"7px 12px",
         fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
+        borderRadius:"10px 10px 0 0",
       }}>
         Suas respostas
       </div>
 
-      {/* Linhas zebra (alterna #fff e #fafbfc), clicáveis pra editar */}
+      {/* Linhas zebra clicáveis */}
       <div>
-        {linhas.map((l, i) => (
-          <div key={l.campo}
-               onClick={() => handleEditar(l.campo)}
-               style={{
-                 display:"flex", alignItems:"center", justifyContent:"space-between", gap:8,
-                 padding:"5px 12px",
-                 background: i % 2 === 0 ? "#fff" : "#fafbfc",
-                 borderTop: i === 0 ? "none" : "1px solid #f3f4f6",
-                 cursor:"pointer",
-                 transition:"background 0.12s",
-               }}
-               onMouseEnter={e => e.currentTarget.style.background = "#f3f4f6"}
-               onMouseLeave={e => e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafbfc"}
-               title="Clique pra refazer a partir desta">
-            <div style={{ fontSize:9, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, fontWeight:700, flexShrink:0, minWidth:60 }}>
-              {l.label}
+        {linhas.map((l, i) => {
+          const aberto = editando === l.campo;
+          const valorAtualKey = l.valorAtual ?? respostas[l.campo];
+          return (
+            <div key={l.campo} style={{ position:"relative" }}>
+              <div
+                onClick={() => setEditando(aberto ? null : l.campo)}
+                style={{
+                  display:"flex", alignItems:"center", justifyContent:"space-between", gap:8,
+                  padding:"5px 12px",
+                  background: aberto ? "#f3f4f6" : (i % 2 === 0 ? "#fff" : "#fafbfc"),
+                  borderTop: i === 0 ? "none" : "1px solid #f3f4f6",
+                  borderRadius: i === linhas.length - 1 ? "0 0 10px 10px" : 0,
+                  cursor:"pointer",
+                  transition:"background 0.12s",
+                }}
+                onMouseEnter={e => !aberto && (e.currentTarget.style.background = "#f3f4f6")}
+                onMouseLeave={e => !aberto && (e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafbfc")}
+                title="Clique pra alterar">
+                <div style={{ fontSize:9, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, fontWeight:700, flexShrink:0, minWidth:60 }}>
+                  {l.label}
+                </div>
+                <div style={{ fontSize:11, color:"#111", lineHeight:1.25, fontWeight:500, textAlign:"right" }}>
+                  {l.valor}
+                </div>
+              </div>
+
+              {/* Popover com opções desse campo. Anchorado à direita da linha,
+                  zIndex alto pra ficar sobre tabela/gráfico. */}
+              {aberto && (
+                <div style={{
+                  position:"absolute",
+                  top: 0, left: "calc(100% + 8px)",
+                  background:"#fff",
+                  border:"1px solid #e5e7eb",
+                  borderRadius:8,
+                  boxShadow:"0 8px 24px rgba(0,0,0,0.12)",
+                  padding:"6px",
+                  zIndex: 100,
+                  minWidth: 200,
+                  animation:"vk-fade-up 0.15s ease-out",
+                }}>
+                  <div style={{ fontSize:9, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, fontWeight:700, padding:"4px 8px 6px" }}>
+                    Alterar {l.label.toLowerCase()}
+                  </div>
+                  {l.opcoes.map(opt => {
+                    const optLabel = l.catMatriz
+                      ? (matriz?.[l.catMatriz]?.[opt]?.label || opt)
+                      : opt;  // estado: usa a sigla mesmo
+                    const selecionada = String(valorAtualKey) === String(opt);
+                    return (
+                      <div key={opt}
+                        onClick={() => {
+                          l.setter(opt);
+                          setEditando(null);
+                        }}
+                        style={{
+                          padding:"7px 10px",
+                          fontSize:12,
+                          borderRadius:5,
+                          cursor:"pointer",
+                          background: selecionada ? "#f3f4f6" : "transparent",
+                          color: selecionada ? "#111" : "#374151",
+                          fontWeight: selecionada ? 600 : 400,
+                          transition:"background 0.1s",
+                        }}
+                        onMouseEnter={e => !selecionada && (e.currentTarget.style.background = "#f9fafb")}
+                        onMouseLeave={e => !selecionada && (e.currentTarget.style.background = "transparent")}>
+                        {optLabel}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-            <div style={{ fontSize:11, color:"#111", lineHeight:1.25, fontWeight:500, textAlign:"right" }}>
-              {l.valor}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -20458,11 +20568,11 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   // Dimensões compactas. padLeft/padRight maiores que o necessário pras barras
   // pra que os textos centralizados acima/abaixo das barras das pontas (ex.
   // "R$ 90,30/m² × 223,88m²") não cortem nas bordas do SVG.
-  const W = 720, H = 170;
-  const padTop = 26, padBot = 50, padLeft = 60, padRight = 60;
+  const W = 720, H = 145;
+  const padTop = 22, padBot = 44, padLeft = 60, padRight = 60;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
-  const barW = Math.min(64, innerW / steps.length - 22);
+  const barW = Math.min(54, innerW / steps.length - 24);
   const gap  = (innerW - barW * steps.length) / (steps.length - 1);
 
   const maxValor = Math.max(honorComPadrao, honorarioCalculado, honorBaseSemFator);
@@ -20595,6 +20705,51 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.6s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.sub}
                 </text>
+
+                {/* Seta indicativa: só pra steps de variação (add/sub).
+                    Aparece à direita da barra, apontando pra cima (sobe, verde)
+                    ou pra baixo (desce, vermelho). Texto delicado embaixo. */}
+                {(s.tipo === "add" || s.tipo === "sub") && visivel && (() => {
+                  // Posição da seta: à direita da barra (deslocada do canto direito)
+                  const setaX = x + barW + 6;
+                  // Posição vertical da seta:
+                  //   - add (sobe): logo abaixo da linha de base, indo pra cima
+                  //   - sub (desce): logo acima da linha de base, indo pra baixo
+                  const setaY1 = s.tipo === "add" ? yBase - 4 : yBase - 18;
+                  const setaY2 = s.tipo === "add" ? yBase - 18 : yBase - 4;
+                  const corSeta = s.tipo === "add" ? "#22c55e" : "#ef4444";
+                  const texto   = s.tipo === "add" ? "Preço sobe" : "Preço desce";
+                  return (
+                    <g style={{ animation: `vk-fade-up 0.4s ease-out 0.65s both` }}>
+                      {/* Linha da seta (diagonal pra dar dinâmica) */}
+                      <line
+                        x1={setaX} y1={setaY1}
+                        x2={setaX + 14} y2={setaY2}
+                        stroke={corSeta} strokeWidth="1.5" strokeLinecap="round"
+                      />
+                      {/* Cabeça da seta (triângulo) */}
+                      <polygon
+                        points={
+                          s.tipo === "add"
+                            ? `${setaX + 14},${setaY2} ${setaX + 9},${setaY2 + 1} ${setaX + 12},${setaY2 + 5}`
+                            : `${setaX + 14},${setaY2} ${setaX + 9},${setaY2 - 1} ${setaX + 12},${setaY2 - 5}`
+                        }
+                        fill={corSeta}
+                      />
+                      {/* Texto delicado embaixo da seta */}
+                      <text
+                        x={setaX + 7}
+                        y={s.tipo === "add" ? setaY1 + 12 : setaY2 + 12}
+                        fontSize="9"
+                        fill={corSeta}
+                        fontStyle="italic"
+                        fontWeight="400"
+                        fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif">
+                        {texto}
+                      </text>
+                    </g>
+                  );
+                })()}
               </g>
             );
           })}
