@@ -346,16 +346,21 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     <div ref={containerRef} style={tela}>
       <div style={{ width:"100%", maxWidth:560, padding:"40px 20px 80px" }}>
 
-        {/* ── Cabeçalho ── */}
-        <div style={{ marginBottom:32 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>VICKE</div>
-          <div style={{ fontSize:24, fontWeight:300, color:"#111", letterSpacing:-0.5, marginBottom:6 }}>
-            Bem-vindo, {(usuario?.nome || "").split(" ")[0]}!
+        {/* ── Cabeçalho — só aparece enquanto questionário ativo ── */}
+        {!todasRespondidas && (
+          <div style={{ marginBottom:32 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>VICKE</div>
+            <div style={{ fontSize:24, fontWeight:300, color:"#111", letterSpacing:-0.5, marginBottom:6 }}>
+              Bem-vindo, {(usuario?.nome || "").split(" ")[0]}!
+            </div>
+            <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.5 }}>
+              Configure seu perfil profissional para personalizar seus orçamentos. Vai levar 2 minutos.
+            </div>
           </div>
-          <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.5 }}>
-            Configure seu perfil profissional para personalizar seus orçamentos. Vai levar 2 minutos.
-          </div>
-        </div>
+        )}
+
+        {/* ── Questionário (1-7) — escondido quando o resultado aparece ── */}
+        {!todasRespondidas && (<>
 
         {/* ── 1. Profissão ── */}
         <PerguntaBlock pergunta="Qual é a sua profissão?">
@@ -448,7 +453,7 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
         {capital !== null && (
           <PerguntaBlock
             pergunta="Em qual estado fica o escritório?"
-            sub="Usamos o CUB do seu estado pra calcular o preço base dos projetos."
+            sub="Usamos os dados do seu estado pra calcular o preço base dos projetos."
           >
             {ESTADOS_DISPONIVEIS.map(e => (
               <Opcao key={e.sigla}
@@ -459,6 +464,8 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
             ))}
           </PerguntaBlock>
         )}
+
+        </>)}{/* ── fim do questionário condicional ── */}
 
         {/* ── Resultado + calibragem ── */}
         {todasRespondidas && (
@@ -579,7 +586,7 @@ function Opcao({ label, selecionada, onClick }) {
 }
 
 // ════════════════════════════════════════════════════════════════
-// Bloco final: análise digitando + waterfall + resumo lateral editável
+// Bloco final: análise digitando + tabela + waterfall + resumo lateral
 // ════════════════════════════════════════════════════════════════
 function BlocoResultado({
   pctMatriz, cubEstado, cubErro, casaCalc, honorarioCalculado,
@@ -606,37 +613,46 @@ function BlocoResultado({
 
   return (
     <div style={{
-      marginTop:36,
-      paddingTop:28,
-      borderTop:"1px solid #f3f4f6",
       animation:"vk-onb-fade-in 0.4s ease-out",
     }}>
       <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:18 }}>
         Resultado da análise
       </div>
 
-      {/* Layout 2 colunas em desktop, empilhado em mobile */}
+      {/* Layout: resumo lateral fininho + texto/tabela à direita */}
       <div style={{
         display:"grid",
-        gridTemplateColumns:"minmax(0, 220px) minmax(0, 1fr)",
-        gap:24,
-        marginBottom:22,
+        gridTemplateColumns:"minmax(0, 150px) minmax(0, 1fr)",
+        gap:20,
+        marginBottom:18,
       }} className="vk-onb-grid">
         <ResumoLateral respostas={respostas} setters={setters} matriz={matriz} />
-        <AnaliseEWaterfall casaCalc={casaCalc} honorarioCalculado={honorarioCalculado} />
+        <AnaliseTexto casaCalc={casaCalc} />
       </div>
 
-      {/* CSS embed pro grid responsivo + animações */}
+      {/* Gráfico waterfall full-width (passa por baixo do resumo lateral) */}
+      <Waterfall casaCalc={casaCalc} honorarioCalculado={honorarioCalculado} />
+
+      {/* CSS — animações + responsivo + cursor digitando */}
       <style>{`
         @media (max-width: 720px) {
           .vk-onb-grid { grid-template-columns: 1fr !important; }
         }
-        @keyframes vk-bar-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-        @keyframes vk-fade-up { from { opacity:0; transform: translateY(6px); } to { opacity:1; transform: translateY(0); } }
-        @keyframes vk-cursor-blink { 0%, 49% { opacity:1; } 50%, 100% { opacity:0; } }
+        @keyframes vk-bar-grow {
+          from { transform: scaleY(0); }
+          to   { transform: scaleY(1); }
+        }
+        @keyframes vk-fade-up {
+          from { opacity:0; transform: translateY(6px); }
+          to   { opacity:1; transform: translateY(0); }
+        }
+        @keyframes vk-cursor-blink {
+          0%, 49%   { opacity:1; }
+          50%, 100% { opacity:0; }
+        }
       `}</style>
 
-      <div style={{ fontSize:14, color:"#111", marginBottom:12, marginTop:8 }}>
+      <div style={{ fontSize:14, color:"#111", marginBottom:12, marginTop:24 }}>
         Esse valor está alinhado com o que você cobraria?
       </div>
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -652,11 +668,9 @@ function BlocoResultado({
         />
       </div>
 
-      {/* Campo de calibragem */}
       {aceitouCalculado === false && (
         <div style={{
-          marginTop:18,
-          paddingTop:16,
+          marginTop:18, paddingTop:16,
           borderTop:"1px dashed #e5e7eb",
           animation:"vk-onb-fade-in 0.3s ease-out",
         }}>
@@ -719,11 +733,11 @@ function BlocoResultado({
 }
 
 // ───────────────────────────────────────────────────────────────
-// ResumoLateral: card com as 7 respostas, cada linha clicável pra editar.
-// Em desktop fica à esquerda; em mobile vira colapsável (CSS no parent).
+// ResumoLateral compacto — 7 respostas, fonte e padding reduzidos.
+// Cada linha clicável → limpa essa resposta + posteriores (volta o
+// questionário àquele ponto, já que !todasRespondidas oculta o resultado).
 // ───────────────────────────────────────────────────────────────
 function ResumoLateral({ respostas, setters, matriz }) {
-  // Helpers pra extrair label da matriz (ou fallback amigável)
   const labelOu = (cat, key, fallback) => {
     if (key === null || key === undefined) return fallback || "—";
     const k = typeof key === "boolean" ? String(key) : key;
@@ -731,23 +745,18 @@ function ResumoLateral({ respostas, setters, matriz }) {
   };
 
   const linhas = [
-    { campo: "profissao",   label: "Profissão",        valor: labelOu("profissao", respostas.profissao),                           setter: setters.setProfissao },
-    { campo: "porte",       label: "Porte",            valor: labelOu("porte", respostas.porte),                                   setter: setters.setPorte },
-    { campo: "experiencia", label: "Experiência",      valor: labelOu("experiencia", respostas.experiencia),                       setter: setters.setExperiencia },
-    { campo: "referencia",  label: "Momento",          valor: labelOu("referencia", respostas.referencia),                         setter: setters.setReferencia },
-    { campo: "padrao",      label: "Padrão",           valor: labelOu("padrao_projetos", respostas.padrao),                        setter: setters.setPadrao },
-    { campo: "capital",     label: "Localização",      valor: labelOu("capital", respostas.capital),                               setter: setters.setCapital },
-    { campo: "estado",      label: "Estado",           valor: respostas.estado || "—",                                             setter: setters.setEstado },
+    { campo: "profissao",   label: "Profissão",   valor: labelOu("profissao", respostas.profissao) },
+    { campo: "porte",       label: "Porte",       valor: labelOu("porte", respostas.porte) },
+    { campo: "experiencia", label: "Experiência", valor: labelOu("experiencia", respostas.experiencia) },
+    { campo: "referencia",  label: "Momento",     valor: labelOu("referencia", respostas.referencia) },
+    { campo: "padrao",      label: "Padrão",      valor: labelOu("padrao_projetos", respostas.padrao) },
+    { campo: "capital",     label: "Localização", valor: labelOu("capital", respostas.capital) },
+    { campo: "estado",      label: "Estado",      valor: respostas.estado || "—" },
   ];
 
-  const handleEditar = (campo, setter) => {
-    // "Editar" = limpar a resposta dessa pergunta. O fluxo de perguntas é
-    // sequencial (cada pergunta só aparece se a anterior foi respondida),
-    // então quando limpamos uma resposta, todas as posteriores também
-    // precisam ser limpas pra UX fazer sentido — senão o usuário troca
-    // a resposta de "Padrão" mas a tela continua mostrando o resultado
-    // calculado com a resposta antiga.
-    const limparAPartirDe = {
+  // Limpa a resposta clicada + todas posteriores (cascata).
+  const handleEditar = (campo) => {
+    const cascata = {
       profissao:   ["setProfissao","setPorte","setExperiencia","setReferencia","setPadrao","setCapital","setEstado"],
       porte:       ["setPorte","setExperiencia","setReferencia","setPadrao","setCapital","setEstado"],
       experiencia: ["setExperiencia","setReferencia","setPadrao","setCapital","setEstado"],
@@ -756,8 +765,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
       capital:     ["setCapital","setEstado"],
       estado:      ["setEstado"],
     };
-    const aLimpar = limparAPartirDe[campo] || [];
-    aLimpar.forEach(s => setters[s] && setters[s](null));
+    (cascata[campo] || []).forEach(s => setters[s] && setters[s](null));
   };
 
   return (
@@ -765,77 +773,65 @@ function ResumoLateral({ respostas, setters, matriz }) {
       background:"#fafbfc",
       border:"1px solid #f3f4f6",
       borderRadius:10,
-      padding:"16px 16px",
+      padding:"12px 12px",
       alignSelf:"start",
-      position:"sticky", top:0,
     }}>
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.8, marginBottom:12 }}>
+      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.7, marginBottom:8, padding:"0 4px" }}>
         Suas respostas
       </div>
-      <div style={{ display:"flex", flexDirection:"column", gap:2 }}>
-        {linhas.map((l, i) => (
+      <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
+        {linhas.map((l) => (
           <div key={l.campo}
-               onClick={() => handleEditar(l.campo, l.setter)}
+               onClick={() => handleEditar(l.campo)}
                style={{
-                 display:"flex", flexDirection:"column", gap:1,
-                 padding:"7px 8px",
-                 borderRadius:6,
+                 padding:"5px 6px",
+                 borderRadius:5,
                  cursor:"pointer",
                  transition:"background 0.12s",
                }}
                onMouseEnter={e => e.currentTarget.style.background = "#f3f4f6"}
                onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-               title={`Clique pra editar (refaz a partir daqui)`}>
-            <div style={{ fontSize:10.5, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>
+               title="Clique pra refazer a partir desta">
+            <div style={{ fontSize:9.5, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.4, fontWeight:600, marginBottom:1 }}>
               {l.label}
             </div>
-            <div style={{ fontSize:12.5, color:"#111", lineHeight:1.35, fontWeight:500 }}>
+            <div style={{ fontSize:11.5, color:"#111", lineHeight:1.3, fontWeight:500 }}>
               {l.valor}
             </div>
           </div>
         ))}
-      </div>
-      <div style={{ fontSize:11, color:"#9ca3af", marginTop:10, lineHeight:1.4, padding:"0 8px" }}>
-        Clique em qualquer campo pra refazer a partir dele.
       </div>
     </div>
   );
 }
 
 // ───────────────────────────────────────────────────────────────
-// AnaliseEWaterfall: bloco central com análise digitando + gráfico waterfall.
+// AnaliseTexto: texto curto digitando + tabela compacta da simulação.
+// Texto e tabela ficam empilhados na coluna direita do resumo lateral.
 // ───────────────────────────────────────────────────────────────
-function AnaliseEWaterfall({ casaCalc, honorarioCalculado }) {
-  // Texto da análise (Versão B — consultiva, sem mencionar fonte de dados externa)
+function AnaliseTexto({ casaCalc }) {
+  // Texto enxuto — versão B condensada. Detalhes da fórmula vão pra tabela
+  // e pro gráfico, não pro texto.
   const textoAnalise = useMemo(() => {
-    return `Sua composição de perfil é compatível com escritórios que aplicam ${moeda(casaCalc.precoBase)} por m² como referência. Esse valor é apenas um ponto de partida: projetos com mais ambientes tornam-se proporcionalmente mais altos, alto padrão acrescenta prêmio, e metragens grandes recebem desconto progressivo. A simulação abaixo demonstra como isso se comporta numa casa típica:`;
+    return `Sua composição de perfil é compatível com escritórios que aplicam ${moeda(casaCalc.precoBase)} por m² como referência. A simulação abaixo mostra como esse valor se comporta numa casa típica:`;
   }, [casaCalc.precoBase]);
 
   const [chars, setChars] = useState(0);
-  const [terminouTexto, setTerminouTexto] = useState(false);
+  const [terminou, setTerminou] = useState(false);
 
-  // Reset da animação quando o texto muda (ex: usuário editou padrão e voltou)
   useEffect(() => {
     setChars(0);
-    setTerminouTexto(false);
+    setTerminou(false);
   }, [textoAnalise]);
 
-  // Efeito de "digitando" — revela 1 char a cada 20ms.
   useEffect(() => {
-    if (chars >= textoAnalise.length) {
-      setTerminouTexto(true);
-      return;
-    }
-    const t = setTimeout(() => setChars(c => c + 1), 20);
+    if (chars >= textoAnalise.length) { setTerminou(true); return; }
+    const t = setTimeout(() => setChars(c => c + 1), 22);
     return () => clearTimeout(t);
   }, [chars, textoAnalise]);
 
-  // Skip: clicar no texto enquanto digita revela tudo
   const handleSkip = () => {
-    if (!terminouTexto) {
-      setChars(textoAnalise.length);
-      setTerminouTexto(true);
-    }
+    if (!terminou) { setChars(textoAnalise.length); setTerminou(true); }
   };
 
   return (
@@ -845,12 +841,12 @@ function AnaliseEWaterfall({ casaCalc, honorarioCalculado }) {
         onClick={handleSkip}
         style={{
           fontSize:14, color:"#111", lineHeight:1.6,
-          marginBottom:24,
-          cursor: terminouTexto ? "default" : "pointer",
-          minHeight: 90, // evita layout shift quando texto cresce
+          marginBottom:14,
+          cursor: terminou ? "default" : "pointer",
+          minHeight: 80,
         }}>
         {textoAnalise.slice(0, chars)}
-        {!terminouTexto && (
+        {!terminou && (
           <span style={{
             display:"inline-block",
             width:2, height:"1em",
@@ -862,86 +858,118 @@ function AnaliseEWaterfall({ casaCalc, honorarioCalculado }) {
         )}
       </div>
 
-      {/* Waterfall — só renderiza depois que o texto termina */}
-      {terminouTexto && <WaterfallChart casaCalc={casaCalc} honorarioCalculado={honorarioCalculado} />}
+      {/* Tabela compacta da casa exemplo — só aparece depois do texto */}
+      {terminou && <TabelaCasaExemplo casaCalc={casaCalc} />}
+    </div>
+  );
+}
+
+// Tabela compacta com a composição e métricas da casa simulada.
+function TabelaCasaExemplo({ casaCalc }) {
+  const labelPadrao = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
+
+  const linha = (label, valor, opts = {}) => (
+    <div style={{
+      display:"flex", justifyContent:"space-between", alignItems:"baseline",
+      padding:"6px 0",
+      fontSize:12.5,
+      borderTop: opts.divisor ? "1px solid #e5e7eb" : "none",
+      marginTop: opts.divisor ? 4 : 0,
+      paddingTop: opts.divisor ? 8 : 6,
+      fontVariantNumeric:"tabular-nums",
+    }}>
+      <span style={{ color: opts.destaque ? "#111" : "#6b7280", fontWeight: opts.destaque ? 600 : 400 }}>{label}</span>
+      <span style={{ color:"#111", fontWeight: opts.destaque ? 700 : 500 }}>{valor}</span>
+    </div>
+  );
+
+  return (
+    <div style={{
+      background:"#fafbfc",
+      border:"1px solid #f3f4f6",
+      borderRadius:10,
+      padding:"12px 16px",
+      animation:"vk-fade-up 0.4s ease-out",
+    }}>
+      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.7, marginBottom:6 }}>
+        Casa simulada
+      </div>
+      <div style={{ fontSize:12, color:"#374151", lineHeight:1.5, marginBottom:6 }}>
+        3 suítes (1 master) · sala de estar · sala de jantar · cozinha · lavabo · lavanderia · 2 vagas garagem
+      </div>
+
+      {linha("Área útil",                  `${casaCalc.areaBruta.toLocaleString("pt-BR")} m²`)}
+      {linha("+ 25% circ. + paredes",       `+${(casaCalc.areaTotal - casaCalc.areaBruta).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²`)}
+      {linha("Área total",                  `${casaCalc.areaTotal.toLocaleString("pt-BR")} m²`, { divisor: true })}
+      {linha("Padrão",                      labelPadrao[casaCalc.padrao] || casaCalc.padrao, { divisor: true })}
+      {linha("Preço base",                  `${moeda(casaCalc.precoBase)} / m²`)}
+      {linha("Preço por m² (com complexidade)", `${moeda(casaCalc.precoM2)} / m²`)}
+      {linha("Honorário total",             moeda(casaCalc.honorario), { divisor: true, destaque: true })}
     </div>
   );
 }
 
 // ───────────────────────────────────────────────────────────────
-// WaterfallChart: SVG animado mostrando como o preço base se transforma
-// em honorário final através de complexidade, padrão e descontos.
-// Etapas: [Base/m²] → [+Complexidade] → [+Padrão] → [Subtotal m²] → [×Área] → [-Desconto] → [Total]
+// Waterfall: gráfico SVG full-width animado.
+// Etapas: Preço base → +Complexidade → ±Padrão → -Desconto → Total
+// Cores modernas: azul #3b82f6 (base/total), verde #22c55e (+), vermelho #ef4444 (−)
 // ───────────────────────────────────────────────────────────────
-function WaterfallChart({ casaCalc, honorarioCalculado }) {
-  // Calculo das parcelas em REAIS (todas convertidas pra honorário equivalente
-  // pra que o waterfall faça sentido visualmente — mostra "qto de honorário
-  // veio de cada componente").
-  //
-  // Simplificação: vamos mostrar 4 barras principais:
-  //  1) Base — honorário se o preço fosse só o base × área total (sem fator)
-  //  2) +Complexidade — adicional vindo do fator de cômodos
-  //  3) +Padrão (se alto) ou −Padrão (se baixo) — adicional/desconto do índice padrão
-  //  4) −Desconto progressivo — redução do que foi descontado pelas faixas
-  //  5) Total — honorário final
+function Waterfall({ casaCalc, honorarioCalculado }) {
+  const { areaTotal, indiceComodos, indicePadrao, precoBase } = casaCalc;
 
-  const { areaTotal, indiceComodos, indicePadrao, precoBase, faixas } = casaCalc;
+  // Honorário em cada estágio (em R$ totais)
+  const honorBaseSemFator    = precoBase * areaTotal;                                  // só preço base × área
+  const honorComComplexidade = precoBase * (1 + indiceComodos) * areaTotal;            // + complexidade
+  const honorComPadrao       = precoBase * (1 + indiceComodos + indicePadrao) * areaTotal; // + padrão (sem desconto)
+  const totalDescontoFaixas  = honorComPadrao - honorarioCalculado;
 
-  // Componentes em valor:
-  const honorBaseSemFator    = precoBase * areaTotal; // se fator fosse 1.0 (sem complexidade)
-  const honorComComplexidade = precoBase * (1 + indiceComodos) * areaTotal;
-  const honorComPadrao       = precoBase * (1 + indiceComodos + indicePadrao) * areaTotal; // antes do desconto
-  const totalDescontoFaixas  = honorComPadrao - honorarioCalculado; // qto foi descontado pelas faixas
+  const parcelaComplexidade = honorComComplexidade - honorBaseSemFator;
+  const parcelaPadrao       = honorComPadrao - honorComComplexidade;
 
-  const parcelaComplexidade  = honorComComplexidade - honorBaseSemFator;
-  const parcelaPadrao        = honorComPadrao - honorComComplexidade;
-
-  // Steps do waterfall
+  // Steps. Padrão e desconto só aparecem se forem relevantes.
   const steps = [
-    { tipo:"base",     label:"Preço base",       sub:`${moeda(precoBase)}/m² × ${areaTotal.toLocaleString("pt-BR")}m²`, valor: honorBaseSemFator,    delta: honorBaseSemFator,   acumulado: honorBaseSemFator },
-    { tipo:"add",      label:"+ Complexidade",   sub:`${(indiceComodos*100).toFixed(0)}% por ambientes`,                valor: parcelaComplexidade,  delta: parcelaComplexidade, acumulado: honorComComplexidade },
-    ...(Math.abs(parcelaPadrao) > 1 ? [{ // só mostra step de padrão se for relevante
+    { tipo:"base",  label:"Preço base",      sub:`${moeda(precoBase)}/m² × ${areaTotal.toLocaleString("pt-BR")}m²`,
+      delta: honorBaseSemFator, acumulado: honorBaseSemFator },
+    { tipo:"add",   label:"+ Complexidade",  sub:`${(indiceComodos*100).toFixed(0)}% por ambientes`,
+      delta: parcelaComplexidade, acumulado: honorComComplexidade },
+    ...(Math.abs(parcelaPadrao) > 1 ? [{
       tipo: parcelaPadrao >= 0 ? "add" : "sub",
       label: parcelaPadrao >= 0 ? "+ Padrão alto" : "− Padrão baixo",
       sub:   parcelaPadrao >= 0 ? "+10% sobre o subtotal" : "−10% sobre o subtotal",
-      valor: parcelaPadrao,
-      delta: parcelaPadrao,
-      acumulado: honorComPadrao,
+      delta: parcelaPadrao, acumulado: honorComPadrao,
     }] : []),
     ...(totalDescontoFaixas > 1 ? [{
       tipo:"sub",
       label:"− Desconto progressivo",
-      sub:`m² acima de 200 com −30% a −50%`,
-      valor: -totalDescontoFaixas,
-      delta: -totalDescontoFaixas,
-      acumulado: honorarioCalculado,
+      sub:`m² acima de 200`,
+      delta: -totalDescontoFaixas, acumulado: honorarioCalculado,
     }] : []),
-    { tipo:"total",    label:"Honorário final",  sub:`para esta casa de ${areaTotal.toLocaleString("pt-BR")}m²`,        valor: honorarioCalculado,   delta: honorarioCalculado,  acumulado: honorarioCalculado },
+    { tipo:"total", label:"Honorário final", sub:`casa de ${areaTotal.toLocaleString("pt-BR")}m²`,
+      delta: honorarioCalculado, acumulado: honorarioCalculado },
   ];
 
-  // Dimensões
-  const W = 640, H = 320;
-  const padTop = 30, padBot = 70, padLeft = 24, padRight = 24;
+  // Dimensões — full-width, mais alto pra dar espaço aos labels
+  const W = 720, H = 360;
+  const padTop = 40, padBot = 80, padLeft = 20, padRight = 20;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
-  const barW = Math.min(72, innerW / steps.length - 18);
+  const barW = Math.min(80, innerW / steps.length - 20);
   const gap  = (innerW - barW * steps.length) / (steps.length - 1);
 
-  // Escala vertical baseada no valor máximo acumulado (geralmente honorComPadrao
-  // antes do desconto). Permite que mesmo o "-Desconto" caiba no gráfico.
+  // Escala vertical — usa o maior valor acumulado pra que mesmo o desconto caiba
   const maxValor = Math.max(honorComPadrao, honorarioCalculado, honorBaseSemFator);
   const yScale = (v) => innerH * (v / maxValor);
-  const yBase = padTop + innerH; // y da linha de base (zero)
+  const yBase = padTop + innerH;
 
-  // Cores
+  // Paleta moderna (apps tipo Linear, Vercel)
   const COR = {
-    base:  "#1e5b7a",  // azul escuro (preço base, total)
-    add:   "#2e8b57",  // verde (aumentos)
-    sub:   "#c0392b",  // vermelho (descontos)
-    total: "#1e5b7a",
+    base:  "#3b82f6",  // azul moderno
+    add:   "#22c55e",  // verde moderno
+    sub:   "#ef4444",  // vermelho moderno
+    total: "#3b82f6",
   };
 
-  // Animação progressiva: cada step revela com delay
+  // Animação progressiva — 700ms crescimento + 900ms entre barras
   const [stepRevelado, setStepRevelado] = useState(0);
   useEffect(() => {
     setStepRevelado(0);
@@ -949,25 +977,31 @@ function WaterfallChart({ casaCalc, honorarioCalculado }) {
     const tick = () => {
       i++;
       setStepRevelado(i);
-      if (i < steps.length) setTimeout(tick, 600);
+      if (i < steps.length) setTimeout(tick, 900);
     };
-    setTimeout(tick, 200);
+    setTimeout(tick, 300);
     // eslint-disable-next-line
   }, [casaCalc.honorario]);
 
   return (
-    <div style={{ background:"#fff", border:"1px solid #f3f4f6", borderRadius:10, padding:"18px 16px", marginBottom:8, animation:"vk-fade-up 0.4s ease-out" }}>
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:8 }}>
+    <div style={{
+      background:"#fff",
+      border:"1px solid #f3f4f6",
+      borderRadius:10,
+      padding:"20px 16px",
+      animation:"vk-fade-up 0.4s ease-out",
+    }}>
+      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.7, marginBottom:8, padding:"0 4px" }}>
         Como chegamos no valor
       </div>
-      <div style={{ width:"100%", overflowX:"auto" }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", minWidth: Math.max(440, steps.length * 100), height:"auto", display:"block" }}>
-          {/* Linha de base */}
+      <div style={{ width:"100%" }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
+          {/* Linha de base sutil */}
           <line x1={padLeft} y1={yBase} x2={W - padRight} y2={yBase} stroke="#e5e7eb" strokeWidth="1" />
 
           {steps.map((s, i) => {
             const x = padLeft + i * (barW + gap);
-            const baseY = s.tipo === "total" || s.tipo === "base" ? yBase : (yBase - yScale(s.acumulado - s.delta));
+            const baseY = (s.tipo === "total" || s.tipo === "base") ? yBase : (yBase - yScale(s.acumulado - s.delta));
             const altura = Math.abs(yScale(s.delta));
             const topY = s.tipo === "sub" ? baseY : baseY - altura;
             const cor = COR[s.tipo] || COR.base;
@@ -977,9 +1011,9 @@ function WaterfallChart({ casaCalc, honorarioCalculado }) {
             return (
               <g key={i} style={{
                 opacity: visivel ? 1 : 0,
-                transition: "opacity 0.25s",
+                transition: "opacity 0.35s",
               }}>
-                {/* Barra com animação de crescimento */}
+                {/* Barra com animação de crescimento (700ms) */}
                 <rect
                   x={x}
                   y={topY}
@@ -989,11 +1023,11 @@ function WaterfallChart({ casaCalc, honorarioCalculado }) {
                   rx={3}
                   style={{
                     transformOrigin: `${x + barW/2}px ${baseY}px`,
-                    animation: visivel ? `vk-bar-grow 0.5s ease-out` : "none",
+                    animation: visivel ? `vk-bar-grow 0.7s cubic-bezier(0.34, 1.4, 0.64, 1)` : "none",
                   }}
                 />
 
-                {/* Linha pontilhada conectando topo da barra anterior ao topo da atual */}
+                {/* Linha pontilhada conectando topo da barra anterior à atual */}
                 {i > 0 && i < steps.length - 1 && visivel && (
                   <line
                     x1={x - gap}
@@ -1001,41 +1035,41 @@ function WaterfallChart({ casaCalc, honorarioCalculado }) {
                     x2={x}
                     y2={isTotal ? yBase - yScale(s.acumulado) : (s.tipo === "sub" ? topY : baseY)}
                     stroke="#9ca3af" strokeWidth="1" strokeDasharray="3,3"
-                    style={{ animation: "vk-fade-up 0.3s ease-out 0.3s both" }}
+                    style={{ animation: "vk-fade-up 0.4s ease-out 0.5s both" }}
                   />
                 )}
 
-                {/* Valor em cima/embaixo da barra (aparece após a barra crescer) */}
+                {/* Valor acima ou abaixo da barra (delay pra aparecer depois da barra crescer) */}
                 <text
                   x={x + barW/2}
-                  y={s.tipo === "sub" ? baseY + altura + 16 : topY - 8}
+                  y={s.tipo === "sub" ? baseY + altura + 18 : topY - 10}
                   textAnchor="middle"
-                  fontSize="12" fontWeight="700"
+                  fontSize="13" fontWeight="700"
                   fill={cor}
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
-                  style={{ animation: visivel ? `vk-fade-up 0.3s ease-out 0.4s both` : "none", opacity: visivel ? undefined : 0 }}>
+                  style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.5s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.tipo === "sub" ? "−" : ""}{moeda(Math.abs(s.delta))}
                 </text>
 
                 {/* Label da etapa (rótulo embaixo) */}
                 <text
                   x={x + barW/2}
-                  y={H - 38}
+                  y={H - 44}
                   textAnchor="middle"
-                  fontSize="11" fontWeight="600"
+                  fontSize="11.5" fontWeight="600"
                   fill="#374151"
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
-                  style={{ animation: visivel ? `vk-fade-up 0.3s ease-out 0.4s both` : "none", opacity: visivel ? undefined : 0 }}>
+                  style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.55s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.label}
                 </text>
                 <text
                   x={x + barW/2}
-                  y={H - 22}
+                  y={H - 26}
                   textAnchor="middle"
-                  fontSize="10"
+                  fontSize="10.5"
                   fill="#9ca3af"
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
-                  style={{ animation: visivel ? `vk-fade-up 0.3s ease-out 0.45s both` : "none", opacity: visivel ? undefined : 0 }}>
+                  style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.6s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.sub}
                 </text>
               </g>
