@@ -10710,7 +10710,92 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     }
   }
 
-  const handlePdf = async (opts = {}) => {
+  // ═══════════════════════════════════════════════════════════════
+  // GERAÇÃO DE PDF — DOIS CAMINHOS
+  //
+  // 1. handlePdfPuppeteer (NOVO): chama backend que usa puppeteer
+  //    pra gerar PDF a partir da própria PropostaPreview renderizada.
+  //    Resultado: PDF é espelho exato do que aparece na tela. Funciona
+  //    para qualquer modelo (Padrão, Direto, futuros). Backend gerencia
+  //    Chrome headless, JWT one-time-use, cache de payload.
+  //
+  // 2. handlePdfLegacy (ANTIGO): jsPDF client-side, código atual em
+  //    resultado-pdf.jsx. Gera PDF do Modelo Padrão usando layout
+  //    hard-coded em código. Mantido como fallback enquanto
+  //    Puppeteer ainda não está totalmente confiável em produção.
+  //
+  // 3. handlePdf (DISPATCHER): decide qual caminho usar:
+  //    - Em modelo Padrão (01-editorial), pode usar legacy (rápido,
+  //      sem cold-start) ou puppeteer (espelho perfeito). Default: legacy
+  //      pra preservar comportamento atual.
+  //    - Em modelo Direto (02-direto) e demais novos: usa puppeteer.
+  //    - Se puppeteer falhar (timeout, 5xx), fallback automático
+  //      pro legacy quando aplicável.
+  //
+  // Toggle de feature:
+  //   window.__VICKE_USE_PUPPETEER = true → força puppeteer pra todos
+  //   window.__VICKE_USE_PUPPETEER = false → força legacy pra todos
+  //   undefined (default) → puppeteer só pra modelos não-Padrão
+  // ═══════════════════════════════════════════════════════════════
+
+  // Helper: chama backend e baixa PDF.
+  // Retorna blob se opts.returnBlob = true; senão dispara download.
+  const handlePdfPuppeteer = async (opts = {}) => {
+    try {
+      // Monta payload mínimo necessário pro backend reproduzir a tela
+      const snapshot = buildPropostaSnapshot();
+      const payload = {
+        snapshot,
+        orcamento: data || {},
+        escritorio: escritorio || {},
+        templateId: templateId,
+        clienteNome: clienteNome || "",
+      };
+
+      // Chama backend
+      const apiBase = (typeof API_BASE === "string" ? API_BASE : "");
+      const tok = (typeof window !== "undefined" && window.localStorage)
+        ? window.localStorage.getItem("vicke-token") : null;
+      const resp = await fetch(`${apiBase}/api/proposta/gerar-pdf`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(tok ? { "Authorization": "Bearer " + tok } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        // Tenta extrair mensagem de erro
+        let msg = "Falha na geração do PDF";
+        try {
+          const j = await resp.json();
+          msg = j.error || msg;
+        } catch (_) {}
+        throw new Error(`${msg} (HTTP ${resp.status})`);
+      }
+
+      const blob = await resp.blob();
+
+      if (opts.returnBlob) return blob;
+
+      // Dispara download
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `proposta-${(clienteNome || "cliente").replace(/[^a-zA-Z0-9]/g, "_")}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("[puppeteer-pdf] erro:", e);
+      throw e; // propaga pra dispatcher decidir fallback
+    }
+  };
+
+  // Versão jsPDF antiga — preservada como fallback
+  const handlePdfLegacy = async (opts = {}) => {
     if (!window.jspdf) { dialogo.alertar({ titulo: "Aguarde alguns segundos", mensagem: "A biblioteca de PDF ainda está carregando.", tipo: "aviso" }); return; }
     try {
       const c = data.calculo;
@@ -10814,6 +10899,59 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     } catch(e) { console.error(e); dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" }); }
   };
 
+  // Dispatcher: decide entre Puppeteer (novo, espelho da preview) e
+  // Legacy (jsPDF, hard-coded). Ver bloco de comentários acima das
+  // duas funções pra detalhes da estratégia.
+  const handlePdf = async (opts = {}) => {
+    // Override manual via window (debug/testing)
+    let forcaPuppeteer = null;
+    if (typeof window !== "undefined" && typeof window.__VICKE_USE_PUPPETEER === "boolean") {
+      forcaPuppeteer = window.__VICKE_USE_PUPPETEER;
+    }
+
+    // Default: puppeteer pra modelos não-Padrão (Direto, futuros).
+    // Padrão usa legacy (mais rápido, sem cold-start).
+    const usarPuppeteer = forcaPuppeteer !== null
+      ? forcaPuppeteer
+      : (templateId !== "01-editorial");
+
+    if (!usarPuppeteer) {
+      return await handlePdfLegacy(opts);
+    }
+
+    // Tenta puppeteer; se falhar e for modelo Padrão, fallback pro legacy.
+    try {
+      return await handlePdfPuppeteer(opts);
+    } catch (e) {
+      console.warn("[handlePdf] puppeteer falhou:", e.message);
+
+      // Fallback inteligente:
+      //   - Padrão: usa legacy (resultado-pdf.jsx) sem aviso
+      //   - Outros modelos: legacy gera o Padrão antigo (não fiel ao
+      //     visual). Avisa o usuário antes.
+      if (templateId === "01-editorial") {
+        return await handlePdfLegacy(opts);
+      }
+
+      // Modelo não-Padrão: avisa que vai sair como Padrão
+      const ok = await new Promise(resolve => {
+        if (typeof dialogo === "undefined" || !dialogo.confirmar) {
+          resolve(true); return;
+        }
+        dialogo.confirmar({
+          titulo: "Geração de PDF temporariamente indisponível",
+          mensagem: `Não foi possível gerar o PDF do modelo escolhido neste momento. Quer baixar como Modelo Padrão? (${e.message})`,
+          tipo: "aviso",
+          onSim: () => resolve(true),
+          onNao: () => resolve(false),
+        });
+      });
+      if (ok) {
+        return await handlePdfLegacy(opts);
+      }
+    }
+  };
+
   // ═══════════════════════════════════════════════════════════════
   // MODELO DIRETO — render alternativo
   //
@@ -10913,11 +11051,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             </div>
           )}
 
-          {/* Aviso temporário sobre PDF (só em modo edição, não locked) */}
+          {/* Aviso: primeira geração pode demorar (puppeteer cold start) */}
           {!lockEdicao && (
-            <div style={{ background:"#fffbeb", border:"1px solid #fde68a", padding:"9px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12, color:"#92400e", lineHeight:1.5 }}>
-              <strong>Modelo Direto em fase visual.</strong> A geração de PDF deste modelo será habilitada em breve.
-              Por enquanto, ao clicar em "Salvar e Gerar PDF", a proposta sai no formato Padrão. Para ajustar visualmente, edite os campos abaixo.
+            <div style={{ background:"#eff6ff", border:"1px solid #bfdbfe", padding:"9px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12, color:"#1e40af", lineHeight:1.5 }}>
+              <strong>Modelo Direto.</strong> A geração de PDF deste modelo é feita no servidor — pode levar 5 a 15 segundos na primeira vez (cold start do Chrome). Próximas chamadas são mais rápidas.
             </div>
           )}
 
@@ -11155,7 +11292,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:8 }}>Salvar proposta?</div>
               <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.55, marginBottom:20 }}>
                 A proposta será arquivada e o PDF baixado. Após salvar, esta versão fica imutável.
-                {" "}<strong style={{ color:"#92400e" }}>O PDF sairá no formato Padrão</strong> (modelo Direto está em fase visual).
+                {" "}<strong style={{ color:"#1e40af" }}>O PDF será gerado no servidor</strong> — primeira chamada pode levar até 15 segundos.
               </div>
               <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
                 <button
@@ -23985,3 +24122,165 @@ export default function ModuloClientesFornecedores() {
 // ═══════════════════════════════════════════════════════════════
 // HOME — MENU PRINCIPAL
 // ═══════════════════════════════════════════════════════════════
+
+
+// ════════════════════════════════════════════════════════════
+// render-pdf-route.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// ROTA /render-pdf/:uuid — SPA MÍNIMA pra Puppeteer capturar PDF
+//
+// Esta rota é acessada por:
+//   - URL: https://vicke.com.br/render-pdf/{uuid}?token={jwt}
+//   - Quem acessa: Chrome headless do Puppeteer (rodando no backend)
+//
+// Fluxo:
+//   1. main.jsx detecta path /render-pdf/* e renderiza <RenderPdfRoute/>
+//      em vez do App normal
+//   2. RenderPdfRoute extrai uuid e token da URL
+//   3. Faz GET /api/proposta/render-data?token=xxx
+//   4. Backend valida token, busca payload no cache, retorna
+//      { snapshot, orcamento, escritorio, templateId, clienteNome }
+//   5. RenderPdfRoute renderiza <PropostaPreview/> com os dados
+//      e lockEdicao=true (sem botões de edição/salvar)
+//   6. Quando carregar 100%, monta <div data-render-ready="true"/>
+//   7. Puppeteer detecta esse selector via waitForSelector e captura PDF
+//
+// Limitações intencionais:
+//   - Sem sidebar, header, login — só conteúdo da proposta
+//   - lockEdicao=true: bloqueia inputs, esconde botões
+//   - Sem chamadas extras ao backend (já recebeu tudo no payload)
+//   - Sem useEffect de auto-save, ping, etc.
+//
+// Por que renderizar via React (não server-side)?
+//   - PropostaPreview é complexa (1500+ linhas) com estados internos
+//     calculados (descontos, etapas, escopo). Reescrever em backend
+//     seria duplicação maciça.
+//   - Puppeteer + React vê EXATAMENTE o que o usuário vê na tela.
+//     Espelho perfeito é o objetivo.
+// ═══════════════════════════════════════════════════════════════
+
+function RenderPdfRoute() {
+  const [estado, setEstado] = useState("loading"); // loading | ok | erro
+  const [erro, setErro] = useState(null);
+  const [dados, setDados] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // Extrai token da query string
+        const sp = new URLSearchParams(window.location.search);
+        const token = sp.get("token");
+        if (!token) {
+          setEstado("erro");
+          setErro("Token ausente na URL");
+          return;
+        }
+
+        // Backend URL — em produção, mesmo domínio que a API regular.
+        // Nota: API_BASE é definida globalmente em api.js do bundle.
+        const apiBase = (typeof API_BASE === "string" ? API_BASE : "");
+        const resp = await fetch(`${apiBase}/api/proposta/render-data?token=${encodeURIComponent(token)}`);
+        if (!resp.ok) {
+          setEstado("erro");
+          setErro(`Falha ao buscar dados: ${resp.status} ${resp.statusText}`);
+          return;
+        }
+        const json = await resp.json();
+        if (!json.ok) {
+          setEstado("erro");
+          setErro(json.error || "Erro desconhecido");
+          return;
+        }
+        setDados(json.data);
+        setEstado("ok");
+      } catch (e) {
+        setEstado("erro");
+        setErro(e.message || String(e));
+      }
+    })();
+  }, []);
+
+  // Quando os dados carregarem e PropostaPreview pintar, sinaliza
+  // pra Puppeteer com data-render-ready="true". Atrasa um pouco
+  // (300ms) pra garantir que toda renderização concluiu — fonts,
+  // imagens, etc.
+  useEffect(() => {
+    if (estado !== "ok") return;
+    const t = setTimeout(() => {
+      const marker = document.createElement("div");
+      marker.setAttribute("data-render-ready", "true");
+      marker.style.position = "absolute";
+      marker.style.top = "0";
+      marker.style.left = "0";
+      marker.style.width = "1px";
+      marker.style.height = "1px";
+      marker.style.opacity = "0";
+      marker.style.pointerEvents = "none";
+      document.body.appendChild(marker);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [estado]);
+
+  if (estado === "loading") {
+    return (
+      <div style={{ padding: 40, fontFamily: "sans-serif", color: "#6b7280", fontSize: 14 }}>
+        Carregando proposta...
+      </div>
+    );
+  }
+
+  if (estado === "erro") {
+    return (
+      <div style={{ padding: 40, fontFamily: "sans-serif", color: "#b91c1c", fontSize: 14 }}>
+        <div style={{ fontWeight: 600, marginBottom: 8 }}>Erro ao gerar PDF</div>
+        <div>{erro}</div>
+      </div>
+    );
+  }
+
+  // Monta o `data` esperado pela PropostaPreview a partir do payload do backend
+  const { snapshot, orcamento, escritorio, templateId, clienteNome } = dados || {};
+
+  // Os parâmetros de PropostaPreview seguem o contrato do componente
+  // já existente em orcamento-teste.jsx. Veja função `function PropostaPreview(props)`.
+  const propostaProps = {
+    data: {
+      ...(orcamento || {}),
+      escritorio: escritorio || {},
+      clienteNome: clienteNome || (orcamento && orcamento.clienteNome) || "",
+      templateId: templateId,
+    },
+    propostaSnapshot: snapshot,
+    lockEdicao: true,         // CRÍTICO: bloqueia edição (visual de "proposta enviada")
+    propostaReadOnly: { versao: snapshot?.versao || "v1" },
+    onVoltar: () => {},        // no-op (não tem onde voltar)
+    onSalvarProposta: null,    // sem ação de salvar
+  };
+
+  // PropostaPreview é um componente global (concatenado pelo combine.js).
+  // Acessamos via window pra evitar problemas de escopo.
+  const Preview = (typeof window !== "undefined" && window.PropostaPreview)
+    ? window.PropostaPreview
+    : (typeof PropostaPreview !== "undefined" ? PropostaPreview : null);
+
+  if (!Preview) {
+    return (
+      <div style={{ padding: 40, fontFamily: "sans-serif", color: "#b91c1c", fontSize: 14 }}>
+        Erro: componente PropostaPreview não encontrado no bundle.
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ background: "#fff", minHeight: "100vh" }}>
+      <Preview {...propostaProps} />
+    </div>
+  );
+}
+
+// Expõe globalmente pra main.jsx poder usar via window.RenderPdfRoute
+if (typeof window !== "undefined") {
+  window.RenderPdfRoute = RenderPdfRoute;
+}

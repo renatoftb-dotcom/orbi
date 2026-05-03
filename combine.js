@@ -24,6 +24,10 @@ const ORDER = [
   "onboarding.jsx",
   "orcamento-config.jsx",
   "app.jsx",
+  // Rota standalone /render-pdf/:uuid pra Puppeteer capturar PDFs.
+  // Tem que vir DEPOIS de orcamento-teste.jsx (pra ter PropostaPreview disponível)
+  // e DEPOIS de app.jsx (pra não conflitar com nada).
+  "render-pdf-route.jsx",
 ];
 
 console.log("🔧 Gerando AppCombined.jsx...\n");
