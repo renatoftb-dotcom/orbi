@@ -72,10 +72,21 @@ function RenderPdfRoute() {
     })();
   }, []);
 
+  // Adiciona classe render-pdf-context no body assim que o componente monta.
+  // Isso ativa as regras CSS .render-pdf-context .no-print do PropostaPreview
+  // (escondem botões, banners de UI e elementos só úteis no app).
+  useEffect(() => {
+    document.body.classList.add("render-pdf-context");
+    return () => {
+      document.body.classList.remove("render-pdf-context");
+    };
+  }, []);
+
   // Quando os dados carregarem e PropostaPreview pintar, sinaliza
   // pra Puppeteer com data-render-ready="true". Atrasa um pouco
-  // (300ms) pra garantir que toda renderização concluiu — fonts,
-  // imagens, etc.
+  // pra garantir que toda renderização concluiu — fonts, imagens,
+  // possíveis re-renders do React em StrictMode etc. 800ms é um
+  // bom balanço entre rapidez e segurança contra captura prematura.
   useEffect(() => {
     if (estado !== "ok") return;
     const t = setTimeout(() => {
@@ -89,7 +100,7 @@ function RenderPdfRoute() {
       marker.style.opacity = "0";
       marker.style.pointerEvents = "none";
       document.body.appendChild(marker);
-    }, 500);
+    }, 800);
     return () => clearTimeout(t);
   }, [estado]);
 

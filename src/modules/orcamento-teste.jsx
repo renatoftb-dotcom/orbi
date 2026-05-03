@@ -5108,10 +5108,16 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   // (arqEdit, etapasPct, escopoState, descontos, etc.) — só muda como
   // organiza visualmente.
   //
-  // Por enquanto Direto NÃO tem geração de PDF própria (puppeteer chega
-  // numa fase posterior). Quando o usuário tenta gerar PDF estando em
-  // Direto, vê um aviso explicando que está em fase visual e o PDF sai
-  // como Padrão. Comportamento controlado em handlePdf.
+  // Conteúdo: igual ao Editorial (objetivo + serviços inclusos +
+  // entregáveis em linha + frase de fechamento por etapa, lista
+  // completa de não inclusos, forma de pagamento estruturada com PIX,
+  // aceite formal e footer).
+  //
+  // Diferença visual em relação ao Editorial:
+  //  - Header amarelo grande (não capa fotográfica)
+  //  - Sem cards estruturados — corpo corrido com seções
+  //  - Bullets ○ em vez de •
+  //  - Cor accent amarela em títulos de seção
   // ═══════════════════════════════════════════════════════════════
   const renderDireto = () => {
     // Cor accent do Direto. Hard-coded por enquanto. No futuro vira
@@ -5120,28 +5126,59 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     const ACCENT_FG = "#111";  // Texto sobre o accent (preto sobre amarelo)
 
     // Estilos locais do modelo Direto
+    //
+    // Cor accent (#fbbf24, amber 400) é usada como background do header,
+    // dos destaques de valor e como label colorida nos títulos.
+    // Cor secundária (#412402, amber 900) é usada pra texto sobre o accent
+    // e pra labels de seção sobre fundo branco — bom contraste em ambos.
     const D = {
       wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
       page: { maxWidth:860, margin:"0 auto", padding:0, background:"#fff" },
+      // Header amarelo
       header: { background:ACCENT, padding:"36px 44px 32px", position:"relative" },
       headerTopRow: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, gap:16 },
-      logoWrap: { background:"#fff", padding:"6px 9px", borderRadius:6, display:"inline-flex", alignItems:"center", boxShadow:"0 1px 2px rgba(0,0,0,0.05)" },
+      logoWrap: { background:"#fff", padding:"6px 9px", borderRadius:8, display:"inline-flex", alignItems:"center", boxShadow:"0 1px 2px rgba(0,0,0,0.05)" },
       headerEyebrow: { fontSize:11, fontWeight:600, color:ACCENT_FG, letterSpacing:"0.06em", textAlign:"right" },
       headerTitulo: { fontSize:38, fontWeight:800, color:ACCENT_FG, lineHeight:1.05, letterSpacing:"-0.02em" },
+      // Corpo
       conteudo: { padding:"24px 44px 36px" },
-      saudacao: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18 },
+      saudacao: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:14 },
       saudacaoB: { color:"#111", fontWeight:600 },
-      secTit: { fontSize:18, fontWeight:800, color:ACCENT, margin:"24px 0 10px", letterSpacing:"-0.01em" },
-      secTexto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:8 },
-      itemEtapa: { fontSize:13, color:"#111", fontWeight:600, margin:"10px 0 4px" },
-      itemBullet: { fontSize:12, color:"#374151", paddingLeft:18, position:"relative", lineHeight:1.55, marginBottom:2 },
+      descricaoProjeto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18, whiteSpace:"normal", wordBreak:"break-word" },
+      // Títulos de seção: estilo mockup — pequeno, amber 900, letterspacing,
+      // com linha sutil embaixo
+      secTit: {
+        fontSize:11, fontWeight:600, color:"#412402",
+        textTransform:"uppercase", letterSpacing:"0.08em",
+        margin:"22px 0 10px", paddingBottom:6,
+        borderBottom:"0.5px solid #e5e7eb",
+      },
+      secTexto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:8, whiteSpace:"normal", wordBreak:"break-word" },
+      // Estrutura de etapa
+      etapaTitulo: { fontSize:14, color:"#111", fontWeight:700, margin:"16px 0 6px" },
+      etapaObjetivo: { fontSize:12.5, color:"#6b7280", fontStyle:"italic", marginBottom:8, lineHeight:1.55 },
+      etapaSubsec: { fontSize:11, color:"#92400e", textTransform:"uppercase", letterSpacing:"0.06em", margin:"8px 0 4px", fontWeight:600 },
+      itemBullet: { fontSize:12.5, color:"#374151", paddingLeft:18, position:"relative", lineHeight:1.6, marginBottom:3 },
+      bulletDot: { position:"absolute", left:2, color:"#9ca3af", fontSize:11, top:1 },
+      entregaveisInline: { fontSize:12, color:"#6b7280", marginTop:6, lineHeight:1.55, paddingLeft:0 },
+      entregaveisLabel: { color:"#92400e", fontWeight:600 },
+      etapaFraseFim: { fontSize:11.5, color:"#9ca3af", fontStyle:"italic", marginTop:6, lineHeight:1.5 },
       grupoCols: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, margin:"6px 0" },
-      destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:6, margin:"14px 0 8px", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
-      destaqueVlrLight: { background:"#fef3c7", padding:"18px 22px", borderRadius:6, margin:"8px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
-      destaqueLbl: { fontSize:11, fontWeight:700, color:ACCENT_FG, textTransform:"uppercase", letterSpacing:"0.06em" },
-      destaqueNum: { fontSize:26, fontWeight:800, color:ACCENT_FG },
-      pgtoLinha: { fontSize:13, color:"#374151", lineHeight:1.7, padding:"5px 0", borderBottom:"0.5px solid #f3f4f6" },
+      // Cards de valor: bordas mais arredondadas (8px) igual ao mockup
+      destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
+      destaqueVlrLight: { background:"#FAEEDA", padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
+      destaqueLbl: { fontSize:11, fontWeight:700, color:"#412402", textTransform:"uppercase", letterSpacing:"0.06em" },
+      destaqueNum: { fontSize:26, fontWeight:800, color:"#412402" },
+      // Card "Total sem impostos" sutil em cinza claro (igual mockup)
+      totalSubtle: { background:"#f9fafb", padding:"10px 22px", borderRadius:8, margin:"4px 0 14px", fontSize:12, color:"#6b7280" },
+      totalSubtleB: { color:"#111", fontWeight:600 },
+      // Forma de pagamento estruturada
+      pgtoBloco: { marginTop:14, marginBottom:8 },
+      pgtoBlocoTit: { fontSize:13, fontWeight:700, color:"#111", margin:"6px 0 6px" },
+      pgtoOpcao: { fontSize:12.5, color:"#374151", lineHeight:1.6, padding:"6px 0", borderBottom:"0.5px solid #f3f4f6" },
+      pgtoOpcaoLbl: { fontSize:11, color:"#92400e", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.04em" },
       pgtoLinhaB: { color:"#111", fontWeight:700 },
+      pixLinha: { fontSize:11.5, color:"#6b7280", marginTop:10, lineHeight:1.5 },
     };
 
     // Etapas com valores calculados (mesma fonte usada no Editorial)
@@ -5151,16 +5188,50 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     const engVal = engAtiva ? engCIEdit : 0;
     const totVal = isPadrao ? totCIEdit : totalPacoteEtapas;
 
-    // Pra cada etapa Arq, calcula valor pelo pct
+    // Pra cada etapa Arq, calcula valor pelo pct (não exibido nesse modelo,
+    // mas calculado pra preservar compat se quiser usar depois)
     const etapasArqValor = etapasPct.filter(e => e.id !== 5).map(e => ({
       ...e, valor: (arqVal * e.pct) / 100,
     }));
     const engPct = etapasPct.find(e => e.id === 5)?.pct || 0;
 
+    // Helper: monta lista de não inclusos. Se naoInclEdit foi customizado
+    // pelo usuário, usa ele; senão usa lista padrão completa do Editorial.
+    const naoInclususLista = (() => {
+      const customizado = naoInclEdit && naoInclEdit.trim();
+      if (customizado) {
+        return naoInclEdit.split("\n").map(s => s.trim()).filter(Boolean);
+      }
+      return [
+        "Projetos de climatização",
+        "Projeto de automação",
+        "Projeto de interiores",
+        "Projeto estrutural de estruturas metálicas",
+        "Sondagem e Planialtimétrico do terreno",
+        "Gestão e execução de obra",
+        "RRT de Execução de obra",
+        "Impostos",
+        "Projeto de prevenção de incêndio",
+        "Projeto de paisagismo",
+        "Projeto de Marcenaria (Móveis internos)",
+        "Projeto estrutural de muros de contenção (>1m)",
+        "Acompanhamento semanal de obra",
+        "Vistoria para Caixa Econômica Federal",
+        "Taxas municipais e emolumentos (CAU/Prefeitura)",
+      ];
+    })();
+
+    // Helper: lista de prazos (split em linhas)
+    const prazosLista = (() => {
+      const txt = prazoEdit || "Estudo Preliminar — 30 dias úteis após assinatura\nAprovação Prefeitura — 60 dias úteis (não inclui análise municipal)\nProjeto Executivo — 60 dias úteis após aprovação\nEngenharia — 30 dias úteis após aprovação";
+      return txt.split("\n").map(s => s.trim()).filter(Boolean);
+    })();
+
     return (
       <div style={D.wrap}>
-        {lockEdicao && (
-          <style>{`
+        {/* Estilos: lock de edição (UI) + supressão de elementos UI no PDF */}
+        <style>{`
+          ${lockEdicao ? `
             .proposta-locked input,
             .proposta-locked textarea,
             .proposta-locked select,
@@ -5176,12 +5247,32 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             .proposta-locked button[data-edicao] {
               display: none !important;
             }
-          `}</style>
-        )}
+          ` : ""}
+          /* Esconder elementos de UI quando renderizando no contexto de PDF
+             (puppeteer abre /render-pdf/* que tem .render-pdf-context no body).
+             Isso mata o banner verde "Visualização da proposta enviada", botões de
+             edição, e qualquer outro elemento marcado com .no-print. */
+          .render-pdf-context .no-print,
+          .render-pdf-context [data-no-print="true"] {
+            display: none !important;
+          }
+          /* Garantir cores de fundo no PDF (Chrome desliga por padrão pra
+             economizar tinta — print-color-adjust:exact força impressão fiel). */
+          .render-pdf-context * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          /* Quebras de página: cada etapa do escopo deve evitar quebrar no meio. */
+          .etapa-bloco {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+        `}</style>
+
         <div style={D.page} className={lockEdicao ? "proposta-locked" : ""}>
-          {/* Banners de status — mesmos do Editorial pra UX consistente */}
+          {/* Banners de status — não aparecem no PDF (classe no-print) */}
           {lockEdicao && propostaReadOnly && (
-            <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5 }}>
+            <div className="no-print" style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5 }}>
               <strong style={{ color:"#166534" }}>📄 Visualização da proposta enviada</strong>
               {propostaReadOnly?.versao && (
                 <span style={{ color:"#15803d", marginLeft:6 }}>
@@ -5192,7 +5283,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             </div>
           )}
           {!lockEdicao && propostaInfo && (
-            <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
+            <div className="no-print" style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
               ✓ Proposta {propostaInfo.versao || ""} salva
               {propostaInfo.enviadaEm && ` · ${new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
             </div>
@@ -5200,7 +5291,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
           {/* Aviso: primeira geração pode demorar (puppeteer cold start) */}
           {!lockEdicao && (
-            <div style={{ background:"#eff6ff", border:"1px solid #bfdbfe", padding:"9px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12, color:"#1e40af", lineHeight:1.5 }}>
+            <div className="no-print" style={{ background:"#eff6ff", border:"1px solid #bfdbfe", padding:"9px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12, color:"#1e40af", lineHeight:1.5 }}>
               <strong>Modelo Direto.</strong> A geração de PDF deste modelo é feita no servidor — pode levar 5 a 15 segundos na primeira vez (cold start do Chrome). Próximas chamadas são mais rápidas.
             </div>
           )}
@@ -5234,26 +5325,35 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               Prezado(a) <span style={D.saudacaoB}>{clienteNome || "Cliente"}</span>,
             </div>
             <div style={D.saudacao}>
-              <TextoEditavel
-                valor={subTituloFinal}
-                onChange={setSubTituloEdit}
-                style={{ fontSize:13, color:"#374151" }}
-              />
+              {lockEdicao ? (
+                <span>{subTituloFinal}</span>
+              ) : (
+                <TextoEditavel
+                  valor={subTituloFinal}
+                  onChange={setSubTituloEdit}
+                  style={{ fontSize:13, color:"#374151" }}
+                />
+              )}
             </div>
 
-            {/* Resumo do projeto (auto-gerado) */}
-            <div style={D.saudacao}>
-              <InputControlado
-                valor={resumoFinal}
-                onCommit={(v) => setResumoEdit(v)}
-                placeholder="Descrição do projeto"
-                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
-                multiline
-              />
+            {/* Resumo do projeto (auto-gerado) — em modo lock, renderiza
+                como texto puro pra não cortar com overflow do input. */}
+            <div style={D.descricaoProjeto}>
+              {lockEdicao ? (
+                <span>{resumoFinal}</span>
+              ) : (
+                <InputControlado
+                  valor={resumoFinal}
+                  onCommit={(v) => setResumoEdit(v)}
+                  placeholder="Descrição do projeto"
+                  style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                  multiline
+                />
+              )}
             </div>
 
             {/* HONORÁRIOS */}
-            <div style={D.secTit}>HONORÁRIOS</div>
+            <div style={D.secTit}>Honorários</div>
             {incluiArq && (
               <div style={D.destaqueVlrLight}>
                 <div style={D.destaqueLbl}>Apenas Arquitetura</div>
@@ -5272,6 +5372,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 <div style={D.destaqueNum}>{fmtV(engVal)}</div>
               </div>
             )}
+            {/* Card sutil consolidando o total — igual ao mockup */}
+            {(incluiArq && incluiEng) && (
+              <div style={D.totalSubtle}>
+                Total sem impostos — <span style={D.totalSubtleB}>{fmtV(totVal)}</span>
+              </div>
+            )}
             <div style={{ ...D.secTexto, fontSize:12, color:"#6b7280", marginTop:8 }}>
               {areaTot > 0 && `${(arqVal/areaTot).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/m² (arq.)`}
               {incluiEng && areaTot > 0 && ` · ${(engVal/areaTot).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/m² (eng.)`}
@@ -5279,109 +5385,170 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               {!temImposto && ` · Valores sem impostos`}
             </div>
 
-            {/* PROPOSTA PARA ELABORAÇÃO */}
-            <div style={D.secTit}>PROPOSTA PARA ELABORAÇÃO DO PROJETO</div>
+            {/* ESCOPO DOS SERVIÇOS — estrutura rica (Versão B do mockup) */}
+            <div style={D.secTit}>Escopo dos serviços</div>
             <div style={D.secTexto}>
-              O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme escopo abaixo:
+              O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme detalhado abaixo:
             </div>
 
-            {/* Lista de etapas com bullets */}
-            {incluiArq && etapasArqValor.map((et, idx) => {
-              const bloco = escopoState.find(b => b.etapaId === et.id);
+            {/* Etapas de arquitetura — só as que estão em escopoState (não-eng) */}
+            {incluiArq && escopoState.filter(b => !b.isEng).map((bloco, idx) => {
+              const titulo = bloco.titulo || `Etapa ${idx + 1}`;
+              const objetivo = bloco.objetivo || "";
+              const itens = bloco.itens || [];
+              const entregaveis = bloco.entregaveis || [];
+              const obs = bloco.obs || "";
               return (
-                <div key={et.id}>
-                  <div style={D.itemEtapa}>
-                    {idx + 1}. {et.nome} — {fmtV(et.valor)} ({et.pct}%)
-                  </div>
-                  {bloco && bloco.itens && bloco.itens.length > 0 && bloco.itens.slice(0, 3).map((it, ii) => (
+                <div key={bloco.etapaId || idx} className="etapa-bloco">
+                  <div style={D.etapaTitulo}>{idx + 1}. {titulo}</div>
+
+                  {objetivo && (
+                    <div style={D.etapaObjetivo}>{objetivo}</div>
+                  )}
+
+                  {itens.length > 0 && (
+                    <>
+                      <div style={D.etapaSubsec}>Serviços inclusos</div>
+                      {itens.map((it, ii) => (
+                        <div key={ii} style={D.itemBullet}>
+                          <span style={D.bulletDot}>○</span>
+                          {it}
+                        </div>
+                      ))}
+                    </>
+                  )}
+
+                  {entregaveis.length > 0 && (
+                    <div style={D.entregaveisInline}>
+                      <span style={D.entregaveisLabel}>Entregáveis:</span>
+                      {" "}{entregaveis.join(", ")}
+                    </div>
+                  )}
+
+                  {obs && (
+                    <div style={D.etapaFraseFim}>{obs}</div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Engenharia — etapa final */}
+            {incluiEng && (() => {
+              // Procura no escopoState o bloco de engenharia (isEng:true)
+              const blocoEng = escopoState.find(b => b.isEng);
+              const blocosArq = escopoState.filter(b => !b.isEng);
+              const numeroEng = (incluiArq ? blocosArq.length : 0) + 1;
+              const itens = blocoEng?.itens || ["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações", "Elétrico: dimensionamento de cargas, circuitos, quadros e pontos", "Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento", "Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"];
+              const titulo = blocoEng?.titulo || "Projetos Complementares de Engenharia";
+              return (
+                <div className="etapa-bloco">
+                  <div style={D.etapaTitulo}>{numeroEng}. {titulo}</div>
+                  <div style={D.etapaSubsec}>Serviços inclusos</div>
+                  {itens.map((it, ii) => (
                     <div key={ii} style={D.itemBullet}>
-                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      <span style={D.bulletDot}>○</span>
                       {it}
                     </div>
                   ))}
                 </div>
               );
-            })}
+            })()}
 
-            {incluiEng && (
-              <div>
-                <div style={D.itemEtapa}>
-                  {(incluiArq ? etapasArqValor.length + 1 : 1)}. Projetos de Engenharia — {fmtV(engVal)} {engPct > 0 && `(${engPct}%)`}
+            {/* FORMA DE PAGAMENTO — estruturada com Opção 1/Opção 2 + PIX */}
+            <div style={D.secTit}>Forma de pagamento</div>
+
+            {incluiArq && (
+              <div style={D.pgtoBloco}>
+                <div style={D.pgtoBlocoTit}>Apenas Arquitetura</div>
+                <div style={D.pgtoOpcao}>
+                  <span style={D.pgtoOpcaoLbl}>Opção 1</span>{" — Pagamento antecipado com {descArqLocal}% de desconto"}
+                  <br/>
+                  De {fmtV(arqVal)} por apenas: <span style={D.pgtoLinhaB}>{fmtV(arqVal * (1 - descArqLocal/100))}</span>
                 </div>
-                <div style={D.grupoCols}>
-                  <div>
-                    <div style={D.itemBullet}>
-                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
-                      Projeto Estrutural
-                    </div>
-                    <div style={D.itemBullet}>
-                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
-                      Projeto Elétrico
-                    </div>
-                  </div>
-                  <div>
-                    <div style={D.itemBullet}>
-                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
-                      Projeto Hidrossanitário
-                    </div>
-                  </div>
+                <div style={{ ...D.pgtoOpcao, borderBottom: incluiEng ? "0.5px solid #f3f4f6" : "none" }}>
+                  <span style={D.pgtoOpcaoLbl}>Opção 2</span>{" — Parcelado em "}{parcArqLocal}× sem desconto
+                  <br/>
+                  Entrada de {fmtV(arqVal/parcArqLocal)} + {parcArqLocal-1}× de {fmtV(arqVal/parcArqLocal)}
                 </div>
               </div>
             )}
 
-            {/* FORMA DE PAGAMENTO */}
-            <div style={D.secTit}>FORMA DE PAGAMENTO</div>
-            {incluiArq && (
-              <>
-                <div style={D.pgtoLinha}>
-                  <span style={D.pgtoLinhaB}>Apenas Arquitetura — Antecipado:</span>
-                  {" "}{descArqLocal}% de desconto · de {fmtV(arqVal)} por <span style={D.pgtoLinhaB}>{fmtV(arqVal * (1 - descArqLocal/100))}</span>
-                </div>
-                <div style={D.pgtoLinha}>
-                  <span style={D.pgtoLinhaB}>Apenas Arquitetura — Parcelado:</span>
-                  {" "}{parcArqLocal}× sem desconto · entrada {fmtV(arqVal/parcArqLocal)} + {parcArqLocal-1}× {fmtV(arqVal/parcArqLocal)}
-                </div>
-              </>
-            )}
             {incluiArq && incluiEng && (
-              <>
-                <div style={D.pgtoLinha}>
-                  <span style={D.pgtoLinhaB}>Pacote Completo — Antecipado:</span>
-                  {" "}{descPacoteLocal}% de desconto · de {fmtV(totVal)} por <span style={D.pgtoLinhaB}>{fmtV(totVal * (1 - descPacoteLocal/100))}</span>
+              <div style={D.pgtoBloco}>
+                <div style={D.pgtoBlocoTit}>Pacote Completo (Arq. + Eng.)</div>
+                <div style={D.pgtoOpcao}>
+                  <span style={D.pgtoOpcaoLbl}>Opção 1</span>{" — Pagamento antecipado com "}{descPacoteLocal}% de desconto
+                  <br/>
+                  De {fmtV(totVal)} por apenas: <span style={D.pgtoLinhaB}>{fmtV(totVal * (1 - descPacoteLocal/100))}</span>
                 </div>
-                <div style={{ ...D.pgtoLinha, borderBottom:"none" }}>
-                  <span style={D.pgtoLinhaB}>Pacote Completo — Parcelado:</span>
-                  {" "}{parcPacoteLocal}× sem desconto · entrada {fmtV(totVal/parcPacoteLocal)} + {parcPacoteLocal-1}× {fmtV(totVal/parcPacoteLocal)}
+                <div style={{ ...D.pgtoOpcao, borderBottom:"none" }}>
+                  <span style={D.pgtoOpcaoLbl}>Opção 2</span>{" — Parcelado em "}{parcPacoteLocal}× sem desconto
+                  <br/>
+                  Entrada de {fmtV(totVal/parcPacoteLocal)} + {parcPacoteLocal-1}× de {fmtV(totVal/parcPacoteLocal)}
                 </div>
-              </>
+              </div>
             )}
+
+            {/* PIX */}
+            <div style={D.pixLinha}>
+              {lockEdicao ? (
+                <span>{pixEdit || ""}</span>
+              ) : (
+                <TextoEditavel valor={pixEdit} onChange={setPixEdit} style={{ fontSize:11.5, color:"#6b7280" }} />
+              )}
+            </div>
 
             {/* PRAZOS */}
-            <div style={D.secTit}>PRAZOS</div>
-            <div style={D.secTexto}>
-              <InputControlado
-                valor={prazoEdit ?? "Estudo Preliminar — 30 dias úteis após assinatura\nAprovação Prefeitura — 60 dias úteis (não inclui análise municipal)\nProjeto Executivo — 60 dias úteis após aprovação\nEngenharia — 30 dias úteis após aprovação"}
-                onCommit={(v) => setPrazoEdit(v)}
-                placeholder="Prazos das etapas"
-                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
-                multiline
-              />
-            </div>
+            <div style={D.secTit}>Prazo de execução</div>
+            {lockEdicao ? (
+              <div>
+                {prazosLista.map((linha, i) => (
+                  <div key={i} style={D.itemBullet}>
+                    <span style={D.bulletDot}>○</span>
+                    {linha}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div style={D.secTexto}>
+                <InputControlado
+                  valor={prazoEdit ?? "Estudo Preliminar — 30 dias úteis após assinatura\nAprovação Prefeitura — 60 dias úteis (não inclui análise municipal)\nProjeto Executivo — 60 dias úteis após aprovação\nEngenharia — 30 dias úteis após aprovação"}
+                  onCommit={(v) => setPrazoEdit(v)}
+                  placeholder="Prazos das etapas"
+                  style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                  multiline
+                />
+              </div>
+            )}
 
-            {/* SERVIÇOS NÃO INCLUSOS */}
-            <div style={D.secTit}>SERVIÇOS NÃO INCLUSOS</div>
-            <div style={D.secTexto}>
-              <InputControlado
-                valor={naoInclEdit ?? "Sondagem de solo (SPT) e levantamento topográfico\nTaxas, emolumentos e ART/RRT junto aos órgãos competentes\nAcompanhamento de obra e gerenciamento\nProjetos complementares (paisagismo, automação, AVCB, gás)\nMobiliário e decoração"}
-                onCommit={(v) => setNaoInclEdit(v)}
-                placeholder="Serviços não inclusos"
-                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
-                multiline
-              />
-            </div>
+            {/* SERVIÇOS NÃO INCLUSOS — lista completa em bullets */}
+            <div style={D.secTit}>Serviços não inclusos</div>
+            {lockEdicao ? (
+              <div>
+                {naoInclususLista.map((linha, i) => (
+                  <div key={i} style={D.itemBullet}>
+                    <span style={D.bulletDot}>○</span>
+                    {linha}
+                  </div>
+                ))}
+                <div style={{ ...D.etapaFraseFim, marginTop:10 }}>
+                  Obs: Todos os serviços não inclusos podem ser contratados como serviços adicionais.
+                </div>
+              </div>
+            ) : (
+              <div style={D.secTexto}>
+                <InputControlado
+                  valor={naoInclEdit ?? naoInclususLista.join("\n")}
+                  onCommit={(v) => setNaoInclEdit(v)}
+                  placeholder="Serviços não inclusos"
+                  style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                  multiline
+                />
+              </div>
+            )}
 
             {/* ACEITE */}
-            <div style={D.secTit}>ACEITE DA PROPOSTA</div>
+            <div style={D.secTit}>Aceite da proposta</div>
             <div style={D.secTexto}>
               Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.
             </div>
@@ -5394,9 +5561,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               </div>
               <div style={{ fontSize:11, color:"#9ca3af" }}>
                 <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
-                  <TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:11, fontWeight:600 }} />
-                  {" · "}
-                  <TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:11, fontWeight:600 }} />
+                  {lockEdicao ? (
+                    <span>{(responsavelEdit || "")}{cauEdit ? ` · ${cauEdit}` : ""}</span>
+                  ) : (
+                    <>
+                      <TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:11, fontWeight:600 }} />
+                      {" · "}
+                      <TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:11, fontWeight:600 }} />
+                    </>
+                  )}
                 </div>
                 <div style={{ marginTop:3 }}>Responsável Técnico</div>
               </div>
@@ -5404,13 +5577,17 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
             {/* Rodapé com contatos */}
             <div style={{ marginTop:32, paddingTop:14, borderTop:"0.5px solid #e5e7eb", fontSize:10, color:"#9ca3af", textAlign:"center", lineHeight:1.6 }}>
-              <span>{escritorio.nome || "Escritório"}</span> · <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:10 }} />
-              {" · "} <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:10 }} />
-              {" · "} <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:10 }} />
+              <span>{escritorio.nome || "Escritório"}</span>
+              {" · "}
+              {lockEdicao ? <span>{emailEdit || ""}</span> : <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:10 }} />}
+              {" · "}
+              {lockEdicao ? <span>{telefoneEdit || ""}</span> : <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:10 }} />}
+              {" · "}
+              {lockEdicao ? <span>{instagramEdit || ""}</span> : <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:10 }} />}
             </div>
 
-            {/* Botões inferiores: Voltar + Salvar (replicados do Editorial) */}
-            <div style={{ marginTop:32, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            {/* Botões inferiores: Voltar + Salvar (só em modo edição) */}
+            <div className="no-print" style={{ marginTop:32, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
               {!lockEdicao && (
                 <>
                   <button
@@ -5429,29 +5606,22 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           </div>
         </div>
 
-        {/* Modal de confirmação de salvar — reusa o mesmo do Editorial */}
+        {/* Modal de confirmação salvar — não muda */}
         {confirmSalvar && (
-          <div style={{
-            position:"fixed", inset:0, background:"rgba(0,0,0,0.5)",
-            display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000,
-          }}>
-            <div style={{ background:"#fff", borderRadius:12, padding:"24px 28px", maxWidth:480, width:"90%", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
-              <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:8 }}>Salvar proposta?</div>
+          <div className="no-print" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
+            <div style={{ background:"#fff", padding:"28px 32px", borderRadius:12, maxWidth:480, width:"90%", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+              <div style={{ fontSize:18, fontWeight:700, color:"#111", marginBottom:8 }}>Salvar e gerar proposta?</div>
               <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.55, marginBottom:20 }}>
                 A proposta será arquivada e o PDF baixado. Após salvar, esta versão fica imutável.
                 {" "}<strong style={{ color:"#1e40af" }}>O PDF será gerado no servidor</strong> — primeira chamada pode levar até 15 segundos.
               </div>
-              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
-                <button
-                  onClick={() => setConfirmSalvar(false)}
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
+                <button onClick={() => setConfirmSalvar(false)}
                   style={{ background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
                   Cancelar
                 </button>
                 <button
-                  onClick={async () => {
-                    setConfirmSalvar(false);
-                    await handleSalvarProposta();
-                  }}
+                  onClick={async () => { setConfirmSalvar(false); await handleSalvarProposta(); }}
                   style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
                   Salvar e gerar PDF
                 </button>
