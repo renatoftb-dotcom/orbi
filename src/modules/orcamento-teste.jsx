@@ -4789,9 +4789,6 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       instagramEdit, cidadeEdit, pixEdit, labelApenasEdit,
       logoPreview,
       escopoState: escopoState ? JSON.parse(JSON.stringify(escopoState)) : [],
-      // Modelo visual escolhido na barra superior (Padrão, Direto, etc.)
-      // Propostas antigas sem templateId caem no default "01-editorial".
-      templateId,
       // ── VALORES EXIBIDOS (fonte única da verdade pro que o cliente viu) ──
       // No modo "padrao": arqCIEdit + engCIEdit (100% de cada)
       // No modo "etapas": totalPacoteEtapas (soma das etapas ativas + eng se ativa)
