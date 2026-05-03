@@ -10,6 +10,37 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // em vez de strings hardcoded. Se algum campo estiver vazio, o PDF mostra
   // string vazia (visualmente melhor do que dados errados).
   const escInput = opts.escritorio || {};
+
+  // ── Identidade Visual (Fase B.3a) ──────────────────────────
+  // Cor primária e fontes vêm do escritório (configuradas em
+  // "Configuração → Orçamento → Configurar Modelo de Orçamento").
+  // Defaults: preto (#111827) e helvetica — preservam aparência atual
+  // pra escritórios que ainda não customizaram.
+  //
+  // Aplicação CONSERVADORA: cor primária só nas barras decorativas
+  // horizontais (linha do topo + linha dupla abaixo do cliente).
+  // Texto, caixa de Total, numeração e backdrop do logo permanecem
+  // pretos pra preservar legibilidade e contraste.
+  function _hexToRgb(hex) {
+    const m = (hex || "").replace("#","").match(/^([0-9a-f]{6}|[0-9a-f]{3})$/i);
+    if (!m) return [17, 24, 39]; // fallback INK
+    let h = m[1];
+    if (h.length === 3) h = h.split("").map(c => c + c).join("");
+    return [
+      parseInt(h.slice(0, 2), 16),
+      parseInt(h.slice(2, 4), 16),
+      parseInt(h.slice(4, 6), 16),
+    ];
+  }
+  const _temaCorPrim    = escInput.identCorPrim    || "#111827";
+  const _temaFonteTit   = escInput.identFonteTit   || "helvetica";
+  const _temaFonteCorpo = escInput.identFonteCorpo || "helvetica";
+  // Restringe a fontes que jsPDF entende nativamente (defesa contra
+  // valores inválidos vindos do banco). Helvetica é o fallback seguro.
+  const _fontesValidas = new Set(["helvetica", "times", "courier"]);
+  const _fonteTit   = _fontesValidas.has(_temaFonteTit)   ? _temaFonteTit   : "helvetica";
+  const _fonteCorpo = _fontesValidas.has(_temaFonteCorpo) ? _temaFonteCorpo : "helvetica";
+
   const _respPrimeiro = (escInput.responsaveis && escInput.responsaveis.length > 0)
     ? escInput.responsaveis[0] : null;
   // Responsável formatado com prefixo "Arq." (padrão do escritório).
@@ -157,7 +188,14 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   let y = 12;
 
   // Helpers
-  const sf  = (s,z) => { doc.setFont("helvetica",s); doc.setFontSize(z); };
+  // sf usa a fonte de CORPO do tema (helvetica por padrão).
+  // sft usa a fonte de TÍTULOS — aplicada seletivamente em elementos
+  // proeminentes (nome do cliente, valor total, títulos de bloco do escopo).
+  // Quando ambos são iguais (default), não há diferença visual — só quando
+  // escritório customizar pra serifa/mono é que a hierarquia tipográfica
+  // emerge.
+  const sf  = (s,z) => { doc.setFont(_fonteCorpo, s); doc.setFontSize(z); };
+  const sft = (s,z) => { doc.setFont(_fonteTit,   s); doc.setFontSize(z); };
   const stc = (rgb) => doc.setTextColor(...rgb);
   const sc  = (rgb,t="fill") => t==="fill" ? doc.setFillColor(...rgb) : doc.setDrawColor(...rgb);
   const tx  = (t,x,yy,o={}) => doc.text(String(t),x,yy,o);
@@ -170,6 +208,11 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const INK_LT= [156,163,175];
   const LINE  = [229,231,235];
   const BG    = [249,250,251];
+  // PRIM: RGB da cor primária do escritório. Usado APENAS nas barras
+  // decorativas horizontais (linha do topo de cada página + linha dupla
+  // separadora abaixo do nome do cliente). Texto e caixas continuam
+  // pretos (INK) pra preservar legibilidade.
+  const PRIM  = _hexToRgb(_temaCorPrim);
 
   const esc = {
     nome:   escInput.nome     || "",
@@ -185,7 +228,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Nova página
   const novaPg = () => {
     doc.addPage(); y = 12;
-    sc(INK); doc.rect(M,6,TW,0.5,"F");
+    sc(PRIM); doc.rect(M,6,TW,0.5,"F");
     sf("bold",8); stc(INK); tx(esc.nome,M,12);
     sf("normal",7.5); stc(INK_LT); tx(`Proposta Comercial  ·  ${orc.cliente||""}`,W-M,12,{align:"right"});
     hr(16); y=22;
@@ -223,7 +266,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   };
 
   // ── LINHA DECORATIVA TOPO ───────────────────────────────────
-  sc(INK); doc.rect(M,6,TW,0.5,"F");
+  sc(PRIM); doc.rect(M,6,TW,0.5,"F");
 
   // ── LOGO ───────────────────────────────────────────────────
   let logoData = logo || null;
@@ -258,12 +301,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // Nome cliente + Arq à direita (label inline + valor)
   y += 10;
-  sf("bold",18); stc(INK); tx(orc.cliente||"—", M, y);
+  sft("bold",18); stc(INK); tx(orc.cliente||"—", M, y);
   // Valor "Apenas Arquitetura" no canto superior direito só aparece quando eng está ATIVA
   // (senão é redundante — o valor arq já aparece logo abaixo em "ARQUITETURA")
   const engAtivaHeaderCalc = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
   if (incluiArq && engAtivaHeaderCalc) {
-    sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
+    sft("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
     const wArqVal = doc.getTextWidth(fmtB(arqCI));
     const labelApenas = P && P.labelApenas ? P.labelApenas : "Apenas Arquitetura";
     sf("normal",6.5); stc(INK_LT); tx(labelApenas, W-M-wArqVal-3, y+1, {align:"right"});
@@ -287,7 +330,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // Linha dupla separadora
   y += 6;
-  sc(INK); doc.rect(M,y,TW,0.5,"F");
+  sc(PRIM); doc.rect(M,y,TW,0.5,"F");
   y += 5;
 
   // Aviso de isolamento parcial — só quando tem arq isolada e nem todas estão (ANTES do resumo)
@@ -317,7 +360,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // Coluna ARQ — sempre mostra valor total de arquitetura
   sf("bold",6.5); stc(INK_LT); tx("ARQUITETURA", M, y);
-  sf("bold",12); stc(INK); tx(fmtB(arqCI), M, y+8);
+  sft("bold",12); stc(INK); tx(fmtB(arqCI), M, y+8);
 
   // Divisor vertical e coluna Engenharia — só quando engenharia está ATIVA (toggle + isolamento)
   if (engAtivaPdfVal) {
@@ -325,7 +368,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     sf("bold",6.5); stc(INK_LT); tx("ENGENHARIA", midX+4, y);
     const wEng = doc.getTextWidth("ENGENHARIA");
     sf("normal",6); stc(INK_LT); tx("(Opcional)", midX+4+wEng+2, y);
-    sf("bold",12); stc(INK); tx(fmtB(engCI), midX+4, y+8);
+    sft("bold",12); stc(INK); tx(fmtB(engCI), midX+4, y+8);
     sf("normal",6.5); stc(INK_LT);
     tx("Estrutural · Elétrico · Hidrossanitário", midX+4, y+14);
   }
@@ -683,7 +726,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   escopoFiltradoPdf.forEach((bloco,bi) => {
     nv(16);
-    sf("bold",9.5); stc(INK); tx(bloco.titulo,M,y); y+=6;
+    sft("bold",9.5); stc(INK); tx(bloco.titulo,M,y); y+=6;
 
     const tagPdf = (txt) => {
       doc.setCharSpace(0.5);

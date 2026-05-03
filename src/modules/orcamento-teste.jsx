@@ -4684,7 +4684,26 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const LT = "#828a98";
   const MD = "#6b7280";
   const LN = "#e5e7eb";
-  const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
+  // ── Identidade visual do escritório (Fase B.3a) ──────────────
+  // Espelha o que o PDF aplica: cor primária só nas barras decorativas
+  // horizontais (1.5px solid C → 1.5px solid PRIM_PREVIEW). Texto, accents
+  // e botões permanecem pretos pra preservar legibilidade da UI.
+  // Defaults preservam aparência atual quando escritório ainda não customizou.
+  const PRIM_PREVIEW = (escritorio && escritorio.identCorPrim) || "#111827";
+  const _temaFonteTitPrev   = (escritorio && escritorio.identFonteTit)   || "helvetica";
+  const _temaFonteCorpoPrev = (escritorio && escritorio.identFonteCorpo) || "helvetica";
+  // Mapeamento jsPDF font name → CSS font-family. Valores ASCII puros
+  // pra evitar fallback browser. Helvetica Neue continua o default visual
+  // pra escritórios que mantêm "helvetica" no tema (compatibilidade).
+  const _cssFonteFamilias = {
+    helvetica: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+    times:     "'Times New Roman',Times,Georgia,serif",
+    courier:   "'Courier New',Courier,monospace",
+  };
+  const _fontTit   = _cssFonteFamilias[_temaFonteTitPrev]   || _cssFonteFamilias.helvetica;
+  const _fontCorpo = _cssFonteFamilias[_temaFonteCorpoPrev] || _cssFonteFamilias.helvetica;
+
+  const wrap  = { fontFamily: _fontCorpo, background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
   const page  = { maxWidth:860, margin:"0 auto", padding:"32px 40px 80px" };
   const secH  = (mt=28) => ({ display:"flex", alignItems:"center", gap:12, margin:`${mt}px 0 14px` });
   const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:600, whiteSpace:"nowrap" };
@@ -5049,9 +5068,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           <div style={{ fontSize:11, color:LT }}><TextoEditavel valor={cidadeEdit} onChange={setCidadeEdit} style={{}} />, {dataStr} · Válido até <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{}} /></div>
         </div>
 
-        <div style={{ borderTop:`1.5px solid ${C}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+        <div style={{ borderTop:`1.5px solid ${PRIM_PREVIEW}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
           <div>
-            <div style={{ fontSize:24, fontWeight:600, color:C }}>{clienteNome || "Cliente"}</div>
+            <div style={{ fontSize:24, fontWeight:600, color:C, fontFamily:_fontTit }}>{clienteNome || "Cliente"}</div>
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloFinal} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
           </div>
           <div style={{ textAlign:"right" }}>
@@ -5059,7 +5078,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               <>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
                   <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
-                  <span style={{ fontSize:22, fontWeight:600, color:C }}>{fmtV(temIsoladas ? arqIsoladaSI : arqEdit)}</span>
+                  <span style={{ fontSize:22, fontWeight:600, color:C, fontFamily:_fontTit }}>{fmtV(temIsoladas ? arqIsoladaSI : arqEdit)}</span>
                 </div>
                 {areaTot > 0 && (
                   <div style={{ fontSize:11, color:LT }}>R$ {fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²</div>
@@ -5125,7 +5144,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           <div style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
-              <div style={{ fontSize:20, fontWeight:600, color:C }}>
+              <div style={{ fontSize:20, fontWeight:600, color:C, fontFamily:_fontTit }}>
                 {editandoArq ? (
                   <input autoFocus type="text"
                     key={arqCI}
@@ -5147,7 +5166,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {incluiArq && engAtiva && <div style={{ background:LN }} />}
             {engAtiva && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}>(Opcional)</span></div>
-              <div style={{ fontSize:20, fontWeight:600, color:C }}>
+              <div style={{ fontSize:20, fontWeight:600, color:C, fontFamily:_fontTit }}>
                 {editandoEng ? (
                   <input autoFocus type="text"
                     key={engCI}
@@ -5500,12 +5519,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             <div key={bloco.etapaId} style={{ marginBottom:18 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6, gap:8 }}>
                 <div style={{ display:"flex", alignItems:"baseline", gap:4, flex:1, minWidth:0 }}>
-                  <span style={{ fontSize:13, fontWeight:600, color:C, whiteSpace:"nowrap" }}>{numPrefix}</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:C, whiteSpace:"nowrap", fontFamily:_fontTit }}>{numPrefix}</span>
                   <InputControlado
                     valor={tituloTexto}
                     onCommit={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
                     placeholder="Inserir novo escopo"
-                    style={{ flex:1, minWidth:0 }}
+                    style={{ flex:1, minWidth:0, fontFamily:_fontTit }}
                   />
                 </div>
                 <span
