@@ -4895,11 +4895,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         clienteNome: clienteNome || "",
       };
 
-      // Chama backend
-      const apiBase = (typeof API_BASE === "string" ? API_BASE : "");
+      // URL base da API (mesmo padrão usado em app.jsx, escritorio.jsx, etc).
+      // Em produção: vicke.com.br chama orbi-production-5f5c.up.railway.app
+      // Em dev: VITE_API_URL pode apontar pra localhost:3000
+      const _API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+        || "https://orbi-production-5f5c.up.railway.app";
+
       const tok = (typeof window !== "undefined" && window.localStorage)
         ? window.localStorage.getItem("vicke-token") : null;
-      const resp = await fetch(`${apiBase}/api/proposta/gerar-pdf`, {
+      const resp = await fetch(`${_API_URL}/api/proposta/gerar-pdf`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

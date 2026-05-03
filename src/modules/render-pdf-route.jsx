@@ -48,10 +48,10 @@ function RenderPdfRoute() {
           return;
         }
 
-        // Backend URL — em produção, mesmo domínio que a API regular.
-        // Nota: API_BASE é definida globalmente em api.js do bundle.
-        const apiBase = (typeof API_BASE === "string" ? API_BASE : "");
-        const resp = await fetch(`${apiBase}/api/proposta/render-data?token=${encodeURIComponent(token)}`);
+        // URL base da API (mesmo padrão usado em app.jsx, escritorio.jsx, etc).
+        const _API_URL = (typeof import.meta !== "undefined" && import.meta.env && import.meta.env.VITE_API_URL)
+          || "https://orbi-production-5f5c.up.railway.app";
+        const resp = await fetch(`${_API_URL}/api/proposta/render-data?token=${encodeURIComponent(token)}`);
         if (!resp.ok) {
           setEstado("erro");
           setErro(`Falha ao buscar dados: ${resp.status} ${resp.statusText}`);
