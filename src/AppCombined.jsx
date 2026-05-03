@@ -4794,37 +4794,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // em vez de strings hardcoded. Se algum campo estiver vazio, o PDF mostra
   // string vazia (visualmente melhor do que dados errados).
   const escInput = opts.escritorio || {};
-
-  // ── Identidade Visual (Fase B.3a) ──────────────────────────
-  // Cor primária e fontes vêm do escritório (configuradas em
-  // "Configuração → Orçamento → Configurar Modelo de Orçamento").
-  // Defaults: preto (#111827) e helvetica — preservam aparência atual
-  // pra escritórios que ainda não customizaram.
-  //
-  // Aplicação CONSERVADORA: cor primária só nas barras decorativas
-  // horizontais (linha do topo + linha dupla abaixo do cliente).
-  // Texto, caixa de Total, numeração e backdrop do logo permanecem
-  // pretos pra preservar legibilidade e contraste.
-  function _hexToRgb(hex) {
-    const m = (hex || "").replace("#","").match(/^([0-9a-f]{6}|[0-9a-f]{3})$/i);
-    if (!m) return [17, 24, 39]; // fallback INK
-    let h = m[1];
-    if (h.length === 3) h = h.split("").map(c => c + c).join("");
-    return [
-      parseInt(h.slice(0, 2), 16),
-      parseInt(h.slice(2, 4), 16),
-      parseInt(h.slice(4, 6), 16),
-    ];
-  }
-  const _temaCorPrim    = escInput.identCorPrim    || "#111827";
-  const _temaFonteTit   = escInput.identFonteTit   || "helvetica";
-  const _temaFonteCorpo = escInput.identFonteCorpo || "helvetica";
-  // Restringe a fontes que jsPDF entende nativamente (defesa contra
-  // valores inválidos vindos do banco). Helvetica é o fallback seguro.
-  const _fontesValidas = new Set(["helvetica", "times", "courier"]);
-  const _fonteTit   = _fontesValidas.has(_temaFonteTit)   ? _temaFonteTit   : "helvetica";
-  const _fonteCorpo = _fontesValidas.has(_temaFonteCorpo) ? _temaFonteCorpo : "helvetica";
-
   const _respPrimeiro = (escInput.responsaveis && escInput.responsaveis.length > 0)
     ? escInput.responsaveis[0] : null;
   // Responsável formatado com prefixo "Arq." (padrão do escritório).
@@ -4972,14 +4941,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   let y = 12;
 
   // Helpers
-  // sf usa a fonte de CORPO do tema (helvetica por padrão).
-  // sft usa a fonte de TÍTULOS — aplicada seletivamente em elementos
-  // proeminentes (nome do cliente, valor total, títulos de bloco do escopo).
-  // Quando ambos são iguais (default), não há diferença visual — só quando
-  // escritório customizar pra serifa/mono é que a hierarquia tipográfica
-  // emerge.
-  const sf  = (s,z) => { doc.setFont(_fonteCorpo, s); doc.setFontSize(z); };
-  const sft = (s,z) => { doc.setFont(_fonteTit,   s); doc.setFontSize(z); };
+  const sf  = (s,z) => { doc.setFont("helvetica",s); doc.setFontSize(z); };
   const stc = (rgb) => doc.setTextColor(...rgb);
   const sc  = (rgb,t="fill") => t==="fill" ? doc.setFillColor(...rgb) : doc.setDrawColor(...rgb);
   const tx  = (t,x,yy,o={}) => doc.text(String(t),x,yy,o);
@@ -4992,11 +4954,6 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   const INK_LT= [156,163,175];
   const LINE  = [229,231,235];
   const BG    = [249,250,251];
-  // PRIM: RGB da cor primária do escritório. Usado APENAS nas barras
-  // decorativas horizontais (linha do topo de cada página + linha dupla
-  // separadora abaixo do nome do cliente). Texto e caixas continuam
-  // pretos (INK) pra preservar legibilidade.
-  const PRIM  = _hexToRgb(_temaCorPrim);
 
   const esc = {
     nome:   escInput.nome     || "",
@@ -5012,7 +4969,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   // Nova página
   const novaPg = () => {
     doc.addPage(); y = 12;
-    sc(PRIM); doc.rect(M,6,TW,0.5,"F");
+    sc(INK); doc.rect(M,6,TW,0.5,"F");
     sf("bold",8); stc(INK); tx(esc.nome,M,12);
     sf("normal",7.5); stc(INK_LT); tx(`Proposta Comercial  ·  ${orc.cliente||""}`,W-M,12,{align:"right"});
     hr(16); y=22;
@@ -5050,7 +5007,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   };
 
   // ── LINHA DECORATIVA TOPO ───────────────────────────────────
-  sc(PRIM); doc.rect(M,6,TW,0.5,"F");
+  sc(INK); doc.rect(M,6,TW,0.5,"F");
 
   // ── LOGO ───────────────────────────────────────────────────
   let logoData = logo || null;
@@ -5085,12 +5042,12 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // Nome cliente + Arq à direita (label inline + valor)
   y += 10;
-  sft("bold",18); stc(INK); tx(orc.cliente||"—", M, y);
+  sf("bold",18); stc(INK); tx(orc.cliente||"—", M, y);
   // Valor "Apenas Arquitetura" no canto superior direito só aparece quando eng está ATIVA
   // (senão é redundante — o valor arq já aparece logo abaixo em "ARQUITETURA")
   const engAtivaHeaderCalc = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
   if (incluiArq && engAtivaHeaderCalc) {
-    sft("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
+    sf("bold",12); stc(INK); tx(fmtB(arqCI), W-M, y+1, {align:"right"});
     const wArqVal = doc.getTextWidth(fmtB(arqCI));
     const labelApenas = P && P.labelApenas ? P.labelApenas : "Apenas Arquitetura";
     sf("normal",6.5); stc(INK_LT); tx(labelApenas, W-M-wArqVal-3, y+1, {align:"right"});
@@ -5114,7 +5071,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // Linha dupla separadora
   y += 6;
-  sc(PRIM); doc.rect(M,y,TW,0.5,"F");
+  sc(INK); doc.rect(M,y,TW,0.5,"F");
   y += 5;
 
   // Aviso de isolamento parcial — só quando tem arq isolada e nem todas estão (ANTES do resumo)
@@ -5144,7 +5101,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   // Coluna ARQ — sempre mostra valor total de arquitetura
   sf("bold",6.5); stc(INK_LT); tx("ARQUITETURA", M, y);
-  sft("bold",12); stc(INK); tx(fmtB(arqCI), M, y+8);
+  sf("bold",12); stc(INK); tx(fmtB(arqCI), M, y+8);
 
   // Divisor vertical e coluna Engenharia — só quando engenharia está ATIVA (toggle + isolamento)
   if (engAtivaPdfVal) {
@@ -5152,7 +5109,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
     sf("bold",6.5); stc(INK_LT); tx("ENGENHARIA", midX+4, y);
     const wEng = doc.getTextWidth("ENGENHARIA");
     sf("normal",6); stc(INK_LT); tx("(Opcional)", midX+4+wEng+2, y);
-    sft("bold",12); stc(INK); tx(fmtB(engCI), midX+4, y+8);
+    sf("bold",12); stc(INK); tx(fmtB(engCI), midX+4, y+8);
     sf("normal",6.5); stc(INK_LT);
     tx("Estrutural · Elétrico · Hidrossanitário", midX+4, y+14);
   }
@@ -5510,7 +5467,7 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
   escopoFiltradoPdf.forEach((bloco,bi) => {
     nv(16);
-    sft("bold",9.5); stc(INK); tx(bloco.titulo,M,y); y+=6;
+    sf("bold",9.5); stc(INK); tx(bloco.titulo,M,y); y+=6;
 
     const tagPdf = (txt) => {
       doc.setCharSpace(0.5);
@@ -9997,29 +9954,59 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
 // ═══════════════════════════════════════════════════════════════
 // SISTEMA DE TEMPLATES DE PROPOSTA
 //
-// Catálogo de layouts disponíveis na barra do topo. Por enquanto só
-// "Editorial" está ativo — quando novos templates forem implementados
-// (Arquitetônico, Premium, etc.), adicionar entradas aqui apontando
-// para o componente viewer correspondente via `comp`.
+// Catálogo de modelos disponíveis na barra do topo da PropostaPreview.
+// Cada modelo é um layout visual diferente da MESMA proposta — todas as
+// informações (valores, descontos, escopo, etapas, aceite) aparecem em
+// todos os modelos. Só muda apresentação.
+//
+// Implementação atual: o JSX de cada modelo está dentro do componente
+// PropostaPreviewEditorial, em funções renderEditorial()/renderDireto()
+// que usam o mesmo conjunto de estados/handlers. Trocar de modelo NÃO
+// perde edições inline (mesmo componente, mesma instância).
 //
 // `templateId` é persistido no snapshot da proposta (ver
 // buildPropostaSnapshot). Propostas antigas sem templateId caem no
 // default "01-editorial".
+//
+// Para adicionar um modelo novo:
+//   1. Adicionar entrada aqui em TEMPLATES_PROPOSTA
+//   2. Implementar função renderXxx() dentro do PropostaPreviewEditorial
+//   3. Adicionar case no switch do return final desse componente
 // ═══════════════════════════════════════════════════════════════
 const TEMPLATES_PROPOSTA = [
-  { id:"01-editorial", label:"Editorial", desc:"Layout atual, totalmente editável", accent:"#111827" },
-  // Roadmap (descomentar quando implementado, junto com viewer no switch abaixo):
-  // { id:"02-arquitetonico", label:"Arquitetônico", desc:"Prancha técnica, monoespaçada", accent:"#1e3a8a" },
+  {
+    id: "01-editorial",
+    label: "Padrão",
+    desc: "Sóbrio, preto e branco",
+    accent: "#111827",
+  },
+  {
+    id: "02-direto",
+    label: "Direto",
+    desc: "Header colorido, prático",
+    accent: "#fbbf24",
+  },
+  // Roadmap (descomentar quando implementado, junto com renderXxx no componente):
+  // { id:"03-corporativo", label:"Corporativo", desc:"Tabelas formais, serifa", accent:"#1f2937" },
+  // { id:"04-magazine",    label:"Magazine",    desc:"Editorial, numeração lateral", accent:"#374151" },
+  // { id:"05-timeline",    label:"Timeline",    desc:"Etapas como jornada", accent:"#0f172a" },
+  // { id:"06-report",      label:"Report",      desc:"Dashboard executivo, 2 colunas", accent:"#475569" },
+  // { id:"07-cards",       label:"Cards",       desc:"Cartões modulares", accent:"#0f172a" },
+  // { id:"08-editorial-visual", label:"Editorial Visual", desc:"Capa SVG + paletas", accent:"#b7896a" },
+  // { id:"09-wabi-sabi",   label:"Wabi-Sabi",   desc:"Minimalismo japonês", accent:"#c9a460" },
 ];
 
-// Barra de seleção de templates — sticky no topo do preview.
-// Esconde quando lockEdicao (proposta finalizada/visualização readonly)
-// OU quando só há 1 template ativo (não tem o que escolher).
-// Quando o 2º template for adicionado em TEMPLATES_PROPOSTA, a barra
-// aparece automaticamente.
+// Barra de seleção de modelos — sticky no topo do preview.
+// Esconde quando lockEdicao (proposta finalizada/visualização readonly).
+// Quando só há 1 modelo ativo a barra ainda é mostrada — feedback visual
+// de qual modelo está ativo, mesmo sem opção de troca.
+//
+// Cada botão tem:
+//   - Thumbnail visual (40×52) com mini-representação do layout
+//   - Nome curto do modelo (Padrão, Direto, etc.)
+// Indicação visual de modelo ativo: borda preta 2px + fundo cinza claro.
 function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
   if (lockEdicao) return null;
-  if (TEMPLATES_PROPOSTA.length <= 1) return null;
   return (
     <div style={{
       position:"sticky", top:0, zIndex:20, background:"#fff",
@@ -10028,11 +10015,11 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
       <span style={{
-        fontSize:10, fontWeight:600, color:"#6b7280",
-        textTransform:"uppercase", letterSpacing:"0.08em",
+        fontSize:10, fontWeight:700, color:"#9ca3af",
+        textTransform:"uppercase", letterSpacing:"0.1em",
         flexShrink:0, marginRight:4,
       }}>
-        Layout:
+        Modelo:
       </span>
       {TEMPLATES_PROPOSTA.map(t => {
         const ativo = templateId === t.id;
@@ -10041,18 +10028,42 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
             key={t.id}
             onClick={() => onChange(t.id)}
             style={{
-              flexShrink:0, padding:"6px 12px",
-              border: ativo ? `2px solid ${t.accent}` : "1px solid #e5e7eb",
-              background: ativo ? `${t.accent}10` : "#fff",
-              borderRadius:6, cursor:"pointer", fontSize:12, fontFamily:"inherit",
-              fontWeight: ativo ? 600 : 500,
-              color: ativo ? t.accent : "#374151",
-              display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1,
-              minWidth:130, transition:"all 0.15s",
+              flexShrink:0,
+              padding: ativo ? "5px 9px 4px" : "6px 10px 5px",
+              border: ativo ? "2px solid #111" : "1px solid #e5e7eb",
+              background: ativo ? "#fafbfc" : "#fff",
+              borderRadius:8, cursor:"pointer", fontFamily:"inherit",
+              display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+              minWidth:78, transition:"all 0.15s",
             }}>
-            <span style={{ fontSize:12, fontWeight:600 }}>{t.label}</span>
-            <span style={{ fontSize:9.5, color: ativo ? t.accent : "#9ca3af", fontWeight:400 }}>
-              {t.desc}
+            {/* Thumbnail visual de cada modelo. SVG mini-mockup. */}
+            <span aria-hidden="true" style={{ display:"inline-block", width:40, height:52 }}>
+              {t.id === "01-editorial" && (
+                <svg viewBox="0 0 40 52" width="40" height="52" style={{ borderRadius:3, border:"0.5px solid #e5e7eb", background:"#fff" }}>
+                  <rect x="3" y="3" width="11" height="6" fill="#111" rx="1"/>
+                  <line x1="3" y1="14" x2="37" y2="14" stroke="#111" strokeWidth="1"/>
+                  <line x1="3" y1="20" x2="32" y2="20" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="24" x2="34" y2="24" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="32" x2="20" y2="32" stroke="#9ca3af" strokeWidth="0.7"/>
+                  <line x1="3" y1="38" x2="30" y2="38" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="42" x2="28" y2="42" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="46" x2="32" y2="46" stroke="#9ca3af" strokeWidth="0.5"/>
+                </svg>
+              )}
+              {t.id === "02-direto" && (
+                <svg viewBox="0 0 40 52" width="40" height="52" style={{ borderRadius:3, border:"0.5px solid #e5e7eb", background:"#fff" }}>
+                  <rect x="0" y="0" width="40" height="18" fill="#fbbf24"/>
+                  <text x="3" y="13" fontSize="6" fontWeight="800" fill="#111">PROPOSTA</text>
+                  <line x1="3" y1="24" x2="34" y2="24" stroke="#fbbf24" strokeWidth="1"/>
+                  <line x1="3" y1="29" x2="28" y2="29" stroke="#374151" strokeWidth="0.5"/>
+                  <line x1="3" y1="33" x2="32" y2="33" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="40" x2="30" y2="40" stroke="#fbbf24" strokeWidth="1"/>
+                  <line x1="3" y1="45" x2="34" y2="45" stroke="#9ca3af" strokeWidth="0.5"/>
+                </svg>
+              )}
+            </span>
+            <span style={{ fontSize:11, fontWeight: ativo ? 600 : 500, color: ativo ? "#111" : "#374151" }}>
+              {t.label}
             </span>
           </button>
         );
@@ -10581,26 +10592,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const LT = "#828a98";
   const MD = "#6b7280";
   const LN = "#e5e7eb";
-  // ── Identidade visual do escritório (Fase B.3a) ──────────────
-  // Espelha o que o PDF aplica: cor primária só nas barras decorativas
-  // horizontais (1.5px solid C → 1.5px solid PRIM_PREVIEW). Texto, accents
-  // e botões permanecem pretos pra preservar legibilidade da UI.
-  // Defaults preservam aparência atual quando escritório ainda não customizou.
-  const PRIM_PREVIEW = (escritorio && escritorio.identCorPrim) || "#111827";
-  const _temaFonteTitPrev   = (escritorio && escritorio.identFonteTit)   || "helvetica";
-  const _temaFonteCorpoPrev = (escritorio && escritorio.identFonteCorpo) || "helvetica";
-  // Mapeamento jsPDF font name → CSS font-family. Valores ASCII puros
-  // pra evitar fallback browser. Helvetica Neue continua o default visual
-  // pra escritórios que mantêm "helvetica" no tema (compatibilidade).
-  const _cssFonteFamilias = {
-    helvetica: "'Helvetica Neue',Helvetica,Arial,sans-serif",
-    times:     "'Times New Roman',Times,Georgia,serif",
-    courier:   "'Courier New',Courier,monospace",
-  };
-  const _fontTit   = _cssFonteFamilias[_temaFonteTitPrev]   || _cssFonteFamilias.helvetica;
-  const _fontCorpo = _cssFonteFamilias[_temaFonteCorpoPrev] || _cssFonteFamilias.helvetica;
-
-  const wrap  = { fontFamily: _fontCorpo, background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
+  const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
   const page  = { maxWidth:860, margin:"0 auto", padding:"32px 40px 80px" };
   const secH  = (mt=28) => ({ display:"flex", alignItems:"center", gap:12, margin:`${mt}px 0 14px` });
   const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:600, whiteSpace:"nowrap" };
@@ -10651,6 +10643,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       instagramEdit, cidadeEdit, pixEdit, labelApenasEdit,
       logoPreview,
       escopoState: escopoState ? JSON.parse(JSON.stringify(escopoState)) : [],
+      // Modelo visual escolhido na barra superior (Padrão, Direto, etc.)
+      // Propostas antigas sem templateId caem no default "01-editorial".
+      templateId,
       // ── VALORES EXIBIDOS (fonte única da verdade pro que o cliente viu) ──
       // No modo "padrao": arqCIEdit + engCIEdit (100% de cada)
       // No modo "etapas": totalPacoteEtapas (soma das etapas ativas + eng se ativa)
@@ -10819,6 +10814,379 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     } catch(e) { console.error(e); dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" }); }
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  // MODELO DIRETO — render alternativo
+  //
+  // Layout estilo "proposta amarela" — header colorido grande no topo +
+  // corpo corrido com listas/bullets. Visual prático, sem capa separada,
+  // sem fundo decorativo. Reusa TODOS os estados/handlers do componente
+  // (arqEdit, etapasPct, escopoState, descontos, etc.) — só muda como
+  // organiza visualmente.
+  //
+  // Por enquanto Direto NÃO tem geração de PDF própria (puppeteer chega
+  // numa fase posterior). Quando o usuário tenta gerar PDF estando em
+  // Direto, vê um aviso explicando que está em fase visual e o PDF sai
+  // como Padrão. Comportamento controlado em handlePdf.
+  // ═══════════════════════════════════════════════════════════════
+  const renderDireto = () => {
+    // Cor accent do Direto. Hard-coded por enquanto. No futuro vira
+    // sub-paleta do modelo (Solar/Terracota/Navy/Sage/Preto).
+    const ACCENT = "#fbbf24";
+    const ACCENT_FG = "#111";  // Texto sobre o accent (preto sobre amarelo)
+
+    // Estilos locais do modelo Direto
+    const D = {
+      wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
+      page: { maxWidth:860, margin:"0 auto", padding:0, background:"#fff" },
+      header: { background:ACCENT, padding:"36px 44px 32px", position:"relative" },
+      headerTopRow: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, gap:16 },
+      logoWrap: { background:"#fff", padding:"6px 9px", borderRadius:6, display:"inline-flex", alignItems:"center", boxShadow:"0 1px 2px rgba(0,0,0,0.05)" },
+      headerEyebrow: { fontSize:11, fontWeight:600, color:ACCENT_FG, letterSpacing:"0.06em", textAlign:"right" },
+      headerTitulo: { fontSize:38, fontWeight:800, color:ACCENT_FG, lineHeight:1.05, letterSpacing:"-0.02em" },
+      conteudo: { padding:"24px 44px 36px" },
+      saudacao: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18 },
+      saudacaoB: { color:"#111", fontWeight:600 },
+      secTit: { fontSize:18, fontWeight:800, color:ACCENT, margin:"24px 0 10px", letterSpacing:"-0.01em" },
+      secTexto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:8 },
+      itemEtapa: { fontSize:13, color:"#111", fontWeight:600, margin:"10px 0 4px" },
+      itemBullet: { fontSize:12, color:"#374151", paddingLeft:18, position:"relative", lineHeight:1.55, marginBottom:2 },
+      grupoCols: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, margin:"6px 0" },
+      destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:6, margin:"14px 0 8px", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
+      destaqueVlrLight: { background:"#fef3c7", padding:"18px 22px", borderRadius:6, margin:"8px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
+      destaqueLbl: { fontSize:11, fontWeight:700, color:ACCENT_FG, textTransform:"uppercase", letterSpacing:"0.06em" },
+      destaqueNum: { fontSize:26, fontWeight:800, color:ACCENT_FG },
+      pgtoLinha: { fontSize:13, color:"#374151", lineHeight:1.7, padding:"5px 0", borderBottom:"0.5px solid #f3f4f6" },
+      pgtoLinhaB: { color:"#111", fontWeight:700 },
+    };
+
+    // Etapas com valores calculados (mesma fonte usada no Editorial)
+    // Usa os valores COM imposto se ligado (arqCIEdit/engCIEdit/totCIEdit)
+    // pra ficar consistente com o que o Editorial mostra.
+    const arqVal = isPadrao ? arqCIEdit : subTotalArqEtapas;
+    const engVal = engAtiva ? engCIEdit : 0;
+    const totVal = isPadrao ? totCIEdit : totalPacoteEtapas;
+
+    // Pra cada etapa Arq, calcula valor pelo pct
+    const etapasArqValor = etapasPct.filter(e => e.id !== 5).map(e => ({
+      ...e, valor: (arqVal * e.pct) / 100,
+    }));
+    const engPct = etapasPct.find(e => e.id === 5)?.pct || 0;
+
+    return (
+      <div style={D.wrap}>
+        {lockEdicao && (
+          <style>{`
+            .proposta-locked input,
+            .proposta-locked textarea,
+            .proposta-locked select,
+            .proposta-locked [contenteditable] {
+              pointer-events: none !important;
+              user-select: text !important;
+              background: transparent !important;
+            }
+            .proposta-locked [data-editable-click] {
+              pointer-events: none !important;
+              cursor: default !important;
+            }
+            .proposta-locked button[data-edicao] {
+              display: none !important;
+            }
+          `}</style>
+        )}
+        <div style={D.page} className={lockEdicao ? "proposta-locked" : ""}>
+          {/* Banners de status — mesmos do Editorial pra UX consistente */}
+          {lockEdicao && propostaReadOnly && (
+            <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5 }}>
+              <strong style={{ color:"#166534" }}>📄 Visualização da proposta enviada</strong>
+              {propostaReadOnly?.versao && (
+                <span style={{ color:"#15803d", marginLeft:6 }}>
+                  {propostaReadOnly.versao}
+                  {propostaReadOnly.enviadaEm && ` · ${new Date(propostaReadOnly.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
+                </span>
+              )}
+            </div>
+          )}
+          {!lockEdicao && propostaInfo && (
+            <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
+              ✓ Proposta {propostaInfo.versao || ""} salva
+              {propostaInfo.enviadaEm && ` · ${new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
+            </div>
+          )}
+
+          {/* Aviso temporário sobre PDF (só em modo edição, não locked) */}
+          {!lockEdicao && (
+            <div style={{ background:"#fffbeb", border:"1px solid #fde68a", padding:"9px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12, color:"#92400e", lineHeight:1.5 }}>
+              <strong>Modelo Direto em fase visual.</strong> A geração de PDF deste modelo será habilitada em breve.
+              Por enquanto, ao clicar em "Salvar e Gerar PDF", a proposta sai no formato Padrão. Para ajustar visualmente, edite os campos abaixo.
+            </div>
+          )}
+
+          {/* Header amarelo */}
+          <div style={D.header}>
+            <div style={D.headerTopRow}>
+              {/* Logo com badge branco automático sobre o amarelo */}
+              {logoPreview ? (
+                <div style={D.logoWrap}>
+                  <img src={logoPreview} alt={escritorio.nome || "Escritório"} style={{ maxHeight:32, maxWidth:140, objectFit:"contain", display:"block" }}/>
+                </div>
+              ) : (
+                <div style={{ ...D.logoWrap, fontSize:11, fontWeight:700, color:"#111", letterSpacing:"0.05em", padding:"8px 12px" }}>
+                  {escritorio.nome || "ESCRITÓRIO"}
+                </div>
+              )}
+              <div style={D.headerEyebrow}>
+                <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:11, fontWeight:600, color:ACCENT_FG }} />
+                {" · "}
+                <span>VÁLIDO ATÉ </span>
+                <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:11, fontWeight:600, color:ACCENT_FG }} />
+              </div>
+            </div>
+            <div style={D.headerTitulo}>PROPOSTA<br/>DE PROJETO</div>
+          </div>
+
+          {/* Corpo */}
+          <div style={D.conteudo}>
+            <div style={D.saudacao}>
+              Prezado(a) <span style={D.saudacaoB}>{clienteNome || "Cliente"}</span>,
+            </div>
+            <div style={D.saudacao}>
+              <TextoEditavel
+                valor={subTituloFinal}
+                onChange={setSubTituloEdit}
+                style={{ fontSize:13, color:"#374151" }}
+              />
+            </div>
+
+            {/* Resumo do projeto (auto-gerado) */}
+            <div style={D.saudacao}>
+              <InputControlado
+                valor={resumoFinal}
+                onCommit={(v) => setResumoEdit(v)}
+                placeholder="Descrição do projeto"
+                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                multiline
+              />
+            </div>
+
+            {/* HONORÁRIOS */}
+            <div style={D.secTit}>HONORÁRIOS</div>
+            {incluiArq && (
+              <div style={D.destaqueVlrLight}>
+                <div style={D.destaqueLbl}>Apenas Arquitetura</div>
+                <div style={D.destaqueNum}>{fmtV(arqVal)}</div>
+              </div>
+            )}
+            {incluiArq && incluiEng && (
+              <div style={D.destaqueVlr}>
+                <div style={D.destaqueLbl}>Pacote Completo (Arq. + Eng.)</div>
+                <div style={D.destaqueNum}>{fmtV(totVal)}</div>
+              </div>
+            )}
+            {!incluiArq && incluiEng && (
+              <div style={D.destaqueVlr}>
+                <div style={D.destaqueLbl}>Engenharia</div>
+                <div style={D.destaqueNum}>{fmtV(engVal)}</div>
+              </div>
+            )}
+            <div style={{ ...D.secTexto, fontSize:12, color:"#6b7280", marginTop:8 }}>
+              {areaTot > 0 && `${(arqVal/areaTot).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/m² (arq.)`}
+              {incluiEng && areaTot > 0 && ` · ${(engVal/areaTot).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/m² (eng.)`}
+              {temImposto && ` · Valores ${aliqImp}% incluindo impostos`}
+              {!temImposto && ` · Valores sem impostos`}
+            </div>
+
+            {/* PROPOSTA PARA ELABORAÇÃO */}
+            <div style={D.secTit}>PROPOSTA PARA ELABORAÇÃO DO PROJETO</div>
+            <div style={D.secTexto}>
+              O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme escopo abaixo:
+            </div>
+
+            {/* Lista de etapas com bullets */}
+            {incluiArq && etapasArqValor.map((et, idx) => {
+              const bloco = escopoState.find(b => b.etapaId === et.id);
+              return (
+                <div key={et.id}>
+                  <div style={D.itemEtapa}>
+                    {idx + 1}. {et.nome} — {fmtV(et.valor)} ({et.pct}%)
+                  </div>
+                  {bloco && bloco.itens && bloco.itens.length > 0 && bloco.itens.slice(0, 3).map((it, ii) => (
+                    <div key={ii} style={D.itemBullet}>
+                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      {it}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+
+            {incluiEng && (
+              <div>
+                <div style={D.itemEtapa}>
+                  {(incluiArq ? etapasArqValor.length + 1 : 1)}. Projetos de Engenharia — {fmtV(engVal)} {engPct > 0 && `(${engPct}%)`}
+                </div>
+                <div style={D.grupoCols}>
+                  <div>
+                    <div style={D.itemBullet}>
+                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      Projeto Estrutural
+                    </div>
+                    <div style={D.itemBullet}>
+                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      Projeto Elétrico
+                    </div>
+                  </div>
+                  <div>
+                    <div style={D.itemBullet}>
+                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      Projeto Hidrossanitário
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* FORMA DE PAGAMENTO */}
+            <div style={D.secTit}>FORMA DE PAGAMENTO</div>
+            {incluiArq && (
+              <>
+                <div style={D.pgtoLinha}>
+                  <span style={D.pgtoLinhaB}>Apenas Arquitetura — Antecipado:</span>
+                  {" "}{descArqLocal}% de desconto · de {fmtV(arqVal)} por <span style={D.pgtoLinhaB}>{fmtV(arqVal * (1 - descArqLocal/100))}</span>
+                </div>
+                <div style={D.pgtoLinha}>
+                  <span style={D.pgtoLinhaB}>Apenas Arquitetura — Parcelado:</span>
+                  {" "}{parcArqLocal}× sem desconto · entrada {fmtV(arqVal/parcArqLocal)} + {parcArqLocal-1}× {fmtV(arqVal/parcArqLocal)}
+                </div>
+              </>
+            )}
+            {incluiArq && incluiEng && (
+              <>
+                <div style={D.pgtoLinha}>
+                  <span style={D.pgtoLinhaB}>Pacote Completo — Antecipado:</span>
+                  {" "}{descPacoteLocal}% de desconto · de {fmtV(totVal)} por <span style={D.pgtoLinhaB}>{fmtV(totVal * (1 - descPacoteLocal/100))}</span>
+                </div>
+                <div style={{ ...D.pgtoLinha, borderBottom:"none" }}>
+                  <span style={D.pgtoLinhaB}>Pacote Completo — Parcelado:</span>
+                  {" "}{parcPacoteLocal}× sem desconto · entrada {fmtV(totVal/parcPacoteLocal)} + {parcPacoteLocal-1}× {fmtV(totVal/parcPacoteLocal)}
+                </div>
+              </>
+            )}
+
+            {/* PRAZOS */}
+            <div style={D.secTit}>PRAZOS</div>
+            <div style={D.secTexto}>
+              <InputControlado
+                valor={prazoEdit ?? "Estudo Preliminar — 30 dias úteis após assinatura\nAprovação Prefeitura — 60 dias úteis (não inclui análise municipal)\nProjeto Executivo — 60 dias úteis após aprovação\nEngenharia — 30 dias úteis após aprovação"}
+                onCommit={(v) => setPrazoEdit(v)}
+                placeholder="Prazos das etapas"
+                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                multiline
+              />
+            </div>
+
+            {/* SERVIÇOS NÃO INCLUSOS */}
+            <div style={D.secTit}>SERVIÇOS NÃO INCLUSOS</div>
+            <div style={D.secTexto}>
+              <InputControlado
+                valor={naoInclEdit ?? "Sondagem de solo (SPT) e levantamento topográfico\nTaxas, emolumentos e ART/RRT junto aos órgãos competentes\nAcompanhamento de obra e gerenciamento\nProjetos complementares (paisagismo, automação, AVCB, gás)\nMobiliário e decoração"}
+                onCommit={(v) => setNaoInclEdit(v)}
+                placeholder="Serviços não inclusos"
+                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                multiline
+              />
+            </div>
+
+            {/* ACEITE */}
+            <div style={D.secTit}>ACEITE DA PROPOSTA</div>
+            <div style={D.secTexto}>
+              Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:36 }}>
+              <div style={{ fontSize:11, color:"#9ca3af" }}>
+                <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
+                  {clienteNome || "—"}
+                </div>
+                <div style={{ marginTop:3 }}>Cliente</div>
+              </div>
+              <div style={{ fontSize:11, color:"#9ca3af" }}>
+                <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
+                  <TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:11, fontWeight:600 }} />
+                  {" · "}
+                  <TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:11, fontWeight:600 }} />
+                </div>
+                <div style={{ marginTop:3 }}>Responsável Técnico</div>
+              </div>
+            </div>
+
+            {/* Rodapé com contatos */}
+            <div style={{ marginTop:32, paddingTop:14, borderTop:"0.5px solid #e5e7eb", fontSize:10, color:"#9ca3af", textAlign:"center", lineHeight:1.6 }}>
+              <span>{escritorio.nome || "Escritório"}</span> · <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:10 }} />
+              {" · "} <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:10 }} />
+              {" · "} <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:10 }} />
+            </div>
+
+            {/* Botões inferiores: Voltar + Salvar (replicados do Editorial) */}
+            <div style={{ marginTop:32, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+              {!lockEdicao && (
+                <>
+                  <button
+                    onClick={() => onVoltar && onVoltar()}
+                    style={{ background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                    ← Voltar
+                  </button>
+                  <button
+                    onClick={() => setConfirmSalvar(true)}
+                    style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"11px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                    Salvar e Gerar PDF
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Modal de confirmação de salvar — reusa o mesmo do Editorial */}
+        {confirmSalvar && (
+          <div style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,0.5)",
+            display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000,
+          }}>
+            <div style={{ background:"#fff", borderRadius:12, padding:"24px 28px", maxWidth:480, width:"90%", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+              <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:8 }}>Salvar proposta?</div>
+              <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.55, marginBottom:20 }}>
+                A proposta será arquivada e o PDF baixado. Após salvar, esta versão fica imutável.
+                {" "}<strong style={{ color:"#92400e" }}>O PDF sairá no formato Padrão</strong> (modelo Direto está em fase visual).
+              </div>
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button
+                  onClick={() => setConfirmSalvar(false)}
+                  style={{ background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                  Cancelar
+                </button>
+                <button
+                  onClick={async () => {
+                    setConfirmSalvar(false);
+                    await handleSalvarProposta();
+                  }}
+                  style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                  Salvar e gerar PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── ESCOLHA DO MODELO ──────────────────────────────────────
+  // Decide qual JSX renderizar baseado no templateId do estado.
+  // Direto tem render próprio (renderDireto acima).
+  // Editorial (default) usa o JSX abaixo no return principal.
+  if (templateId === "02-direto") {
+    return renderDireto();
+  }
+
   return (
     <div style={wrap}>
       {/* Quando em modo somente-leitura (visualização de proposta enviada),
@@ -10965,9 +11333,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           <div style={{ fontSize:11, color:LT }}><TextoEditavel valor={cidadeEdit} onChange={setCidadeEdit} style={{}} />, {dataStr} · Válido até <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{}} /></div>
         </div>
 
-        <div style={{ borderTop:`1.5px solid ${PRIM_PREVIEW}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+        <div style={{ borderTop:`1.5px solid ${C}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
           <div>
-            <div style={{ fontSize:24, fontWeight:600, color:C, fontFamily:_fontTit }}>{clienteNome || "Cliente"}</div>
+            <div style={{ fontSize:24, fontWeight:600, color:C }}>{clienteNome || "Cliente"}</div>
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloFinal} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
           </div>
           <div style={{ textAlign:"right" }}>
@@ -10975,7 +11343,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               <>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
                   <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
-                  <span style={{ fontSize:22, fontWeight:600, color:C, fontFamily:_fontTit }}>{fmtV(temIsoladas ? arqIsoladaSI : arqEdit)}</span>
+                  <span style={{ fontSize:22, fontWeight:600, color:C }}>{fmtV(temIsoladas ? arqIsoladaSI : arqEdit)}</span>
                 </div>
                 {areaTot > 0 && (
                   <div style={{ fontSize:11, color:LT }}>R$ {fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²</div>
@@ -11041,7 +11409,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           <div style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
-              <div style={{ fontSize:20, fontWeight:600, color:C, fontFamily:_fontTit }}>
+              <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoArq ? (
                   <input autoFocus type="text"
                     key={arqCI}
@@ -11063,7 +11431,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {incluiArq && engAtiva && <div style={{ background:LN }} />}
             {engAtiva && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}>(Opcional)</span></div>
-              <div style={{ fontSize:20, fontWeight:600, color:C, fontFamily:_fontTit }}>
+              <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
                   <input autoFocus type="text"
                     key={engCI}
@@ -11416,12 +11784,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             <div key={bloco.etapaId} style={{ marginBottom:18 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6, gap:8 }}>
                 <div style={{ display:"flex", alignItems:"baseline", gap:4, flex:1, minWidth:0 }}>
-                  <span style={{ fontSize:13, fontWeight:600, color:C, whiteSpace:"nowrap", fontFamily:_fontTit }}>{numPrefix}</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:C, whiteSpace:"nowrap" }}>{numPrefix}</span>
                   <InputControlado
                     valor={tituloTexto}
                     onCommit={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
                     placeholder="Inserir novo escopo"
-                    style={{ flex:1, minWidth:0, fontFamily:_fontTit }}
+                    style={{ flex:1, minWidth:0 }}
                   />
                 </div>
                 <span
@@ -14665,21 +15033,7 @@ function Escritorio({ data, save }) {
   const emptyMembro = { id:"", nome:"", cargo:"", email:"", telefone:"", cau:"", cpf:"" };
 
   function handleSave() {
-    // Preserva os campos de identidade visual (cor, fonte, capa, etc.) que
-    // são gerenciados em "Configuração → Orçamento → Configurar Modelo".
-    // Sem isso, salvar Escritório → Dados gerais zeraria a identidade visual
-    // que o admin configurou em outra tela. Pegamos de data.escritorio o que
-    // não está em `form` (a fonte da verdade pros campos visuais).
-    const escritorioAtual = (data && data.escritorio) || {};
-    const camposIdentVisual = {
-      identCorPrim:      escritorioAtual.identCorPrim,
-      identFonteTit:     escritorioAtual.identFonteTit,
-      identFonteCorpo:   escritorioAtual.identFonteCorpo,
-      identModeloCapa:   escritorioAtual.identModeloCapa,
-      identCapaUrl:      escritorioAtual.identCapaUrl,
-      identCapaPublicId: escritorioAtual.identCapaPublicId,
-    };
-    save({ ...data, escritorio: { ...camposIdentVisual, ...form, equipe, responsaveis } });
+    save({ ...data, escritorio: { ...form, equipe, responsaveis } });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     // Volta pro modo visualização — UX padrão de "salvou, fecha edição"
@@ -21309,29 +21663,20 @@ function moeda(v) {
 // ════════════════════════════════════════════════════════════
 
 // ═══════════════════════════════════════════════════════════════
-// ORÇAMENTO — Configurações
+// ORÇAMENTO — Configurações de pricing
 // ═══════════════════════════════════════════════════════════════
-// Aba "Orçamento" da seção Configuração na sidebar. Tem 2 sub-abas:
-//
-// 1. Configurar Preço — calibragem (profissão, padrão, estado, pct)
-//    e botão "Resetar e refazer calibragem" que dispara
-//    POST /admin/empresas/:id/reset-onboarding e refetcha /auth/me.
-//
-// 2. Configurar Modelo de Orçamento — identidade visual da proposta
-//    (cor primária, tipografia, modelo de capa). Os dados moram em
-//    escritorio.dados (mesmo lugar de antes — pra evitar migração
-//    de schema). Save dispara via prop `save` igual outros módulos.
+// Aba "Orçamento" da seção Configuração na sidebar. Por enquanto contém
+// apenas o botão de "Resetar e refazer calibragem" — dispara o endpoint
+// POST /admin/empresas/:id/reset-onboarding e em seguida refetcha /auth/me
+// pra que o app.jsx detecte precisa_fazer_onboarding=TRUE e renderize o
+// componente Onboarding direto, sem precisar de logout/login.
 //
 // Permissões:
-// - master e admin podem editar (backend valida também).
-// - Outros perfis (editor/visualizador) veem mensagem amigável.
-// ═══════════════════════════════════════════════════════════════
+// - master e admin podem executar (backend já valida).
+// - Outros perfis (editor/visualizador) veem mensagem explicando que
+//   precisam de admin/master.
 
-function OrcamentoConfig({ usuario, data, save, setUsuario }) {
-  // Sub-aba ativa: 'preco' (default) | 'modelo'
-  const [subAba, setSubAba] = useState("preco");
-
-  // ── Estado da aba "Configurar Preço" ──────────────────────────
+function OrcamentoConfig({ usuario, data, setUsuario }) {
   const [executando, setExecutando] = useState(false);
 
   // URL base da API. Mesma lógica que escritorio.jsx e shared.jsx —
@@ -21463,6 +21808,9 @@ function OrcamentoConfig({ usuario, data, save, setUsuario }) {
       // Sucesso: refetch /auth/me pra trazer estado atualizado (precisa_fazer_onboarding=true,
       // campos zerados). Atualizar setUsuario faz o app.jsx detectar a flag e
       // renderizar <Onboarding /> automaticamente — sem logout, sem reload.
+      // Se o usuário fechar a aba/navegador depois disso, o token ainda vale (não foi
+      // invalidado), mas ao reabrir, /auth/me vai retornar precisa_fazer_onboarding=true
+      // e ele vai cair no onboarding direto após login.
       const meRes = await fetch(`${_API_URL}/auth/me`, {
         headers: { "Authorization": `Bearer ${token}` },
       });
@@ -21475,6 +21823,9 @@ function OrcamentoConfig({ usuario, data, save, setUsuario }) {
         setUsuario(meJson.data);
       }
       try { localStorage.setItem("vicke-user", JSON.stringify(meJson.data)); } catch {}
+      // Não precisa de modal de "sucesso" — a transição visual pra tela de
+      // onboarding já é o feedback. Se ficar muito instantâneo, dá pra
+      // adicionar um toast leve aqui no futuro.
     } catch (e) {
       dialogo.alertar({
         titulo: "Erro ao resetar calibragem",
@@ -21486,189 +21837,13 @@ function OrcamentoConfig({ usuario, data, save, setUsuario }) {
     }
   }
 
-  // ── Estado da aba "Configurar Modelo de Orçamento" ────────────
-  // Identidade visual da proposta. Mora em data.escritorio.identXxx (mesmo
-  // lugar do banco — sem migração nova). O admin edita aqui e clica
-  // "Salvar identidade visual" pra disparar `save()` que persiste tudo.
-  const cfgEscr = (data && data.escritorio) || {};
-  const perm    = getPermissoes();
-  const podeEditarIdent = perm.podeAlterarConfig; // mesma regra do escritorio (admin)
-
-  const [formIdent, setFormIdent] = useState({
-    identCorPrim:      cfgEscr.identCorPrim      || "#111827",
-    identFonteTit:     cfgEscr.identFonteTit     || "helvetica",
-    identFonteCorpo:   cfgEscr.identFonteCorpo   || "helvetica",
-    identModeloCapa:   cfgEscr.identModeloCapa   || "minimalista",
-    identCapaUrl:      cfgEscr.identCapaUrl      || "",
-    identCapaPublicId: cfgEscr.identCapaPublicId || "",
-  });
-  const [savedIdent, setSavedIdent] = useState(false);
-
-  // Quando o `data` (escritorio) mudar externamente (ex: outra aba salvou),
-  // resincroniza formIdent. Evita ficar com state stale após F5 ou save vindo
-  // de outra fonte. Comparação simples por JSON pra evitar loop.
-  useEffect(() => {
-    setFormIdent({
-      identCorPrim:      cfgEscr.identCorPrim      || "#111827",
-      identFonteTit:     cfgEscr.identFonteTit     || "helvetica",
-      identFonteCorpo:   cfgEscr.identFonteCorpo   || "helvetica",
-      identModeloCapa:   cfgEscr.identModeloCapa   || "minimalista",
-      identCapaUrl:      cfgEscr.identCapaUrl      || "",
-      identCapaPublicId: cfgEscr.identCapaPublicId || "",
-    });
-    /* eslint-disable-next-line */
-  }, [JSON.stringify({
-    a: cfgEscr.identCorPrim, b: cfgEscr.identFonteTit, c: cfgEscr.identFonteCorpo,
-    d: cfgEscr.identModeloCapa, e: cfgEscr.identCapaUrl, f: cfgEscr.identCapaPublicId,
-  })]);
-
-  function setFI(key, val) {
-    setFormIdent(f => ({ ...f, [key]: val }));
-  }
-
-  // Contraste WCAG: dado um hex, devolve "#fff" ou "#111" baseado na
-  // luminância relativa. Usado pra escolher cor do texto sobre cor primária
-  // no preview (e depois no PDF/PropostaPreview na Fase B.3).
-  function contrasteSobre(hex) {
-    const m = (hex || "").replace("#","").match(/^([0-9a-f]{6}|[0-9a-f]{3})$/i);
-    if (!m) return "#fff";
-    let h = m[1];
-    if (h.length === 3) h = h.split("").map(c => c + c).join("");
-    const r = parseInt(h.slice(0,2), 16) / 255;
-    const g = parseInt(h.slice(2,4), 16) / 255;
-    const b = parseInt(h.slice(4,6), 16) / 255;
-    const sRGB = (c) => c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4);
-    const L = 0.2126*sRGB(r) + 0.7152*sRGB(g) + 0.0722*sRGB(b);
-    return L > 0.5 ? "#111" : "#fff";
-  }
-
-  // Upload da capa via Cloudinary (POST /api/uploads multipart).
-  async function _uploadImagemCapa(arquivo) {
-    const token = localStorage.getItem("vicke-token");
-    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
-    const fd = new FormData();
-    fd.append("arquivo", arquivo);
-    fd.append("categoria", "capa_escritorio");
-    const res = await fetch(`${_API_URL}/api/uploads`, {
-      method: "POST",
-      headers: { "Authorization": `Bearer ${token}` },
-      body: fd,
-    });
-    const json = await res.json();
-    if (!json.ok) throw new Error(json.error || "Falha no upload");
-    return json.data;
-  }
-
-  // Cleanup: remove imagem antiga do Cloudinary quando troca a capa.
-  // Best-effort: falha não bloqueia o usuário (capa órfã pode ficar mas
-  // job de manutenção limpa no futuro).
-  async function _removerImagemCloudinary(public_id) {
-    if (!public_id) return;
-    const token = localStorage.getItem("vicke-token");
-    if (!token) return;
-    try {
-      await fetch(`${_API_URL}/api/uploads`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ public_id }),
-      });
-    } catch (e) {
-      console.warn("[capa] falha ao remover do Cloudinary:", e.message);
-    }
-  }
-
-  async function handleUploadCapa(evento) {
-    const arquivo = evento.target.files?.[0];
-    evento.target.value = "";
-    if (!arquivo) return;
-
-    const tiposOk = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
-    if (!tiposOk.includes(arquivo.type)) {
-      dialogo.alertar({
-        titulo: "Formato não suportado",
-        mensagem: "Use PNG, JPG ou WebP. (SVG não é aceito em capas fotográficas.)",
-        tipo: "aviso",
-      });
-      return;
-    }
-    if (arquivo.size > 2 * 1024 * 1024) {
-      dialogo.alertar({
-        titulo: "Arquivo grande demais",
-        mensagem: `A imagem tem ${(arquivo.size/1024/1024).toFixed(1)}MB. Limite: 2MB. Use uma versão menor ou comprima a imagem.`,
-        tipo: "aviso",
-      });
-      return;
-    }
-
-    try {
-      // Cleanup: se já tinha uma capa, remove antiga antes de subir nova.
-      const publicIdAntigo = formIdent.identCapaPublicId;
-      if (publicIdAntigo) {
-        await _removerImagemCloudinary(publicIdAntigo);
-      }
-      const resp = await _uploadImagemCapa(arquivo);
-      setFormIdent(f => ({
-        ...f,
-        identCapaUrl: resp.url,
-        identCapaPublicId: resp.public_id,
-      }));
-    } catch (e) {
-      dialogo.alertar({
-        titulo: "Falha no upload",
-        mensagem: e.message || "Tente novamente em alguns segundos.",
-        tipo: "erro",
-      });
-    }
-  }
-
-  async function removerCapa() {
-    const publicId = formIdent.identCapaPublicId;
-    if (publicId) {
-      await _removerImagemCloudinary(publicId);
-    }
-    setFormIdent(f => ({ ...f, identCapaUrl: "", identCapaPublicId: "" }));
-  }
-
-  // Salva a identidade visual na empresa. Faz merge com data.escritorio
-  // pra preservar todos os outros campos (nome, telefone, equipe, logo etc.)
-  // que são gerenciados em "Escritório → Dados gerais".
-  function salvarIdentidade() {
-    if (!save) {
-      dialogo.alertar({
-        titulo: "Erro",
-        mensagem: "Função de salvar não disponível. Recarregue a página.",
-        tipo: "erro",
-      });
-      return;
-    }
-    const escritorioAtual = (data && data.escritorio) || {};
-    save({
-      ...data,
-      escritorio: {
-        ...escritorioAtual,
-        identCorPrim:      formIdent.identCorPrim,
-        identFonteTit:     formIdent.identFonteTit,
-        identFonteCorpo:   formIdent.identFonteCorpo,
-        identModeloCapa:   formIdent.identModeloCapa,
-        identCapaUrl:      formIdent.identCapaUrl,
-        identCapaPublicId: formIdent.identCapaPublicId,
-      },
-    });
-    setSavedIdent(true);
-    setTimeout(() => setSavedIdent(false), 2000);
-  }
-
-  // ── Estilos compartilhados ─────────────────────────────────────
+  // Estilos — mesma paleta minimalista do escritorio.jsx pra manter
+  // consistência visual entre as abas de Configuração.
   const S = {
     wrap:     { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header:   { borderBottom:"1px solid #e5e7eb", padding:"24px 32px" },
     titulo:   { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:      { fontSize:13, color:"#9ca3af", marginTop:3 },
-    abas:     { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
-    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body:     { padding:"32px", maxWidth:760 },
     secao:    { marginBottom:32 },
     secTitulo:{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
@@ -21677,19 +21852,16 @@ function OrcamentoConfig({ usuario, data, save, setUsuario }) {
     vazio:    { fontSize:14, color:"#d1d5db", fontStyle:"italic" },
     grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:18 },
     btn:      { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSalvo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
     btnDanger:{ background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     aviso:    { fontSize:13, color:"#6b7280", lineHeight:1.6, background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius:8, padding:"14px 16px", marginBottom:16 },
     avisoSemPerm: { fontSize:13, color:"#92400e", lineHeight:1.6, background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, padding:"14px 16px" },
+    // Box de destaque do preço base R$/m². Visualmente diferente das células
+    // do grid pra dar peso ao número que importa no dia a dia.
     boxPrecoBase: { background:"#fafbfc", border:"1px solid #e5e7eb", borderRadius:10, padding:"18px 20px", marginTop:4 },
     boxLabel:     { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.6, fontWeight:600, marginBottom:6 },
     boxValor:     { fontSize:28, fontWeight:700, color:"#111", lineHeight:1, display:"flex", alignItems:"baseline", gap:6 },
     boxUnidade:   { fontSize:14, fontWeight:500, color:"#9ca3af" },
     boxFormula:   { fontSize:12, color:"#9ca3af", marginTop:8 },
-    // Identidade visual
-    inputHex: { border:"1px solid #d1d5db", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"monospace", width:110, boxSizing:"border-box", textTransform:"uppercase" },
-    select:   { border:"1px solid #d1d5db", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
-    campoLbl: { fontSize:12, color:"#6b7280", fontWeight:500 },
   };
 
   // Helper de exibição: se o valor for nulo/vazio, mostra "—" cinza itálico
@@ -21700,318 +21872,90 @@ function OrcamentoConfig({ usuario, data, save, setUsuario }) {
     </div>
   );
 
-  // ── Render: aba "Configurar Preço" ─────────────────────────────
-  const renderPreco = () => (
-    <div style={S.body}>
-      <div style={S.secao}>
-        <div style={S.secTitulo}>Calibragem atual</div>
-
-        {meErro && (
-          <div style={{ ...S.avisoSemPerm, marginBottom: 12 }}>
-            Não foi possível carregar os dados frescos: {meErro}.
-            {" "}<a href="#" onClick={(e) => { e.preventDefault(); carregarMe(); }} style={{ color:"#92400e", fontWeight:600 }}>Tentar novamente</a>
-          </div>
-        )}
-
-        <div style={S.grid2}>
-          <Campo label="Profissão"           valor={labelProfissao[profissao] || profissao} />
-          <Campo label="Padrão dos projetos" valor={labelPadrao[padraoProjetos] || padraoProjetos} />
-          <Campo label="Estado"              valor={estado} />
-          <Campo
-            label="Percentual aplicado"
-            valor={
-              pctEfetivo != null
-                ? `${fmtPct(pctEfetivo)}${pctCalibrado != null ? " (calibrado)" : " (matriz)"}`
-                : null
-            }
-          />
-        </div>
-
-        {/* Box de destaque do preço base R$/m² — número que entra na fórmula
-            do orçamento (depois multiplicado pelos índices e tamanho da casa
-            pra chegar no honorário final). É o que importa no dia a dia. */}
-        <div style={S.boxPrecoBase}>
-          <div style={S.boxLabel}>Preço base do m²</div>
-          <div style={S.boxValor}>
-            {precoBaseM2 != null ? fmtBRL(precoBaseM2) : <span style={S.vazio}>—</span>}
-            {precoBaseM2 != null && <span style={S.boxUnidade}>/m²</span>}
-          </div>
-          {pctEfetivo != null && cubValor != null && (
-            <div style={S.boxFormula}>
-              {fmtPct(pctEfetivo)} × {fmtBRL(cubValor)} (CUB R-1 Normal {estado})
-            </div>
-          )}
-        </div>
-
-        {meLoading && (
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:12 }}>Atualizando…</div>
-        )}
-      </div>
-
-      <div style={S.secao}>
-        <div style={S.secTitulo}>Refazer calibragem</div>
-
-        {!podeResetar ? (
-          <div style={S.avisoSemPerm}>
-            Apenas <strong>master</strong> ou <strong>administradores</strong> da empresa podem resetar a calibragem.
-            Peça pro responsável da sua empresa fazer o reset.
-          </div>
-        ) : (
-          <>
-            <div style={S.aviso}>
-              Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_calibrado</code>) da empresa.
-              Você cai direto na tela de onboarding pra refazer a calibragem — sem precisar fazer login novamente.
-              Clientes, projetos e orçamentos <strong>não</strong> são afetados.
-            </div>
-            <button
-              onClick={executarReset}
-              disabled={executando}
-              style={{
-                ...S.btnDanger,
-                opacity: executando ? 0.5 : 1,
-                cursor: executando ? "not-allowed" : "pointer",
-              }}>
-              {executando ? "Resetando..." : "Resetar e refazer calibragem"}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-
-  // ── Render: aba "Configurar Modelo de Orçamento" ───────────────
-  const renderModelo = () => (
-    <div style={S.body}>
-      <div style={S.secao}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:8 }}>
-          <div>
-            <div style={S.secTitulo}>Identidade Visual da Proposta</div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:-8 }}>
-              Customização aplicada nas propostas em PDF e na visualização.
-            </div>
-          </div>
-        </div>
-
-        {!podeEditarIdent && (
-          <div style={{ ...S.avisoSemPerm, marginBottom:16 }}>
-            Somente administradores podem alterar a identidade visual.
-          </div>
-        )}
-
-        {/* Cor primária + preview de contraste */}
-        <div style={{ marginTop:16, marginBottom:24 }}>
-          <div style={{ ...S.campoLbl, marginBottom:8 }}>Cor primária</div>
-          <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-            <input
-              type="color"
-              value={formIdent.identCorPrim}
-              onChange={(e) => setFI("identCorPrim", e.target.value)}
-              disabled={!podeEditarIdent}
-              style={{
-                width:48, height:36, border:"1px solid #d1d5db", borderRadius:8,
-                padding:2, cursor: podeEditarIdent ? "pointer" : "not-allowed",
-                background:"#fff",
-              }}
-            />
-            <input
-              type="text"
-              value={formIdent.identCorPrim}
-              onChange={(e) => {
-                let v = e.target.value.trim();
-                if (v && !v.startsWith("#")) v = "#" + v;
-                setFI("identCorPrim", v);
-              }}
-              disabled={!podeEditarIdent}
-              maxLength={7}
-              style={S.inputHex}
-            />
-            <div style={{
-              padding:"8px 16px", borderRadius:8,
-              background: formIdent.identCorPrim,
-              color: contrasteSobre(formIdent.identCorPrim),
-              fontSize:12, fontWeight:600, letterSpacing:0.3,
-            }}>
-              Pré-visualização
-            </div>
-            {formIdent.identCorPrim !== "#111827" && podeEditarIdent && (
-              <button
-                onClick={() => setFI("identCorPrim", "#111827")}
-                style={{
-                  background:"none", border:"none", color:"#6b7280",
-                  fontSize:12, cursor:"pointer", textDecoration:"underline",
-                  fontFamily:"inherit",
-                }}>
-                Restaurar padrão
-              </button>
-            )}
-          </div>
-          <div style={{ fontSize:11, color:"#9ca3af", marginTop:8, lineHeight:1.4 }}>
-            Aplicada em: linha do cabeçalho, caixa de Total Geral, numeração de seções,
-            QR de fundo do rodapé. Não afeta toggles, botões ou cores semânticas.
-          </div>
-        </div>
-
-        {/* Tipografia: títulos + corpo */}
-        <div style={{ ...S.grid2, marginBottom:24 }}>
-          <div>
-            <label style={S.campoLbl}>Fonte dos títulos</label>
-            <select
-              value={formIdent.identFonteTit}
-              onChange={(e) => setFI("identFonteTit", e.target.value)}
-              disabled={!podeEditarIdent}
-              style={{ ...S.select, marginTop:5 }}>
-              <option value="helvetica">Helvetica (sem serifa, padrão)</option>
-              <option value="times">Times (serifa, clássica)</option>
-              <option value="courier">Courier (monoespaçada, técnica)</option>
-            </select>
-          </div>
-          <div>
-            <label style={S.campoLbl}>Fonte do corpo</label>
-            <select
-              value={formIdent.identFonteCorpo}
-              onChange={(e) => setFI("identFonteCorpo", e.target.value)}
-              disabled={!podeEditarIdent}
-              style={{ ...S.select, marginTop:5 }}>
-              <option value="helvetica">Helvetica (sem serifa, padrão)</option>
-              <option value="times">Times (serifa, clássica)</option>
-              <option value="courier">Courier (monoespaçada, técnica)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Modelo de capa: 3 opções como cards radio */}
-        <div style={{ marginBottom:16 }}>
-          <div style={{ ...S.campoLbl, marginBottom:10 }}>Modelo de capa</div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:10 }}>
-            {[
-              { id:"minimalista", titulo:"Minimalista", desc:"Layout atual, fundo branco com logo no topo" },
-              { id:"cor_solida",  titulo:"Cor sólida",  desc:"Bloco superior na cor primária" },
-              { id:"fotografica", titulo:"Fotográfica", desc:"Imagem de fundo + overlay escuro" },
-            ].map(opt => {
-              const ativo = formIdent.identModeloCapa === opt.id;
-              return (
-                <button
-                  key={opt.id}
-                  onClick={() => podeEditarIdent && setFI("identModeloCapa", opt.id)}
-                  disabled={!podeEditarIdent}
-                  style={{
-                    textAlign:"left", padding:"12px 14px",
-                    border: ativo ? "2px solid #111" : "1px solid #e5e7eb",
-                    background: ativo ? "#fafbfc" : "#fff",
-                    borderRadius:8,
-                    cursor: podeEditarIdent ? "pointer" : "not-allowed",
-                    fontFamily:"inherit",
-                    opacity: podeEditarIdent ? 1 : 0.6,
-                    transition:"all 0.15s",
-                  }}>
-                  <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:4 }}>
-                    {opt.titulo}
-                  </div>
-                  <div style={{ fontSize:11, color:"#6b7280", lineHeight:1.4 }}>
-                    {opt.desc}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Upload de imagem da capa — só visível se modeloCapa = fotografica */}
-        {formIdent.identModeloCapa === "fotografica" && (
-          <div style={{
-            marginTop:8, padding:"16px", background:"#fafbfc",
-            border:"1px solid #e5e7eb", borderRadius:8,
-          }}>
-            <div style={{ fontSize:12, color:"#6b7280", marginBottom:12, lineHeight:1.5 }}>
-              Imagem que aparece como fundo na primeira página da proposta.
-              Recomendado: 1920×1080 ou maior · PNG, JPG ou WebP · Máximo 2MB.
-            </div>
-            <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
-              {/* Preview */}
-              <div style={{
-                width:200, height:120,
-                border: formIdent.identCapaUrl ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db",
-                borderRadius:8,
-                background: formIdent.identCapaUrl ? `url(${formIdent.identCapaUrl}) center/cover` : "#fff",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                flexShrink:0,
-              }}>
-                {!formIdent.identCapaUrl && (
-                  <span style={{ fontSize:11, color:"#9ca3af" }}>Sem imagem</span>
-                )}
-              </div>
-              {/* Ações */}
-              <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
-                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                  <label style={{
-                    ...S.btn,
-                    cursor: podeEditarIdent ? "pointer" : "not-allowed",
-                    opacity: podeEditarIdent ? 1 : 0.5,
-                    display:"inline-flex", alignItems:"center",
-                    fontSize:12.5, fontWeight:600, padding:"7px 14px",
-                  }}>
-                    {formIdent.identCapaUrl ? "Trocar imagem" : "Enviar imagem"}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/jpg,image/webp"
-                      style={{ display:"none" }}
-                      onChange={handleUploadCapa}
-                      disabled={!podeEditarIdent}
-                    />
-                  </label>
-                  {formIdent.identCapaUrl && podeEditarIdent && (
-                    <button
-                      onClick={removerCapa}
-                      style={{
-                        background:"#fff", color:"#dc2626", border:"1px solid #fecaca",
-                        borderRadius:7, padding:"7px 14px", fontSize:12.5, fontWeight:600,
-                        cursor:"pointer", fontFamily:"inherit",
-                      }}>
-                      Remover
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Botão Salvar — só pra quem pode editar */}
-        {podeEditarIdent && (
-          <div style={{ marginTop:24, display:"flex", justifyContent:"flex-end" }}>
-            <button
-              onClick={salvarIdentidade}
-              style={savedIdent ? S.btnSalvo : S.btn}>
-              {savedIdent ? "Salvo!" : "Salvar identidade visual"}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // ── Render principal ───────────────────────────────────────────
   return (
     <div style={S.wrap}>
       {/* Header */}
       <div style={S.header}>
         <div style={S.titulo}>Orçamento</div>
-        <div style={S.sub}>Configurações de pricing e modelo da proposta</div>
+        <div style={S.sub}>Configurações de pricing e calibragem</div>
       </div>
 
-      {/* Sub-abas: Configurar Preço / Configurar Modelo */}
-      <div style={S.abas}>
-        <button style={S.aba(subAba === "preco")} onClick={() => setSubAba("preco")}>
-          Configurar Preço
-        </button>
-        <button style={S.aba(subAba === "modelo")} onClick={() => setSubAba("modelo")}>
-          Configurar Modelo de Orçamento
-        </button>
-      </div>
+      {/* Conteúdo */}
+      <div style={S.body}>
+        <div style={S.secao}>
+          <div style={S.secTitulo}>Calibragem atual</div>
 
-      {/* Conteúdo da aba ativa */}
-      {subAba === "preco"  && renderPreco()}
-      {subAba === "modelo" && renderModelo()}
+          {meErro && (
+            <div style={{ ...S.avisoSemPerm, marginBottom: 12 }}>
+              Não foi possível carregar os dados frescos: {meErro}.
+              {" "}<a href="#" onClick={(e) => { e.preventDefault(); carregarMe(); }} style={{ color:"#92400e", fontWeight:600 }}>Tentar novamente</a>
+            </div>
+          )}
+
+          <div style={S.grid2}>
+            <Campo label="Profissão"           valor={labelProfissao[profissao] || profissao} />
+            <Campo label="Padrão dos projetos" valor={labelPadrao[padraoProjetos] || padraoProjetos} />
+            <Campo label="Estado"              valor={estado} />
+            <Campo
+              label="Percentual aplicado"
+              valor={
+                pctEfetivo != null
+                  ? `${fmtPct(pctEfetivo)}${pctCalibrado != null ? " (calibrado)" : " (matriz)"}`
+                  : null
+              }
+            />
+          </div>
+
+          {/* Box de destaque do preço base R$/m² — número que entra na fórmula
+              do orçamento (depois multiplicado pelos índices e tamanho da casa
+              pra chegar no honorário final). É o que importa no dia a dia. */}
+          <div style={S.boxPrecoBase}>
+            <div style={S.boxLabel}>Preço base do m²</div>
+            <div style={S.boxValor}>
+              {precoBaseM2 != null ? fmtBRL(precoBaseM2) : <span style={S.vazio}>—</span>}
+              {precoBaseM2 != null && <span style={S.boxUnidade}>/m²</span>}
+            </div>
+            {pctEfetivo != null && cubValor != null && (
+              <div style={S.boxFormula}>
+                {fmtPct(pctEfetivo)} × {fmtBRL(cubValor)} (CUB R-1 Normal {estado})
+              </div>
+            )}
+          </div>
+
+          {meLoading && (
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:12 }}>Atualizando…</div>
+          )}
+        </div>
+
+        <div style={S.secao}>
+          <div style={S.secTitulo}>Refazer calibragem</div>
+
+          {!podeResetar ? (
+            <div style={S.avisoSemPerm}>
+              Apenas <strong>master</strong> ou <strong>administradores</strong> da empresa podem resetar a calibragem.
+              Peça pro responsável da sua empresa fazer o reset.
+            </div>
+          ) : (
+            <>
+              <div style={S.aviso}>
+                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_calibrado</code>) da empresa.
+                Você cai direto na tela de onboarding pra refazer a calibragem — sem precisar fazer login novamente.
+                Clientes, projetos e orçamentos <strong>não</strong> são afetados.
+              </div>
+              <button
+                onClick={executarReset}
+                disabled={executando}
+                style={{
+                  ...S.btnDanger,
+                  opacity: executando ? 0.5 : 1,
+                  cursor: executando ? "not-allowed" : "pointer",
+                }}>
+                {executando ? "Resetando..." : "Resetar e refazer calibragem"}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -23935,7 +23879,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
-          {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} save={save} setUsuario={setUsuario} />}
+          {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
           {/* Sub-abas do menu Master — Admin recebe initialTab pra abrir direto na aba certa */}
           {aba === "admin" && isMaster && <Admin usuario={usuario} data={data} save={save} />}
           {aba === "admin:empresas" && isMaster && <Admin usuario={usuario} data={data} save={save} initialTab="empresas" />}

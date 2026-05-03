@@ -4100,29 +4100,59 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
 // ═══════════════════════════════════════════════════════════════
 // SISTEMA DE TEMPLATES DE PROPOSTA
 //
-// Catálogo de layouts disponíveis na barra do topo. Por enquanto só
-// "Editorial" está ativo — quando novos templates forem implementados
-// (Arquitetônico, Premium, etc.), adicionar entradas aqui apontando
-// para o componente viewer correspondente via `comp`.
+// Catálogo de modelos disponíveis na barra do topo da PropostaPreview.
+// Cada modelo é um layout visual diferente da MESMA proposta — todas as
+// informações (valores, descontos, escopo, etapas, aceite) aparecem em
+// todos os modelos. Só muda apresentação.
+//
+// Implementação atual: o JSX de cada modelo está dentro do componente
+// PropostaPreviewEditorial, em funções renderEditorial()/renderDireto()
+// que usam o mesmo conjunto de estados/handlers. Trocar de modelo NÃO
+// perde edições inline (mesmo componente, mesma instância).
 //
 // `templateId` é persistido no snapshot da proposta (ver
 // buildPropostaSnapshot). Propostas antigas sem templateId caem no
 // default "01-editorial".
+//
+// Para adicionar um modelo novo:
+//   1. Adicionar entrada aqui em TEMPLATES_PROPOSTA
+//   2. Implementar função renderXxx() dentro do PropostaPreviewEditorial
+//   3. Adicionar case no switch do return final desse componente
 // ═══════════════════════════════════════════════════════════════
 const TEMPLATES_PROPOSTA = [
-  { id:"01-editorial", label:"Editorial", desc:"Layout atual, totalmente editável", accent:"#111827" },
-  // Roadmap (descomentar quando implementado, junto com viewer no switch abaixo):
-  // { id:"02-arquitetonico", label:"Arquitetônico", desc:"Prancha técnica, monoespaçada", accent:"#1e3a8a" },
+  {
+    id: "01-editorial",
+    label: "Padrão",
+    desc: "Sóbrio, preto e branco",
+    accent: "#111827",
+  },
+  {
+    id: "02-direto",
+    label: "Direto",
+    desc: "Header colorido, prático",
+    accent: "#fbbf24",
+  },
+  // Roadmap (descomentar quando implementado, junto com renderXxx no componente):
+  // { id:"03-corporativo", label:"Corporativo", desc:"Tabelas formais, serifa", accent:"#1f2937" },
+  // { id:"04-magazine",    label:"Magazine",    desc:"Editorial, numeração lateral", accent:"#374151" },
+  // { id:"05-timeline",    label:"Timeline",    desc:"Etapas como jornada", accent:"#0f172a" },
+  // { id:"06-report",      label:"Report",      desc:"Dashboard executivo, 2 colunas", accent:"#475569" },
+  // { id:"07-cards",       label:"Cards",       desc:"Cartões modulares", accent:"#0f172a" },
+  // { id:"08-editorial-visual", label:"Editorial Visual", desc:"Capa SVG + paletas", accent:"#b7896a" },
+  // { id:"09-wabi-sabi",   label:"Wabi-Sabi",   desc:"Minimalismo japonês", accent:"#c9a460" },
 ];
 
-// Barra de seleção de templates — sticky no topo do preview.
-// Esconde quando lockEdicao (proposta finalizada/visualização readonly)
-// OU quando só há 1 template ativo (não tem o que escolher).
-// Quando o 2º template for adicionado em TEMPLATES_PROPOSTA, a barra
-// aparece automaticamente.
+// Barra de seleção de modelos — sticky no topo do preview.
+// Esconde quando lockEdicao (proposta finalizada/visualização readonly).
+// Quando só há 1 modelo ativo a barra ainda é mostrada — feedback visual
+// de qual modelo está ativo, mesmo sem opção de troca.
+//
+// Cada botão tem:
+//   - Thumbnail visual (40×52) com mini-representação do layout
+//   - Nome curto do modelo (Padrão, Direto, etc.)
+// Indicação visual de modelo ativo: borda preta 2px + fundo cinza claro.
 function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
   if (lockEdicao) return null;
-  if (TEMPLATES_PROPOSTA.length <= 1) return null;
   return (
     <div style={{
       position:"sticky", top:0, zIndex:20, background:"#fff",
@@ -4131,11 +4161,11 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
       <span style={{
-        fontSize:10, fontWeight:600, color:"#6b7280",
-        textTransform:"uppercase", letterSpacing:"0.08em",
+        fontSize:10, fontWeight:700, color:"#9ca3af",
+        textTransform:"uppercase", letterSpacing:"0.1em",
         flexShrink:0, marginRight:4,
       }}>
-        Layout:
+        Modelo:
       </span>
       {TEMPLATES_PROPOSTA.map(t => {
         const ativo = templateId === t.id;
@@ -4144,18 +4174,42 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
             key={t.id}
             onClick={() => onChange(t.id)}
             style={{
-              flexShrink:0, padding:"6px 12px",
-              border: ativo ? `2px solid ${t.accent}` : "1px solid #e5e7eb",
-              background: ativo ? `${t.accent}10` : "#fff",
-              borderRadius:6, cursor:"pointer", fontSize:12, fontFamily:"inherit",
-              fontWeight: ativo ? 600 : 500,
-              color: ativo ? t.accent : "#374151",
-              display:"flex", flexDirection:"column", alignItems:"flex-start", gap:1,
-              minWidth:130, transition:"all 0.15s",
+              flexShrink:0,
+              padding: ativo ? "5px 9px 4px" : "6px 10px 5px",
+              border: ativo ? "2px solid #111" : "1px solid #e5e7eb",
+              background: ativo ? "#fafbfc" : "#fff",
+              borderRadius:8, cursor:"pointer", fontFamily:"inherit",
+              display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+              minWidth:78, transition:"all 0.15s",
             }}>
-            <span style={{ fontSize:12, fontWeight:600 }}>{t.label}</span>
-            <span style={{ fontSize:9.5, color: ativo ? t.accent : "#9ca3af", fontWeight:400 }}>
-              {t.desc}
+            {/* Thumbnail visual de cada modelo. SVG mini-mockup. */}
+            <span aria-hidden="true" style={{ display:"inline-block", width:40, height:52 }}>
+              {t.id === "01-editorial" && (
+                <svg viewBox="0 0 40 52" width="40" height="52" style={{ borderRadius:3, border:"0.5px solid #e5e7eb", background:"#fff" }}>
+                  <rect x="3" y="3" width="11" height="6" fill="#111" rx="1"/>
+                  <line x1="3" y1="14" x2="37" y2="14" stroke="#111" strokeWidth="1"/>
+                  <line x1="3" y1="20" x2="32" y2="20" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="24" x2="34" y2="24" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="32" x2="20" y2="32" stroke="#9ca3af" strokeWidth="0.7"/>
+                  <line x1="3" y1="38" x2="30" y2="38" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="42" x2="28" y2="42" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="46" x2="32" y2="46" stroke="#9ca3af" strokeWidth="0.5"/>
+                </svg>
+              )}
+              {t.id === "02-direto" && (
+                <svg viewBox="0 0 40 52" width="40" height="52" style={{ borderRadius:3, border:"0.5px solid #e5e7eb", background:"#fff" }}>
+                  <rect x="0" y="0" width="40" height="18" fill="#fbbf24"/>
+                  <text x="3" y="13" fontSize="6" fontWeight="800" fill="#111">PROPOSTA</text>
+                  <line x1="3" y1="24" x2="34" y2="24" stroke="#fbbf24" strokeWidth="1"/>
+                  <line x1="3" y1="29" x2="28" y2="29" stroke="#374151" strokeWidth="0.5"/>
+                  <line x1="3" y1="33" x2="32" y2="33" stroke="#9ca3af" strokeWidth="0.5"/>
+                  <line x1="3" y1="40" x2="30" y2="40" stroke="#fbbf24" strokeWidth="1"/>
+                  <line x1="3" y1="45" x2="34" y2="45" stroke="#9ca3af" strokeWidth="0.5"/>
+                </svg>
+              )}
+            </span>
+            <span style={{ fontSize:11, fontWeight: ativo ? 600 : 500, color: ativo ? "#111" : "#374151" }}>
+              {t.label}
             </span>
           </button>
         );
@@ -4684,26 +4738,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const LT = "#828a98";
   const MD = "#6b7280";
   const LN = "#e5e7eb";
-  // ── Identidade visual do escritório (Fase B.3a) ──────────────
-  // Espelha o que o PDF aplica: cor primária só nas barras decorativas
-  // horizontais (1.5px solid C → 1.5px solid PRIM_PREVIEW). Texto, accents
-  // e botões permanecem pretos pra preservar legibilidade da UI.
-  // Defaults preservam aparência atual quando escritório ainda não customizou.
-  const PRIM_PREVIEW = (escritorio && escritorio.identCorPrim) || "#111827";
-  const _temaFonteTitPrev   = (escritorio && escritorio.identFonteTit)   || "helvetica";
-  const _temaFonteCorpoPrev = (escritorio && escritorio.identFonteCorpo) || "helvetica";
-  // Mapeamento jsPDF font name → CSS font-family. Valores ASCII puros
-  // pra evitar fallback browser. Helvetica Neue continua o default visual
-  // pra escritórios que mantêm "helvetica" no tema (compatibilidade).
-  const _cssFonteFamilias = {
-    helvetica: "'Helvetica Neue',Helvetica,Arial,sans-serif",
-    times:     "'Times New Roman',Times,Georgia,serif",
-    courier:   "'Courier New',Courier,monospace",
-  };
-  const _fontTit   = _cssFonteFamilias[_temaFonteTitPrev]   || _cssFonteFamilias.helvetica;
-  const _fontCorpo = _cssFonteFamilias[_temaFonteCorpoPrev] || _cssFonteFamilias.helvetica;
-
-  const wrap  = { fontFamily: _fontCorpo, background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
+  const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
   const page  = { maxWidth:860, margin:"0 auto", padding:"32px 40px 80px" };
   const secH  = (mt=28) => ({ display:"flex", alignItems:"center", gap:12, margin:`${mt}px 0 14px` });
   const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:600, whiteSpace:"nowrap" };
@@ -4754,6 +4789,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       instagramEdit, cidadeEdit, pixEdit, labelApenasEdit,
       logoPreview,
       escopoState: escopoState ? JSON.parse(JSON.stringify(escopoState)) : [],
+      // Modelo visual escolhido na barra superior (Padrão, Direto, etc.)
+      // Propostas antigas sem templateId caem no default "01-editorial".
+      templateId,
       // ── VALORES EXIBIDOS (fonte única da verdade pro que o cliente viu) ──
       // No modo "padrao": arqCIEdit + engCIEdit (100% de cada)
       // No modo "etapas": totalPacoteEtapas (soma das etapas ativas + eng se ativa)
@@ -4922,6 +4960,379 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     } catch(e) { console.error(e); dialogo.alertar({ titulo: "Erro ao gerar PDF", mensagem: e.message, tipo: "erro" }); }
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  // MODELO DIRETO — render alternativo
+  //
+  // Layout estilo "proposta amarela" — header colorido grande no topo +
+  // corpo corrido com listas/bullets. Visual prático, sem capa separada,
+  // sem fundo decorativo. Reusa TODOS os estados/handlers do componente
+  // (arqEdit, etapasPct, escopoState, descontos, etc.) — só muda como
+  // organiza visualmente.
+  //
+  // Por enquanto Direto NÃO tem geração de PDF própria (puppeteer chega
+  // numa fase posterior). Quando o usuário tenta gerar PDF estando em
+  // Direto, vê um aviso explicando que está em fase visual e o PDF sai
+  // como Padrão. Comportamento controlado em handlePdf.
+  // ═══════════════════════════════════════════════════════════════
+  const renderDireto = () => {
+    // Cor accent do Direto. Hard-coded por enquanto. No futuro vira
+    // sub-paleta do modelo (Solar/Terracota/Navy/Sage/Preto).
+    const ACCENT = "#fbbf24";
+    const ACCENT_FG = "#111";  // Texto sobre o accent (preto sobre amarelo)
+
+    // Estilos locais do modelo Direto
+    const D = {
+      wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
+      page: { maxWidth:860, margin:"0 auto", padding:0, background:"#fff" },
+      header: { background:ACCENT, padding:"36px 44px 32px", position:"relative" },
+      headerTopRow: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, gap:16 },
+      logoWrap: { background:"#fff", padding:"6px 9px", borderRadius:6, display:"inline-flex", alignItems:"center", boxShadow:"0 1px 2px rgba(0,0,0,0.05)" },
+      headerEyebrow: { fontSize:11, fontWeight:600, color:ACCENT_FG, letterSpacing:"0.06em", textAlign:"right" },
+      headerTitulo: { fontSize:38, fontWeight:800, color:ACCENT_FG, lineHeight:1.05, letterSpacing:"-0.02em" },
+      conteudo: { padding:"24px 44px 36px" },
+      saudacao: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18 },
+      saudacaoB: { color:"#111", fontWeight:600 },
+      secTit: { fontSize:18, fontWeight:800, color:ACCENT, margin:"24px 0 10px", letterSpacing:"-0.01em" },
+      secTexto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:8 },
+      itemEtapa: { fontSize:13, color:"#111", fontWeight:600, margin:"10px 0 4px" },
+      itemBullet: { fontSize:12, color:"#374151", paddingLeft:18, position:"relative", lineHeight:1.55, marginBottom:2 },
+      grupoCols: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, margin:"6px 0" },
+      destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:6, margin:"14px 0 8px", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
+      destaqueVlrLight: { background:"#fef3c7", padding:"18px 22px", borderRadius:6, margin:"8px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
+      destaqueLbl: { fontSize:11, fontWeight:700, color:ACCENT_FG, textTransform:"uppercase", letterSpacing:"0.06em" },
+      destaqueNum: { fontSize:26, fontWeight:800, color:ACCENT_FG },
+      pgtoLinha: { fontSize:13, color:"#374151", lineHeight:1.7, padding:"5px 0", borderBottom:"0.5px solid #f3f4f6" },
+      pgtoLinhaB: { color:"#111", fontWeight:700 },
+    };
+
+    // Etapas com valores calculados (mesma fonte usada no Editorial)
+    // Usa os valores COM imposto se ligado (arqCIEdit/engCIEdit/totCIEdit)
+    // pra ficar consistente com o que o Editorial mostra.
+    const arqVal = isPadrao ? arqCIEdit : subTotalArqEtapas;
+    const engVal = engAtiva ? engCIEdit : 0;
+    const totVal = isPadrao ? totCIEdit : totalPacoteEtapas;
+
+    // Pra cada etapa Arq, calcula valor pelo pct
+    const etapasArqValor = etapasPct.filter(e => e.id !== 5).map(e => ({
+      ...e, valor: (arqVal * e.pct) / 100,
+    }));
+    const engPct = etapasPct.find(e => e.id === 5)?.pct || 0;
+
+    return (
+      <div style={D.wrap}>
+        {lockEdicao && (
+          <style>{`
+            .proposta-locked input,
+            .proposta-locked textarea,
+            .proposta-locked select,
+            .proposta-locked [contenteditable] {
+              pointer-events: none !important;
+              user-select: text !important;
+              background: transparent !important;
+            }
+            .proposta-locked [data-editable-click] {
+              pointer-events: none !important;
+              cursor: default !important;
+            }
+            .proposta-locked button[data-edicao] {
+              display: none !important;
+            }
+          `}</style>
+        )}
+        <div style={D.page} className={lockEdicao ? "proposta-locked" : ""}>
+          {/* Banners de status — mesmos do Editorial pra UX consistente */}
+          {lockEdicao && propostaReadOnly && (
+            <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5 }}>
+              <strong style={{ color:"#166534" }}>📄 Visualização da proposta enviada</strong>
+              {propostaReadOnly?.versao && (
+                <span style={{ color:"#15803d", marginLeft:6 }}>
+                  {propostaReadOnly.versao}
+                  {propostaReadOnly.enviadaEm && ` · ${new Date(propostaReadOnly.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
+                </span>
+              )}
+            </div>
+          )}
+          {!lockEdicao && propostaInfo && (
+            <div style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
+              ✓ Proposta {propostaInfo.versao || ""} salva
+              {propostaInfo.enviadaEm && ` · ${new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
+            </div>
+          )}
+
+          {/* Aviso temporário sobre PDF (só em modo edição, não locked) */}
+          {!lockEdicao && (
+            <div style={{ background:"#fffbeb", border:"1px solid #fde68a", padding:"9px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12, color:"#92400e", lineHeight:1.5 }}>
+              <strong>Modelo Direto em fase visual.</strong> A geração de PDF deste modelo será habilitada em breve.
+              Por enquanto, ao clicar em "Salvar e Gerar PDF", a proposta sai no formato Padrão. Para ajustar visualmente, edite os campos abaixo.
+            </div>
+          )}
+
+          {/* Header amarelo */}
+          <div style={D.header}>
+            <div style={D.headerTopRow}>
+              {/* Logo com badge branco automático sobre o amarelo */}
+              {logoPreview ? (
+                <div style={D.logoWrap}>
+                  <img src={logoPreview} alt={escritorio.nome || "Escritório"} style={{ maxHeight:32, maxWidth:140, objectFit:"contain", display:"block" }}/>
+                </div>
+              ) : (
+                <div style={{ ...D.logoWrap, fontSize:11, fontWeight:700, color:"#111", letterSpacing:"0.05em", padding:"8px 12px" }}>
+                  {escritorio.nome || "ESCRITÓRIO"}
+                </div>
+              )}
+              <div style={D.headerEyebrow}>
+                <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:11, fontWeight:600, color:ACCENT_FG }} />
+                {" · "}
+                <span>VÁLIDO ATÉ </span>
+                <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:11, fontWeight:600, color:ACCENT_FG }} />
+              </div>
+            </div>
+            <div style={D.headerTitulo}>PROPOSTA<br/>DE PROJETO</div>
+          </div>
+
+          {/* Corpo */}
+          <div style={D.conteudo}>
+            <div style={D.saudacao}>
+              Prezado(a) <span style={D.saudacaoB}>{clienteNome || "Cliente"}</span>,
+            </div>
+            <div style={D.saudacao}>
+              <TextoEditavel
+                valor={subTituloFinal}
+                onChange={setSubTituloEdit}
+                style={{ fontSize:13, color:"#374151" }}
+              />
+            </div>
+
+            {/* Resumo do projeto (auto-gerado) */}
+            <div style={D.saudacao}>
+              <InputControlado
+                valor={resumoFinal}
+                onCommit={(v) => setResumoEdit(v)}
+                placeholder="Descrição do projeto"
+                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                multiline
+              />
+            </div>
+
+            {/* HONORÁRIOS */}
+            <div style={D.secTit}>HONORÁRIOS</div>
+            {incluiArq && (
+              <div style={D.destaqueVlrLight}>
+                <div style={D.destaqueLbl}>Apenas Arquitetura</div>
+                <div style={D.destaqueNum}>{fmtV(arqVal)}</div>
+              </div>
+            )}
+            {incluiArq && incluiEng && (
+              <div style={D.destaqueVlr}>
+                <div style={D.destaqueLbl}>Pacote Completo (Arq. + Eng.)</div>
+                <div style={D.destaqueNum}>{fmtV(totVal)}</div>
+              </div>
+            )}
+            {!incluiArq && incluiEng && (
+              <div style={D.destaqueVlr}>
+                <div style={D.destaqueLbl}>Engenharia</div>
+                <div style={D.destaqueNum}>{fmtV(engVal)}</div>
+              </div>
+            )}
+            <div style={{ ...D.secTexto, fontSize:12, color:"#6b7280", marginTop:8 }}>
+              {areaTot > 0 && `${(arqVal/areaTot).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/m² (arq.)`}
+              {incluiEng && areaTot > 0 && ` · ${(engVal/areaTot).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/m² (eng.)`}
+              {temImposto && ` · Valores ${aliqImp}% incluindo impostos`}
+              {!temImposto && ` · Valores sem impostos`}
+            </div>
+
+            {/* PROPOSTA PARA ELABORAÇÃO */}
+            <div style={D.secTit}>PROPOSTA PARA ELABORAÇÃO DO PROJETO</div>
+            <div style={D.secTexto}>
+              O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme escopo abaixo:
+            </div>
+
+            {/* Lista de etapas com bullets */}
+            {incluiArq && etapasArqValor.map((et, idx) => {
+              const bloco = escopoState.find(b => b.etapaId === et.id);
+              return (
+                <div key={et.id}>
+                  <div style={D.itemEtapa}>
+                    {idx + 1}. {et.nome} — {fmtV(et.valor)} ({et.pct}%)
+                  </div>
+                  {bloco && bloco.itens && bloco.itens.length > 0 && bloco.itens.slice(0, 3).map((it, ii) => (
+                    <div key={ii} style={D.itemBullet}>
+                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      {it}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+
+            {incluiEng && (
+              <div>
+                <div style={D.itemEtapa}>
+                  {(incluiArq ? etapasArqValor.length + 1 : 1)}. Projetos de Engenharia — {fmtV(engVal)} {engPct > 0 && `(${engPct}%)`}
+                </div>
+                <div style={D.grupoCols}>
+                  <div>
+                    <div style={D.itemBullet}>
+                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      Projeto Estrutural
+                    </div>
+                    <div style={D.itemBullet}>
+                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      Projeto Elétrico
+                    </div>
+                  </div>
+                  <div>
+                    <div style={D.itemBullet}>
+                      <span style={{ position:"absolute", left:0, color:"#9ca3af", fontSize:10, top:1 }}>○</span>
+                      Projeto Hidrossanitário
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* FORMA DE PAGAMENTO */}
+            <div style={D.secTit}>FORMA DE PAGAMENTO</div>
+            {incluiArq && (
+              <>
+                <div style={D.pgtoLinha}>
+                  <span style={D.pgtoLinhaB}>Apenas Arquitetura — Antecipado:</span>
+                  {" "}{descArqLocal}% de desconto · de {fmtV(arqVal)} por <span style={D.pgtoLinhaB}>{fmtV(arqVal * (1 - descArqLocal/100))}</span>
+                </div>
+                <div style={D.pgtoLinha}>
+                  <span style={D.pgtoLinhaB}>Apenas Arquitetura — Parcelado:</span>
+                  {" "}{parcArqLocal}× sem desconto · entrada {fmtV(arqVal/parcArqLocal)} + {parcArqLocal-1}× {fmtV(arqVal/parcArqLocal)}
+                </div>
+              </>
+            )}
+            {incluiArq && incluiEng && (
+              <>
+                <div style={D.pgtoLinha}>
+                  <span style={D.pgtoLinhaB}>Pacote Completo — Antecipado:</span>
+                  {" "}{descPacoteLocal}% de desconto · de {fmtV(totVal)} por <span style={D.pgtoLinhaB}>{fmtV(totVal * (1 - descPacoteLocal/100))}</span>
+                </div>
+                <div style={{ ...D.pgtoLinha, borderBottom:"none" }}>
+                  <span style={D.pgtoLinhaB}>Pacote Completo — Parcelado:</span>
+                  {" "}{parcPacoteLocal}× sem desconto · entrada {fmtV(totVal/parcPacoteLocal)} + {parcPacoteLocal-1}× {fmtV(totVal/parcPacoteLocal)}
+                </div>
+              </>
+            )}
+
+            {/* PRAZOS */}
+            <div style={D.secTit}>PRAZOS</div>
+            <div style={D.secTexto}>
+              <InputControlado
+                valor={prazoEdit ?? "Estudo Preliminar — 30 dias úteis após assinatura\nAprovação Prefeitura — 60 dias úteis (não inclui análise municipal)\nProjeto Executivo — 60 dias úteis após aprovação\nEngenharia — 30 dias úteis após aprovação"}
+                onCommit={(v) => setPrazoEdit(v)}
+                placeholder="Prazos das etapas"
+                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                multiline
+              />
+            </div>
+
+            {/* SERVIÇOS NÃO INCLUSOS */}
+            <div style={D.secTit}>SERVIÇOS NÃO INCLUSOS</div>
+            <div style={D.secTexto}>
+              <InputControlado
+                valor={naoInclEdit ?? "Sondagem de solo (SPT) e levantamento topográfico\nTaxas, emolumentos e ART/RRT junto aos órgãos competentes\nAcompanhamento de obra e gerenciamento\nProjetos complementares (paisagismo, automação, AVCB, gás)\nMobiliário e decoração"}
+                onCommit={(v) => setNaoInclEdit(v)}
+                placeholder="Serviços não inclusos"
+                style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
+                multiline
+              />
+            </div>
+
+            {/* ACEITE */}
+            <div style={D.secTit}>ACEITE DA PROPOSTA</div>
+            <div style={D.secTexto}>
+              Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:36 }}>
+              <div style={{ fontSize:11, color:"#9ca3af" }}>
+                <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
+                  {clienteNome || "—"}
+                </div>
+                <div style={{ marginTop:3 }}>Cliente</div>
+              </div>
+              <div style={{ fontSize:11, color:"#9ca3af" }}>
+                <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
+                  <TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:11, fontWeight:600 }} />
+                  {" · "}
+                  <TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:11, fontWeight:600 }} />
+                </div>
+                <div style={{ marginTop:3 }}>Responsável Técnico</div>
+              </div>
+            </div>
+
+            {/* Rodapé com contatos */}
+            <div style={{ marginTop:32, paddingTop:14, borderTop:"0.5px solid #e5e7eb", fontSize:10, color:"#9ca3af", textAlign:"center", lineHeight:1.6 }}>
+              <span>{escritorio.nome || "Escritório"}</span> · <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:10 }} />
+              {" · "} <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:10 }} />
+              {" · "} <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:10 }} />
+            </div>
+
+            {/* Botões inferiores: Voltar + Salvar (replicados do Editorial) */}
+            <div style={{ marginTop:32, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+              {!lockEdicao && (
+                <>
+                  <button
+                    onClick={() => onVoltar && onVoltar()}
+                    style={{ background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                    ← Voltar
+                  </button>
+                  <button
+                    onClick={() => setConfirmSalvar(true)}
+                    style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"11px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                    Salvar e Gerar PDF
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Modal de confirmação de salvar — reusa o mesmo do Editorial */}
+        {confirmSalvar && (
+          <div style={{
+            position:"fixed", inset:0, background:"rgba(0,0,0,0.5)",
+            display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000,
+          }}>
+            <div style={{ background:"#fff", borderRadius:12, padding:"24px 28px", maxWidth:480, width:"90%", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+              <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:8 }}>Salvar proposta?</div>
+              <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.55, marginBottom:20 }}>
+                A proposta será arquivada e o PDF baixado. Após salvar, esta versão fica imutável.
+                {" "}<strong style={{ color:"#92400e" }}>O PDF sairá no formato Padrão</strong> (modelo Direto está em fase visual).
+              </div>
+              <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+                <button
+                  onClick={() => setConfirmSalvar(false)}
+                  style={{ background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                  Cancelar
+                </button>
+                <button
+                  onClick={async () => {
+                    setConfirmSalvar(false);
+                    await handleSalvarProposta();
+                  }}
+                  style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                  Salvar e gerar PDF
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── ESCOLHA DO MODELO ──────────────────────────────────────
+  // Decide qual JSX renderizar baseado no templateId do estado.
+  // Direto tem render próprio (renderDireto acima).
+  // Editorial (default) usa o JSX abaixo no return principal.
+  if (templateId === "02-direto") {
+    return renderDireto();
+  }
+
   return (
     <div style={wrap}>
       {/* Quando em modo somente-leitura (visualização de proposta enviada),
@@ -5068,9 +5479,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           <div style={{ fontSize:11, color:LT }}><TextoEditavel valor={cidadeEdit} onChange={setCidadeEdit} style={{}} />, {dataStr} · Válido até <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{}} /></div>
         </div>
 
-        <div style={{ borderTop:`1.5px solid ${PRIM_PREVIEW}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+        <div style={{ borderTop:`1.5px solid ${C}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
           <div>
-            <div style={{ fontSize:24, fontWeight:600, color:C, fontFamily:_fontTit }}>{clienteNome || "Cliente"}</div>
+            <div style={{ fontSize:24, fontWeight:600, color:C }}>{clienteNome || "Cliente"}</div>
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloFinal} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
           </div>
           <div style={{ textAlign:"right" }}>
@@ -5078,7 +5489,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               <>
                 <div style={{ display:"flex", alignItems:"baseline", justifyContent:"flex-end", gap:6 }}>
                   <span style={{ fontSize:10, color:LT }}>Apenas Arquitetura</span>
-                  <span style={{ fontSize:22, fontWeight:600, color:C, fontFamily:_fontTit }}>{fmtV(temIsoladas ? arqIsoladaSI : arqEdit)}</span>
+                  <span style={{ fontSize:22, fontWeight:600, color:C }}>{fmtV(temIsoladas ? arqIsoladaSI : arqEdit)}</span>
                 </div>
                 {areaTot > 0 && (
                   <div style={{ fontSize:11, color:LT }}>R$ {fmtN(Math.round((temIsoladas ? arqIsoladaSI : arqCI)/areaTot*100)/100)}/m²</div>
@@ -5144,7 +5555,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           <div style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
-              <div style={{ fontSize:20, fontWeight:600, color:C, fontFamily:_fontTit }}>
+              <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoArq ? (
                   <input autoFocus type="text"
                     key={arqCI}
@@ -5166,7 +5577,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {incluiArq && engAtiva && <div style={{ background:LN }} />}
             {engAtiva && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}>(Opcional)</span></div>
-              <div style={{ fontSize:20, fontWeight:600, color:C, fontFamily:_fontTit }}>
+              <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
                   <input autoFocus type="text"
                     key={engCI}
@@ -5519,12 +5930,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             <div key={bloco.etapaId} style={{ marginBottom:18 }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6, gap:8 }}>
                 <div style={{ display:"flex", alignItems:"baseline", gap:4, flex:1, minWidth:0 }}>
-                  <span style={{ fontSize:13, fontWeight:600, color:C, whiteSpace:"nowrap", fontFamily:_fontTit }}>{numPrefix}</span>
+                  <span style={{ fontSize:13, fontWeight:600, color:C, whiteSpace:"nowrap" }}>{numPrefix}</span>
                   <InputControlado
                     valor={tituloTexto}
                     onCommit={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
                     placeholder="Inserir novo escopo"
-                    style={{ flex:1, minWidth:0, fontFamily:_fontTit }}
+                    style={{ flex:1, minWidth:0 }}
                   />
                 </div>
                 <span

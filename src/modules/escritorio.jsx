@@ -230,21 +230,7 @@ function Escritorio({ data, save }) {
   const emptyMembro = { id:"", nome:"", cargo:"", email:"", telefone:"", cau:"", cpf:"" };
 
   function handleSave() {
-    // Preserva os campos de identidade visual (cor, fonte, capa, etc.) que
-    // são gerenciados em "Configuração → Orçamento → Configurar Modelo".
-    // Sem isso, salvar Escritório → Dados gerais zeraria a identidade visual
-    // que o admin configurou em outra tela. Pegamos de data.escritorio o que
-    // não está em `form` (a fonte da verdade pros campos visuais).
-    const escritorioAtual = (data && data.escritorio) || {};
-    const camposIdentVisual = {
-      identCorPrim:      escritorioAtual.identCorPrim,
-      identFonteTit:     escritorioAtual.identFonteTit,
-      identFonteCorpo:   escritorioAtual.identFonteCorpo,
-      identModeloCapa:   escritorioAtual.identModeloCapa,
-      identCapaUrl:      escritorioAtual.identCapaUrl,
-      identCapaPublicId: escritorioAtual.identCapaPublicId,
-    };
-    save({ ...data, escritorio: { ...camposIdentVisual, ...form, equipe, responsaveis } });
+    save({ ...data, escritorio: { ...form, equipe, responsaveis } });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     // Volta pro modo visualização — UX padrão de "salvou, fecha edição"
