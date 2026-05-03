@@ -5134,14 +5134,27 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     const D = {
       wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
       page: { maxWidth:860, margin:"0 auto", padding:0, background:"#fff" },
-      // Header amarelo
-      header: { background:ACCENT, padding:"36px 44px 32px", position:"relative" },
-      headerTopRow: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18, gap:16 },
-      logoWrap: { background:"#fff", padding:"6px 9px", borderRadius:8, display:"inline-flex", alignItems:"center", boxShadow:"0 1px 2px rgba(0,0,0,0.05)" },
-      headerEyebrow: { fontSize:11, fontWeight:600, color:ACCENT_FG, letterSpacing:"0.06em", textAlign:"right" },
-      headerTitulo: { fontSize:38, fontWeight:800, color:ACCENT_FG, lineHeight:1.05, letterSpacing:"-0.02em" },
-      // Corpo
-      conteudo: { padding:"24px 44px 36px" },
+      // Header amarelo — sem padding-top (barra branca cobre o topo)
+      // Padding lateral 40px pra padronizar com o Padrão (page: padding "32px 40px 80px")
+      header: { background:ACCENT, paddingBottom:32, position:"relative", overflow:"hidden", borderRadius:8 },
+      // Barra branca semi-transparente que cobre o topo do header.
+      // 92% de opacidade deixa o amarelo "vazar" um pouco — visual editorial.
+      headerBar: {
+        background:"rgba(255,255,255,0.92)",
+        padding:"14px 40px",
+        display:"flex",
+        justifyContent:"space-between",
+        alignItems:"center",
+        gap:16,
+        borderBottom:"0.5px solid rgba(255,255,255,0.5)",
+      },
+      headerEyebrow: { fontSize:11, fontWeight:600, color:"#111", letterSpacing:"0.06em", textAlign:"right" },
+      headerTitulo: { fontSize:38, fontWeight:800, color:ACCENT_FG, lineHeight:1.05, letterSpacing:"-0.02em", padding:"30px 40px 0" },
+      // Logo dentro da barra branca: agora não precisa de wrapper branco
+      // (a barra inteira já é branca). Logo aparece direto.
+      logoWrap: { display:"inline-flex", alignItems:"center" },
+      // Corpo — padding lateral 40px (padronizado com Padrão)
+      conteudo: { padding:"32px 40px 36px" },
       saudacao: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:14 },
       saudacaoB: { color:"#111", fontWeight:600 },
       descricaoProjeto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18, whiteSpace:"normal", wordBreak:"break-word" },
@@ -5278,6 +5291,17 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             page-break-inside: avoid;
             break-inside: avoid;
           }
+          /* Margens das páginas no PDF (Puppeteer respeita @page).
+             Página 1: margem zero (header amarelo cola no topo).
+             Página 2+: 12mm de margem superior pra conteúdo respirar
+             (padronizado com o Modelo Padrão, que usa padding-top: 32px
+             ≈ 12mm na sua page A4). */
+          @page {
+            margin: 0;
+          }
+          @page :not(:first) {
+            margin-top: 12mm;
+          }
         `}</style>
 
         {/* Banners de status — FORA do card amarelo, no topo da viewport.
@@ -5301,29 +5325,39 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         )}
 
         <div style={D.page} className={`${lockEdicao ? "proposta-locked lockEdicao-active" : ""}`}>
-          {/* Header amarelo — agora ocupa toda a largura do D.page,
-              sem margem em cima, com bordas arredondadas inferiores
-              (cantos retos no topo pra dar peso de "papel timbrado",
-              cantos arredondados na transição com o corpo branco). */}
-          <div style={{ ...D.header, borderRadius: "0 0 8px 8px" }}>
-            <div style={D.headerTopRow}>
-              {/* Logo com badge branco automático sobre o amarelo */}
-              {logoPreview ? (
-                <div style={D.logoWrap}>
-                  <img src={logoPreview} alt={escritorio.nome || "Escritório"} style={{ maxHeight:32, maxWidth:140, objectFit:"contain", display:"block" }}/>
-                </div>
-              ) : (
-                <div style={{ ...D.logoWrap, fontSize:11, fontWeight:700, color:"#111", letterSpacing:"0.05em", padding:"8px 12px" }}>
-                  {escritorio.nome || "ESCRITÓRIO"}
-                </div>
-              )}
+          {/* Header amarelo — ocupa toda a largura do D.page com bordas
+              arredondadas. Estrutura:
+                ┌──────────────────────────────────────────┐
+                │ [Barra branca: Logo │  Cidade · Validade]│ ← Barra translúcida
+                ├──────────────────────────────────────────┤
+                │                                          │
+                │  PROPOSTA DE PROJETO                     │ ← Título sobre amarelo
+                │                                          │
+                └──────────────────────────────────────────┘
+              A barra branca (92% opaca) cria uma área formal pro logo,
+              funciona pra qualquer cor de logo (preto, colorido, etc.) e
+              dá um ar editorial sem precisar customizar por cliente.
+          */}
+          <div style={D.header}>
+            {/* Barra branca translúcida — logo à esquerda, cidade/validade à direita */}
+            <div style={D.headerBar}>
+              <div style={D.logoWrap}>
+                {logoPreview ? (
+                  <img src={logoPreview} alt={escritorio.nome || "Escritório"} style={{ maxHeight:36, maxWidth:160, objectFit:"contain", display:"block" }}/>
+                ) : (
+                  <div style={{ fontSize:12, fontWeight:700, color:"#111", letterSpacing:"0.05em" }}>
+                    {escritorio.nome || "ESCRITÓRIO"}
+                  </div>
+                )}
+              </div>
               <div style={D.headerEyebrow}>
-                <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:11, fontWeight:600, color:ACCENT_FG }} />
+                <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:11, fontWeight:600, color:"#111" }} />
                 {" · "}
                 <span>VÁLIDO ATÉ </span>
-                <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:11, fontWeight:600, color:ACCENT_FG }} />
+                <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:11, fontWeight:600, color:"#111" }} />
               </div>
             </div>
+            {/* Título sobre o amarelo puro */}
             <div style={D.headerTitulo}>PROPOSTA<br/>DE PROJETO</div>
           </div>
 
@@ -5393,6 +5427,53 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               {!temImposto && ` · Valores sem impostos`}
             </div>
 
+            {/* FORMA DE PAGAMENTO — vem ANTES do Escopo (decisão de UX:
+                cliente vê valor → vê como pagar → entende detalhe técnico).
+                Estruturada com Opção 1 (antecipado com desconto) e Opção 2
+                (parcelado). PIX abaixo. */}
+            <div style={D.secTit}>Forma de pagamento</div>
+
+            {incluiArq && (
+              <div style={D.pgtoBloco}>
+                <div style={D.pgtoBlocoTit}>Apenas Arquitetura</div>
+                <div style={D.pgtoOpcao}>
+                  <span style={D.pgtoOpcaoLbl}>Opção 1</span>{" — Pagamento antecipado com "}{descArqLocal}% de desconto
+                  <br/>
+                  De {fmtV(arqVal)} por apenas: <span style={D.pgtoLinhaB}>{fmtV(arqVal * (1 - descArqLocal/100))}</span>
+                </div>
+                <div style={{ ...D.pgtoOpcao, borderBottom: incluiEng ? "0.5px solid #f3f4f6" : "none" }}>
+                  <span style={D.pgtoOpcaoLbl}>Opção 2</span>{" — Parcelado em "}{parcArqLocal}× sem desconto
+                  <br/>
+                  Entrada de {fmtV(arqVal/parcArqLocal)} + {parcArqLocal-1}× de {fmtV(arqVal/parcArqLocal)}
+                </div>
+              </div>
+            )}
+
+            {incluiArq && incluiEng && (
+              <div style={D.pgtoBloco}>
+                <div style={D.pgtoBlocoTit}>Pacote Completo (Arq. + Eng.)</div>
+                <div style={D.pgtoOpcao}>
+                  <span style={D.pgtoOpcaoLbl}>Opção 1</span>{" — Pagamento antecipado com "}{descPacoteLocal}% de desconto
+                  <br/>
+                  De {fmtV(totVal)} por apenas: <span style={D.pgtoLinhaB}>{fmtV(totVal * (1 - descPacoteLocal/100))}</span>
+                </div>
+                <div style={{ ...D.pgtoOpcao, borderBottom:"none" }}>
+                  <span style={D.pgtoOpcaoLbl}>Opção 2</span>{" — Parcelado em "}{parcPacoteLocal}× sem desconto
+                  <br/>
+                  Entrada de {fmtV(totVal/parcPacoteLocal)} + {parcPacoteLocal-1}× de {fmtV(totVal/parcPacoteLocal)}
+                </div>
+              </div>
+            )}
+
+            {/* PIX */}
+            <div style={D.pixLinha}>
+              {lockEdicao ? (
+                <span>{pixEdit || ""}</span>
+              ) : (
+                <TextoEditavel valor={pixEdit} onChange={setPixEdit} style={{ fontSize:11.5, color:"#6b7280" }} />
+              )}
+            </div>
+
             {/* ESCOPO DOS SERVIÇOS — estrutura rica (Versão B do mockup) */}
             <div style={D.secTit}>Escopo dos serviços</div>
             <div style={D.secTexto}>
@@ -5444,53 +5525,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               );
             })}
 
-            {/* Engenharia — etapa final */}
             {/* Engenharia: já incluída em escopoDefault acima quando engAtiva.
                 Não duplicamos aqui. */}
-
-            {/* FORMA DE PAGAMENTO — estruturada com Opção 1/Opção 2 + PIX */}
-            <div style={D.secTit}>Forma de pagamento</div>
-
-            {incluiArq && (
-              <div style={D.pgtoBloco}>
-                <div style={D.pgtoBlocoTit}>Apenas Arquitetura</div>
-                <div style={D.pgtoOpcao}>
-                  <span style={D.pgtoOpcaoLbl}>Opção 1</span>{" — Pagamento antecipado com {descArqLocal}% de desconto"}
-                  <br/>
-                  De {fmtV(arqVal)} por apenas: <span style={D.pgtoLinhaB}>{fmtV(arqVal * (1 - descArqLocal/100))}</span>
-                </div>
-                <div style={{ ...D.pgtoOpcao, borderBottom: incluiEng ? "0.5px solid #f3f4f6" : "none" }}>
-                  <span style={D.pgtoOpcaoLbl}>Opção 2</span>{" — Parcelado em "}{parcArqLocal}× sem desconto
-                  <br/>
-                  Entrada de {fmtV(arqVal/parcArqLocal)} + {parcArqLocal-1}× de {fmtV(arqVal/parcArqLocal)}
-                </div>
-              </div>
-            )}
-
-            {incluiArq && incluiEng && (
-              <div style={D.pgtoBloco}>
-                <div style={D.pgtoBlocoTit}>Pacote Completo (Arq. + Eng.)</div>
-                <div style={D.pgtoOpcao}>
-                  <span style={D.pgtoOpcaoLbl}>Opção 1</span>{" — Pagamento antecipado com "}{descPacoteLocal}% de desconto
-                  <br/>
-                  De {fmtV(totVal)} por apenas: <span style={D.pgtoLinhaB}>{fmtV(totVal * (1 - descPacoteLocal/100))}</span>
-                </div>
-                <div style={{ ...D.pgtoOpcao, borderBottom:"none" }}>
-                  <span style={D.pgtoOpcaoLbl}>Opção 2</span>{" — Parcelado em "}{parcPacoteLocal}× sem desconto
-                  <br/>
-                  Entrada de {fmtV(totVal/parcPacoteLocal)} + {parcPacoteLocal-1}× de {fmtV(totVal/parcPacoteLocal)}
-                </div>
-              </div>
-            )}
-
-            {/* PIX */}
-            <div style={D.pixLinha}>
-              {lockEdicao ? (
-                <span>{pixEdit || ""}</span>
-              ) : (
-                <TextoEditavel valor={pixEdit} onChange={setPixEdit} style={{ fontSize:11.5, color:"#6b7280" }} />
-              )}
-            </div>
 
             {/* PRAZOS — usa prazoDefault (mesma fonte do Padrão).
                 Já filtrado pra esconder Engenharia quando !engAtiva.
