@@ -126,6 +126,48 @@ const api = {
     clear:  ()     => put("/api/logo", { data: null }),
   },
 
+  // ── UPLOADS (Cloudinary) ────────────────────────────────────
+  // Substituirá gradualmente o padrão antigo de base64 no Postgres.
+  // 3 categorias: 'logo', 'capa_escritorio', 'imagem_projeto'.
+  // Limites por categoria checados no backend; frontend valida tamanho
+  // antes pra dar feedback rápido.
+  uploads: {
+    // Envia File/Blob via multipart. Retorna { url, public_id, width, height, bytes, formato }.
+    // Diferente das outras chamadas: NÃO usa req() porque precisa de FormData
+    // (multipart) em vez de JSON. Token vai no header como sempre.
+    send: async (arquivo, categoria) => {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+      const fd = new FormData();
+      fd.append("arquivo", arquivo);
+      fd.append("categoria", categoria);
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      // NÃO seta Content-Type — o browser monta o boundary do multipart sozinho.
+      const res = await fetch(`${_API_URL}/api/uploads`, {
+        method: "POST",
+        headers,
+        body: fd,
+      });
+      if (res.status === 401 && !_sessionExpiredHandled) {
+        _sessionExpiredHandled = true;
+        try { localStorage.removeItem("vicke-token"); localStorage.removeItem("vicke-user"); } catch {}
+        if (typeof location !== "undefined") location.reload();
+        throw new Error("Sessão expirada — faça login novamente");
+      }
+      const json = await res.json();
+      if (!json.ok) {
+        const erro = new Error(json.error || "Erro no upload");
+        erro.status = res.status;
+        throw erro;
+      }
+      return json.data;
+    },
+    // Remove imagem pelo public_id (do Cloudinary + marca inativa no log).
+    remove: (public_id) => req("DELETE", "/api/uploads", { public_id }),
+    // Lista uploads ativos da empresa (debug/admin). Retorna { uploads, quotas }.
+    list:   (categoria) => get(`/api/uploads${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ""}`),
+  },
+
   config: {
     get:  (chave)        => get(`/api/config/${chave}`),
     save: (chave, dados) => put(`/api/config/${chave}`, dados),
