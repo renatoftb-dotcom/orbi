@@ -25,6 +25,18 @@ function Escritorio({ data, save }) {
     pixTipo:     cfg.pixTipo     || "CNPJ",
     pixChave:    cfg.pixChave    || "",
     logo:        cfg.logo        || null,  // base64 data URL (ex: "data:image/png;base64,...")
+    // ── Identidade Visual da Proposta (Fase B.1) ──
+    // Aplicada em: linha dupla do header do PDF, caixa "Total Geral",
+    // QR de fundo do rodapé, numeração de seções do escopo, e — quando
+    // modeloCapa = 'cor_solida' — no fundo do bloco superior da capa.
+    // NÃO afeta toggles, botões, cores semânticas (Arq amarelo, Eng roxo,
+    // imposto vermelho, sucesso verde) nem cinzas estruturais.
+    identCorPrim:     cfg.identCorPrim     || "#111827",      // preto-azulado (atual)
+    identFonteTit:    cfg.identFonteTit    || "helvetica",    // helvetica | times | courier
+    identFonteCorpo:  cfg.identFonteCorpo  || "helvetica",
+    identModeloCapa:  cfg.identModeloCapa  || "minimalista",  // minimalista | cor_solida | fotografica
+    identCapaUrl:     cfg.identCapaUrl     || "",             // URL Cloudinary (só usado se modeloCapa='fotografica')
+    identCapaPublicId:cfg.identCapaPublicId|| "",             // public_id Cloudinary (pra cleanup ao trocar)
   });
   const [responsaveis, setResponsaveis] = useState(
     cfg.responsaveis?.length ? cfg.responsaveis
@@ -367,6 +379,128 @@ function Escritorio({ data, save }) {
     });
   }
 
+  // ── Identidade Visual: helpers ───────────────────────────────
+  // Contraste WCAG: dado um hex, devolve "#fff" ou "#111" baseado na
+  // luminância relativa. Usado pra escolher cor do texto sobre cor primária
+  // (ex: capa "cor sólida" — bloco na cor primária + texto branco se cor
+  // for escura, ou texto preto se cor for clara).
+  function contrasteSobre(hex) {
+    const m = (hex || "").replace("#","").match(/^([0-9a-f]{6}|[0-9a-f]{3})$/i);
+    if (!m) return "#fff";
+    let h = m[1];
+    if (h.length === 3) h = h.split("").map(c => c + c).join("");
+    const r = parseInt(h.slice(0,2), 16) / 255;
+    const g = parseInt(h.slice(2,4), 16) / 255;
+    const b = parseInt(h.slice(4,6), 16) / 255;
+    // Luminância relativa simplificada (formula WCAG)
+    const sRGB = (c) => c <= 0.03928 ? c/12.92 : Math.pow((c+0.055)/1.055, 2.4);
+    const L = 0.2126*sRGB(r) + 0.7152*sRGB(g) + 0.0722*sRGB(b);
+    // Threshold 0.5 separa cores escuras (texto branco) de claras (texto preto).
+    // Não é o threshold WCAG exato (4.5:1) mas dá resultado visual coerente
+    // pra esse caso de uso (capa de proposta, não interface densa).
+    return L > 0.5 ? "#111" : "#fff";
+  }
+
+  // Upload da imagem de capa fotográfica via Cloudinary.
+  // Antes de subir nova, deleta a anterior (cleanup automático) pra não
+  // acumular órfãs no storage. Permissão checada pelo backend (admin/editor).
+  //
+  // Usa fetch raw com FormData (multipart) — não JSON. Mesmo padrão de
+  // fetchUsuariosAPI deste arquivo (não usa o objeto `api` global pra
+  // garantir consistência). Endpoints: POST /api/uploads e DELETE /api/uploads.
+  async function _uploadImagemCapa(arquivo) {
+    const token = localStorage.getItem("vicke-token");
+    if (!token) throw new Error("Sessão expirada. Faça login novamente.");
+    const fd = new FormData();
+    fd.append("arquivo", arquivo);
+    fd.append("categoria", "capa_escritorio");
+    // NÃO seta Content-Type — browser monta o boundary do multipart automático.
+    const res = await fetch(`${_API_URL}/api/uploads`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${token}` },
+      body: fd,
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || "Falha no upload");
+    return json.data; // { url, public_id, width, height, bytes, formato }
+  }
+
+  async function _removerImagemCloudinary(public_id) {
+    if (!public_id) return;
+    const token = localStorage.getItem("vicke-token");
+    if (!token) return; // se não tem token, não tenta — sessão já cuidará disso
+    try {
+      await fetch(`${_API_URL}/api/uploads`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ public_id }),
+      });
+    } catch (e) {
+      // Cleanup é best-effort: não bloqueia o usuário se falhar.
+      console.warn("[capa] falha ao remover do Cloudinary:", e.message);
+    }
+  }
+
+  async function handleUploadCapa(evento) {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = "";
+    if (!arquivo) return;
+
+    const tiposOk = ["image/png", "image/jpeg", "image/jpg", "image/webp"];
+    if (!tiposOk.includes(arquivo.type)) {
+      dialogo.alertar({
+        titulo: "Formato não suportado",
+        mensagem: "Use PNG, JPG ou WebP. (SVG não é aceito em capas fotográficas.)",
+        tipo: "aviso",
+      });
+      return;
+    }
+    // Limite frontend: 2MB (backend também valida). Mensagem amigável aqui.
+    if (arquivo.size > 2 * 1024 * 1024) {
+      dialogo.alertar({
+        titulo: "Arquivo grande demais",
+        mensagem: `A imagem tem ${(arquivo.size/1024/1024).toFixed(1)}MB. Limite: 2MB. Use uma versão menor ou comprima a imagem.`,
+        tipo: "aviso",
+      });
+      return;
+    }
+
+    try {
+      // Cleanup: se já tinha uma capa, remove do Cloudinary antes de subir nova.
+      // Idempotente: se public_id antigo não existe mais, backend ignora.
+      const publicIdAntigo = form.identCapaPublicId;
+      if (publicIdAntigo) {
+        await _removerImagemCloudinary(publicIdAntigo);
+      }
+
+      const resp = await _uploadImagemCapa(arquivo);
+      // Salva URL e public_id no form (commitado no save geral).
+      setForm(f => ({
+        ...f,
+        identCapaUrl: resp.url,
+        identCapaPublicId: resp.public_id,
+      }));
+    } catch (e) {
+      dialogo.alertar({
+        titulo: "Falha no upload",
+        mensagem: e.message || "Tente novamente em alguns segundos.",
+        tipo: "erro",
+      });
+    }
+  }
+
+  // Remove capa fotográfica: deleta do Cloudinary e zera campos do form.
+  async function removerCapa() {
+    const publicId = form.identCapaPublicId;
+    if (publicId) {
+      await _removerImagemCloudinary(publicId);
+    }
+    setForm(f => ({ ...f, identCapaUrl: "", identCapaPublicId: "" }));
+  }
+
   const E = {
     wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header: { borderBottom:"1px solid #e5e7eb", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
@@ -503,6 +637,206 @@ function Escritorio({ data, save }) {
             </div>
           </div>
         </div>
+      </div>
+
+      <hr style={E.divisor} />
+
+      {/* ─── Identidade Visual da Proposta ────────────────────────
+          Customização leve do PDF e da PropostaPreview: cor primária
+          aplicada em fundos/conteúdos proeminentes, fonte de títulos
+          e corpo, modelo de capa. Toggles e botões NÃO mudam de cor —
+          permanecem neutros pra preservar consistência da UI.
+
+          Disponível apenas pra admin. Visualizadores e editores veem
+          mas não alteram. */}
+      <div style={E.secao}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:16 }}>
+          <div>
+            <div style={E.secTitulo}>Identidade Visual da Proposta</div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:-8 }}>
+              Customização aplicada nas propostas em PDF e na visualização.
+            </div>
+          </div>
+        </div>
+
+        {/* Cor primária + preview de contraste */}
+        <div style={{ marginBottom:24 }}>
+          <div style={{ ...E.label, marginBottom:8 }}>Cor primária</div>
+          <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+            <input
+              type="color"
+              value={form.identCorPrim}
+              onChange={(e) => setF("identCorPrim", e.target.value)}
+              disabled={!perm.podeAlterarConfig}
+              style={{
+                width:48, height:36, border:"1px solid #d1d5db", borderRadius:8,
+                padding:2, cursor: perm.podeAlterarConfig ? "pointer" : "not-allowed",
+                background:"#fff",
+              }}
+            />
+            <input
+              type="text"
+              value={form.identCorPrim}
+              onChange={(e) => {
+                let v = e.target.value.trim();
+                if (v && !v.startsWith("#")) v = "#" + v;
+                setF("identCorPrim", v);
+              }}
+              disabled={!perm.podeAlterarConfig}
+              maxLength={7}
+              style={{ ...E.input, width:110, fontFamily:"monospace", textTransform:"uppercase" }}
+            />
+            {/* Preview: caixa com cor primária + texto que escolhe contraste auto */}
+            <div style={{
+              padding:"8px 16px", borderRadius:8,
+              background: form.identCorPrim,
+              color: contrasteSobre(form.identCorPrim),
+              fontSize:12, fontWeight:600, letterSpacing:0.3,
+            }}>
+              Pré-visualização
+            </div>
+            {form.identCorPrim !== "#111827" && perm.podeAlterarConfig && (
+              <button
+                onClick={() => setF("identCorPrim", "#111827")}
+                style={{
+                  background:"none", border:"none", color:"#6b7280",
+                  fontSize:12, cursor:"pointer", textDecoration:"underline",
+                  fontFamily:"inherit",
+                }}>
+                Restaurar padrão
+              </button>
+            )}
+          </div>
+          <div style={{ fontSize:11, color:"#9ca3af", marginTop:8, lineHeight:1.4 }}>
+            Aplicada em: linha do cabeçalho, caixa de Total Geral, numeração de seções,
+            QR de fundo do rodapé. Não afeta toggles, botões ou cores semânticas.
+          </div>
+        </div>
+
+        {/* Tipografia: títulos + corpo */}
+        <div style={{ ...E.grid2, marginBottom:24 }}>
+          <div style={E.campo}>
+            <label style={E.label}>Fonte dos títulos</label>
+            <select
+              value={form.identFonteTit}
+              onChange={(e) => setF("identFonteTit", e.target.value)}
+              disabled={!perm.podeAlterarConfig}
+              style={E.select}>
+              <option value="helvetica">Helvetica (sem serifa, padrão)</option>
+              <option value="times">Times (serifa, clássica)</option>
+              <option value="courier">Courier (monoespaçada, técnica)</option>
+            </select>
+          </div>
+          <div style={E.campo}>
+            <label style={E.label}>Fonte do corpo</label>
+            <select
+              value={form.identFonteCorpo}
+              onChange={(e) => setF("identFonteCorpo", e.target.value)}
+              disabled={!perm.podeAlterarConfig}
+              style={E.select}>
+              <option value="helvetica">Helvetica (sem serifa, padrão)</option>
+              <option value="times">Times (serifa, clássica)</option>
+              <option value="courier">Courier (monoespaçada, técnica)</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Modelo de capa: 3 opções como cards radio */}
+        <div style={{ marginBottom:16 }}>
+          <div style={{ ...E.label, marginBottom:10 }}>Modelo de capa</div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:10 }}>
+            {[
+              { id:"minimalista", titulo:"Minimalista", desc:"Layout atual, fundo branco com logo no topo" },
+              { id:"cor_solida",  titulo:"Cor sólida",  desc:"Bloco superior na cor primária" },
+              { id:"fotografica", titulo:"Fotográfica", desc:"Imagem de fundo + overlay escuro" },
+            ].map(opt => {
+              const ativo = form.identModeloCapa === opt.id;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => perm.podeAlterarConfig && setF("identModeloCapa", opt.id)}
+                  disabled={!perm.podeAlterarConfig}
+                  style={{
+                    textAlign:"left", padding:"12px 14px",
+                    border: ativo ? "2px solid #111" : "1px solid #e5e7eb",
+                    background: ativo ? "#fafbfc" : "#fff",
+                    borderRadius:8,
+                    cursor: perm.podeAlterarConfig ? "pointer" : "not-allowed",
+                    fontFamily:"inherit",
+                    opacity: perm.podeAlterarConfig ? 1 : 0.6,
+                    transition:"all 0.15s",
+                  }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:4 }}>
+                    {opt.titulo}
+                  </div>
+                  <div style={{ fontSize:11, color:"#6b7280", lineHeight:1.4 }}>
+                    {opt.desc}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Upload de imagem da capa — só visível se modeloCapa = fotografica */}
+        {form.identModeloCapa === "fotografica" && (
+          <div style={{
+            marginTop:8, padding:"16px", background:"#fafbfc",
+            border:"1px solid #e5e7eb", borderRadius:8,
+          }}>
+            <div style={{ fontSize:12, color:"#6b7280", marginBottom:12, lineHeight:1.5 }}>
+              Imagem que aparece como fundo na primeira página da proposta.
+              Recomendado: 1920×1080 ou maior · PNG, JPG ou WebP · Máximo 2MB.
+            </div>
+            <div style={{ display:"flex", gap:16, alignItems:"flex-start" }}>
+              {/* Preview */}
+              <div style={{
+                width:200, height:120,
+                border: form.identCapaUrl ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db",
+                borderRadius:8,
+                background: form.identCapaUrl ? `url(${form.identCapaUrl}) center/cover` : "#fff",
+                display:"flex", alignItems:"center", justifyContent:"center",
+                flexShrink:0,
+              }}>
+                {!form.identCapaUrl && (
+                  <span style={{ fontSize:11, color:"#9ca3af" }}>Sem imagem</span>
+                )}
+              </div>
+              {/* Ações */}
+              <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
+                <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                  <label style={{
+                    ...E.btn,
+                    cursor: perm.podeAlterarConfig ? "pointer" : "not-allowed",
+                    opacity: perm.podeAlterarConfig ? 1 : 0.5,
+                    display:"inline-flex", alignItems:"center",
+                    fontSize:12.5, fontWeight:600, padding:"7px 14px",
+                  }}>
+                    {form.identCapaUrl ? "Trocar imagem" : "Enviar imagem"}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/webp"
+                      style={{ display:"none" }}
+                      onChange={handleUploadCapa}
+                      disabled={!perm.podeAlterarConfig}
+                    />
+                  </label>
+                  {form.identCapaUrl && perm.podeAlterarConfig && (
+                    <button
+                      onClick={removerCapa}
+                      style={{
+                        background:"#fff", color:"#dc2626", border:"1px solid #fecaca",
+                        borderRadius:7, padding:"7px 14px", fontSize:12.5, fontWeight:600,
+                        cursor:"pointer", fontFamily:"inherit",
+                      }}>
+                      Remover
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <hr style={E.divisor} />
