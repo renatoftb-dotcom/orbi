@@ -11019,15 +11019,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       etapaFraseFim: { fontSize:11.5, color:"#9ca3af", fontStyle:"italic", marginTop:6, lineHeight:1.5 },
       grupoCols: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, margin:"6px 0" },
       // Cards de valor: bordas mais arredondadas (8px) igual ao mockup
-      destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
-      destaqueVlrLight: { background:"#FAEEDA", padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline" },
+      destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
+      destaqueVlrLight: { background:"#FAEEDA", padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
       destaqueLbl: { fontSize:11, fontWeight:700, color:"#412402", textTransform:"uppercase", letterSpacing:"0.06em" },
       destaqueNum: { fontSize:26, fontWeight:800, color:"#412402" },
       // Card "Total sem impostos" sutil em cinza claro (igual mockup)
       totalSubtle: { background:"#f9fafb", padding:"10px 22px", borderRadius:8, margin:"4px 0 14px", fontSize:12, color:"#6b7280" },
       totalSubtleB: { color:"#111", fontWeight:600 },
       // Forma de pagamento estruturada
-      pgtoBloco: { marginTop:14, marginBottom:8 },
+      pgtoBloco: { marginTop:14, marginBottom:8, breakInside:"avoid", pageBreakInside:"avoid" },
       pgtoBlocoTit: { fontSize:13, fontWeight:700, color:"#111", margin:"6px 0 6px" },
       pgtoOpcao: { fontSize:12.5, color:"#374151", lineHeight:1.6, padding:"6px 0", borderBottom:"0.5px solid #f3f4f6" },
       pgtoOpcaoLbl: { fontSize:11, color:"#92400e", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.04em" },
@@ -11049,36 +11049,42 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     }));
     const engPct = etapasPct.find(e => e.id === 5)?.pct || 0;
 
-    // Helper: monta lista de não inclusos. Se naoInclEdit foi customizado
-    // pelo usuário, usa ele; senão usa lista padrão completa do Editorial.
-    const naoInclususLista = (() => {
-      const customizado = naoInclEdit && naoInclEdit.trim();
-      if (customizado) {
-        return naoInclEdit.split("\n").map(s => s.trim()).filter(Boolean);
-      }
-      return [
-        "Projetos de climatização",
-        "Projeto de automação",
-        "Projeto de interiores",
-        "Projeto estrutural de estruturas metálicas",
-        "Sondagem e Planialtimétrico do terreno",
-        "Gestão e execução de obra",
-        "RRT de Execução de obra",
-        "Impostos",
-        "Projeto de prevenção de incêndio",
-        "Projeto de paisagismo",
-        "Projeto de Marcenaria (Móveis internos)",
-        "Projeto estrutural de muros de contenção (>1m)",
-        "Acompanhamento semanal de obra",
-        "Vistoria para Caixa Econômica Federal",
-        "Taxas municipais e emolumentos (CAU/Prefeitura)",
-      ];
-    })();
+    // ── FONTES DE DADOS ────────────────────────────────────────────
+    // O Modelo Direto NÃO inventa dados nem tem defaults próprios.
+    // Lê EXATAMENTE das mesmas fontes que o Modelo Padrão usa, no
+    // escopo deste componente (PropostaPreviewEditorial):
+    //
+    //   - naoInclDefault: array [{ label, sub }] calculado dinamicamente
+    //     considerando incluiMarcenaria, temImposto, temIsoladas,
+    //     idsIsolados, engAtiva, incluiArq.
+    //   - naoInclEdit: array editado pelo usuário (sobrescreve o default).
+    //   - prazoDefault: array de strings calculado em função de isPadrao,
+    //     incluiArq, engAtiva.
+    //   - prazoEdit: array editado pelo usuário (sobrescreve o default).
+    //
+    // CRÍTICO: naoInclEdit e prazoEdit são ARRAYS (não strings). O
+    // Modelo Padrão salva como array, então o Direto também tem que
+    // ler como array. Compatibilidade total entre os 2 modelos.
 
-    // Helper: lista de prazos (split em linhas)
-    const prazosLista = (() => {
-      const txt = prazoEdit || "Estudo Preliminar — 30 dias úteis após assinatura\nAprovação Prefeitura — 60 dias úteis (não inclui análise municipal)\nProjeto Executivo — 60 dias úteis após aprovação\nEngenharia — 30 dias úteis após aprovação";
-      return txt.split("\n").map(s => s.trim()).filter(Boolean);
+    // Filtra prazos: igual o Padrão faz, esconde linha de Engenharia
+    // se eng não está ativa
+    const prazosLista = (prazoEdit || prazoDefault).filter(p => {
+      if (typeof p !== "string") return true;
+      if (p.toLowerCase().includes("engenharia")) {
+        if (!engAtiva) return false;
+      }
+      return true;
+    });
+
+    // naoInclEdit pode estar em formato antigo (array de strings) ou
+    // novo (array de { label, sub }). Normaliza pra { label, sub }.
+    const naoInclususLista = (() => {
+      const fonte = naoInclEdit || naoInclDefault;
+      if (!Array.isArray(fonte)) return [];
+      return fonte.map(item => {
+        if (typeof item === "string") return { label: item, sub: null };
+        return item;
+      });
     })();
 
     return (
@@ -11105,9 +11111,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           /* Esconder elementos de UI quando renderizando no contexto de PDF
              (puppeteer abre /render-pdf/* que tem .render-pdf-context no body).
              Isso mata o banner verde "Visualização da proposta enviada", botões de
-             edição, e qualquer outro elemento marcado com .no-print. */
+             edição, e qualquer outro elemento marcado com .no-print.
+             Também escondemos quando lockEdicao=true (modo visualização da
+             proposta enviada) — banner é redundante. */
           .render-pdf-context .no-print,
-          .render-pdf-context [data-no-print="true"] {
+          .render-pdf-context [data-no-print="true"],
+          .lockEdicao-active .no-print {
             display: none !important;
           }
           /* Garantir cores de fundo no PDF (Chrome desliga por padrão pra
@@ -11116,42 +11125,41 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
-          /* Quebras de página: cada etapa do escopo deve evitar quebrar no meio. */
-          .etapa-bloco {
+          /* Quebras de página: cada etapa do escopo deve evitar quebrar no meio.
+             Aplicado a elementos críticos pra o PDF não cortar feio. */
+          .etapa-bloco,
+          .secao-bloco {
             page-break-inside: avoid;
             break-inside: avoid;
           }
         `}</style>
 
-        <div style={D.page} className={lockEdicao ? "proposta-locked" : ""}>
-          {/* Banners de status — não aparecem no PDF (classe no-print) */}
-          {lockEdicao && propostaReadOnly && (
-            <div className="no-print" style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5 }}>
-              <strong style={{ color:"#166534" }}>📄 Visualização da proposta enviada</strong>
-              {propostaReadOnly?.versao && (
-                <span style={{ color:"#15803d", marginLeft:6 }}>
-                  {propostaReadOnly.versao}
-                  {propostaReadOnly.enviadaEm && ` · ${new Date(propostaReadOnly.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
-                </span>
-              )}
-            </div>
-          )}
-          {!lockEdicao && propostaInfo && (
-            <div className="no-print" style={{ background:"#f0fdf4", border:"1px solid #bbf7d0", padding:"10px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
+        {/* Banners de status — FORA do card amarelo, no topo da viewport.
+            Aparecem só em modo edição (lockEdicao=false). Em modo visualização
+            (proposta enviada) ou no PDF, são escondidos.
+            Largura limitada pra alinhar com o card abaixo. */}
+        {!lockEdicao && propostaInfo && (
+          <div className="no-print" style={{ maxWidth:860, margin:"16px auto 0", padding:"0 0", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
+            <div style={{ padding:"10px 14px" }}>
               ✓ Proposta {propostaInfo.versao || ""} salva
               {propostaInfo.enviadaEm && ` · ${new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
             </div>
-          )}
-
-          {/* Aviso: primeira geração pode demorar (puppeteer cold start) */}
-          {!lockEdicao && (
-            <div className="no-print" style={{ background:"#eff6ff", border:"1px solid #bfdbfe", padding:"9px 14px", margin:"16px 44px 0", borderRadius:8, fontSize:12, color:"#1e40af", lineHeight:1.5 }}>
+          </div>
+        )}
+        {!lockEdicao && (
+          <div className="no-print" style={{ maxWidth:860, margin:"12px auto 0", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:8, fontSize:12, color:"#1e40af", lineHeight:1.5 }}>
+            <div style={{ padding:"9px 14px" }}>
               <strong>Modelo Direto.</strong> A geração de PDF deste modelo é feita no servidor — pode levar 5 a 15 segundos na primeira vez (cold start do Chrome). Próximas chamadas são mais rápidas.
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Header amarelo */}
-          <div style={D.header}>
+        <div style={D.page} className={`${lockEdicao ? "proposta-locked lockEdicao-active" : ""}`}>
+          {/* Header amarelo — agora ocupa toda a largura do D.page,
+              sem margem em cima, com bordas arredondadas inferiores
+              (cantos retos no topo pra dar peso de "papel timbrado",
+              cantos arredondados na transição com o corpo branco). */}
+          <div style={{ ...D.header, borderRadius: "0 0 8px 8px" }}>
             <div style={D.headerTopRow}>
               {/* Logo com badge branco automático sobre o amarelo */}
               {logoPreview ? (
@@ -11245,16 +11253,20 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme detalhado abaixo:
             </div>
 
-            {/* Etapas de arquitetura — só as que estão em escopoState (não-eng) */}
-            {incluiArq && escopoState.filter(b => !b.isEng).map((bloco, idx) => {
-              const titulo = bloco.titulo || `Etapa ${idx + 1}`;
+            {/* ESCOPO — usa escopoDefault, que é o array calculado pelo
+                componente principal levando em conta TODAS as flags:
+                isPadrao, incluiArq, engAtiva, temIsoladas, idsIsolados,
+                etapas custom. Vem já filtrado e numerado (tituloNum).
+                Não duplica filtro aqui — fonte única de verdade. */}
+            {escopoDefault.map((bloco, idx) => {
+              const titulo = bloco.tituloNum || bloco.titulo || `Etapa ${idx + 1}`;
               const objetivo = bloco.objetivo || "";
               const itens = bloco.itens || [];
               const entregaveis = bloco.entregaveis || [];
               const obs = bloco.obs || "";
               return (
                 <div key={bloco.etapaId || idx} className="etapa-bloco">
-                  <div style={D.etapaTitulo}>{idx + 1}. {titulo}</div>
+                  <div style={D.etapaTitulo}>{titulo}</div>
 
                   {objetivo && (
                     <div style={D.etapaObjetivo}>{objetivo}</div>
@@ -11287,26 +11299,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             })}
 
             {/* Engenharia — etapa final */}
-            {incluiEng && (() => {
-              // Procura no escopoState o bloco de engenharia (isEng:true)
-              const blocoEng = escopoState.find(b => b.isEng);
-              const blocosArq = escopoState.filter(b => !b.isEng);
-              const numeroEng = (incluiArq ? blocosArq.length : 0) + 1;
-              const itens = blocoEng?.itens || ["Estrutural: lançamento, dimensionamento de vigas, pilares, lajes e fundações", "Elétrico: dimensionamento de cargas, circuitos, quadros e pontos", "Hidrossanitário: distribuição de pontos de água fria/quente, esgoto e dimensionamento", "Compatibilização entre projetos arquitetônico e de engenharia para verificar possíveis interferências"];
-              const titulo = blocoEng?.titulo || "Projetos Complementares de Engenharia";
-              return (
-                <div className="etapa-bloco">
-                  <div style={D.etapaTitulo}>{numeroEng}. {titulo}</div>
-                  <div style={D.etapaSubsec}>Serviços inclusos</div>
-                  {itens.map((it, ii) => (
-                    <div key={ii} style={D.itemBullet}>
-                      <span style={D.bulletDot}>○</span>
-                      {it}
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
+            {/* Engenharia: já incluída em escopoDefault acima quando engAtiva.
+                Não duplicamos aqui. */}
 
             {/* FORMA DE PAGAMENTO — estruturada com Opção 1/Opção 2 + PIX */}
             <div style={D.secTit}>Forma de pagamento</div>
@@ -11352,53 +11346,61 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               )}
             </div>
 
-            {/* PRAZOS */}
+            {/* PRAZOS — usa prazoDefault (mesma fonte do Padrão).
+                Já filtrado pra esconder Engenharia quando !engAtiva.
+                Em modo edição, mantém InputControlado em string pra compat
+                (mas o ideal é o usuário editar pelo Modelo Padrão). */}
             <div style={D.secTit}>Prazo de execução</div>
-            {lockEdicao ? (
-              <div>
-                {prazosLista.map((linha, i) => (
-                  <div key={i} style={D.itemBullet}>
-                    <span style={D.bulletDot}>○</span>
-                    {linha}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div style={D.secTexto}>
-                <InputControlado
-                  valor={prazoEdit ?? "Estudo Preliminar — 30 dias úteis após assinatura\nAprovação Prefeitura — 60 dias úteis (não inclui análise municipal)\nProjeto Executivo — 60 dias úteis após aprovação\nEngenharia — 30 dias úteis após aprovação"}
-                  onCommit={(v) => setPrazoEdit(v)}
-                  placeholder="Prazos das etapas"
-                  style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
-                  multiline
-                />
-              </div>
-            )}
+            <div>
+              {prazosLista.map((linha, i) => (
+                <div key={i} style={{ ...D.itemBullet, breakInside:"avoid" }}>
+                  <span style={D.bulletDot}>○</span>
+                  {linha}
+                </div>
+              ))}
+            </div>
 
-            {/* SERVIÇOS NÃO INCLUSOS — lista completa em bullets */}
+            {/* SERVIÇOS NÃO INCLUSOS — usa naoInclDefault (mesma fonte do Padrão).
+                Cada item é { label, sub }. Se naoInclEdit estiver definido,
+                usa ele (formato do Padrão); senão usa o default calculado.
+                Em modo locked, renderiza em 2 colunas (igual mockup/Padrão).
+                Em modo edição, mostra um InputControlado em string (compat com
+                editor antigo) — não é o modo recomendado mas mantém retrocompat. */}
             <div style={D.secTit}>Serviços não inclusos</div>
             {lockEdicao ? (
-              <div>
-                {naoInclususLista.map((linha, i) => (
-                  <div key={i} style={D.itemBullet}>
-                    <span style={D.bulletDot}>○</span>
-                    {linha}
-                  </div>
-                ))}
-                <div style={{ ...D.etapaFraseFim, marginTop:10 }}>
-                  Obs: Todos os serviços não inclusos podem ser contratados como serviços adicionais.
+              <>
+                <div style={{ columns:"2", columnGap:32, marginBottom:8 }}>
+                  {naoInclususLista.map((item, i) => (
+                    <div key={i} style={{ ...D.itemBullet, breakInside:"avoid", display:"flex", alignItems:"flex-start", marginBottom:4 }}>
+                      <span style={D.bulletDot}>○</span>
+                      <span style={{ flex:1 }}>
+                        {item.label}
+                        {item.sub && <span style={{ fontSize:11, color:"#9ca3af", marginLeft:4 }}>{item.sub}</span>}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              </div>
+                <div style={{ ...D.etapaFraseFim, marginTop:10 }}>
+                  Todos os serviços não inclusos podem ser contratados como serviços adicionais.
+                </div>
+              </>
             ) : (
-              <div style={D.secTexto}>
-                <InputControlado
-                  valor={naoInclEdit ?? naoInclususLista.join("\n")}
-                  onCommit={(v) => setNaoInclEdit(v)}
-                  placeholder="Serviços não inclusos"
-                  style={{ width:"100%", fontSize:13, color:"#374151", lineHeight:1.65 }}
-                  multiline
-                />
-              </div>
+              <>
+                <div style={{ columns:"2", columnGap:32, marginBottom:8 }}>
+                  {naoInclususLista.map((item, i) => (
+                    <div key={i} style={{ ...D.itemBullet, breakInside:"avoid", display:"flex", alignItems:"flex-start", marginBottom:4 }}>
+                      <span style={D.bulletDot}>○</span>
+                      <span style={{ flex:1 }}>
+                        {item.label}
+                        {item.sub && <span style={{ fontSize:11, color:"#9ca3af", marginLeft:4 }}>{item.sub}</span>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ ...D.etapaFraseFim, marginTop:10 }}>
+                  Todos os serviços não inclusos podem ser contratados como serviços adicionais.
+                </div>
+              </>
             )}
 
             {/* ACEITE */}
