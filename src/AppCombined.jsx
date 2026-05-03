@@ -11147,17 +11147,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             page-break-inside: avoid;
             break-inside: avoid;
           }
-          /* Margens das páginas no PDF (Puppeteer respeita @page).
-             Página 1: margem zero (header amarelo cola no topo).
-             Página 2+: 12mm de margem superior pra conteúdo respirar
-             (padronizado com o Modelo Padrão, que usa padding-top: 32px
-             ≈ 12mm na sua page A4). */
-          @page {
-            margin: 0;
-          }
-          @page :not(:first) {
-            margin-top: 12mm;
-          }
+          /* Margens das páginas no PDF: 12mm uniforme em cima e embaixo
+             em TODAS as páginas (Puppeteer config no backend). Mesma
+             estratégia do Modelo Padrão (que usa padding-top: 32px ≈ 12mm
+             na page). Visualmente, o header amarelo aparece com 12mm de
+             margem branca no topo da primeira página — consistente com
+             o resto do PDF. */
         `}</style>
 
         {/* Banners de status — FORA do card amarelo, no topo da viewport.
