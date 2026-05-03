@@ -5153,8 +5153,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       // Logo dentro da barra branca: agora não precisa de wrapper branco
       // (a barra inteira já é branca). Logo aparece direto.
       logoWrap: { display:"inline-flex", alignItems:"center" },
-      // Corpo — padding lateral 40px (padronizado com Padrão)
-      conteudo: { padding:"32px 40px 36px" },
+      // Corpo — padding lateral 40px e padding inferior 80px,
+      // padronizados com Padrão (page: padding "32px 40px 80px").
+      // Padding superior 32px deixa o conteúdo respirar do header amarelo.
+      conteudo: { padding:"32px 40px 80px" },
       saudacao: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:14 },
       saudacaoB: { color:"#111", fontWeight:600 },
       descricaoProjeto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18, whiteSpace:"normal", wordBreak:"break-word" },
