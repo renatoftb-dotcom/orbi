@@ -7732,6 +7732,34 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [cardComodosRecolhido, setCardComodosRecolhido] = useState(false);
   // Cômodo com popup visível (via hover OU via click no input)
   const [comodoAberto, setComodoAberto] = useState(null);
+  // Abre o primeiro cômodo da lista AUTOMATICAMENTE quando o usuário entra
+  // na tela do orçamento (UX desktop: não precisa passar o mouse pra começar
+  // a preencher quantidades). Roda só uma vez, em useEffect com timeout de
+  // 50ms pra dar tempo do comodosFlatRef.current ser populado pelo
+  // primeiro render.
+  //
+  // RESTRITO AO DESKTOP: mobile tem UX própria (seletor inline em
+  // ativoMobile, sem hover/popup), então não deve ser afetado por essa
+  // abertura automática.
+  //
+  // Mesmo se o state for setado, a renderização do popup já tem o guard
+  // `(!isMobileOrc && isOpen)` na linha do `visivel`, então mobile não
+  // mostraria o popup mesmo que comodoAberto estivesse definido. Mas
+  // colocar o guard aqui também evita ciclos desnecessários.
+  const abriuPrimeiroRef = useRef(false);
+  useEffect(() => {
+    if (abriuPrimeiroRef.current) return;
+    if (isMobileOrc) return; // mobile: não afeta
+    const t = setTimeout(() => {
+      const flat = comodosFlatRef.current || [];
+      if (flat.length > 0 && !comodoAberto) {
+        setComodoAberto(flat[0]);
+        abriuPrimeiroRef.current = true;
+      }
+    }, 50);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isMobileOrc]);
   // MOBILE: cômodo onde o seletor [input] 0 1 2 3 4 está exibido inline.
   // null = comportamento default (primeiro da fila). Setado quando o usuário
   // toca em qualquer outro cômodo da lista de disponíveis pra "pular" pra ele.
