@@ -11024,13 +11024,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         overflow:"hidden",
       },
       // Coluna direita (amarela) — 1/3
+      // justifyContent stretch + filhos com width:100% pra que o
+      // text-align:justify do <div> de OURINHOS funcione (esticar
+      // letras pra ocupar a largura toda).
       colDir: {
         flex:"1 1 0",
         background:ACCENT,
         padding:"24px 24px",
         display:"flex",
         alignItems:"center",
-        justifyContent:"flex-end",
       },
       headerTitulo: {
         fontSize:32,
@@ -11040,13 +11042,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         letterSpacing:"-0.02em",
       },
       // Cidade · validade em negrito (decisão do usuário)
+      // width:100% pra ocupar toda a coluna direita (necessário pro
+      // justify funcionar na linha OURINHOS).
       headerEyebrow: {
         fontSize:12,
         fontWeight:700,
         color:"#111",
         letterSpacing:"0.04em",
-        textAlign:"right",
         lineHeight:1.4,
+        width:"100%",
       },
       // Corpo — padding lateral 40px e padding inferior 80px,
       // padronizados com Padrão (page: padding "32px 40px 80px").
@@ -11077,8 +11081,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       // Cards de valor: bordas mais arredondadas (8px) igual ao mockup
       destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
       destaqueVlrLight: { background:"#FAEEDA", padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
-      destaqueLbl: { fontSize:11, fontWeight:700, color:"#412402", textTransform:"uppercase", letterSpacing:"0.06em" },
-      destaqueNum: { fontSize:26, fontWeight:800, color:"#412402" },
+      destaqueLbl: { fontSize:14, fontWeight:700, color:"#412402", textTransform:"uppercase", letterSpacing:"0.06em" },
+      destaqueNum: { fontSize:30, fontWeight:800, color:"#412402" },
       // Card "Total sem impostos" sutil em cinza claro (igual mockup)
       totalSubtle: { background:"#f9fafb", padding:"10px 22px", borderRadius:8, margin:"4px 0 14px", fontSize:12, color:"#6b7280" },
       totalSubtleB: { color:"#111", fontWeight:600 },
@@ -11271,10 +11275,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 (1/3 da largura): cidade em cima, validade embaixo. */}
             <div style={D.colDir}>
               <div style={D.headerEyebrow}>
-                <div>
+                {/* Primeira linha: OURINHOS — justificada (letras espalhadas
+                    até alinhar com a borda direita de "VÁLIDO ATÉ X"). */}
+                <div style={{ textAlign:"justify", textAlignLast:"justify" }}>
                   <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
                 </div>
-                <div style={{ marginTop:2 }}>
+                {/* Segunda linha: VÁLIDO ATÉ X — right align (sem esticar palavras). */}
+                <div style={{ marginTop:2, textAlign:"right" }}>
                   <span>VÁLIDO ATÉ </span>
                   <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
                 </div>
@@ -11323,13 +11330,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             <div style={D.secTit}>Honorários</div>
             {incluiArq && (
               <div style={D.destaqueVlrLight}>
-                <div style={D.destaqueLbl}>Apenas Arquitetura</div>
+                <div style={D.destaqueLbl}>Arquitetura</div>
                 <div style={D.destaqueNum}>{fmtV(arqVal)}</div>
               </div>
             )}
             {incluiEng && (
               <div style={D.destaqueVlr}>
-                <div style={D.destaqueLbl}>Apenas Engenharia</div>
+                <div style={D.destaqueLbl}>Engenharia</div>
                 <div style={D.destaqueNum}>{fmtV(engVal)}</div>
               </div>
             )}
