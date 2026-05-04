@@ -12695,7 +12695,7 @@ function EtapaFormaPagamento({
         <div className="vk-fp-linha" key="antecipado">
           <span className="vk-fp-linha-label">Antecipado · desc.</span>
           <div className="vk-fp-linha-input">
-            <NumStepper valor={v} onChange={setter} min={0} max={100} step={0.5} width={48} />
+            <NumStepper valor={v} onChange={setter} min={0} max={100} step={1} width={28} />
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
           </div>
         </div>
@@ -12708,7 +12708,7 @@ function EtapaFormaPagamento({
         <div className="vk-fp-linha" key="parcelas">
           <span className="vk-fp-linha-label">Parcelado em</span>
           <div className="vk-fp-linha-input">
-            <NumStepper valor={v} onChange={n => setter(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={36} />
+            <NumStepper valor={v} onChange={n => setter(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
           </div>
         </div>
@@ -12721,7 +12721,7 @@ function EtapaFormaPagamento({
         <div className="vk-fp-linha" key="final">
           <span className="vk-fp-linha-label">Entrada + final</span>
           <div className="vk-fp-linha-input">
-            <NumStepper valor={v} onChange={setter} min={0} max={100} step={5} width={48} />
+            <NumStepper valor={v} onChange={setter} min={0} max={100} step={1} width={28} />
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
             <span style={{ color: '#d1d5db', fontSize: 11, margin: '0 4px' }}>+</span>
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>final</span>
@@ -12851,7 +12851,7 @@ function EtapaFormaPagamento({
         </div>
 
         <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '4px 0', background: '#fff', marginBottom: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 60px 110px 22px', gap: 8, padding: '10px 14px', borderBottom: '1.5px solid #111', alignItems: 'center' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 100px 110px 22px', gap: 8, padding: '10px 14px', borderBottom: '1.5px solid #111', alignItems: 'center' }}>
             <span></span>
             <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Etapa</span>
             <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>%</span>
@@ -12883,7 +12883,7 @@ function EtapaFormaPagamento({
                     <NumStepper
                       valor={et.pct}
                       onChange={n => atualizarEtapaPct(et.id, n)}
-                      min={0} max={100} step={1} width={36}
+                      min={0} max={100} step={1} width={28}
                     />
                   </span>
                 )}
@@ -12902,7 +12902,7 @@ function EtapaFormaPagamento({
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 60px 110px 22px', gap: 8, padding: '10px 14px', borderTop: '1.5px solid #111', alignItems: 'center', background: '#fafbfc' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 100px 110px 22px', gap: 8, padding: '10px 14px', borderTop: '1.5px solid #111', alignItems: 'center', background: '#fafbfc' }}>
             <span></span>
             <span style={{ fontWeight: 600, color: '#111', fontSize: 13 }}>Total</span>
             <span style={{ fontWeight: 600, color: '#111', fontSize: 13, textAlign: 'center' }}>{pctTotal}%</span>
@@ -12950,13 +12950,13 @@ function EtapaFormaPagamento({
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12.5, color: '#6b7280' }}>Desconto adicional</span>
-                  <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={0.5} width={48} />
+                  <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={1} width={28} />
                   <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
                 </div>
                 <span style={{ color: '#d1d5db', fontSize: 11 }}>+</span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: 12.5, color: '#6b7280' }}>Parcelas</span>
-                  <NumStepper valor={parcCompleto} onChange={n => setParcCompleto(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={36} />
+                  <NumStepper valor={parcCompleto} onChange={n => setParcCompleto(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
                   <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
                 </div>
               </div>
@@ -13026,7 +13026,7 @@ function EtapaFormaPagamento({
         .vk-fp-resumo-sub-label { font-size: 11.5px; color: #6b7280; margin-bottom: 2px; }
         .vk-fp-resumo-sub-valor { font-size: 13px; font-weight: 500; color: #111; line-height: 1.3; margin-bottom: 4px; }
         .vk-fp-etapa-row {
-          display: grid; grid-template-columns: 28px 1fr 60px 110px 22px;
+          display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
           gap: 8px; padding: 8px 14px;
           border-bottom: 0.5px solid #f3f4f6; align-items: center;
         }
