@@ -11010,10 +11010,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         display:"flex",
         alignItems:"center",
       },
-      // Coluna meio (preta) — 1/3, sem padding pra logo ocupar tudo
+      // Coluna meio (preta) — 1/3, sem padding pra logo ocupar tudo.
+      // Background #000 (preto puro) pra coincidir com fundo do PNG do
+      // logo da Padovan e evitar contraste visível entre os 2 pretos.
       colMeio: {
         flex:"1 1 0",
-        background:"#111",
+        background:"#000",
         padding:0,
         display:"flex",
         alignItems:"center",
@@ -11022,15 +11024,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         overflow:"hidden",
       },
       // Coluna direita (amarela) — 1/3
-      // justifyContent:flex-start + filhos com width:100% pra texto poder
-      // espalhar letras até a borda direita (text-align:justify funciona).
       colDir: {
         flex:"1 1 0",
         background:ACCENT,
         padding:"24px 24px",
         display:"flex",
         alignItems:"center",
-        justifyContent:"stretch",
+        justifyContent:"flex-end",
       },
       headerTitulo: {
         fontSize:32,
@@ -11045,8 +11045,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         fontWeight:700,
         color:"#111",
         letterSpacing:"0.04em",
-        textAlign:"justify",
-        textAlignLast:"justify",
+        textAlign:"right",
         lineHeight:1.4,
       },
       // Corpo — padding lateral 40px e padding inferior 80px,
@@ -11258,7 +11257,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 <img
                   src={logoPreview}
                   alt={escritorio.nome || "Escritório"}
-                  style={{ width:"100%", height:"100%", objectFit:"contain", display:"block", padding:"12px 16px", boxSizing:"border-box" }}
+                  style={{ width:"100%", height:"100%", objectFit:"contain", display:"block", padding:"6px 8px", boxSizing:"border-box" }}
                 />
               ) : (
                 <div style={{ fontSize:13, fontWeight:700, color:"#fff", letterSpacing:"0.05em", textAlign:"center", lineHeight:1.2, padding:"12px 16px" }}>
@@ -11271,7 +11270,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 Quebra em 2 linhas pra não cortar quando a coluna é estreita
                 (1/3 da largura): cidade em cima, validade embaixo. */}
             <div style={D.colDir}>
-              <div style={{ ...D.headerEyebrow, width:"100%" }}>
+              <div style={D.headerEyebrow}>
                 <div>
                   <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
                 </div>
