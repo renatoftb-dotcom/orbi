@@ -6524,28 +6524,31 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
           }}>Pacote completo</div>
         )}
 
-        {formasParaTabela.map((formaId, idx) => {
+        {formasParaTabela.flatMap((formaId, idx) => {
           const isLast = idx === formasParaTabela.length - 1;
-          return (
-            <React.Fragment key={formaId}>
-              <div style={{
-                padding: '18px 0',
-                borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6',
-                fontSize: 13, color: '#6b7280',
-                lineHeight: 1.3,
-              }}>{getLabelLinha(formaId)}</div>
-              {showArq && (
-                <div style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
-                  {renderCelula('arq', formaId)}
-                </div>
-              )}
-              {showPacote && (
-                <div style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
-                  {renderCelula('pac', formaId)}
-                </div>
-              )}
-            </React.Fragment>
-          );
+          const cells = [
+            <div key={formaId + '-label'} style={{
+              padding: '18px 0',
+              borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6',
+              fontSize: 13, color: '#6b7280',
+              lineHeight: 1.3,
+            }}>{getLabelLinha(formaId)}</div>
+          ];
+          if (showArq) {
+            cells.push(
+              <div key={formaId + '-arq'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                {renderCelula('arq', formaId)}
+              </div>
+            );
+          }
+          if (showPacote) {
+            cells.push(
+              <div key={formaId + '-pac'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                {renderCelula('pac', formaId)}
+              </div>
+            );
+          }
+          return cells;
         })}
       </div>
     );
