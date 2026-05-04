@@ -5168,13 +5168,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         overflow:"hidden",
       },
       // Coluna direita (amarela) — 1/3
+      // justifyContent:flex-start + filhos com width:100% pra texto poder
+      // espalhar letras até a borda direita (text-align:justify funciona).
       colDir: {
         flex:"1 1 0",
         background:ACCENT,
         padding:"24px 24px",
         display:"flex",
         alignItems:"center",
-        justifyContent:"flex-end",
+        justifyContent:"stretch",
       },
       headerTitulo: {
         fontSize:32,
@@ -5189,7 +5191,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         fontWeight:700,
         color:"#111",
         letterSpacing:"0.04em",
-        textAlign:"right",
+        textAlign:"justify",
+        textAlignLast:"justify",
         lineHeight:1.4,
       },
       // Corpo — padding lateral 40px e padding inferior 80px,
@@ -5414,7 +5417,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 Quebra em 2 linhas pra não cortar quando a coluna é estreita
                 (1/3 da largura): cidade em cima, validade embaixo. */}
             <div style={D.colDir}>
-              <div style={D.headerEyebrow}>
+              <div style={{ ...D.headerEyebrow, width:"100%" }}>
                 <div>
                   <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
                 </div>
@@ -5459,7 +5462,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               )}
             </div>
 
-            {/* HONORÁRIOS */}
+            {/* HONORÁRIOS — Decisão de UX: mostrar valores SEPARADOS de Arq
+                e Eng (em vez do "Pacote Completo" combinado). Cliente vê:
+                  - Apenas Arquitetura (light)
+                  - Apenas Engenharia (escuro/destaque, se eng ativa)
+                  - Total sem impostos (sutil, embaixo) — quando ambos ativos */}
             <div style={D.secTit}>Honorários</div>
             {incluiArq && (
               <div style={D.destaqueVlrLight}>
@@ -5467,29 +5474,23 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 <div style={D.destaqueNum}>{fmtV(arqVal)}</div>
               </div>
             )}
-            {incluiArq && incluiEng && (
+            {incluiEng && (
               <div style={D.destaqueVlr}>
-                <div style={D.destaqueLbl}>Pacote Completo (Arq. + Eng.)</div>
-                <div style={D.destaqueNum}>{fmtV(totVal)}</div>
-              </div>
-            )}
-            {!incluiArq && incluiEng && (
-              <div style={D.destaqueVlr}>
-                <div style={D.destaqueLbl}>Engenharia</div>
+                <div style={D.destaqueLbl}>Apenas Engenharia</div>
                 <div style={D.destaqueNum}>{fmtV(engVal)}</div>
               </div>
             )}
-            {/* Card sutil consolidando o total — igual ao mockup */}
+            {/* Card sutil consolidando o total — só aparece quando há 2 valores
+                pra somar (Arq + Eng). Se for só um, o valor já é o total. */}
             {(incluiArq && incluiEng) && (
               <div style={D.totalSubtle}>
                 Total sem impostos — <span style={D.totalSubtleB}>{fmtV(totVal)}</span>
               </div>
             )}
+            {/* Linha de informação fiscal (com/sem impostos). Removida a parte
+                de R$/m² por arq e eng (decisão do usuário: redundante). */}
             <div style={{ ...D.secTexto, fontSize:12, color:"#6b7280", marginTop:8 }}>
-              {areaTot > 0 && `${(arqVal/areaTot).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/m² (arq.)`}
-              {incluiEng && areaTot > 0 && ` · ${(engVal/areaTot).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}/m² (eng.)`}
-              {temImposto && ` · Valores ${aliqImp}% incluindo impostos`}
-              {!temImposto && ` · Valores sem impostos`}
+              {temImposto ? `Valores incluindo impostos (${aliqImp}%)` : "Valores sem impostos"}
             </div>
 
             {/* FORMA DE PAGAMENTO — vem ANTES do Escopo (decisão de UX:
