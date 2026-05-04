@@ -5134,10 +5134,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     const D = {
       wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
       page: { maxWidth:860, margin:"0 auto", padding:0, background:"#fff" },
-      // Header: 3 colunas com bordas externas arredondadas.
+      // Header: 3 colunas IGUAIS (33.33% cada) com bordas externas arredondadas.
       // Esquerda (amarela) → "PROPOSTA DE PROJETO"
-      // Meio (preta) → Logo do escritório (cor de fundo configurável no futuro)
-      // Direita (amarela) → cidade · validade
+      // Meio (preta) → Logo do escritório ocupando TODO o bloco
+      // Direita (amarela) → cidade · validade em negrito
       // overflow:hidden + borderRadius dão o efeito de "as 3 colunas dentro
       // de um container retangular arredondado", igual ao mockup.
       header: {
@@ -5146,30 +5146,32 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         background:ACCENT,
         borderRadius:8,
         overflow:"hidden",
-        minHeight:140,
+        minHeight:160,
       },
-      // Coluna esquerda (amarela)
+      // Coluna esquerda (amarela) — 1/3
       colEsq: {
-        flex:"0 0 38%",
+        flex:"1 1 0",
         background:ACCENT,
         padding:"32px 28px",
         display:"flex",
         alignItems:"center",
       },
-      // Coluna meio (preta) — fundo do logo
+      // Coluna meio (preta) — 1/3, sem padding pra logo ocupar tudo
       colMeio: {
-        flex:"0 0 28%",
+        flex:"1 1 0",
         background:"#111",
-        padding:"24px 16px",
+        padding:0,
         display:"flex",
         alignItems:"center",
         justifyContent:"center",
+        position:"relative",
+        overflow:"hidden",
       },
-      // Coluna direita (amarela)
+      // Coluna direita (amarela) — 1/3
       colDir: {
-        flex:"0 0 34%",
+        flex:"1 1 0",
         background:ACCENT,
-        padding:"24px 28px",
+        padding:"24px 24px",
         display:"flex",
         alignItems:"center",
         justifyContent:"flex-end",
@@ -5337,25 +5339,36 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
              de pág 2+ ganharem respiro natural ao virar página. */
         `}</style>
 
-        {/* Banners de status — FORA do card amarelo, no topo da viewport.
-            Aparecem só em modo edição (lockEdicao=false). Em modo visualização
-            (proposta enviada) ou no PDF, são escondidos.
-            Largura limitada pra alinhar com o card abaixo. */}
+        {/* Banner verde de proposta salva — só em modo edição quando há propostaInfo.
+            Aparece como notificação pequena, não interfere no header amarelo. */}
         {!lockEdicao && propostaInfo && (
-          <div className="no-print" style={{ maxWidth:860, margin:"16px auto 0", padding:"0 0", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
-            <div style={{ padding:"10px 14px" }}>
-              ✓ Proposta {propostaInfo.versao || ""} salva
-              {propostaInfo.enviadaEm && ` · ${new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
-            </div>
+          <div className="no-print" style={{ maxWidth:860, margin:"16px auto 0", padding:"10px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
+            ✓ Proposta {propostaInfo.versao || ""} salva
+            {propostaInfo.enviadaEm && ` · ${new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
           </div>
         )}
-        {!lockEdicao && (
-          <div className="no-print" style={{ maxWidth:860, margin:"12px auto 0", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:8, fontSize:12, color:"#1e40af", lineHeight:1.5 }}>
-            <div style={{ padding:"9px 14px" }}>
-              <strong>Modelo Direto.</strong> A geração de PDF deste modelo é feita no servidor — pode levar 5 a 15 segundos na primeira vez (cold start do Chrome). Próximas chamadas são mais rápidas.
-            </div>
-          </div>
-        )}
+
+        {/* Toolbar superior: Voltar (esquerda) + Gerar/Salvar PDF (direita).
+            Mesma estrutura, posição e estilo do Modelo Padrão. Lógica idêntica:
+            - Em lockEdicao OU já salva → "Gerar PDF" (chama handlePdf direto)
+            - Em edição com onSalvarProposta → "Salvar e Gerar PDF" (abre modal)
+            - Em edição sem onSalvarProposta → "Gerar PDF" (chama handlePdf direto)
+            Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
+        <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+          <button onClick={onVoltar} style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
+            ← Voltar
+          </button>
+          {(propostaInfo || lockEdicao) ? (
+            <button onClick={handlePdf} style={{ background:"#111", border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+              Gerar PDF
+            </button>
+          ) : (
+            <button onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
+              style={{ background:"#111", border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+              {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
+            </button>
+          )}
+        </div>
 
         <div style={D.page} className={`${lockEdicao ? "proposta-locked lockEdicao-active" : ""}`}>
           {/* Header em 3 colunas com bordas externas arredondadas:
@@ -5381,28 +5394,34 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               <div style={D.headerTitulo}>PROPOSTA<br/>DE PROJETO</div>
             </div>
 
-            {/* Coluna meio (preto): logo */}
+            {/* Coluna meio (preto): logo ocupa todo o bloco mantendo
+                proporção (width/height 100% + objectFit contain). */}
             <div style={D.colMeio}>
               {logoPreview ? (
                 <img
                   src={logoPreview}
                   alt={escritorio.nome || "Escritório"}
-                  style={{ maxHeight:80, maxWidth:200, objectFit:"contain", display:"block" }}
+                  style={{ width:"100%", height:"100%", objectFit:"contain", display:"block", padding:"12px 16px", boxSizing:"border-box" }}
                 />
               ) : (
-                <div style={{ fontSize:13, fontWeight:700, color:"#fff", letterSpacing:"0.05em", textAlign:"center", lineHeight:1.2 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:"#fff", letterSpacing:"0.05em", textAlign:"center", lineHeight:1.2, padding:"12px 16px" }}>
                   {escritorio.nome || "ESCRITÓRIO"}
                 </div>
               )}
             </div>
 
-            {/* Coluna direita (amarelo): cidade · validade em negrito */}
+            {/* Coluna direita (amarelo): cidade · validade em negrito.
+                Quebra em 2 linhas pra não cortar quando a coluna é estreita
+                (1/3 da largura): cidade em cima, validade embaixo. */}
             <div style={D.colDir}>
               <div style={D.headerEyebrow}>
-                <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
-                {" · "}
-                <span>VÁLIDO ATÉ </span>
-                <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
+                <div>
+                  <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
+                </div>
+                <div style={{ marginTop:2 }}>
+                  <span>VÁLIDO ATÉ </span>
+                  <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
+                </div>
               </div>
             </div>
           </div>
@@ -5670,23 +5689,6 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               {lockEdicao ? <span>{instagramEdit || ""}</span> : <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:10 }} />}
             </div>
 
-            {/* Botões inferiores: Voltar + Salvar (só em modo edição) */}
-            <div className="no-print" style={{ marginTop:32, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-              {!lockEdicao && (
-                <>
-                  <button
-                    onClick={() => onVoltar && onVoltar()}
-                    style={{ background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
-                    ← Voltar
-                  </button>
-                  <button
-                    onClick={() => setConfirmSalvar(true)}
-                    style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"11px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                    Salvar e Gerar PDF
-                  </button>
-                </>
-              )}
-            </div>
           </div>
         </div>
 
