@@ -6852,7 +6852,7 @@ function EtapaFormaPagamento({
       const setter = tipo === 'arq' ? setParcArq : setParcPac;
       return (
         <div className="vk-fp-linha" key="parcelas">
-          <span className="vk-fp-linha-label">Parcelado em</span>
+          <span className="vk-fp-linha-label">Entrada + parcelas</span>
           <div className="vk-fp-linha-input">
             <NumStepper valor={v} onChange={n => setter(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
@@ -6900,10 +6900,20 @@ function EtapaFormaPagamento({
     if (formasParaCards.includes('parcelas')) {
       const parc = tipo === 'arq' ? parcArq : parcPac;
       const v = calcParcelado(valorBase, parc);
+      const valorParc = Math.round(v * 100) / 100;
       blocos.push(
         <div className="vk-fp-resumo-bloco" key="parcelas">
-          <div className="vk-fp-resumo-label">Parcelado</div>
-          <div className="vk-fp-resumo-principal" style={{ fontSize: 13.5 }}>{parc}× de {fmtBRL_FP(Math.round(v * 100) / 100)}</div>
+          <div className="vk-fp-resumo-label">Entrada + parcelas</div>
+          {parc === 1 ? (
+            <div className="vk-fp-resumo-principal" style={{ fontSize: 13.5 }}>{fmtBRL_FP(valorParc)} à vista</div>
+          ) : (
+            <>
+              <div className="vk-fp-resumo-sub-label">Entrada</div>
+              <div className="vk-fp-resumo-sub-valor">{fmtBRL_FP(valorParc)}</div>
+              <div className="vk-fp-resumo-sub-label">+ {parc - 1}× de</div>
+              <div className="vk-fp-resumo-sub-valor">{fmtBRL_FP(valorParc)}</div>
+            </>
+          )}
         </div>
       );
     }
@@ -7336,6 +7346,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [parcEtCtrt,    setParcEtCtrt]    = useState(orcBase?.parcEtCtrt  || 2);
   const [descPacCtrt,   setDescPacCtrt]   = useState(orcBase?.descPacCtrt || 15);
   const [parcPacCtrt,   setParcPacCtrt]   = useState(orcBase?.parcPacCtrt || 8);
+  // Entrada + final (introduzido na Etapa 5 / Deploy 2). entArq/entPac são o
+  // % de entrada; o restante (100 - entArq) é pago no final, na entrega.
+  const [entArq,        setEntArq]        = useState(orcBase?.entArq      || 50);
+  const [entPac,        setEntPac]        = useState(orcBase?.entPac      || 40);
   const [etapasPct, setEtapasPct] = useState(orcBase?.etapasPct || [
     { id:1, nome:"Estudo de Viabilidade",  pct:10 },
     { id:2, nome:"Estudo Preliminar",      pct:40 },
@@ -9005,28 +9019,33 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         : [...etapasPct, { id: 5, nome: "Engenharia", pct: 0, eng: true }];
 
       const _atualizarEtapaPctFP = (id, novoPct) => {
-        // Replica lógica de cascata circular do PropostaPreviewEditorial:
+        // Replica lógica de cascata circular do PropostaPreviewEditorial
+        // (paridade total com função atualizarEtapaPct, linha ~4586):
         // - Sem isolamento: edita livre
         // - Com isolamento: ajusta a próxima isolada (cascata circular)
         // - Eng (id=5) e etapas não isoladas: edição simples
+        // - Cascata circular: última da lista volta pra primeira
+        const clampedInt = Math.round(Math.max(0, Math.min(100, novoPct)));
         const temIso = etapasIsoladas.size > 0;
         if (!temIso || id === 5 || !etapasIsoladas.has(id)) {
-          setEtapasPct(prev => prev.map(e => e.id === id ? { ...e, pct: novoPct } : e));
+          setEtapasPct(prev => prev.map(e => e.id === id ? { ...e, pct: clampedInt } : e));
           return;
         }
         const arqIso = etapasComEng.filter(e => e.id !== 5 && etapasIsoladas.has(e.id));
         if (arqIso.length === 1) {
-          setEtapasPct(prev => prev.map(e => e.id === id ? { ...e, pct: novoPct } : e));
+          setEtapasPct(prev => prev.map(e => e.id === id ? { ...e, pct: clampedInt } : e));
           return;
         }
         const idxEd = arqIso.findIndex(e => e.id === id);
         const alvo = arqIso[(idxEd + 1) % arqIso.length];
         const ed = arqIso[idxEd];
-        const total = ed.pct + alvo.pct;
-        const finalPct = Math.min(novoPct, total);
+        const pctAntigoEd = Math.round(Number(ed.pct));
+        const pctAntigoAlvo = Math.round(Number(alvo.pct));
+        const totalPar = pctAntigoEd + pctAntigoAlvo;
+        const finalPct = Math.min(clampedInt, totalPar);
         setEtapasPct(prev => prev.map(e => {
           if (e.id === id) return { ...e, pct: finalPct };
-          if (e.id === alvo.id) return { ...e, pct: total - finalPct };
+          if (e.id === alvo.id) return { ...e, pct: totalPar - finalPct };
           return e;
         }));
       };
@@ -9088,8 +9107,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           descPac={descPacote} setDescPac={setDescPacote}
           parcArq={parcArq} setParcArq={setParcArq}
           parcPac={parcPacote} setParcPac={setParcPacote}
-          entArq={50} setEntArq={() => {}} /* TODO Deploy 3: state próprio para entrada */
-          entPac={40} setEntPac={() => {}}
+          entArq={entArq} setEntArq={setEntArq}
+          entPac={entPac} setEntPac={setEntPac}
           etapas={etapasComEng}
           atualizarEtapaPct={_atualizarEtapaPctFP}
           atualizarEtapaNome={_atualizarEtapaNomeFP}
