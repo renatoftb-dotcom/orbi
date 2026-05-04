@@ -11363,7 +11363,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             */}
             <div style={D.secTit}>Honorários</div>
             {incluiArq && (
-              <div style={D.destaqueVlrLight}>
+              <div style={D.destaqueVlr}>
                 <div style={D.destaqueLbl}>Arquitetura</div>
                 <div style={D.destaqueNum}>{fmtV(arqCI)}</div>
               </div>
