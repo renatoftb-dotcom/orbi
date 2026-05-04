@@ -5134,25 +5134,62 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     const D = {
       wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
       page: { maxWidth:860, margin:"0 auto", padding:0, background:"#fff" },
-      // Header amarelo — sem padding-top (barra branca cobre o topo)
-      // Padding lateral 40px pra padronizar com o Padrão (page: padding "32px 40px 80px")
-      header: { background:ACCENT, paddingBottom:32, position:"relative", overflow:"hidden", borderRadius:8 },
-      // Barra branca semi-transparente que cobre o topo do header.
-      // 92% de opacidade deixa o amarelo "vazar" um pouco — visual editorial.
-      headerBar: {
-        background:"rgba(255,255,255,0.92)",
-        padding:"14px 40px",
+      // Header: 3 colunas com bordas externas arredondadas.
+      // Esquerda (amarela) → "PROPOSTA DE PROJETO"
+      // Meio (preta) → Logo do escritório (cor de fundo configurável no futuro)
+      // Direita (amarela) → cidade · validade
+      // overflow:hidden + borderRadius dão o efeito de "as 3 colunas dentro
+      // de um container retangular arredondado", igual ao mockup.
+      header: {
         display:"flex",
-        justifyContent:"space-between",
-        alignItems:"center",
-        gap:16,
-        borderBottom:"0.5px solid rgba(255,255,255,0.5)",
+        alignItems:"stretch",
+        background:ACCENT,
+        borderRadius:8,
+        overflow:"hidden",
+        minHeight:140,
       },
-      headerEyebrow: { fontSize:11, fontWeight:600, color:"#111", letterSpacing:"0.06em", textAlign:"right" },
-      headerTitulo: { fontSize:38, fontWeight:800, color:ACCENT_FG, lineHeight:1.05, letterSpacing:"-0.02em", padding:"30px 40px 0" },
-      // Logo dentro da barra branca: agora não precisa de wrapper branco
-      // (a barra inteira já é branca). Logo aparece direto.
-      logoWrap: { display:"inline-flex", alignItems:"center" },
+      // Coluna esquerda (amarela)
+      colEsq: {
+        flex:"0 0 38%",
+        background:ACCENT,
+        padding:"32px 28px",
+        display:"flex",
+        alignItems:"center",
+      },
+      // Coluna meio (preta) — fundo do logo
+      colMeio: {
+        flex:"0 0 28%",
+        background:"#111",
+        padding:"24px 16px",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"center",
+      },
+      // Coluna direita (amarela)
+      colDir: {
+        flex:"0 0 34%",
+        background:ACCENT,
+        padding:"24px 28px",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"flex-end",
+      },
+      headerTitulo: {
+        fontSize:32,
+        fontWeight:800,
+        color:ACCENT_FG,
+        lineHeight:1.05,
+        letterSpacing:"-0.02em",
+      },
+      // Cidade · validade em negrito (decisão do usuário)
+      headerEyebrow: {
+        fontSize:12,
+        fontWeight:700,
+        color:"#111",
+        letterSpacing:"0.04em",
+        textAlign:"right",
+        lineHeight:1.4,
+      },
       // Corpo — padding lateral 40px e padding inferior 80px,
       // padronizados com Padrão (page: padding "32px 40px 80px").
       // Padding superior 32px deixa o conteúdo respirar do header amarelo.
@@ -5295,10 +5332,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           }
           /* Margens das páginas no PDF: 12mm uniforme em cima e embaixo
              em TODAS as páginas (Puppeteer config no backend). Mesma
-             estratégia do Modelo Padrão (que usa padding-top: 32px ≈ 12mm
-             na page). Visualmente, o header amarelo aparece com 12mm de
-             margem branca no topo da primeira página — consistente com
-             o resto do PDF. */
+             estratégia do Modelo Padrão. Trade-off conhecido: pág 1
+             tem 12mm de margem branca acima do header amarelo, em troca
+             de pág 2+ ganharem respiro natural ao virar página. */
         `}</style>
 
         {/* Banners de status — FORA do card amarelo, no topo da viewport.
@@ -5322,40 +5358,53 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         )}
 
         <div style={D.page} className={`${lockEdicao ? "proposta-locked lockEdicao-active" : ""}`}>
-          {/* Header amarelo — ocupa toda a largura do D.page com bordas
-              arredondadas. Estrutura:
-                ┌──────────────────────────────────────────┐
-                │ [Barra branca: Logo │  Cidade · Validade]│ ← Barra translúcida
-                ├──────────────────────────────────────────┤
-                │                                          │
-                │  PROPOSTA DE PROJETO                     │ ← Título sobre amarelo
-                │                                          │
-                └──────────────────────────────────────────┘
-              A barra branca (92% opaca) cria uma área formal pro logo,
-              funciona pra qualquer cor de logo (preto, colorido, etc.) e
-              dá um ar editorial sem precisar customizar por cliente.
+          {/* Header em 3 colunas com bordas externas arredondadas:
+                ┌──────────────────────────────────────────────────┐
+                │           │              │                       │
+                │ PROPOSTA  │    [LOGO]    │  OURINHOS · VÁLIDO    │
+                │ DE PROJETO│  (fundo:#111)│  ATÉ 18/05/2026       │
+                │           │              │                       │
+                │ (amarelo) │   (preto)    │      (amarelo)        │
+                └──────────────────────────────────────────────────┘
+              - Coluna esquerda (~38%): Título "PROPOSTA DE PROJETO" no amarelo
+              - Coluna meio (~28%): Logo do escritório com fundo preto fixo
+                (cor de fundo do logo será configurável no escritorio.jsx
+                em sprint futura — por enquanto preto resolve a Padovan)
+              - Coluna direita (~34%): cidade · validade em negrito
+              No PDF, o header amarelo deve colar no topo da primeira página.
+              Páginas seguintes ganham margem via headerTemplate vazio do
+              Puppeteer (configurado no backend).
           */}
           <div style={D.header}>
-            {/* Barra branca translúcida — logo à esquerda, cidade/validade à direita */}
-            <div style={D.headerBar}>
-              <div style={D.logoWrap}>
-                {logoPreview ? (
-                  <img src={logoPreview} alt={escritorio.nome || "Escritório"} style={{ maxHeight:36, maxWidth:160, objectFit:"contain", display:"block" }}/>
-                ) : (
-                  <div style={{ fontSize:12, fontWeight:700, color:"#111", letterSpacing:"0.05em" }}>
-                    {escritorio.nome || "ESCRITÓRIO"}
-                  </div>
-                )}
-              </div>
+            {/* Coluna esquerda (amarelo): título */}
+            <div style={D.colEsq}>
+              <div style={D.headerTitulo}>PROPOSTA<br/>DE PROJETO</div>
+            </div>
+
+            {/* Coluna meio (preto): logo */}
+            <div style={D.colMeio}>
+              {logoPreview ? (
+                <img
+                  src={logoPreview}
+                  alt={escritorio.nome || "Escritório"}
+                  style={{ maxHeight:80, maxWidth:200, objectFit:"contain", display:"block" }}
+                />
+              ) : (
+                <div style={{ fontSize:13, fontWeight:700, color:"#fff", letterSpacing:"0.05em", textAlign:"center", lineHeight:1.2 }}>
+                  {escritorio.nome || "ESCRITÓRIO"}
+                </div>
+              )}
+            </div>
+
+            {/* Coluna direita (amarelo): cidade · validade em negrito */}
+            <div style={D.colDir}>
               <div style={D.headerEyebrow}>
-                <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:11, fontWeight:600, color:"#111" }} />
+                <TextoEditavel valor={(typeof cidadeEdit==="string"?cidadeEdit:"OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
                 {" · "}
                 <span>VÁLIDO ATÉ </span>
-                <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:11, fontWeight:600, color:"#111" }} />
+                <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
               </div>
             </div>
-            {/* Título sobre o amarelo puro */}
-            <div style={D.headerTitulo}>PROPOSTA<br/>DE PROJETO</div>
           </div>
 
           {/* Corpo */}
