@@ -10156,8 +10156,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
   // Estados locais (antes eram props read-only) — editáveis inline
   const [tipoPgto, setTipoPgtoLocal]     = useState(snap?.tipoPgto || data.tipoPgto || "padrao");
-  const [temImposto, setTemImpostoLocal] = useState(snap?.temImposto ?? data.temImposto ?? false);
-  const [aliqImp, setAliqImpLocal]       = useState(snap?.aliqImp ?? data.aliqImp ?? 16);
+
+  // Imposto: NÃO é mais state local desde o Deploy 1 da refatoração de pagamento.
+  // Decidido no Passo 1 do Form (toggle + input de alíquota perto do "Repetição")
+  // e chega via data.temImposto / data.aliqImp (live sync via liveData no Form).
+  // Snapshots antigos têm os valores capturados no snap — usamos como fallback
+  // pra que propostas salvas antes mudarem o imposto continuem renderizando
+  // exatamente como foram geradas (snapshot é histórico/imutável).
+  const temImposto = snap?.temImposto ?? data.temImposto ?? false;
+  const aliqImp    = snap?.aliqImp    ?? data.aliqImp    ?? 16;
   const [etapasPct, setEtapasPctLocal]   = useState(() => {
     const base = snap?.etapasPct || data.etapasPct || [
       { id:1, nome:"Estudo de Viabilidade",  pct:10 },
@@ -11891,33 +11898,16 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               )}
             </div>}
           </div>
+          {/* Resumo informativo de impostos. Desde o Deploy 1 da refatoração
+              de pagamento, o toggle e o input de alíquota vivem APENAS no
+              Passo 1 do Form (perto de "Repetição") — não são mais editáveis
+              aqui. Snapshots antigos preservam o valor que tinham quando
+              foram gerados (snap?.temImposto/aliqImp como fallback). */}
           <div style={{ border:`0.5px solid ${LN}`, borderRadius:8, padding:"10px 14px", fontSize:12, color:LT, marginBottom:4,
               display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-            <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
-              <span style={{
-                position:"relative", display:"inline-block", width:26, height:14,
-                background: temImposto ? "#0369a1" : "#d1d5db",
-                borderRadius:7, transition:"background 0.15s",
-              }}>
-                <span style={{
-                  position:"absolute", top:2, left: temImposto ? 14 : 2,
-                  width:10, height:10, background:"#fff", borderRadius:"50%",
-                  transition:"left 0.15s", boxShadow:"0 1px 2px rgba(0,0,0,0.2)",
-                }} />
-              </span>
-              <input type="checkbox" checked={temImposto} onChange={e => setTemImpostoLocal(e.target.checked)} style={{ display:"none" }} />
-              <span>Incluir impostos</span>
-            </label>
-            {temImposto && (
-              <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                <NumInput valor={aliqImp} onCommit={n => setAliqImpLocal(n)}
-                  decimais={2} min={0} max={99} width={42}
-                  style={{ textAlign:"right" }} />
-                <span style={{ color:LT }}>%</span>
-              </span>
-            )}
-            <span style={{ color:LN }}>·</span>
             {temImposto ? (<>
+              <span>Imposto ({aliqImp}%)</span>
+              <span style={{ color:LN }}>·</span>
               + Impostos — <span style={{ color:MD, fontWeight:500 }}>{fmtV(temIsoladas ? Math.round((totCIBase - totSIBase)*100)/100 : impostoEdit)}</span>
               &nbsp;·&nbsp; Total com impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIBase)}</span>
             </>) : (<>
