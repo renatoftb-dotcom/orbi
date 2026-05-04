@@ -6583,6 +6583,72 @@ const fmtBRL_FP = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 
 const fmtBRLcurto_FP = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
 const clamp_FP = (v, min, max) => Math.max(min, Math.min(max, parseFloat(v) || 0));
 
+// Helper componente: input numérico com setas de incremento/decremento.
+// Resolve dois problemas:
+//   1. Permite ajuste com clique sem precisar digitar (botões − / +)
+//   2. Aceita string vazia enquanto o usuário digita (não força 0/1).
+//      Commita o valor só no blur ou Enter — se ficar vazio, restaura
+//      o valor anterior.
+function NumStepper({ valor, onChange, min = 0, max = 100, step = 1, width = 56, suffix = '%' }) {
+  const [textoLocal, setTextoLocal] = useState(String(valor));
+
+  // Sincroniza state local quando o pai muda o valor (ex: cascata circular)
+  useEffect(() => { setTextoLocal(String(valor)); }, [valor]);
+
+  function commit(novoValor) {
+    const limpo = Math.max(min, Math.min(max, novoValor));
+    onChange(limpo);
+    setTextoLocal(String(limpo));
+  }
+
+  function handleBlur() {
+    if (textoLocal === '' || textoLocal === '-') {
+      // Vazio → restaura valor anterior (não força 0)
+      setTextoLocal(String(valor));
+      return;
+    }
+    const n = parseFloat(textoLocal);
+    if (isNaN(n)) {
+      setTextoLocal(String(valor));
+      return;
+    }
+    commit(n);
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.target.blur();
+    } else if (e.key === 'Escape') {
+      setTextoLocal(String(valor));
+      e.target.blur();
+    }
+  }
+
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'stretch', border: '1px solid #d1d5db', borderRadius: 5, overflow: 'hidden' }}>
+      <button type="button"
+        onClick={e => { e.stopPropagation(); commit(valor - step); }}
+        style={{ width: 22, background: '#fff', border: 'none', borderRight: '1px solid #e5e7eb', cursor: 'pointer', color: '#6b7280', fontSize: 13, fontFamily: 'inherit', padding: 0, lineHeight: 1 }}
+        aria-label="Diminuir"
+      >−</button>
+      <input type="text" inputMode="decimal"
+        value={textoLocal}
+        onChange={e => setTextoLocal(e.target.value.replace(/[^\d,.-]/g, '').replace(',', '.'))}
+        onBlur={handleBlur}
+        onKeyDown={handleKey}
+        onClick={e => e.stopPropagation()}
+        style={{ width, padding: '4px 6px', fontSize: 13, fontWeight: 500, border: 'none', outline: 'none', fontFamily: 'inherit', textAlign: 'center', background: 'transparent' }}
+      />
+      <button type="button"
+        onClick={e => { e.stopPropagation(); commit(valor + step); }}
+        style={{ width: 22, background: '#fff', border: 'none', borderLeft: '1px solid #e5e7eb', cursor: 'pointer', color: '#6b7280', fontSize: 13, fontFamily: 'inherit', padding: 0, lineHeight: 1 }}
+        aria-label="Aumentar"
+      >+</button>
+    </span>
+  );
+}
+
 function EtapaFormaPagamento({
   // Valores calculados do orçamento (vindos do Form pai)
   valorArq, valorEng, incluiArq, incluiEng,
@@ -6595,12 +6661,14 @@ function EtapaFormaPagamento({
   etapas, atualizarEtapaPct, atualizarEtapaNome, adicionarEtapa, removerEtapa,
   isoladas, toggleIsolada,
   descCompleto, setDescCompleto, parcCompleto, setParcCompleto,
+  modalidadesEtapa, setModalidadesEtapa,
   // Callbacks de navegação
   onVoltar, onContinuar,
 }) {
   // subTela: 'selecao' (Tela 1, escolhe formas) ou 'config' (Tela 2, configura)
   const [subTela, setSubTela] = useState('selecao');
   const [erroSelecao, setErroSelecao] = useState(false);
+  const [erroValidacao, setErroValidacao] = useState('');
 
   const valorPac = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0);
 
@@ -6697,6 +6765,9 @@ function EtapaFormaPagamento({
             <div style={S.perguntaTitulo}>Marque uma ou mais formas. O cliente vê todas que você marcar.</div>
             <div style={S.perguntaSub}>
               O <strong style={{ color: '#111' }}>antecipado com desconto</strong> pode ser combinado com qualquer outra. As demais são alternativas entre si — o cliente escolhe uma.
+              <div style={{ marginTop: 8, color: '#374151' }}>
+                <strong style={{ color: '#111' }}>Sugerimos sempre oferecer o antecipado</strong> — elimina o risco de não receber.
+              </div>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -6770,9 +6841,7 @@ function EtapaFormaPagamento({
         <div className="vk-fp-linha" key="antecipado">
           <span className="vk-fp-linha-label">Antecipado · desc.</span>
           <div className="vk-fp-linha-input">
-            <input type="number" min="0" max="100" step="0.5" value={v}
-              onChange={e => setter(clamp_FP(e.target.value, 0, 100))}
-              className="vk-fp-num" style={{ width: 56 }} />
+            <NumStepper valor={v} onChange={setter} min={0} max={100} step={0.5} width={48} />
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
           </div>
         </div>
@@ -6785,9 +6854,7 @@ function EtapaFormaPagamento({
         <div className="vk-fp-linha" key="parcelas">
           <span className="vk-fp-linha-label">Parcelado em</span>
           <div className="vk-fp-linha-input">
-            <input type="number" min="1" max="24" step="1" value={v}
-              onChange={e => setter(Math.max(1, parseInt(e.target.value) || 1))}
-              className="vk-fp-num" style={{ width: 44 }} />
+            <NumStepper valor={v} onChange={n => setter(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={36} />
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
           </div>
         </div>
@@ -6800,9 +6867,7 @@ function EtapaFormaPagamento({
         <div className="vk-fp-linha" key="final">
           <span className="vk-fp-linha-label">Entrada + final</span>
           <div className="vk-fp-linha-input">
-            <input type="number" min="0" max="100" step="5" value={v}
-              onChange={e => setter(clamp_FP(e.target.value, 0, 100))}
-              className="vk-fp-num" style={{ width: 56 }} />
+            <NumStepper valor={v} onChange={setter} min={0} max={100} step={5} width={48} />
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
             <span style={{ color: '#d1d5db', fontSize: 11, margin: '0 4px' }}>+</span>
             <span style={{ fontSize: 12.5, color: '#6b7280' }}>final</span>
@@ -6904,9 +6969,25 @@ function EtapaFormaPagamento({
       valorTotal = valorArq + (incluiEng ? valorEng : 0);
     }
 
-    const completoAnt = (valorArq + valorEng) * (1 - descCompleto / 100);
-    const completoEco = (valorArq + valorEng) - completoAnt;
+    // Modalidade 2 (contratação completa) usa o valorTotal calculado acima.
+    // Quando há etapas isoladas, valorTotal é a soma dessas isoladas (não Arq+Eng).
+    // Assim, "contratar tudo" significa contratar todas as etapas que o usuário
+    // selecionou como contratáveis.
+    const baseCompleto = valorTotal;
+    const completoAnt = baseCompleto * (1 - descCompleto / 100);
+    const completoEco = baseCompleto - completoAnt;
     const completoParcVal = completoAnt / parcCompleto;
+
+    // Helpers das modalidades (radio com toggle, ambas começam marcadas)
+    const mod1Marcada = modalidadesEtapa.includes('mod1');
+    const mod2Marcada = modalidadesEtapa.includes('mod2');
+    const toggleMod = (mod) => {
+      if (modalidadesEtapa.includes(mod)) {
+        setModalidadesEtapa(modalidadesEtapa.filter(m => m !== mod));
+      } else {
+        setModalidadesEtapa([...modalidadesEtapa, mod]);
+      }
+    };
 
     return (
       <div style={{ marginTop: 40, ...S.fadeIn }}>
@@ -6944,10 +7025,12 @@ function EtapaFormaPagamento({
                 {et.eng ? (
                   <span style={{ textAlign: 'center', color: '#d1d5db' }}>—</span>
                 ) : (
-                  <span style={{ textAlign: 'center' }}>
-                    <input type="number" className="vk-fp-etapa-pct" min="0" max="100"
-                      value={et.pct}
-                      onChange={e => atualizarEtapaPct(et.id, clamp_FP(e.target.value, 0, 100))} />
+                  <span style={{ textAlign: 'center', display: 'flex', justifyContent: 'center' }}>
+                    <NumStepper
+                      valor={et.pct}
+                      onChange={n => atualizarEtapaPct(et.id, n)}
+                      min={0} max={100} step={1} width={36}
+                    />
                   </span>
                 )}
                 <span className="vk-fp-etapa-valor">{fmtBRL_FP(Math.round(valor * 100) / 100)}</span>
@@ -6974,38 +7057,60 @@ function EtapaFormaPagamento({
           </div>
         </div>
 
-        <div style={{ background: '#fafbfc', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#111', marginBottom: 8 }}>Quando o cliente contrata uma etapa só</div>
-          <div style={{ fontSize: 12.5, color: '#6b7280', lineHeight: 1.5 }}>
-            Ele paga <strong style={{ color: '#111' }}>50% no início + 50% em 30 dias</strong>. Sem desconto, sem parcelamento adicional.
+        <div style={{ marginTop: 16, marginBottom: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
+          Quais modalidades de pagamento por etapa você quer oferecer? <span style={{ color: '#9ca3af' }}>(pelo menos uma)</span>
+        </div>
+
+        {/* Modalidade 1 — card selecionável */}
+        <div
+          className={'vk-fp-card' + (mod1Marcada ? ' selected' : '')}
+          onClick={e => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+            toggleMod('mod1');
+          }}>
+          <div style={{ flex: 1, padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <button type="button" className="vk-fp-radio" style={{ marginTop: 2 }} onClick={e => { e.stopPropagation(); toggleMod('mod1'); }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#111', marginBottom: 6 }}>Contratação por etapa individual</div>
+              <div style={{ fontSize: 12.5, color: '#6b7280', lineHeight: 1.5 }}>
+                Cliente escolhe quais etapas contratar. Cada etapa é paga em <strong style={{ color: '#111' }}>50% no início + 50% em 30 dias</strong>. Sem desconto, sem parcelamento adicional.
+              </div>
+            </div>
           </div>
         </div>
 
-        <div style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '14px 16px' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#111', marginBottom: 4 }}>Quando o cliente contrata o projeto inteiro</div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 1.5 }}>
-            Aplique um desconto adicional para incentivar a contratação completa. Ele paga em até N parcelas mensais.
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12.5, color: '#6b7280' }}>Desconto adicional</span>
-              <input type="number" min="0" max="100" step="0.5" value={descCompleto}
-                onChange={e => setDescCompleto(clamp_FP(e.target.value, 0, 100))}
-                className="vk-fp-num" style={{ width: 56 }} />
-              <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
+        {/* Modalidade 2 — card selecionável */}
+        <div
+          className={'vk-fp-card' + (mod2Marcada ? ' selected' : '')}
+          onClick={e => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
+            toggleMod('mod2');
+          }}>
+          <div style={{ flex: 1, padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <button type="button" className="vk-fp-radio" style={{ marginTop: 2 }} onClick={e => { e.stopPropagation(); toggleMod('mod2'); }} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 14, fontWeight: 500, color: '#111', marginBottom: 6 }}>Contratação completa (todas as etapas)</div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 1.5 }}>
+                Aplique um desconto adicional para incentivar o cliente a fechar tudo de uma vez, em parcelas mensais.
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12.5, color: '#6b7280' }}>Desconto adicional</span>
+                  <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={0.5} width={48} />
+                  <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
+                </div>
+                <span style={{ color: '#d1d5db', fontSize: 11 }}>+</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 12.5, color: '#6b7280' }}>Parcelas</span>
+                  <NumStepper valor={parcCompleto} onChange={n => setParcCompleto(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={36} />
+                  <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #e5e7eb' }}>
+                Total: <span style={{ color: '#111', fontWeight: 500 }}>{fmtBRL_FP(Math.round(completoAnt * 100) / 100)}</span> em {parcCompleto}× de <span style={{ color: '#111', fontWeight: 500 }}>{fmtBRL_FP(Math.round(completoParcVal * 100) / 100)}</span>
+                {descCompleto > 0 && <span style={{ color: '#047857' }}> · economia de {fmtBRLcurto_FP(completoEco)}</span>}
+              </div>
             </div>
-            <span style={{ color: '#d1d5db', fontSize: 11 }}>+</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12.5, color: '#6b7280' }}>Parcelas</span>
-              <input type="number" min="1" max="24" step="1" value={parcCompleto}
-                onChange={e => setParcCompleto(Math.max(1, parseInt(e.target.value) || 1))}
-                className="vk-fp-num" style={{ width: 44 }} />
-              <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #e5e7eb' }}>
-            Total: <span style={{ color: '#111', fontWeight: 500 }}>{fmtBRL_FP(Math.round(completoAnt * 100) / 100)}</span> em {parcCompleto}× de <span style={{ color: '#111', fontWeight: 500 }}>{fmtBRL_FP(Math.round(completoParcVal * 100) / 100)}</span>
-            {descCompleto > 0 && <span style={{ color: '#047857' }}> · economia de {fmtBRLcurto_FP(completoEco)}</span>}
           </div>
         </div>
       </div>
@@ -7118,19 +7223,45 @@ function EtapaFormaPagamento({
           <div style={{ marginTop: 28, ...S.fadeIn }}>
             <div style={S.perguntaTitulo}>Como o cliente vai poder contratar?</div>
             <div style={S.perguntaSub}>
-              <strong style={{ color: '#111' }}>Os dois cards marcados</strong> = cliente escolhe contratar só Arquitetura ou o pacote completo (com Engenharia).{' '}
-              <strong style={{ color: '#111' }}>Só o Pacote</strong> = cliente só pode contratar tudo junto.
+              <strong style={{ color: '#111' }}>Os dois cards marcados</strong> = cliente escolhe contratar só Arquitetura ou o pacote completo.
+              <div style={{ marginTop: 4 }}>
+                <strong style={{ color: '#111' }}>Só Pacote marcado</strong> = cliente só pode contratar Arquitetura + Engenharia juntos.
+              </div>
             </div>
             {renderCardContratacao('arq', 'Apenas Arquitetura')}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, margin: '8px 0', fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 500 }}>
+              <span style={{ flex: 1, height: 0, borderTop: '0.5px solid #e5e7eb' }}></span>
+              <span>ou</span>
+              <span style={{ flex: 1, height: 0, borderTop: '0.5px solid #e5e7eb' }}></span>
+            </div>
             {renderCardContratacao('pac', 'Pacote Arq + Eng')}
           </div>
         )}
 
         {temEtapa && renderSecaoEtapa()}
 
+        {erroValidacao && (
+          <div style={{ marginTop: 16, padding: '10px 12px', background: '#fef2f2', border: '0.5px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#991b1b' }}>
+            {erroValidacao}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, marginTop: 32 }}>
           <button type="button" style={S.btnSecondary} onClick={() => setSubTela('selecao')}>← Voltar</button>
-          <button type="button" style={{ ...S.btnPrimary, flex: 1 }} onClick={onContinuar}>
+          <button type="button" style={{ ...S.btnPrimary, flex: 1 }} onClick={() => {
+            // Validação: pelo menos uma forma deve ter contratação selecionada
+            if (formasParaCards.length > 0 && contratacoesSelecionadas.length === 0) {
+              setErroValidacao('Selecione ao menos uma forma de contratação (Apenas Arquitetura ou Pacote).');
+              return;
+            }
+            // Validação: se "Por etapa" marcado, pelo menos uma modalidade
+            if (temEtapa && modalidadesEtapa.length === 0) {
+              setErroValidacao('Selecione ao menos uma modalidade de pagamento por etapa.');
+              return;
+            }
+            setErroValidacao('');
+            onContinuar();
+          }}>
             Continuar para proposta →
           </button>
         </div>
@@ -7230,6 +7361,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   //   (sempre passa pela Etapa 5, conforme decisão de UX).
   const [formasSelecionadas,      setFormasSelecionadas]      = useState(orcBase?.formaPagamento?.formas        || []);
   const [contratacoesSelecionadas,setContratacoesSelecionadas]= useState(orcBase?.formaPagamento?.contratacoes  || ["arq", "pac"]);
+  // Modalidades do "Por etapa" — ambas começam marcadas. Usuário pode desmarcar
+  // se quiser oferecer só pacote completo (mod 1 desmarcada) ou só contratação
+  // por etapa individual (mod 2 desmarcada).
+  const [modalidadesEtapa, setModalidadesEtapa] = useState(orcBase?.formaPagamento?.modalidadesEtapa || ["mod1", "mod2"]);
   const [etapaPagamentoConfirmada, setEtapaPagamentoConfirmada] = useState(false);
 
   useEffect(() => {
@@ -8964,6 +9099,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           toggleIsolada={_toggleIsoladaFP}
           descCompleto={descPacCtrt} setDescCompleto={setDescPacCtrt}
           parcCompleto={parcPacCtrt} setParcCompleto={setParcPacCtrt}
+          modalidadesEtapa={modalidadesEtapa}
+          setModalidadesEtapa={setModalidadesEtapa}
           onVoltar={() => { setPropostaData(null); }}
           onContinuar={() => { setEtapaPagamentoConfirmada(true); }}
         />
