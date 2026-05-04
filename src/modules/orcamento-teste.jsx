@@ -3663,7 +3663,7 @@ function TextareaControlado({ valor, onCommit, placeholder="", style={}, minHeig
 }
 
 // Input single-line com mesmo visual/comportamento do TextareaControlado
-function InputControlado({ valor, onCommit, placeholder="", style={} }) {
+function InputControlado({ valor, onCommit, placeholder="", style={}, multiline=false }) {
   const [local, setLocal] = useState(valor || "");
   const [focado, setFocado] = useState(false);
   const ultimoExterno = useRef(valor || "");
@@ -3674,6 +3674,39 @@ function InputControlado({ valor, onCommit, placeholder="", style={} }) {
       setLocal(externo);
     }
   }, [valor]);
+  // Multiline: renderiza textarea com auto-resize (rows ajusta ao conteúdo)
+  // pra descrição longa não ficar cortada.
+  if (multiline) {
+    const linhas = String(local || "").split("\n").length;
+    return (
+      <textarea
+        value={local}
+        onChange={e => setLocal(e.target.value)}
+        onFocus={() => setFocado(true)}
+        onBlur={() => {
+          setFocado(false);
+          if (local !== (valor || "")) {
+            ultimoExterno.current = local;
+            onCommit(local);
+          }
+        }}
+        placeholder={placeholder}
+        rows={Math.max(2, linhas)}
+        style={{
+          width:"100%",
+          fontFamily:"inherit",
+          border: focado ? "1px solid #d1d5db" : "1px solid transparent",
+          borderRadius:6,
+          padding:"6px 8px",
+          background: focado ? "#fff" : "transparent",
+          outline:"none",
+          resize:"vertical",
+          minHeight:"3em",
+          ...style,
+        }}
+      />
+    );
+  }
   return (
     <input
       type="text"
@@ -5342,16 +5375,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
              em TODAS as páginas (Puppeteer config no backend). Mesma
              estratégia do Modelo Padrão. Trade-off conhecido: pág 1
              tem 12mm de margem branca acima do header amarelo, em troca
-             de pág 2+ ganharem respiro natural ao virar página.
-
-             TENTATIVA de fazer header invadir a margem superior do PDF
-             na pág 1 (decisão do usuário): margin-top:-12mm aplicado SÓ
-             no contexto de PDF (classe render-pdf-context). Pode ser que
-             o Chromium clipe (corte) o que ultrapassa a borda da página.
-             Se ficar feio, basta remover esta regra. */
-          .render-pdf-context .vk-direto-header {
-            margin-top: -12mm !important;
-          }
+             de pág 2+ ganharem respiro natural ao virar página. */
         `}</style>
 
         {/* Banner verde de proposta salva — só em modo edição quando há propostaInfo.
@@ -5403,7 +5427,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               Páginas seguintes ganham margem via headerTemplate vazio do
               Puppeteer (configurado no backend).
           */}
-          <div style={D.header} className="vk-direto-header">
+          <div style={D.header}>
             {/* Coluna esquerda (amarelo): título */}
             <div style={D.colEsq}>
               <div style={D.headerTitulo}>PROPOSTA<br/>DE PROJETO</div>
@@ -5430,17 +5454,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 (1/3 da largura): cidade em cima, validade embaixo. */}
             <div style={D.colDir}>
               <div style={D.headerEyebrow}>
-                {/* Primeira linha: cidade — letras espalhadas com display:flex
-                    + justifyContent:space-between. Cada letra é um span e o
-                    flex distribui automaticamente os espaços, alinhando a
-                    primeira letra na esquerda e a última na direita.
-                    Funciona pra qualquer tamanho de cidade. */}
-                <div style={{ display:"flex", justifyContent:"space-between", width:"100%" }}>
-                  {(typeof cidadeEdit==="string" ? cidadeEdit : "OURINHOS").toUpperCase().split("").map((letra, i) => (
-                    <span key={i} style={{ fontSize:12, fontWeight:700, color:"#111" }}>{letra === " " ? "\u00A0" : letra}</span>
-                  ))}
+                {/* Cidade alinhada à direita */}
+                <div style={{ textAlign:"right" }}>
+                  <TextoEditavel valor={(typeof cidadeEdit==="string" ? cidadeEdit : "OURINHOS").toUpperCase()} onChange={(v) => setCidadeEdit(v)} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
                 </div>
-                {/* Segunda linha: VÁLIDO ATÉ X — right align (sem esticar palavras). */}
+                {/* Validade alinhada à direita */}
                 <div style={{ marginTop:2, textAlign:"right" }}>
                   <span>VÁLIDO ATÉ </span>
                   <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{ fontSize:12, fontWeight:700, color:"#111" }} />
@@ -5496,7 +5514,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             )}
             {incluiEng && (
               <div style={D.destaqueVlr}>
-                <div style={D.destaqueLbl}>Engenharia (Opcional)</div>
+                <div style={D.destaqueLbl}>
+                  Engenharia
+                  <span style={{ fontSize:11, fontWeight:600, marginLeft:6, textTransform:"none" }}>(opcional)</span>
+                </div>
                 <div style={D.destaqueNum}>{fmtV(engVal)}</div>
               </div>
             )}
