@@ -5500,38 +5500,49 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               )}
             </div>
 
-            {/* HONORÁRIOS — Decisão de UX: mostrar valores SEPARADOS de Arq
-                e Eng (em vez do "Pacote Completo" combinado). Cliente vê:
-                  - Apenas Arquitetura (light)
-                  - Apenas Engenharia (escuro/destaque, se eng ativa)
-                  - Total sem impostos (sutil, embaixo) — quando ambos ativos */}
+            {/* HONORÁRIOS — Estrutura igual ao Modelo Padrão:
+                  - Cards de serviços (Arq, Eng) com valores SEM imposto
+                  - Quando temImposto: linha "+ Impostos — R$ X" mostrando o
+                    valor do imposto separadamente
+                  - Card final destacado com o "Total Geral" COM imposto
+                  - Quando NÃO temImposto: card final mostra "Total sem impostos"
+                Forma de pagamento abaixo usa o total COM imposto (totCIEdit).
+            */}
             <div style={D.secTit}>Honorários</div>
             {incluiArq && (
               <div style={D.destaqueVlrLight}>
                 <div style={D.destaqueLbl}>Arquitetura</div>
-                <div style={D.destaqueNum}>{fmtV(arqVal)}</div>
+                <div style={D.destaqueNum}>{fmtV(arqCI)}</div>
               </div>
             )}
             {incluiEng && (
-              <div style={D.destaqueVlr}>
+              <div style={D.destaqueVlrLight}>
                 <div style={D.destaqueLbl}>
                   Engenharia
                   <span style={{ fontSize:11, fontWeight:600, marginLeft:6, textTransform:"none" }}>(opcional)</span>
                 </div>
-                <div style={D.destaqueNum}>{fmtV(engVal)}</div>
+                <div style={D.destaqueNum}>{fmtV(engCI)}</div>
               </div>
             )}
-            {/* Card sutil consolidando o total — só aparece quando há 2 valores
-                pra somar (Arq + Eng). Se for só um, o valor já é o total. */}
+            {/* Subtotal sem impostos — só aparece quando há 2 valores pra somar */}
             {(incluiArq && incluiEng) && (
               <div style={D.totalSubtle}>
-                Total sem impostos — <span style={D.totalSubtleB}>{fmtV(totVal)}</span>
+                Total sem impostos — <span style={D.totalSubtleB}>{fmtV(totSIEdit)}</span>
               </div>
             )}
-            {/* Linha de informação fiscal (com/sem impostos). Removida a parte
-                de R$/m² por arq e eng (decisão do usuário: redundante). */}
-            <div style={{ ...D.secTexto, fontSize:12, color:"#6b7280", marginTop:8 }}>
-              {temImposto ? `Valores incluindo impostos (${aliqImp}%)` : "Valores sem impostos"}
+            {/* Linha de impostos — só quando temImposto */}
+            {temImposto && (
+              <div style={D.totalSubtle}>
+                + Impostos ({aliqImp}%) — <span style={D.totalSubtleB}>{fmtV(impostoEdit)}</span>
+              </div>
+            )}
+            {/* Card final destacado: Total Geral com impostos (escuro/amarelo).
+                Aparece sempre, com label diferente baseado em temImposto. */}
+            <div style={D.destaqueVlr}>
+              <div style={D.destaqueLbl}>
+                {temImposto ? "Total Geral com Impostos" : "Total Geral"}
+              </div>
+              <div style={D.destaqueNum}>{fmtV(totCIEdit)}</div>
             </div>
 
             {/* FORMA DE PAGAMENTO — vem ANTES do Escopo (decisão de UX:
