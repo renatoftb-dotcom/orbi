@@ -5500,12 +5500,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               )}
             </div>
 
-            {/* HONORÁRIOS — Estrutura igual ao Modelo Padrão:
-                  - Cards de serviços (Arq, Eng) com valores SEM imposto
-                  - Quando temImposto: linha "+ Impostos — R$ X" mostrando o
-                    valor do imposto separadamente
-                  - Card final destacado com o "Total Geral" COM imposto
-                  - Quando NÃO temImposto: card final mostra "Total sem impostos"
+            {/* HONORÁRIOS:
+                  - Cards de serviços (Arquitetura, Engenharia) com valores SEM imposto
+                  - Linha sutil embaixo:
+                    · Sem imposto: "Total sem impostos — R$ X"
+                    · Com imposto: "+ Impostos — R$ Y · Total com impostos — R$ X"
                 Forma de pagamento abaixo usa o total COM imposto (totCIEdit).
             */}
             <div style={D.secTit}>Honorários</div>
@@ -5524,26 +5523,20 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 <div style={D.destaqueNum}>{fmtV(engCI)}</div>
               </div>
             )}
-            {/* Subtotal sem impostos — só aparece quando há 2 valores pra somar */}
-            {(incluiArq && incluiEng) && (
-              <div style={D.totalSubtle}>
-                Total sem impostos — <span style={D.totalSubtleB}>{fmtV(totSIEdit)}</span>
-              </div>
-            )}
-            {/* Linha de impostos — só quando temImposto */}
-            {temImposto && (
+            {/* Linha sutil de total — formato muda conforme tem imposto ou não */}
+            {temImposto ? (
               <div style={D.totalSubtle}>
                 + Impostos ({aliqImp}%) — <span style={D.totalSubtleB}>{fmtV(impostoEdit)}</span>
+                {" · "}
+                Total com impostos — <span style={D.totalSubtleB}>{fmtV(totCIEdit)}</span>
               </div>
+            ) : (
+              (incluiArq && incluiEng) && (
+                <div style={D.totalSubtle}>
+                  Total sem impostos — <span style={D.totalSubtleB}>{fmtV(totSIEdit)}</span>
+                </div>
+              )
             )}
-            {/* Card final destacado: Total Geral com impostos (escuro/amarelo).
-                Aparece sempre, com label diferente baseado em temImposto. */}
-            <div style={D.destaqueVlr}>
-              <div style={D.destaqueLbl}>
-                {temImposto ? "Total Geral com Impostos" : "Total Geral"}
-              </div>
-              <div style={D.destaqueNum}>{fmtV(totCIEdit)}</div>
-            </div>
 
             {/* FORMA DE PAGAMENTO — vem ANTES do Escopo (decisão de UX:
                 cliente vê valor → vê como pagar → entende detalhe técnico).
@@ -7750,22 +7743,25 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // primeiro render.
   //
   // RESTRITO AO DESKTOP: mobile tem UX própria (seletor inline em
-  // ativoMobile, sem hover/popup), então não deve ser afetado por essa
-  // abertura automática.
+  // ativoMobile, sem hover/popup), então não deve ser afetado.
   //
-  // Mesmo se o state for setado, a renderização do popup já tem o guard
-  // `(!isMobileOrc && isOpen)` na linha do `visivel`, então mobile não
-  // mostraria o popup mesmo que comodoAberto estivesse definido. Mas
-  // colocar o guard aqui também evita ciclos desnecessários.
+  // O abriuPrimeiroRef serve TAMBÉM como flag de "proteção": enquanto for
+  // false, o useEffect [qtds] NÃO fecha o cômodo aberto (caso contrário,
+  // qualquer mudança em qtds dispara elementFromPoint, que retorna null
+  // quando o cursor está fora da lista, e fecharia o cômodo).
+  // Quando o usuário move o mouse pela primeira vez sobre algum cômodo,
+  // a flag vira true e o hover passa a comandar normalmente.
   const abriuPrimeiroRef = useRef(false);
   useEffect(() => {
     if (abriuPrimeiroRef.current) return;
-    if (isMobileOrc) return; // mobile: não afeta
+    if (isMobileOrc) {
+      abriuPrimeiroRef.current = true; // mobile: não usa, só marca
+      return;
+    }
     const t = setTimeout(() => {
       const flat = comodosFlatRef.current || [];
       if (flat.length > 0 && !comodoAberto) {
         setComodoAberto(flat[0]);
-        abriuPrimeiroRef.current = true;
       }
     }, 50);
     return () => clearTimeout(t);
@@ -7831,18 +7827,31 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (travado) return; // travado → ignora hover
     if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
     setComodoAberto(nome);
+    abriuPrimeiroRef.current = true; // usuário interagiu com cômodo
   }
   // Hover: saiu
   function agendarFecharComodo() {
     if (travado) return; // travado → não fecha
     if (comodoCloseRef.current) clearTimeout(comodoCloseRef.current);
-    comodoCloseRef.current = setTimeout(() => setComodoAberto(null), 80);
+    comodoCloseRef.current = setTimeout(() => {
+      // Se o usuário ainda não interagiu (ainda tá na abertura inicial),
+      // não fecha — mantém o cômodo inicial visível.
+      if (abriuPrimeiroRef.current) {
+        setComodoAberto(null);
+      }
+    }, 80);
   }
 
   // Após qtds mudar (cômodo selecionado → lista reorganiza), o browser não dispara
   // mouseenter/leave porque o cursor não se moveu. Detecta qual cômodo está sob o
   // cursor via elementFromPoint e abre ele. Usa requestAnimationFrame pra rodar
   // após o React commitar o DOM reorganizado.
+  //
+  // GUARD ABERTURA INICIAL: enquanto abriuPrimeiroRef.current === false (usuário
+  // ainda não interagiu com cômodos), NÃO fecha o cômodo via setComodoAberto(null).
+  // Isso protege a abertura automática do primeiro cômodo. Quando o cursor passa
+  // por cima de qualquer cômodo, marca a flag como true e o controle volta ao
+  // hover normal.
   useEffect(() => {
     const id = requestAnimationFrame(() => {
       if (travado) return;
@@ -7855,8 +7864,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       if (nome) {
         if (comodoCloseRef.current) { clearTimeout(comodoCloseRef.current); comodoCloseRef.current = null; }
         setComodoAberto(nome);
+        abriuPrimeiroRef.current = true; // usuário interagiu com cômodo
       } else {
-        setComodoAberto(null);
+        // Não fecha enquanto a abertura inicial ainda não foi "consumida".
+        if (abriuPrimeiroRef.current) {
+          setComodoAberto(null);
+        }
       }
     });
     return () => cancelAnimationFrame(id);
