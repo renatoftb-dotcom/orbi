@@ -11399,43 +11399,18 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               )
             )}
 
-            {/* FORMA DE PAGAMENTO — vem ANTES do Escopo (decisão de UX:
-                cliente vê valor → vê como pagar → entende detalhe técnico).
-                Estruturada com Opção 1 (antecipado com desconto) e Opção 2
-                (parcelado). PIX abaixo. */}
+            {/* FORMA DE PAGAMENTO — Fase 1 do refator. Exibição vem do
+                objeto canônico data.formaPagamento (preenchido na Etapa 5).
+                Componente compartilhado entre Editorial e Direto. */}
             <div style={D.secTit}>Forma de pagamento</div>
-
-            {incluiArq && (
-              <div style={D.pgtoBloco}>
-                <div style={D.pgtoBlocoTit}>Apenas Arquitetura</div>
-                <div style={D.pgtoOpcao}>
-                  <span style={D.pgtoOpcaoLbl}>Opção 1</span>{" — Pagamento antecipado com "}{descArqLocal}% de desconto
-                  <br/>
-                  De {fmtV(arqVal)} por apenas: <span style={D.pgtoLinhaB}>{fmtV(arqVal * (1 - descArqLocal/100))}</span>
-                </div>
-                <div style={{ ...D.pgtoOpcao, borderBottom: incluiEng ? "0.5px solid #f3f4f6" : "none" }}>
-                  <span style={D.pgtoOpcaoLbl}>Opção 2</span>{" — Parcelado em "}{parcArqLocal}× sem desconto
-                  <br/>
-                  Entrada de {fmtV(arqVal/parcArqLocal)} + {parcArqLocal-1}× de {fmtV(arqVal/parcArqLocal)}
-                </div>
-              </div>
-            )}
-
-            {incluiArq && incluiEng && (
-              <div style={D.pgtoBloco}>
-                <div style={D.pgtoBlocoTit}>Pacote Completo (Arq. + Eng.)</div>
-                <div style={D.pgtoOpcao}>
-                  <span style={D.pgtoOpcaoLbl}>Opção 1</span>{" — Pagamento antecipado com "}{descPacoteLocal}% de desconto
-                  <br/>
-                  De {fmtV(totVal)} por apenas: <span style={D.pgtoLinhaB}>{fmtV(totVal * (1 - descPacoteLocal/100))}</span>
-                </div>
-                <div style={{ ...D.pgtoOpcao, borderBottom:"none" }}>
-                  <span style={D.pgtoOpcaoLbl}>Opção 2</span>{" — Parcelado em "}{parcPacoteLocal}× sem desconto
-                  <br/>
-                  Entrada de {fmtV(totVal/parcPacoteLocal)} + {parcPacoteLocal-1}× de {fmtV(totVal/parcPacoteLocal)}
-                </div>
-              </div>
-            )}
+            <BlocoFormaPagamentoView
+              formaPagamento={data.formaPagamento}
+              valorArq={arqCIEdit}
+              valorEng={engCIEdit}
+              incluiEng={incluiEng}
+              accent="#fbbf24"
+              pixTexto={null}
+            />
 
             {/* PIX */}
             <div style={D.pixLinha}>
@@ -11914,282 +11889,21 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               Total sem impostos — <span style={{ fontSize:13, fontWeight:600, color:C }}>{fmtV(totCIBase)}</span>
             </>)}
           </div>
-          <div style={{ display:"flex", gap:6, marginTop:6, marginBottom:4 }}>
-            <button
-              onClick={() => {
-                setTipoPgtoLocal("padrao");
-                // Limpa etapas isoladas ao trocar pra Pagamento padrão
-                // (pagamento padrão = orça tudo; isolamento é exclusivo do modo "Por etapas")
-                setEtapasIsoladasLocal(new Set());
-              }}
-              style={{ flex:1, padding:"8px 10px", fontSize:12, fontWeight:isPadrao?600:400,
-                border: isPadrao ? `1px solid ${C}` : `0.5px solid ${LN}`,
-                background:"transparent", borderRadius:6, cursor:"pointer", color:C, fontFamily:"inherit" }}>
-              Pagamento padrão
-            </button>
-            <button
-              onClick={() => setTipoPgtoLocal("etapas")}
-              style={{ flex:1, padding:"8px 10px", fontSize:12, fontWeight:!isPadrao?600:400,
-                border: !isPadrao ? `1px solid ${C}` : `0.5px solid ${LN}`,
-                background:"transparent", borderRadius:6, cursor:"pointer", color:C, fontFamily:"inherit" }}>
-              Por etapas
-            </button>
-          </div>
         </div>
 
-        <Sec title={isPadrao ? "Formas de pagamento" : "Contratação por etapa"}>
-          {isPadrao ? (<>
-            <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>
-                <TextoEditavel
-                  valor={labelApenasEdit || (incluiArq && incluiEng ? "Apenas Arquitetura" : incluiEng ? "Apenas Engenharia" : "Apenas Arquitetura")}
-                  onChange={setLabelApenasEdit}
-                  style={{ fontSize:12, fontWeight:600 }} />
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
-                  <NumInput valor={descArqLocal} onCommit={n => setDescArqLocal(n)} decimais={2} min={0} max={100} width={42} />
-                  <span style={{ fontSize:11, color:LT }}>%</span>
-                </div>
-                <span style={{ color:LN }}>·</span>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:12, color:MD }}>Parcelado</span>
-                  <NumInput valor={parcArqLocal} onCommit={n => setParcArqLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
-                  <span style={{ fontSize:11, color:LT }}>×</span>
-                </div>
-              </div>
-              <OpcoesPagamento tipo="pacote" valor={arqCIEdit} desc={descArqLocal} parcelas={parcArqLocal} fmtV={fmtV} />
-            </div>
-            {incluiArq && incluiEng && (
-            <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:12, marginBottom:12 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>Pacote Completo (Arq. + Eng.)</div>
-              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
-                  <NumInput valor={descPacoteLocal} onCommit={n => setDescPacoteLocal(n)} decimais={2} min={0} max={100} width={42} />
-                  <span style={{ fontSize:11, color:LT }}>%</span>
-                </div>
-                <span style={{ color:LN }}>·</span>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:12, color:MD }}>Parcelado</span>
-                  <NumInput valor={parcPacoteLocal} onCommit={n => setParcPacoteLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
-                  <span style={{ fontSize:11, color:LT }}>×</span>
-                </div>
-              </div>
-              <OpcoesPagamento tipo="pacote" valor={totCIEdit} desc={descPacoteLocal} parcelas={parcPacoteLocal} fmtV={fmtV} />
-            </div>
-            )}
-          </>) : (<>
-            <div style={{ marginBottom:16 }}>
-              <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, alignItems:"center", paddingBottom:6, borderBottom:`1.5px solid ${C}` }}>
-                <span></span>
-                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em" }}>Etapa</span>
-                  <label style={{ display:"flex", alignItems:"center", gap:5, cursor:"pointer", fontSize:10, color:LT, textTransform:"none", letterSpacing:0, fontWeight:400 }}>
-                    <span style={{
-                      position:"relative", display:"inline-block", width:26, height:14,
-                      background: mostrarTabelaEtapas ? "#0369a1" : "#d1d5db",
-                      borderRadius:7, transition:"background 0.15s",
-                    }}>
-                      <span style={{
-                        position:"absolute", top:2, left: mostrarTabelaEtapas ? 14 : 2,
-                        width:10, height:10, background:"#fff", borderRadius:"50%",
-                        transition:"left 0.15s", boxShadow:"0 1px 2px rgba(0,0,0,0.2)",
-                      }} />
-                    </span>
-                    <input type="checkbox"
-                      checked={mostrarTabelaEtapas}
-                      onChange={e => setMostrarTabelaEtapas(e.target.checked)}
-                      style={{ display:"none" }} />
-                    <span>Mostrar no PDF</span>
-                  </label>
-                </div>
-                <span></span>
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:4 }}>
-                  <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em" }}>%</span>
-                  <span
-                    title="Para alterar valores das etapas de arquitetura, edite o total de arquitetura no topo ou ajuste os percentuais"
-                    style={{ fontSize:11, color:LT, cursor:"help", userSelect:"none", lineHeight:1 }}>ⓘ</span>
-                </div>
-                <span style={{ fontSize:10, fontWeight:600, color:C, textTransform:"uppercase", letterSpacing:"0.06em", textAlign:"right" }}>Valor</span>
-                <span></span>
-              </div>
-              {etapasPct.filter(e => incluiEng || e.id !== 5).map((et, i) => {
-                const isIsolada = idsIsolados.has(et.id);
-                const isEng = et.id === 5;
-                // visivel: sem isolamento, tudo visível. Com isolamento, só isoladas
-                const visivel = !temIsoladas || isIsolada;
-                const bgRow = isIsolada ? "#e0f2fe" : "transparent";
-                const corRow = isIsolada ? "#0369a1" : C;
-                const fontWt = isIsolada ? 600 : 400;
-                // Valor da etapa: arq × pct/100 (com imp). Engenharia: integral (com imp)
-                const valorEtapa = isEng
-                  ? engCIEdit
-                  : Math.round(arqCIEdit*(et.pct/100)*100)/100;
-                return (
-                <div key={et.id} style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"7px 4px", borderBottom:`0.5px solid ${LN}`, alignItems:"center", background: bgRow, opacity: visivel ? 1 : 0.35 }}>
-                  <span
-                    onClick={() => toggleIsolarEtapa(et.id)}
-                    title={isIsolada ? "Desmarcar isolamento" : "Orçar apenas esta etapa"}
-                    style={{ cursor:"pointer", textAlign:"center", fontSize:14, color: isIsolada ? "#0369a1" : LT, fontWeight:500, userSelect:"none" }}>
-                    {isIsolada ? "◉" : "◎"}
-                  </span>
-                  <span style={{ color:corRow, fontWeight:fontWt }}>
-                    {isEng ? (<>
-                      <div>Projetos de Engenharia</div>
-                      <div style={{ fontSize:11, color:LT, fontWeight:400 }}>Estrutural · Elétrico · Hidrossanitário</div>
-                    </>) : (
-                      <TextoEditavel valor={et.nome} onChange={v => atualizarEtapaNome(et.id, v)} style={{ fontSize:13, color:corRow, fontWeight:fontWt }} />
-                    )}
-                  </span>
-                  <span></span>
-                  {!isEng ? (
-                    <NumInput valor={et.pct} onCommit={n => atualizarEtapaPct(et.id, n)}
-                      decimais={0} min={0} max={100} width={50} />
-                  ) : (
-                    <span style={{ color:LT, textAlign:"center" }}>—</span>
-                  )}
-                  {!isEng ? (
-                    <span style={{ fontSize:12, color:corRow, fontWeight:isIsolada?600:500, textAlign:"right", padding:"3px 6px" }}>
-                      {fmtN(valorEtapa)}
-                    </span>
-                  ) : (
-                    <EtapaValorInput
-                      valorAtual={valorEtapa}
-                      fmtN={fmtN}
-                      onCommit={novo => {
-                        // Converte valor com imposto de volta para sem imposto antes de setar engEdit
-                        const semImp = semImposto(novo);
-                        setEngEdit(semImp);
-                      }}
-                      borderColor={LN}
-                      color={corRow}
-                    />
-                  )}
-                  {!isEng ? (
-                    <span onClick={() => removerEtapa(et.id)} title="Remover etapa"
-                      style={{ cursor:"pointer", textAlign:"center", color:"#d1d5db", userSelect:"none", fontSize:14 }}>×</span>
-                  ) : <span></span>}
-                </div>
-                );
-              })}
-              <div style={{ padding:"8px 0" }}>
-                <button
-                  onClick={adicionarEtapa}
-                  style={{ width:"100%", fontSize:11, color:LT, background:"transparent",
-                    border:`1px dashed ${LN}`, borderRadius:6, padding:"6px", cursor:"pointer", fontFamily:"inherit" }}>
-                  + Adicionar etapa
-                </button>
-              </div>
-              {(() => {
-                // Total = apenas linhas ativas
-                // - Etapas arq: ativas se (sem isolamento) OU (isolada)
-                // - Engenharia: ativa se incluiEng && ((sem isolamento) OU (eng isolada))
-                const etapasAtivas = etapasPct.filter(e => {
-                  if (e.id === 5) return false; // eng vai separado
-                  if (!temIsoladas) return true;
-                  return idsIsolados.has(e.id);
-                });
-                const pctAtivo = etapasAtivas.reduce((s,e)=>s+Number(e.pct),0);
-                const engAtiva = incluiEng && (!temIsoladas || idsIsolados.has(5));
-                const valorAtivo = Math.round((arqCIEdit * pctAtivo / 100 + (engAtiva ? engCIEdit : 0)) * 100) / 100;
-                return (
-                  <div style={{ display:"grid", gridTemplateColumns:"24px 1fr 60px 60px 110px 22px", gap:6, padding:"8px 4px", borderTop:`1.5px solid ${C}`, marginTop:2, alignItems:"center" }}>
-                    <span></span>
-                    <span style={{ fontWeight:600, color:C }}>Total</span>
-                    <span></span>
-                    <span style={{ fontWeight:600, color:C, textAlign:"center" }}>{pctAtivo}%</span>
-                    <span style={{ fontSize:15, fontWeight:700, color:C, textAlign:"right" }}>{fmtV(valorAtivo)}</span>
-                    <span></span>
-                  </div>
-                );
-              })()}
-            </div>
-            {mostrarTabelaEtapas ? (
-            <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>Etapa a Etapa</div>
-              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:12, color:MD }}>Antecipado por etapa — desconto</span>
-                  <NumInput valor={descEtCtrtLocal} onCommit={n => setDescEtCtrtLocal(n)} decimais={2} min={0} max={100} width={42} />
-                  <span style={{ fontSize:11, color:LT }}>%</span>
-                </div>
-                <span style={{ color:LN }}>·</span>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:12, color:MD }}>Parcelado por etapa</span>
-                  <NumInput valor={parcEtCtrtLocal} onCommit={n => setParcEtCtrtLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
-                  <span style={{ fontSize:11, color:LT }}>×</span>
-                </div>
-              </div>
-              <OpcoesPagamento tipo="etapaAEtapa" desc={descEtCtrtLocal} parcelas={parcEtCtrtLocal} fmtV={fmtV} />
-            </div>
-            ) : (
-            /* Toggle "Mostrar no PDF" DESLIGADO: espelha pagamento padrão —
-               "Apenas Arquitetura" (valor arq selecionada) + "Pacote Completo" se eng ativa */
-            <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-              <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>
-                Apenas Arquitetura
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
-                  <NumInput valor={descArqLocal} onCommit={n => setDescArqLocal(n)} decimais={2} min={0} max={100} width={42} />
-                  <span style={{ fontSize:11, color:LT }}>%</span>
-                </div>
-                <span style={{ color:LN }}>·</span>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ fontSize:12, color:MD }}>Parcelado</span>
-                  <NumInput valor={parcArqLocal} onCommit={n => setParcArqLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
-                  <span style={{ fontSize:11, color:LT }}>×</span>
-                </div>
-              </div>
-              <OpcoesPagamento tipo="pacote" valor={subTotalArqEtapas} desc={descArqLocal} parcelas={parcArqLocal} fmtV={fmtV} />
-            </div>
-            )}
-            {/* Pacote Completo — sempre aparece quando tem mais de 1 etapa selecionada
-                 OU quando eng + arq estão selecionadas (oferece contratação total)
-                 Não aparece se só 1 etapa sem eng (pacote = etapa única, não faz sentido) */}
-            {(() => {
-              const etArqAtivas = etapasPct.filter(e => e.id !== 5 && (!temIsoladas || idsIsolados.has(e.id)));
-              const multiEtapas = etArqAtivas.length > 1;
-              const temArqEEng = incluiArq && engAtiva && etArqAtivas.length > 0;
-              // Pacote Completo só aparece em 2 cenários:
-              // 1) Toggle LIGADO + (várias etapas OU arq+eng) — permite contratação total vs etapa a etapa
-              // 2) Toggle DESLIGADO + arq+eng ambos ativos — oferece "Apenas Arq" + "Pacote Completo"
-              // Quando toggle desligado E sem eng, fica só o bloco único "Apenas Arq" (sem pacote)
-              const mostraPacote = mostrarTabelaEtapas
-                ? (multiEtapas || temArqEEng)
-                : temArqEEng; // toggle off: só mostra pacote se tem arq+eng
-              if (!mostraPacote) return null;
-              // Label dinâmico
-              const labelPacote = (incluiArq && engAtiva)
-                ? "Pacote Completo (Arq. + Eng.)"
-                : "Pacote Completo";
-              return (
-                <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, marginBottom:10 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:C, marginBottom:8 }}>{labelPacote}</div>
-                  <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap", marginBottom:6 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <span style={{ fontSize:12, color:MD }}>Antecipado — desconto</span>
-                      <NumInput valor={descPacCtrtLocal} onCommit={n => setDescPacCtrtLocal(n)} decimais={2} min={0} max={100} width={42} />
-                      <span style={{ fontSize:11, color:LT }}>%</span>
-                    </div>
-                    <span style={{ color:LN }}>·</span>
-                    <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                      <span style={{ fontSize:12, color:MD }}>Parcelado</span>
-                      <NumInput valor={parcPacCtrtLocal} onCommit={n => setParcPacCtrtLocal(Math.max(1, n))} decimais={0} min={1} max={99} width={42} />
-                      <span style={{ fontSize:11, color:LT }}>×</span>
-                    </div>
-                  </div>
-                  <OpcoesPagamento tipo="pacote" valor={totalPacoteEtapas} desc={descPacCtrtLocal} parcelas={parcPacCtrtLocal} fmtV={fmtV} />
-                </div>
-              );
-            })()}
-          </>)}
-          <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:10, fontSize:11, color:LT }}>
-            <TextoEditavel valor={pixEdit} onChange={setPixEdit} style={{ fontSize:11, color:LT }} />
-          </div>
+        <Sec title="Forma de pagamento">
+          {/* Fase 1 do refator — exibição vem do objeto canônico
+              data.formaPagamento (preenchido na Etapa 5). Edição não
+              acontece mais aqui — usuário volta pra Etapa 5 se quiser
+              alterar formas/percentuais/parcelas. */}
+          <BlocoFormaPagamentoView
+            formaPagamento={data.formaPagamento}
+            valorArq={arqCIEdit}
+            valorEng={engCIEdit}
+            incluiEng={incluiEng}
+            accent="#111"
+            pixTexto={pixEdit}
+          />
         </Sec>
 
         <Sec title="Escopo dos serviços" action={
@@ -12500,6 +12214,358 @@ function NumStepper({ valor, onChange, min = 0, max = 100, step = 1, width = 56,
         aria-label="Aumentar"
       >+</button>
     </span>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BlocoFormaPagamentoView — visualização da forma de pagamento
+// ═══════════════════════════════════════════════════════════════
+// Componente compartilhado entre os 2 templates do Preview (Editorial e
+// Direto). Recebe formaPagamento (objeto canônico vindo do Form pai) +
+// valores + accent color, e renderiza dinamicamente os 4 cenários:
+//   1. Tabela Arq×Pacote — quando há antecipado/parcelas/final marcados
+//   2. Seção Por etapa — tabela de etapas + 2 cards de modalidade
+//   3. Combinado — tabela Arq×Pacote (só com formas não-etapa) + seção Por etapa
+//   4. Só Por etapa — apenas a seção Por etapa
+//
+// Badge "Recomendado" aparece em:
+//   - Célula Pacote × Antecipado (se ambos marcados)
+//   - Modalidade 2 do Por etapa (sempre)
+//
+// Props:
+//   formaPagamento: { formas, contratacoes, antecipado, parcelas, final, etapa }
+//   valorArq, valorEng: valores líquidos (sem imposto) do orçamento
+//   accent: cor accent do template ('#111' Editorial, '#fbbf24' Direto)
+//   incluiEng: se Engenharia faz parte do escopo (passado pra cálculo)
+//   pixTexto: texto do PIX (string ou null) — exibido embaixo da tabela
+function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng, accent, pixTexto }) {
+  if (!formaPagamento) return null;
+  const fp = formaPagamento;
+  const formas        = fp.formas        || [];
+  const contratacoes  = fp.contratacoes  || ['arq','pac'];
+  const antecipado    = fp.antecipado    || { descArq: 5, descPac: 10 };
+  const parcelas      = fp.parcelas      || { parcArq: 3, parcPac: 4 };
+  const final         = fp.final         || { entArq: 50, entPac: 40 };
+  const etapaCfg      = fp.etapa         || {};
+
+  // Determina o que entra nas seções
+  const ordemFormas = ['antecipado', 'parcelas', 'final'];
+  const formasParaTabela = ordemFormas.filter(f => formas.includes(f));
+  const temPorEtapa = formas.includes('etapa');
+
+  // Recomendação: Pacote × Antecipado
+  const showPacote = contratacoes.includes('pac');
+  const showArq    = contratacoes.includes('arq');
+  const recomendaCelula = showPacote && formas.includes('antecipado');
+
+  const valorPac = valorArq + (incluiEng ? valorEng : 0);
+
+  // Helpers de formatação BR
+  const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  const fmtBRLcurto = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+
+  // Acento do "verde recomendado" — independente do accent do template
+  // (verde é universal pra "preferência/destaque positivo").
+  const VERDE = '#047857';
+  const VERDE_BG = '#ecfdf5';
+  const VERDE_LIGHT = '#15803d';
+
+  // Cor do título da seção (usa o accent se for amarelo do Direto;
+  // senão preto sóbrio do Editorial).
+  const tituloCor = accent === '#fbbf24' ? '#92400e' : '#111';
+  const tituloBg = accent === '#fbbf24' ? '#fef3c7' : 'transparent';
+
+  // ── Renderiza uma célula da tabela Arq×Pacote ─────────────────
+  function renderCelula(tipoCard, formaId) {
+    const isRec = tipoCard === 'pac' && formaId === 'antecipado' && recomendaCelula;
+    const valorBase = tipoCard === 'arq' ? valorArq : valorPac;
+    const conteudo = (() => {
+      if (formaId === 'antecipado') {
+        const desc = tipoCard === 'arq' ? antecipado.descArq : antecipado.descPac;
+        const v = valorBase * (1 - desc / 100);
+        const eco = valorBase - v;
+        return (<>
+          <div style={{ fontSize: 18, fontWeight: 500, color: '#111', marginBottom: 2 }}>
+            {fmtBRL(Math.round(v * 100) / 100)}
+          </div>
+          <div style={{ fontSize: 11.5, color: isRec ? VERDE_LIGHT : '#9ca3af', fontWeight: isRec ? 500 : 400 }}>
+            {desc}% de desconto{desc > 0 ? ' · economia ' + fmtBRLcurto(eco) : ''}
+          </div>
+        </>);
+      }
+      if (formaId === 'parcelas') {
+        const n = tipoCard === 'arq' ? parcelas.parcArq : parcelas.parcPac;
+        const v = valorBase / n;
+        return (<>
+          <div style={{ fontSize: 16, fontWeight: 500, color: '#111', marginBottom: 2 }}>
+            {n}× {fmtBRL(Math.round(v * 100) / 100)}
+          </div>
+          <div style={{ fontSize: 11.5, color: '#9ca3af' }}>
+            Entrada + {n - 1} mensais
+          </div>
+        </>);
+      }
+      if (formaId === 'final') {
+        const ent = tipoCard === 'arq' ? final.entArq : final.entPac;
+        const vEnt = valorBase * (ent / 100);
+        const vFin = valorBase - vEnt;
+        return (<>
+          <div style={{ fontSize: 14, color: '#111' }}>
+            <span style={{ fontWeight: 500 }}>{fmtBRL(Math.round(vEnt * 100) / 100)}</span>{' '}
+            <span style={{ color: '#9ca3af' }}>({ent}%)</span>
+          </div>
+          <div style={{ fontSize: 14, color: '#111', marginTop: 2 }}>
+            <span style={{ fontWeight: 500 }}>{fmtBRL(Math.round(vFin * 100) / 100)}</span>{' '}
+            <span style={{ color: '#9ca3af' }}>({100 - ent}% final)</span>
+          </div>
+        </>);
+      }
+      return null;
+    })();
+
+    return (
+      <div style={isRec ? {
+        padding: '18px 16px', border: `1.5px solid ${VERDE}`, borderRadius: 8,
+        margin: '4px 0', position: 'relative',
+      } : {
+        padding: '18px 16px',
+      }}>
+        {isRec && (
+          <div style={{
+            position: 'absolute', top: -8, left: 12,
+            fontSize: 9, color: '#fff', background: VERDE,
+            padding: '3px 8px', borderRadius: 999,
+            letterSpacing: '0.05em', fontWeight: 600,
+          }}>RECOMENDADO</div>
+        )}
+        <div style={{ marginTop: isRec ? 4 : 0 }}>{conteudo}</div>
+      </div>
+    );
+  }
+
+  function getLabelLinha(formaId) {
+    if (formaId === 'antecipado') return 'Antecipado';
+    if (formaId === 'parcelas') return 'Parcelado';
+    if (formaId === 'final') return (<>Entrada<br/><span style={{ color: '#9ca3af', fontSize: 11.5 }}>+ pagto final</span></>);
+    return '';
+  }
+
+  // ── Renderiza tabela Arq×Pacote ───────────────────────────────
+  function renderTabelaArqPac() {
+    if (formasParaTabela.length === 0) return null;
+    const numCols = (showArq ? 1 : 0) + (showPacote ? 1 : 0);
+    if (numCols === 0) return null;
+
+    const colsTemplate = showArq && showPacote
+      ? '130px 1fr 1fr'
+      : '130px 1fr';
+
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: colsTemplate, gap: 0, marginBottom: temPorEtapa ? 28 : 0 }}>
+        <div></div>
+        {showArq && (
+          <div style={{
+            fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+            letterSpacing: '0.05em', padding: '0 16px 12px',
+            borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
+          }}>Apenas Arquitetura</div>
+        )}
+        {showPacote && (
+          <div style={{
+            fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+            letterSpacing: '0.05em', padding: '0 16px 12px',
+            borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
+          }}>Pacote completo</div>
+        )}
+
+        {formasParaTabela.map((formaId, idx) => {
+          const isLast = idx === formasParaTabela.length - 1;
+          return (
+            <React.Fragment key={formaId}>
+              <div style={{
+                padding: '18px 0',
+                borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6',
+                fontSize: 13, color: '#6b7280',
+                lineHeight: 1.3,
+              }}>{getLabelLinha(formaId)}</div>
+              {showArq && (
+                <div style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                  {renderCelula('arq', formaId)}
+                </div>
+              )}
+              {showPacote && (
+                <div style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                  {renderCelula('pac', formaId)}
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // ── Renderiza seção Por etapa ─────────────────────────────────
+  function renderSecaoPorEtapa() {
+    if (!temPorEtapa) return null;
+    const etapas = etapaCfg.etapas || [];
+    const isoladasArr = etapaCfg.isoladas || [];
+    const isoladasSet = new Set(isoladasArr);
+    const modalidades = etapaCfg.modalidades || ['mod1', 'mod2'];
+    const mod2 = etapaCfg.modalidade2 || { desconto: 15, parcelas: 8 };
+
+    // Valor base do "todas as etapas" — se há isolamento, soma das isoladas;
+    // senão, valorArq + valorEng (o pacote completo)
+    const temIso = isoladasSet.size > 0;
+    let valorTotal = 0;
+    let pctTotal = 0;
+    etapas.forEach(e => {
+      if (e.eng) {
+        if (!temIso || isoladasSet.has(5)) valorTotal += valorEng;
+      } else {
+        if (!temIso || isoladasSet.has(e.id)) {
+          pctTotal += e.pct;
+          valorTotal += valorArq * (e.pct / 100);
+        }
+      }
+    });
+    if (!temIso) valorTotal = valorArq + (incluiEng ? valorEng : 0);
+
+    const baseCompleto = valorTotal;
+    const completoAnt = baseCompleto * (1 - mod2.desconto / 100);
+    const completoEco = baseCompleto - completoAnt;
+    const completoParcVal = completoAnt / mod2.parcelas;
+
+    const mod1Marcada = modalidades.includes('mod1');
+    const mod2Marcada = modalidades.includes('mod2');
+
+    return (
+      <div style={{ paddingTop: formasParaTabela.length > 0 ? 20 : 0, borderTop: formasParaTabela.length > 0 ? '0.5px solid #e5e7eb' : 'none' }}>
+        {formasParaTabela.length > 0 && (
+          <div style={{
+            fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+            letterSpacing: '0.05em', fontWeight: 500, marginBottom: 14,
+          }}>Pagamento por etapa</div>
+        )}
+
+        {/* Tabela de etapas */}
+        <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 60px 110px',
+            gap: 12, padding: '10px 14px', background: '#fafbfc',
+            fontSize: 10, color: '#6b7280', textTransform: 'uppercase',
+            letterSpacing: '0.05em', fontWeight: 500,
+          }}>
+            <span>Etapa</span>
+            <span style={{ textAlign: 'center' }}>%</span>
+            <span style={{ textAlign: 'right' }}>Valor</span>
+          </div>
+          {etapas.map(et => {
+            const isIso = isoladasSet.has(et.id);
+            const valor = et.eng ? valorEng : valorArq * (et.pct / 100);
+            const dimmed = temIso && !isIso;
+            return (
+              <div key={et.id} style={{
+                display: 'grid', gridTemplateColumns: '1fr 60px 110px',
+                gap: 12, padding: '11px 14px',
+                borderTop: '0.5px solid #f3f4f6',
+                fontSize: 13, color: '#111',
+                alignItems: 'center',
+                background: et.eng ? '#fafbfc' : 'transparent',
+                opacity: dimmed ? 0.4 : 1,
+              }}>
+                <span>
+                  {et.nome}
+                  {et.eng && <span style={{ fontSize: 10.5, color: '#9ca3af' }}> · Estr · Elét · Hidro</span>}
+                </span>
+                <span style={{ textAlign: 'center', color: et.eng ? '#9ca3af' : '#6b7280' }}>
+                  {et.eng ? '—' : `${et.pct}%`}
+                </span>
+                <span style={{ textAlign: 'right', fontWeight: 500 }}>
+                  {fmtBRL(Math.round(valor * 100) / 100)}
+                </span>
+              </div>
+            );
+          })}
+          <div style={{
+            display: 'grid', gridTemplateColumns: '1fr 60px 110px',
+            gap: 12, padding: '12px 14px',
+            borderTop: '1.5px solid #111',
+            fontSize: 13, color: '#111', alignItems: 'center',
+          }}>
+            <span style={{ fontWeight: 500 }}>Total</span>
+            <span style={{ textAlign: 'center', fontWeight: 500 }}>{pctTotal}%</span>
+            <span style={{ textAlign: 'right', fontWeight: 500 }}>
+              {fmtBRL(Math.round(valorTotal * 100) / 100)}
+            </span>
+          </div>
+        </div>
+
+        {/* Cards de modalidade */}
+        {(mod1Marcada || mod2Marcada) && (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: (mod1Marcada && mod2Marcada) ? '1fr 1fr' : '1fr',
+            gap: 12,
+          }}>
+            {mod1Marcada && (
+              <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 8, padding: '14px 16px' }}>
+                <div style={{
+                  fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+                  letterSpacing: '0.05em', fontWeight: 500, marginBottom: 8,
+                }}>Por etapa individual</div>
+                <div style={{ fontSize: 12, color: '#111', lineHeight: 1.5 }}>
+                  50% início + 50% em 30 dias
+                </div>
+                <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 4 }}>Sem desconto</div>
+              </div>
+            )}
+            {mod2Marcada && (
+              <div style={{
+                border: `1.5px solid ${VERDE}`, borderRadius: 8,
+                padding: '14px 16px', position: 'relative',
+              }}>
+                <div style={{
+                  position: 'absolute', top: -8, left: 12,
+                  fontSize: 9, color: '#fff', background: VERDE,
+                  padding: '3px 8px', borderRadius: 999,
+                  letterSpacing: '0.05em', fontWeight: 600,
+                }}>RECOMENDADO</div>
+                <div style={{
+                  fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+                  letterSpacing: '0.05em', fontWeight: 500, marginBottom: 8, marginTop: 4,
+                }}>Contratação completa</div>
+                <div style={{ fontSize: 16, fontWeight: 500, color: '#111' }}>
+                  {fmtBRL(Math.round(completoAnt * 100) / 100)}
+                </div>
+                <div style={{ fontSize: 11.5, color: VERDE_LIGHT, marginTop: 2 }}>
+                  {mod2.desconto}% desc · {mod2.parcelas}× de {fmtBRL(Math.round(completoParcVal * 100) / 100)}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── Render principal ──────────────────────────────────────────
+  if (formas.length === 0) return null; // nenhuma forma marcada → nada a mostrar
+
+  return (
+    <div>
+      {renderTabelaArqPac()}
+      {renderSecaoPorEtapa()}
+      {pixTexto && (
+        <div style={{
+          fontSize: 11, color: '#9ca3af',
+          paddingTop: 16, marginTop: 16,
+          borderTop: '0.5px solid #e5e7eb',
+        }}>
+          {pixTexto}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -14779,6 +14845,26 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       }
       return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
     })();
+    // ─── Objeto canônico de Forma de Pagamento (Fase 1 do refator) ───
+    // Centraliza tudo o que foi configurado na Etapa 5. Lido pelo Preview
+    // (BlocoFormaPagamentoView) e futuramente pelo PDF.
+    const formaPagamentoObj = {
+      formas:       formasSelecionadas,
+      contratacoes: contratacoesSelecionadas,
+      antecipado:   { descArq, descPac: descPacote },
+      parcelas:     { parcArq, parcPac: parcPacote },
+      final:        { entArq, entPac },
+      etapa: {
+        modalidades: modalidadesEtapa,
+        etapas: (() => {
+          // Garante Engenharia injetada como entry com flag eng:true
+          const temEng = etapasPct.some(e => e.id === 5);
+          return temEng ? etapasPct : [...etapasPct, { id: 5, nome: 'Engenharia', pct: 0, eng: true }];
+        })(),
+        isoladas: Array.from(etapasIsoladas),
+        modalidade2: { desconto: descPacCtrt, parcelas: parcPacCtrt },
+      },
+    };
     setPropostaData({
       tipoProjeto, tipoObra, padrao, tipologia, tamanho,
       clienteNome, referencia,
@@ -14794,6 +14880,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       etapasPct,
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
       escritorio: esc, // Passa o escritório inteiro pra PropostaPreview/PDF lerem dados
+      formaPagamento: formaPagamentoObj, // Fase 1 — objeto canônico
     });
     const orcParaSalvar = {
       ...(orcBase || {}),
@@ -14809,8 +14896,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       tipoPgto, temImposto, aliqImp,
       descArq, parcArq, descPacote, parcPacote,
       descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
+      entArq, entPac, // Fase 1 — persistir Entrada+final
       etapasPct,
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+      formaPagamento: formaPagamentoObj, // Fase 1 — objeto canônico
     };
     if (onSalvar) onSalvar(orcParaSalvar);
   }
