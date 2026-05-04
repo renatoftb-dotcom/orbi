@@ -12407,6 +12407,592 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ETAPA FORMA DE PAGAMENTO (Deploy 2 da refatoração de pagamento)
+// ═══════════════════════════════════════════════════════════════
+// Tela intermediária entre os cômodos e a PropostaPreview. O usuário
+// escolhe quais formas de pagamento oferecer ao cliente (Tela 1) e
+// configura os parâmetros de cada uma (Tela 2).
+//
+// Padrão visual: alinhado com o onboarding (PerguntaBlock-like, fade-in,
+// container 720px, paleta neutra preto/branco).
+//
+// Estado interno: a tela mantém apenas o controle de navegação (sub-tela 1
+// vs 2). Os valores configurados (descArq, parcArq, etc.) ficam no
+// FormOrcamentoProjetoTeste pai e são manipulados via callbacks `onChange*`
+// — assim, ao voltar/avançar entre as telas, nada se perde, e os mesmos
+// valores são consumidos pela PropostaPreview no Deploy 3.
+//
+// Constantes locais usadas nos cálculos do resumo lateral. Os valores
+// reais vêm via props (valorArq, valorEng, valorPac).
+const FORMAS_PAGAMENTO = [
+  { id: 'antecipado', tipo: 'antecipado', label: 'Pagamento antecipado com desconto' },
+  { id: 'parcelas',   tipo: 'exclusiva',  label: 'Entrada + parcelas a cada 30 dias' },
+  { id: 'final',      tipo: 'exclusiva',  label: 'Entrada + pagamento final na entrega' },
+  { id: 'etapa',      tipo: 'exclusiva',  label: 'Pagamento por etapa' },
+];
+
+// Helpers de formatação BR — usados só nesse componente
+const fmtBRL_FP = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const fmtBRLcurto_FP = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+const clamp_FP = (v, min, max) => Math.max(min, Math.min(max, parseFloat(v) || 0));
+
+function EtapaFormaPagamento({
+  // Valores calculados do orçamento (vindos do Form pai)
+  valorArq, valorEng, incluiArq, incluiEng,
+  // Estado controlado pelo Form pai (single source of truth)
+  formasSelecionadas, setFormasSelecionadas,
+  contratacoesSelecionadas, setContratacoesSelecionadas,
+  descArq, setDescArq, descPac, setDescPac,
+  parcArq, setParcArq, parcPac, setParcPac,
+  entArq, setEntArq, entPac, setEntPac,
+  etapas, atualizarEtapaPct, atualizarEtapaNome, adicionarEtapa, removerEtapa,
+  isoladas, toggleIsolada,
+  descCompleto, setDescCompleto, parcCompleto, setParcCompleto,
+  // Callbacks de navegação
+  onVoltar, onContinuar,
+}) {
+  // subTela: 'selecao' (Tela 1, escolhe formas) ou 'config' (Tela 2, configura)
+  const [subTela, setSubTela] = useState('selecao');
+  const [erroSelecao, setErroSelecao] = useState(false);
+
+  const valorPac = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0);
+
+  // ── Tela 1: Seleção de formas ─────────────────────────────────
+  function toggleForma(formaId) {
+    setErroSelecao(false);
+    const forma = FORMAS_PAGAMENTO.find(f => f.id === formaId);
+    const idx = formasSelecionadas.indexOf(formaId);
+    if (idx !== -1) {
+      // Já selecionada → remove
+      setFormasSelecionadas(formasSelecionadas.filter(x => x !== formaId));
+    } else if (forma.tipo === 'antecipado') {
+      // Antecipado é modificador: pode coexistir com qualquer outra
+      setFormasSelecionadas([...formasSelecionadas, formaId]);
+    } else {
+      // Demais são mutuamente exclusivas: substitui qualquer outra exclusiva
+      setFormasSelecionadas([...formasSelecionadas.filter(x => x === 'antecipado'), formaId]);
+    }
+  }
+
+  function avancarParaConfig() {
+    if (formasSelecionadas.length === 0) {
+      setErroSelecao(true);
+      return;
+    }
+    setSubTela('config');
+  }
+
+  // ── Tela 2: Configuração ──────────────────────────────────────
+  function toggleContratacao(tipo) {
+    const idx = contratacoesSelecionadas.indexOf(tipo);
+    if (idx !== -1) {
+      setContratacoesSelecionadas(contratacoesSelecionadas.filter(x => x !== tipo));
+    } else {
+      setContratacoesSelecionadas([...contratacoesSelecionadas, tipo]);
+    }
+  }
+
+  // Estilos compartilhados — alinhados com o onboarding
+  const S = {
+    wrap: { background: '#fff', minHeight: '100vh', paddingBottom: 60, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", color: '#111' },
+    container: { maxWidth: 720, margin: '0 auto', padding: '24px 20px' },
+    cabecalhoLabel: { fontSize: 11, fontWeight: 500, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
+    cabecalhoTitulo: { fontSize: 24, fontWeight: 400, color: '#111', letterSpacing: -0.5, marginBottom: 6 },
+    cabecalhoSub: { fontSize: 14, color: '#6b7280', lineHeight: 1.5 },
+    perguntaTitulo: { fontSize: 15, fontWeight: 500, color: '#111', marginBottom: 4, lineHeight: 1.5 },
+    perguntaSub: { fontSize: 12.5, color: '#9ca3af', marginBottom: 12, lineHeight: 1.5 },
+    btnPrimary: { padding: '13px 14px', background: '#111', border: '1px solid #111', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#fff', fontWeight: 500 },
+    btnSecondary: { padding: '13px 18px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#6b7280', fontWeight: 500 },
+    erroBox: { marginTop: 12, padding: '10px 12px', background: '#fef2f2', border: '0.5px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#991b1b' },
+    fadeIn: { animation: 'vk-fp-fade-in 0.35s ease-out' },
+  };
+
+  // ── Tela 1 ────────────────────────────────────────────────────
+  if (subTela === 'selecao') {
+    return (
+      <div style={S.wrap}>
+        <style>{`
+          @keyframes vk-fp-fade-in {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+          }
+          .vk-fp-opt {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 14px; background: #fff;
+            border: 1px solid #e5e7eb; border-radius: 8px;
+            cursor: pointer; text-align: left;
+            font-family: inherit; font-size: 13.5px; color: #111;
+            width: 100%; transition: all 0.12s;
+          }
+          .vk-fp-opt:hover .vk-fp-check { border-color: #9ca3af; }
+          .vk-fp-opt.selected {
+            background: #fafbfc; border-color: #111 !important;
+            border-width: 1.5px !important; font-weight: 500;
+            padding: 11.5px 13.5px;
+          }
+          .vk-fp-opt.selected .vk-fp-check { background: #111; border-color: #111; }
+          .vk-fp-opt.selected .vk-fp-check-mark { display: block; }
+          .vk-fp-check {
+            flex-shrink: 0; width: 18px; height: 18px;
+            border-radius: 4px; border: 1.5px solid #d1d5db;
+            background: #fff; display: flex; align-items: center; justify-content: center;
+          }
+          .vk-fp-check-mark { display: none; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
+        `}</style>
+        <div style={S.container}>
+          <div style={{ marginBottom: 28 }}>
+            <div style={S.cabecalhoLabel}>FORMA DE PAGAMENTO</div>
+            <div style={S.cabecalhoTitulo}>Forma de pagamento</div>
+            <div style={S.cabecalhoSub}>Quais opções de pagamento você quer oferecer ao seu cliente?</div>
+          </div>
+
+          <div style={{ marginTop: 28, ...S.fadeIn }}>
+            <div style={S.perguntaTitulo}>Marque uma ou mais formas. O cliente vê todas que você marcar.</div>
+            <div style={S.perguntaSub}>
+              O <strong style={{ color: '#111' }}>antecipado com desconto</strong> pode ser combinado com qualquer outra. As demais são alternativas entre si — o cliente escolhe uma.
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {FORMAS_PAGAMENTO.map(f => {
+                const sel = formasSelecionadas.includes(f.id);
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={'vk-fp-opt' + (sel ? ' selected' : '')}
+                    onClick={() => toggleForma(f.id)}>
+                    <span className="vk-fp-check">
+                      <span className="vk-fp-check-mark">✓</span>
+                    </span>
+                    <span style={{ flex: 1 }}>{f.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {erroSelecao && (
+              <div style={S.erroBox}>
+                Selecione pelo menos uma forma de pagamento para continuar.
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, marginTop: 24 }}>
+            <button type="button" style={S.btnSecondary} onClick={onVoltar}>← Voltar</button>
+            <button
+              type="button"
+              style={{ ...S.btnPrimary, flex: 1, opacity: formasSelecionadas.length > 0 ? 1 : 0.5 }}
+              onClick={avancarParaConfig}>
+              Continuar →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Tela 2: Configuração ──────────────────────────────────────
+  // Ordem fixa: Antecipado → Parcelas → Entrada+final → Por etapa
+  const ordemFormas = ['antecipado', 'parcelas', 'final', 'etapa'];
+  const ativas = ordemFormas.filter(f => formasSelecionadas.includes(f));
+  const formasParaCards = ativas.filter(f => f !== 'etapa');
+  const temEtapa = ativas.includes('etapa');
+  const labels = ativas.map(f => FORMAS_PAGAMENTO.find(x => x.id === f).label).join(' + ');
+
+  // ── Helpers de cálculo ────────────────────────────────────────
+  function calcAntecipado(valorBase, descPct) {
+    const valor = valorBase * (1 - descPct / 100);
+    const eco = valorBase - valor;
+    return { valor, eco };
+  }
+  function calcParcelado(valorBase, n) {
+    return valorBase / n;
+  }
+  function calcEntradaFinal(valorBase, entPct) {
+    const ent = valorBase * (entPct / 100);
+    const fin = valorBase - ent;
+    return { ent, fin };
+  }
+
+  // ── Renderiza linha de input dentro do card ───────────────────
+  function renderLinhaForma(tipo, formaId) {
+    if (formaId === 'antecipado') {
+      const v = tipo === 'arq' ? descArq : descPac;
+      const setter = tipo === 'arq' ? setDescArq : setDescPac;
+      return (
+        <div className="vk-fp-linha" key="antecipado">
+          <span className="vk-fp-linha-label">Antecipado · desc.</span>
+          <div className="vk-fp-linha-input">
+            <input type="number" min="0" max="100" step="0.5" value={v}
+              onChange={e => setter(clamp_FP(e.target.value, 0, 100))}
+              className="vk-fp-num" style={{ width: 56 }} />
+            <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
+          </div>
+        </div>
+      );
+    }
+    if (formaId === 'parcelas') {
+      const v = tipo === 'arq' ? parcArq : parcPac;
+      const setter = tipo === 'arq' ? setParcArq : setParcPac;
+      return (
+        <div className="vk-fp-linha" key="parcelas">
+          <span className="vk-fp-linha-label">Parcelado em</span>
+          <div className="vk-fp-linha-input">
+            <input type="number" min="1" max="24" step="1" value={v}
+              onChange={e => setter(Math.max(1, parseInt(e.target.value) || 1))}
+              className="vk-fp-num" style={{ width: 44 }} />
+            <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
+          </div>
+        </div>
+      );
+    }
+    if (formaId === 'final') {
+      const v = tipo === 'arq' ? entArq : entPac;
+      const setter = tipo === 'arq' ? setEntArq : setEntPac;
+      return (
+        <div className="vk-fp-linha" key="final">
+          <span className="vk-fp-linha-label">Entrada + final</span>
+          <div className="vk-fp-linha-input">
+            <input type="number" min="0" max="100" step="5" value={v}
+              onChange={e => setter(clamp_FP(e.target.value, 0, 100))}
+              className="vk-fp-num" style={{ width: 56 }} />
+            <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
+            <span style={{ color: '#d1d5db', fontSize: 11, margin: '0 4px' }}>+</span>
+            <span style={{ fontSize: 12.5, color: '#6b7280' }}>final</span>
+            <span style={{ fontSize: 13, fontWeight: 500, color: '#6b7280', padding: '4px 8px', background: '#f3f4f6', borderRadius: 5 }}>
+              {100 - v}%
+            </span>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  }
+
+  // ── Renderiza resumo lateral ──────────────────────────────────
+  function renderResumo(tipo) {
+    const valorBase = tipo === 'arq' ? valorArq : valorPac;
+    const blocos = [];
+
+    if (formasParaCards.includes('antecipado')) {
+      const desc = tipo === 'arq' ? descArq : descPac;
+      const { valor, eco } = calcAntecipado(valorBase, desc);
+      blocos.push(
+        <div className="vk-fp-resumo-bloco" key="antecipado">
+          <div className="vk-fp-resumo-label">Antecipado</div>
+          <div className="vk-fp-resumo-principal">{fmtBRL_FP(Math.round(valor * 100) / 100)}</div>
+          {desc > 0 && <div className="vk-fp-resumo-eco">economia {fmtBRLcurto_FP(eco)}</div>}
+        </div>
+      );
+    }
+    if (formasParaCards.includes('parcelas')) {
+      const parc = tipo === 'arq' ? parcArq : parcPac;
+      const v = calcParcelado(valorBase, parc);
+      blocos.push(
+        <div className="vk-fp-resumo-bloco" key="parcelas">
+          <div className="vk-fp-resumo-label">Parcelado</div>
+          <div className="vk-fp-resumo-principal" style={{ fontSize: 13.5 }}>{parc}× de {fmtBRL_FP(Math.round(v * 100) / 100)}</div>
+        </div>
+      );
+    }
+    if (formasParaCards.includes('final')) {
+      const ent = tipo === 'arq' ? entArq : entPac;
+      const { ent: vEnt, fin: vFin } = calcEntradaFinal(valorBase, ent);
+      blocos.push(
+        <div className="vk-fp-resumo-bloco" key="final">
+          <div className="vk-fp-resumo-label">Entrada + final</div>
+          <div className="vk-fp-resumo-sub-label">Entrada</div>
+          <div className="vk-fp-resumo-sub-valor">{fmtBRL_FP(Math.round(vEnt * 100) / 100)}</div>
+          <div className="vk-fp-resumo-sub-label">Pgto final</div>
+          <div className="vk-fp-resumo-sub-valor">{fmtBRL_FP(Math.round(vFin * 100) / 100)}</div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ width: 200, padding: '18px 20px', background: '#fafbfc', borderLeft: '0.5px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Resumo</div>
+        {blocos}
+      </div>
+    );
+  }
+
+  // ── Renderiza card de contratação ─────────────────────────────
+  function renderCardContratacao(tipo, titulo) {
+    const sel = contratacoesSelecionadas.includes(tipo);
+    return (
+      <div
+        key={tipo}
+        className={'vk-fp-card' + (sel ? ' selected' : '')}
+        onClick={e => {
+          if (e.target.tagName === 'INPUT') return;
+          toggleContratacao(tipo);
+        }}>
+        <div style={{ flex: 1, padding: '18px 20px', display: 'flex', alignItems: 'flex-start', gap: 16 }}>
+          <button type="button" className="vk-fp-radio" onClick={e => { e.stopPropagation(); toggleContratacao(tipo); }} />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 500, color: '#111', marginBottom: 14 }}>{titulo}</div>
+            {formasParaCards.map(f => renderLinhaForma(tipo, f))}
+          </div>
+        </div>
+        {renderResumo(tipo)}
+      </div>
+    );
+  }
+
+  // ── Renderiza seção "Por etapa" ───────────────────────────────
+  function renderSecaoEtapa() {
+    const temIso = isoladas.size > 0;
+    let pctTotal = 0, valorTotal = 0;
+    if (temIso) {
+      etapas.forEach(e => {
+        if (e.eng && isoladas.has(5)) valorTotal += valorEng;
+        else if (!e.eng && isoladas.has(e.id)) {
+          pctTotal += e.pct;
+          valorTotal += valorArq * (e.pct / 100);
+        }
+      });
+    } else {
+      etapas.forEach(e => { if (!e.eng) pctTotal += e.pct; });
+      valorTotal = valorArq + (incluiEng ? valorEng : 0);
+    }
+
+    const completoAnt = (valorArq + valorEng) * (1 - descCompleto / 100);
+    const completoEco = (valorArq + valorEng) - completoAnt;
+    const completoParcVal = completoAnt / parcCompleto;
+
+    return (
+      <div style={{ marginTop: 40, ...S.fadeIn }}>
+        <div style={S.perguntaTitulo}>Pagamento por etapa</div>
+        <div style={S.perguntaSub}>
+          Defina o percentual de cada etapa do projeto. Marque <strong style={{ color: '#0369a1' }}>◉</strong> nas etapas que o cliente pode contratar isoladamente — sem precisar fechar o projeto inteiro. Etapas com <span style={{ color: '#9ca3af' }}>◎</span> só são contratadas como pacote completo.
+        </div>
+
+        <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '4px 0', background: '#fff', marginBottom: 16 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 60px 110px 22px', gap: 8, padding: '10px 14px', borderBottom: '1.5px solid #111', alignItems: 'center' }}>
+            <span></span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Etapa</span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>%</span>
+            <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'right' }}>Valor</span>
+            <span></span>
+          </div>
+
+          {etapas.map(et => {
+            const isIso = isoladas.has(et.id);
+            const valor = et.eng ? valorEng : valorArq * (et.pct / 100);
+            const rowCls = 'vk-fp-etapa-row' + (isIso ? ' isolada' : '') + (et.eng ? ' eng' : '');
+            return (
+              <div key={et.id} className={rowCls}>
+                <span className="vk-fp-iso" onClick={() => toggleIsolada(et.id)} title={isIso ? 'Desmarcar (etapa só no pacote)' : 'Marcar (etapa pode ser contratada isoladamente)'}>
+                  {isIso ? '◉' : '◎'}
+                </span>
+                <span>
+                  <input type="text"
+                    className="vk-fp-etapa-nome"
+                    value={et.nome}
+                    onChange={e => atualizarEtapaNome(et.id, e.target.value)}
+                    readOnly={!!et.eng} />
+                  {et.eng && <div style={{ fontSize: 10.5, color: '#9ca3af', paddingLeft: 4 }}>Estrutural · Elétrico · Hidrossanitário</div>}
+                </span>
+                {et.eng ? (
+                  <span style={{ textAlign: 'center', color: '#d1d5db' }}>—</span>
+                ) : (
+                  <span style={{ textAlign: 'center' }}>
+                    <input type="number" className="vk-fp-etapa-pct" min="0" max="100"
+                      value={et.pct}
+                      onChange={e => atualizarEtapaPct(et.id, clamp_FP(e.target.value, 0, 100))} />
+                  </span>
+                )}
+                <span className="vk-fp-etapa-valor">{fmtBRL_FP(Math.round(valor * 100) / 100)}</span>
+                {(!et.eng && et.id > 4) ? (
+                  <span className="vk-fp-etapa-rm" onClick={() => removerEtapa(et.id)} title="Remover etapa">×</span>
+                ) : <span></span>}
+              </div>
+            );
+          })}
+
+          <div style={{ padding: '8px 14px' }}>
+            <button type="button" onClick={adicionarEtapa}
+              style={{ width: '100%', fontSize: 11.5, color: '#6b7280', background: 'transparent', border: '1px dashed #d1d5db', borderRadius: 6, padding: 8, cursor: 'pointer', fontFamily: 'inherit' }}>
+              + Adicionar etapa
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 60px 110px 22px', gap: 8, padding: '10px 14px', borderTop: '1.5px solid #111', alignItems: 'center', background: '#fafbfc' }}>
+            <span></span>
+            <span style={{ fontWeight: 600, color: '#111', fontSize: 13 }}>Total</span>
+            <span style={{ fontWeight: 600, color: '#111', fontSize: 13, textAlign: 'center' }}>{pctTotal}%</span>
+            <span style={{ fontWeight: 700, color: '#111', fontSize: 14, textAlign: 'right' }}>{fmtBRL_FP(Math.round(valorTotal * 100) / 100)}</span>
+            <span></span>
+          </div>
+        </div>
+
+        <div style={{ background: '#fafbfc', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#111', marginBottom: 8 }}>Quando o cliente contrata uma etapa só</div>
+          <div style={{ fontSize: 12.5, color: '#6b7280', lineHeight: 1.5 }}>
+            Ele paga <strong style={{ color: '#111' }}>50% no início + 50% em 30 dias</strong>. Sem desconto, sem parcelamento adicional.
+          </div>
+        </div>
+
+        <div style={{ background: '#fff', border: '0.5px solid #e5e7eb', borderRadius: 10, padding: '14px 16px' }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#111', marginBottom: 4 }}>Quando o cliente contrata o projeto inteiro</div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 1.5 }}>
+            Aplique um desconto adicional para incentivar a contratação completa. Ele paga em até N parcelas mensais.
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12.5, color: '#6b7280' }}>Desconto adicional</span>
+              <input type="number" min="0" max="100" step="0.5" value={descCompleto}
+                onChange={e => setDescCompleto(clamp_FP(e.target.value, 0, 100))}
+                className="vk-fp-num" style={{ width: 56 }} />
+              <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
+            </div>
+            <span style={{ color: '#d1d5db', fontSize: 11 }}>+</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 12.5, color: '#6b7280' }}>Parcelas</span>
+              <input type="number" min="1" max="24" step="1" value={parcCompleto}
+                onChange={e => setParcCompleto(Math.max(1, parseInt(e.target.value) || 1))}
+                className="vk-fp-num" style={{ width: 44 }} />
+              <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #e5e7eb' }}>
+            Total: <span style={{ color: '#111', fontWeight: 500 }}>{fmtBRL_FP(Math.round(completoAnt * 100) / 100)}</span> em {parcCompleto}× de <span style={{ color: '#111', fontWeight: 500 }}>{fmtBRL_FP(Math.round(completoParcVal * 100) / 100)}</span>
+            {descCompleto > 0 && <span style={{ color: '#047857' }}> · economia de {fmtBRLcurto_FP(completoEco)}</span>}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render Tela 2 ─────────────────────────────────────────────
+  return (
+    <div style={S.wrap}>
+      <style>{`
+        @keyframes vk-fp-fade-in {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .vk-fp-card {
+          display: flex; gap: 0; padding: 0;
+          background: #fff; border: 1px solid #e5e7eb;
+          border-radius: 10px; margin-bottom: 12px; overflow: hidden;
+          cursor: pointer; transition: all 0.12s;
+        }
+        .vk-fp-card.selected {
+          border-color: #111 !important; border-width: 1.5px !important;
+          background: #fafbfc !important;
+        }
+        .vk-fp-card.selected .vk-fp-radio { border: 6px solid #111 !important; }
+        .vk-fp-card:hover:not(.selected) .vk-fp-radio { border-color: #9ca3af; }
+        .vk-fp-radio {
+          flex-shrink: 0; width: 22px; height: 22px;
+          border-radius: 50%; border: 1.5px solid #d1d5db;
+          background: #fff; cursor: pointer; padding: 0;
+          transition: all 0.12s; margin-top: 2px;
+        }
+        .vk-fp-num {
+          padding: 4px 6px; font-size: 13px; font-weight: 500;
+          border: 1px solid #d1d5db; border-radius: 5px;
+          outline: none; font-family: inherit; text-align: center;
+        }
+        .vk-fp-num:focus { border-color: #111 !important; }
+        .vk-fp-num::-webkit-inner-spin-button,
+        .vk-fp-num::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .vk-fp-linha {
+          display: grid; grid-template-columns: 130px 1fr;
+          gap: 10px; align-items: center; padding: 6px 0;
+        }
+        .vk-fp-linha + .vk-fp-linha {
+          border-top: 0.5px solid #f3f4f6; padding-top: 10px; margin-top: 4px;
+        }
+        .vk-fp-linha-label { font-size: 12.5px; color: #6b7280; }
+        .vk-fp-linha-input { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .vk-fp-resumo-bloco + .vk-fp-resumo-bloco {
+          padding-top: 10px; margin-top: 10px; border-top: 0.5px solid #e5e7eb;
+        }
+        .vk-fp-resumo-label {
+          font-size: 11px; font-weight: 600; color: #6b7280;
+          text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
+        }
+        .vk-fp-resumo-principal { font-size: 14px; font-weight: 600; color: #111; line-height: 1.3; }
+        .vk-fp-resumo-eco { font-size: 11px; color: #047857; }
+        .vk-fp-resumo-sub-label { font-size: 11.5px; color: #6b7280; margin-bottom: 2px; }
+        .vk-fp-resumo-sub-valor { font-size: 13px; font-weight: 500; color: #111; line-height: 1.3; margin-bottom: 4px; }
+        .vk-fp-etapa-row {
+          display: grid; grid-template-columns: 28px 1fr 60px 110px 22px;
+          gap: 8px; padding: 8px 14px;
+          border-bottom: 0.5px solid #f3f4f6; align-items: center;
+        }
+        .vk-fp-etapa-row.isolada { background: #e0f2fe; }
+        .vk-fp-etapa-row.isolada .vk-fp-etapa-nome,
+        .vk-fp-etapa-row.isolada .vk-fp-etapa-pct,
+        .vk-fp-etapa-row.isolada .vk-fp-etapa-valor { color: #0369a1; font-weight: 600; }
+        .vk-fp-etapa-row.eng { background: #fafbfc; }
+        .vk-fp-iso { cursor: pointer; text-align: center; font-size: 16px; color: #d1d5db; user-select: none; transition: color 0.12s; }
+        .vk-fp-etapa-row.isolada .vk-fp-iso { color: #0369a1; }
+        .vk-fp-iso:hover { color: #6b7280; }
+        .vk-fp-etapa-row.isolada .vk-fp-iso:hover { color: #075985; }
+        .vk-fp-etapa-nome {
+          background: transparent; border: 0; font-size: 13px;
+          font-family: inherit; color: #111; padding: 2px 4px;
+          border-radius: 3px; width: 100%;
+        }
+        .vk-fp-etapa-nome:hover { background: #f9fafb; }
+        .vk-fp-etapa-nome:focus { background: #fff; outline: 1px solid #111; }
+        .vk-fp-etapa-pct {
+          width: 50px; padding: 4px; font-size: 13px; font-weight: 500;
+          border: 1px solid #d1d5db; border-radius: 4px;
+          text-align: center; font-family: inherit; outline: none;
+        }
+        .vk-fp-etapa-pct:focus { border-color: #111; }
+        .vk-fp-etapa-pct::-webkit-inner-spin-button,
+        .vk-fp-etapa-pct::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        .vk-fp-etapa-valor { font-size: 12.5px; text-align: right; color: #374151; }
+        .vk-fp-etapa-rm {
+          cursor: pointer; text-align: center;
+          color: #d1d5db; user-select: none; font-size: 14px;
+        }
+        .vk-fp-etapa-rm:hover { color: #6b7280; }
+      `}</style>
+      <div style={S.container}>
+        <div style={{ marginBottom: 28 }}>
+          <div style={S.cabecalhoLabel}>FORMA DE PAGAMENTO · CONFIGURAR</div>
+          <div style={S.cabecalhoTitulo}>Defina os valores</div>
+          <div style={S.cabecalhoSub}>
+            Configure os percentuais e parcelas de cada forma marcada. Os valores ao lado mostram quanto o cliente vai pagar em cada cenário.
+          </div>
+          <div style={{ fontSize: 12.5, color: '#6b7280', marginTop: 8 }}>
+            Você marcou: <span style={{ color: '#111', fontWeight: 500 }}>{labels}</span>
+          </div>
+        </div>
+
+        {formasParaCards.length > 0 && (
+          <div style={{ marginTop: 28, ...S.fadeIn }}>
+            <div style={S.perguntaTitulo}>Como o cliente vai poder contratar?</div>
+            <div style={S.perguntaSub}>
+              <strong style={{ color: '#111' }}>Os dois cards marcados</strong> = cliente escolhe contratar só Arquitetura ou o pacote completo (com Engenharia).{' '}
+              <strong style={{ color: '#111' }}>Só o Pacote</strong> = cliente só pode contratar tudo junto.
+            </div>
+            {renderCardContratacao('arq', 'Apenas Arquitetura')}
+            {renderCardContratacao('pac', 'Pacote Arq + Eng')}
+          </div>
+        )}
+
+        {temEtapa && renderSecaoEtapa()}
+
+        <div style={{ display: 'flex', gap: 8, marginTop: 32 }}>
+          <button type="button" style={S.btnSecondary} onClick={() => setSubTela('selecao')}>← Voltar</button>
+          <button type="button" style={{ ...S.btnPrimary, flex: 1 }} onClick={onContinuar}>
+            Continuar para proposta →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio, usuario, cub }) {
   // Normaliza escritorio (defaults vazios se algo faltar)
   const esc = escritorio || {};
@@ -12487,6 +13073,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [incluiArq,        setIncluiArq]        = useState(orcBase?.incluiArq        !== false);
   const [incluiEng,        setIncluiEng]        = useState(orcBase?.incluiEng        !== false);
   const [incluiMarcenaria, setIncluiMarcenaria] = useState(orcBase?.incluiMarcenaria || false);
+
+  // ─── Etapa 5: Forma de Pagamento (Deploy 2) ───
+  // formasSelecionadas: quais formas o usuário marcou (na Tela 1 da Etapa 5)
+  //   Ex: ["antecipado", "parcelas"]
+  // contratacoesSelecionadas: cards Apenas Arq/Pacote marcados (na Tela 2)
+  //   Ex: ["arq", "pac"]
+  // etapaPagamentoConfirmada: flag de navegação. false = mostra EtapaFormaPagamento;
+  //   true = mostra PropostaPreview. Reabertura de proposta antiga começa em false
+  //   (sempre passa pela Etapa 5, conforme decisão de UX).
+  const [formasSelecionadas,      setFormasSelecionadas]      = useState(orcBase?.formaPagamento?.formas        || []);
+  const [contratacoesSelecionadas,setContratacoesSelecionadas]= useState(orcBase?.formaPagamento?.contratacoes  || ["arq", "pac"]);
+  const [etapaPagamentoConfirmada, setEtapaPagamentoConfirmada] = useState(false);
 
   useEffect(() => {
     if (!orcBase) return;
@@ -14112,9 +14710,129 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       versao: ultimaProposta.versao,
       enviadaEm: ultimaProposta.enviadaEm,
     } : null);
+
+    // ─── Etapa 5: Forma de Pagamento (Deploy 2) ───
+    // Antes de mostrar o PropostaPreview, o usuário precisa configurar a forma
+    // de pagamento. Sempre passa pela Etapa 5 (mesmo reabrindo proposta antiga),
+    // conforme decisão de UX. Quando confirmar, etapaPagamentoConfirmada vira
+    // true e cai no PropostaPreview normalmente.
+    if (!etapaPagamentoConfirmada) {
+      // Helpers de manipulação de etapasPct pra Etapa 5 (delegam pros setters
+      // existentes, mantendo single source of truth no Form pai).
+      const etapasComEng = etapasPct.some(e => e.id === 5)
+        ? etapasPct
+        : [...etapasPct, { id: 5, nome: "Engenharia", pct: 0, eng: true }];
+
+      const _atualizarEtapaPctFP = (id, novoPct) => {
+        // Replica lógica de cascata circular do PropostaPreviewEditorial:
+        // - Sem isolamento: edita livre
+        // - Com isolamento: ajusta a próxima isolada (cascata circular)
+        // - Eng (id=5) e etapas não isoladas: edição simples
+        const temIso = etapasIsoladas.size > 0;
+        if (!temIso || id === 5 || !etapasIsoladas.has(id)) {
+          setEtapasPct(prev => prev.map(e => e.id === id ? { ...e, pct: novoPct } : e));
+          return;
+        }
+        const arqIso = etapasComEng.filter(e => e.id !== 5 && etapasIsoladas.has(e.id));
+        if (arqIso.length === 1) {
+          setEtapasPct(prev => prev.map(e => e.id === id ? { ...e, pct: novoPct } : e));
+          return;
+        }
+        const idxEd = arqIso.findIndex(e => e.id === id);
+        const alvo = arqIso[(idxEd + 1) % arqIso.length];
+        const ed = arqIso[idxEd];
+        const total = ed.pct + alvo.pct;
+        const finalPct = Math.min(novoPct, total);
+        setEtapasPct(prev => prev.map(e => {
+          if (e.id === id) return { ...e, pct: finalPct };
+          if (e.id === alvo.id) return { ...e, pct: total - finalPct };
+          return e;
+        }));
+      };
+
+      const _atualizarEtapaNomeFP = (id, novoNome) => {
+        setEtapasPct(prev => prev.map(e => e.id === id ? { ...e, nome: novoNome } : e));
+      };
+
+      const _adicionarEtapaFP = () => {
+        setEtapasPct(prev => {
+          const maxId = Math.max(0, ...prev.map(e => e.id));
+          const novaId = Math.max(maxId, 5) + 1;
+          // Insere antes da Engenharia se ela existir, senão no fim
+          const idxEng = prev.findIndex(e => e.id === 5);
+          const nova = { id: novaId, nome: "Nova etapa", pct: 0 };
+          if (idxEng === -1) return [...prev, nova];
+          return [...prev.slice(0, idxEng), nova, ...prev.slice(idxEng)];
+        });
+      };
+
+      const _removerEtapaFP = (id) => {
+        if (id <= 4 || id === 5) return; // protege etapas padrão
+        setEtapasPct(prev => prev.filter(e => e.id !== id));
+        if (etapasIsoladas.has(id)) {
+          setEtapasIsoladas(prev => {
+            const next = new Set(prev);
+            next.delete(id);
+            return next;
+          });
+        }
+      };
+
+      const _toggleIsoladaFP = (id) => {
+        setEtapasIsoladas(prev => {
+          const next = new Set(prev);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return next;
+        });
+      };
+
+      // Valores base do orçamento — vêm do `calculo` (sem imposto). A Etapa 5
+      // mostra os valores líquidos. Imposto continua sendo decidido no Passo 1
+      // do Form e aplicado na renderização final do PropostaPreview.
+      const _valorArqFP = propostaData.calculo?.precoArq || 0;
+      const _valorEngFP = propostaData.calculo?.precoEng || 0;
+
+      return (
+        <EtapaFormaPagamento
+          valorArq={_valorArqFP}
+          valorEng={_valorEngFP}
+          incluiArq={incluiArq}
+          incluiEng={incluiEng}
+          formasSelecionadas={formasSelecionadas}
+          setFormasSelecionadas={setFormasSelecionadas}
+          contratacoesSelecionadas={contratacoesSelecionadas}
+          setContratacoesSelecionadas={setContratacoesSelecionadas}
+          descArq={descArq} setDescArq={setDescArq}
+          descPac={descPacote} setDescPac={setDescPacote}
+          parcArq={parcArq} setParcArq={setParcArq}
+          parcPac={parcPacote} setParcPac={setParcPacote}
+          entArq={50} setEntArq={() => {}} /* TODO Deploy 3: state próprio para entrada */
+          entPac={40} setEntPac={() => {}}
+          etapas={etapasComEng}
+          atualizarEtapaPct={_atualizarEtapaPctFP}
+          atualizarEtapaNome={_atualizarEtapaNomeFP}
+          adicionarEtapa={_adicionarEtapaFP}
+          removerEtapa={_removerEtapaFP}
+          isoladas={etapasIsoladas}
+          toggleIsolada={_toggleIsoladaFP}
+          descCompleto={descPacCtrt} setDescCompleto={setDescPacCtrt}
+          parcCompleto={parcPacCtrt} setParcCompleto={setParcPacCtrt}
+          onVoltar={() => { setPropostaData(null); }}
+          onContinuar={() => { setEtapaPagamentoConfirmada(true); }}
+        />
+      );
+    }
+
     return <PropostaPreview
       data={liveData}
-      onVoltar={() => { setPropostaData(null); }}
+      onVoltar={() => {
+        // Volta pros cômodos. Reseta a flag da Etapa 5 pra que, ao reabrir
+        // o orçamento, o usuário passe pela Etapa 5 de novo (decisão de UX:
+        // sempre passa pela Etapa 5).
+        setEtapaPagamentoConfirmada(false);
+        setPropostaData(null);
+      }}
       onSalvarProposta={handleSalvarPropostaSnapshot}
       propostaReadOnly={propostaAbertaReadOnly}
       propostaSnapshot={ultimaProposta}
@@ -15180,7 +15898,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   onMouseEnter={e => { e.currentTarget.style.background="#000"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="#111"; }}
                   onClick={gerarProposta}>
-                  Gerar Orçamento →
+                  Definir forma de pagamento →
                 </button>
               </div>
             )}
