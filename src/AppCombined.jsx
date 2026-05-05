@@ -11400,6 +11400,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               formaPagamento={data.formaPagamento}
               valorArq={arqCIEdit}
               valorEng={engCIEdit}
+              incluiArq={incluiArq}
               incluiEng={incluiEng}
               accent="#fbbf24"
               pixTexto={null}
@@ -11966,6 +11967,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             formaPagamento={data.formaPagamento}
             valorArq={arqCIEdit}
             valorEng={engCIEdit}
+            incluiArq={incluiArq}
             incluiEng={incluiEng}
             accent="#111"
             pixTexto={pixEdit}
@@ -12316,7 +12318,7 @@ function NumStepper({ valor, onChange, min = 0, max = 100, step = 1, width = 56,
 //   accent: cor accent do template ('#111' Editorial, '#fbbf24' Direto)
 //   incluiEng: se Engenharia faz parte do escopo (passado pra cálculo)
 //   pixTexto: texto do PIX (string ou null) — exibido embaixo da tabela
-function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng, accent, pixTexto }) {
+function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq = true, incluiEng, accent, pixTexto }) {
   if (!formaPagamento) return null;
   const fp = formaPagamento;
   const formas        = fp.formas        || [];
@@ -12338,9 +12340,23 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
   //   - Se há Pacote → recomenda Pacote × Antecipado (oferece desconto + escopo completo)
   //   - Se só há Apenas Arq → recomenda Apenas Arq × Antecipado (única opção com desconto)
   //   - Sem Antecipado → sem recomendação
-  const showPacote = contratacoes.includes('pac');
-  const showArq    = contratacoes.includes('arq');
+  // Patch (Toggle Arq/Eng): aplica filtro baseado em incluiArq/incluiEng.
+  //   - showArq aparece só quando incluiArq=true E user marcou 'arq'
+  //   - showPacote aparece só quando incluiArq=true E incluiEng=true (Pacote = Arq+Eng)
+  //     E user marcou 'pac'. Sem um dos dois, "Pacote" vira redundante.
+  //   - Caso especial: incluiArq=true e incluiEng=false → mostra só "Apenas Arquitetura"
+  //                    incluiArq=false e incluiEng=true → mostra só "Apenas Engenharia"
+  const showPacote = contratacoes.includes('pac') && incluiArq && incluiEng;
+  const showArq    = contratacoes.includes('arq') && (incluiArq || incluiEng);
   const temAntecipado = formas.includes('antecipado');
+
+  // Patch (Toggle Arq/Eng): título da coluna "showArq" muda conforme o que
+  // está incluído. Se só Eng, vira "Apenas Engenharia". Caso contrário,
+  // "Apenas Arquitetura".
+  const labelApenas = (incluiArq && !incluiEng) ? 'Apenas Arquitetura'
+                    : (!incluiArq && incluiEng) ? 'Apenas Engenharia'
+                    : 'Apenas Arquitetura';
+
   // Coluna que recebe o badge "Recomendado": Pacote tem prioridade,
   // mas se Pacote não foi marcado, vai pra Apenas Arq.
   const colunaRecomendada = temAntecipado
@@ -12348,6 +12364,10 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
     : null;
 
   const valorPac = valorArq + (incluiEng ? valorEng : 0);
+
+  // Patch (Toggle Arq/Eng): quando arq está OFF e eng está ON, a coluna
+  // "arq" representa "Apenas Engenharia" e seu valor deve ser valorEng.
+  const valorApenas = incluiArq ? valorArq : (incluiEng ? valorEng : 0);
 
   // Helpers de formatação BR
   const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -12367,7 +12387,9 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
   // ── Renderiza uma célula da tabela Arq×Pacote ─────────────────
   function renderCelula(tipoCard, formaId) {
     const isRec = formaId === 'antecipado' && tipoCard === colunaRecomendada;
-    const valorBase = tipoCard === 'arq' ? valorArq : valorPac;
+    // Patch (Toggle Arq/Eng): coluna 'arq' usa valorApenas (que adapta
+    // pra valorEng quando só Eng está ativo).
+    const valorBase = tipoCard === 'arq' ? valorApenas : valorPac;
     const conteudo = (() => {
       if (formaId === 'antecipado') {
         const desc = tipoCard === 'arq' ? antecipado.descArq : antecipado.descPac;
@@ -12488,7 +12510,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
               fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
               letterSpacing: '0.05em', padding: '0 16px 12px',
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
-            }}>Apenas Arquitetura</div>
+            }}>{labelApenas}</div>
           )}
           {showPacote && (
             <div className="vk-bfp-header" style={{
@@ -12530,7 +12552,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
             "APENAS ARQUITETURA" com Antecipado/Parcelas/Final dentro,
             "PACOTE COMPLETO" com Antecipado/Parcelas/Final dentro. */}
         <div className="vk-bfp-mobile-only" style={{ marginBottom: temPorEtapa ? 28 : 0 }}>
-          {showArq && renderGrupoMobile('arq', 'Apenas Arquitetura')}
+          {showArq && renderGrupoMobile('arq', labelApenas)}
           {showPacote && renderGrupoMobile('pac', 'Pacote completo')}
         </div>
       </>
@@ -12555,17 +12577,22 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
 
     // Quantas etapas vão aparecer pro cliente (lógica preservada do código antigo)?
     // Se isoladasSet vazio = todas; senão = só as isoladas.
+    // Patch (Toggle Arq/Eng): filtra também por incluiArq/incluiEng.
+    //   - incluiArq=false: ignora etapas !eng (todas as de arquitetura somem)
+    //   - incluiEng=false: ignora etapa eng
     const temIso = isoladasSet.size > 0;
     let valorTotal = 0;
     let pctTotal = 0;
     let qtdEtapasMostradas = 0;
     etapas.forEach(e => {
       if (e.eng) {
+        if (!incluiEng) return; // eng OFF → ignora etapa de eng
         if (!temIso || isoladasSet.has(5)) {
           valorTotal += valorEng;
           qtdEtapasMostradas++;
         }
       } else {
+        if (!incluiArq) return; // arq OFF → ignora etapas de arq
         if (!temIso || isoladasSet.has(e.id)) {
           pctTotal += e.pct;
           valorTotal += valorArq * (e.pct / 100);
@@ -12573,7 +12600,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
         }
       }
     });
-    if (!temIso) valorTotal = valorArq + (incluiEng ? valorEng : 0);
+    if (!temIso) valorTotal = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0);
 
     // Decide quais cards aparecer
     const mostraEtapaUnica   = qtdEtapasMostradas >= 1; // etapa a etapa sempre aparece (≥1)
@@ -12621,6 +12648,9 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
             // Patch 2: filtra só etapas incluídas. Lógica preservada:
             //   isoladasSet vazio = todas incluídas (default)
             //   isoladasSet não-vazio = só os IDs dentro
+            // Patch (Toggle Arq/Eng): também filtra por incluiArq/incluiEng.
+            if (et.eng && !incluiEng) return false;
+            if (!et.eng && !incluiArq) return false;
             return isoladasSet.size === 0 || isoladasSet.has(et.id);
           }).map(et => {
             const valor = et.eng ? valorEng : valorArq * (et.pct / 100);
@@ -12635,7 +12665,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
               }}>
                 <span>
                   {et.nome}
-                  {et.eng && <span style={{ fontSize: 10.5, color: '#9ca3af' }}> · Estr · Elét · Hidro</span>}
+                  {et.eng && <span style={{ fontSize: 10, color: '#9ca3af' }}> · Estrutural · Elétrico · Hidrossanitário</span>}
                 </span>
                 <span style={{ textAlign: 'center', color: et.eng ? '#9ca3af' : '#6b7280' }}>
                   {et.eng ? '—' : `${et.pct}%`}
@@ -12906,6 +12936,20 @@ function EtapaFormaPagamento({
       setContratacoesSelecionadas([...contratacoesSelecionadas, tipo]);
     }
   }
+
+  // Patch (Toggle Arq/Eng): auto-ajusta contratacoesSelecionadas quando
+  // uma das inclusões está desligada.
+  //   - !incluiArq || !incluiEng: remove 'pac' (Pacote precisa dos 2)
+  //   - Se ficar vazio depois da remoção, adiciona 'arq' automaticamente
+  //     (ainda há a coluna "Apenas Arq/Eng" pra mostrar)
+  useEffect(() => {
+    const semPacote = !incluiArq || !incluiEng;
+    if (semPacote && contratacoesSelecionadas.includes('pac')) {
+      const novo = contratacoesSelecionadas.filter(x => x !== 'pac');
+      // Garante pelo menos 'arq' selecionado pra não ficar vazio
+      setContratacoesSelecionadas(novo.length === 0 ? ['arq'] : novo);
+    }
+  }, [incluiArq, incluiEng]);
 
   // Estilos compartilhados — alinhados com o onboarding
   // O container usa className 'vk-fp-container' (definido no <style>) para
@@ -13670,24 +13714,42 @@ function EtapaFormaPagamento({
           </div>
         </div>
 
-        {formasParaCards.length > 0 && (
-          <div style={{ marginTop: 28, ...S.fadeIn }}>
-            <div style={S.perguntaTitulo}>Como o cliente vai poder contratar?</div>
-            <div style={S.perguntaSub}>
-              <strong style={{ color: '#111' }}>Os dois cards marcados</strong> = cliente escolhe contratar só Arquitetura ou o pacote completo.
-              <div style={{ marginTop: 4 }}>
-                <strong style={{ color: '#111' }}>Só Pacote marcado</strong> = cliente só pode contratar Arquitetura + Engenharia juntos.
-              </div>
+        {formasParaCards.length > 0 && (() => {
+          // Patch (Toggle Arq/Eng): adapta os cards conforme o que está ativo.
+          //   - Pacote só aparece quando AMBOS Arq e Eng estão ativos
+          //   - Quando só 1 está ativo, mostra apenas o card único com o
+          //     título correto ("Apenas Arquitetura" ou "Apenas Engenharia")
+          //   - Esconde a explicação "Os dois cards marcados..." quando só
+          //     1 card está disponível (não tem o que comparar)
+          const mostraPacote = incluiArq && incluiEng;
+          const tituloApenas = (incluiArq && !incluiEng) ? 'Apenas Arquitetura'
+                             : (!incluiArq && incluiEng) ? 'Apenas Engenharia'
+                             : 'Apenas Arquitetura';
+          return (
+            <div style={{ marginTop: 28, ...S.fadeIn }}>
+              <div style={S.perguntaTitulo}>Como o cliente vai poder contratar?</div>
+              {mostraPacote && (
+                <div style={S.perguntaSub}>
+                  <strong style={{ color: '#111' }}>Os dois cards marcados</strong> = cliente escolhe contratar só Arquitetura ou o pacote completo.
+                  <div style={{ marginTop: 4 }}>
+                    <strong style={{ color: '#111' }}>Só Pacote marcado</strong> = cliente só pode contratar Arquitetura + Engenharia juntos.
+                  </div>
+                </div>
+              )}
+              {renderCardContratacao('arq', tituloApenas)}
+              {mostraPacote && (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, margin: '8px 0', fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 500 }}>
+                    <span style={{ flex: 1, height: 0, borderTop: '0.5px solid #e5e7eb' }}></span>
+                    <span>ou</span>
+                    <span style={{ flex: 1, height: 0, borderTop: '0.5px solid #e5e7eb' }}></span>
+                  </div>
+                  {renderCardContratacao('pac', 'Pacote Arq + Eng')}
+                </>
+              )}
             </div>
-            {renderCardContratacao('arq', 'Apenas Arquitetura')}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, margin: '8px 0', fontSize: 11, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 500 }}>
-              <span style={{ flex: 1, height: 0, borderTop: '0.5px solid #e5e7eb' }}></span>
-              <span>ou</span>
-              <span style={{ flex: 1, height: 0, borderTop: '0.5px solid #e5e7eb' }}></span>
-            </div>
-            {renderCardContratacao('pac', 'Pacote Arq + Eng')}
-          </div>
-        )}
+          );
+        })()}
 
         {temEtapa && renderSecaoEtapa()}
 
