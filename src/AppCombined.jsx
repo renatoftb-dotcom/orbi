@@ -12355,8 +12355,11 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
 
   // Determina o que entra nas seções
   const ordemFormas = ['antecipado', 'parcelas', 'final'];
-  const formasParaTabela = ordemFormas.filter(f => formas.includes(f));
   const temPorEtapa = formas.includes('etapa');
+  // Patch 2: tabela Arq×Pacote é escondida quando "Por etapa" está marcado.
+  // Os blocos novos ("etapa a etapa" + "etapas completas") já cobrem a oferta
+  // de Antecipado nesse cenário, evitando duplicidade.
+  const formasParaTabela = temPorEtapa ? [] : ordemFormas.filter(f => formas.includes(f));
 
   // Recomendação: Antecipado na coluna mais "alta" disponível.
   //   - Se há Pacote → recomenda Pacote × Antecipado (oferece desconto + escopo completo)
@@ -12587,10 +12590,13 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
             <span style={{ textAlign: 'center' }}>%</span>
             <span style={{ textAlign: 'right' }}>Valor</span>
           </div>
-          {etapas.map(et => {
-            const isIso = isoladasSet.has(et.id);
+          {etapas.filter(et => {
+            // Patch 2: filtra só etapas incluídas. Lógica preservada:
+            //   isoladasSet vazio = todas incluídas (default)
+            //   isoladasSet não-vazio = só os IDs dentro
+            return isoladasSet.size === 0 || isoladasSet.has(et.id);
+          }).map(et => {
             const valor = et.eng ? valorEng : valorArq * (et.pct / 100);
-            const dimmed = temIso && !isIso;
             return (
               <div key={et.id} className="vk-bfp-etapas-grid" style={{
                 display: 'grid', gridTemplateColumns: '1fr 60px 110px',
@@ -12599,7 +12605,6 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
                 fontSize: 13, color: '#111',
                 alignItems: 'center',
                 background: et.eng ? '#fafbfc' : 'transparent',
-                opacity: dimmed ? 0.4 : 1,
               }}>
                 <span>
                   {et.nome}
@@ -12923,8 +12928,11 @@ function EtapaFormaPagamento({
   // Ordem fixa: Antecipado → Parcelas → Entrada+final → Por etapa
   const ordemFormas = ['antecipado', 'parcelas', 'final', 'etapa'];
   const ativas = ordemFormas.filter(f => formasSelecionadas.includes(f));
-  const formasParaCards = ativas.filter(f => f !== 'etapa');
+  // Patch 2: Cards Apenas Arq/Pacote são escondidos quando "Por etapa" está
+  // marcado, porque os blocos novos ("etapa a etapa" + "etapas completas")
+  // já cobrem a configuração de Antecipado nesse cenário.
   const temEtapa = ativas.includes('etapa');
+  const formasParaCards = temEtapa ? [] : ativas.filter(f => f !== 'etapa');
   const labels = ativas.map(f => FORMAS_PAGAMENTO.find(x => x.id === f).label).join(' + ');
 
   // ── Helpers de cálculo ────────────────────────────────────────
@@ -13102,7 +13110,7 @@ function EtapaFormaPagamento({
       <div style={{ marginTop: 40, ...S.fadeIn }}>
         <div style={S.perguntaTitulo}>Pagamento por etapa</div>
         <div style={S.perguntaSub}>
-          Defina o percentual de cada etapa do projeto. Marque <strong style={{ color: '#0369a1' }}>◉</strong> nas etapas que o cliente pode contratar isoladamente — sem precisar fechar o projeto inteiro. Etapas com <span style={{ color: '#9ca3af' }}>◎</span> só são contratadas como pacote completo.
+          Defina o percentual de cada etapa do projeto. <strong style={{ color: '#111' }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
         </div>
 
         <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '4px 0', background: '#fff', marginBottom: 16 }}>
@@ -13115,13 +13123,16 @@ function EtapaFormaPagamento({
           </div>
 
           {etapas.map(et => {
-            const isIso = isoladas.has(et.id);
+            // Patch 2 — lógica inversa:
+            //   isoladas vazio = todas as etapas estão marcadas (default)
+            //   isoladas não-vazio = só os IDs dentro dele estão marcados
+            const incluida = isoladas.size === 0 || isoladas.has(et.id);
             const valor = et.eng ? valorEng : valorArq * (et.pct / 100);
-            const rowCls = 'vk-fp-etapa-row' + (isIso ? ' isolada' : '') + (et.eng ? ' eng' : '');
+            const rowCls = 'vk-fp-etapa-row' + (incluida ? ' incluida' : '') + (et.eng ? ' eng' : '');
             return (
               <div key={et.id} className={rowCls}>
-                <span className="vk-fp-iso" onClick={() => toggleIsolada(et.id)} title={isIso ? 'Desmarcar (etapa só no pacote)' : 'Marcar (etapa pode ser contratada isoladamente)'}>
-                  {isIso ? '◉' : '◎'}
+                <span className="vk-fp-checkbox" onClick={() => toggleIsolada(et.id)} title={incluida ? 'Desmarcar para excluir essa etapa da proposta' : 'Marcar para incluir essa etapa na proposta'}>
+                  <span className="vk-fp-checkbox-inner">{incluida ? '✓' : ''}</span>
                 </span>
                 <span>
                   <input type="text"
@@ -13276,15 +13287,50 @@ function EtapaFormaPagamento({
           gap: 8px; padding: 8px 14px;
           border-bottom: 0.5px solid #f3f4f6; align-items: center;
         }
-        .vk-fp-etapa-row.isolada { background: #e0f2fe; }
-        .vk-fp-etapa-row.isolada .vk-fp-etapa-nome,
-        .vk-fp-etapa-row.isolada .vk-fp-etapa-pct,
-        .vk-fp-etapa-row.isolada .vk-fp-etapa-valor { color: #0369a1; font-weight: 600; }
         .vk-fp-etapa-row.eng { background: #fafbfc; }
-        .vk-fp-iso { cursor: pointer; text-align: center; font-size: 16px; color: #d1d5db; user-select: none; transition: color 0.12s; }
-        .vk-fp-etapa-row.isolada .vk-fp-iso { color: #0369a1; }
-        .vk-fp-iso:hover { color: #6b7280; }
-        .vk-fp-etapa-row.isolada .vk-fp-iso:hover { color: #075985; }
+        /* Patch 2: linha quando a etapa está EXCLUÍDA (não-incluída) — fica
+           atenuada pra o usuário entender que ela não vai aparecer pro cliente. */
+        .vk-fp-etapa-row:not(.incluida) {
+          opacity: 0.45;
+        }
+        .vk-fp-etapa-row:not(.incluida) .vk-fp-etapa-nome,
+        .vk-fp-etapa-row:not(.incluida) .vk-fp-etapa-pct,
+        .vk-fp-etapa-row:not(.incluida) .vk-fp-etapa-valor {
+          text-decoration: line-through;
+          color: #9ca3af;
+        }
+        /* Patch 2: checkbox quadrado preto com tique branco quando marcado.
+           Lógica inversa: default todas marcadas, desmarcar exclui. */
+        .vk-fp-checkbox {
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px; height: 18px;
+          border-radius: 4px;
+          border: 1.5px solid #d1d5db;
+          background: #fff;
+          transition: all 0.12s;
+          user-select: none;
+          margin: 0 auto;
+        }
+        .vk-fp-etapa-row.incluida .vk-fp-checkbox {
+          background: #111;
+          border-color: #111;
+        }
+        .vk-fp-checkbox-inner {
+          color: #fff;
+          font-size: 11px;
+          font-weight: 700;
+          line-height: 1;
+        }
+        .vk-fp-checkbox:hover {
+          border-color: #6b7280;
+        }
+        .vk-fp-etapa-row.incluida .vk-fp-checkbox:hover {
+          background: #1f2937;
+          border-color: #1f2937;
+        }
         .vk-fp-etapa-nome {
           background: transparent; border: 0; font-size: 13px;
           font-family: inherit; color: #111; padding: 2px 4px;
@@ -13356,16 +13402,11 @@ function EtapaFormaPagamento({
             margin: 6px 0;
             align-items: center;
           }
-          .vk-fp-etapa-row.isolada {
-            border-color: #0369a1;
-            background: #f0f9ff;
-          }
           .vk-fp-etapa-row.eng { background: #fafbfc; }
 
-          /* Linha 1: ◉ na col 1, nome na col 2-3 */
-          .vk-fp-etapa-row > .vk-fp-iso {
+          /* Linha 1: checkbox na col 1, nome na col 2-3 */
+          .vk-fp-etapa-row > .vk-fp-checkbox {
             grid-column: 1; grid-row: 1;
-            font-size: 18px;
             justify-self: center;
           }
           .vk-fp-etapa-row > span:nth-child(2) {
@@ -15328,9 +15369,37 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       const _toggleIsoladaFP = (id) => {
         setEtapasIsoladas(prev => {
-          const next = new Set(prev);
-          if (next.has(id)) next.delete(id);
-          else next.add(id);
+          // Patch 2 — lógica inversa: default todas marcadas (Set vazio = todas).
+          // Quando o usuário "desmarca" pela primeira vez, preenche o Set com
+          // todos os IDs **exceto** o que ele desmarcou. Toggle subsequente:
+          //   - ID no Set → remove (desmarcar) → pode resultar em Set vazio
+          //     se for a última, mas isso significa "nenhuma marcada"
+          //   - ID não no Set → adiciona (marcar de novo)
+          //   - Se Set passar a conter TODOS os IDs → zera (volta a "todas")
+          const todosIds = etapasPct.map(e => e.id);
+          // incluiEng decide se o id 5 entra no "todos"
+          const todosIdsValidos = incluiEng ? [...todosIds, 5].filter((v, i, arr) => arr.indexOf(v) === i) : todosIds.filter(x => x !== 5);
+
+          const isMarcado = prev.size === 0 || prev.has(id);
+          let next;
+
+          if (prev.size === 0) {
+            // Primeiro toggle: usuário desmarcou uma etapa.
+            // Preenche o Set com todas as outras (= "todas exceto essa").
+            next = new Set(todosIdsValidos.filter(x => x !== id));
+          } else {
+            next = new Set(prev);
+            if (isMarcado) {
+              next.delete(id); // desmarcar
+            } else {
+              next.add(id); // remarcar
+            }
+            // Se Set agora contém TODOS os IDs válidos, zera (= "todas marcadas")
+            if (next.size === todosIdsValidos.length &&
+                todosIdsValidos.every(x => next.has(x))) {
+              next = new Set();
+            }
+          }
           return next;
         });
       };
