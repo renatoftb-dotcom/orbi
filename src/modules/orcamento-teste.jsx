@@ -5334,9 +5334,52 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     })();
 
     return (
-      <div style={D.wrap}>
-        {/* Estilos: lock de edição (UI) + supressão de elementos UI no PDF */}
+      <div style={D.wrap} className="vk-prev-direto">
+        {/* Estilos: lock de edição (UI) + supressão de elementos UI no PDF
+            + media queries mobile (responsividade) */}
         <style>{`
+          @media (max-width: 640px) {
+            /* Container principal: padding reduzido */
+            .vk-prev-direto > div[style*="padding"] {
+              padding: 16px 14px 60px !important;
+            }
+            .vk-prev-direto, .vk-prev-direto > div { overflow-x: hidden; max-width: 100%; }
+            /* BlocoFormaPagamentoView: tabela vertical em vez de horizontal */
+            .vk-prev-direto .vk-bfp-tabela {
+              display: block !important;
+              grid-template-columns: none !important;
+            }
+            .vk-prev-direto .vk-bfp-tabela > div { padding: 8px 12px !important; }
+            .vk-prev-direto .vk-bfp-header {
+              border-bottom: none !important;
+              padding-top: 14px !important;
+              padding-bottom: 6px !important;
+              font-weight: 700 !important;
+              color: #92400e !important;
+              font-size: 13px !important;
+              letter-spacing: 0 !important;
+              text-transform: none !important;
+            }
+            .vk-prev-direto .vk-bfp-row-label {
+              color: #6b7280 !important;
+              padding-left: 0 !important;
+              font-size: 12px !important;
+              padding-bottom: 0 !important;
+            }
+            .vk-prev-direto .vk-bfp-etapas-grid {
+              grid-template-columns: 1fr 50px 90px !important;
+              gap: 6px !important;
+              padding: 8px 10px !important;
+              font-size: 11.5px !important;
+            }
+            .vk-prev-direto .vk-bfp-mods {
+              grid-template-columns: 1fr !important;
+            }
+            .vk-prev-direto [data-mobile-stack="1"] {
+              grid-template-columns: 1fr !important;
+            }
+            .vk-prev-direto img { max-width: 100%; height: auto; }
+          }
           ${lockEdicao ? `
             .proposta-locked input,
             .proposta-locked textarea,
@@ -5683,7 +5726,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             <div style={D.secTexto}>
               Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.
             </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:36 }}>
+            <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:36 }}>
               <div style={{ fontSize:11, color:"#9ca3af" }}>
                 <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
                   {clienteNome || "—"}
@@ -5756,7 +5799,69 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   }
 
   return (
-    <div style={wrap}>
+    <div style={wrap} className="vk-prev-editorial">
+      {/* Estilos mobile-responsivos pro Preview Editorial.
+          Aplicado via media query CSS — sem useState/listener.
+          Breakpoint: 640px. Cobre:
+            - Padding do container reduzido
+            - Bloco de pagamento (BlocoFormaPagamentoView): tabela vira vertical
+            - Tabela de etapas: cards empilhados em vez de grid horizontal
+            - Cards Arq+Eng do passo 2: empilhados
+            - Geral: travar overflow horizontal em qualquer container */}
+      <style>{`
+        @media (max-width: 640px) {
+          /* 1. Container principal: padding reduzido */
+          .vk-prev-editorial > div[class*="proposta-locked"],
+          .vk-prev-editorial > div:not(.proposta-locked) {
+            padding: 16px 14px 60px !important;
+          }
+          /* Trava overflow horizontal em todo o Preview */
+          .vk-prev-editorial,
+          .vk-prev-editorial > div {
+            overflow-x: hidden;
+            max-width: 100%;
+          }
+          /* 2. BlocoFormaPagamentoView — tabela Arq×Pacote vira vertical */
+          .vk-bfp-tabela {
+            display: block !important;
+            grid-template-columns: none !important;
+          }
+          .vk-bfp-tabela > div { padding: 8px 12px !important; }
+          .vk-bfp-tabela > .vk-bfp-header {
+            border-bottom: none !important;
+            padding-top: 14px !important;
+            padding-bottom: 6px !important;
+            font-weight: 700 !important;
+            color: #111 !important;
+            font-size: 13px !important;
+            letter-spacing: 0 !important;
+            text-transform: none !important;
+          }
+          .vk-bfp-tabela > .vk-bfp-row-label {
+            color: #6b7280 !important;
+            padding-left: 0 !important;
+            font-size: 12px !important;
+            padding-bottom: 0 !important;
+          }
+          /* 3. Tabela de etapas dentro do BlocoFormaPagamentoView */
+          .vk-bfp-etapas-grid {
+            grid-template-columns: 1fr 50px 90px !important;
+            gap: 6px !important;
+            padding: 8px 10px !important;
+            font-size: 11.5px !important;
+          }
+          /* 4. Cards de modalidade Por etapa: 1 coluna em vez de 2 */
+          .vk-bfp-mods {
+            grid-template-columns: 1fr !important;
+          }
+          /* 5. Geral — qualquer grid 2 colunas dentro do Preview vira 1 coluna */
+          .vk-prev-editorial [data-mobile-stack="1"] {
+            grid-template-columns: 1fr !important;
+          }
+          /* 6. Imagens e logos: nunca estouram */
+          .vk-prev-editorial img { max-width: 100%; height: auto; }
+        }
+      `}</style>
       {/* Quando em modo somente-leitura (visualização de proposta enviada),
           desabilita todos os inputs e impede interações de edição. */}
       {lockEdicao && (
@@ -5974,7 +6079,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         </div>
         <div>
 
-          <div style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
+          <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
@@ -6235,7 +6340,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         </Sec>
 
         <Sec title="Aceite da proposta">
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:8 }}>
+          <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:8 }}>
             <div>
               <div style={{ fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Cliente</div>
               <div style={{ fontSize:14, fontWeight:600, color:C, marginBottom:32 }}>{clienteNome || "—"}</div>
@@ -6515,17 +6620,17 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
       : '130px 1fr';
 
     return (
-      <div style={{ display: 'grid', gridTemplateColumns: colsTemplate, gap: 0, marginBottom: temPorEtapa ? 28 : 0 }}>
+      <div className="vk-bfp-tabela" style={{ display: 'grid', gridTemplateColumns: colsTemplate, gap: 0, marginBottom: temPorEtapa ? 28 : 0 }}>
         <div></div>
         {showArq && (
-          <div style={{
+          <div className="vk-bfp-header" style={{
             fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
             letterSpacing: '0.05em', padding: '0 16px 12px',
             borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
           }}>Apenas Arquitetura</div>
         )}
         {showPacote && (
-          <div style={{
+          <div className="vk-bfp-header" style={{
             fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
             letterSpacing: '0.05em', padding: '0 16px 12px',
             borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
@@ -6535,7 +6640,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
         {formasParaTabela.flatMap((formaId, idx) => {
           const isLast = idx === formasParaTabela.length - 1;
           const cells = [
-            <div key={formaId + '-label'} style={{
+            <div key={formaId + '-label'} className="vk-bfp-row-label" style={{
               padding: '18px 0',
               borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6',
               fontSize: 13, color: '#6b7280',
@@ -6607,7 +6712,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
 
         {/* Tabela de etapas */}
         <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{
+          <div className="vk-bfp-etapas-grid" style={{
             display: 'grid', gridTemplateColumns: '1fr 60px 110px',
             gap: 12, padding: '10px 14px', background: '#fafbfc',
             fontSize: 10, color: '#6b7280', textTransform: 'uppercase',
@@ -6622,7 +6727,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
             const valor = et.eng ? valorEng : valorArq * (et.pct / 100);
             const dimmed = temIso && !isIso;
             return (
-              <div key={et.id} style={{
+              <div key={et.id} className="vk-bfp-etapas-grid" style={{
                 display: 'grid', gridTemplateColumns: '1fr 60px 110px',
                 gap: 12, padding: '11px 14px',
                 borderTop: '0.5px solid #f3f4f6',
@@ -6644,7 +6749,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
               </div>
             );
           })}
-          <div style={{
+          <div className="vk-bfp-etapas-grid" style={{
             display: 'grid', gridTemplateColumns: '1fr 60px 110px',
             gap: 12, padding: '12px 14px',
             borderTop: '1.5px solid #111',
@@ -6660,7 +6765,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
 
         {/* Cards de modalidade */}
         {(mod1Marcada || mod2Marcada) && (
-          <div style={{
+          <div className="vk-bfp-mods" style={{
             display: 'grid',
             gridTemplateColumns: (mod1Marcada && mod2Marcada) ? '1fr 1fr' : '1fr',
             gap: 12,
