@@ -13206,25 +13206,47 @@ function EtapaFormaPagamento({
         </div>
 
         {/* BLOCO 2: Etapas completas (10%/4x default).
-            Visível pro cliente quando 2+ etapas marcadas. */}
-        <div style={{
+            Visível pro cliente quando 2+ etapas marcadas. Resumo à direita. */}
+        <div className="vk-fp-card-completo" style={{
           background: '#fff', border: '1px solid #e5e7eb',
-          borderRadius: 10, padding: '14px 16px',
+          borderRadius: 10, overflow: 'hidden',
+          display: 'flex',
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Etapas completas</span>
-            <span style={{ fontSize: 11, color: '#9ca3af' }}>(quando há 2+ etapas)</span>
-          </div>
-          <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
-              <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={1} width={28} />
-              <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
+          {/* Lado esquerdo: configuração */}
+          <div style={{ flex: 1, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Etapas completas</span>
+              <span style={{ fontSize: 11, color: '#9ca3af' }}>(quando há 2+ etapas)</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 80 }}>Parcelado</span>
-              <NumStepper valor={parcCompleto} onChange={n => setParcCompleto(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
-              <span style={{ fontSize: 12, color: '#6b7280' }}>×</span>
+            <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
+                <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={1} width={28} />
+                <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 80 }}>Parcelado</span>
+                <NumStepper valor={parcCompleto} onChange={n => setParcCompleto(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
+                <span style={{ fontSize: 12, color: '#6b7280' }}>×</span>
+              </div>
+            </div>
+          </div>
+          {/* Lado direito: resumo (igual aos cards Apenas Arq / Pacote) */}
+          <div style={{
+            width: 200, padding: '14px 16px',
+            background: '#fafbfc', borderLeft: '0.5px solid #e5e7eb',
+          }}>
+            <div className="vk-fp-resumo-label">Resumo</div>
+            <div className="vk-fp-resumo-bloco">
+              <div className="vk-fp-resumo-label">Antecipado</div>
+              <div className="vk-fp-resumo-principal">{fmtBRL_FP(Math.round(completoAnt * 100) / 100)}</div>
+              {descCompleto > 0 && (
+                <div className="vk-fp-resumo-eco">economia {fmtBRLcurto_FP(completoEco)}</div>
+              )}
+            </div>
+            <div className="vk-fp-resumo-bloco">
+              <div className="vk-fp-resumo-label">Parcelado</div>
+              <div className="vk-fp-resumo-sub-valor">{parcCompleto}× {fmtBRL_FP(Math.round((valorTotal / parcCompleto) * 100) / 100)}</div>
             </div>
           </div>
         </div>
@@ -13366,17 +13388,24 @@ function EtapaFormaPagamento({
 
         /* ───────────────── MOBILE (≤ 640px) ───────────────── */
         @media (max-width: 640px) {
-          /* 1. Cards Apenas Arq / Pacote: empilhados em vez de lado-a-lado.
-             O .vk-fp-card é flex horizontal (input à esquerda, resumo lateral
-             200px à direita). Em mobile vira coluna: input em cima, resumo
-             embaixo, e o resumo ganha borda superior em vez de lateral. */
-          .vk-fp-card { flex-direction: column; }
-          .vk-fp-card > div:first-child { padding: 14px 16px !important; }
-          .vk-fp-card > div:last-child {
+          /* 1. Cards Apenas Arq / Pacote + Etapas completas: empilhados.
+             O .vk-fp-card e .vk-fp-card-completo são flex horizontal. Em mobile
+             viram coluna: input em cima, resumo embaixo, com borda superior. */
+          .vk-fp-card,
+          .vk-fp-card-completo { flex-direction: column; }
+          .vk-fp-card > div:first-child,
+          .vk-fp-card-completo > div:first-child { padding: 14px 16px !important; }
+          .vk-fp-card > div:last-child,
+          .vk-fp-card-completo > div:last-child {
             width: 100% !important;
             border-left: none !important;
             border-top: 0.5px solid #e5e7eb !important;
             padding: 14px 16px !important;
+          }
+          /* Mod-grid: empilha as 2 colunas (Antecipado + Parcelado) em mobile */
+          .vk-fp-mod-grid {
+            grid-template-columns: 1fr !important;
+            gap: 8px !important;
           }
           /* Linha forma label estreita */
           .vk-fp-linha { grid-template-columns: 110px 1fr; }
