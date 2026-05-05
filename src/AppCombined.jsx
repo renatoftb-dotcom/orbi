@@ -11919,7 +11919,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             </div>}
             {incluiArq && engAtiva && <div style={{ background:LN }} />}
             {engAtiva && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
-              <div style={tag}>Engenharia <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}>(Opcional)</span></div>
+              <div style={tag}>Engenharia{incluiArq && <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}> (Opcional)</span>}</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
                 {editandoEng ? (
                   <input autoFocus type="text"
@@ -12228,7 +12228,8 @@ const FORMAS_PAGAMENTO = [
 
 // Helpers de formatação BR — usados só nesse componente
 const fmtBRL_FP = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const fmtBRLcurto_FP = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+// Patch: 2 casas decimais sempre (consistência entre todos valores que vão pro PDF)
+const fmtBRLcurto_FP = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const clamp_FP = (v, min, max) => Math.max(min, Math.min(max, parseFloat(v) || 0));
 
 // Helper componente: input numérico com setas de incremento/decremento.
@@ -12371,7 +12372,8 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
 
   // Helpers de formatação BR
   const fmtBRL = v => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-  const fmtBRLcurto = v => 'R$ ' + Math.round(v).toLocaleString('pt-BR');
+  // Patch: 2 casas decimais sempre (consistência entre todos valores que vão pro PDF)
+  const fmtBRLcurto = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // Acento do "verde recomendado" — independente do accent do template
   // (verde é universal pra "preferência/destaque positivo").
@@ -13229,6 +13231,9 @@ function EtapaFormaPagamento({
     let qtdEtapasMostradas = 0;
     if (temIso) {
       etapas.forEach(e => {
+        // Patch (Toggle Arq/Eng): respeita incluiArq/incluiEng também aqui
+        if (e.eng && !incluiEng) return;
+        if (!e.eng && !incluiArq) return;
         if (e.eng && isoladas.has(5)) {
           valorTotal += valorEng;
           qtdEtapasMostradas++;
@@ -13241,11 +13246,13 @@ function EtapaFormaPagamento({
       });
     } else {
       etapas.forEach(e => {
+        // Patch (Toggle Arq/Eng): só conta etapas que vão aparecer pro cliente
+        if (e.eng && !incluiEng) return;
+        if (!e.eng && !incluiArq) return;
         if (!e.eng) pctTotal += e.pct;
-        // Conta todas as etapas (que vão aparecer pro cliente em modo "todas")
-        if (!e.eng || incluiEng) qtdEtapasMostradas++;
+        qtdEtapasMostradas++;
       });
-      valorTotal = valorArq + (incluiEng ? valorEng : 0);
+      valorTotal = (incluiArq ? valorArq : 0) + (incluiEng ? valorEng : 0);
     }
 
     // Patch: decide quais blocos de configuração mostrar baseado na quantidade
@@ -13285,7 +13292,13 @@ function EtapaFormaPagamento({
             <span></span>
           </div>
 
-          {etapas.map(et => {
+          {etapas.filter(et => {
+            // Patch (Toggle Arq/Eng): esconde etapa de eng quando incluiEng=false,
+            // e etapas de arq quando incluiArq=false.
+            if (et.eng && !incluiEng) return false;
+            if (!et.eng && !incluiArq) return false;
+            return true;
+          }).map(et => {
             // Patch 2 — lógica inversa:
             //   isoladas vazio = todas as etapas estão marcadas (default)
             //   isoladas não-vazio = só os IDs dentro dele estão marcados
@@ -13324,12 +13337,16 @@ function EtapaFormaPagamento({
             );
           })}
 
-          <div style={{ padding: '8px 14px' }}>
-            <button type="button" onClick={adicionarEtapa}
-              style={{ width: '100%', fontSize: 11.5, color: '#6b7280', background: 'transparent', border: '1px dashed #d1d5db', borderRadius: 6, padding: 8, cursor: 'pointer', fontFamily: 'inherit' }}>
-              + Adicionar etapa
-            </button>
-          </div>
+          {/* Patch (Toggle Arq/Eng): esconde "+ Adicionar etapa" quando arq OFF,
+              já que esse botão só cria etapas de arquitetura. */}
+          {incluiArq && (
+            <div style={{ padding: '8px 14px' }}>
+              <button type="button" onClick={adicionarEtapa}
+                style={{ width: '100%', fontSize: 11.5, color: '#6b7280', background: 'transparent', border: '1px dashed #d1d5db', borderRadius: 6, padding: 8, cursor: 'pointer', fontFamily: 'inherit' }}>
+                + Adicionar etapa
+              </button>
+            </div>
+          )}
 
           <div className="vk-fp-etapa-total">
             <span></span>
