@@ -11618,6 +11618,22 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         /* Default (desktop): mostra desktop (grid preservado), esconde mobile.
            A media query mobile inverte: esconde desktop, mostra mobile (block). */
         .vk-bfp-mobile-only { display: none; }
+        /* Patch CRÍTICO: regra de no-print precisa estar aqui (no <style> global
+           do Editorial) porque o style do Direto só carrega quando template ===
+           "02-direto". Antes, ao gerar PDF do Editorial via Puppeteer, a regra
+           não existia e os botões de edição vazavam pro PDF.
+           Cobertura ampla: render-pdf-context (Puppeteer), lockEdicao-active
+           (Direto), proposta-locked (Editorial em modo visualização). */
+        .render-pdf-context .no-print,
+        .render-pdf-context [data-no-print="true"],
+        .lockEdicao-active .no-print,
+        .proposta-locked .no-print {
+          display: none !important;
+        }
+        .render-pdf-context * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
         /* Patch: bloco Aceite + footer não pode quebrar entre páginas no PDF */
         .vk-prev-editorial .aceite-footer-bloco,
         .vk-prev-editorial .etapa-bloco,
