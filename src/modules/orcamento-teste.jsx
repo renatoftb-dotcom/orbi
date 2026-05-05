@@ -7283,7 +7283,7 @@ function EtapaFormaPagamento({
     return (
       <div style={{ width: 200, padding: '18px 20px', background: '#fafbfc', borderLeft: '0.5px solid #e5e7eb', fontSize: 12, color: '#374151' }}>
         <div style={{ fontSize: 11, fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8 }}>Resumo</div>
-        {blocos}
+        <div className="vk-fp-resumo-blocos">{blocos}</div>
       </div>
     );
   }
@@ -7697,6 +7697,26 @@ function EtapaFormaPagamento({
           .vk-fp-resumo-bloco + .vk-fp-resumo-bloco {
             padding-top: 8px !important;
             margin-top: 8px !important;
+          }
+          /* Em mobile, blocos do resumo ficam LADO A LADO (grid 2 colunas)
+             pra ocupar a largura total e evitar espaço vazio à direita.
+             Quando há só 1 bloco, ocupa 100%. Borda separadora vira lateral
+             (esquerda) em vez de superior. */
+          .vk-fp-resumo-blocos {
+            display: grid !important;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+          }
+          .vk-fp-resumo-bloco + .vk-fp-resumo-bloco {
+            padding-top: 0 !important;
+            margin-top: 0 !important;
+            padding-left: 12px;
+            border-top: none !important;
+            border-left: 0.5px solid #e5e7eb;
+          }
+          /* Quando há só 1 bloco, ocupa toda a largura */
+          .vk-fp-resumo-blocos > .vk-fp-resumo-bloco:only-child {
+            grid-column: 1 / -1;
           }
           .vk-fp-resumo-label { margin-bottom: 2px !important; }
           .vk-fp-resumo-sub-valor { margin-bottom: 2px !important; line-height: 1.25 !important; }
