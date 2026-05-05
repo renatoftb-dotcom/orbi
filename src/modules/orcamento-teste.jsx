@@ -6937,7 +6937,9 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
             </div>
 
             {/* Linha de parcelas — fora do destaque verde.
-                Padrão: se valorBase concreto, mostra "ou em N× R$ X". Senão, "ou em N× sem desconto". */}
+                Padrão: se valorBase concreto, mostra "ou em N× R$ X · Entrada + (N-1) mensais".
+                Quando parcelas=1, esconde "Entrada + 0 mensais".
+                Senão, mostra "ou em N× sem desconto" (texto). */}
             <div style={{
               fontSize: 11.5, color: '#6b7280',
               paddingTop: isRecomendado ? 8 : 6,
@@ -6945,9 +6947,15 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
               marginTop: isRecomendado ? 0 : 6,
             }}>
               {valorParcela != null ? (
-                <>ou em <strong>{parcelas}× {fmtBRL(Math.round(valorParcela * 100) / 100)}</strong></>
+                <>
+                  ou em <strong>{parcelas}× {fmtBRL(Math.round(valorParcela * 100) / 100)}</strong>
+                  {parcelas > 1 && <span style={{ color: '#9ca3af' }}> · Entrada + {parcelas - 1} {parcelas - 1 === 1 ? 'mensal' : 'mensais'}</span>}
+                </>
               ) : (
-                <>ou em <strong>{parcelas}× sem desconto</strong></>
+                <>
+                  ou em <strong>{parcelas}× sem desconto</strong>
+                  {parcelas > 1 && <span style={{ color: '#9ca3af' }}> · Entrada + {parcelas - 1} {parcelas - 1 === 1 ? 'mensal' : 'mensais'}</span>}
+                </>
               )}
             </div>
           </>
@@ -6960,7 +6968,10 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
               <div style={{ fontSize: 16, fontWeight: 500, color: '#111', marginBottom: 2 }}>
                 {parcelas}× {fmtBRL(Math.round(valorParcela * 100) / 100)}
               </div>
-              <div style={{ fontSize: 11.5, color: '#9ca3af' }}>sem desconto</div>
+              <div style={{ fontSize: 11.5, color: '#9ca3af' }}>
+                sem desconto
+                {parcelas > 1 && <> · Entrada + {parcelas - 1} {parcelas - 1 === 1 ? 'mensal' : 'mensais'}</>}
+              </div>
             </>
           ) : (
             <div style={{ fontSize: 13, color: '#111' }}>
