@@ -11681,6 +11681,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           .vk-prev-editorial [data-mobile-stack="1"] {
             grid-template-columns: 1fr !important;
           }
+          /* Bloco "Valores dos projetos" — Arq + Eng lado a lado em mobile.
+             Reduz só o padding direito da coluna pra evitar estouro horizontal. */
+          .vk-prev-valores-grid > div { padding-right: 8px !important; }
           /* 6. Imagens e logos: nunca estouram */
           .vk-prev-editorial img { max-width: 100%; height: auto; }
         }
@@ -11902,7 +11905,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         </div>
         <div>
 
-          <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
+          <div className="vk-prev-valores-grid" style={{ display:"grid", gridTemplateColumns: incluiArq && engAtiva ? "1fr 0.5px 1fr" : "1fr", gap:0, marginBottom:12 }}>
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
