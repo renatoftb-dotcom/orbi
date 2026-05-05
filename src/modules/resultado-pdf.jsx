@@ -350,328 +350,295 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
   }
   y += 12;
 
-  // ── CONTRATAÇÃO / FORMAS DE PAGAMENTO ─────────────────────
-  // Determina se vai mostrar a tabela de etapas (para decidir o título)
-  const _mostrarTabela = P ? P.mostrarTabelaEtapas !== false : (orc.mostrarTabelaEtapas !== false);
-  // Se padrão, sempre "Formas de pagamento"
-  // Se etapas + tabela ligada: "Contratação por etapa" (depois outro "Forma de Pagamento" abaixo)
-  // Se etapas + tabela desligada: "Forma de Pagamento" direto (sem título de "Contratação por etapa")
-  if (isPadrao) {
-    secTitle("Formas de pagamento", 8, 40);
-  } else if (_mostrarTabela) {
-    secTitle("Contratação por etapa", 8, 40);
+  // ── FORMA DE PAGAMENTO ────────────────────────────────────
+  // Patch (Refator de Pagamento): lê do objeto canônico orc.formaPagamento
+  // que é serializado pelo Form pai e contém:
+  //   formas: ['antecipado','parcelas','final','etapa']
+  //   contratacoes: ['arq','pac']
+  //   antecipado: {descArq, descPac}, parcelas: {parcArq, parcPac}, final: {entArq, entPac}
+  //   etapa: { etapas, isoladas, modalidadeEtapa: {desconto,parcelas}, modalidade2: {desconto,parcelas} }
+  //
+  // Lógica:
+  //   1. Se 'etapa' marcado → tabela de etapas (filtrada por isoladas) +
+  //      cards "Etapa a etapa" + "Etapas completas" (lado a lado).
+  //      Cards Arq/Pacote NÃO aparecem (redundância).
+  //   2. Senão → tabela Arq×Pacote (formato lista vertical).
+  //
+  // Recomendado (verde): card Pacote × Antecipado, OU Etapas completas (≥2 etapas),
+  // OU Etapa a etapa (1 etapa só).
+
+  const fp = orc.formaPagamento || {};
+  const fpFormas = fp.formas || [];
+  const fpContratacoes = fp.contratacoes || ['arq','pac'];
+  const fpAntecipado = fp.antecipado || { descArq: 5, descPac: 10 };
+  const fpParcelas = fp.parcelas || { parcArq: 3, parcPac: 4 };
+  const fpFinal = fp.final || { entArq: 50, entPac: 40 };
+  const fpEtapa = fp.etapa || {};
+  const fpEtapas = fpEtapa.etapas || (orc.etapasPct || []);
+  const fpIsoladasArr = fpEtapa.isoladas || [];
+  const fpIsoladasSet = new Set(fpIsoladasArr);
+  const fpModEtapa = fpEtapa.modalidadeEtapa || { desconto: 5, parcelas: 2 };
+  const fpModCompleto = fpEtapa.modalidade2 || { desconto: 10, parcelas: 4 };
+
+  const fpTemAntecipado = fpFormas.includes('antecipado');
+  const fpTemParcelas = fpFormas.includes('parcelas');
+  const fpTemFinal = fpFormas.includes('final');
+  const fpTemEtapa = fpFormas.includes('etapa');
+  const fpShowArq = fpContratacoes.includes('arq');
+  const fpShowPac = fpContratacoes.includes('pac');
+
+  // Cor do "RECOMENDADO" — verde escuro (#047857)
+  const VERDE = [4, 120, 87];
+  const VERDE_LIGHT = [21, 128, 61];
+
+  // Helper: desenha o badge "RECOMENDADO" + borda verde retangular
+  const desenhaBadgeRec = (xLeft, yTop, w, h) => {
+    sc(VERDE, "draw"); doc.setLineWidth(0.4);
+    doc.roundedRect(xLeft, yTop, w, h, 1.2, 1.2, "S");
+    // badge fundo verde + texto branco "RECOMENDADO"
+    sc(VERDE, "fill");
+    const badgeTxt = "RECOMENDADO";
+    sf("bold", 5.5);
+    const badgeW = doc.getTextWidth(badgeTxt) + 3;
+    doc.roundedRect(xLeft + 3, yTop - 1.5, badgeW, 3.2, 1, 1, "F");
+    stc([255, 255, 255]);
+    doc.setCharSpace(0.4);
+    tx(badgeTxt, xLeft + 3 + badgeW / 2, yTop + 0.7, { align: "center" });
+    doc.setCharSpace(0);
+  };
+
+  // ─── CASO 1: Por etapa marcado ───────────────────────────────
+  if (fpTemEtapa) {
+    secTitle("Forma de Pagamento", 8, 50);
+
+    // Filtra etapas: isoladasSet vazio = todas; senão = só as isoladas
+    const etapasMostradas = fpEtapas.filter(e => fpIsoladasSet.size === 0 || fpIsoladasSet.has(e.id));
+    const qtdEtapasMostradas = etapasMostradas.length;
+    const mostraEtapaUnica = qtdEtapasMostradas >= 1;
+    const mostraEtapasCompletas = qtdEtapasMostradas >= 2;
+
+    // Calcula valor total e pct total das etapas mostradas
+    let valorTotalEt = 0, pctTotalEt = 0;
+    etapasMostradas.forEach(e => {
+      if (e.eng) {
+        valorTotalEt += engCIcom;
+      } else {
+        pctTotalEt += Number(e.pct || 0);
+        const arqCIBaseEt = temImp && arqCI > 0 ? Math.round(arqCI / (1 - aliqImp / 100) * 100) / 100 : arqCI;
+        valorTotalEt += Math.round(arqCIBaseEt * (e.pct / 100) * 100) / 100;
+      }
+    });
+    valorTotalEt = Math.round(valorTotalEt * 100) / 100;
+
+    // ─── Tabela de etapas ───
+    nv(14);
+    const cE = M, cP = W - M - 45, cV = W - M, rH = 8;
+    sf("bold", 7.5); stc(INK);
+    tx("ETAPA", cE, y); tx("%", cP, y, { align: "right" }); tx("VALOR", cV, y, { align: "right" });
+    y += 2; sc(INK); doc.rect(M, y, TW, 0.5, "F"); y += rH - 1;
+
+    etapasMostradas.forEach(et => {
+      nv(rH + 3);
+      sf("normal", 8.5); stc(INK_MD);
+      tx(et.nome || "", cE, y);
+      if (et.eng) {
+        const wEngTxt = doc.getTextWidth(et.nome || "");
+        sf("normal", 6.5); stc(INK_LT);
+        tx(" — Estrutural · Elétrico · Hidrossanitário", cE + wEngTxt, y);
+      }
+      const valEt = et.eng ? engCIcom : (() => {
+        const arqCIBaseEt = temImp && arqCI > 0 ? Math.round(arqCI / (1 - aliqImp / 100) * 100) / 100 : arqCI;
+        return Math.round(arqCIBaseEt * (et.pct / 100) * 100) / 100;
+      })();
+      sf("normal", 8.5); stc(INK_LT);
+      tx(et.eng ? "—" : `${et.pct}%`, cP, y, { align: "right" });
+      sf("normal", 8.5); stc(INK);
+      tx(fmtB(valEt), cV, y, { align: "right" });
+      y += 1.5; sc(LINE); doc.rect(M, y, TW, 0.3, "F"); y += rH - 1;
+    });
+
+    // Linha Total
+    nv(10);
+    y += 1; sc(INK); doc.rect(M, y - 1, TW, 0.5, "F"); y += 3;
+    sf("bold", 8.5); stc(INK);
+    tx("Total", cE, y);
+    tx(`${pctTotalEt}%`, cP, y, { align: "right" });
+    tx(fmtB(valorTotalEt), cV, y, { align: "right" });
+    y += 8;
+
+    // ─── Cards de oferta lado a lado ───
+    if (mostraEtapaUnica || mostraEtapasCompletas) {
+      const cardH = fpTemAntecipado ? 26 : 18;
+      nv(cardH + 4);
+      const gap = 4;
+      const colW = mostraEtapaUnica && mostraEtapasCompletas ? (TW - gap) / 2 : TW;
+
+      // Quem recebe RECOMENDADO?
+      // - Se 2 cards: só "Etapas completas"
+      // - Se 1 só (etapa única): ela recebe
+      const recEtapaUnica = mostraEtapaUnica && !mostraEtapasCompletas && fpTemAntecipado;
+      const recEtapasCompletas = mostraEtapasCompletas && fpTemAntecipado;
+
+      // Helper: desenha um card de oferta
+      const desenhaCardOferta = (xLeft, titulo, desconto, parcelas, valorBase, isRec) => {
+        const yCardTop = y;
+        // Borda externa cinza
+        sc(LINE, "draw"); doc.setLineWidth(0.25);
+        doc.roundedRect(xLeft, yCardTop, colW, cardH, 1.5, 1.5, "S");
+
+        // Título
+        let yC = yCardTop + 4.5;
+        sf("bold", 6.5); stc(INK_MD);
+        doc.setCharSpace(0.4);
+        tx(titulo.toUpperCase(), xLeft + 4, yC);
+        doc.setCharSpace(0);
+        yC += 4;
+
+        if (fpTemAntecipado) {
+          const valorAnt = (valorBase != null && desconto > 0) ? valorBase * (1 - desconto / 100) : null;
+          const economia = (valorBase != null && desconto > 0) ? valorBase - valorAnt : null;
+          // Sub-box verde só na linha do antecipado quando isRec
+          if (isRec) {
+            const subBoxYTop = yC - 1;
+            const subBoxH = (valorAnt != null) ? 11 : 6;
+            desenhaBadgeRec(xLeft + 3, subBoxYTop, colW - 6, subBoxH);
+            yC += 1.5;
+          }
+          if (valorAnt != null) {
+            sf("bold", 11); stc(INK);
+            tx(fmtB(Math.round(valorAnt * 100) / 100), xLeft + 5, yC + 1.5);
+            yC += 4.5;
+            sf("normal", 6.5); stc(isRec ? VERDE_LIGHT : INK_LT);
+            tx(`${desconto}% de desconto · economia ${fmtB(Math.round(economia * 100) / 100)}`, xLeft + 5, yC);
+            yC += isRec ? 4 : 4;
+          } else {
+            // Valor variável — só texto
+            sf("normal", 7.5); stc(INK_MD);
+            tx(`Antecipado com ${desconto}% de desconto`, xLeft + 5, yC + 1);
+            yC += isRec ? 4 : 3;
+          }
+          // Linha de parcelas (fora do destaque)
+          if (isRec) yC += 2;
+          sf("normal", 6.5); stc(INK_LT);
+          if (valorBase != null) {
+            const parcVal = Math.round(valorBase / parcelas * 100) / 100;
+            tx(`ou em ${parcelas}× ${fmtB(parcVal)}`, xLeft + 4, yC);
+          } else {
+            tx(`ou em ${parcelas}× sem desconto`, xLeft + 4, yC);
+          }
+        } else {
+          // Sem antecipado: só parcelas em destaque
+          if (valorBase != null) {
+            const parcVal = Math.round(valorBase / parcelas * 100) / 100;
+            sf("bold", 9); stc(INK);
+            tx(`${parcelas}× ${fmtB(parcVal)}`, xLeft + 4, yC + 1.5);
+            yC += 4;
+            sf("normal", 6.5); stc(INK_LT);
+            tx("sem desconto", xLeft + 4, yC + 0.5);
+          } else {
+            sf("normal", 7.5); stc(INK_MD);
+            tx(`Em ${parcelas}× sem desconto`, xLeft + 4, yC + 1);
+          }
+        }
+      };
+
+      // Quando 1 etapa só, valorBase = valor da etapa única (= valorTotalEt)
+      const baseEtapaUnica = qtdEtapasMostradas === 1 ? valorTotalEt : null;
+      let xCol = M;
+      if (mostraEtapaUnica) {
+        desenhaCardOferta(xCol, "Contratação etapa a etapa", fpModEtapa.desconto, fpModEtapa.parcelas, baseEtapaUnica, recEtapaUnica);
+        xCol += colW + gap;
+      }
+      if (mostraEtapasCompletas) {
+        desenhaCardOferta(xCol, "Etapas completas", fpModCompleto.desconto, fpModCompleto.parcelas, valorTotalEt, recEtapasCompletas);
+      }
+      y += cardH + 4;
+    }
   }
-  // Se !isPadrao && !_mostrarTabela, o título "Forma de Pagamento" virá abaixo (em outro secTitle)
+  // ─── CASO 2: Tabela Arq×Pacote (sem Por etapa) ───────────────
+  else if (fpFormas.length > 0) {
+    secTitle("Forma de Pagamento", 8, 30);
 
-  if (!isPadrao && etapasPdf.length > 0) {
-    // Engenharia ativa? (preview manda via _preview.engAtiva; senão recalcula com isolamento)
-    const engAtiva = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
-    const mostrarTabela = _mostrarTabela;
+    // Quem recebe RECOMENDADO? Pacote × Antecipado tem prioridade; senão Apenas Arq × Antecipado.
+    const colunaRec = fpTemAntecipado ? (fpShowPac ? 'pac' : (fpShowArq ? 'arq' : null)) : null;
 
-    if (mostrarTabela) {
-      // Tabela de etapas
-      nv(14);
-      const cE=M, cP=W-M-45, cV=W-M, rH=8;
-      sf("bold",7.5); stc(INK);
-      tx("ETAPA",cE,y); tx("%",cP,y,{align:"right"}); tx("VALOR",cV,y,{align:"right"});
-      y+=2; sc(INK); doc.rect(M,y,TW,0.5,"F"); y+=rH-1;
+    // Renderiza um grupo (Apenas Arq OU Pacote completo)
+    const desenhaGrupo = (tipoCard, titulo) => {
+      nv(50);
+      const valorBaseGrupo = tipoCard === 'arq' ? arqCIcom : totCI;
 
-      etapasPdf
-        .filter(e => e.id !== 5)
-        .filter(e => !temIsoladasPdf || idsIsoladosPdf.has(e.id))
-        .forEach(et => {
-          nv(rH+3);
-          sf("normal",8.5); stc(INK_MD); tx(et.nome||"",cE,y);
-          const arqCIBase = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-          // Valor: se preview mandou pré-calculado, usa; senão calcula
-          const valEtapa = (et.valorCalculado !== undefined)
-            ? et.valorCalculado
-            : Math.round(arqCIBase*(et.pct/100)*100)/100;
-          sf("normal",8.5); stc(INK_LT); tx(`${et.pct}%`,cP,y,{align:"right"});
-          sf("normal",8.5); stc(INK); tx(fmtB(valEtapa),cV,y,{align:"right"});
-          y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
-        });
+      // Título do grupo
+      sf("bold", 9); stc(INK);
+      tx(titulo, M, y);
+      y += 5.5;
 
-      // Linha Engenharia — só quando eng ativa (engAtiva = incluiEng && [sem isolamento OU eng isolada])
-      if (engAtiva) {
-        nv(rH+2);
-        sf("normal",8.5); stc(INK_MD); tx("Projetos de Engenharia",cE,y);
-        const wEngTxt = doc.getTextWidth("Projetos de Engenharia");
-        sf("normal",6.5); stc(INK_LT); tx("— Estrutural · Elétrico · Hidrossanitário", cE+wEngTxt+2, y);
-        sf("normal",8.5); stc(INK_LT); tx("—",cP,y,{align:"right"});
-        sf("normal",8.5); stc(INK); tx(fmtB(engCIcom),cV,y,{align:"right"});
-        y+=1.5; sc(LINE); doc.rect(M,y,TW,0.3,"F"); y+=rH-1;
-      }
+      // Linha Antecipado
+      if (fpTemAntecipado) {
+        const desc = tipoCard === 'arq' ? fpAntecipado.descArq : fpAntecipado.descPac;
+        const valorAnt = valorBaseGrupo * (1 - desc / 100);
+        const economia = valorBaseGrupo - valorAnt;
+        const isRec = tipoCard === colunaRec;
 
-      // Total — ESPELHO do preview
-      nv(10);
-      y+=1; sc(INK); doc.rect(M,y-1,TW,0.5,"F"); y+=3;
-      sf("bold",8.5); stc(INK);
-      tx("Total",cE,y);
-      const etapasAtivasPdf = etapasPdf.filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
-      const pctArqAtivo = etapasAtivasPdf.reduce((s,e) => s + Number(e.pct), 0);
-      // Total: preview já calcula tudo - usa totalCI direto
-      let totalPdfBase;
-      if (P) {
-        totalPdfBase = P.totalCI;
-      } else if (etapasAtivasPdf.length > 0 && etapasAtivasPdf[0].valorCalculado !== undefined) {
-        const somaEtapas = etapasAtivasPdf.reduce((s,e) => s + Number(e.valorCalculado || 0), 0);
-        totalPdfBase = Math.round((somaEtapas + (engAtiva ? engCIcom : 0)) * 100) / 100;
-      } else {
-        const arqCIBasePdf2 = temImp && arqCI>0 ? Math.round(arqCI/(1-aliqImp/100)*100)/100 : arqCI;
-        totalPdfBase = Math.round((arqCIBasePdf2*(pctArqAtivo/100) + (engAtiva?engCIcom:0))*100)/100;
-      }
-      tx(`${pctArqAtivo}%`, cP, y, {align:"right"});
-      tx(fmtB(totalPdfBase),cV,y,{align:"right"});
-      y+=6;
-    }
-
-    // Condições etapa a etapa
-    const dEt = orc.descontoEtapaCtrt??5, pEt = orc.parcelasEtapaCtrt??2;
-    y+=2;
-    // Calcula altura TOTAL da seção (Etapa a Etapa/Apenas Arq + Pacote Completo) para manter tudo junto
-    const etArqAtivasPre = (orc.etapasPct || []).filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
-    const engAtivaPre = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
-    const mostrarTabelaPdf = P ? P.mostrarTabelaEtapas !== false : (orc.mostrarTabelaEtapas !== false);
-    // Pacote: toggle ligado → (multi OU arq+eng); toggle desligado → só arq+eng
-    const multiPre = etArqAtivasPre.length > 1;
-    const arqEngPre = incluiArq && engAtivaPre && etArqAtivasPre.length > 0;
-    const mostraPacotePre = mostrarTabelaPdf ? (multiPre || arqEngPre) : arqEngPre;
-    // Etapa a Etapa: título(7) + op1(5+4) + op2(5) + hr(11) = 29 (COMPACTO com respiro antes do Pacote)
-    // Apenas Arq (toggle off): título(8) + op1 arejado(5+6+4) + op2(5+5) + hr(8) = 36 (AREJADO)
-    const alturaPrimeiro = mostrarTabelaPdf ? 29 : 36;
-    // Pacote Completo: compacto(28) quando tem tabela, arejado(36) quando não
-    const alturaPacote = mostraPacotePre ? (mostrarTabelaPdf ? 28 : 36) : 0;
-    const alturaTotalFormaPgto = alturaPrimeiro + alturaPacote + 6;
-    secTitle("Forma de Pagamento", 8, alturaTotalFormaPgto);
-
-    if (mostrarTabelaPdf) {
-      // Bloco "Etapa a Etapa" (toggle LIGADO)
-      sf("bold",8.5); stc(INK); tx("Etapa a Etapa",M,y);
-      sf("normal",6.5); stc(INK_LT); tx("Obs.: Nesta opção valores de etapas futuras podem ser reajustados.",W-M,y,{align:"right"});
-      y+=7;
-      // Opção 1 — Antecipado por etapa (uma linha)
-      const op1LabelEt = `Opção 1: `;
-      sf("bold",8.5); stc(INK_MD); tx(op1LabelEt, M+2, y);
-      const wOp1Et = doc.getTextWidth(op1LabelEt);
-      sf("normal",8.5); stc(INK_MD); tx(`Cada etapa paga antecipadamente com ${dEt}% de desconto.`, M+2+wOp1Et, y);
-      y+=5; sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F"); y+=4;
-      // Opção 2 — Parcelado por etapa (uma linha)
-      const op2LabelEt = `Opção 2: `;
-      sf("bold",8.5); stc(INK_MD); tx(op2LabelEt, M+2, y);
-      const wOp2Et = doc.getTextWidth(op2LabelEt);
-      sf("normal",8.5); stc(INK_MD);
-      if (pEt > 1) {
-        const fraseOp2 = `Cada etapa parcelada em ${pEt}× (entrada + ${pEt-1}× ao longo da etapa).`;
-        tx(fraseOp2, M+2+wOp2Et, y);
-        const wFraseOp2 = doc.getTextWidth(fraseOp2);
-        sf("normal",6.5); stc(INK_LT); tx("sem desconto", M+2+wOp2Et+wFraseOp2+3, y);
-      } else {
-        tx(`Cada etapa paga à vista no início.`, M+2+wOp2Et, y);
-      }
-      hr(y+3); y+=11;
-    } else {
-      // Toggle DESLIGADO: renderiza "Apenas Arquitetura" igual Pagamento Padrão
-      // Valor: subTotalArqEtapas (só arq selecionada, sem eng)
-      const valorApenasArq = P && P.subTotalArqEtapas !== undefined ? P.subTotalArqEtapas : arqCIcom;
-      const dArq = orc.descontoEtapa??5, pArq = orc.parcelasEtapa??3;
-      const tDescArq = Math.round(valorApenasArq*(1-dArq/100)*100)/100;
-      const labelApenasPgto = P && P.labelApenas ? P.labelApenas : "Apenas Arquitetura";
-      sf("bold",8.5); stc(INK); tx(labelApenasPgto,M,y); y+=8;
-      // Opção 1 — subtítulo cinza pequeno + valor destacado embaixo
-      sf("bold",8); stc(INK_MD); tx("Opção 1", M+2, y);
-      const wOp1LabApA = doc.getTextWidth("Opção 1");
-      sf("normal",7); stc(INK_LT); tx(` · Pagamento antecipado com ${dArq}% de desconto`, M+2+wOp1LabApA, y); y+=5;
-      const yOp1ApA = y;
-      const labelOp1ApA = `De ${fmtB(valorApenasArq)} por apenas:`;
-      sf("normal",8.5); stc(INK_MD); tx(labelOp1ApA, M+2, yOp1ApA);
-      const wLabelOp1ApA = doc.getTextWidth(labelOp1ApA);
-      sf("bold",10); stc(INK); tx(fmtB(tDescArq), M+2+wLabelOp1ApA+4, yOp1ApA);
-      y = yOp1ApA + 6;
-      sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F"); y+=4;
-      // Opção 2
-      sf("bold",8); stc(INK_MD); tx("Opção 2", M+2, y);
-      const wOp2LabApA = doc.getTextWidth("Opção 2");
-      sf("normal",7); stc(INK_LT);
-      if (pArq > 1) {
-        tx(` · Parcelado em ${pArq}× sem desconto`, M+2+wOp2LabApA, y);
-      } else {
-        tx(` · À vista`, M+2+wOp2LabApA, y);
-      }
-      y+=5;
-      sf("normal",8.5); stc(INK_MD);
-      if (pArq > 1) {
-        const parcValArq = Math.round(valorApenasArq/pArq*100)/100;
-        tx(`Entrada de ${fmtB(parcValArq)} + ${pArq-1}× de ${fmtB(parcValArq)}`, M+2, y);
-      } else {
-        tx(`${fmtB(valorApenasArq)}`, M+2, y);
-      }
-      hr(y+3); y+=8;
-    }
-
-    // Pacote completo etapas — mesma lógica do preview:
-    // Toggle LIGADO: pacote aparece se (multiEtapas OU arq+eng)
-    // Toggle DESLIGADO: pacote aparece SÓ se arq+eng (senão fica só o bloco "Apenas Arq")
-    const etArqAtivas = (orc.etapasPct || []).filter(e => e.id !== 5 && (!temIsoladasPdf || idsIsoladosPdf.has(e.id)));
-    const engAtivaPdf = P ? P.engAtiva : (incluiEng && (!temIsoladasPdf || idsIsoladosPdf.has(5)));
-    const multiEtapasPdf = etArqAtivas.length > 1;
-    const temArqEEngPdf = incluiArq && engAtivaPdf && etArqAtivas.length > 0;
-    const mostraPacote = mostrarTabelaPdf
-      ? (multiEtapasPdf || temArqEEngPdf)
-      : temArqEEngPdf;
-    if (mostraPacote) {
-      // Valor do pacote vem do preview (espelho) ou recalcula
-      const totalPacote = P && P.totalPacoteEtapas !== undefined ? P.totalPacoteEtapas : totCI;
-      const dPac=orc.descontoPacoteCtrt??15, pPac=orc.parcelasPacoteCtrt??8;
-      const tDescP=Math.round(totalPacote*(1-dPac/100)*100)/100;
-      // Label dinâmico igual preview
-      const labelPacotePdf = (incluiArq && engAtivaPdf)
-        ? "Pacote Completo (Arq. + Eng.)"
-        : "Pacote Completo";
-
-      if (mostrarTabelaPdf) {
-        // COMPACTO: quando há tabela acima, poupa espaço na página
-        sf("bold",8.5); stc(INK); tx(labelPacotePdf,M,y); y+=7;
-        // Opção 1 em uma linha
-        const op1LabelPac = `Opção 1: `;
-        sf("bold",8.5); stc(INK_MD); tx(op1LabelPac, M+2, y);
-        const wOp1LabPac = doc.getTextWidth(op1LabelPac);
-        const fraseOp1Pac = `Pagamento antecipado com ${dPac}% de desconto — de ${fmtB(totalPacote)} por`;
-        sf("normal",8.5); stc(INK_MD); tx(fraseOp1Pac, M+2+wOp1LabPac, y);
-        const wFraseOp1Pac = doc.getTextWidth(fraseOp1Pac);
-        sf("bold",9.5); stc(INK); tx(fmtB(tDescP), M+2+wOp1LabPac+wFraseOp1Pac+2, y);
-        y+=5; sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F"); y+=4;
-        // Opção 2 em uma linha
-        const op2LabelPac = `Opção 2: `;
-        sf("bold",8.5); stc(INK_MD); tx(op2LabelPac, M+2, y);
-        const wOp2LabPac = doc.getTextWidth(op2LabelPac);
-        sf("normal",8.5); stc(INK_MD);
-        if (pPac > 1) {
-          const parcValPac = Math.round(totalPacote/pPac*100)/100;
-          const fraseOp2Pac = `Parcelado em ${pPac}× — entrada de ${fmtB(parcValPac)} + ${pPac-1}× de ${fmtB(parcValPac)}.`;
-          tx(fraseOp2Pac, M+2+wOp2LabPac, y);
-          const wFraseOp2Pac = doc.getTextWidth(fraseOp2Pac);
-          sf("normal",6.5); stc(INK_LT); tx("sem desconto", M+2+wOp2LabPac+wFraseOp2Pac+3, y);
-        } else {
-          tx(`À vista — ${fmtB(totalPacote)}`, M+2+wOp2LabPac, y);
+        const yLinhaTop = y - 1;
+        const linhaH = 12;
+        if (isRec) {
+          desenhaBadgeRec(M, yLinhaTop, TW, linhaH);
         }
-        hr(y+3); y+=7;
-      } else {
-        // AREJADO: sem tabela acima, pode ser mais espaçoso e destacar o valor
-        sf("bold",8.5); stc(INK); tx(labelPacotePdf,M,y); y+=8;
-        // Opção 1 — subtítulo + valor destacado
-        sf("bold",8); stc(INK_MD); tx("Opção 1", M+2, y);
-        const wOp1LabPac = doc.getTextWidth("Opção 1");
-        sf("normal",7); stc(INK_LT); tx(` · Pagamento antecipado com ${dPac}% de desconto`, M+2+wOp1LabPac, y); y+=5;
-        const yOp1Pac = y;
-        const labelOp1Pac = `De ${fmtB(totalPacote)} por apenas:`;
-        sf("normal",8.5); stc(INK_MD); tx(labelOp1Pac, M+2, yOp1Pac);
-        const wLabelOp1Pac = doc.getTextWidth(labelOp1Pac);
-        sf("bold",10); stc(INK); tx(fmtB(tDescP), M+2+wLabelOp1Pac+4, yOp1Pac);
-        y = yOp1Pac + 6;
-        sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F"); y+=4;
-        // Opção 2
-        sf("bold",8); stc(INK_MD); tx("Opção 2", M+2, y);
-        const wOp2LabPac = doc.getTextWidth("Opção 2");
-        sf("normal",7); stc(INK_LT);
-        if (pPac > 1) {
-          tx(` · Parcelado em ${pPac}× sem desconto`, M+2+wOp2LabPac, y);
-        } else {
-          tx(` · À vista`, M+2+wOp2LabPac, y);
+        sf("bold", 7); stc(INK_MD);
+        tx("ANTECIPADO", M + 3, y + 2.5);
+        sf("bold", 11); stc(INK);
+        tx(fmtB(Math.round(valorAnt * 100) / 100), M + 3, y + 7);
+        if (desc > 0) {
+          sf("normal", 6.5); stc(isRec ? VERDE_LIGHT : INK_LT);
+          const valorAntStr = fmtB(Math.round(valorAnt * 100) / 100);
+          const wValorAnt = doc.getTextWidth(valorAntStr);
+          sf("bold", 11);
+          const wValorAntFull = doc.getTextWidth(valorAntStr);
+          sf("normal", 6.5);
+          tx(`  ${desc}% de desconto · economia ${fmtB(Math.round(economia * 100) / 100)}`, M + 3 + wValorAntFull, y + 7);
         }
-        y+=5;
-        sf("normal",8.5); stc(INK_MD);
-        if (pPac > 1) {
-          const parcValPac = Math.round(totalPacote/pPac*100)/100;
-          tx(`Entrada de ${fmtB(parcValPac)} + ${pPac-1}× de ${fmtB(parcValPac)}`, M+2, y);
-        } else {
-          tx(`${fmtB(totalPacote)}`, M+2, y);
-        }
-        hr(y+3); y+=8;
+        y += linhaH + 2;
       }
-    }
 
-  } else {
-    const dA=orc.descontoEtapa??5, pA=orc.parcelasEtapa??3;
-    const tDescA=Math.round(arqCIcom*(1-dA/100)*100)/100;
-    nv(25);
-    const labelApenasPgto = P && P.labelApenas ? P.labelApenas : "Apenas Arquitetura";
-    sf("bold",8.5); stc(INK); tx(labelApenasPgto,M,y); y+=8;
+      // Linha Parcelas
+      if (fpTemParcelas) {
+        const n = tipoCard === 'arq' ? fpParcelas.parcArq : fpParcelas.parcPac;
+        const valorParc = Math.round(valorBaseGrupo / n * 100) / 100;
+        nv(10);
+        sf("bold", 7); stc(INK_MD);
+        tx("PARCELADO", M + 3, y + 2.5);
+        sf("bold", 9); stc(INK);
+        tx(`${n}× ${fmtB(valorParc)}`, M + 3, y + 7);
+        sf("normal", 6.5); stc(INK_LT);
+        const parcStr = `${n}× ${fmtB(valorParc)}`;
+        sf("bold", 9);
+        const wParc = doc.getTextWidth(parcStr);
+        sf("normal", 6.5);
+        tx(`  Entrada + ${n - 1} mensais`, M + 3 + wParc, y + 7);
+        y += 11;
+      }
 
-    // Opção 1 — antecipado com desconto
-    sf("bold",8); stc(INK_MD); tx("Opção 1", M+2, y);
-    const wOp1LabPad = doc.getTextWidth("Opção 1");
-    sf("normal",7); stc(INK_LT); tx(` · Pagamento antecipado com ${dA}% de desconto`, M+2+wOp1LabPad, y); y+=5;
-    const yOp1A = y;
-    const labelOp1A = `De ${fmtB(arqCIcom)} por apenas:`;
-    sf("normal",8.5); stc(INK_MD); tx(labelOp1A, M+2, yOp1A);
-    const wLabelOp1A = doc.getTextWidth(labelOp1A);
-    sf("bold",10); stc(INK); tx(fmtB(tDescA), M+2+wLabelOp1A+4, yOp1A);
-    y = yOp1A + 6;
-
-    // Divisória fina
-    sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F");
-    y += 4;
-
-    // Opção 2
-    sf("bold",8); stc(INK_MD); tx("Opção 2", M+2, y);
-    const wOp2LabPad = doc.getTextWidth("Opção 2");
-    sf("normal",7); stc(INK_LT);
-    if (pA > 1) {
-      tx(` · Parcelado em ${pA}× sem desconto`, M+2+wOp2LabPad, y);
-    } else {
-      tx(` · À vista`, M+2+wOp2LabPad, y);
-    }
-    y+=5;
-    sf("normal",8.5); stc(INK_MD);
-    if (pA > 1) {
-      const parcValA = Math.round(arqCIcom/pA*100)/100;
-      tx(`Entrada de ${fmtB(parcValA)} + ${pA-1}× de ${fmtB(parcValA)}`, M+2, y);
-    } else {
-      tx(`${fmtB(arqCIcom)}`, M+2, y);
-    }
-    hr(y+3); y+=8;
-
-    if (incluiArq && incluiEng) {
-      const dP=orc.descontoPacote??10, pP=orc.parcelasPacote??4;
-      const tDescPad=Math.round(totCI*(1-dP/100)*100)/100;
-      sf("bold",8.5); stc(INK); tx("Pacote Completo (Arq. + Eng.)",M,y); y+=8;
-
-      // Opção 1
-      sf("bold",8); stc(INK_MD); tx("Opção 1", M+2, y);
-      const wOp1LabPP = doc.getTextWidth("Opção 1");
-      sf("normal",7); stc(INK_LT); tx(` · Pagamento antecipado com ${dP}% de desconto`, M+2+wOp1LabPP, y); y+=5;
-      const yOp1P = y;
-      const labelOp1P = `De ${fmtB(totCI)} por apenas:`;
-      sf("normal",8.5); stc(INK_MD); tx(labelOp1P, M+2, yOp1P);
-      const wLabelOp1P = doc.getTextWidth(labelOp1P);
-      sf("bold",10); stc(INK); tx(fmtB(tDescPad), M+2+wLabelOp1P+4, yOp1P);
-      y = yOp1P + 6;
-
-      // Divisória fina
-      sc(LINE); doc.rect(M+2, y-2, TW-4, 0.3, "F");
+      // Linha Entrada+Final
+      if (fpTemFinal) {
+        const ent = tipoCard === 'arq' ? fpFinal.entArq : fpFinal.entPac;
+        const vEnt = valorBaseGrupo * (ent / 100);
+        const vFin = valorBaseGrupo - vEnt;
+        nv(10);
+        sf("bold", 7); stc(INK_MD);
+        tx("ENTRADA + FINAL", M + 3, y + 2.5);
+        sf("normal", 8); stc(INK);
+        tx(`Entrada ${fmtB(Math.round(vEnt * 100) / 100)} (${ent}%)`, M + 3, y + 7);
+        y += 4;
+        tx(`Pgto final ${fmtB(Math.round(vFin * 100) / 100)} (${100 - ent}%)`, M + 3, y + 7);
+        y += 7;
+      }
       y += 4;
+    };
 
-      // Opção 2
-      sf("bold",8); stc(INK_MD); tx("Opção 2", M+2, y);
-      const wOp2LabPP = doc.getTextWidth("Opção 2");
-      sf("normal",7); stc(INK_LT);
-      if (pP > 1) {
-        tx(` · Parcelado em ${pP}× sem desconto`, M+2+wOp2LabPP, y);
-      } else {
-        tx(` · À vista`, M+2+wOp2LabPP, y);
-      }
-      y+=5;
-      sf("normal",8.5); stc(INK_MD);
-      if (pP > 1) {
-        const parcValP = Math.round(totCI/pP*100)/100;
-        tx(`Entrada de ${fmtB(parcValP)} + ${pP-1}× de ${fmtB(parcValP)}`, M+2, y);
-      } else {
-        tx(`${fmtB(totCI)}`, M+2, y);
-      }
-      hr(y+3); y+=8;
-    }
+    if (fpShowArq) desenhaGrupo('arq', 'Apenas Arquitetura');
+    if (fpShowPac) desenhaGrupo('pac', incluiArq && incluiEng ? 'Pacote Completo (Arq. + Eng.)' : 'Pacote Completo');
   }
+
 
   // PIX
   sf("normal",8); stc(INK_LT);
