@@ -6777,9 +6777,10 @@ function EtapaFormaPagamento({
   }
 
   // Estilos compartilhados — alinhados com o onboarding
+  // O container usa className 'vk-fp-container' (definido no <style>) para
+  // permitir media query mobile sem useState/listener.
   const S = {
     wrap: { background: '#fff', minHeight: '100vh', paddingBottom: 60, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", color: '#111' },
-    container: { maxWidth: 720, margin: '0 auto', padding: '24px 20px' },
     cabecalhoLabel: { fontSize: 11, fontWeight: 500, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
     cabecalhoTitulo: { fontSize: 24, fontWeight: 400, color: '#111', letterSpacing: -0.5, marginBottom: 6 },
     cabecalhoSub: { fontSize: 14, color: '#6b7280', lineHeight: 1.5 },
@@ -6791,15 +6792,29 @@ function EtapaFormaPagamento({
     fadeIn: { animation: 'vk-fp-fade-in 0.35s ease-out' },
   };
 
+  // CSS responsivo compartilhado entre as duas telas. Definido como string
+  // pra ser inserido em <style> de cada tela. Inclui @media queries pra mobile.
+  const SHARED_CSS = `
+    @keyframes vk-fp-fade-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    /* Container responsivo */
+    .vk-fp-container {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 24px 20px;
+    }
+    @media (max-width: 640px) {
+      .vk-fp-container { padding: 16px 12px; }
+    }
+  `;
+
   // ── Tela 1 ────────────────────────────────────────────────────
   if (subTela === 'selecao') {
     return (
       <div style={S.wrap}>
-        <style>{`
-          @keyframes vk-fp-fade-in {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-          }
+        <style>{SHARED_CSS + `
           .vk-fp-opt {
             display: flex; align-items: center; gap: 10px;
             padding: 12px 14px; background: #fff;
@@ -6823,7 +6838,7 @@ function EtapaFormaPagamento({
           }
           .vk-fp-check-mark { display: none; color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
         `}</style>
-        <div style={S.container}>
+        <div className="vk-fp-container">
           <div style={{ marginBottom: 28 }}>
             <div style={S.cabecalhoLabel}>FORMA DE PAGAMENTO</div>
             <div style={S.cabecalhoTitulo}>Forma de pagamento</div>
@@ -7076,7 +7091,7 @@ function EtapaFormaPagamento({
         </div>
 
         <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '4px 0', background: '#fff', marginBottom: 16 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 100px 110px 22px', gap: 8, padding: '10px 14px', borderBottom: '1.5px solid #111', alignItems: 'center' }}>
+          <div className="vk-fp-etapa-header">
             <span></span>
             <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Etapa</span>
             <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em', textAlign: 'center' }}>%</span>
@@ -7127,7 +7142,7 @@ function EtapaFormaPagamento({
             </button>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '28px 1fr 100px 110px 22px', gap: 8, padding: '10px 14px', borderTop: '1.5px solid #111', alignItems: 'center', background: '#fafbfc' }}>
+          <div className="vk-fp-etapa-total">
             <span></span>
             <span style={{ fontWeight: 600, color: '#111', fontSize: 13 }}>Total</span>
             <span style={{ fontWeight: 600, color: '#111', fontSize: 13, textAlign: 'center' }}>{pctTotal}%</span>
@@ -7199,11 +7214,7 @@ function EtapaFormaPagamento({
   // ── Render Tela 2 ─────────────────────────────────────────────
   return (
     <div style={S.wrap}>
-      <style>{`
-        @keyframes vk-fp-fade-in {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
+      <style>{SHARED_CSS + `
         .vk-fp-card {
           display: flex; gap: 0; padding: 0;
           background: #fff; border: 1px solid #e5e7eb;
@@ -7285,8 +7296,109 @@ function EtapaFormaPagamento({
           color: #d1d5db; user-select: none; font-size: 14px;
         }
         .vk-fp-etapa-rm:hover { color: #6b7280; }
+        .vk-fp-etapa-header {
+          display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
+          gap: 8px; padding: 10px 14px;
+          border-bottom: 1.5px solid #111; align-items: center;
+        }
+        .vk-fp-etapa-total {
+          display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
+          gap: 8px; padding: 10px 14px;
+          border-top: 1.5px solid #111; align-items: center;
+          background: #fafbfc;
+        }
+
+        /* ───────────────── MOBILE (≤ 640px) ───────────────── */
+        @media (max-width: 640px) {
+          /* 1. Cards Apenas Arq / Pacote: empilhados em vez de lado-a-lado.
+             O .vk-fp-card é flex horizontal (input à esquerda, resumo lateral
+             200px à direita). Em mobile vira coluna: input em cima, resumo
+             embaixo, e o resumo ganha borda superior em vez de lateral. */
+          .vk-fp-card { flex-direction: column; }
+          .vk-fp-card > div:first-child { padding: 14px 16px !important; }
+          .vk-fp-card > div:last-child {
+            width: 100% !important;
+            border-left: none !important;
+            border-top: 0.5px solid #e5e7eb !important;
+            padding: 14px 16px !important;
+          }
+          /* Linha forma label estreita */
+          .vk-fp-linha { grid-template-columns: 110px 1fr; }
+          .vk-fp-linha-label { font-size: 12px; }
+
+          /* 2. Tabela de etapas: vira lista de cards empilhados.
+             Cada linha (.vk-fp-etapa-row) deixa de ser grid horizontal e
+             vira um card próprio com layout em 2 linhas:
+               - Linha 1: ◉/◎ + nome (lado a lado, com gap)
+               - Linha 2: NumStepper de % + valor R$ + ×remover
+             Os spans originais (era grid 5 colunas) são reorganizados via
+             flex-wrap. O 5º elemento (rm) flutua no canto inferior direito. */
+          .vk-fp-etapa-row {
+            display: grid !important;
+            grid-template-columns: 28px 1fr auto;
+            grid-template-rows: auto auto;
+            gap: 8px 10px !important;
+            padding: 12px 14px !important;
+            background: #fff;
+            border: 0.5px solid #e5e7eb;
+            border-bottom: 0.5px solid #e5e7eb !important;
+            border-radius: 8px;
+            margin: 6px 0;
+            align-items: center;
+          }
+          .vk-fp-etapa-row.isolada {
+            border-color: #0369a1;
+            background: #f0f9ff;
+          }
+          .vk-fp-etapa-row.eng { background: #fafbfc; }
+
+          /* Linha 1: ◉ na col 1, nome na col 2-3 */
+          .vk-fp-etapa-row > .vk-fp-iso {
+            grid-column: 1; grid-row: 1;
+            font-size: 18px;
+            justify-self: center;
+          }
+          .vk-fp-etapa-row > span:nth-child(2) {
+            grid-column: 2 / 4; grid-row: 1;
+          }
+          /* Linha 2: vazio na col 1, NumStepper de % na col 2, valor na col 3 */
+          .vk-fp-etapa-row > span:nth-child(3) {
+            grid-column: 2; grid-row: 2;
+            text-align: left !important;
+            justify-self: start;
+          }
+          .vk-fp-etapa-row > .vk-fp-etapa-valor {
+            grid-column: 3; grid-row: 2;
+            font-size: 13px;
+            font-weight: 600;
+          }
+          .vk-fp-etapa-row > .vk-fp-etapa-rm {
+            grid-column: 1; grid-row: 2;
+            font-size: 16px;
+            color: #d1d5db;
+          }
+
+          /* Header da tabela: oculto em mobile (cards têm seu próprio layout) */
+          .vk-fp-etapa-header { display: none !important; }
+          /* Total: compacto, só "Total" e valor */
+          .vk-fp-etapa-total {
+            display: flex !important;
+            justify-content: space-between;
+            padding: 12px 14px !important;
+            margin-top: 10px;
+            border-radius: 8px;
+            border: none !important;
+            border-top: 1.5px solid #111 !important;
+          }
+          .vk-fp-etapa-total > span:first-child,
+          .vk-fp-etapa-total > span:last-child { display: none; }
+          .vk-fp-etapa-total > span:nth-child(3) {
+            margin-left: auto;
+            margin-right: 16px;
+          }
+        }
       `}</style>
-      <div style={S.container}>
+      <div className="vk-fp-container">
         <div style={{ marginBottom: 28 }}>
           <div style={S.cabecalhoLabel}>FORMA DE PAGAMENTO · CONFIGURAR</div>
           <div style={S.cabecalhoTitulo}>Defina os valores</div>
@@ -7449,6 +7561,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // por etapa individual (mod 2 desmarcada).
   const [modalidadesEtapa, setModalidadesEtapa] = useState(orcBase?.formaPagamento?.modalidadesEtapa || ["mod1", "mod2"]);
   const [etapaPagamentoConfirmada, setEtapaPagamentoConfirmada] = useState(false);
+  // previewRemountKey: incrementa a cada vez que o usuário sai da Etapa 5 pra
+  // o Preview. Isso força o React a remontar o PropostaPreview (e seus
+  // useState internos), garantindo que valores stale não persistam quando o
+  // usuário muda algo na Etapa 5 e volta pro Preview.
+  const [previewRemountKey, setPreviewRemountKey] = useState(0);
 
   useEffect(() => {
     if (!orcBase) return;
@@ -9054,6 +9171,26 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }
 
   if (propostaData) {
+    // Fase 1 do refator — reconstrói formaPagamento dinamicamente. O propostaData
+    // tem um snapshot antigo (de quando o usuário clicou "Continuar para proposta"),
+    // mas se ele voltar pra Etapa 5 e mudar algo, esse snapshot fica desatualizado.
+    // O liveData reflete o estado ATUAL do Form pai (single source of truth).
+    const formaPagamentoLive = {
+      formas:       formasSelecionadas,
+      contratacoes: contratacoesSelecionadas,
+      antecipado:   { descArq, descPac: descPacote },
+      parcelas:     { parcArq, parcPac: parcPacote },
+      final:        { entArq, entPac },
+      etapa: {
+        modalidades: modalidadesEtapa,
+        etapas: (() => {
+          const temEng = etapasPct.some(e => e.id === 5);
+          return temEng ? etapasPct : [...etapasPct, { id: 5, nome: 'Engenharia', pct: 0, eng: true }];
+        })(),
+        isoladas: Array.from(etapasIsoladas),
+        modalidade2: { desconto: descPacCtrt, parcelas: parcPacCtrt },
+      },
+    };
     const liveData = {
       ...propostaData,
       tipoPgto, temImposto, aliqImp,
@@ -9062,6 +9199,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       descEtCtrt, parcEtCtrt, descPacCtrt, parcPacCtrt,
       etapasPct,
       totSI: modalTotSI, totCI: modalTotCI, impostoV: modalImposto,
+      formaPagamento: formaPagamentoLive, // sobrescreve o snapshot antigo
     };
     // Callback: salva snapshot da proposta no orçamento (cria v1, v2, ...)
     async function handleSalvarPropostaSnapshot(snapshot) {
@@ -9213,12 +9351,21 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           modalidadesEtapa={modalidadesEtapa}
           setModalidadesEtapa={setModalidadesEtapa}
           onVoltar={() => { setPropostaData(null); }}
-          onContinuar={() => { setEtapaPagamentoConfirmada(true); }}
+          onContinuar={() => {
+            // Re-chama gerarProposta() pra refrescar o propostaData snapshot
+            // com os values ATUAIS do Form pai. E incrementa previewRemountKey
+            // pra forçar o React a remontar o PropostaPreview (resetando seus
+            // useStates internos, que ficariam stale com o snapshot anterior).
+            gerarProposta();
+            setPreviewRemountKey(k => k + 1);
+            setEtapaPagamentoConfirmada(true);
+          }}
         />
       );
     }
 
     return <PropostaPreview
+      key={previewRemountKey}
       data={liveData}
       onVoltar={() => {
         // Volta pros cômodos. Reseta a flag da Etapa 5 pra que, ao reabrir
