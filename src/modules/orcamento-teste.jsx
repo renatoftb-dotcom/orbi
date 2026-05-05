@@ -7230,18 +7230,32 @@ function EtapaFormaPagamento({
   function renderSecaoEtapa() {
     const temIso = isoladas.size > 0;
     let pctTotal = 0, valorTotal = 0;
+    let qtdEtapasMostradas = 0;
     if (temIso) {
       etapas.forEach(e => {
-        if (e.eng && isoladas.has(5)) valorTotal += valorEng;
+        if (e.eng && isoladas.has(5)) {
+          valorTotal += valorEng;
+          qtdEtapasMostradas++;
+        }
         else if (!e.eng && isoladas.has(e.id)) {
           pctTotal += e.pct;
           valorTotal += valorArq * (e.pct / 100);
+          qtdEtapasMostradas++;
         }
       });
     } else {
-      etapas.forEach(e => { if (!e.eng) pctTotal += e.pct; });
+      etapas.forEach(e => {
+        if (!e.eng) pctTotal += e.pct;
+        // Conta todas as etapas (que vão aparecer pro cliente em modo "todas")
+        if (!e.eng || incluiEng) qtdEtapasMostradas++;
+      });
       valorTotal = valorArq + (incluiEng ? valorEng : 0);
     }
+
+    // Patch: decide quais blocos de configuração mostrar baseado na quantidade
+    // de etapas que vão aparecer pro cliente. Espelha a lógica do Preview.
+    const mostraEtapaUnica       = qtdEtapasMostradas >= 1;
+    const mostraEtapasCompletas  = qtdEtapasMostradas >= 2;
 
     // Modalidade 2 (contratação completa) usa o valorTotal calculado acima.
     // Quando há etapas isoladas, valorTotal é a soma dessas isoladas (não Arq+Eng).
@@ -7324,11 +7338,12 @@ function EtapaFormaPagamento({
         </div>
 
         <div style={{ marginTop: 16, marginBottom: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
-          Como o cliente pode contratar? <span style={{ color: '#9ca3af' }}>Configure as duas modalidades. Mostradas conforme a quantidade de etapas marcadas pelo cliente.</span>
+          Como o cliente pode contratar? <span style={{ color: '#9ca3af' }}>Configure as modalidades. Mostradas conforme a quantidade de etapas selecionadas.</span>
         </div>
 
         {/* BLOCO 1: Contratação etapa a etapa (5%/2x default).
-            Visível pro cliente quando 1 etapa marcada (ou ambos quando 2+). */}
+            Aparece sempre que há ≥1 etapa marcada. */}
+        {mostraEtapaUnica && (
         <div style={{
           background: '#fff', border: '1px solid #e5e7eb',
           borderRadius: 10, padding: '14px 16px', marginBottom: 12,
@@ -7350,9 +7365,11 @@ function EtapaFormaPagamento({
             </div>
           </div>
         </div>
+        )}
 
         {/* BLOCO 2: Etapas completas (10%/4x default).
-            Visível pro cliente quando 2+ etapas marcadas. Resumo à direita. */}
+            Aparece quando há ≥2 etapas marcadas. Resumo à direita. */}
+        {mostraEtapasCompletas && (
         <div className="vk-fp-card-completo" style={{
           background: '#fff', border: '1px solid #e5e7eb',
           borderRadius: 10, overflow: 'hidden',
@@ -7396,6 +7413,7 @@ function EtapaFormaPagamento({
             </div>
           </div>
         </div>
+        )}
       </div>
     );
   }
