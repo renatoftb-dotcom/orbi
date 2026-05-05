@@ -5875,7 +5875,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       <div style={page} className={lockEdicao ? "proposta-locked" : ""}>
         {/* Badge de "Visualização de proposta enviada" */}
         {lockEdicao && (
-          <div style={{
+          <div className="no-print" style={{
             background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8,
             padding:"10px 14px", marginBottom:16,
             display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
@@ -5916,7 +5916,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           </div>
         )}
 
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
+        <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
           <button onClick={onVoltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             ← Voltar
           </button>
@@ -6157,7 +6157,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               });
             }}
             style={{ fontSize:10, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
-              border:`1px solid ${LN}`, background:"#f3f4f6", whiteSpace:"nowrap", userSelect:"none" }}>+ bloco</span>
+              border:`1px solid ${LN}`, background:"#f3f4f6", whiteSpace:"nowrap", userSelect:"none" }}
+            className="no-print">+ bloco</span>
         }>
           {escopoDefault.map((bloco, i) => {
             // Separa número (fixo) do texto (editável)
@@ -6179,6 +6180,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 <span
                   onClick={() => setEscopoState(prev => prev.filter(b => b.etapaId !== bloco.etapaId))}
                   title="Remover bloco"
+                  className="no-print"
                   style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"2px 6px", borderRadius:4,
                     border:"1px solid #e5e7eb", background:"#fafafa", lineHeight:1.4,
                     userSelect:"none" }}>✕ remover</span>
@@ -6238,6 +6240,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                       <div style={tag}>Serviços inclusos</div>
                       <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", [...(bloco.itens||[]), "Novo item"])}
                         title="Adicionar item"
+                        className="no-print"
                         style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
                           background:"#f3f4f6", border:"1px solid #c8cdd6", lineHeight:"16px" }}>+ item</span>
                     </div>
@@ -6249,6 +6252,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                           setEscopoBloco(bloco.etapaId, "itens", arr);
                         }} style={{ fontSize:13, color:MD, lineHeight:1.6, flex:1 }} />
                         <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", bloco.itens.filter((_,k)=>k!==j))}
+                          className="no-print"
                           style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
                       </div>
                     ))}
@@ -6258,6 +6262,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                       <div style={tag}>Entregáveis</div>
                       <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", [...(bloco.entregaveis||[]), "Novo entregável"])}
                         title="Adicionar entregável"
+                        className="no-print"
                         style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
                           background:"#f3f4f6", border:"1px solid #c8cdd6", lineHeight:"16px" }}>+ item</span>
                     </div>
@@ -6269,6 +6274,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                           setEscopoBloco(bloco.etapaId, "entregaveis", arr);
                         }} style={{ fontSize:13, color:MD, lineHeight:1.6, flex:1 }} />
                         <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", bloco.entregaveis.filter((_,k)=>k!==j))}
+                          className="no-print"
                           style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
                       </div>
                     ))}
@@ -6298,12 +6304,14 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 }} style={{ fontSize:13, color:MD, flex:1 }} />
                 {item.sub && <span style={{ fontSize:11, color:LT, marginLeft:4 }}>{item.sub}</span>}
                 <span onClick={() => setNaoInclEdit((naoInclEdit || naoInclDefault).filter((_,k)=>k!==i))}
+                  className="no-print"
                   style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
               </div>
             ))}
           </div>
           <div style={{ marginBottom:8 }}>
             <span onClick={() => setNaoInclEdit([...(naoInclEdit||naoInclDefault), { label:"Novo item", sub:null }])}
+              className="no-print"
               style={{ fontSize:11, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
                 background:"#f3f4f6", border:"1px solid #c8cdd6" }}>+ item</span>
           </div>
