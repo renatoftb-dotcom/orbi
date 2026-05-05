@@ -7256,6 +7256,13 @@ function EtapaFormaPagamento({
     // de etapas que vão aparecer pro cliente. Espelha a lógica do Preview.
     const mostraEtapaUnica       = qtdEtapasMostradas >= 1;
     const mostraEtapasCompletas  = qtdEtapasMostradas >= 2;
+    // Quando só 1 etapa marcada, o "Contratação etapa a etapa" mostra o valor
+    // concreto dela. Quando 2+, esconde o resumo (varia por etapa).
+    const mostraResumoEtapaUnica = qtdEtapasMostradas === 1;
+    const baseEtapaUnica = valorTotal; // = valor da única etapa marcada
+    const etapaUnicaAnt = baseEtapaUnica * (1 - descEtapa / 100);
+    const etapaUnicaEco = baseEtapaUnica - etapaUnicaAnt;
+    const etapaUnicaParcVal = baseEtapaUnica / parcEtapa;
 
     // Modalidade 2 (contratação completa) usa o valorTotal calculado acima.
     // Quando há etapas isoladas, valorTotal é a soma dessas isoladas (não Arq+Eng).
@@ -7342,28 +7349,55 @@ function EtapaFormaPagamento({
         </div>
 
         {/* BLOCO 1: Contratação etapa a etapa (5%/2x default).
-            Aparece sempre que há ≥1 etapa marcada. */}
+            Aparece sempre que há ≥1 etapa marcada. Quando há SÓ 1, mostra
+            resumo lateral com valor concreto. Quando há 2+, esconde resumo
+            (porque o valor varia conforme qual etapa o cliente escolher). */}
         {mostraEtapaUnica && (
-        <div style={{
+        <div className="vk-fp-card-completo" style={{
           background: '#fff', border: '1px solid #e5e7eb',
-          borderRadius: 10, padding: '14px 16px', marginBottom: 12,
+          borderRadius: 10, overflow: 'hidden',
+          display: 'flex',
+          marginBottom: 12,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Contratação etapa a etapa</span>
-            <span style={{ fontSize: 11, color: '#9ca3af' }}>(quando há 1 etapa)</span>
-          </div>
-          <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
-              <NumStepper valor={descEtapa} onChange={setDescEtapa} min={0} max={100} step={1} width={28} />
-              <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
+          {/* Lado esquerdo: configuração */}
+          <div style={{ flex: 1, padding: '14px 16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Contratação etapa a etapa</span>
+              <span style={{ fontSize: 11, color: '#9ca3af' }}>(quando há 1 etapa)</span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 80 }}>Parcelado</span>
-              <NumStepper valor={parcEtapa} onChange={n => setParcEtapa(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
-              <span style={{ fontSize: 12, color: '#6b7280' }}>×</span>
+            <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
+                <NumStepper valor={descEtapa} onChange={setDescEtapa} min={0} max={100} step={1} width={28} />
+                <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 80 }}>Parcelado</span>
+                <NumStepper valor={parcEtapa} onChange={n => setParcEtapa(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
+                <span style={{ fontSize: 12, color: '#6b7280' }}>×</span>
+              </div>
             </div>
           </div>
+          {/* Lado direito: resumo SÓ quando há 1 etapa marcada (valor concreto) */}
+          {mostraResumoEtapaUnica && (
+            <div style={{
+              width: 200, padding: '14px 16px',
+              background: '#fafbfc', borderLeft: '0.5px solid #e5e7eb',
+            }}>
+              <div className="vk-fp-resumo-label">Resumo</div>
+              <div className="vk-fp-resumo-bloco">
+                <div className="vk-fp-resumo-label">Antecipado</div>
+                <div className="vk-fp-resumo-principal">{fmtBRL_FP(Math.round(etapaUnicaAnt * 100) / 100)}</div>
+                {descEtapa > 0 && (
+                  <div className="vk-fp-resumo-eco">economia {fmtBRLcurto_FP(etapaUnicaEco)}</div>
+                )}
+              </div>
+              <div className="vk-fp-resumo-bloco">
+                <div className="vk-fp-resumo-label">Parcelado</div>
+                <div className="vk-fp-resumo-sub-valor">{parcEtapa}× {fmtBRL_FP(Math.round(etapaUnicaParcVal * 100) / 100)}</div>
+              </div>
+            </div>
+          )}
         </div>
         )}
 
