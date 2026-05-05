@@ -13139,13 +13139,11 @@ function EtapaFormaPagamento({
     return (
       <div
         key={tipo}
-        className={'vk-fp-card' + (sel ? ' selected' : '')}
-        onClick={e => {
-          if (e.target.tagName === 'INPUT') return;
-          toggleContratacao(tipo);
-        }}>
+        className={'vk-fp-card' + (sel ? ' selected' : '')}>
+        {/* Patch: clicar no card NÃO faz toggle (evita desmarcar sem querer
+            ao tentar editar inputs internos). Só o radio dispara toggle. */}
         <div style={{ flex: 1, padding: '18px 20px', display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-          <button type="button" className="vk-fp-radio" onClick={e => { e.stopPropagation(); toggleContratacao(tipo); }} />
+          <button type="button" className="vk-fp-radio" onClick={() => toggleContratacao(tipo)} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 500, color: '#111', marginBottom: 14 }}>{titulo}</div>
             {formasParaCards.map(f => renderLinhaForma(tipo, f))}
@@ -13390,14 +13388,14 @@ function EtapaFormaPagamento({
           display: flex; gap: 0; padding: 0;
           background: #fff; border: 1px solid #e5e7eb;
           border-radius: 10px; margin-bottom: 12px; overflow: hidden;
-          cursor: pointer; transition: all 0.12s;
+          transition: all 0.12s;
         }
         .vk-fp-card.selected {
           border-color: #111 !important; border-width: 1.5px !important;
           background: #fafbfc !important;
         }
         .vk-fp-card.selected .vk-fp-radio { border: 6px solid #111 !important; }
-        .vk-fp-card:hover:not(.selected) .vk-fp-radio { border-color: #9ca3af; }
+        .vk-fp-radio:hover { border-color: #9ca3af; }
         .vk-fp-radio {
           flex-shrink: 0; width: 22px; height: 22px;
           border-radius: 50%; border: 1.5px solid #d1d5db;
