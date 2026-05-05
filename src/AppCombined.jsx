@@ -12522,38 +12522,49 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
   }
 
   // ── Renderiza seção Por etapa ─────────────────────────────────
+  // Patch 1: Lógica nova baseada em quantidade de etapas selecionadas.
+  //   - 1 etapa marcada → só "Contratação etapa a etapa"
+  //   - 2+ etapas marcadas → "Etapa a etapa" + "Etapas completas"
+  // Cruzando com Antecipado:
+  //   - Antecipado marcado: cards mostram "À vista N% ou em Mx"
+  //   - Antecipado desmarcado: cards mostram só "Em Mx sem desconto"
   function renderSecaoPorEtapa() {
     if (!temPorEtapa) return null;
     const etapas = etapaCfg.etapas || [];
     const isoladasArr = etapaCfg.isoladas || [];
     const isoladasSet = new Set(isoladasArr);
-    const modalidades = etapaCfg.modalidades || ['mod1', 'mod2'];
-    const mod2 = etapaCfg.modalidade2 || { desconto: 15, parcelas: 8 };
+    // Patch 1: novos parâmetros (defaults 5/2 etapa a etapa, 10/4 etapas completas)
+    const modEtapa = etapaCfg.modalidadeEtapa || { desconto: 5, parcelas: 2 };
+    const modCompleto = etapaCfg.modalidade2 || { desconto: 10, parcelas: 4 };
 
-    // Valor base do "todas as etapas" — se há isolamento, soma das isoladas;
-    // senão, valorArq + valorEng (o pacote completo)
+    // Quantas etapas vão aparecer pro cliente (lógica preservada do código antigo)?
+    // Se isoladasSet vazio = todas; senão = só as isoladas.
     const temIso = isoladasSet.size > 0;
     let valorTotal = 0;
     let pctTotal = 0;
+    let qtdEtapasMostradas = 0;
     etapas.forEach(e => {
       if (e.eng) {
-        if (!temIso || isoladasSet.has(5)) valorTotal += valorEng;
+        if (!temIso || isoladasSet.has(5)) {
+          valorTotal += valorEng;
+          qtdEtapasMostradas++;
+        }
       } else {
         if (!temIso || isoladasSet.has(e.id)) {
           pctTotal += e.pct;
           valorTotal += valorArq * (e.pct / 100);
+          qtdEtapasMostradas++;
         }
       }
     });
     if (!temIso) valorTotal = valorArq + (incluiEng ? valorEng : 0);
 
-    const baseCompleto = valorTotal;
-    const completoAnt = baseCompleto * (1 - mod2.desconto / 100);
-    const completoEco = baseCompleto - completoAnt;
-    const completoParcVal = completoAnt / mod2.parcelas;
+    // Decide quais cards aparecer
+    const mostraEtapaUnica   = qtdEtapasMostradas >= 1; // etapa a etapa sempre aparece (≥1)
+    const mostraEtapasCompletas = qtdEtapasMostradas >= 2;
 
-    const mod1Marcada = modalidades.includes('mod1');
-    const mod2Marcada = modalidades.includes('mod2');
+    // Detecta se Antecipado está marcado (na lista geral de formas)
+    const temAntecipadoMarcado = formas.includes('antecipado');
 
     return (
       <div style={{ paddingTop: formasParaTabela.length > 0 ? 20 : 0, borderTop: formasParaTabela.length > 0 ? '0.5px solid #e5e7eb' : 'none' }}>
@@ -12617,48 +12628,71 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
           </div>
         </div>
 
-        {/* Cards de modalidade */}
-        {(mod1Marcada || mod2Marcada) && (
+        {/* Cards de oferta — Patch 1
+            Renderiza um helper pra cada card. */}
+        {(mostraEtapaUnica || mostraEtapasCompletas) && (
           <div className="vk-bfp-mods" style={{
             display: 'grid',
-            gridTemplateColumns: (mod1Marcada && mod2Marcada) ? '1fr 1fr' : '1fr',
+            gridTemplateColumns: (mostraEtapaUnica && mostraEtapasCompletas) ? '1fr 1fr' : '1fr',
             gap: 12,
           }}>
-            {mod1Marcada && (
-              <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 8, padding: '14px 16px' }}>
-                <div style={{
-                  fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-                  letterSpacing: '0.05em', fontWeight: 500, marginBottom: 8,
-                }}>Por etapa individual</div>
-                <div style={{ fontSize: 12, color: '#111', lineHeight: 1.5 }}>
-                  50% início + 50% em 30 dias
-                </div>
-                <div style={{ fontSize: 11.5, color: '#9ca3af', marginTop: 4 }}>Sem desconto</div>
-              </div>
-            )}
-            {mod2Marcada && (
-              <div style={{
-                border: `1.5px solid ${VERDE}`, borderRadius: 8,
-                padding: '14px 16px', position: 'relative',
-              }}>
-                <div style={{
-                  position: 'absolute', top: -8, left: 12,
-                  fontSize: 9, color: '#fff', background: VERDE,
-                  padding: '3px 8px', borderRadius: 999,
-                  letterSpacing: '0.05em', fontWeight: 600,
-                }}>RECOMENDADO</div>
-                <div style={{
-                  fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-                  letterSpacing: '0.05em', fontWeight: 500, marginBottom: 8, marginTop: 4,
-                }}>Contratação completa</div>
-                <div style={{ fontSize: 16, fontWeight: 500, color: '#111' }}>
-                  {fmtBRL(Math.round(completoAnt * 100) / 100)}
-                </div>
-                <div style={{ fontSize: 11.5, color: VERDE_LIGHT, marginTop: 2 }}>
-                  {mod2.desconto}% desc · {mod2.parcelas}× de {fmtBRL(Math.round(completoParcVal * 100) / 100)}
-                </div>
-              </div>
-            )}
+            {mostraEtapaUnica && renderCardOferta({
+              titulo: 'Contratação etapa a etapa',
+              temAntecipado: temAntecipadoMarcado,
+              desconto: modEtapa.desconto,
+              parcelas: modEtapa.parcelas,
+            })}
+            {mostraEtapasCompletas && renderCardOferta({
+              titulo: 'Etapas completas',
+              temAntecipado: temAntecipadoMarcado,
+              desconto: modCompleto.desconto,
+              parcelas: modCompleto.parcelas,
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Helper: renderiza um card de oferta (etapa a etapa OU etapas completas).
+  // Quando temAntecipado=true, mostra "À vista N% OU em Mx".
+  // Quando temAntecipado=false, mostra apenas "Em Mx sem desconto".
+  // Badge "RECOMENDADO" aparece sempre que temAntecipado.
+  function renderCardOferta({ titulo, temAntecipado, desconto, parcelas }) {
+    const isRec = temAntecipado;
+    return (
+      <div style={{
+        border: isRec ? `1.5px solid ${VERDE}` : '0.5px solid #e5e7eb',
+        borderRadius: 8, padding: '14px 16px', position: 'relative',
+      }}>
+        {isRec && (
+          <div style={{
+            position: 'absolute', top: -8, left: 12,
+            fontSize: 9, color: '#fff', background: VERDE,
+            padding: '3px 8px', borderRadius: 999,
+            letterSpacing: '0.05em', fontWeight: 600,
+          }}>RECOMENDADO</div>
+        )}
+        <div style={{
+          fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+          letterSpacing: '0.05em', fontWeight: 500, marginBottom: 10, marginTop: isRec ? 4 : 0,
+        }}>{titulo}</div>
+        {temAntecipado && (
+          <>
+            <div style={{ fontSize: 13, color: '#111' }}>
+              À vista com <strong>{desconto}% de desconto</strong>
+            </div>
+            <div style={{
+              fontSize: 11.5, color: '#6b7280', marginTop: 6,
+              paddingTop: 6, borderTop: '0.5px solid #f3f4f6',
+            }}>
+              ou em <strong>{parcelas}× sem desconto</strong>
+            </div>
+          </>
+        )}
+        {!temAntecipado && (
+          <div style={{ fontSize: 13, color: '#111' }}>
+            Em <strong>{parcelas}× sem desconto</strong>
           </div>
         )}
       </div>
@@ -12697,6 +12731,8 @@ function EtapaFormaPagamento({
   etapas, atualizarEtapaPct, atualizarEtapaNome, adicionarEtapa, removerEtapa,
   isoladas, toggleIsolada,
   descCompleto, setDescCompleto, parcCompleto, setParcCompleto,
+  // Patch 1: novos props pra "Contratação etapa a etapa" (5%/2x default)
+  descEtapa, setDescEtapa, parcEtapa, setParcEtapa,
   modalidadesEtapa, setModalidadesEtapa,
   resetValoresPagamento, // Callback opcional: chamado quando muda forma exclusiva
   // Callbacks de navegação
@@ -13062,17 +13098,6 @@ function EtapaFormaPagamento({
     const completoEco = baseCompleto - completoAnt;
     const completoParcVal = completoAnt / parcCompleto;
 
-    // Helpers das modalidades (radio com toggle, ambas começam marcadas)
-    const mod1Marcada = modalidadesEtapa.includes('mod1');
-    const mod2Marcada = modalidadesEtapa.includes('mod2');
-    const toggleMod = (mod) => {
-      if (modalidadesEtapa.includes(mod)) {
-        setModalidadesEtapa(modalidadesEtapa.filter(m => m !== mod));
-      } else {
-        setModalidadesEtapa([...modalidadesEtapa, mod]);
-      }
-    };
-
     return (
       <div style={{ marginTop: 40, ...S.fadeIn }}>
         <div style={S.perguntaTitulo}>Pagamento por etapa</div>
@@ -13142,58 +13167,53 @@ function EtapaFormaPagamento({
         </div>
 
         <div style={{ marginTop: 16, marginBottom: 8, fontSize: 13, color: '#6b7280', lineHeight: 1.5 }}>
-          Quais modalidades de pagamento por etapa você quer oferecer? <span style={{ color: '#9ca3af' }}>(pelo menos uma)</span>
+          Como o cliente pode contratar? <span style={{ color: '#9ca3af' }}>Configure as duas modalidades. Mostradas conforme a quantidade de etapas marcadas pelo cliente.</span>
         </div>
 
-        {/* Modalidade 1 — card selecionável */}
-        <div
-          className={'vk-fp-card' + (mod1Marcada ? ' selected' : '')}
-          onClick={e => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-            toggleMod('mod1');
-          }}>
-          <div style={{ flex: 1, padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-            <button type="button" className="vk-fp-radio" style={{ marginTop: 2 }} onClick={e => { e.stopPropagation(); toggleMod('mod1'); }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: '#111', marginBottom: 6 }}>Contratação por etapa individual</div>
-              <div style={{ fontSize: 12.5, color: '#6b7280', lineHeight: 1.5 }}>
-                Cliente escolhe quais etapas contratar. Cada etapa é paga em <strong style={{ color: '#111' }}>50% no início + 50% em 30 dias</strong>. Sem desconto, sem parcelamento adicional.
-              </div>
+        {/* BLOCO 1: Contratação etapa a etapa (5%/2x default).
+            Visível pro cliente quando 1 etapa marcada (ou ambos quando 2+). */}
+        <div style={{
+          background: '#fff', border: '1px solid #e5e7eb',
+          borderRadius: 10, padding: '14px 16px', marginBottom: 12,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Contratação etapa a etapa</span>
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>(quando há 1 etapa)</span>
+          </div>
+          <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
+              <NumStepper valor={descEtapa} onChange={setDescEtapa} min={0} max={100} step={1} width={28} />
+              <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 80 }}>Parcelado</span>
+              <NumStepper valor={parcEtapa} onChange={n => setParcEtapa(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
+              <span style={{ fontSize: 12, color: '#6b7280' }}>×</span>
             </div>
           </div>
         </div>
 
-        {/* Modalidade 2 — card selecionável */}
-        <div
-          className={'vk-fp-card' + (mod2Marcada ? ' selected' : '')}
-          onClick={e => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'BUTTON') return;
-            toggleMod('mod2');
-          }}>
-          <div style={{ flex: 1, padding: '14px 16px', display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-            <button type="button" className="vk-fp-radio" style={{ marginTop: 2 }} onClick={e => { e.stopPropagation(); toggleMod('mod2'); }} />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 500, color: '#111', marginBottom: 6 }}>Contratação completa (todas as etapas)</div>
-              <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12, lineHeight: 1.5 }}>
-                Aplique um desconto adicional para incentivar o cliente a fechar tudo de uma vez, em parcelas mensais.
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12.5, color: '#6b7280' }}>Desconto adicional</span>
-                  <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={1} width={28} />
-                  <span style={{ fontSize: 12.5, color: '#6b7280' }}>%</span>
-                </div>
-                <span style={{ color: '#d1d5db', fontSize: 11 }}>+</span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 12.5, color: '#6b7280' }}>Parcelas</span>
-                  <NumStepper valor={parcCompleto} onChange={n => setParcCompleto(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
-                  <span style={{ fontSize: 12.5, color: '#6b7280' }}>×</span>
-                </div>
-              </div>
-              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 10, paddingTop: 10, borderTop: '0.5px solid #e5e7eb' }}>
-                Total: <span style={{ color: '#111', fontWeight: 500 }}>{fmtBRL_FP(Math.round(completoAnt * 100) / 100)}</span> em {parcCompleto}× de <span style={{ color: '#111', fontWeight: 500 }}>{fmtBRL_FP(Math.round(completoParcVal * 100) / 100)}</span>
-                {descCompleto > 0 && <span style={{ color: '#047857' }}> · economia de {fmtBRLcurto_FP(completoEco)}</span>}
-              </div>
+        {/* BLOCO 2: Etapas completas (10%/4x default).
+            Visível pro cliente quando 2+ etapas marcadas. */}
+        <div style={{
+          background: '#fff', border: '1px solid #e5e7eb',
+          borderRadius: 10, padding: '14px 16px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Etapas completas</span>
+            <span style={{ fontSize: 11, color: '#9ca3af' }}>(quando há 2+ etapas)</span>
+          </div>
+          <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
+              <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={1} width={28} />
+              <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 80 }}>Parcelado</span>
+              <NumStepper valor={parcCompleto} onChange={n => setParcCompleto(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
+              <span style={{ fontSize: 12, color: '#6b7280' }}>×</span>
             </div>
           </div>
         </div>
@@ -13435,11 +13455,9 @@ function EtapaFormaPagamento({
               setErroValidacao('Selecione ao menos uma forma de contratação (Apenas Arquitetura ou Pacote).');
               return;
             }
-            // Validação: se "Por etapa" marcado, pelo menos uma modalidade
-            if (temEtapa && modalidadesEtapa.length === 0) {
-              setErroValidacao('Selecione ao menos uma modalidade de pagamento por etapa.');
-              return;
-            }
+            // Patch 1: validação de modalidadesEtapa removida — agora as 2
+            // modalidades sempre estão configuradas e o Preview decide qual
+            // mostrar dinamicamente baseado em quantas etapas selecionadas.
             setErroValidacao('');
             onContinuar();
           }}>
@@ -13513,10 +13531,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [parcArq,       setParcArq]       = useState(orcBase?.parcArq     || 3);
   const [descPacote,    setDescPacote]    = useState(orcBase?.descPacote  || 10);
   const [parcPacote,    setParcPacote]    = useState(orcBase?.parcPacote  || 4);
+  // Por etapa — Patch 1: nomenclatura nova (semântica clara).
+  //   descEtCtrt/parcEtCtrt = "Contratação etapa a etapa" (cliente contrata 1 de cada vez)
+  //   descPacCtrt/parcPacCtrt = "Etapas completas" (cliente contrata todas juntas)
+  // Defaults: 5%/2x pra etapa a etapa, 10%/4x pra etapas completas.
   const [descEtCtrt,    setDescEtCtrt]    = useState(orcBase?.descEtCtrt  || 5);
   const [parcEtCtrt,    setParcEtCtrt]    = useState(orcBase?.parcEtCtrt  || 2);
-  const [descPacCtrt,   setDescPacCtrt]   = useState(orcBase?.descPacCtrt || 15);
-  const [parcPacCtrt,   setParcPacCtrt]   = useState(orcBase?.parcPacCtrt || 8);
+  const [descPacCtrt,   setDescPacCtrt]   = useState(orcBase?.descPacCtrt || 10);
+  const [parcPacCtrt,   setParcPacCtrt]   = useState(orcBase?.parcPacCtrt || 4);
   // Entrada + final (introduzido na Etapa 5 / Deploy 2). entArq/entPac são o
   // % de entrada; o restante (100 - entArq) é pago no final, na entrega.
   const [entArq,        setEntArq]        = useState(orcBase?.entArq      || 50);
@@ -13531,6 +13553,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   const [editandoRep, setEditandoRep] = useState(false);
   const [editandoAliq, setEditandoAliq] = useState(false);
   const [editandoGrupoQtd, setEditandoGrupoQtd] = useState(null); // guarda o nome do grupo que está com input aberto
+  // etapasIsoladas: Set de IDs INCLUÍDAS na proposta. Lógica interna preservada
+  // (downstream depende disso). Default: vazio = significava "todas" no código antigo.
+  // A UI nova mostra todas marcadas por default e o usuário desmarca pra excluir,
+  // mas internamente convertemos pra esse Set "incluídas" mantido pelo código existente.
   const [etapasIsoladas, setEtapasIsoladas] = useState(new Set(orcBase?.etapasIsoladas || []));
   const [incluiArq,        setIncluiArq]        = useState(orcBase?.incluiArq        !== false);
   const [incluiEng,        setIncluiEng]        = useState(orcBase?.incluiEng        !== false);
@@ -15118,7 +15144,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           return temEng ? etapasPct : [...etapasPct, { id: 5, nome: 'Engenharia', pct: 0, eng: true }];
         })(),
         isoladas: Array.from(etapasIsoladas),
-        modalidade2: { desconto: descPacCtrt, parcelas: parcPacCtrt },
+        modalidadeEtapa: { desconto: descEtCtrt, parcelas: parcEtCtrt }, // Patch 1: etapa a etapa
+        modalidade2: { desconto: descPacCtrt, parcelas: parcPacCtrt }, // Patch 1: etapas completas
       },
     };
     setPropostaData({
@@ -15178,7 +15205,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           return temEng ? etapasPct : [...etapasPct, { id: 5, nome: 'Engenharia', pct: 0, eng: true }];
         })(),
         isoladas: Array.from(etapasIsoladas),
-        modalidade2: { desconto: descPacCtrt, parcelas: parcPacCtrt },
+        modalidadeEtapa: { desconto: descEtCtrt, parcelas: parcEtCtrt }, // Patch 1: etapa a etapa
+        modalidade2: { desconto: descPacCtrt, parcelas: parcPacCtrt }, // Patch 1: etapas completas
       },
     };
     const liveData = {
@@ -15338,6 +15366,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           toggleIsolada={_toggleIsoladaFP}
           descCompleto={descPacCtrt} setDescCompleto={setDescPacCtrt}
           parcCompleto={parcPacCtrt} setParcCompleto={setParcPacCtrt}
+          descEtapa={descEtCtrt} setDescEtapa={setDescEtCtrt}
+          parcEtapa={parcEtCtrt} setParcEtapa={setParcEtCtrt}
           modalidadesEtapa={modalidadesEtapa}
           setModalidadesEtapa={setModalidadesEtapa}
           resetValoresPagamento={() => {
@@ -15349,8 +15379,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             setParcPacote(4);
             setEntArq(50);
             setEntPac(40);
-            setDescPacCtrt(15);
-            setParcPacCtrt(8);
+            // Por etapa (Patch 1): defaults novos
+            setDescEtCtrt(5);  // Contratação etapa a etapa: 5% antecipado
+            setParcEtCtrt(2);  // Contratação etapa a etapa: 2x
+            setDescPacCtrt(10); // Etapas completas: 10% antecipado
+            setParcPacCtrt(4);  // Etapas completas: 4x
             setContratacoesSelecionadas(['arq', 'pac']);
             setModalidadesEtapa(['mod1', 'mod2']);
           }}
