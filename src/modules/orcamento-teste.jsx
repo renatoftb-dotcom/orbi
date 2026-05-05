@@ -5051,7 +5051,29 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       const fmtM2 = v => v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+" m²";
       // etapasPct no PDF: passa só as que aparecem no preview
       const etapasPdfFinal = etapasExibidas;
+
+      // Patch (Refator de Pagamento): reconstrói o objeto canônico formaPagamento
+      // pro PDF usar a mesma lógica do Preview. Aplica os overrides locais de
+      // valores editados (descArqLocal, parcArqLocal, etc.) sobre o snapshot
+      // que veio da Etapa 5 (data.formaPagamento).
+      const fpBase = data.formaPagamento || {};
+      const formaPagamentoPdf = {
+        ...fpBase,
+        antecipado: { descArq: descArqLocal, descPac: descPacoteLocal },
+        parcelas:   { parcArq: parcArqLocal, parcPac: parcPacoteLocal },
+        // final / contratacoes / formas / etapa vêm do snapshot da Etapa 5
+        etapa: {
+          ...(fpBase.etapa || {}),
+          // Overrides do Preview pras modalidades de etapa
+          modalidadeEtapa: { desconto: descEtCtrtLocal, parcelas: parcEtCtrtLocal },
+          modalidade2:     { desconto: descPacCtrtLocal, parcelas: parcPacCtrtLocal },
+          // etapas/isoladas vêm do snapshot pra refletir o que o user marcou na Etapa 5
+        },
+      };
+
       const orc = { id:"teste-"+Date.now(), cliente:data.clienteNome||"Cliente", tipo:data.tipoProjeto, subtipo:data.tipoObra, padrao:data.padrao, tipologia:data.tipologia, tamanho:data.tamanho, comodos:data.comodos||[], tipoPagamento:tipoPgto, descontoEtapa:descArqLocal, parcelasEtapa:parcArqLocal, descontoPacote:descPacoteLocal, parcelasPacote:parcPacoteLocal, descontoEtapaCtrt:descEtCtrtLocal, parcelasEtapaCtrt:parcEtCtrtLocal, descontoPacoteCtrt:descPacCtrtLocal, parcelasPacoteCtrt:parcPacCtrtLocal, etapasPct:etapasPdfFinal, incluiImposto:temImposto, aliquotaImposto:aliqImp, etapasIsoladas:Array.from(idsIsolados), totSI:0, criadoEm:new Date().toISOString(), resultado:r,
+        // Patch (Refator de Pagamento): objeto canônico pro PDF novo
+        formaPagamento: formaPagamentoPdf,
         // Controle de exibição
         mostrarTabelaEtapas: mostrarTabelaEtapas,
         // ESPELHO do preview: valores exatos pré-calculados (PDF usa esses em vez de recalcular)
