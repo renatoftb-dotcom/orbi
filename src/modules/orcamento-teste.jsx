@@ -6399,10 +6399,18 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
   const formasParaTabela = ordemFormas.filter(f => formas.includes(f));
   const temPorEtapa = formas.includes('etapa');
 
-  // Recomendação: Pacote × Antecipado
+  // Recomendação: Antecipado na coluna mais "alta" disponível.
+  //   - Se há Pacote → recomenda Pacote × Antecipado (oferece desconto + escopo completo)
+  //   - Se só há Apenas Arq → recomenda Apenas Arq × Antecipado (única opção com desconto)
+  //   - Sem Antecipado → sem recomendação
   const showPacote = contratacoes.includes('pac');
   const showArq    = contratacoes.includes('arq');
-  const recomendaCelula = showPacote && formas.includes('antecipado');
+  const temAntecipado = formas.includes('antecipado');
+  // Coluna que recebe o badge "Recomendado": Pacote tem prioridade,
+  // mas se Pacote não foi marcado, vai pra Apenas Arq.
+  const colunaRecomendada = temAntecipado
+    ? (showPacote ? 'pac' : (showArq ? 'arq' : null))
+    : null;
 
   const valorPac = valorArq + (incluiEng ? valorEng : 0);
 
@@ -6423,7 +6431,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
 
   // ── Renderiza uma célula da tabela Arq×Pacote ─────────────────
   function renderCelula(tipoCard, formaId) {
-    const isRec = tipoCard === 'pac' && formaId === 'antecipado' && recomendaCelula;
+    const isRec = formaId === 'antecipado' && tipoCard === colunaRecomendada;
     const valorBase = tipoCard === 'arq' ? valorArq : valorPac;
     const conteudo = (() => {
       if (formaId === 'antecipado') {
@@ -6731,6 +6739,7 @@ function EtapaFormaPagamento({
   isoladas, toggleIsolada,
   descCompleto, setDescCompleto, parcCompleto, setParcCompleto,
   modalidadesEtapa, setModalidadesEtapa,
+  resetValoresPagamento, // Callback opcional: chamado quando muda forma exclusiva
   // Callbacks de navegação
   onVoltar, onContinuar,
 }) {
@@ -6746,16 +6755,38 @@ function EtapaFormaPagamento({
     setErroSelecao(false);
     const forma = FORMAS_PAGAMENTO.find(f => f.id === formaId);
     const idx = formasSelecionadas.indexOf(formaId);
+
+    // Detecta forma exclusiva atual (parcelas/final/etapa) — só pode haver uma
+    const exclusivaAtual = formasSelecionadas.find(f => {
+      const def = FORMAS_PAGAMENTO.find(x => x.id === f);
+      return def && def.tipo === 'exclusiva';
+    });
+
+    let novaSelecao;
     if (idx !== -1) {
       // Já selecionada → remove
-      setFormasSelecionadas(formasSelecionadas.filter(x => x !== formaId));
+      novaSelecao = formasSelecionadas.filter(x => x !== formaId);
     } else if (forma.tipo === 'antecipado') {
       // Antecipado é modificador: pode coexistir com qualquer outra
-      setFormasSelecionadas([...formasSelecionadas, formaId]);
+      novaSelecao = [...formasSelecionadas, formaId];
     } else {
       // Demais são mutuamente exclusivas: substitui qualquer outra exclusiva
-      setFormasSelecionadas([...formasSelecionadas.filter(x => x === 'antecipado'), formaId]);
+      novaSelecao = [...formasSelecionadas.filter(x => x === 'antecipado'), formaId];
     }
+
+    // Detecta forma exclusiva nova
+    const exclusivaNova = novaSelecao.find(f => {
+      const def = FORMAS_PAGAMENTO.find(x => x.id === f);
+      return def && def.tipo === 'exclusiva';
+    });
+
+    // Reset: dispara quando a forma exclusiva muda (entrou nova, saiu, ou trocou)
+    // Antecipado entrar/sair não dispara reset (é modificador, preserva configs).
+    if (exclusivaAtual !== exclusivaNova) {
+      if (resetValoresPagamento) resetValoresPagamento();
+    }
+
+    setFormasSelecionadas(novaSelecao);
   }
 
   function avancarParaConfig() {
@@ -9350,6 +9381,20 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           parcCompleto={parcPacCtrt} setParcCompleto={setParcPacCtrt}
           modalidadesEtapa={modalidadesEtapa}
           setModalidadesEtapa={setModalidadesEtapa}
+          resetValoresPagamento={() => {
+            // Chamado quando o usuário muda a forma exclusiva na Tela 1.
+            // Volta todos os valores configuráveis aos defaults.
+            setDescArq(5);
+            setDescPacote(10);
+            setParcArq(3);
+            setParcPacote(4);
+            setEntArq(50);
+            setEntPac(40);
+            setDescPacCtrt(15);
+            setParcPacCtrt(8);
+            setContratacoesSelecionadas(['arq', 'pac']);
+            setModalidadesEtapa(['mod1', 'mod2']);
+          }}
           onVoltar={() => { setPropostaData(null); }}
           onContinuar={() => {
             // Re-chama gerarProposta() pra refrescar o propostaData snapshot
