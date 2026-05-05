@@ -5118,38 +5118,32 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       forcaPuppeteer = window.__VICKE_USE_PUPPETEER;
     }
 
-    // Default: puppeteer pra modelos não-Padrão (Direto, futuros).
-    // Padrão usa legacy (mais rápido, sem cold-start).
-    const usarPuppeteer = forcaPuppeteer !== null
-      ? forcaPuppeteer
-      : (templateId !== "01-editorial");
+    // Patch (Refator de Pagamento): Puppeteer como default pra TODOS os
+    // templates, inclusive 01-editorial. Garante que o PDF é espelho exato
+    // do Preview (incluindo o novo BlocoFormaPagamentoView). O legacy fica
+    // só como fallback se Puppeteer falhar.
+    // Antes: puppeteer só pra não-Padrão (templateId !== "01-editorial")
+    const usarPuppeteer = forcaPuppeteer !== null ? forcaPuppeteer : true;
 
     if (!usarPuppeteer) {
       return await handlePdfLegacy(opts);
     }
 
-    // Tenta puppeteer; se falhar e for modelo Padrão, fallback pro legacy.
+    // Tenta puppeteer; se falhar, fallback pro legacy.
     try {
       return await handlePdfPuppeteer(opts);
     } catch (e) {
       console.warn("[handlePdf] puppeteer falhou:", e.message);
 
-      // Fallback inteligente:
-      //   - Padrão: usa legacy (resultado-pdf.jsx) sem aviso
-      //   - Outros modelos: legacy gera o Padrão antigo (não fiel ao
-      //     visual). Avisa o usuário antes.
-      if (templateId === "01-editorial") {
-        return await handlePdfLegacy(opts);
-      }
-
-      // Modelo não-Padrão: avisa que vai sair como Padrão
+      // Fallback: avisa o usuário que o PDF de fallback pode não estar
+      // 100% fiel ao visual atual (legacy ainda usa formato Padrão antigo).
       const ok = await new Promise(resolve => {
         if (typeof dialogo === "undefined" || !dialogo.confirmar) {
           resolve(true); return;
         }
         dialogo.confirmar({
           titulo: "Geração de PDF temporariamente indisponível",
-          mensagem: `Não foi possível gerar o PDF do modelo escolhido neste momento. Quer baixar como Modelo Padrão? (${e.message})`,
+          mensagem: `Não foi possível gerar o PDF agora. Quer baixar uma versão alternativa? Pode haver pequenas diferenças visuais. (${e.message})`,
           tipo: "aviso",
           onSim: () => resolve(true),
           onNao: () => resolve(false),
@@ -5158,6 +5152,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       if (ok) {
         return await handlePdfLegacy(opts);
       }
+      throw e;
     }
   };
 
