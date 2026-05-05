@@ -5338,34 +5338,17 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         {/* Estilos: lock de edição (UI) + supressão de elementos UI no PDF
             + media queries mobile (responsividade) */}
         <style>{`
+          /* Default desktop: esconde versão mobile da tabela bfp */
+          .vk-prev-direto .vk-bfp-mobile-only { display: none; }
           @media (max-width: 640px) {
             /* Container principal: padding reduzido */
             .vk-prev-direto > div[style*="padding"] {
               padding: 16px 14px 60px !important;
             }
             .vk-prev-direto, .vk-prev-direto > div { overflow-x: hidden; max-width: 100%; }
-            /* BlocoFormaPagamentoView: tabela vertical em vez de horizontal */
-            .vk-prev-direto .vk-bfp-tabela {
-              display: block !important;
-              grid-template-columns: none !important;
-            }
-            .vk-prev-direto .vk-bfp-tabela > div { padding: 8px 12px !important; }
-            .vk-prev-direto .vk-bfp-header {
-              border-bottom: none !important;
-              padding-top: 14px !important;
-              padding-bottom: 6px !important;
-              font-weight: 700 !important;
-              color: #92400e !important;
-              font-size: 13px !important;
-              letter-spacing: 0 !important;
-              text-transform: none !important;
-            }
-            .vk-prev-direto .vk-bfp-row-label {
-              color: #6b7280 !important;
-              padding-left: 0 !important;
-              font-size: 12px !important;
-              padding-bottom: 0 !important;
-            }
+            /* BlocoFormaPagamentoView: alterna desktop/mobile */
+            .vk-prev-direto .vk-bfp-desktop-only { display: none !important; }
+            .vk-prev-direto .vk-bfp-mobile-only { display: block !important; }
             .vk-prev-direto .vk-bfp-etapas-grid {
               grid-template-columns: 1fr 50px 90px !important;
               gap: 6px !important;
@@ -5809,6 +5792,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             - Cards Arq+Eng do passo 2: empilhados
             - Geral: travar overflow horizontal em qualquer container */}
       <style>{`
+        /* Default (desktop): mostra desktop (grid preservado), esconde mobile.
+           A media query mobile inverte: esconde desktop, mostra mobile (block). */
+        .vk-bfp-mobile-only { display: none; }
         @media (max-width: 640px) {
           /* 1. Container principal: padding reduzido */
           .vk-prev-editorial > div[class*="proposta-locked"],
@@ -5821,28 +5807,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             overflow-x: hidden;
             max-width: 100%;
           }
-          /* 2. BlocoFormaPagamentoView — tabela Arq×Pacote vira vertical */
-          .vk-bfp-tabela {
-            display: block !important;
-            grid-template-columns: none !important;
-          }
-          .vk-bfp-tabela > div { padding: 8px 12px !important; }
-          .vk-bfp-tabela > .vk-bfp-header {
-            border-bottom: none !important;
-            padding-top: 14px !important;
-            padding-bottom: 6px !important;
-            font-weight: 700 !important;
-            color: #111 !important;
-            font-size: 13px !important;
-            letter-spacing: 0 !important;
-            text-transform: none !important;
-          }
-          .vk-bfp-tabela > .vk-bfp-row-label {
-            color: #6b7280 !important;
-            padding-left: 0 !important;
-            font-size: 12px !important;
-            padding-bottom: 0 !important;
-          }
+          /* 2. BlocoFormaPagamentoView — alterna entre desktop e mobile.
+             Em desktop: mostra .vk-bfp-desktop-only (tabela grid 3 colunas)
+             Em mobile: mostra .vk-bfp-mobile-only (grupos por contratação) */
+          .vk-bfp-desktop-only { display: none !important; }
+          .vk-bfp-mobile-only { display: block !important; }
           /* 3. Tabela de etapas dentro do BlocoFormaPagamentoView */
           .vk-bfp-etapas-grid {
             grid-template-columns: 1fr 50px 90px !important;
@@ -6613,6 +6582,9 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
   }
 
   // ── Renderiza tabela Arq×Pacote ───────────────────────────────
+  // Patch: renderiza DUAS versões — desktop (grid 3 colunas) e mobile
+  // (agrupada por contratação). CSS .vk-bfp-desktop-only e .vk-bfp-mobile-only
+  // controlam qual aparece via media query.
   function renderTabelaArqPac() {
     if (formasParaTabela.length === 0) return null;
     const numCols = (showArq ? 1 : 0) + (showPacote ? 1 : 0);
@@ -6622,51 +6594,88 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
       ? '130px 1fr 1fr'
       : '130px 1fr';
 
-    return (
-      <div className="vk-bfp-tabela" style={{ display: 'grid', gridTemplateColumns: colsTemplate, gap: 0, marginBottom: temPorEtapa ? 28 : 0 }}>
-        <div></div>
-        {showArq && (
-          <div className="vk-bfp-header" style={{
-            fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-            letterSpacing: '0.05em', padding: '0 16px 12px',
-            borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
-          }}>Apenas Arquitetura</div>
-        )}
-        {showPacote && (
-          <div className="vk-bfp-header" style={{
-            fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-            letterSpacing: '0.05em', padding: '0 16px 12px',
-            borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
-          }}>Pacote completo</div>
-        )}
-
-        {formasParaTabela.flatMap((formaId, idx) => {
-          const isLast = idx === formasParaTabela.length - 1;
-          const cells = [
-            <div key={formaId + '-label'} className="vk-bfp-row-label" style={{
-              padding: '18px 0',
-              borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6',
-              fontSize: 13, color: '#6b7280',
-              lineHeight: 1.3,
+    // Helper: renderiza um grupo (Apenas Arq OU Pacote) — usado na versão mobile
+    const renderGrupoMobile = (tipoCard, titulo) => (
+      <div style={{
+        marginBottom: 18, paddingBottom: 14,
+        borderBottom: '0.5px solid #e5e7eb',
+      }}>
+        <div style={{
+          fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+          letterSpacing: '0.05em', fontWeight: 500, marginBottom: 8,
+        }}>{titulo}</div>
+        {formasParaTabela.map((formaId, idx) => (
+          <div key={tipoCard + '-' + formaId} style={{
+            display: 'flex', alignItems: 'flex-start', gap: 12,
+            padding: '8px 0',
+            borderTop: idx > 0 ? '0.5px solid #f3f4f6' : 'none',
+          }}>
+            <div style={{
+              minWidth: 90, fontSize: 12.5, color: '#6b7280',
+              lineHeight: 1.3, paddingTop: 2,
             }}>{getLabelLinha(formaId)}</div>
-          ];
-          if (showArq) {
-            cells.push(
-              <div key={formaId + '-arq'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
-                {renderCelula('arq', formaId)}
-              </div>
-            );
-          }
-          if (showPacote) {
-            cells.push(
-              <div key={formaId + '-pac'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
-                {renderCelula('pac', formaId)}
-              </div>
-            );
-          }
-          return cells;
-        })}
+            <div style={{ flex: 1 }}>{renderCelula(tipoCard, formaId)}</div>
+          </div>
+        ))}
       </div>
+    );
+
+    return (
+      <>
+        {/* DESKTOP — grid 3 colunas (igual antes) */}
+        <div className="vk-bfp-tabela vk-bfp-desktop-only" style={{ display: 'grid', gridTemplateColumns: colsTemplate, gap: 0, marginBottom: temPorEtapa ? 28 : 0 }}>
+          <div></div>
+          {showArq && (
+            <div className="vk-bfp-header" style={{
+              fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+              letterSpacing: '0.05em', padding: '0 16px 12px',
+              borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
+            }}>Apenas Arquitetura</div>
+          )}
+          {showPacote && (
+            <div className="vk-bfp-header" style={{
+              fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+              letterSpacing: '0.05em', padding: '0 16px 12px',
+              borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
+            }}>Pacote completo</div>
+          )}
+
+          {formasParaTabela.flatMap((formaId, idx) => {
+            const isLast = idx === formasParaTabela.length - 1;
+            const cells = [
+              <div key={formaId + '-label'} className="vk-bfp-row-label" style={{
+                padding: '18px 0',
+                borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6',
+                fontSize: 13, color: '#6b7280',
+                lineHeight: 1.3,
+              }}>{getLabelLinha(formaId)}</div>
+            ];
+            if (showArq) {
+              cells.push(
+                <div key={formaId + '-arq'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                  {renderCelula('arq', formaId)}
+                </div>
+              );
+            }
+            if (showPacote) {
+              cells.push(
+                <div key={formaId + '-pac'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                  {renderCelula('pac', formaId)}
+                </div>
+              );
+            }
+            return cells;
+          })}
+        </div>
+
+        {/* MOBILE — agrupada por contratação. Mostra um grupo embaixo do outro:
+            "APENAS ARQUITETURA" com Antecipado/Parcelas/Final dentro,
+            "PACOTE COMPLETO" com Antecipado/Parcelas/Final dentro. */}
+        <div className="vk-bfp-mobile-only" style={{ marginBottom: temPorEtapa ? 28 : 0 }}>
+          {showArq && renderGrupoMobile('arq', 'Apenas Arquitetura')}
+          {showPacote && renderGrupoMobile('pac', 'Pacote completo')}
+        </div>
+      </>
     );
   }
 
@@ -7682,6 +7691,16 @@ function EtapaFormaPagamento({
           /* Linha forma label estreita */
           .vk-fp-linha { grid-template-columns: 110px 1fr; }
           .vk-fp-linha-label { font-size: 12px; }
+          /* Compactar resumo lateral em mobile (Antecipado, Entrada+parcelas, etc.).
+             Em desktop tem 10+10px de gap entre blocos; em mobile reduzo pra 6+6px
+             pra evitar muito espaço vazio. */
+          .vk-fp-resumo-bloco + .vk-fp-resumo-bloco {
+            padding-top: 8px !important;
+            margin-top: 8px !important;
+          }
+          .vk-fp-resumo-label { margin-bottom: 2px !important; }
+          .vk-fp-resumo-sub-valor { margin-bottom: 2px !important; line-height: 1.25 !important; }
+          .vk-fp-resumo-sub-label { margin-bottom: 1px !important; }
 
           /* 2. Tabela de etapas: vira lista de cards empilhados.
              Cada linha (.vk-fp-etapa-row) deixa de ser grid horizontal e
