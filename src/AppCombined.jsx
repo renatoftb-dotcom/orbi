@@ -12569,6 +12569,20 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
     // Detecta se Antecipado está marcado (na lista geral de formas)
     const temAntecipadoMarcado = formas.includes('antecipado');
 
+    // Patch: calcula valor base de cada modalidade pra mostrar economia
+    //   - Etapa a etapa: só faz sentido quando há 1 etapa (valor concreto = valorTotal)
+    //     Quando há 2+, "etapa a etapa" é variável → não mostra economia.
+    //   - Etapas completas: sempre é a soma das etapas mostradas (= valorTotal)
+    const valorBaseEtapaUnica = qtdEtapasMostradas === 1 ? valorTotal : null;
+    const valorBaseEtapasCompletas = valorTotal;
+
+    // Patch: regra do RECOMENDADO
+    //   - Se há 2 cards (etapa a etapa + completas) → recomenda só "Etapas completas"
+    //   - Se há só 1 card (1 etapa marcada) → recomenda "Etapa a etapa"
+    // Só recomenda quando Antecipado está marcado (sem desconto, sem recomendação).
+    const recomendaEtapaUnica       = mostraEtapaUnica && !mostraEtapasCompletas && temAntecipadoMarcado;
+    const recomendaEtapasCompletas  = mostraEtapasCompletas && temAntecipadoMarcado;
+
     return (
       <div style={{ paddingTop: formasParaTabela.length > 0 ? 20 : 0, borderTop: formasParaTabela.length > 0 ? '0.5px solid #e5e7eb' : 'none' }}>
         {formasParaTabela.length > 0 && (
@@ -12646,12 +12660,16 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
               temAntecipado: temAntecipadoMarcado,
               desconto: modEtapa.desconto,
               parcelas: modEtapa.parcelas,
+              valorBase: valorBaseEtapaUnica, // null quando 2+ etapas (varia)
+              isRecomendado: recomendaEtapaUnica,
             })}
             {mostraEtapasCompletas && renderCardOferta({
               titulo: 'Etapas completas',
               temAntecipado: temAntecipadoMarcado,
               desconto: modCompleto.desconto,
               parcelas: modCompleto.parcelas,
+              valorBase: valorBaseEtapasCompletas,
+              isRecomendado: recomendaEtapasCompletas,
             })}
           </div>
         )}
@@ -12660,36 +12678,65 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
   }
 
   // Helper: renderiza um card de oferta (etapa a etapa OU etapas completas).
-  // Quando temAntecipado=true, mostra "À vista N% OU em Mx".
-  // Quando temAntecipado=false, mostra apenas "Em Mx sem desconto".
-  // Badge "RECOMENDADO" aparece sempre que temAntecipado.
-  function renderCardOferta({ titulo, temAntecipado, desconto, parcelas }) {
-    const isRec = temAntecipado;
+  // Layout: o badge RECOMENDADO + borda verde envolvem APENAS a linha do
+  // "Antecipado" (sub-box interno). A linha "ou em Mx sem desconto" fica
+  // fora do destaque verde.
+  // Args:
+  //   titulo: string
+  //   temAntecipado: boolean — se Antecipado está marcado pelo usuário
+  //   desconto: número (% antecipado)
+  //   parcelas: número (qtd de parcelas)
+  //   valorBase: número ou null. Se número, mostra economia em letras pequenas.
+  //              Null = valor variável (ex: etapa a etapa com 2+ etapas).
+  //   isRecomendado: boolean — se esse card é o "recomendado"
+  function renderCardOferta({ titulo, temAntecipado, desconto, parcelas, valorBase, isRecomendado }) {
+    const valorAntecipado = (valorBase != null && desconto > 0) ? valorBase * (1 - desconto / 100) : null;
+    const economia = (valorBase != null && desconto > 0) ? valorBase - valorAntecipado : null;
     return (
       <div style={{
-        border: isRec ? `1.5px solid ${VERDE}` : '0.5px solid #e5e7eb',
-        borderRadius: 8, padding: '14px 16px', position: 'relative',
+        border: '0.5px solid #e5e7eb',
+        borderRadius: 8, padding: '14px 16px',
       }}>
-        {isRec && (
-          <div style={{
-            position: 'absolute', top: -8, left: 12,
-            fontSize: 9, color: '#fff', background: VERDE,
-            padding: '3px 8px', borderRadius: 999,
-            letterSpacing: '0.05em', fontWeight: 600,
-          }}>RECOMENDADO</div>
-        )}
         <div style={{
           fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-          letterSpacing: '0.05em', fontWeight: 500, marginBottom: 10, marginTop: isRec ? 4 : 0,
+          letterSpacing: '0.05em', fontWeight: 500, marginBottom: 10,
         }}>{titulo}</div>
+
         {temAntecipado && (
           <>
-            <div style={{ fontSize: 13, color: '#111' }}>
-              À vista com <strong>{desconto}% de desconto</strong>
-            </div>
+            {/* Sub-box verde envolve só a linha do antecipado.
+                Quando isRecomendado, ganha borda verde + badge "RECOMENDADO". */}
             <div style={{
-              fontSize: 11.5, color: '#6b7280', marginTop: 6,
-              paddingTop: 6, borderTop: '0.5px solid #f3f4f6',
+              border: isRecomendado ? `1.5px solid ${VERDE}` : 'none',
+              borderRadius: 6,
+              padding: isRecomendado ? '10px 12px 8px' : 0,
+              position: 'relative',
+              marginTop: isRecomendado ? 4 : 0,
+              marginBottom: 6,
+            }}>
+              {isRecomendado && (
+                <div style={{
+                  position: 'absolute', top: -8, left: 10,
+                  fontSize: 9, color: '#fff', background: VERDE,
+                  padding: '3px 8px', borderRadius: 999,
+                  letterSpacing: '0.05em', fontWeight: 600,
+                }}>RECOMENDADO</div>
+              )}
+              <div style={{ fontSize: 13, color: '#111', marginTop: isRecomendado ? 4 : 0 }}>
+                Antecipado com <strong>{desconto}% de desconto</strong>
+              </div>
+              {economia != null && (
+                <div style={{ fontSize: 10.5, color: VERDE_LIGHT, marginTop: 3 }}>
+                  economia de {fmtBRL(Math.round(economia * 100) / 100)}
+                </div>
+              )}
+            </div>
+            {/* Linha de parcelas — fora do destaque verde */}
+            <div style={{
+              fontSize: 11.5, color: '#6b7280',
+              paddingTop: isRecomendado ? 8 : 6,
+              borderTop: isRecomendado ? 'none' : '0.5px solid #f3f4f6',
+              marginTop: isRecomendado ? 0 : 6,
             }}>
               ou em <strong>{parcelas}× sem desconto</strong>
             </div>
