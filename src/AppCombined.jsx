@@ -10236,27 +10236,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   // escritório trocar o logo depois.
   const [logoPreview, setLogoPreview]       = useState(snap?.logoPreview ?? (escritorio.logo || null));
 
-  // Logo agora vem de data.escritorio.logo (salvo no banco pela aba Escritório).
-  // O upload/remoção aqui no preview fica como override TEMPORÁRIO só pra esta
-  // proposta específica — não mexe no escritório global. Útil pra propostas
-  // excepcionais (ex: parceria com logo diferente) sem afetar as demais.
-  // Ao salvar a proposta, logoPreview entra no snapshot.
-  const inputLogoRef = useRef(null);
-
-  function handleLogoUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      const data64 = ev.target.result;
-      setLogoPreview(data64);
-    };
-    reader.readAsDataURL(file);
-  }
-
-  function handleLogoRemove() {
-    setLogoPreview(null);
-  }
+  // Patch: logo agora vem APENAS do cadastro do escritório (data.escritorio.logo).
+  // Removido upload/remoção inline no Preview — sem confusão sobre onde editar.
+  // Pra mudar o logo, o usuário vai na aba Escritório → Dados Gerais.
 
   const arqOriginal  = incluiArq ? (calculo.precoArq || 0) : 0;
   const engOriginal  = incluiEng ? (calculo.precoEng || 0) : 0;
@@ -11238,7 +11220,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           /* Quebras de página: cada etapa do escopo deve evitar quebrar no meio.
              Aplicado a elementos críticos pra o PDF não cortar feio. */
           .etapa-bloco,
-          .secao-bloco {
+          .secao-bloco,
+          .aceite-footer-bloco {
             page-break-inside: avoid;
             break-inside: avoid;
           }
@@ -11542,43 +11525,45 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               </>
             )}
 
-            {/* ACEITE */}
-            <div style={D.secTit}>Aceite da proposta</div>
-            <div style={D.secTexto}>
-              Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.
-            </div>
-            <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:36 }}>
-              <div style={{ fontSize:11, color:"#9ca3af" }}>
-                <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
-                  {clienteNome || "—"}
-                </div>
-                <div style={{ marginTop:3 }}>Cliente</div>
+            {/* ACEITE — Patch: envolto pra não quebrar entre páginas no PDF */}
+            <div className="aceite-footer-bloco">
+              <div style={D.secTit}>Aceite da proposta</div>
+              <div style={D.secTexto}>
+                Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.
               </div>
-              <div style={{ fontSize:11, color:"#9ca3af" }}>
-                <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
-                  {lockEdicao ? (
-                    <span>{(responsavelEdit || "")}{cauEdit ? ` · ${cauEdit}` : ""}</span>
-                  ) : (
-                    <>
-                      <TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:11, fontWeight:600 }} />
-                      {" · "}
-                      <TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:11, fontWeight:600 }} />
-                    </>
-                  )}
+              <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:36 }}>
+                <div style={{ fontSize:11, color:"#9ca3af" }}>
+                  <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
+                    {clienteNome || "—"}
+                  </div>
+                  <div style={{ marginTop:3 }}>Cliente</div>
                 </div>
-                <div style={{ marginTop:3 }}>Responsável Técnico</div>
+                <div style={{ fontSize:11, color:"#9ca3af" }}>
+                  <div style={{ borderTop:"1px solid #111", paddingTop:6, marginTop:36, fontWeight:600, color:"#111", fontSize:11 }}>
+                    {lockEdicao ? (
+                      <span>{(responsavelEdit || "")}{cauEdit ? ` · ${cauEdit}` : ""}</span>
+                    ) : (
+                      <>
+                        <TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:11, fontWeight:600 }} />
+                        {" · "}
+                        <TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:11, fontWeight:600 }} />
+                      </>
+                    )}
+                  </div>
+                  <div style={{ marginTop:3 }}>Responsável Técnico</div>
+                </div>
               </div>
-            </div>
 
-            {/* Rodapé com contatos */}
-            <div style={{ marginTop:32, paddingTop:14, borderTop:"0.5px solid #e5e7eb", fontSize:10, color:"#9ca3af", textAlign:"center", lineHeight:1.6 }}>
-              <span>{escritorio.nome || "Escritório"}</span>
-              {" · "}
-              {lockEdicao ? <span>{emailEdit || ""}</span> : <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:10 }} />}
-              {" · "}
-              {lockEdicao ? <span>{telefoneEdit || ""}</span> : <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:10 }} />}
-              {" · "}
-              {lockEdicao ? <span>{instagramEdit || ""}</span> : <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:10 }} />}
+              {/* Rodapé com contatos */}
+              <div style={{ marginTop:32, paddingTop:14, borderTop:"0.5px solid #e5e7eb", fontSize:10, color:"#9ca3af", textAlign:"center", lineHeight:1.6 }}>
+                <span>{escritorio.nome || "Escritório"}</span>
+                {" · "}
+                {lockEdicao ? <span>{emailEdit || ""}</span> : <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:10 }} />}
+                {" · "}
+                {lockEdicao ? <span>{telefoneEdit || ""}</span> : <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:10 }} />}
+                {" · "}
+                {lockEdicao ? <span>{instagramEdit || ""}</span> : <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:10 }} />}
+              </div>
             </div>
 
           </div>
@@ -11633,6 +11618,13 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         /* Default (desktop): mostra desktop (grid preservado), esconde mobile.
            A media query mobile inverte: esconde desktop, mostra mobile (block). */
         .vk-bfp-mobile-only { display: none; }
+        /* Patch: bloco Aceite + footer não pode quebrar entre páginas no PDF */
+        .vk-prev-editorial .aceite-footer-bloco,
+        .vk-prev-editorial .etapa-bloco,
+        .vk-prev-editorial .secao-bloco {
+          page-break-inside: avoid;
+          break-inside: avoid;
+        }
         @media (max-width: 640px) {
           /* 1. Container principal: padding reduzido */
           .vk-prev-editorial > div[class*="proposta-locked"],
@@ -11793,25 +11785,22 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            {/* Patch: logo vem do cadastro do escritório (escritorio.logo).
+                Sem upload/remoção inline. Quando ausente, mostra placeholder
+                discreto (só em modo edição) lembrando o usuário de cadastrar. */}
             {logoPreview ? (
-              <div style={{ position:"relative", display:"inline-flex", alignItems:"center" }}>
-                <img src={logoPreview} alt="Logo" style={{ height:44, maxWidth:120, objectFit:"contain", borderRadius:4 }} />
-                <button onClick={handleLogoRemove} title="Remover logo"
-                  style={{ position:"absolute", top:-6, right:-6, width:16, height:16, borderRadius:"50%",
-                    background:"#ef4444", border:"none", cursor:"pointer", display:"flex", alignItems:"center",
-                    justifyContent:"center", fontSize:9, color:"#fff", fontWeight:700, lineHeight:1 }}>
-                  ✕
-                </button>
-              </div>
+              <img src={logoPreview} alt="Logo" style={{ height:80, maxWidth:220, objectFit:"contain", borderRadius:4 }} />
             ) : (
-              <button onClick={() => inputLogoRef.current?.click()}
-                style={{ height:44, padding:"0 12px", border:"1.5px dashed #d1d5db", borderRadius:6,
-                  background:"#f5f6f8", cursor:"pointer", fontSize:11, color:"#828a98", fontFamily:"inherit",
-                  display:"flex", alignItems:"center", gap:5, whiteSpace:"nowrap" }}>
-                + Logo
-              </button>
+              !lockEdicao && (
+                <div className="no-print" style={{
+                  height:80, padding:"0 16px", border:"1.5px dashed #d1d5db", borderRadius:6,
+                  background:"#fafbfc", fontSize:12, color:"#9ca3af", fontFamily:"inherit",
+                  display:"flex", alignItems:"center", whiteSpace:"nowrap"
+                }}>
+                  Cadastre o logo do escritório
+                </div>
+              )
             )}
-            <input ref={inputLogoRef} type="file" accept="image/*" style={{ display:"none" }} onChange={handleLogoUpload} />
           </div>
           <div style={{ fontSize:11, color:LT }}><TextoEditavel valor={cidadeEdit} onChange={setCidadeEdit} style={{}} />, {dataStr} · Válido até <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{}} /></div>
         </div>
@@ -12157,32 +12146,36 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           ))}
         </Sec>
 
-        <Sec title="Aceite da proposta">
-          <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:8 }}>
-            <div>
-              <div style={{ fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Cliente</div>
-              <div style={{ fontSize:14, fontWeight:600, color:C, marginBottom:32 }}>{clienteNome || "—"}</div>
-              <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:6, display:"flex", justifyContent:"space-between", fontSize:11, color:LT }}>
-                <span>Assinatura</span><span>Data: _____ / _____ / _______</span>
+        {/* Patch: bloco "Aceite + footer" envolto pra não quebrar entre páginas
+            no PDF. Se não couber inteiro, vai todo pra próxima página. */}
+        <div className="aceite-footer-bloco">
+          <Sec title="Aceite da proposta">
+            <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:8 }}>
+              <div>
+                <div style={{ fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Cliente</div>
+                <div style={{ fontSize:14, fontWeight:600, color:C, marginBottom:32 }}>{clienteNome || "—"}</div>
+                <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:6, display:"flex", justifyContent:"space-between", fontSize:11, color:LT }}>
+                  <span>Assinatura</span><span>Data: _____ / _____ / _______</span>
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Responsável técnico</div>
+                <div style={{ fontSize:14, fontWeight:600, color:C, marginBottom:4 }}><TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:14, fontWeight:600 }} /></div>
+                <div style={{ fontSize:12, color:LT, marginBottom:20 }}><TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:12 }} /></div>
+                <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:6, display:"flex", justifyContent:"space-between", fontSize:11, color:LT }}>
+                  <span>Assinatura</span><span>{dataStr}</span>
+                </div>
               </div>
             </div>
-            <div>
-              <div style={{ fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Responsável técnico</div>
-              <div style={{ fontSize:14, fontWeight:600, color:C, marginBottom:4 }}><TextoEditavel valor={responsavelEdit} onChange={setResponsavelEdit} style={{ fontSize:14, fontWeight:600 }} /></div>
-              <div style={{ fontSize:12, color:LT, marginBottom:20 }}><TextoEditavel valor={cauEdit} onChange={setCauEdit} style={{ fontSize:12 }} /></div>
-              <div style={{ borderTop:`0.5px solid ${LN}`, paddingTop:6, display:"flex", justifyContent:"space-between", fontSize:11, color:LT }}>
-                <span>Assinatura</span><span>{dataStr}</span>
-              </div>
-            </div>
-          </div>
-        </Sec>
+          </Sec>
 
-        <div style={{ borderTop:`0.5px solid ${LN}`, marginTop:48, paddingTop:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, fontSize:11, color:LT }}>
-            <span>{escritorio.nome || "Escritório"}</span><span>·</span>
-            <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:11 }} /><span>·</span>
-            <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:11 }} /><span>·</span>
-            <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:11 }} />
+          <div style={{ borderTop:`0.5px solid ${LN}`, marginTop:48, paddingTop:14, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, fontSize:11, color:LT }}>
+              <span>{escritorio.nome || "Escritório"}</span><span>·</span>
+              <TextoEditavel valor={emailEdit} onChange={setEmailEdit} style={{ fontSize:11 }} /><span>·</span>
+              <TextoEditavel valor={telefoneEdit} onChange={setTelefoneEdit} style={{ fontSize:11 }} /><span>·</span>
+              <TextoEditavel valor={instagramEdit} onChange={setInstagramEdit} style={{ fontSize:11 }} />
+            </div>
           </div>
         </div>
       </div>
