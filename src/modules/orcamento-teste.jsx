@@ -6824,20 +6824,24 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
   }
 
   // Helper: renderiza um card de oferta (etapa a etapa OU etapas completas).
+  // Padrão equalizado com os cards Apenas Arq / Pacote:
+  //   - Valor R$ em destaque (se calculável)
+  //   - "X% de desconto · economia R$ Y" em letra menor
+  //   - "ou em N× R$ Z" pra parcela
   // Layout: o badge RECOMENDADO + borda verde envolvem APENAS a linha do
-  // "Antecipado" (sub-box interno). A linha "ou em Mx sem desconto" fica
-  // fora do destaque verde.
+  // "Antecipado" (sub-box interno). A linha "ou em Mx" fica fora do destaque.
   // Args:
   //   titulo: string
-  //   temAntecipado: boolean — se Antecipado está marcado pelo usuário
+  //   temAntecipado: boolean — se Antecipado está marcado
   //   desconto: número (% antecipado)
   //   parcelas: número (qtd de parcelas)
-  //   valorBase: número ou null. Se número, mostra economia em letras pequenas.
-  //              Null = valor variável (ex: etapa a etapa com 2+ etapas).
+  //   valorBase: número ou null. Se null = valor variável (ex: etapa a etapa
+  //              com 2+ etapas). Nesse caso, fallback pra texto "X% de desconto".
   //   isRecomendado: boolean — se esse card é o "recomendado"
   function renderCardOferta({ titulo, temAntecipado, desconto, parcelas, valorBase, isRecomendado }) {
     const valorAntecipado = (valorBase != null && desconto > 0) ? valorBase * (1 - desconto / 100) : null;
-    const economia = (valorBase != null && desconto > 0) ? valorBase - valorAntecipado : null;
+    const economia        = (valorBase != null && desconto > 0) ? valorBase - valorAntecipado : null;
+    const valorParcela    = (valorBase != null) ? valorBase / parcelas : null;
     return (
       <div style={{
         border: '0.5px solid #e5e7eb',
@@ -6850,7 +6854,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
 
         {temAntecipado && (
           <>
-            {/* Sub-box verde envolve só a linha do antecipado.
+            {/* Sub-box verde envolve só a linha do antecipado (com valor + economia).
                 Quando isRecomendado, ganha borda verde + badge "RECOMENDADO". */}
             <div style={{
               border: isRecomendado ? `1.5px solid ${VERDE}` : 'none',
@@ -6868,30 +6872,55 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiEng
                   letterSpacing: '0.05em', fontWeight: 600,
                 }}>RECOMENDADO</div>
               )}
-              <div style={{ fontSize: 13, color: '#111', marginTop: isRecomendado ? 4 : 0 }}>
-                Antecipado com <strong>{desconto}% de desconto</strong>
-              </div>
-              {economia != null && (
-                <div style={{ fontSize: 10.5, color: VERDE_LIGHT, marginTop: 3 }}>
-                  economia de {fmtBRL(Math.round(economia * 100) / 100)}
+              {valorAntecipado != null ? (
+                // Valor concreto: mostra R$ em destaque + linha menor
+                <>
+                  <div style={{ fontSize: 18, fontWeight: 500, color: '#111', marginTop: isRecomendado ? 4 : 0 }}>
+                    {fmtBRL(Math.round(valorAntecipado * 100) / 100)}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: isRecomendado ? VERDE_LIGHT : '#9ca3af', marginTop: 2 }}>
+                    {desconto}% de desconto · economia {fmtBRLcurto(economia)}
+                  </div>
+                </>
+              ) : (
+                // Valor variável (etapa a etapa com 2+ etapas): mostra só texto
+                <div style={{ fontSize: 13, color: '#111', marginTop: isRecomendado ? 4 : 0 }}>
+                  Antecipado com <strong>{desconto}% de desconto</strong>
                 </div>
               )}
             </div>
-            {/* Linha de parcelas — fora do destaque verde */}
+
+            {/* Linha de parcelas — fora do destaque verde.
+                Padrão: se valorBase concreto, mostra "ou em N× R$ X". Senão, "ou em N× sem desconto". */}
             <div style={{
               fontSize: 11.5, color: '#6b7280',
               paddingTop: isRecomendado ? 8 : 6,
               borderTop: isRecomendado ? 'none' : '0.5px solid #f3f4f6',
               marginTop: isRecomendado ? 0 : 6,
             }}>
-              ou em <strong>{parcelas}× sem desconto</strong>
+              {valorParcela != null ? (
+                <>ou em <strong>{parcelas}× {fmtBRL(Math.round(valorParcela * 100) / 100)}</strong></>
+              ) : (
+                <>ou em <strong>{parcelas}× sem desconto</strong></>
+              )}
             </div>
           </>
         )}
+
+        {/* Cenário sem Antecipado: só mostra a linha de parcelas em destaque */}
         {!temAntecipado && (
-          <div style={{ fontSize: 13, color: '#111' }}>
-            Em <strong>{parcelas}× sem desconto</strong>
-          </div>
+          valorParcela != null ? (
+            <>
+              <div style={{ fontSize: 16, fontWeight: 500, color: '#111', marginBottom: 2 }}>
+                {parcelas}× {fmtBRL(Math.round(valorParcela * 100) / 100)}
+              </div>
+              <div style={{ fontSize: 11.5, color: '#9ca3af' }}>sem desconto</div>
+            </>
+          ) : (
+            <div style={{ fontSize: 13, color: '#111' }}>
+              Em <strong>{parcelas}× sem desconto</strong>
+            </div>
+          )
         )}
       </div>
     );
