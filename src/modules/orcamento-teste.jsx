@@ -6703,7 +6703,8 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
           {showArq && (
             <div className="vk-bfp-header" style={{
               fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-              letterSpacing: '0.05em', padding: '0 16px 12px',
+              letterSpacing: '0.05em',
+              padding: recPacoteSemAnt ? '14px 16px 12px' : '0 16px 12px',
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>{labelApenas}</div>
           )}

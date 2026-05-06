@@ -577,8 +577,8 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
         let groupH = 5.5;
         if (fpTemParcelas) groupH += 11;
         if (fpTemFinal) groupH += 11;
-        groupH += 4;
-        desenhaBadgeRec(M, y - 1, TW, groupH);
+        groupH += 7;
+        desenhaBadgeRec(M, y - 4, TW, groupH);
       }
 
       // Título do grupo
