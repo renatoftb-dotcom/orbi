@@ -6529,6 +6529,8 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
   const showPacote = contratacoes.includes('pac') && incluiArq && incluiEng;
   const showArq    = contratacoes.includes('arq') && (incluiArq || incluiEng);
   const temAntecipado = formas.includes('antecipado');
+  const recPacoteSemAnt = !temAntecipado && showPacote
+                       && (formas.includes('parcelas') || formas.includes('final'));
 
   // Patch (Toggle Arq/Eng): título da coluna "showArq" muda conforme o que
   // está incluído. Se só Eng, vira "Apenas Engenharia". Caso contrário,
@@ -6656,11 +6658,23 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
       : '130px 1fr';
 
     // Helper: renderiza um grupo (Apenas Arq OU Pacote) — usado na versão mobile
-    const renderGrupoMobile = (tipoCard, titulo) => (
-      <div style={{
+    const renderGrupoMobile = (tipoCard, titulo, isRec = false) => (
+      <div style={isRec ? {
+        marginBottom: 18, padding: '14px 16px',
+        border: `1.5px solid ${VERDE}`, borderRadius: 8,
+        position: 'relative',
+      } : {
         marginBottom: 18, paddingBottom: 14,
         borderBottom: '0.5px solid #e5e7eb',
       }}>
+        {isRec && (
+          <div style={{
+            position: 'absolute', top: -8, left: 10,
+            fontSize: 9, color: '#fff', background: VERDE,
+            padding: '3px 8px', borderRadius: 999,
+            letterSpacing: '0.05em', fontWeight: 600,
+          }}>RECOMENDADO</div>
+        )}
         <div style={{
           fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
           letterSpacing: '0.05em', fontWeight: 500, marginBottom: 8,
@@ -6693,12 +6707,40 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>{labelApenas}</div>
           )}
-          {showPacote && (
+          {showPacote && !recPacoteSemAnt && (
             <div className="vk-bfp-header" style={{
               fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
               letterSpacing: '0.05em', padding: '0 16px 12px',
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>Pacote completo</div>
+          )}
+          {showPacote && recPacoteSemAnt && (
+            <div style={{
+              gridColumn: showArq ? 3 : 2,
+              gridRow: `1 / span ${formasParaTabela.length + 1}`,
+              border: `1.5px solid ${VERDE}`, borderRadius: 8,
+              position: 'relative',
+            }}>
+              <div style={{
+                position: 'absolute', top: -8, left: 10,
+                fontSize: 9, color: '#fff', background: VERDE,
+                padding: '3px 8px', borderRadius: 999,
+                letterSpacing: '0.05em', fontWeight: 600,
+              }}>RECOMENDADO</div>
+              <div style={{
+                fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+                letterSpacing: '0.05em', padding: '14px 16px 12px',
+                borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
+              }}>Pacote completo</div>
+              {formasParaTabela.map((formaId, idx) => {
+                const isLast = idx === formasParaTabela.length - 1;
+                return (
+                  <div key={formaId + '-pac-rec'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                    {renderCelula('pac', formaId)}
+                  </div>
+                );
+              })}
+            </div>
           )}
 
           {formasParaTabela.flatMap((formaId, idx) => {
@@ -6718,7 +6760,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
                 </div>
               );
             }
-            if (showPacote) {
+            if (showPacote && !recPacoteSemAnt) {
               cells.push(
                 <div key={formaId + '-pac'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
                   {renderCelula('pac', formaId)}
@@ -6734,7 +6776,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
             "PACOTE COMPLETO" com Antecipado/Parcelas/Final dentro. */}
         <div className="vk-bfp-mobile-only" style={{ marginBottom: temPorEtapa ? 28 : 0 }}>
           {showArq && renderGrupoMobile('arq', labelApenas)}
-          {showPacote && renderGrupoMobile('pac', 'Pacote completo')}
+          {showPacote && renderGrupoMobile('pac', 'Pacote completo', recPacoteSemAnt)}
         </div>
       </>
     );
@@ -6802,7 +6844,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
     //   - Se há só 1 card (1 etapa marcada) → recomenda "Etapa a etapa"
     // Só recomenda quando Antecipado está marcado (sem desconto, sem recomendação).
     const recomendaEtapaUnica       = mostraEtapaUnica && !mostraEtapasCompletas && temAntecipadoMarcado;
-    const recomendaEtapasCompletas  = mostraEtapasCompletas && temAntecipadoMarcado;
+    const recomendaEtapasCompletas  = mostraEtapasCompletas;
 
     return (
       <div style={{ paddingTop: formasParaTabela.length > 0 ? 20 : 0, borderTop: formasParaTabela.length > 0 ? '0.5px solid #e5e7eb' : 'none' }}>
@@ -6922,9 +6964,18 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
     const valorParcela    = (valorBase != null) ? valorBase / parcelas : null;
     return (
       <div style={{
-        border: '0.5px solid #e5e7eb',
+        border: (isRecomendado && !temAntecipado) ? `1.5px solid ${VERDE}` : '0.5px solid #e5e7eb',
         borderRadius: 8, padding: '14px 16px',
+        position: 'relative',
       }}>
+        {isRecomendado && !temAntecipado && (
+          <div style={{
+            position: 'absolute', top: -8, left: 10,
+            fontSize: 9, color: '#fff', background: VERDE,
+            padding: '3px 8px', borderRadius: 999,
+            letterSpacing: '0.05em', fontWeight: 600,
+          }}>RECOMENDADO</div>
+        )}
         <div style={{
           fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
           letterSpacing: '0.05em', fontWeight: 500, marginBottom: 10,
@@ -7441,6 +7492,7 @@ function EtapaFormaPagamento({
     // Quando só 1 etapa marcada, o "Contratação etapa a etapa" mostra o valor
     // concreto dela. Quando 2+, esconde o resumo (varia por etapa).
     const mostraResumoEtapaUnica = qtdEtapasMostradas === 1;
+    const temAntecipadoMod = formasSelecionadas.includes('antecipado');
     const baseEtapaUnica = valorTotal; // = valor da única etapa marcada
     const etapaUnicaAnt = baseEtapaUnica * (1 - descEtapa / 100);
     const etapaUnicaEco = baseEtapaUnica - etapaUnicaAnt;
@@ -7557,12 +7609,14 @@ function EtapaFormaPagamento({
               <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Contratação etapa a etapa</span>
               <span style={{ fontSize: 11, color: '#9ca3af' }}>(quando há 1 etapa)</span>
             </div>
-            <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
-                <NumStepper valor={descEtapa} onChange={setDescEtapa} min={0} max={100} step={1} width={28} />
-                <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
-              </div>
+            <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: temAntecipadoMod ? '1fr 1fr' : '1fr', gap: 16 }}>
+              {temAntecipadoMod && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
+                  <NumStepper valor={descEtapa} onChange={setDescEtapa} min={0} max={100} step={1} width={28} />
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 80 }}>Parcelado</span>
                 <NumStepper valor={parcEtapa} onChange={n => setParcEtapa(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
@@ -7577,13 +7631,15 @@ function EtapaFormaPagamento({
               background: '#fafbfc', borderLeft: '0.5px solid #e5e7eb',
             }}>
               <div className="vk-fp-resumo-label">Resumo</div>
-              <div className="vk-fp-resumo-bloco">
-                <div className="vk-fp-resumo-label">Antecipado</div>
-                <div className="vk-fp-resumo-principal">{fmtBRL_FP(Math.round(etapaUnicaAnt * 100) / 100)}</div>
-                {descEtapa > 0 && (
-                  <div className="vk-fp-resumo-eco">economia {fmtBRLcurto_FP(etapaUnicaEco)}</div>
-                )}
-              </div>
+              {temAntecipadoMod && (
+                <div className="vk-fp-resumo-bloco">
+                  <div className="vk-fp-resumo-label">Antecipado</div>
+                  <div className="vk-fp-resumo-principal">{fmtBRL_FP(Math.round(etapaUnicaAnt * 100) / 100)}</div>
+                  {descEtapa > 0 && (
+                    <div className="vk-fp-resumo-eco">economia {fmtBRLcurto_FP(etapaUnicaEco)}</div>
+                  )}
+                </div>
+              )}
               <div className="vk-fp-resumo-bloco">
                 <div className="vk-fp-resumo-label">Parcelado</div>
                 <div className="vk-fp-resumo-sub-valor">{parcEtapa}× {fmtBRL_FP(Math.round(etapaUnicaParcVal * 100) / 100)}</div>
@@ -7607,12 +7663,14 @@ function EtapaFormaPagamento({
               <span style={{ fontSize: 13, fontWeight: 600, color: '#111' }}>Etapas completas</span>
               <span style={{ fontSize: 11, color: '#9ca3af' }}>(quando há 2+ etapas)</span>
             </div>
-            <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
-                <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={1} width={28} />
-                <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
-              </div>
+            <div className="vk-fp-mod-grid" style={{ display: 'grid', gridTemplateColumns: temAntecipadoMod ? '1fr 1fr' : '1fr', gap: 16 }}>
+              {temAntecipadoMod && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 100 }}>Antecipado · desc.</span>
+                  <NumStepper valor={descCompleto} onChange={setDescCompleto} min={0} max={100} step={1} width={28} />
+                  <span style={{ fontSize: 12, color: '#6b7280' }}>%</span>
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <span style={{ fontSize: 12.5, color: '#6b7280', minWidth: 80 }}>Parcelado</span>
                 <NumStepper valor={parcCompleto} onChange={n => setParcCompleto(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
@@ -7626,13 +7684,15 @@ function EtapaFormaPagamento({
             background: '#fafbfc', borderLeft: '0.5px solid #e5e7eb',
           }}>
             <div className="vk-fp-resumo-label">Resumo</div>
-            <div className="vk-fp-resumo-bloco">
-              <div className="vk-fp-resumo-label">Antecipado</div>
-              <div className="vk-fp-resumo-principal">{fmtBRL_FP(Math.round(completoAnt * 100) / 100)}</div>
-              {descCompleto > 0 && (
-                <div className="vk-fp-resumo-eco">economia {fmtBRLcurto_FP(completoEco)}</div>
-              )}
-            </div>
+            {temAntecipadoMod && (
+              <div className="vk-fp-resumo-bloco">
+                <div className="vk-fp-resumo-label">Antecipado</div>
+                <div className="vk-fp-resumo-principal">{fmtBRL_FP(Math.round(completoAnt * 100) / 100)}</div>
+                {descCompleto > 0 && (
+                  <div className="vk-fp-resumo-eco">economia {fmtBRLcurto_FP(completoEco)}</div>
+                )}
+              </div>
+            )}
             <div className="vk-fp-resumo-bloco">
               <div className="vk-fp-resumo-label">Parcelado</div>
               <div className="vk-fp-resumo-sub-valor">{parcCompleto}× {fmtBRL_FP(Math.round((valorTotal / parcCompleto) * 100) / 100)}</div>

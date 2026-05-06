@@ -477,14 +477,18 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
       // - Se 2 cards: só "Etapas completas"
       // - Se 1 só (etapa única): ela recebe
       const recEtapaUnica = mostraEtapaUnica && !mostraEtapasCompletas && fpTemAntecipado;
-      const recEtapasCompletas = mostraEtapasCompletas && fpTemAntecipado;
+      const recEtapasCompletas = mostraEtapasCompletas;
 
       // Helper: desenha um card de oferta
       const desenhaCardOferta = (xLeft, titulo, desconto, parcelas, valorBase, isRec) => {
         const yCardTop = y;
-        // Borda externa cinza
-        sc(LINE, "draw"); doc.setLineWidth(0.25);
-        doc.roundedRect(xLeft, yCardTop, colW, cardH, 1.5, 1.5, "S");
+        // Borda externa cinza (ou verde + pill RECOMENDADO quando isRec sem antecipado)
+        if (isRec && !fpTemAntecipado) {
+          desenhaBadgeRec(xLeft, yCardTop, colW, cardH);
+        } else {
+          sc(LINE, "draw"); doc.setLineWidth(0.25);
+          doc.roundedRect(xLeft, yCardTop, colW, cardH, 1.5, 1.5, "S");
+        }
 
         // Título
         let yC = yCardTop + 4.5;
@@ -561,15 +565,25 @@ async function buildPdf(orc, logo=null, modeloPdf=null, corTema=null, bgLogo="#f
 
     // Quem recebe RECOMENDADO? Pacote × Antecipado tem prioridade; senão Apenas Arq × Antecipado.
     const colunaRec = fpTemAntecipado ? (fpShowPac ? 'pac' : (fpShowArq ? 'arq' : null)) : null;
+    const recPacoteSemAnt = !fpTemAntecipado && fpShowPac && (fpTemParcelas || fpTemFinal);
 
     // Renderiza um grupo (Apenas Arq OU Pacote completo)
     const desenhaGrupo = (tipoCard, titulo) => {
       nv(50);
       const valorBaseGrupo = tipoCard === 'arq' ? arqCIcom : totCI;
 
+      const isPacRec = tipoCard === 'pac' && recPacoteSemAnt;
+      if (isPacRec) {
+        let groupH = 5.5;
+        if (fpTemParcelas) groupH += 11;
+        if (fpTemFinal) groupH += 11;
+        groupH += 4;
+        desenhaBadgeRec(M, y - 1, TW, groupH);
+      }
+
       // Título do grupo
       sf("bold", 9); stc(INK);
-      tx(titulo, M, y);
+      tx(titulo, isPacRec ? M + 3 : M, y);
       y += 5.5;
 
       // Linha Antecipado
