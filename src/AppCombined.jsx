@@ -23134,10 +23134,14 @@ function BlocoResultado({
   return (
     <div style={{ animation:"vk-onb-fade-in 0.4s ease-out" }}>
       {/* Header da apresentação — kicker e título lado a lado pra economizar
-          altura. Em mobile (telas estreitas) volta a empilhar via CSS. */}
+          altura. Em etapa 2, ganha marginLeft 232px (sidebar 220 + gap 12)
+          pra alinhar com o início do fluxograma à direita. Em mobile o grid
+          colapsa e o marginLeft é zerado via CSS abaixo. */}
       <div style={{
         display:"flex", flexWrap:"wrap", alignItems:"baseline", gap:14,
-        marginBottom: etapa === 1 ? 24 : 8,
+        marginBottom: etapa === 1 ? 24 : 14,
+        marginLeft: etapa === 2 ? 232 : 0,
+        transition: "margin-left 0.3s ease-out",
       }} className="vk-onb-header">
         <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, flexShrink:0 }}>
           VICKE · Análise Inteligente
@@ -23291,6 +23295,7 @@ function BlocoResultado({
       <style>{`
         @media (max-width: 720px) {
           .vk-onb-grid { grid-template-columns: 1fr !important; }
+          .vk-onb-header { margin-left: 0 !important; }
         }
         @keyframes vk-bar-grow {
           from { transform: scaleY(0); }
@@ -23947,12 +23952,15 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   const yScale = (v) => innerH * (v / maxValor);
   const yBase = padTop + innerH;
 
-  // Paleta moderna (#3b82f6 azul, #22c55e verde, #ef4444 vermelho)
+  // Paleta sóbria — versão clareada/dessaturada da palette anterior:
+  // base/total cinza-azulado neutro, add verde sólido sóbrio, sub vermelho
+  // pálido. Casa com o tom dos cards do fluxograma (cinza claro nos
+  // detalhes, sem cores saturadas).
   const COR = {
-    base:  "#3b82f6",
-    add:   "#22c55e",
-    sub:   "#ef4444",
-    total: "#3b82f6",
+    base:  "#64748b",   // slate-500 (era #3b82f6 azul saturado)
+    add:   "#34d399",   // emerald-400 (era #22c55e verde saturado)
+    sub:   "#f87171",   // red-400 (era #ef4444 vermelho saturado)
+    total: "#64748b",
   };
 
   // Animação progressiva — 700ms crescimento + 900ms entre barras
@@ -23971,24 +23979,23 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
 
   return (
     <div style={{
-      borderRadius:10,
-      overflow:"hidden",
+      background:"#fff",
+      border:"1px solid #e5e7eb",
+      borderRadius:14,
+      padding:"22px 24px",
       animation:"vk-fade-up 0.4s ease-out",
-      background:"transparent",  // fundo transparente conforme pedido
     }}>
-      {/* Header preto/branco */}
+      {/* Título — mesma tipografia dos cards do fluxograma */}
       <div style={{
-        background:"#111", color:"#fff",
-        padding:"7px 14px",
-        fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
-        borderRadius:"10px 10px 0 0",
-        marginBottom:2,
+        fontSize:11, fontWeight:600, color:"#9ca3af",
+        textTransform:"uppercase", letterSpacing:0.5,
+        marginBottom:16,
       }}>
         Como chegamos no valor
       </div>
 
-      {/* SVG sem fundo — herda o background da tela */}
-      <div style={{ width:"100%", padding:"2px 0 0" }}>
+      {/* SVG dentro do card */}
+      <div style={{ width:"100%" }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
           {/* Linha de base sutil */}
           <line x1={padLeft} y1={yBase} x2={W - padRight} y2={yBase} stroke="#e5e7eb" strokeWidth="1" />
@@ -24053,7 +24060,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                     ? baseY + altura + 16
                     : topY - 10}
                   textAnchor="middle"
-                  fontSize="12" fontWeight="700"
+                  fontSize="12" fontWeight="600"
                   fill="#111"
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.5s both` : "none", opacity: visivel ? undefined : 0 }}>
@@ -24065,7 +24072,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   x={x + barW/2}
                   y={H - 36}
                   textAnchor="middle"
-                  fontSize="11" fontWeight="600"
+                  fontSize="11" fontWeight="500"
                   fill="#374151"
                   fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.55s both` : "none", opacity: visivel ? undefined : 0 }}>
@@ -24114,7 +24121,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   const x2 = cx + dx / 2;
                   const y1 = s.tipo === "add" ? setaCentroY + dy / 2 : setaCentroY - dy / 2;
                   const y2 = s.tipo === "add" ? setaCentroY - dy / 2 : setaCentroY + dy / 2;
-                  const corSeta = s.tipo === "add" ? "#22c55e" : "#ef4444";
+                  const corSeta = s.tipo === "add" ? "#34d399" : "#f87171";
                   const texto   = s.tipo === "add" ? "preço sobe" : "preço desce";
 
                   // Cabeça da seta
