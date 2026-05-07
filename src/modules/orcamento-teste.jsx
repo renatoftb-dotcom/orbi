@@ -5897,6 +5897,16 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // por etapa individual (mod 2 desmarcada).
   const [modalidadesEtapa, setModalidadesEtapa] = useState(orcBase?.formaPagamento?.modalidadesEtapa || ["mod1", "mod2"]);
   const [etapaPagamentoConfirmada, setEtapaPagamentoConfirmada] = useState(false);
+  // Template de Edição (Fase 4): tela intermediária entre Forma de Pagamento
+  // e Preview, onde o usuário ajusta os textos livres da proposta.
+  // Inicializa como TRUE em modo read-only (verProposta) — usuário só está
+  // visualizando uma proposta salva, não precisa editar template.
+  const [templateEdicaoConfirmada, setTemplateEdicaoConfirmada] = useState(propostaReadOnlyForce);
+  // Textos editados no Template de Edição. Persistem no propostaData pra
+  // alimentar o modelo escolhido (Fase 5+ vai consumir esses textos no
+  // render). Apresentacao/escopo/observacoes começam vazios e são
+  // preenchidos com defaults dentro do TemplateEdicao.
+  const [templateTextos, setTemplateTextos] = useState(orcBase?.template?.textos || null);
   // previewRemountKey: incrementa a cada vez que o usuário sai da Etapa 5 pra
   // o Preview. Isso força o React a remontar o PropostaPreview (e seus
   // useState internos), garantindo que valores stale não persistam quando o
@@ -7749,20 +7759,57 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       );
     }
 
+    // Template de Edição (Fase 4) — tela intermediária entre Etapa 5 e Preview.
+    // Pulada em modo read-only (templateEdicaoConfirmada já vem true) e quando
+    // o usuário clicou "Pular esta etapa" no template anterior.
+    if (!templateEdicaoConfirmada) {
+      // Mescla os textos atuais em liveData pro template re-popular ao reabrir
+      const liveDataComTemplate = {
+        ...liveData,
+        template: { textos: templateTextos || undefined },
+      };
+      return (
+        <TemplateEdicao
+          data={liveDataComTemplate}
+          escritorio={esc}
+          onVoltar={() => {
+            // Volta pra Etapa 5 (Forma de Pagamento)
+            setEtapaPagamentoConfirmada(false);
+          }}
+          onProsseguir={(textos) => {
+            // Salva os textos editados e avança pro preview
+            setTemplateTextos(textos);
+            setTemplateEdicaoConfirmada(true);
+          }}
+          onPular={() => {
+            // Avança sem salvar textos — o modelo usa defaults internos
+            setTemplateEdicaoConfirmada(true);
+          }}
+        />
+      );
+    }
+
     // Componente do modelo escolhido pela empresa (esc.modelo_default).
     // Fallback pro Padrão quando não definido. Permite que cada escritório
     // tenha seu modelo visual default sem mexer no backend (campo extra
     // entra no JSONB do escritório automaticamente).
     const ModeloComponente = getModeloOrcamento(esc.modelo_default);
 
+    // Mescla os textos do template em liveData pra disponibilizar pro modelo
+    // (Fase 5+ vai usar esses textos no render).
+    const liveDataParaModelo = templateTextos
+      ? { ...liveData, template: { textos: templateTextos } }
+      : liveData;
+
     return <ModeloComponente
       key={previewRemountKey}
-      data={liveData}
+      data={liveDataParaModelo}
       onVoltar={() => {
-        // Volta pros cômodos. Reseta a flag da Etapa 5 pra que, ao reabrir
-        // o orçamento, o usuário passe pela Etapa 5 de novo (decisão de UX:
-        // sempre passa pela Etapa 5).
+        // Volta pra Etapa 5 (Forma de Pagamento), passando pelo Template de
+        // Edição no caminho. Reseta as duas flags pra que o fluxo refaça
+        // ambas as etapas.
         setEtapaPagamentoConfirmada(false);
+        setTemplateEdicaoConfirmada(false);
         setPropostaData(null);
       }}
       onSalvarProposta={handleSalvarPropostaSnapshot}

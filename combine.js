@@ -24,6 +24,9 @@ const ORDER = [
   // (ordem importa pra const declarations).
   "modelo-padrao.jsx",
   "modelos-registry.jsx",
+  // template-edicao.jsx vem antes de orcamento-teste.jsx pq esta usa
+  // <TemplateEdicao /> diretamente.
+  "template-edicao.jsx",
   "orcamento-teste.jsx",
   "escritorio.jsx",
   "admin.jsx",
