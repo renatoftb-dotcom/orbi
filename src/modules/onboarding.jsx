@@ -168,6 +168,38 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
   // que vem em seguida (cadastro do escritório). Usuário clica e libera.
   const [concluido, setConcluido] = useState(false);
 
+  // Cadastro do escritório (inline, abre quando aceitouCalculado === true).
+  // Step 2: campos básicos — nome, cidade, estado, e-mail, telefone, instagram, logo.
+  // Logo é base64 (mesma estratégia da aba Escritório). logoErro é mensagem inline.
+  const [escLogo, setEscLogo]             = useState(null);
+  const [escLogoErro, setEscLogoErro]     = useState(null);
+  const [escNome, setEscNome]             = useState("");
+  const [escCidade, setEscCidade]         = useState("");
+  const [escEstado, setEscEstado]         = useState("");
+  const [escEmail, setEscEmail]           = useState("");
+  const [escTelefone, setEscTelefone]     = useState("");
+  const [escInstagram, setEscInstagram]   = useState("");
+  // Responsável técnico (Step 3) — primeiro responsável vai pro
+  // responsaveis[0] do escritório. Outros podem ser adicionados depois
+  // pela aba Escritório.
+  const [escRespNome, setEscRespNome]         = useState("");
+  const [escRespRegistro, setEscRespRegistro] = useState("");
+  // PIX e Banco (Step 4) — todos opcionais. Linha PIX só aparece no
+  // PDF/preview se a chave estiver preenchida.
+  const [escPixTipo, setEscPixTipo]           = useState("");
+  const [escPixChave, setEscPixChave]         = useState("");
+  const [escBanco, setEscBanco]               = useState("");
+
+  // Pré-preenche estado (resposta da pergunta 7) e e-mail (do JWT) quando o
+  // bloco de cadastro abre pela primeira vez. Usa `prev || ...` pra preservar
+  // edição manual posterior — se o usuário já mexeu, não sobrescreve.
+  useEffect(() => {
+    if (aceitouCalculado === true) {
+      setEscEstado(prev => prev || estado || "");
+      setEscEmail(prev => prev || usuario?.email || "");
+    }
+  }, [aceitouCalculado, estado, usuario]);
+
   // Ref pra rolar o conteúdo conforme novas perguntas aparecem.
   const containerRef = useRef(null);
 
@@ -364,11 +396,20 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     );
   }
 
+  // Cadastro do escritório: campos obrigatórios pra liberar o save quando
+  // o usuário aceitou o valor calculado (Step 5a). Logo, e-mail, telefone,
+  // instagram, PIX e Banco são opcionais e podem ser completados depois.
+  const cadastroValido =
+    escNome.trim() !== "" &&
+    escCidade.trim() !== "" &&
+    escRespNome.trim() !== "" &&
+    escRespRegistro.trim() !== "";
+
   // Pode "concluir" quando tudo respondido e:
-  //   - aceitou o calculado, OU
+  //   - aceitou o calculado E cadastro do escritório válido, OU
   //   - digitou valor de calibragem válido (e confirmou caso seja absurdo)
   const podeConcluir = todasRespondidas && (
-    aceitouCalculado === true ||
+    (aceitouCalculado === true && cadastroValido) ||
     (aceitouCalculado === false && analiseCalibragem && !analiseCalibragem.invalido && (
       // Se for absurdo, só pode concluir se já confirmou
       (!analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto) || confirmandoAbsurdo
@@ -393,8 +434,41 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
         estado,
         valor_calibrado,
       });
-      // Sucesso → mostra tela de transição. onConcluido() é chamado quando
-      // usuário clicar "Continuar para o cadastro" (ver TelaTransicao abaixo).
+
+      // Step 5b — Quando o usuário aceitou o valor calculado, salva também
+      // o cadastro do escritório que ele preencheu inline. Falha aqui não
+      // bloqueia o fluxo: onboarding já tá marcado como concluído no backend,
+      // e o usuário pode completar/corrigir pela aba Escritório depois.
+      if (aceitouCalculado === true) {
+        try {
+          await api.escritorio.save({
+            nome:      escNome.trim(),
+            email:     escEmail.trim(),
+            telefone:  escTelefone.trim(),
+            cidade:    escCidade.trim(),
+            estado:    escEstado,
+            instagram: escInstagram.trim(),
+            banco:     escBanco.trim(),
+            pixTipo:   escPixTipo,
+            pixChave:  escPixChave.trim(),
+            logo:      escLogo,
+            responsaveis: [{
+              id:   "r1",
+              nome: escRespNome.trim(),
+              cau:  escRespRegistro.trim(),
+              cpf:  "",
+            }],
+          });
+        } catch (e) {
+          console.warn("[onboarding] escritorio.save falhou:", e);
+        }
+        // Step 5c — Pula TelaTransicao e vai direto pro app, já que o
+        // cadastro foi feito inline.
+        onConcluido(estado);
+        return;
+      }
+
+      // Fluxo legado (Quero ajustar): mostra TelaTransicao.
       setConcluido(true);
     } catch (e) {
       setErroSalvar(e.message || "Falha ao salvar perfil");
@@ -571,6 +645,26 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
             matriz={matriz}
             containerRef={containerRef}
             cubLoading={cubLoading}
+          />
+        )}
+
+        {/* ── Cadastro do escritório (só quando aceitou o valor calculado) ── */}
+        {todasRespondidas && aceitouCalculado === true && (
+          <BlocoCadastroEscritorio
+            logo={escLogo} setLogo={setEscLogo}
+            logoErro={escLogoErro} setLogoErro={setEscLogoErro}
+            nome={escNome} setNome={setEscNome}
+            cidade={escCidade} setCidade={setEscCidade}
+            estado={escEstado} setEstado={setEscEstado}
+            email={escEmail} setEmail={setEscEmail}
+            telefone={escTelefone} setTelefone={setEscTelefone}
+            instagram={escInstagram} setInstagram={setEscInstagram}
+            respNome={escRespNome} setRespNome={setEscRespNome}
+            respRegistro={escRespRegistro} setRespRegistro={setEscRespRegistro}
+            profissao={profissao}
+            pixTipo={escPixTipo} setPixTipo={setEscPixTipo}
+            pixChave={escPixChave} setPixChave={setEscPixChave}
+            banco={escBanco} setBanco={setEscBanco}
           />
         )}
 
@@ -1585,6 +1679,409 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
             );
           })}
         </svg>
+      </div>
+    </div>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────
+// BlocoCadastroEscritorio — aparece inline depois que o usuário
+// aceita o valor calculado ("Sim, esse valor está bom"). Coleta os
+// dados do escritório que vão direto pro cabeçalho, rodapé e aceite
+// das propostas/PDFs, evitando ter que editar cada proposta depois.
+// Quando o usuário escolhe "Quero ajustar", esse bloco NÃO aparece —
+// fluxo dele segue por TelaTransicao + aba Escritório (legado).
+// ───────────────────────────────────────────────────────────────
+function BlocoCadastroEscritorio({
+  logo, setLogo, logoErro, setLogoErro,
+  nome, setNome,
+  cidade, setCidade,
+  estado, setEstado,
+  email, setEmail,
+  telefone, setTelefone,
+  instagram, setInstagram,
+  respNome, setRespNome,
+  respRegistro, setRespRegistro,
+  profissao,
+  pixTipo, setPixTipo,
+  pixChave, setPixChave,
+  banco, setBanco,
+}) {
+  // Label do registro profissional — arquitetos têm CAU, engenheiros CREA.
+  // Detectado pela resposta da pergunta 1. Fallback genérico se algo der errado.
+  const labelRegistro =
+    profissao === "arquiteto" ? "CAU" :
+    profissao === "engenheiro" ? "CREA" :
+    "CAU/CREA";
+
+  // Auto-fill bidirecional do PIX: quando o tipo é E-mail ou Telefone,
+  // a chave acompanha o campo correspondente do form. Mesma lógica de
+  // escritorio.jsx:362-366. Se o tipo for outro (CNPJ/CPF/Aleatória), o
+  // usuário digita manualmente.
+  useEffect(() => {
+    if (pixTipo === "E-mail" && email) setPixChave(email);
+    if (pixTipo === "Telefone" && telefone) setPixChave(telefone);
+  }, [pixTipo, email, telefone, setPixChave]);
+
+  const BANCOS_COMUNS = [
+    "Banco do Brasil", "Caixa Econômica Federal", "Itaú", "Bradesco", "Santander",
+    "Nubank", "Inter", "Sicoob", "Sicredi", "BTG Pactual",
+    "C6 Bank", "PicPay", "Mercado Pago", "Banco Original", "Banco Safra",
+  ];
+  // Drag & drop state — visual feedback quando arrasta sobre a área do logo.
+  const [arrastando, setArrastando] = useState(false);
+
+  // Validação + leitura do arquivo. Reusa a lógica de escritorio.jsx
+  // (PNG/JPG/SVG, máx 1MB, base64). Diferença: erros aparecem inline em vez
+  // de modal `dialogo.alertar`.
+  async function lerArquivoLogo(arquivo) {
+    setLogoErro(null);
+    if (!arquivo) return;
+    const tiposOk = ["image/png", "image/jpeg", "image/jpg", "image/svg+xml"];
+    if (!tiposOk.includes(arquivo.type)) {
+      setLogoErro("Formato não suportado. Use PNG, JPG ou SVG.");
+      return;
+    }
+    if (arquivo.size > 1024 * 1024) {
+      setLogoErro(`Arquivo grande demais (${(arquivo.size/1024).toFixed(0)}KB). Limite: 1MB.`);
+      return;
+    }
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+        reader.readAsDataURL(arquivo);
+      });
+      setLogo(base64);
+    } catch (e) {
+      setLogoErro(e.message || "Erro ao ler arquivo");
+    }
+  }
+
+  function handleUploadLogo(evento) {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = ""; // permite re-selecionar o mesmo arquivo
+    lerArquivoLogo(arquivo);
+  }
+
+  function handleDrop(e) {
+    e.preventDefault();
+    setArrastando(false);
+    const arquivo = e.dataTransfer.files?.[0];
+    lerArquivoLogo(arquivo);
+  }
+
+  // Estilo compartilhado dos inputs.
+  const inputBase = {
+    width: "100%", boxSizing: "border-box",
+    border: "1px solid #d1d5db", borderRadius: 8,
+    padding: "10px 12px", fontSize: 13, color: "#111",
+    outline: "none", background: "#fff", fontFamily: "inherit",
+    transition: "border-color 0.12s",
+  };
+  const labelBase = {
+    fontSize: 11.5, color: "#6b7280", fontWeight: 500,
+    marginBottom: 5, display: "block",
+  };
+  const campoWrap = { display: "flex", flexDirection: "column", marginBottom: 16 };
+
+  return (
+    <div style={{
+      marginTop: 32,
+      paddingTop: 28,
+      borderTop: "1px solid #f3f4f6",
+      animation: "vk-onb-fade-in 0.4s ease-out",
+    }}>
+      <style>{`
+        .vk-onb-cad input:focus, .vk-onb-cad select:focus { border-color: #111 !important; }
+        @media (max-width: 720px) {
+          .vk-onb-cad-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+
+      <div style={{
+        fontSize: 10.5, fontWeight: 700, color: "#9ca3af",
+        textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8,
+      }}>
+        VICKE · Cadastro do Escritório
+      </div>
+      <div style={{
+        fontSize: 22, fontWeight: 300, color: "#111",
+        letterSpacing: -0.4, lineHeight: 1.2, marginBottom: 12,
+      }}>
+        Quase lá — vamos completar o cadastro
+      </div>
+      <div style={{
+        fontSize: 14, color: "#6b7280", lineHeight: 1.6, maxWidth: 700, marginBottom: 28,
+      }}>
+        Reserve alguns minutos para preencher os dados do seu escritório. Essas informações aparecem automaticamente no cabeçalho, no rodapé e na área de aceite de todas as propostas, orçamentos e PDFs que você gerar — preenchendo agora, você não precisa editar em cada proposta enviada ao cliente.
+      </div>
+
+      <div className="vk-onb-cad" style={{ maxWidth: 720 }}>
+
+        {/* ── Logo do escritório ─────────────────────────────────── */}
+        <div style={{ marginBottom: 8 }}>
+          <div style={{
+            fontSize: 11, fontWeight: 700, color: "#9ca3af",
+            textTransform: "uppercase", letterSpacing: 1, marginBottom: 12,
+          }}>Logo do escritório <span style={{ fontWeight: 400, color: "#d1d5db" }}>· opcional</span></div>
+          <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+            {/* Preview com drag & drop */}
+            <label
+              onDragOver={e => { e.preventDefault(); setArrastando(true); }}
+              onDragLeave={() => setArrastando(false)}
+              onDrop={handleDrop}
+              style={{
+                width: 160, height: 100,
+                border: arrastando ? "1.5px solid #111" : (logo ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db"),
+                borderRadius: 8,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: arrastando ? "#f3f4f6" : "#fafbfc",
+                overflow: "hidden", flexShrink: 0,
+                cursor: "pointer", transition: "all 0.12s",
+              }}
+              onMouseEnter={e => { if (!arrastando && !logo) e.currentTarget.style.borderColor = "#9ca3af"; }}
+              onMouseLeave={e => { if (!arrastando && !logo) e.currentTarget.style.borderColor = "#d1d5db"; }}
+              title={logo ? "Clique pra trocar ou arraste uma nova imagem" : "Clique ou arraste uma imagem"}>
+              {logo ? (
+                <img src={logo} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+              ) : (
+                <span style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "0 8px" }}>
+                  {arrastando ? "Solte aqui" : "Clique ou arraste"}
+                </span>
+              )}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                style={{ display: "none" }}
+                onChange={handleUploadLogo}
+              />
+            </label>
+
+            {/* Descrição + ações */}
+            <div style={{ flex: 1, minWidth: 220 }}>
+              <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 10 }}>
+                Aparece no cabeçalho das propostas em PDF.<br/>
+                PNG, JPG ou SVG · Máximo 1MB.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <label style={{
+                  background: "#111", color: "#fff", border: "none", borderRadius: 7,
+                  padding: "7px 14px", fontSize: 12.5, fontWeight: 600,
+                  cursor: "pointer", display: "inline-flex", alignItems: "center", fontFamily: "inherit",
+                }}>
+                  {logo ? "Trocar logo" : "Enviar logo"}
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/svg+xml"
+                    style={{ display: "none" }}
+                    onChange={handleUploadLogo}
+                  />
+                </label>
+                {logo && (
+                  <button
+                    type="button"
+                    onClick={() => { setLogo(null); setLogoErro(null); }}
+                    style={{
+                      background: "#fff", color: "#374151",
+                      border: "1px solid #d1d5db", borderRadius: 7,
+                      padding: "7px 14px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit",
+                    }}>
+                    Remover
+                  </button>
+                )}
+              </div>
+              {logoErro && (
+                <div style={{ fontSize: 12, color: "#991b1b", marginTop: 8, lineHeight: 1.4 }}>
+                  {logoErro}
+                </div>
+              )}
+              {!logo && !logoErro && (
+                <div style={{
+                  fontSize: 11.5, color: "#9ca3af", marginTop: 10,
+                  lineHeight: 1.5, display: "flex", alignItems: "flex-start", gap: 6,
+                }}>
+                  <span style={{ flexShrink: 0, fontSize: 12 }}>ⓘ</span>
+                  <span>
+                    Sem o logo, o cabeçalho das propostas usa só o nome do escritório. Pode adicionar depois na aba <strong style={{ color: "#6b7280", fontWeight: 600 }}>Escritório</strong>.
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <hr style={{ border: "none", borderTop: "1px solid #f3f4f6", margin: "24px 0" }} />
+
+        {/* ── Nome (full-width) ──────────────────────────────────── */}
+        <div style={campoWrap}>
+          <label style={labelBase}>Nome do escritório <span style={{ color: "#dc2626" }}>*</span></label>
+          <input
+            type="text"
+            value={nome}
+            onChange={e => setNome(e.target.value)}
+            placeholder="Ex: Estúdio de Arquitetura João Silva"
+            style={inputBase}
+          />
+        </div>
+
+        {/* ── Cidade + Estado (2 cols) ───────────────────────────── */}
+        <div className="vk-onb-cad-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={campoWrap}>
+            <label style={labelBase}>Cidade <span style={{ color: "#dc2626" }}>*</span></label>
+            <input
+              type="text"
+              value={cidade}
+              onChange={e => setCidade(e.target.value)}
+              placeholder="Ex: São Paulo"
+              style={inputBase}
+            />
+          </div>
+          <div style={campoWrap}>
+            <label style={labelBase}>Estado</label>
+            <select
+              value={estado}
+              onChange={e => setEstado(e.target.value)}
+              style={{ ...inputBase, cursor: "pointer" }}>
+              <option value="">— Selecione —</option>
+              {ESTADOS_DISPONIVEIS.map(e => (
+                <option key={e.sigla} value={e.sigla}>{e.nome}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* ── E-mail + Telefone (2 cols) ─────────────────────────── */}
+        <div className="vk-onb-cad-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={campoWrap}>
+            <label style={labelBase}>E-mail</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="contato@escritorio.com"
+              style={inputBase}
+            />
+          </div>
+          <div style={campoWrap}>
+            <label style={labelBase}>Telefone</label>
+            <input
+              type="tel"
+              value={telefone}
+              onChange={e => setTelefone(e.target.value)}
+              placeholder="(11) 91234-5678"
+              style={inputBase}
+            />
+          </div>
+        </div>
+
+        {/* ── Instagram (full-width) ─────────────────────────────── */}
+        <div style={campoWrap}>
+          <label style={labelBase}>Instagram</label>
+          <input
+            type="text"
+            value={instagram}
+            onChange={e => setInstagram(e.target.value)}
+            placeholder="@seuescritorio"
+            style={inputBase}
+          />
+        </div>
+
+        <hr style={{ border: "none", borderTop: "1px solid #f3f4f6", margin: "24px 0" }} />
+
+        {/* ── Responsável Técnico ────────────────────────────────── */}
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: "#9ca3af",
+          textTransform: "uppercase", letterSpacing: 1, marginBottom: 8,
+        }}>Responsável técnico</div>
+        <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 16 }}>
+          Aparece como assinatura técnica no aceite das propostas. Se houver mais de um responsável no escritório, você adiciona os outros depois na aba Escritório.
+        </div>
+
+        <div className="vk-onb-cad-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={campoWrap}>
+            <label style={labelBase}>Nome <span style={{ color: "#dc2626" }}>*</span></label>
+            <input
+              type="text"
+              value={respNome}
+              onChange={e => setRespNome(e.target.value)}
+              placeholder="Ex: João Silva"
+              style={inputBase}
+            />
+          </div>
+          <div style={campoWrap}>
+            <label style={labelBase}>{labelRegistro} <span style={{ color: "#dc2626" }}>*</span></label>
+            <input
+              type="text"
+              value={respRegistro}
+              onChange={e => setRespRegistro(e.target.value)}
+              placeholder={profissao === "engenheiro" ? "Ex: 0123456789" : "Ex: A12345-6"}
+              style={inputBase}
+            />
+          </div>
+        </div>
+
+        <hr style={{ border: "none", borderTop: "1px solid #f3f4f6", margin: "24px 0" }} />
+
+        {/* ── PIX e Banco ────────────────────────────────────────── */}
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: "#9ca3af",
+          textTransform: "uppercase", letterSpacing: 1, marginBottom: 8,
+        }}>PIX e Banco <span style={{ fontWeight: 400, color: "#d1d5db" }}>· opcional</span></div>
+        <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 16 }}>
+          Aparece embaixo da forma de pagamento nas propostas. Pode preencher depois se preferir — só aparece no PDF se você informar a chave.
+        </div>
+
+        <div className="vk-onb-cad-grid" style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
+          <div style={campoWrap}>
+            <label style={labelBase}>Tipo de chave</label>
+            <select
+              value={pixTipo}
+              onChange={e => setPixTipo(e.target.value)}
+              style={{ ...inputBase, cursor: "pointer" }}>
+              <option value="">— Selecione —</option>
+              <option value="CNPJ">CNPJ</option>
+              <option value="CPF">CPF</option>
+              <option value="E-mail">E-mail</option>
+              <option value="Telefone">Telefone</option>
+              <option value="Aleatória">Aleatória</option>
+            </select>
+          </div>
+          <div style={campoWrap}>
+            <label style={labelBase}>Chave PIX</label>
+            <input
+              type="text"
+              value={pixChave}
+              onChange={e => setPixChave(e.target.value)}
+              placeholder={
+                pixTipo === "CNPJ"     ? "00.000.000/0000-00" :
+                pixTipo === "CPF"      ? "000.000.000-00" :
+                pixTipo === "E-mail"   ? "contato@escritorio.com" :
+                pixTipo === "Telefone" ? "(11) 91234-5678" :
+                pixTipo === "Aleatória" ? "Cole a chave aleatória do banco" :
+                "Selecione o tipo acima"
+              }
+              style={inputBase}
+            />
+          </div>
+        </div>
+
+        <div style={campoWrap}>
+          <label style={labelBase}>Banco</label>
+          <input
+            type="text"
+            value={banco}
+            onChange={e => setBanco(e.target.value)}
+            placeholder="Ex: Sicoob"
+            list="vk-onb-bancos"
+            style={inputBase}
+          />
+          <datalist id="vk-onb-bancos">
+            {BANCOS_COMUNS.map(b => <option key={b} value={b} />)}
+          </datalist>
+        </div>
+
       </div>
     </div>
   );
