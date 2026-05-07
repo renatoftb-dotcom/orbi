@@ -23095,16 +23095,28 @@ function BlocoResultado({
   // resumo lateral devem só atualizar os valores reativamente — gráfico,
   // tabela e números recalculam sozinhos pelo useMemo do componente pai.
 
-  // Auto-scroll: sempre que conteúdo novo aparece (etapa 2 montada, ou input
-  // de calibragem aberto após "Quero ajustar"), rola o container até o final
-  // pra mostrar pro usuário que tem mais informação. Espera 1 frame pro DOM
-  // atualizar e calcular scrollHeight corretamente antes de rolar.
-  // Quando o cadastro inline está ativo (qualquer um dos dois caminhos),
-  // o TelaOnboarding controla o scroll pra alinhar o topo do cadastro com a
-  // viewport — então pulamos o scroll-pro-fim aqui pra evitar conflito.
+  // Scroll pro TOPO quando entra na etapa 2 — o título "Resultado da sua
+  // calibragem" deve ficar visível na chegada da tela completa. Roda em 2
+  // frames pra esperar o layout da etapa 2 montar antes de scrollar.
+  useEffect(() => {
+    if (etapa === 2 && containerRef?.current) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          containerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+        });
+      });
+    }
+  }, [etapa, containerRef]);
+
+  // Scroll pro FIM apenas quando o usuário escolhe "Quero ajustar" (revela o
+  // input). Quando o cadastro inline está ativo, o TelaOnboarding controla o
+  // scroll pra alinhar o topo do cadastro com a viewport — então pulamos
+  // aqui pra evitar conflito. Não dispara na entrada da etapa 2 (essa já tem
+  // o useEffect acima que leva pro topo).
   useEffect(() => {
     if (!containerRef?.current) return;
     if (cadastroInlineAtivo) return;
+    if (aceitouCalculado === null) return;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (containerRef.current) {
@@ -23115,7 +23127,7 @@ function BlocoResultado({
         }
       });
     });
-  }, [etapa, aceitouCalculado, cadastroInlineAtivo, containerRef]);
+  }, [aceitouCalculado, cadastroInlineAtivo, containerRef]);
 
   if (cubErro) {
     return (
@@ -23139,7 +23151,7 @@ function BlocoResultado({
           colapsa e o marginLeft é zerado via CSS abaixo. */}
       <div style={{
         display:"flex", flexWrap:"wrap", alignItems:"baseline", gap:14,
-        marginBottom: etapa === 1 ? 24 : 14,
+        marginBottom: etapa === 1 ? 24 : 28,
         marginLeft: etapa === 2 ? 232 : 0,
         transition: "margin-left 0.3s ease-out",
       }} className="vk-onb-header">
@@ -23502,10 +23514,14 @@ function ResumoLateral({ respostas, setters, matriz }) {
       alignSelf: "start",
       position: "relative",  // popover ancora nas linhas (relative dentro)
     }}>
-      {/* Header em texto cinza (sem fundo preto) */}
+      {/* Header em texto cinza (sem fundo preto). fontSize/lineHeight casam
+          com a primeira linha da descrição no FluxogramaCasa ("Em uma
+          simulação...") pra ficarem alinhados horizontalmente no topo das
+          colunas do grid. */}
       <div style={{
-        fontSize: 10.5, fontWeight: 600, color: "#9ca3af",
+        fontSize: 12, fontWeight: 600, color: "#9ca3af",
         textTransform: "uppercase", letterSpacing: 0.8,
+        lineHeight: 1.5,
         marginBottom: 10, paddingLeft: 2,
       }}>
         Suas respostas
