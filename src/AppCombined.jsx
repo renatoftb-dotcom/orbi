@@ -23176,7 +23176,7 @@ function BlocoResultado({
             marginBottom:6,
           }} className="vk-onb-grid">
             <ResumoLateral respostas={respostas} setters={setters} matriz={matriz} />
-            <TabelaCasaExemplo casaCalc={casaCalc} />
+            <FluxogramaCasa casaCalc={casaCalc} />
           </div>
 
           {/* Linha 2: gráfico waterfall */}
@@ -23494,76 +23494,100 @@ function ResumoLateral({ respostas, setters, matriz }) {
 
   return (
     <div data-resumo-lateral style={{
-      background:"#fff",
-      border:"1px solid #e5e7eb",
-      borderRadius:10,
-      overflow:"visible",  // popover precisa vazar pra fora
-      alignSelf:"start",
-      boxShadow:"0 1px 2px rgba(0,0,0,0.03)",
-      position:"relative",  // popover ancora aqui
+      alignSelf: "start",
+      position: "relative",  // popover ancora nas linhas (relative dentro)
     }}>
-      {/* Header preto/branco */}
+      {/* Header em texto cinza (sem fundo preto) */}
       <div style={{
-        background:"#111",
-        color:"#fff",
-        padding:"7px 12px",
-        fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
-        borderRadius:"10px 10px 0 0",
+        fontSize: 10.5, fontWeight: 600, color: "#9ca3af",
+        textTransform: "uppercase", letterSpacing: 0.8,
+        marginBottom: 10, paddingLeft: 2,
       }}>
         Suas respostas
       </div>
 
-      {/* Linhas zebra clicáveis */}
-      <div>
-        {linhas.map((l, i) => {
+      {/* Pilha de botões card-style */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {linhas.map(l => {
           const aberto = editando === l.campo;
           const valorAtualKey = l.valorAtual ?? respostas[l.campo];
           return (
-            <div key={l.campo} style={{ position:"relative" }}>
-              <div
+            <div key={l.campo} style={{ position: "relative" }}>
+              <button
+                type="button"
                 onClick={() => setEditando(aberto ? null : l.campo)}
                 style={{
-                  display:"flex", alignItems:"center", justifyContent:"space-between", gap:8,
-                  padding:"5px 12px",
-                  background: aberto ? "#f3f4f6" : (i % 2 === 0 ? "#fff" : "#fafbfc"),
-                  borderTop: i === 0 ? "none" : "1px solid #f3f4f6",
-                  borderRadius: i === linhas.length - 1 ? "0 0 10px 10px" : 0,
-                  cursor:"pointer",
-                  transition:"background 0.12s",
+                  width: "100%",
+                  border: aberto ? "1px solid #111" : "1px solid #e5e7eb",
+                  borderRadius: 10,
+                  padding: "10px 12px",
+                  background: aberto ? "#f3f4f6" : "#fff",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  textAlign: "left",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 8,
+                  transition: "border-color 0.12s, background 0.12s",
                 }}
-                onMouseEnter={e => !aberto && (e.currentTarget.style.background = "#f3f4f6")}
-                onMouseLeave={e => !aberto && (e.currentTarget.style.background = i % 2 === 0 ? "#fff" : "#fafbfc")}
+                onMouseEnter={e => {
+                  if (!aberto) {
+                    e.currentTarget.style.borderColor = "#9ca3af";
+                    e.currentTarget.style.background = "#fafbfc";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!aberto) {
+                    e.currentTarget.style.borderColor = "#e5e7eb";
+                    e.currentTarget.style.background = "#fff";
+                  }
+                }}
                 title="Clique pra alterar">
-                <div style={{ fontSize:9, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, fontWeight:700, flexShrink:0, minWidth:60 }}>
-                  {l.label}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontSize: 9.5, fontWeight: 700, color: "#9ca3af",
+                    textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4,
+                  }}>
+                    {l.label}
+                  </div>
+                  <div style={{
+                    fontSize: 12.5, color: "#111", fontWeight: 500, lineHeight: 1.25,
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>
+                    {l.valor}
+                  </div>
                 </div>
-                <div style={{ fontSize:11, color:"#111", lineHeight:1.25, fontWeight:500, textAlign:"right" }}>
-                  {l.valor}
-                </div>
-              </div>
+                <div style={{
+                  fontSize: 12, color: "#9ca3af", flexShrink: 0,
+                  display: "inline-block", lineHeight: 1,
+                  transform: aberto ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 0.15s ease-out",
+                }}>⌄</div>
+              </button>
 
-              {/* Popover com opções desse campo. Anchorado à direita da linha,
+              {/* Popover com opções desse campo. Anchorado à direita do botão,
                   zIndex alto pra ficar sobre tabela/gráfico. */}
               {aberto && (
                 <div style={{
-                  position:"absolute",
+                  position: "absolute",
                   top: 0, left: "calc(100% + 8px)",
-                  background:"#fff",
-                  border:"1px solid #e5e7eb",
-                  borderRadius:8,
-                  boxShadow:"0 8px 24px rgba(0,0,0,0.12)",
-                  padding:"6px",
+                  background: "#fff",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: 10,
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+                  padding: 6,
                   zIndex: 100,
                   minWidth: 200,
-                  animation:"vk-fade-up 0.15s ease-out",
+                  animation: "vk-fade-up 0.15s ease-out",
                 }}>
-                  <div style={{ fontSize:9, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, fontWeight:700, padding:"4px 8px 6px" }}>
+                  <div style={{ fontSize: 9, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, padding: "4px 8px 6px" }}>
                     Alterar {l.label.toLowerCase()}
                   </div>
                   {l.opcoes.map(opt => {
                     const optLabel = l.catMatriz
                       ? (matriz?.[l.catMatriz]?.[opt]?.label || opt)
-                      : opt;  // estado: usa a sigla mesmo
+                      : opt;
                     const selecionada = String(valorAtualKey) === String(opt);
                     return (
                       <div key={opt}
@@ -23572,14 +23596,14 @@ function ResumoLateral({ respostas, setters, matriz }) {
                           setEditando(null);
                         }}
                         style={{
-                          padding:"7px 10px",
-                          fontSize:12,
-                          borderRadius:5,
-                          cursor:"pointer",
+                          padding: "7px 10px",
+                          fontSize: 12,
+                          borderRadius: 6,
+                          cursor: "pointer",
                           background: selecionada ? "#f3f4f6" : "transparent",
                           color: selecionada ? "#111" : "#374151",
                           fontWeight: selecionada ? 600 : 400,
-                          transition:"background 0.1s",
+                          transition: "background 0.1s",
                         }}
                         onMouseEnter={e => !selecionada && (e.currentTarget.style.background = "#f9fafb")}
                         onMouseLeave={e => !selecionada && (e.currentTarget.style.background = "transparent")}>
@@ -23598,75 +23622,271 @@ function ResumoLateral({ respostas, setters, matriz }) {
 }
 
 // ───────────────────────────────────────────────────────────────
-// TabelaCasaExemplo: header preto, linhas zebra, tipografia hierárquica.
+// FluxogramaCasa — substitui a TabelaCasaExemplo. Apresenta o cálculo
+// de área como um fluxograma horizontal: COMPOSIÇÃO DOS AMBIENTES (lista
+// detalhada com áreas) → SETA ANIMADA com label "+25% paredes e circulação"
+// → ÁREA TOTAL (card destaque com count-up). Estilo moderno (sem zebra,
+// borders rounded, espaçamento generoso). Animação sequencial em ~2s no mount.
 // ───────────────────────────────────────────────────────────────
-function TabelaCasaExemplo({ casaCalc }) {
-  const labelPadrao = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
-  const padraoLabel = (labelPadrao[casaCalc.padrao] || casaCalc.padrao || "").toUpperCase();
+function FluxogramaCasa({ casaCalc }) {
+  const labelPadrao = { baixo: "baixo", medio: "médio", alto: "alto" };
+  const padraoLabel = labelPadrao[casaCalc.padrao] || casaCalc.padrao || "médio";
 
-  // Debug temporário: log o padrão que chegou pra confirmar que o re-render
-  // está acontecendo. Pode remover depois.
-  if (typeof window !== "undefined") {
-    console.log("[TabelaCasaExemplo] padrão recebido:", casaCalc.padrao, "→ label:", padraoLabel);
-  }
+  // Phases controladas por flags individuais — cada elemento aparece na
+  // sua hora, com a transição CSS apropriada.
+  const [showDesc, setShowDesc]             = useState(false);
+  const [showCardC, setShowCardC]           = useState(false);
+  const [linhasReveladas, setLinhasReveladas] = useState(0);
+  const [showSubtotal, setShowSubtotal]     = useState(false);
+  const [showLabelOp, setShowLabelOp]       = useState(false);
+  const [arrowDrawing, setArrowDrawing]     = useState(false);
+  const [arrowDone, setArrowDone]           = useState(false);
+  const [showCardA, setShowCardA]           = useState(false);
+  // Count-up: começa em areaBruta e cresce até areaTotal junto com o
+  // fade-in do card "Área total". Lazy initializer evita flash inicial.
+  const [areaCountValue, setAreaCountValue] = useState(() => casaCalc.areaBruta);
 
-  // Cada linha é uma tupla [label, valor, opcional={destaque, separador}]
-  // Linha "Padrão" foi removida da tabela — agora aparece no header à direita
-  // (CASA SIMULADA · ALTO PADRÃO) economizando espaço vertical.
-  const linhas = [
-    { label: "Área útil",                       valor: `${casaCalc.areaBruta.toLocaleString("pt-BR")} m²` },
-    { label: "+ 25% circ. + paredes",           valor: `+${(casaCalc.areaTotal - casaCalc.areaBruta).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²` },
-    { label: "Área total",                      valor: `${casaCalc.areaTotal.toLocaleString("pt-BR")} m²`, divisor: true },
-    { label: "Preço base",                      valor: `${moeda(casaCalc.precoBase)} / m²` },
-    { label: "Preço por m² (com complexidade)", valor: `${moeda(casaCalc.precoM2)} / m²` },
-    { label: "Honorário total",                 valor: moeda(casaCalc.honorario), destaque: true, divisor: true },
-  ];
+  const totalLines = CASA_EXEMPLO.comodos.length;
+
+  // Sequência de animação — só roda no mount. Mudanças de respostas
+  // (padrão, estado, etc) atualizam números reativamente sem re-animar.
+  useEffect(() => {
+    const timeouts = [];
+    let raf;
+
+    timeouts.push(setTimeout(() => setShowDesc(true), 50));
+    timeouts.push(setTimeout(() => setShowCardC(true), 250));
+
+    // Stagger das linhas dos cômodos — 30ms entre cada
+    for (let i = 0; i < totalLines; i++) {
+      timeouts.push(setTimeout(() => setLinhasReveladas(i + 1), 550 + i * 30));
+    }
+
+    const linesEnd = 550 + totalLines * 30;
+
+    timeouts.push(setTimeout(() => setShowSubtotal(true), linesEnd + 100));
+    timeouts.push(setTimeout(() => setShowLabelOp(true), linesEnd + 350));
+    timeouts.push(setTimeout(() => setArrowDrawing(true), linesEnd + 550));
+    timeouts.push(setTimeout(() => setArrowDone(true), linesEnd + 1050));
+    timeouts.push(setTimeout(() => setShowCardA(true), linesEnd + 1100));
+
+    // Count-up animado: areaBruta → areaTotal em 500ms (ease-out cubic)
+    timeouts.push(setTimeout(() => {
+      const start = performance.now();
+      const startVal = casaCalc.areaBruta;
+      const target = casaCalc.areaTotal;
+      const duration = 500;
+      const tick = (now) => {
+        const t = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        setAreaCountValue(startVal + (target - startVal) * eased);
+        if (t < 1) raf = requestAnimationFrame(tick);
+      };
+      raf = requestAnimationFrame(tick);
+    }, linesEnd + 1100));
+
+    return () => {
+      timeouts.forEach(t => clearTimeout(t));
+      if (raf) cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pluralização específica dos cômodos da CASA_EXEMPLO
+  const displayName = (nome, qtd) => {
+    if (qtd <= 1) return nome;
+    const plurais = { "Suíte": "Suítes", "Garagem": "Vagas de garagem" };
+    return `${qtd} ${plurais[nome] || nome + "s"}`;
+  };
+
+  const adicaoCirc = casaCalc.areaTotal - casaCalc.areaBruta;
+
+  // Dimensões do SVG da seta
+  const arrW = 160, arrH = 40;
+  const lineSX = 12, lineEX = 144, lineY = arrH / 2;
+  const lineLen = lineEX - lineSX;
 
   return (
-    <div style={{
-      background:"#fff",
-      border:"1px solid #e5e7eb",
-      borderRadius:10,
-      overflow:"hidden",
-      boxShadow:"0 1px 2px rgba(0,0,0,0.03)",
-      animation:"vk-fade-up 0.4s ease-out",
-    }}>
-      {/* Header preto/branco — CASA SIMULADA · MÉDIO PADRÃO em linha única */}
+    <div style={{ animation: "vk-fade-up 0.4s ease-out" }}>
+      <style>{`
+        @media (max-width: 640px) {
+          .vk-fluxo-grid {
+            grid-template-columns: 1fr !important;
+            gap: 14px !important;
+          }
+        }
+      `}</style>
+
+      {/* Descrição introdutória */}
       <div style={{
-        background:"#111", color:"#fff",
-        padding:"7px 14px",
-        fontSize:10.5, fontWeight:700, letterSpacing:1, textTransform:"uppercase",
+        opacity: showDesc ? 1 : 0,
+        transform: showDesc ? "translateY(0)" : "translateY(6px)",
+        transition: "opacity 0.3s ease-out, transform 0.3s ease-out",
+        marginBottom: 24,
       }}>
-        Casa simulada
-        {padraoLabel && (
-          <span style={{ color:"#d1d5db", fontWeight:500, marginLeft:8 }}>· {padraoLabel} padrão</span>
-        )}
+        <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
+          Em uma simulação com as seguintes características:
+        </div>
+        <div style={{ fontSize: 14, color: "#111", fontWeight: 500, marginTop: 4 }}>
+          Casa de padrão {padraoLabel} com ambientes médios
+        </div>
       </div>
 
-      {/* Subtítulo: lista de cômodos */}
-      <div style={{ padding:"6px 14px", fontSize:11, color:"#374151", lineHeight:1.4, background:"#fafbfc", borderBottom:"1px solid #f3f4f6" }}>
-        3 suítes (1 master) · sala de estar · sala de jantar · cozinha · lavabo · lavanderia · 2 vagas garagem
-      </div>
-
-      {/* Linhas zebra */}
-      <div>
-        {linhas.map((l, i) => (
-          <div key={i} style={{
-            display:"flex", justifyContent:"space-between", alignItems:"baseline",
-            padding: l.destaque ? "7px 14px" : "5px 14px",
-            background: l.destaque ? "#f3f4f6" : (i % 2 === 0 ? "#fff" : "#fafbfc"),
-            borderTop: l.divisor ? "1px solid #e5e7eb" : (i === 0 ? "none" : "1px solid #f9fafb"),
-            fontSize: l.destaque ? 13 : 12,
-            fontVariantNumeric:"tabular-nums",
+      {/* Fluxograma — grid 3 colunas: cômodos | seta | área total */}
+      <div className="vk-fluxo-grid" style={{
+        display: "grid",
+        gridTemplateColumns: "1fr 160px 1fr",
+        gap: 16,
+        alignItems: "center",
+      }}>
+        {/* ─── CARD CÔMODOS ──────────────────────────────────── */}
+        <div style={{
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 14,
+          padding: "22px 24px",
+          opacity: showCardC ? 1 : 0,
+          transform: showCardC ? "translateY(0)" : "translateY(8px)",
+          transition: "opacity 0.35s ease-out, transform 0.35s ease-out",
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: "#9ca3af",
+            textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 16,
           }}>
-            <span style={{ color: l.destaque ? "#111" : "#6b7280", fontWeight: l.destaque ? 700 : 500 }}>
-              {l.label}
-            </span>
-            <span style={{ color:"#111", fontWeight: l.destaque ? 700 : 600 }}>
-              {l.valor}
+            Composição dos ambientes
+          </div>
+
+          {CASA_EXEMPLO.comodos.map((c, i) => {
+            const revealed = i < linhasReveladas;
+            const total = c.area * c.qtd;
+            return (
+              <div key={i} style={{
+                display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                padding: "5px 0",
+                fontSize: 13, fontVariantNumeric: "tabular-nums",
+                opacity: revealed ? 1 : 0,
+                transform: revealed ? "translateX(0)" : "translateX(-4px)",
+                transition: "opacity 0.25s ease-out, transform 0.25s ease-out",
+              }}>
+                <span style={{ color: "#374151" }}>{displayName(c.nome, c.qtd)}</span>
+                <span style={{ color: "#111", fontWeight: 500 }}>
+                  {total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
+                </span>
+              </div>
+            );
+          })}
+
+          {/* Subtotal área útil — divisor sutil + linha bold */}
+          <div style={{
+            marginTop: 12,
+            paddingTop: 12,
+            borderTop: "1px solid #f3f4f6",
+            display: "flex", justifyContent: "space-between", alignItems: "baseline",
+            fontSize: 13, fontVariantNumeric: "tabular-nums",
+            opacity: showSubtotal ? 1 : 0,
+            transform: showSubtotal ? "scale(1)" : "scale(0.96)",
+            transition: "opacity 0.3s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
+          }}>
+            <span style={{ color: "#6b7280", fontWeight: 500 }}>Subtotal área útil</span>
+            <span style={{ color: "#111", fontWeight: 600 }}>
+              {casaCalc.areaBruta.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
             </span>
           </div>
-        ))}
+        </div>
+
+        {/* ─── SETA + LABELS ─────────────────────────────────── */}
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
+        }}>
+          {/* Label "+25% paredes e circulação" */}
+          <div style={{
+            fontSize: 11, color: "#374151", textAlign: "center", lineHeight: 1.35,
+            opacity: showLabelOp ? 1 : 0,
+            transform: showLabelOp ? "translateY(0)" : "translateY(-4px)",
+            transition: "opacity 0.3s ease-out, transform 0.3s ease-out",
+          }}>
+            <strong style={{ fontWeight: 600 }}>+25%</strong>
+            <br />
+            paredes e circulação
+          </div>
+
+          {/* SVG da seta animada */}
+          <svg width={arrW} height={arrH} style={{ overflow: "visible", display: "block" }}>
+            {/* Linha que se desenha */}
+            <line
+              x1={lineSX} y1={lineY}
+              x2={lineEX} y2={lineY}
+              stroke="#374151"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeDasharray={lineLen}
+              strokeDashoffset={arrowDrawing ? 0 : lineLen}
+              style={{ transition: "stroke-dashoffset 600ms cubic-bezier(0.4, 0, 0.2, 1)" }}
+            />
+            {/* Ponta brilhante seguindo a linha (some quando termina) */}
+            <circle
+              cx={arrowDrawing ? lineEX - 4 : lineSX}
+              cy={lineY}
+              r={4}
+              fill="#374151"
+              style={{
+                transition: "cx 600ms cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-out",
+                filter: "drop-shadow(0 0 4px rgba(55, 65, 81, 0.5))",
+                opacity: arrowDone ? 0 : (arrowDrawing ? 1 : 0),
+              }}
+            />
+            {/* Cabeça da seta — minimalista (linha aberta →) */}
+            <g style={{
+              opacity: arrowDone ? 1 : 0,
+              transform: arrowDone ? "scale(1)" : "scale(0.5)",
+              transformOrigin: `${lineEX}px ${lineY}px`,
+              transition: "opacity 0.2s ease-out, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)",
+            }}>
+              <line x1={lineEX - 6} y1={lineY - 5} x2={lineEX} y2={lineY}
+                stroke="#374151" strokeWidth="1.5" strokeLinecap="round" />
+              <line x1={lineEX - 6} y1={lineY + 5} x2={lineEX} y2={lineY}
+                stroke="#374151" strokeWidth="1.5" strokeLinecap="round" />
+            </g>
+          </svg>
+
+          {/* Annotation "+44.78 m²" embaixo */}
+          <div style={{
+            fontSize: 11, color: "#374151", textAlign: "center",
+            fontVariantNumeric: "tabular-nums", fontWeight: 500,
+            opacity: arrowDone ? 1 : 0,
+            transform: arrowDone ? "translateY(0)" : "translateY(-4px)",
+            transition: "opacity 0.3s ease-out, transform 0.3s ease-out",
+          }}>
+            +{adicaoCirc.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
+          </div>
+        </div>
+
+        {/* ─── CARD ÁREA TOTAL ───────────────────────────────── */}
+        <div style={{
+          background: "#fff",
+          border: "1px solid #e5e7eb",
+          borderRadius: 14,
+          padding: "28px 24px",
+          textAlign: "center",
+          opacity: showCardA ? 1 : 0,
+          transform: showCardA ? "scale(1)" : "scale(0.96)",
+          transition: "opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
+        }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: "#9ca3af",
+            textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8,
+          }}>
+            Área total
+          </div>
+          <div style={{
+            fontSize: 30, fontWeight: 500, color: "#111",
+            letterSpacing: -0.5, fontVariantNumeric: "tabular-nums",
+            lineHeight: 1.1,
+          }}>
+            {areaCountValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>m²</div>
+        </div>
       </div>
     </div>
   );
