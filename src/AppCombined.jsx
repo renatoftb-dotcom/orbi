@@ -22342,6 +22342,16 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
   // muda — evita flicker e dá controle pro usuário.
   const [valorCalibradoConfirmado, setValorCalibradoConfirmado] = useState(null);
   const [confirmandoAbsurdo, setConfirmandoAbsurdo] = useState(false);
+  // Reconfirmação após o usuário ajustar o preço (caminho "Quero ajustar").
+  // null = ainda não respondeu, true = "Sim, prosseguir" → abre cadastro inline,
+  // false = "Quero ajustar mais" → continua editando o input.
+  // Reseta automaticamente quando valorCalibradoConfirmado muda (preço novo
+  // precisa ser reconfirmado).
+  const [precoRecalibradoOk, setPrecoRecalibradoOk] = useState(null);
+
+  useEffect(() => {
+    setPrecoRecalibradoOk(null);
+  }, [valorCalibradoConfirmado]);
 
   // Estado de salvamento.
   const [salvando, setSalvando] = useState(false);
@@ -22383,19 +22393,24 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     }
   }, [aceitouCalculado, estado, usuario]);
 
-  // Quando o usuário aceita o valor calculado, posiciona o topo do bloco de
-  // cadastro no topo da viewport pra ele ver o cabeçalho ("VICKE · Cadastro
-  // do Escritório") + texto explicativo antes de descer pros campos.
-  // Roda em 2 frames pra garantir que o DOM já montou o bloco.
+  // Caminho inline do cadastro: ativo quando "Sim, esse valor está bom" OU
+  // quando o usuário ajustou o preço e reconfirmou. Determina quando o bloco
+  // de cadastro aparece, quando o save button aparece e quando o auto-scroll
+  // alinha o topo do cadastro com a viewport.
+  const cadastroInlineAtivo = aceitouCalculado === true || precoRecalibradoOk === true;
+
+  // Quando o cadastro inline abre (qualquer um dos dois caminhos), posiciona
+  // o topo do bloco no topo da viewport pra ele ver o cabeçalho + texto
+  // explicativo. Roda em 2 frames pra garantir que o DOM já montou o bloco.
   useEffect(() => {
-    if (aceitouCalculado === true) {
+    if (cadastroInlineAtivo) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           cadastroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
         });
       });
     }
-  }, [aceitouCalculado]);
+  }, [cadastroInlineAtivo]);
 
   // Ref pra rolar o conteúdo conforme novas perguntas aparecem.
   const containerRef = useRef(null);
@@ -22605,16 +22620,18 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     escRespNome.trim() !== "" &&
     escRespRegistro.trim() !== "";
 
-  // Pode "concluir" quando tudo respondido e:
-  //   - aceitou o calculado E cadastro do escritório válido, OU
-  //   - digitou valor de calibragem válido (e confirmou caso seja absurdo)
-  const podeConcluir = todasRespondidas && (
-    (aceitouCalculado === true && cadastroValido) ||
-    (aceitouCalculado === false && analiseCalibragem && !analiseCalibragem.invalido && (
-      // Se for absurdo, só pode concluir se já confirmou
+  // Análise de calibragem é considerada válida quando: existe, não é inválida,
+  // e o valor está dentro da faixa OU o usuário confirmou um valor absurdo.
+  // Usado pra decidir quando mostrar a pergunta de reconfirmação no caminho
+  // "Quero ajustar".
+  const analiseCalibragemValida = aceitouCalculado === false &&
+    analiseCalibragem && !analiseCalibragem.invalido && (
       (!analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto) || confirmandoAbsurdo
-    ))
-  );
+    );
+
+  // Pode "concluir" só quando o cadastro inline está ativo (Sim direto OU
+  // Quero ajustar reconfirmado) E o cadastro está válido.
+  const podeConcluir = todasRespondidas && cadastroInlineAtivo && cadastroValido;
 
   async function handleConcluir() {
     if (!podeConcluir) return;
@@ -22635,44 +22652,36 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
         valor_calibrado,
       });
 
-      // Step 5b — Quando o usuário aceitou o valor calculado, salva também
-      // o cadastro do escritório que ele preencheu inline. Falha aqui não
-      // bloqueia o fluxo: onboarding já tá marcado como concluído no backend,
-      // e o usuário pode completar/corrigir pela aba Escritório depois.
-      if (aceitouCalculado === true) {
-        try {
-          await api.escritorio.save({
-            nome:      escNome.trim(),
-            email:     escEmail.trim(),
-            telefone:  escTelefone.trim(),
-            cidade:    escCidade.trim(),
-            estado:    escEstado,
-            instagram: escInstagram.trim(),
-            banco:     escBanco.trim(),
-            pixTipo:   escPixTipo,
-            pixChave:  escPixChave.trim(),
-            logo:      escLogo,
-            responsaveis: [{
-              id:   "r1",
-              nome: escRespNome.trim(),
-              cau:  escRespRegistro.trim(),
-              cpf:  "",
-            }],
-          });
-        } catch (e) {
-          console.warn("[onboarding] escritorio.save falhou:", e);
-        }
-        // Step 5c — Pula TelaTransicao e vai direto pro app, já que o
-        // cadastro foi feito inline. Flag avisa o parent que o escritório
-        // já foi salvo inline — assim ele NÃO refaz o pré-preenchimento de
-        // estado (que sobrescreveria os dados completos com um objeto quase
-        // vazio do cache de boot).
-        onConcluido(estado, { escritorioJaSalvo: true });
-        return;
+      // Cadastro inline: ambos os caminhos ("Sim, está bom" e "Quero ajustar"
+      // + reconfirmação) salvam o escritório inline. Falha aqui não bloqueia
+      // o fluxo: onboarding já tá marcado como concluído no backend, e o
+      // usuário pode completar/corrigir pela aba Escritório depois.
+      try {
+        await api.escritorio.save({
+          nome:      escNome.trim(),
+          email:     escEmail.trim(),
+          telefone:  escTelefone.trim(),
+          cidade:    escCidade.trim(),
+          estado:    escEstado,
+          instagram: escInstagram.trim(),
+          banco:     escBanco.trim(),
+          pixTipo:   escPixTipo,
+          pixChave:  escPixChave.trim(),
+          logo:      escLogo,
+          responsaveis: [{
+            id:   "r1",
+            nome: escRespNome.trim(),
+            cau:  escRespRegistro.trim(),
+            cpf:  "",
+          }],
+        });
+      } catch (e) {
+        console.warn("[onboarding] escritorio.save falhou:", e);
       }
-
-      // Fluxo legado (Quero ajustar): mostra TelaTransicao.
-      setConcluido(true);
+      // Pula TelaTransicao e vai direto pro app. Flag avisa o parent que o
+      // escritório já foi salvo inline — assim ele NÃO refaz o pré-preenchimento
+      // de estado (que sobrescreveria os dados completos com cache stale).
+      onConcluido(estado, { escritorioJaSalvo: true });
     } catch (e) {
       setErroSalvar(e.message || "Falha ao salvar perfil");
     } finally {
@@ -22842,6 +22851,10 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
             analiseCalibragem={analiseCalibragem}
             confirmandoAbsurdo={confirmandoAbsurdo}
             setConfirmandoAbsurdo={setConfirmandoAbsurdo}
+            precoRecalibradoOk={precoRecalibradoOk}
+            setPrecoRecalibradoOk={setPrecoRecalibradoOk}
+            analiseCalibragemValida={analiseCalibragemValida}
+            cadastroInlineAtivo={cadastroInlineAtivo}
             // Respostas atuais (pra resumo lateral) e setters (pra editar)
             respostas={{ profissao, porte, experiencia, referencia, padrao, capital, estado }}
             setters={{ setProfissao, setPorte, setExperiencia, setReferencia, setPadrao, setCapital, setEstado }}
@@ -22851,8 +22864,8 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
           />
         )}
 
-        {/* ── Cadastro do escritório (só quando aceitou o valor calculado) ── */}
-        {todasRespondidas && aceitouCalculado === true && (
+        {/* ── Cadastro do escritório (Sim direto OU Quero ajustar reconfirmado) ── */}
+        {todasRespondidas && cadastroInlineAtivo && (
           <BlocoCadastroEscritorio
             outerRef={cadastroRef}
             logo={escLogo} setLogo={setEscLogo}
@@ -22872,8 +22885,8 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
           />
         )}
 
-        {/* ── Botão concluir ── */}
-        {todasRespondidas && aceitouCalculado !== null && (
+        {/* ── Botão concluir (só aparece após cadastro inline aberto) ── */}
+        {todasRespondidas && cadastroInlineAtivo && (
           <div style={{ marginTop:32, paddingTop:24, borderTop:"1px solid #f3f4f6" }}>
             {erroSalvar && (
               <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
@@ -23072,6 +23085,8 @@ function BlocoResultado({
   valorCalibradoConfirmado, setValorCalibradoConfirmado,
   analiseCalibragem,
   confirmandoAbsurdo, setConfirmandoAbsurdo,
+  precoRecalibradoOk, setPrecoRecalibradoOk,
+  analiseCalibragemValida, cadastroInlineAtivo,
   respostas, setters, matriz, containerRef, cubLoading,
 }) {
   // Etapa atual: 1 = só texto, 2 = simulação completa
@@ -23084,13 +23099,12 @@ function BlocoResultado({
   // de calibragem aberto após "Quero ajustar"), rola o container até o final
   // pra mostrar pro usuário que tem mais informação. Espera 1 frame pro DOM
   // atualizar e calcular scrollHeight corretamente antes de rolar.
-  // Quando o usuário escolhe "Sim, esse valor está bom" (aceitouCalculado===true),
-  // o TelaOnboarding controla o scroll pra alinhar o topo do bloco de cadastro
-  // com o topo da viewport — então pulamos o scroll-pro-fim aqui pra evitar
-  // conflito de scrolls competindo.
+  // Quando o cadastro inline está ativo (qualquer um dos dois caminhos),
+  // o TelaOnboarding controla o scroll pra alinhar o topo do cadastro com a
+  // viewport — então pulamos o scroll-pro-fim aqui pra evitar conflito.
   useEffect(() => {
     if (!containerRef?.current) return;
-    if (aceitouCalculado === true) return;
+    if (cadastroInlineAtivo) return;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (containerRef.current) {
@@ -23101,7 +23115,7 @@ function BlocoResultado({
         }
       });
     });
-  }, [etapa, aceitouCalculado, containerRef]);
+  }, [etapa, aceitouCalculado, cadastroInlineAtivo, containerRef]);
 
   if (cubErro) {
     return (
@@ -23230,6 +23244,26 @@ function BlocoResultado({
                 {analiseCalibragem && !analiseCalibragem.invalido && !analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto && (
                   <div style={{ marginTop:12, fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
                     {moeda(analiseCalibragem.valor)} será o seu novo preço de referência.
+                  </div>
+                )}
+
+                {/* Reconfirmação — só aparece quando análise está válida (faixa
+                    normal, OU absurdo + checkbox confirmando). Esconde o botão
+                    "Salvar..." até o usuário confirmar e preencher o cadastro. */}
+                {analiseCalibragemValida && (
+                  <div style={{ marginTop:18 }}>
+                    <PerguntaBlock pergunta="Esse novo valor está bom?">
+                      <Opcao
+                        label="Sim, prosseguir"
+                        selecionada={precoRecalibradoOk === true}
+                        onClick={() => setPrecoRecalibradoOk(true)}
+                      />
+                      <Opcao
+                        label="Quero ajustar mais"
+                        selecionada={precoRecalibradoOk === false}
+                        onClick={() => setPrecoRecalibradoOk(false)}
+                      />
+                    </PerguntaBlock>
                   </div>
                 )}
               </div>
