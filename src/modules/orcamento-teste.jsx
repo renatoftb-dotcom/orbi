@@ -7749,7 +7749,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       );
     }
 
-    return <PropostaPreview
+    // Componente do modelo escolhido pela empresa (esc.modelo_default).
+    // Fallback pro Padrão quando não definido. Permite que cada escritório
+    // tenha seu modelo visual default sem mexer no backend (campo extra
+    // entra no JSONB do escritório automaticamente).
+    const ModeloComponente = getModeloOrcamento(esc.modelo_default);
+
+    return <ModeloComponente
       key={previewRemountKey}
       data={liveData}
       onVoltar={() => {

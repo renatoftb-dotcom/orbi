@@ -19,7 +19,11 @@ const ORDER = [
   // modelo-padrao.jsx vem ANTES de orcamento-teste.jsx — embora função
   // declarations hoist independente de ordem, deixar antes torna a leitura
   // do bundle final mais natural (templates antes do form que os usa).
+  // modelos-registry.jsx vem DEPOIS de modelo-padrao.jsx pra que o
+  // typeof PropostaPreview !== "undefined" check passe na inicialização
+  // (ordem importa pra const declarations).
   "modelo-padrao.jsx",
+  "modelos-registry.jsx",
   "orcamento-teste.jsx",
   "escritorio.jsx",
   "admin.jsx",
