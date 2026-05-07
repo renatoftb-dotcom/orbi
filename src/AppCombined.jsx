@@ -23941,8 +23941,11 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   // visual) fica em `topY - 10` acima da barra. Pra barra mais alta (topY ≈ padTop),
   // sobram 40 - 10 - 14 = 16px de margem entre o topo do SVG e o topo do texto.
   // Garante que nada corte mesmo com valores grandes ou alturas extremas.
-  const W = 720, H = 180;
-  const padTop = 40, padBot = 56, padLeft = 60, padRight = 60;
+  const W = 720, H = 200;
+  // padBot aumentado de 56→76 pra acomodar a linha extra "R$ X,XX/m²" abaixo
+  // do sub-label da última barra (Honorário final). innerH e yBase ficam iguais
+  // — só mudou a margem inferior pra dar espaço pra esse novo elemento.
+  const padTop = 40, padBot = 76, padLeft = 60, padRight = 60;
   const innerW = W - padLeft - padRight;
   const innerH = H - padTop - padBot;
   const barW = Math.min(54, innerW / steps.length - 24);
@@ -24067,10 +24070,12 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   {s.tipo === "sub" ? "−" : ""}{moeda(Math.abs(s.delta))}
                 </text>
 
-                {/* Label */}
+                {/* Label — posição relativa a yBase (não a H) pra ficar
+                    independente do crescimento de H (que agora reserva espaço
+                    pro R$/m² da última barra). */}
                 <text
                   x={x + barW/2}
-                  y={H - 36}
+                  y={yBase + 20}
                   textAnchor="middle"
                   fontSize="11" fontWeight="500"
                   fill="#374151"
@@ -24080,7 +24085,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                 </text>
                 <text
                   x={x + barW/2}
-                  y={H - 20}
+                  y={yBase + 36}
                   textAnchor="middle"
                   fontSize="10"
                   fill="#9ca3af"
@@ -24088,6 +24093,50 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.6s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.sub}
                 </text>
+
+                {/* R$/m² apenas na última barra (Honorário final), abaixo do
+                    sub-label, com seta horizontal apontando da esquerda pra
+                    direita pro valor. */}
+                {i === steps.length - 1 && visivel && (() => {
+                  const cx = x + barW / 2;
+                  const valorPorM2 = (honorarioCalculado / casaCalc.areaTotal).toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2, maximumFractionDigits: 2,
+                  });
+                  const ay = yBase + 56;             // baseline do texto/seta
+                  const arrowStartX = cx - 38;
+                  const arrowEndX = cx - 22;
+                  const textX = cx - 18;
+                  return (
+                    <g style={{ animation: "vk-fade-up 0.4s ease-out 0.7s both", opacity: visivel ? undefined : 0 }}>
+                      {/* Linha horizontal */}
+                      <line
+                        x1={arrowStartX} y1={ay - 3.5}
+                        x2={arrowEndX}   y2={ay - 3.5}
+                        stroke="#374151" strokeWidth="1" strokeLinecap="round"
+                      />
+                      {/* Cabeça → minimalista */}
+                      <line
+                        x1={arrowEndX - 3} y1={ay - 6}
+                        x2={arrowEndX}     y2={ay - 3.5}
+                        stroke="#374151" strokeWidth="1" strokeLinecap="round"
+                      />
+                      <line
+                        x1={arrowEndX - 3} y1={ay - 1}
+                        x2={arrowEndX}     y2={ay - 3.5}
+                        stroke="#374151" strokeWidth="1" strokeLinecap="round"
+                      />
+                      {/* Valor R$ X,XX/m² */}
+                      <text
+                        x={textX} y={ay}
+                        textAnchor="start"
+                        fontSize="10" fontWeight="500"
+                        fill="#111"
+                        fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif">
+                        R$ {valorPorM2}/m²
+                      </text>
+                    </g>
+                  );
+                })()}
 
                 {/* Seta indicativa: só pra steps de variação (add/sub).
                     Posição: logo ABAIXO da barra de variação (que termina em
