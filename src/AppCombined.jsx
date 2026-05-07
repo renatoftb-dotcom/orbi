@@ -23204,8 +23204,11 @@ function BlocoResultado({
 
             {aceitouCalculado === false && (
               <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
-                <div style={{ fontSize:13, color:"#111", marginBottom:8 }}>
+                <div style={{ fontSize:13, color:"#111", marginBottom:4 }}>
                   Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
+                </div>
+                <div style={{ fontSize:11.5, color:"#9ca3af", marginBottom:10, lineHeight:1.4 }}>
+                  Insira novo valor e aperte <strong style={{ color:"#6b7280", fontWeight:600 }}>ENTER</strong>
                 </div>
                 <InputMoedaBR
                   valor={valorCalibragem}
