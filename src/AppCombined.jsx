@@ -22383,8 +22383,25 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     }
   }, [aceitouCalculado, estado, usuario]);
 
+  // Quando o usuário aceita o valor calculado, posiciona o topo do bloco de
+  // cadastro no topo da viewport pra ele ver o cabeçalho ("VICKE · Cadastro
+  // do Escritório") + texto explicativo antes de descer pros campos.
+  // Roda em 2 frames pra garantir que o DOM já montou o bloco.
+  useEffect(() => {
+    if (aceitouCalculado === true) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          cadastroRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      });
+    }
+  }, [aceitouCalculado]);
+
   // Ref pra rolar o conteúdo conforme novas perguntas aparecem.
   const containerRef = useRef(null);
+  // Ref pro cabeçalho do bloco de cadastro do escritório, usada pra alinhar
+  // o topo dele com o topo da viewport quando o usuário aceita o valor calculado.
+  const cadastroRef = useRef(null);
 
   // Busca matriz do backend ao montar.
   useEffect(() => {
@@ -22646,8 +22663,11 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
           console.warn("[onboarding] escritorio.save falhou:", e);
         }
         // Step 5c — Pula TelaTransicao e vai direto pro app, já que o
-        // cadastro foi feito inline.
-        onConcluido(estado);
+        // cadastro foi feito inline. Flag avisa o parent que o escritório
+        // já foi salvo inline — assim ele NÃO refaz o pré-preenchimento de
+        // estado (que sobrescreveria os dados completos com um objeto quase
+        // vazio do cache de boot).
+        onConcluido(estado, { escritorioJaSalvo: true });
         return;
       }
 
@@ -22834,6 +22854,7 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
         {/* ── Cadastro do escritório (só quando aceitou o valor calculado) ── */}
         {todasRespondidas && aceitouCalculado === true && (
           <BlocoCadastroEscritorio
+            outerRef={cadastroRef}
             logo={escLogo} setLogo={setEscLogo}
             logoErro={escLogoErro} setLogoErro={setEscLogoErro}
             nome={escNome} setNome={setEscNome}
@@ -23063,8 +23084,13 @@ function BlocoResultado({
   // de calibragem aberto após "Quero ajustar"), rola o container até o final
   // pra mostrar pro usuário que tem mais informação. Espera 1 frame pro DOM
   // atualizar e calcular scrollHeight corretamente antes de rolar.
+  // Quando o usuário escolhe "Sim, esse valor está bom" (aceitouCalculado===true),
+  // o TelaOnboarding controla o scroll pra alinhar o topo do bloco de cadastro
+  // com o topo da viewport — então pulamos o scroll-pro-fim aqui pra evitar
+  // conflito de scrolls competindo.
   useEffect(() => {
     if (!containerRef?.current) return;
+    if (aceitouCalculado === true) return;
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         if (containerRef.current) {
@@ -23876,6 +23902,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
 // fluxo dele segue por TelaTransicao + aba Escritório (legado).
 // ───────────────────────────────────────────────────────────────
 function BlocoCadastroEscritorio({
+  outerRef,
   logo, setLogo, logoErro, setLogoErro,
   nome, setNome,
   cidade, setCidade,
@@ -23970,11 +23997,12 @@ function BlocoCadastroEscritorio({
   const campoWrap = { display: "flex", flexDirection: "column", marginBottom: 16 };
 
   return (
-    <div style={{
+    <div ref={outerRef} style={{
       marginTop: 32,
       paddingTop: 28,
       borderTop: "1px solid #f3f4f6",
       animation: "vk-onb-fade-in 0.4s ease-out",
+      scrollMarginTop: 16,
     }}>
       <style>{`
         .vk-onb-cad input:focus, .vk-onb-cad select:focus { border-color: #111 !important; }
@@ -26026,7 +26054,13 @@ export default function ModuloClientesFornecedores() {
       <>
       <TelaOnboarding
         usuario={usuario}
-        onConcluido={async (estadoOnboarding) => {
+        onConcluido={async (estadoOnboarding, opts = {}) => {
+          // Define destino IMEDIATAMENTE — antes dos awaits do refetch.
+          // Se ficar pro fim, awaits + render do setSalvando(false) podem
+          // causar um flash do "home" antes do Escritório aparecer.
+          setAba("escritorio");
+          setEscritorioKey(n => n + 1);
+
           // Backend zerou precisa_fazer_onboarding e gravou as respostas
           // (profissao, padrao_projetos, pct_matriz_calculado, etc).
           // Refaz /auth/me pra trazer TODOS os campos atualizados — fazer
@@ -26065,7 +26099,13 @@ export default function ModuloClientesFornecedores() {
           // são todos campos de primeiro nível) — não aninhado em endereco.estado.
           // Evita que o usuário tenha que digitar de novo a mesma info que acabou
           // de informar no onboarding.
-          if (estadoOnboarding && data?.escritorio && !data.escritorio.estado) {
+          //
+          // IMPORTANTE: opts.escritorioJaSalvo é true quando o usuário escolheu
+          // "Sim, esse valor está bom" e preencheu o cadastro inline. Nesse caso
+          // o escritório já foi salvo com TODOS os campos pelo handleConcluir do
+          // onboarding — refazer um save aqui usaria `data.escritorio` STALE do
+          // cache de boot e sobrescreveria com um objeto quase vazio.
+          if (!opts.escritorioJaSalvo && estadoOnboarding && data?.escritorio && !data.escritorio.estado) {
             const escritorioAtualizado = {
               ...data.escritorio,
               estado: estadoOnboarding,
@@ -26074,12 +26114,6 @@ export default function ModuloClientesFornecedores() {
               console.error("Falha ao pré-preencher estado:", e);
             });
           }
-
-          // Redireciona pra aba Escritório pra completar cadastro completo
-          // (logo, endereço, contatos, equipe). Mensagem explicando o porquê
-          // fica na tela de transição do onboarding.
-          setAba("escritorio");
-          setEscritorioKey(n => n + 1);
         }}
         onLogout={handleLogout}
       />

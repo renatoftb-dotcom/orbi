@@ -1356,7 +1356,13 @@ export default function ModuloClientesFornecedores() {
       <>
       <TelaOnboarding
         usuario={usuario}
-        onConcluido={async (estadoOnboarding) => {
+        onConcluido={async (estadoOnboarding, opts = {}) => {
+          // Define destino IMEDIATAMENTE — antes dos awaits do refetch.
+          // Se ficar pro fim, awaits + render do setSalvando(false) podem
+          // causar um flash do "home" antes do Escritório aparecer.
+          setAba("escritorio");
+          setEscritorioKey(n => n + 1);
+
           // Backend zerou precisa_fazer_onboarding e gravou as respostas
           // (profissao, padrao_projetos, pct_matriz_calculado, etc).
           // Refaz /auth/me pra trazer TODOS os campos atualizados — fazer
@@ -1395,7 +1401,13 @@ export default function ModuloClientesFornecedores() {
           // são todos campos de primeiro nível) — não aninhado em endereco.estado.
           // Evita que o usuário tenha que digitar de novo a mesma info que acabou
           // de informar no onboarding.
-          if (estadoOnboarding && data?.escritorio && !data.escritorio.estado) {
+          //
+          // IMPORTANTE: opts.escritorioJaSalvo é true quando o usuário escolheu
+          // "Sim, esse valor está bom" e preencheu o cadastro inline. Nesse caso
+          // o escritório já foi salvo com TODOS os campos pelo handleConcluir do
+          // onboarding — refazer um save aqui usaria `data.escritorio` STALE do
+          // cache de boot e sobrescreveria com um objeto quase vazio.
+          if (!opts.escritorioJaSalvo && estadoOnboarding && data?.escritorio && !data.escritorio.estado) {
             const escritorioAtualizado = {
               ...data.escritorio,
               estado: estadoOnboarding,
@@ -1404,12 +1416,6 @@ export default function ModuloClientesFornecedores() {
               console.error("Falha ao pré-preencher estado:", e);
             });
           }
-
-          // Redireciona pra aba Escritório pra completar cadastro completo
-          // (logo, endereço, contatos, equipe). Mensagem explicando o porquê
-          // fica na tela de transição do onboarding.
-          setAba("escritorio");
-          setEscritorioKey(n => n + 1);
         }}
         onLogout={handleLogout}
       />
