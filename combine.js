@@ -16,6 +16,10 @@ const ORDER = [
   "outros.jsx",
   "clientes.jsx",
   "resultado-pdf.jsx",
+  // modelo-padrao.jsx vem ANTES de orcamento-teste.jsx — embora função
+  // declarations hoist independente de ordem, deixar antes torna a leitura
+  // do bundle final mais natural (templates antes do form que os usa).
+  "modelo-padrao.jsx",
   "orcamento-teste.jsx",
   "escritorio.jsx",
   "admin.jsx",
