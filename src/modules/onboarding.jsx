@@ -1065,22 +1065,34 @@ function BlocoResultado({
                 )}
 
                 {/* Reconfirmação — só aparece quando análise está válida (faixa
-                    normal, OU absurdo + checkbox confirmando). Esconde o botão
-                    "Salvar..." até o usuário confirmar e preencher o cadastro. */}
-                {analiseCalibragemValida && (
-                  <div style={{ marginTop:18 }}>
-                    <PerguntaBlock pergunta="Esse novo valor está bom?">
-                      <Opcao
-                        label="Sim, prosseguir"
-                        selecionada={precoRecalibradoOk === true}
-                        onClick={() => setPrecoRecalibradoOk(true)}
-                      />
-                      <Opcao
-                        label="Quero ajustar mais"
-                        selecionada={precoRecalibradoOk === false}
-                        onClick={() => setPrecoRecalibradoOk(false)}
-                      />
-                    </PerguntaBlock>
+                    normal, OU absurdo + checkbox confirmando) E o usuário ainda
+                    não prosseguiu. Botão "Prosseguir ↓" abre o cadastro inline.
+                    Pra ajustar mais, basta editar o input acima e Enter — o
+                    estado reseta automaticamente via useEffect. */}
+                {analiseCalibragemValida && precoRecalibradoOk !== true && (
+                  <div style={{ marginTop: 18, animation: "vk-onb-fade-in 0.3s ease-out" }}>
+                    <button
+                      onClick={() => setPrecoRecalibradoOk(true)}
+                      style={{
+                        background: "#111", color: "#fff",
+                        border: "none", borderRadius: 8,
+                        padding: "11px 20px",
+                        fontSize: 13, fontWeight: 600,
+                        cursor: "pointer", fontFamily: "inherit",
+                        display: "inline-flex", alignItems: "center", gap: 8,
+                        transition: "background 0.15s",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = "#000"}
+                      onMouseLeave={e => e.currentTarget.style.background = "#111"}>
+                      Prosseguir
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="5" x2="12" y2="19"/>
+                        <polyline points="5 12 12 19 19 12"/>
+                      </svg>
+                    </button>
+                    <div style={{ marginTop: 10, fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
+                      Quer ajustar mais? Edite o valor acima e aperte <strong style={{ color: "#6b7280", fontWeight: 600 }}>Enter</strong>.
+                    </div>
                   </div>
                 )}
               </div>
