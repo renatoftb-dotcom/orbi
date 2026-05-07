@@ -8156,11 +8156,14 @@ function getModeloEntry(id) {
 // ═══════════════════════════════════════════════════════════════
 // Tipo "Word com texto livre" — campos estruturados (read-only) com os
 // dados do orçamento já configurados nas etapas anteriores + textareas
-// livres pra apresentação, escopo e observações.
+// livres pra todos os blocos de texto que aparecem na proposta:
+// apresentação, escopo dos serviços (com 3 etapas pré-formatadas),
+// serviços não inclusos, prazos, termo de aceite e observações finais.
 //
 // Os textos editados aqui são guardados em propostaData.template.textos no
 // FormOrcamentoProjetoTeste e ficam disponíveis pros modelos visuais
-// (ModeloPadrao + futuros) consumirem ao renderizar a proposta final.
+// (ModeloPadrao + futuros) consumirem ao renderizar a proposta final
+// (Fase 5+).
 //
 // Pode ser pulado via botão "Pular esta etapa" — nesse caso os textos
 // ficam vazios e cada modelo usa seus próprios defaults internos.
@@ -8170,27 +8173,161 @@ function getModeloEntry(id) {
 // fluxograma do onboarding).
 // ═══════════════════════════════════════════════════════════════
 
-// Defaults pros textos das textareas — pré-preenchem na primeira abertura
-// do template (quando ainda não há textos salvos no orçamento).
-const TPL_DEFAULT_APRESENTACAO =
-  "Olá! Apresentamos esta proposta para o desenvolvimento do projeto. Estamos à disposição para esclarecer qualquer dúvida.";
-const TPL_DEFAULT_ESCOPO =
-  "Projeto arquitetônico completo, contemplando estudo preliminar, anteprojeto, projeto executivo, detalhamentos, plantas, cortes e fachadas.";
-const TPL_DEFAULT_OBSERVACOES =
-  "Os serviços não inclusos podem ser contratados separadamente como serviços adicionais. A proposta tem validade de 15 dias a partir da data de emissão.";
+// ─────────────────────────────────────────────────────────────
+// Defaults — escopo, não inclusos, prazo, aceite
+// Replicam os defaults usados pelo ModeloPadrao/PDF, formatados como texto
+// livre pra o usuário ler/editar como num documento Word.
+// ─────────────────────────────────────────────────────────────
+
+const TPL_DEFAULT_ESCOPO_ETAPAS = [
+  {
+    titulo: "1. Estudo Preliminar",
+    objetivo: "Desenvolver o conceito arquitetônico inicial, organizando os ambientes, a implantação e a linguagem estética do projeto.",
+    itens: [
+      "Reunião de briefing e entendimento das necessidades do cliente",
+      "Definição do programa de necessidades",
+      "Estudo de implantação da edificação no terreno",
+      "Desenvolvimento da concepção arquitetônica inicial",
+      "Definição preliminar de: layout, fluxos, volumetria, setorização e linguagem estética",
+      "Compatibilização entre funcionalidade, conforto, estética e viabilidade construtiva",
+      "Ajustes conforme alinhamento com o cliente",
+    ],
+    entregaveis: [
+      "Planta baixa preliminar",
+      "Estudo volumétrico / fachada conceitual",
+      "Implantação inicial",
+      "Imagens, croquis ou perspectivas conceituais",
+      "Apresentação para validação do conceito arquitetônico",
+    ],
+    obs: "É nesta etapa que o projeto ganha forma. O estudo preliminar define a essência da proposta e orienta todas as fases seguintes.",
+  },
+  {
+    titulo: "2. Aprovação na Prefeitura",
+    objetivo: "Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.",
+    itens: [
+      "Adequação do projeto às exigências legais e urbanísticas do município",
+      "Elaboração dos desenhos técnicos exigidos para aprovação",
+      "Montagem da documentação técnica necessária ao processo",
+      "Inserção de informações obrigatórias conforme normas municipais",
+      "Preparação de pranchas, quadros de áreas e demais peças gráficas",
+      "Apoio técnico durante o processo de aprovação",
+      "Atendimento a eventuais comunique-se ou exigências técnicas da prefeitura",
+    ],
+    entregaveis: [
+      "Projeto legal para aprovação",
+      "Plantas, cortes, fachadas e implantação conforme exigência municipal",
+      "Quadros de áreas",
+      "Arquivos e documentação técnica para protocolo",
+    ],
+    obs: "Não inclusos nesta etapa: taxas municipais, emolumentos, ART/RRT, levantamentos complementares, certidões e exigências extraordinárias de órgãos externos, salvo se expressamente previsto.",
+  },
+  {
+    titulo: "3. Projeto Executivo",
+    objetivo: "Desenvolver o projeto arquitetônico em nível detalhado para execução da obra, fornecendo todas as informações necessárias para construção com precisão.",
+    itens: [
+      "Desenvolvimento técnico completo do projeto aprovado",
+      "Detalhamento arquitetônico para obra",
+      "Definição precisa de: dimensões, níveis, cotas, eixos, paginações, esquadrias, acabamentos e elementos construtivos",
+      "Elaboração de desenhos técnicos executivos",
+      "Compatibilização arquitetônica com premissas de obra",
+      "Apoio técnico para leitura e entendimento do projeto pela equipe executora",
+    ],
+    entregaveis: [
+      "Planta baixa executiva",
+      "Planta de locação e implantação",
+      "Planta de cobertura",
+      "Cortes e fachadas executivos",
+      "Planta de layout e pontos arquitetônicos",
+      "Planta de esquadrias e pisos",
+      "Detalhamentos construtivos",
+      "Quadro de esquadrias e quadro de áreas final",
+    ],
+    obs: "É a etapa que transforma a ideia em construção real. Um bom projeto executivo reduz improvisos, retrabalhos e falhas de execução na obra.",
+  },
+];
+
+const TPL_DEFAULT_NAO_INCLUSOS = [
+  "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
+  "Impostos",
+  "Projetos de climatização",
+  "Projeto de prevenção de incêndio",
+  "Projeto de automação",
+  "Projeto de paisagismo",
+  "Projeto de interiores",
+  "Projeto de Marcenaria (Móveis internos)",
+  "Projeto estrutural de estruturas metálicas",
+  "Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura",
+  "Sondagem e Planialtimétrico do terreno",
+  "Acompanhamento semanal de obra",
+  "Gestão e execução de obra",
+  "Vistoria para Caixa Econômica Federal",
+  "RRT de Execução de obra",
+];
+
+const TPL_DEFAULT_PRAZO = [
+  "Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação.",
+  "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura.",
+];
+
+const TPL_DEFAULT_ACEITE =
+  "Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.";
+
+const TPL_DEFAULT_APRESENTACAO = "";   // livre por padrão
+const TPL_DEFAULT_OBSERVACOES = "";    // livre por padrão
+
+// ─────────────────────────────────────────────────────────────
+// Formatadores — convertem dados estruturados em texto editável
+// ─────────────────────────────────────────────────────────────
+
+function formatarEscopoComoTexto(etapas) {
+  return etapas.map(et => {
+    const linhas = [];
+    linhas.push(et.titulo);
+    linhas.push("");
+    linhas.push("Objetivo: " + et.objetivo);
+    linhas.push("");
+    linhas.push("Inclui:");
+    et.itens.forEach(i => linhas.push("• " + i));
+    linhas.push("");
+    linhas.push("Entregáveis:");
+    et.entregaveis.forEach(e => linhas.push("• " + e));
+    if (et.obs) {
+      linhas.push("");
+      linhas.push(et.obs);
+    }
+    return linhas.join("\n");
+  }).join("\n\n────────\n\n");
+}
+
+function formatarListaComoTexto(lista) {
+  return lista.map(item => "• " + item).join("\n");
+}
+
+// ─────────────────────────────────────────────────────────────
+// Componente principal
+// ─────────────────────────────────────────────────────────────
 
 function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   const safeData = data || {};
   const esc = escritorio || {};
 
   // Inicialização preserva edições anteriores. Se não houver template salvo
-  // (primeiro acesso), aplica os defaults acima.
+  // (primeiro acesso), aplica os defaults formatados.
   const tx = safeData.template?.textos || {};
   const [apresentacao, setApresentacao] = useState(
     tx.apresentacao !== undefined ? tx.apresentacao : TPL_DEFAULT_APRESENTACAO
   );
   const [escopo, setEscopo] = useState(
-    tx.escopo !== undefined ? tx.escopo : TPL_DEFAULT_ESCOPO
+    tx.escopo !== undefined ? tx.escopo : formatarEscopoComoTexto(TPL_DEFAULT_ESCOPO_ETAPAS)
+  );
+  const [naoInclusos, setNaoInclusos] = useState(
+    tx.naoInclusos !== undefined ? tx.naoInclusos : formatarListaComoTexto(TPL_DEFAULT_NAO_INCLUSOS)
+  );
+  const [prazo, setPrazo] = useState(
+    tx.prazo !== undefined ? tx.prazo : formatarListaComoTexto(TPL_DEFAULT_PRAZO)
+  );
+  const [aceite, setAceite] = useState(
+    tx.aceite !== undefined ? tx.aceite : TPL_DEFAULT_ACEITE
   );
   const [observacoes, setObservacoes] = useState(
     tx.observacoes !== undefined ? tx.observacoes : TPL_DEFAULT_OBSERVACOES
@@ -8200,11 +8337,14 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     onProsseguir({
       apresentacao: apresentacao.trim(),
       escopo: escopo.trim(),
+      naoInclusos: naoInclusos.trim(),
+      prazo: prazo.trim(),
+      aceite: aceite.trim(),
       observacoes: observacoes.trim(),
     });
   }
 
-  // Helpers de display
+  // Helpers de display do resumo
   const padraoMap = { baixo: "Baixo", medio: "Médio", alto: "Alto" };
   const padraoTxt = padraoMap[safeData.padrao] || safeData.padrao || "—";
   const tipoTxt = [safeData.tipoProjeto, safeData.tipoObra].filter(Boolean).join(" — ") || "—";
@@ -8238,9 +8378,9 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     fontSize: 12.5, color: "#374151", fontWeight: 500,
     marginBottom: 6, display: "block",
   };
-  const textareaStyle = {
+  const labelOptional = { color: "#d1d5db", fontWeight: 400 };
+  const textareaBase = {
     width: "100%",
-    minHeight: 100,
     border: "1px solid #d1d5db",
     borderRadius: 10,
     padding: "12px 14px",
@@ -8273,6 +8413,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     fontSize: 12, cursor: "pointer",
     fontFamily: "inherit",
   };
+  const spacer = (h = 18) => <div style={{ height: h }} />;
 
   return (
     <div style={wrap}>
@@ -8306,7 +8447,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           Ajustes finais antes de gerar o orçamento
         </div>
         <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.55, marginTop: 10, maxWidth: 600 }}>
-          Os dados do projeto já estão preenchidos. Aqui você pode personalizar os textos que vão aparecer na proposta — ou pular essa etapa para usar os textos padrão do modelo.
+          Os dados do projeto já estão preenchidos. Edite livremente os textos abaixo — escopo, prazos, não inclusos e termo de aceite vêm pré-preenchidos com o conteúdo padrão da proposta. Você pode pular esta etapa pra usar os textos padrão sem alterações.
         </div>
       </div>
 
@@ -8350,47 +8491,88 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         ) : null}
       </div>
 
-      {/* Card 2 — Textos livres */}
+      {/* Card 2 — Textos introdutórios */}
       <div style={card}>
-        <div style={cardTitle}>Textos da proposta</div>
+        <div style={cardTitle}>Apresentação e observações</div>
 
         <label style={labelTextarea}>
-          Apresentação ao cliente <span style={{ color: "#d1d5db", fontWeight: 400 }}>· opcional</span>
+          Apresentação ao cliente <span style={labelOptional}>· opcional</span>
         </label>
         <textarea
           className="vk-tpl-textarea"
           value={apresentacao}
           onChange={e => setApresentacao(e.target.value)}
           placeholder="Olá, [nome]! Apresentamos esta proposta para..."
-          style={textareaStyle}
+          style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
 
-        <div style={{ height: 18 }} />
+        {spacer()}
 
         <label style={labelTextarea}>
-          Escopo do projeto <span style={{ color: "#d1d5db", fontWeight: 400 }}>· opcional</span>
-        </label>
-        <textarea
-          className="vk-tpl-textarea"
-          value={escopo}
-          onChange={e => setEscopo(e.target.value)}
-          placeholder="Descreva o escopo: o que está incluído, etapas, entregas..."
-          style={{ ...textareaStyle, minHeight: 130 }}
-          rows={6}
-        />
-
-        <div style={{ height: 18 }} />
-
-        <label style={labelTextarea}>
-          Observações finais <span style={{ color: "#d1d5db", fontWeight: 400 }}>· opcional</span>
+          Observações finais <span style={labelOptional}>· opcional</span>
         </label>
         <textarea
           className="vk-tpl-textarea"
           value={observacoes}
           onChange={e => setObservacoes(e.target.value)}
           placeholder="Considerações finais, prazos especiais, condições particulares..."
-          style={textareaStyle}
+          style={{ ...textareaBase, minHeight: 100 }}
+          rows={4}
+        />
+      </div>
+
+      {/* Card 3 — Escopo e detalhes técnicos (pré-preenchidos com defaults) */}
+      <div style={card}>
+        <div style={cardTitle}>Escopo e detalhes técnicos</div>
+
+        <label style={labelTextarea}>
+          Escopo dos serviços
+        </label>
+        <textarea
+          className="vk-tpl-textarea"
+          value={escopo}
+          onChange={e => setEscopo(e.target.value)}
+          style={{ ...textareaBase, minHeight: 360 }}
+          rows={18}
+        />
+
+        {spacer()}
+
+        <label style={labelTextarea}>
+          Serviços não inclusos
+        </label>
+        <textarea
+          className="vk-tpl-textarea"
+          value={naoInclusos}
+          onChange={e => setNaoInclusos(e.target.value)}
+          style={{ ...textareaBase, minHeight: 200 }}
+          rows={10}
+        />
+
+        {spacer()}
+
+        <label style={labelTextarea}>
+          Prazo de execução
+        </label>
+        <textarea
+          className="vk-tpl-textarea"
+          value={prazo}
+          onChange={e => setPrazo(e.target.value)}
+          style={{ ...textareaBase, minHeight: 80 }}
+          rows={3}
+        />
+
+        {spacer()}
+
+        <label style={labelTextarea}>
+          Termo de aceite
+        </label>
+        <textarea
+          className="vk-tpl-textarea"
+          value={aceite}
+          onChange={e => setAceite(e.target.value)}
+          style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
       </div>
