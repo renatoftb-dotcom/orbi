@@ -1357,11 +1357,10 @@ export default function ModuloClientesFornecedores() {
       <TelaOnboarding
         usuario={usuario}
         onConcluido={async (estadoOnboarding, opts = {}) => {
-          // Define destino IMEDIATAMENTE — antes dos awaits do refetch.
-          // Se ficar pro fim, awaits + render do setSalvando(false) podem
-          // causar um flash do "home" antes do Escritório aparecer.
-          setAba("escritorio");
-          setEscritorioKey(n => n + 1);
+          // Após salvar o cadastro inline (fluxo novo), o usuário cai direto
+          // na home. O destino é definido imediatamente — antes dos awaits do
+          // refetch — pra evitar flash de outras telas durante a transição.
+          setAba("home");
 
           // Backend zerou precisa_fazer_onboarding e gravou as respostas
           // (profissao, padrao_projetos, pct_matriz_calculado, etc).
