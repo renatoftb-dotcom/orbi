@@ -527,83 +527,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     ? txTpl.descricaoProjeto
     : (resumoEdit !== null ? resumoEdit : resumoDinamico);
 
-  // Manipuladores de etapas (isolar, adicionar, remover, editar %)
-  function toggleIsolarEtapa(id) {
-    setEtapasIsoladasLocal(prev => {
-      const novo = new Set(prev);
-      if (novo.has(id)) novo.delete(id); else novo.add(id);
-      return novo;
-    });
-  }
-  function removerEtapa(id) {
-    if (id === 5) { dialogo.alertar({ titulo: "Etapa de Engenharia", mensagem: "A etapa de Engenharia não pode ser removida por aqui. Use o toggle de Engenharia na Tela 1 para excluir.", tipo: "aviso" }); return; }
-    setEtapasPctLocal(prev => prev.filter(e => e.id !== id));
-    setEtapasIsoladasLocal(prev => { const n = new Set(prev); n.delete(id); return n; });
-  }
-  function adicionarEtapa() {
-    // Garante ID >= 10 para não colidir com ID=5 (Engenharia) nem com IDs padrão (1-4)
-    const maxId = Math.max(9, ...etapasPct.map(e => e.id));
-    const nextId = maxId + 1;
-    setEtapasPctLocal(prev => {
-      const engIdx = prev.findIndex(e => e.id === 5);
-      const nova = { id: nextId, nome: "Nova etapa", pct: 0 };
-      if (engIdx >= 0) {
-        // Insere antes da engenharia
-        const semEng = prev.filter(e => e.id !== 5);
-        return [...semEng, nova, prev[engIdx]];
-      }
-      return [...prev, nova];
-    });
-  }
-  function atualizarEtapaPct(id, novoPct) {
-    // Arredonda pra inteiro (sem casas decimais)
-    const clampedInt = Math.round(Math.max(0, Math.min(100, novoPct)));
-    setEtapasPctLocal(prev => {
-      // Sem isolamento: só atualiza
-      if (!temIsoladas) {
-        return prev.map(e => e.id === id ? { ...e, pct: clampedInt } : e);
-      }
-      const etapaAtual = prev.find(e => e.id === id);
-      if (!etapaAtual) return prev;
-      // Eng ou etapa não isolada: atualização simples
-      if (id === 5 || !idsIsolados.has(id)) {
-        return prev.map(e => e.id === id ? { ...e, pct: clampedInt } : e);
-      }
-      // CASCATA CIRCULAR: ajusta só a PRÓXIMA etapa na ordem.
-      // Se a editada é a última da lista de isoladas, volta pra primeira.
-      // Assim o total das isoladas se mantém sempre constante.
-      const arqIsoladasOrdem = prev.filter(e => e.id !== 5 && idsIsolados.has(e.id));
-      const idxEditada = arqIsoladasOrdem.findIndex(e => e.id === id);
-      const alvo = arqIsoladasOrdem[(idxEditada + 1) % arqIsoladasOrdem.length];
-      const pctAntigoEditada = Math.round(Number(etapaAtual.pct));
-      const pctAntigoAlvo = Math.round(Number(alvo.pct));
-      // O total a manter é: pctAntigoEditada + pctAntigoAlvo
-      const totalPar = pctAntigoEditada + pctAntigoAlvo;
-      // Limita o valor editado ao máximo possível (não pode passar do totalPar, senão alvo ficaria negativo)
-      const pctFinalEditada = Math.min(clampedInt, totalPar);
-      const pctFinalAlvo = totalPar - pctFinalEditada;
-      // Só tem a editada (1 única etapa isolada): ajusta só ela
-      if (arqIsoladasOrdem.length === 1) {
-        return prev.map(e => e.id === id ? { ...e, pct: clampedInt } : e);
-      }
-      return prev.map(e => {
-        if (e.id === id)    return { ...e, pct: pctFinalEditada };
-        if (e.id === alvo.id) return { ...e, pct: pctFinalAlvo };
-        return e;
-      });
-    });
-  }
-  function atualizarEtapaValor(id, novoValor) {
-    // Converte valor R$ → % da arq base
-    // (arqCIEdit é a arq total com imposto; se não tiver imposto, é arqCI mesmo)
-    const base = arqCIEdit;
-    if (!base || base <= 0) return;
-    const novoPct = Math.round((novoValor / base) * 100 * 100) / 100; // 2 decimais
-    setEtapasPctLocal(prev => prev.map(e => e.id === id ? { ...e, pct: Math.max(0, Math.min(100, novoPct)) } : e));
-  }
-  function atualizarEtapaNome(id, novoNome) {
-    setEtapasPctLocal(prev => prev.map(e => e.id === id ? { ...e, nome: novoNome } : e));
-  }
+  // Fase 7: manipuladores de etapas (toggleIsolar/adicionar/remover/atualizar*)
+  // foram REMOVIDOS — eram zombies. Edição de etapas vive 100% no Template
+  // de Edição agora (orcamento-teste.jsx + template-edicao.jsx). Modelo usa
+  // etapas só pra leitura, sincronizadas via useEffect com data.template.formaPagamento.
 
   // totCIBase = com imposto
   const totCIBase       = temIsoladas
@@ -760,6 +687,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const apresentacaoTpl = (txTpl.apresentacao && txTpl.apresentacao.trim()) ? txTpl.apresentacao : null;
   const observacoesTpl = (txTpl.observacoes && txTpl.observacoes.trim()) ? txTpl.observacoes : null;
   const escopoTextoTpl = (txTpl.escopo && txTpl.escopo.trim()) ? txTpl.escopo : null;
+  // Fase 7: quando o template tem escopo preenchido, edição inline do escopo
+  // no preview vira read-only (a fonte canônica é o Template). Botões +/×
+  // adicionam/removem items também são escondidos. Quando o template é pulado
+  // ou não tem escopo, mantém comportamento legado.
+  const escopoLocked = !!escopoTextoTpl;
 
   const C = "#111827";
   const LT = "#828a98";
@@ -2380,20 +2312,26 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6, gap:8 }}>
                 <div style={{ display:"flex", alignItems:"baseline", gap:4, flex:1, minWidth:0 }}>
                   <span style={{ fontSize:13, fontWeight:600, color:C, whiteSpace:"nowrap" }}>{numPrefix}</span>
-                  <InputControlado
-                    valor={tituloTexto}
-                    onCommit={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
-                    placeholder="Inserir novo escopo"
-                    style={{ flex:1, minWidth:0 }}
-                  />
+                  {escopoLocked ? (
+                    <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:600, color:C }}>{tituloTexto}</span>
+                  ) : (
+                    <InputControlado
+                      valor={tituloTexto}
+                      onCommit={v => setEscopoBloco(bloco.etapaId, "titulo", v)}
+                      placeholder="Inserir novo escopo"
+                      style={{ flex:1, minWidth:0 }}
+                    />
+                  )}
                 </div>
-                <span
-                  onClick={() => setEscopoState(prev => prev.filter(b => b.etapaId !== bloco.etapaId))}
-                  title="Remover bloco"
-                  className="no-print"
-                  style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"2px 6px", borderRadius:4,
-                    border:"1px solid #e5e7eb", background:"#fafafa", lineHeight:1.4,
-                    userSelect:"none" }}>✕ remover</span>
+                {!escopoLocked && (
+                  <span
+                    onClick={() => setEscopoState(prev => prev.filter(b => b.etapaId !== bloco.etapaId))}
+                    title="Remover bloco"
+                    className="no-print"
+                    style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"2px 6px", borderRadius:4,
+                      border:"1px solid #e5e7eb", background:"#fafafa", lineHeight:1.4,
+                      userSelect:"none" }}>✕ remover</span>
+                )}
               </div>
               {bloco.custom ? (
                 // Bloco customizado — totalmente editável
@@ -2443,16 +2381,19 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                   {bloco.objetivo !== undefined && <>
                     <div style={tag}>Objetivo</div>
                     <TextoEditavel valor={bloco.objetivo} onChange={v => setEscopoBloco(bloco.etapaId, "objetivo", v)}
+                      readonly={escopoLocked}
                       style={{ fontSize:13, color:MD, lineHeight:1.7, display:"block" }} multiline={true} />
                   </>}
                   {bloco.itens !== undefined && <>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:2 }}>
                       <div style={tag}>Serviços inclusos</div>
-                      <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", [...(bloco.itens||[]), "Novo item"])}
-                        title="Adicionar item"
-                        className="no-print"
-                        style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
-                          background:"#f3f4f6", border:"1px solid #c8cdd6", lineHeight:"16px" }}>+ item</span>
+                      {!escopoLocked && (
+                        <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", [...(bloco.itens||[]), "Novo item"])}
+                          title="Adicionar item"
+                          className="no-print"
+                          style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
+                            background:"#f3f4f6", border:"1px solid #c8cdd6", lineHeight:"16px" }}>+ item</span>
+                      )}
                     </div>
                     {(bloco.itens||[]).map((it,j) => (
                       <div key={j} style={{ ...bl, alignItems:"flex-start" }}>
@@ -2460,21 +2401,26 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                         <TextoEditavel valor={it} onChange={v => {
                           const arr = [...bloco.itens]; arr[j] = v;
                           setEscopoBloco(bloco.etapaId, "itens", arr);
-                        }} style={{ fontSize:13, color:MD, lineHeight:1.6, flex:1 }} />
-                        <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", bloco.itens.filter((_,k)=>k!==j))}
-                          className="no-print"
-                          style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
+                        }} readonly={escopoLocked}
+                          style={{ fontSize:13, color:MD, lineHeight:1.6, flex:1 }} />
+                        {!escopoLocked && (
+                          <span onClick={() => setEscopoBloco(bloco.etapaId, "itens", bloco.itens.filter((_,k)=>k!==j))}
+                            className="no-print"
+                            style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
+                        )}
                       </div>
                     ))}
                   </>}
                   {bloco.entregaveis !== undefined && <>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:2, marginTop:6 }}>
                       <div style={tag}>Entregáveis</div>
-                      <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", [...(bloco.entregaveis||[]), "Novo entregável"])}
-                        title="Adicionar entregável"
-                        className="no-print"
-                        style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
-                          background:"#f3f4f6", border:"1px solid #c8cdd6", lineHeight:"16px" }}>+ item</span>
+                      {!escopoLocked && (
+                        <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", [...(bloco.entregaveis||[]), "Novo entregável"])}
+                          title="Adicionar entregável"
+                          className="no-print"
+                          style={{ fontSize:10, color:LT, cursor:"pointer", padding:"0 4px", borderRadius:3,
+                            background:"#f3f4f6", border:"1px solid #c8cdd6", lineHeight:"16px" }}>+ item</span>
+                      )}
                     </div>
                     {(bloco.entregaveis||[]).map((it,j) => (
                       <div key={j} style={{ ...bl, alignItems:"flex-start" }}>
@@ -2482,15 +2428,19 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                         <TextoEditavel valor={it} onChange={v => {
                           const arr = [...bloco.entregaveis]; arr[j] = v;
                           setEscopoBloco(bloco.etapaId, "entregaveis", arr);
-                        }} style={{ fontSize:13, color:MD, lineHeight:1.6, flex:1 }} />
-                        <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", bloco.entregaveis.filter((_,k)=>k!==j))}
-                          className="no-print"
-                          style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
+                        }} readonly={escopoLocked}
+                          style={{ fontSize:13, color:MD, lineHeight:1.6, flex:1 }} />
+                        {!escopoLocked && (
+                          <span onClick={() => setEscopoBloco(bloco.etapaId, "entregaveis", bloco.entregaveis.filter((_,k)=>k!==j))}
+                            className="no-print"
+                            style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
+                        )}
                       </div>
                     ))}
                   </>}
                   {bloco.obs !== undefined && <div style={{ fontSize:12, color:LT, marginTop:8, lineHeight:1.6, fontStyle:"italic" }}>
                     <TextoEditavel valor={bloco.obs} onChange={v => setEscopoBloco(bloco.etapaId, "obs", v)}
+                      readonly={escopoLocked}
                       style={{ fontSize:12, color:LT, fontStyle:"italic" }} multiline={true} />
                   </div>}
                 </>

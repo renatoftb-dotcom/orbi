@@ -3602,9 +3602,15 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
 // Helpers de edição inline — top-level para preservar identidade
 // entre re-renders e manter o foco ao clicar
 // ─────────────────────────────────────────────────────────────
-function TextoEditavel({ valor, onChange, style={}, multiline=false, placeholder="" }) {
+function TextoEditavel({ valor, onChange, style={}, multiline=false, placeholder="", readonly=false }) {
   const [editando, setEditando] = useState(false);
   const [tmp, setTmp] = useState(valor);
+  // Fase 7: quando readonly, renderiza puramente <span> sem cursor pointer/click.
+  // Usado pelo modelo-padrao.jsx em campos que agora vêm do Template e não devem
+  // ser editáveis inline no preview.
+  if (readonly) {
+    return <span style={style}>{valor || placeholder}</span>;
+  }
   if (editando) {
     const baseStyle = { fontSize:"inherit", fontWeight:"inherit", color:"inherit", fontFamily:"inherit",
       lineHeight:"inherit", letterSpacing:"inherit", background:"#fffde7",
