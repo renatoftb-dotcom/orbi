@@ -667,7 +667,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
   const page  = { maxWidth:860, margin:"0 auto", padding:"32px 40px 80px" };
   const secH  = (mt=28) => ({ display:"flex", alignItems:"center", gap:12, margin:`${mt}px 0 14px` });
-  const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:600, whiteSpace:"nowrap" };
+  const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:700, whiteSpace:"nowrap" };
   const secLn = { flex:1, height:1, background:LN };
   const tag   = { fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:5, marginTop:10 };
   const bl    = { display:"flex", gap:8, marginBottom:4 };
@@ -1161,9 +1161,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       saudacaoB: { color:"#111", fontWeight:600 },
       descricaoProjeto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18, whiteSpace:"normal", wordBreak:"break-word" },
       // Títulos de seção: estilo mockup — pequeno, amber 900, letterspacing,
-      // com linha sutil embaixo
+      // com linha sutil embaixo. fontWeight 700 (negrito) pra padronizar com
+      // os outros títulos da proposta.
       secTit: {
-        fontSize:11, fontWeight:600, color:"#412402",
+        fontSize:11, fontWeight:700, color:"#412402",
         textTransform:"uppercase", letterSpacing:"0.08em",
         margin:"22px 0 10px", paddingBottom:6,
         borderBottom:"0.5px solid #e5e7eb",
@@ -1451,6 +1452,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 />
               )}
             </div>
+
+            {/* Título "Escopo" acima da descrição da obra — mesmo padrão dos
+                outros títulos do template Direto (D.secTit). */}
+            <div style={D.secTit}>Escopo</div>
 
             {/* Resumo do projeto (auto-gerado) — em modo lock, renderiza
                 como texto puro pra não cortar com overflow do input. */}
@@ -2066,7 +2071,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           );
         })()}
         {resumoFinal && (
-          <div style={{ marginBottom:20, position:"relative" }}>
+          <>
+            {/* Título "Escopo" acima da descrição da obra. Usa o mesmo padrão
+                dos outros títulos de seção (linha ao lado, fontSize 10,
+                uppercase, negrito). */}
+            <div style={secH(28)}>
+              <span style={secL}>Escopo</span>
+              <div style={secLn} />
+            </div>
+            <div style={{ marginBottom:20, position:"relative" }}>
             {(editandoResumo && !txTpl.descricaoProjeto) ? (
               <textarea
                 autoFocus
@@ -2085,7 +2098,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 {resumoFinal}
               </div>
             )}
-          </div>
+            </div>
+          </>
         )}
 
         {/* APRESENTAÇÃO — texto livre opcional do Template de Edição. */}
@@ -2101,7 +2115,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         )}
 
         <div style={{ display:"flex", alignItems:"center", gap:10, margin:"28px 0 14px" }}>
-          <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#828a98", fontWeight:600, whiteSpace:"nowrap" }}>Valores dos projetos</span>
+          <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#828a98", fontWeight:700, whiteSpace:"nowrap" }}>Valores dos projetos</span>
           <div style={{ flex:1, height:1, background:"#e5e7eb" }} />
           {valorEditado && (
             <button className="no-print" onClick={() => { setArqEdit(arqOriginal); setEngEdit(engOriginal); }}

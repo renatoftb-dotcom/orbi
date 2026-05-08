@@ -6720,7 +6720,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
   const page  = { maxWidth:860, margin:"0 auto", padding:"32px 40px 80px" };
   const secH  = (mt=28) => ({ display:"flex", alignItems:"center", gap:12, margin:`${mt}px 0 14px` });
-  const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:600, whiteSpace:"nowrap" };
+  const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:700, whiteSpace:"nowrap" };
   const secLn = { flex:1, height:1, background:LN };
   const tag   = { fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:5, marginTop:10 };
   const bl    = { display:"flex", gap:8, marginBottom:4 };
@@ -7214,9 +7214,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       saudacaoB: { color:"#111", fontWeight:600 },
       descricaoProjeto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18, whiteSpace:"normal", wordBreak:"break-word" },
       // Títulos de seção: estilo mockup — pequeno, amber 900, letterspacing,
-      // com linha sutil embaixo
+      // com linha sutil embaixo. fontWeight 700 (negrito) pra padronizar com
+      // os outros títulos da proposta.
       secTit: {
-        fontSize:11, fontWeight:600, color:"#412402",
+        fontSize:11, fontWeight:700, color:"#412402",
         textTransform:"uppercase", letterSpacing:"0.08em",
         margin:"22px 0 10px", paddingBottom:6,
         borderBottom:"0.5px solid #e5e7eb",
@@ -7504,6 +7505,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 />
               )}
             </div>
+
+            {/* Título "Escopo" acima da descrição da obra — mesmo padrão dos
+                outros títulos do template Direto (D.secTit). */}
+            <div style={D.secTit}>Escopo</div>
 
             {/* Resumo do projeto (auto-gerado) — em modo lock, renderiza
                 como texto puro pra não cortar com overflow do input. */}
@@ -8119,7 +8124,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           );
         })()}
         {resumoFinal && (
-          <div style={{ marginBottom:20, position:"relative" }}>
+          <>
+            {/* Título "Escopo" acima da descrição da obra. Usa o mesmo padrão
+                dos outros títulos de seção (linha ao lado, fontSize 10,
+                uppercase, negrito). */}
+            <div style={secH(28)}>
+              <span style={secL}>Escopo</span>
+              <div style={secLn} />
+            </div>
+            <div style={{ marginBottom:20, position:"relative" }}>
             {(editandoResumo && !txTpl.descricaoProjeto) ? (
               <textarea
                 autoFocus
@@ -8138,7 +8151,8 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 {resumoFinal}
               </div>
             )}
-          </div>
+            </div>
+          </>
         )}
 
         {/* APRESENTAÇÃO — texto livre opcional do Template de Edição. */}
@@ -8154,7 +8168,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         )}
 
         <div style={{ display:"flex", alignItems:"center", gap:10, margin:"28px 0 14px" }}>
-          <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#828a98", fontWeight:600, whiteSpace:"nowrap" }}>Valores dos projetos</span>
+          <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#828a98", fontWeight:700, whiteSpace:"nowrap" }}>Valores dos projetos</span>
           <div style={{ flex:1, height:1, background:"#e5e7eb" }} />
           {valorEditado && (
             <button className="no-print" onClick={() => { setArqEdit(arqOriginal); setEngEdit(engOriginal); }}
@@ -13472,11 +13486,14 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
         {/* DESKTOP — grid 3 colunas (igual antes) */}
         <div className="vk-bfp-tabela vk-bfp-desktop-only" style={{ display: 'grid', gridTemplateColumns: colsTemplate, gap: 0, marginBottom: temPorEtapa ? 28 : 0 }}>
           <div></div>
-          {showArq && (
+          {/* Headers — só aparecem no fluxo padrão (sem antecipado + Pacote
+              recomendado vira BIG ITEMs em ambas as colunas, com headers
+              internos). Quando recPacoteSemAnt=true, os headers ficam DENTRO
+              dos cards pra evitar duplicação visual + linha extra. */}
+          {showArq && !recPacoteSemAnt && (
             <div className="vk-bfp-header" style={{
               fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              padding: recPacoteSemAnt ? '14px 16px 12px' : '0 16px 12px',
+              letterSpacing: '0.05em', padding: '0 16px 12px',
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>{labelApenas}</div>
           )}
@@ -13487,12 +13504,42 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>Pacote completo</div>
           )}
+
+          {/* BIG ITEM Apenas Arquitetura — borda cinza neutra, mesmo layout
+              compacto do Pacote Completo (header sem linha embaixo, valor
+              próximo do título). Só ativa quando recPacoteSemAnt. */}
+          {showArq && recPacoteSemAnt && (
+            <div style={{
+              gridColumn: 2,
+              gridRow: `1 / span ${formasParaTabela.length + 1}`,
+              border: '1px solid #e5e7eb', borderRadius: 8,
+              position: 'relative',
+              alignSelf: 'start',
+            }}>
+              <div style={{
+                fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+                letterSpacing: '0.05em', padding: '14px 16px 4px',
+                fontWeight: 500,
+              }}>{labelApenas}</div>
+              {formasParaTabela.map((formaId, idx) => {
+                const isLast = idx === formasParaTabela.length - 1;
+                return (
+                  <div key={formaId + '-arq-rec'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                    {renderCelula('arq', formaId)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* BIG ITEM Pacote Completo — borda verde + pill RECOMENDADO. */}
           {showPacote && recPacoteSemAnt && (
             <div style={{
               gridColumn: showArq ? 3 : 2,
               gridRow: `1 / span ${formasParaTabela.length + 1}`,
               border: `1.5px solid ${VERDE}`, borderRadius: 8,
               position: 'relative',
+              alignSelf: 'start',
             }}>
               <div style={{
                 position: 'absolute', top: -8, left: 10,
@@ -13502,8 +13549,8 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
               }}>RECOMENDADO</div>
               <div style={{
                 fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-                letterSpacing: '0.05em', padding: '14px 16px 12px',
-                borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
+                letterSpacing: '0.05em', padding: '14px 16px 4px',
+                fontWeight: 500,
               }}>Pacote completo</div>
               {formasParaTabela.map((formaId, idx) => {
                 const isLast = idx === formasParaTabela.length - 1;
@@ -13526,7 +13573,9 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
                 lineHeight: 1.3,
               }}>{getLabelLinha(formaId)}</div>
             ];
-            if (showArq) {
+            // Cells per-row só quando NÃO é o cenário recPacoteSemAnt (nesse
+            // caso ambas as colunas são BIG ITEMs e renderizam internamente).
+            if (showArq && !recPacoteSemAnt) {
               cells.push(
                 <div key={formaId + '-arq'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
                   {renderCelula('arq', formaId)}

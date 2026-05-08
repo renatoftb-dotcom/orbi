@@ -4451,11 +4451,14 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
         {/* DESKTOP — grid 3 colunas (igual antes) */}
         <div className="vk-bfp-tabela vk-bfp-desktop-only" style={{ display: 'grid', gridTemplateColumns: colsTemplate, gap: 0, marginBottom: temPorEtapa ? 28 : 0 }}>
           <div></div>
-          {showArq && (
+          {/* Headers — só aparecem no fluxo padrão (sem antecipado + Pacote
+              recomendado vira BIG ITEMs em ambas as colunas, com headers
+              internos). Quando recPacoteSemAnt=true, os headers ficam DENTRO
+              dos cards pra evitar duplicação visual + linha extra. */}
+          {showArq && !recPacoteSemAnt && (
             <div className="vk-bfp-header" style={{
               fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              padding: recPacoteSemAnt ? '14px 16px 12px' : '0 16px 12px',
+              letterSpacing: '0.05em', padding: '0 16px 12px',
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>{labelApenas}</div>
           )}
@@ -4466,12 +4469,42 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>Pacote completo</div>
           )}
+
+          {/* BIG ITEM Apenas Arquitetura — borda cinza neutra, mesmo layout
+              compacto do Pacote Completo (header sem linha embaixo, valor
+              próximo do título). Só ativa quando recPacoteSemAnt. */}
+          {showArq && recPacoteSemAnt && (
+            <div style={{
+              gridColumn: 2,
+              gridRow: `1 / span ${formasParaTabela.length + 1}`,
+              border: '1px solid #e5e7eb', borderRadius: 8,
+              position: 'relative',
+              alignSelf: 'start',
+            }}>
+              <div style={{
+                fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
+                letterSpacing: '0.05em', padding: '14px 16px 4px',
+                fontWeight: 500,
+              }}>{labelApenas}</div>
+              {formasParaTabela.map((formaId, idx) => {
+                const isLast = idx === formasParaTabela.length - 1;
+                return (
+                  <div key={formaId + '-arq-rec'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
+                    {renderCelula('arq', formaId)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* BIG ITEM Pacote Completo — borda verde + pill RECOMENDADO. */}
           {showPacote && recPacoteSemAnt && (
             <div style={{
               gridColumn: showArq ? 3 : 2,
               gridRow: `1 / span ${formasParaTabela.length + 1}`,
               border: `1.5px solid ${VERDE}`, borderRadius: 8,
               position: 'relative',
+              alignSelf: 'start',
             }}>
               <div style={{
                 position: 'absolute', top: -8, left: 10,
@@ -4481,8 +4514,8 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
               }}>RECOMENDADO</div>
               <div style={{
                 fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-                letterSpacing: '0.05em', padding: '14px 16px 12px',
-                borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
+                letterSpacing: '0.05em', padding: '14px 16px 4px',
+                fontWeight: 500,
               }}>Pacote completo</div>
               {formasParaTabela.map((formaId, idx) => {
                 const isLast = idx === formasParaTabela.length - 1;
@@ -4505,7 +4538,9 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
                 lineHeight: 1.3,
               }}>{getLabelLinha(formaId)}</div>
             ];
-            if (showArq) {
+            // Cells per-row só quando NÃO é o cenário recPacoteSemAnt (nesse
+            // caso ambas as colunas são BIG ITEMs e renderizam internamente).
+            if (showArq && !recPacoteSemAnt) {
               cells.push(
                 <div key={formaId + '-arq'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
                   {renderCelula('arq', formaId)}
