@@ -150,6 +150,57 @@ function formatarListaComoTexto(lista) {
   return lista.map(item => "• " + item).join("\n");
 }
 
+// Gera descrição dinâmica do projeto (ex: "Construção nova de uma residência
+// térrea, com 224m² de área construída, composta por 9 ambientes: ...").
+// Lógica REPLICADA do modelo-padrao.jsx (resumoDinamico). TODO Fase 5: extrair
+// pra um shared-textos.jsx único e remover a duplicação. Depende de
+// formatComodo (declarado em orcamento-teste.jsx, disponível via escopo
+// global após combine).
+function computarDescricaoProjeto(data) {
+  if (!data) return "";
+  const fmtN2 = v => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtArea = v => v > 0 ? fmtN2(v) + "m²" : null;
+  const tipoObraLower = (data.tipoObra || "").toLowerCase();
+  const prefixo = tipoObraLower.includes("reforma") ? "Reforma de " : "Construção nova de ";
+  const calc = data.calculo || {};
+
+  // Caso comercial (conjunto comercial com grupoQtds)
+  if (data.grupoQtds && calc.blocosCom) {
+    const partes = [];
+    const nL = data.grupoQtds["Por Loja"] || 0;
+    const nA = data.grupoQtds["Espaço Âncora"] || 0;
+    const nAp = data.grupoQtds["Por Apartamento"] || 0;
+    const nG = data.grupoQtds["Galpao"] || 0;
+    if (nL > 0) { const b = calc.blocosCom.find(x => x.label === "Loja"); if (b) partes.push(`${nL} loja${nL !== 1 ? "s" : ""} (${fmtArea(b.area1 * nL)})`); }
+    if (nA > 0) { const b = calc.blocosCom.find(x => x.label === "Âncora"); if (b) partes.push(`${nA} ${nA === 1 ? "Espaço Âncora" : "Espaços Âncoras"} (${fmtArea(b.area1 * nA)})`); }
+    if (nAp > 0) { const b = calc.blocosCom.find(x => x.label === "Apartamento"); if (b) partes.push(`${nAp} apartamento${nAp !== 1 ? "s" : ""} (${fmtArea(b.area1 * nAp)})`); }
+    if (nG > 0) { const b = calc.blocosCom.find(x => x.label === "Galpão"); if (b) partes.push(`${nG} ${nG !== 1 ? "galpões" : "galpão"} (${fmtArea(b.area1 * nG)})`); }
+    const bc = calc.blocosCom.find(x => x.label === "Área Comum"); if (bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`);
+    const lista = partes.length > 1 ? partes.slice(0, -1).join(", ") + " e " + partes[partes.length - 1] : partes[0] || "";
+    return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(calc.areaTot || calc.areaTotal)}.`;
+  }
+
+  // Caso residencial
+  const nUnid = calc.nRep || 1;
+  const areaUni = calc.areaTotal || calc.areaTot || 0;
+  const areaTotR = Math.round(areaUni * nUnid * 100) / 100;
+  const comodos = data.comodos || [];
+  const totalAmb = comodos.reduce((s, c) => s + (c.qtd || 0), 0);
+  // formatComodo vem do escopo global (declarado em orcamento-teste.jsx)
+  const fc = (typeof formatComodo === "function") ? formatComodo : (n, q) => `${q} ${n}`;
+  const itensFmt = comodos.filter(c => (c.qtd || 0) > 0).map(c => fc(c.nome, c.qtd));
+  const listaStr = itensFmt.length > 1
+    ? itensFmt.slice(0, -1).join(", ") + " e " + itensFmt[itensFmt.length - 1]
+    : itensFmt[0] || "";
+  const tipDesc = (data.tipologia || "").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
+  const numFem = ["", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  if (nUnid > 1) {
+    const nExt = nUnid >= 1 && nUnid <= 10 ? numFem[nUnid] : String(nUnid);
+    return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+  }
+  return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+}
+
 // ─────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────
@@ -161,6 +212,11 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   // Inicialização preserva edições anteriores. Se não houver template salvo
   // (primeiro acesso), aplica os defaults formatados.
   const tx = safeData.template?.textos || {};
+  // Descrição do projeto — gerada dinamicamente da data (cômodos, áreas, etc.)
+  // ou usa o valor salvo se já editado antes.
+  const [descricaoProjeto, setDescricaoProjeto] = useState(
+    tx.descricaoProjeto !== undefined ? tx.descricaoProjeto : computarDescricaoProjeto(safeData)
+  );
   const [apresentacao, setApresentacao] = useState(
     tx.apresentacao !== undefined ? tx.apresentacao : TPL_DEFAULT_APRESENTACAO
   );
@@ -182,6 +238,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
 
   function handleProsseguir() {
     onProsseguir({
+      descricaoProjeto: descricaoProjeto.trim(),
       apresentacao: apresentacao.trim(),
       escopo: escopo.trim(),
       naoInclusos: naoInclusos.trim(),
@@ -340,7 +397,24 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
 
       {/* Card 2 — Textos introdutórios */}
       <div style={card}>
-        <div style={cardTitle}>Apresentação e observações</div>
+        <div style={cardTitle}>Descrição, apresentação e observações</div>
+
+        <label style={labelTextarea}>
+          Descrição do projeto
+        </label>
+        <textarea
+          className="vk-tpl-textarea"
+          value={descricaoProjeto}
+          onChange={e => setDescricaoProjeto(e.target.value)}
+          placeholder="Construção nova de uma residência..."
+          style={{ ...textareaBase, minHeight: 90 }}
+          rows={3}
+        />
+        <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 6, lineHeight: 1.4 }}>
+          Pré-preenchida com base nos dados do projeto. Aparece logo abaixo do nome do cliente na proposta.
+        </div>
+
+        {spacer()}
 
         <label style={labelTextarea}>
           Apresentação ao cliente <span style={labelOptional}>· opcional</span>
