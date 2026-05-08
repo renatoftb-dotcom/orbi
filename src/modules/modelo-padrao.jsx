@@ -183,8 +183,27 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const [confirmSalvar, setConfirmSalvar] = useState(false);
   const [propostaInfo, setPropostaInfo] = useState(propostaReadOnly || null);
 
-  // Estados locais (antes eram props read-only) — editáveis inline
-  const [tipoPgto, setTipoPgtoLocal]     = useState(snap?.tipoPgto || data.tipoPgto || "padrao");
+  // Estados locais (antes eram props read-only) — editáveis inline.
+  // Override (Fase 6d.1): data.template.formaPagamento.tipoPgto vence quando preenchido.
+  const _tplFp = data?.template?.formaPagamento || null;
+  const [_tipoPgtoState, setTipoPgtoStateLocal]     = useState(snap?.tipoPgto || data.tipoPgto || "padrao");
+  const tipoPgto = (_tplFp?.tipoPgto != null) ? _tplFp.tipoPgto : _tipoPgtoState;
+  const setTipoPgtoLocal = setTipoPgtoStateLocal;
+  // Merge da estrutura formaPagamento: template vence campo a campo sobre data.formaPagamento.
+  // Usado em <BlocoFormaPagamentoView> (preview) e na construção do PDF.
+  const formaPagamentoEfetiva = (() => {
+    const base = data.formaPagamento || {};
+    if (!_tplFp) return base;
+    return {
+      ...base,
+      ...(Array.isArray(_tplFp.formas)       ? { formas:       _tplFp.formas }       : {}),
+      ...(Array.isArray(_tplFp.contratacoes) ? { contratacoes: _tplFp.contratacoes } : {}),
+      etapa: {
+        ...(base.etapa || {}),
+        ...(Array.isArray(_tplFp.modalidadesEtapa) ? { modalidades: _tplFp.modalidadesEtapa } : {}),
+      },
+    };
+  })();
 
   // Imposto: NÃO é mais state local desde o Deploy 1 da refatoração de pagamento.
   // Decidido no Passo 1 do Form (toggle + input de alíquota perto do "Repetição")
@@ -1001,7 +1020,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       // pro PDF usar a mesma lógica do Preview. Aplica os overrides locais de
       // valores editados (descArqLocal, parcArqLocal, etc.) sobre o snapshot
       // que veio da Etapa 5 (data.formaPagamento).
-      const fpBase = data.formaPagamento || {};
+      const fpBase = formaPagamentoEfetiva;
       const formaPagamentoPdf = {
         ...fpBase,
         antecipado: { descArq: descArqLocal, descPac: descPacoteLocal },
@@ -1581,7 +1600,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 Componente compartilhado entre Editorial e Direto. */}
             <div style={D.secTit}>Forma de pagamento</div>
             <BlocoFormaPagamentoView
-              formaPagamento={data.formaPagamento}
+              formaPagamento={formaPagamentoEfetiva}
               valorArq={arqCIEdit}
               valorEng={engCIEdit}
               incluiArq={incluiArq}
@@ -2253,7 +2272,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               acontece mais aqui — usuário volta pra Etapa 5 se quiser
               alterar formas/percentuais/parcelas. */}
           <BlocoFormaPagamentoView
-            formaPagamento={data.formaPagamento}
+            formaPagamento={formaPagamentoEfetiva}
             valorArq={arqCIEdit}
             valorEng={engCIEdit}
             incluiArq={incluiArq}

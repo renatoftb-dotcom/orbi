@@ -5891,6 +5891,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // inline. Quando preenchidos, têm prioridade sobre arqEdit/engEdit do
   // modelo (que ficam só como fallback pro fluxo antigo).
   const [templateValores, setTemplateValores] = useState(orcBase?.template?.valores || null);
+  // Estrutura editada no Template (Fase 6d.1) — modo, formas, contratacoes,
+  // modalidadesEtapa. Quando preenchido, vence sobre data.tipoPgto / data.formaPagamento.
+  const [templateFormaPagamento, setTemplateFormaPagamento] = useState(orcBase?.template?.formaPagamento || null);
   // previewRemountKey: incrementa a cada vez que o usuário sai da Etapa 5 pra
   // o Preview. Isso força o React a remontar o PropostaPreview (e seus
   // useState internos), garantindo que valores stale não persistam quando o
@@ -7754,6 +7757,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         template: {
           textos: templateTextos || undefined,
           valores: templateValores || undefined,
+          formaPagamento: templateFormaPagamento || undefined,
         },
       };
       return (
@@ -7765,9 +7769,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             setEtapaPagamentoConfirmada(false);
           }}
           onProsseguir={(payload) => {
-            // payload = { textos, valores } — Fase 6b
+            // payload = { textos, valores, formaPagamento } — Fase 6b/6c/6d.1
             setTemplateTextos(payload.textos);
             setTemplateValores(payload.valores);
+            if (payload.formaPagamento) setTemplateFormaPagamento(payload.formaPagamento);
             setTemplateEdicaoConfirmada(true);
           }}
           onPular={() => {
@@ -7784,10 +7789,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // entra no JSONB do escritório automaticamente).
     const ModeloComponente = getModeloOrcamento(esc.modelo_default);
 
-    // Mescla textos + valores do template em liveData. Quando preenchidos,
-    // o modelo usa eles com prioridade sobre os defaults internos.
-    const liveDataParaModelo = (templateTextos || templateValores)
-      ? { ...liveData, template: { textos: templateTextos, valores: templateValores } }
+    // Mescla textos + valores + formaPagamento do template em liveData. Quando
+    // preenchidos, o modelo usa eles com prioridade sobre os defaults internos.
+    const liveDataParaModelo = (templateTextos || templateValores || templateFormaPagamento)
+      ? { ...liveData, template: { textos: templateTextos, valores: templateValores, formaPagamento: templateFormaPagamento } }
       : liveData;
 
     return <ModeloComponente

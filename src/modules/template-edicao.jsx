@@ -232,10 +232,40 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     tv.parcPacCtrt != null ? Number(tv.parcPacCtrt) : (Number(safeData.parcPacCtrt) || 8)
   );
 
-  // Modo de pagamento atual (vem da Etapa 5). "padrao" = Antecipado/Parcelas;
-  // "etapas" = Por etapa (modalidades). Controla qual UI renderizar.
-  const tipoPgtoAtual = safeData.tipoPgto || "padrao";
-  const ehPorEtapa = tipoPgtoAtual === "etapas";
+  // Estrutura da forma de pagamento (Fase 6d.1) — agora editável no Template.
+  // Antes vinha exclusivamente da Etapa 5; agora o Template permite ajustar
+  // as escolhas (modo, formas, contratações, modalidades) inline. Defaults
+  // vêm de safeData.formaPagamento (snapshot da Etapa 5) ou template.formaPagamento
+  // (preserva edição anterior). Persistido via payload.formaPagamento.
+  const fpFromTemplate = safeData.template?.formaPagamento || null;
+  const fpFromEtapa    = safeData.formaPagamento || {};
+  const [tipoPgtoTpl, setTipoPgtoTpl] = useState(
+    fpFromTemplate?.tipoPgto ?? safeData.tipoPgto ?? "padrao"
+  );
+  const [formasTpl, setFormasTpl] = useState(() => {
+    const ini = fpFromTemplate?.formas ?? fpFromEtapa.formas ?? ["antecipado", "parcelado"];
+    return Array.isArray(ini) ? [...ini] : ["antecipado", "parcelado"];
+  });
+  const [contratacoesTpl, setContratacoesTpl] = useState(() => {
+    const ini = fpFromTemplate?.contratacoes ?? fpFromEtapa.contratacoes ?? ["arq", "pac"];
+    return Array.isArray(ini) ? [...ini] : ["arq", "pac"];
+  });
+  const [modalidadesEtapaTpl, setModalidadesEtapaTpl] = useState(() => {
+    const ini = fpFromTemplate?.modalidadesEtapa ?? fpFromEtapa.etapa?.modalidades ?? ["mod1", "mod2"];
+    return Array.isArray(ini) ? [...ini] : ["mod1", "mod2"];
+  });
+  const ehPorEtapa = tipoPgtoTpl === "etapas";
+
+  // Toggle helper: liga/desliga item de array; força no mínimo 1 item ativo
+  // pra UI nunca ficar vazia (sem nada pra renderizar no PDF).
+  function toggleArr(arr, item, setter, minLen = 1) {
+    if (arr.includes(item)) {
+      if (arr.length <= minLen) return; // não permite desligar o último
+      setter(arr.filter(x => x !== item));
+    } else {
+      setter([...arr, item]);
+    }
+  }
 
   function handleProsseguir() {
     onProsseguir({
@@ -259,6 +289,12 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         parcEtCtrt:  Math.max(1, Math.round(Number(parcEtCtrt)  || 1)),
         descPacCtrt: Number(descPacCtrt) || 0,
         parcPacCtrt: Math.max(1, Math.round(Number(parcPacCtrt) || 1)),
+      },
+      formaPagamento: {
+        tipoPgto: tipoPgtoTpl,
+        formas: [...formasTpl],
+        contratacoes: [...contratacoesTpl],
+        modalidadesEtapa: [...modalidadesEtapaTpl],
       },
     });
   }
@@ -690,14 +726,119 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         </div>
       </div>
 
-      {/* Card 5 — Pagamento (Fase 6c/6d) */}
+      {/* Card 5 — Pagamento (Fase 6c/6d/6d.1) */}
       <div id="secao-pagamento" style={card}>
         <div style={cardTitle}>Forma de pagamento</div>
         <div style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.5, marginBottom: 16 }}>
-          {ehPorEtapa
-            ? "Configure descontos e parcelas das modalidades por etapa. Os valores atualizam em tempo real conforme você edita."
-            : "Configure descontos do pagamento antecipado e quantidade de parcelas. Os valores das parcelas atualizam em tempo real conforme você edita."}
+          Escolha o modo, as formas de pagamento e ajuste os valores. Tudo atualiza em tempo real.
         </div>
+
+        {/* Bloco estrutural — chips horizontais */}
+        {(() => {
+          const chipBase = {
+            display: "inline-flex", alignItems: "center",
+            padding: "7px 14px", borderRadius: 20, fontSize: 12.5,
+            fontWeight: 500, cursor: "pointer", userSelect: "none",
+            border: "1px solid #d1d5db", background: "#fff", color: "#374151",
+            transition: "all 0.15s", whiteSpace: "nowrap",
+          };
+          const chipOn = {
+            ...chipBase,
+            background: "#111", color: "#fff", borderColor: "#111",
+          };
+          const chipsRow = {
+            display: "flex", gap: 8, flexWrap: "wrap",
+            marginBottom: 14,
+          };
+          const subLabel = {
+            fontSize: 11, fontWeight: 700, color: "#9ca3af",
+            textTransform: "uppercase", letterSpacing: 1,
+            marginBottom: 8, marginTop: 4,
+          };
+          return (
+            <div style={{
+              padding: 14, marginBottom: 18,
+              background: "#f9fafb", border: "1px solid #f3f4f6",
+              borderRadius: 10,
+            }}>
+              {/* Modo: Padrão vs Por etapa (exclusivo) */}
+              <div style={subLabel}>Modo</div>
+              <div style={chipsRow}>
+                <span
+                  style={tipoPgtoTpl === "padrao" ? chipOn : chipBase}
+                  onClick={() => setTipoPgtoTpl("padrao")}>
+                  Padrão (Antecipado / Parcelado)
+                </span>
+                <span
+                  style={tipoPgtoTpl === "etapas" ? chipOn : chipBase}
+                  onClick={() => setTipoPgtoTpl("etapas")}>
+                  Por etapa
+                </span>
+              </div>
+
+              {/* Formas (só faz sentido no modo padrão) */}
+              {!ehPorEtapa && (
+                <>
+                  <div style={subLabel}>Formas exibidas</div>
+                  <div style={chipsRow}>
+                    {[
+                      { id: "antecipado", label: "Antecipado" },
+                      { id: "parcelado",  label: "Parcelado" },
+                      { id: "final",      label: "À Faturar" },
+                    ].map(f => {
+                      const on = formasTpl.includes(f.id);
+                      return (
+                        <span key={f.id}
+                          style={on ? chipOn : chipBase}
+                          onClick={() => toggleArr(formasTpl, f.id, setFormasTpl, 1)}>
+                          {on ? "✓ " : ""}{f.label}
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  {/* Contratações (modo padrão): Apenas Arq + Pacote */}
+                  <div style={subLabel}>Contratações exibidas</div>
+                  <div style={{ ...chipsRow, marginBottom: 0 }}>
+                    {(safeData.incluiArq !== false) && (
+                      <span
+                        style={contratacoesTpl.includes("arq") ? chipOn : chipBase}
+                        onClick={() => toggleArr(contratacoesTpl, "arq", setContratacoesTpl, 1)}>
+                        {contratacoesTpl.includes("arq") ? "✓ " : ""}Apenas Arquitetura
+                      </span>
+                    )}
+                    {(safeData.incluiArq !== false && safeData.incluiEng) && (
+                      <span
+                        style={contratacoesTpl.includes("pac") ? chipOn : chipBase}
+                        onClick={() => toggleArr(contratacoesTpl, "pac", setContratacoesTpl, 1)}>
+                        {contratacoesTpl.includes("pac") ? "✓ " : ""}Pacote Completo
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Modalidades (modo etapas): Etapa-a-etapa + Etapas completas */}
+              {ehPorEtapa && (
+                <>
+                  <div style={subLabel}>Modalidades exibidas</div>
+                  <div style={{ ...chipsRow, marginBottom: 0 }}>
+                    <span
+                      style={modalidadesEtapaTpl.includes("mod1") ? chipOn : chipBase}
+                      onClick={() => toggleArr(modalidadesEtapaTpl, "mod1", setModalidadesEtapaTpl, 1)}>
+                      {modalidadesEtapaTpl.includes("mod1") ? "✓ " : ""}Contratação etapa a etapa
+                    </span>
+                    <span
+                      style={modalidadesEtapaTpl.includes("mod2") ? chipOn : chipBase}
+                      onClick={() => toggleArr(modalidadesEtapaTpl, "mod2", setModalidadesEtapaTpl, 1)}>
+                      {modalidadesEtapaTpl.includes("mod2") ? "✓ " : ""}Etapas completas
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* Modo "padrão": Antecipado + Parcelado por escopo (Arq / Pacote) */}
         {!ehPorEtapa && (
