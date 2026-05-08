@@ -1565,7 +1565,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 estruturado com cards por etapa. */}
             {escopoTextoTpl ? (
               escopoTextoTpl.split(/\n+─{4,}\n+/g).map((bloco, idx) => {
-                const linhas = bloco.trim().split("\n");
+                // Limpa traços/separadores residuais e linhas vazias nas
+                // pontas do bloco (txtTrimBlocoEscopo do shared-textos.jsx).
+                const blocoLimpo = txtTrimBlocoEscopo(bloco.trim());
+                if (!blocoLimpo) return null;
+                const linhas = blocoLimpo.split("\n");
                 const titulo = linhas[0] || "";
                 const corpo = linhas.slice(1).join("\n").trim();
                 return (
@@ -2224,7 +2228,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         }>
           {escopoTextoTpl ? (
             escopoTextoTpl.split(/\n+─{4,}\n+/g).map((bloco, idx) => {
-              const linhas = bloco.trim().split("\n");
+              const blocoLimpo = txtTrimBlocoEscopo(bloco.trim());
+              if (!blocoLimpo) return null;
+              const linhas = blocoLimpo.split("\n");
               const titulo = linhas[0] || "";
               const corpo = linhas.slice(1).join("\n").trim();
               return (

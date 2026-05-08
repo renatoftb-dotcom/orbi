@@ -157,6 +157,28 @@ function txtParseListaDeTexto(texto) {
     .filter(l => l.length > 0);
 }
 
+// Remove linhas-separador residuais (traços que não bateram com o regex de
+// split do escopo, ex: "──" com 2-3 chars, "----", "____") e linhas vazias
+// no início/fim de cada bloco de etapa. Garante que o render do modelo não
+// mostre tracinhos órfãos quando o usuário editar o texto.
+function txtTrimBlocoEscopo(texto) {
+  if (!texto || typeof texto !== "string") return "";
+  let linhas = texto.split("\n");
+  // Trim leading
+  while (linhas.length > 0) {
+    const t = linhas[0].trim();
+    if (t === "" || /^[─\-_=*]+$/.test(t)) linhas.shift();
+    else break;
+  }
+  // Trim trailing
+  while (linhas.length > 0) {
+    const t = linhas[linhas.length - 1].trim();
+    if (t === "" || /^[─\-_=*]+$/.test(t)) linhas.pop();
+    else break;
+  }
+  return linhas.join("\n");
+}
+
 // ─── Helper de descrição dinâmica do projeto ─────────────────
 
 // Gera uma frase descritiva dinâmica do projeto (ex: "Construção nova de
