@@ -1441,12 +1441,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {/* APRESENTAÇÃO — texto livre opcional do Template de Edição.
                 Aparece logo abaixo do resumo, antes dos honorários. */}
             {apresentacaoTpl && (
-              <div style={{
-                fontSize: 13, color: "#374151", lineHeight: 1.65,
-                whiteSpace: "pre-wrap", marginBottom: 18, marginTop: 4,
-              }}>
-                {apresentacaoTpl}
-              </div>
+              <>
+                <div style={D.secTit}>Apresentação</div>
+                <div style={{
+                  fontSize: 13, color: "#374151", lineHeight: 1.65,
+                  whiteSpace: "pre-wrap", marginBottom: 18,
+                }}>
+                  {apresentacaoTpl}
+                </div>
+              </>
             )}
 
             {/* HONORÁRIOS:
@@ -1517,19 +1520,41 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             </div>
 
             {/* ESCOPO — Quando o usuário editou o escopo no Template de Edição
-                (escopoTextoTpl), renderiza como texto livre preformatado
-                (preserva line breaks e bullets do que ele digitou). Senão,
-                usa o escopoDefault estruturado com cards por etapa. */}
+                (escopoTextoTpl), divide o texto pelos separadores "────────"
+                e renderiza cada bloco com título destacado em badge cinza
+                arredondado + corpo preformatado. Senão, usa o escopoDefault
+                estruturado com cards por etapa. */}
             {escopoTextoTpl ? (
-              <div style={{
-                ...D.secTexto,
-                whiteSpace: "pre-wrap",
-                fontSize: 13,
-                lineHeight: 1.65,
-                marginTop: 8,
-              }}>
-                {escopoTextoTpl}
-              </div>
+              escopoTextoTpl.split(/\n+─{4,}\n+/g).map((bloco, idx) => {
+                const linhas = bloco.trim().split("\n");
+                const titulo = linhas[0] || "";
+                const corpo = linhas.slice(1).join("\n").trim();
+                return (
+                  <div key={idx} style={{ marginBottom: 24, breakInside: "avoid" }}>
+                    <div style={{
+                      display: "inline-block",
+                      padding: "5px 14px",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 8,
+                      background: "#fafbfc",
+                      fontSize: 13, fontWeight: 600,
+                      color: "#111", marginBottom: 10,
+                    }}>
+                      {titulo}
+                    </div>
+                    {corpo && (
+                      <div style={{
+                        whiteSpace: "pre-wrap",
+                        fontSize: 13,
+                        lineHeight: 1.65,
+                        color: "#374151",
+                      }}>
+                        {corpo}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             ) : escopoDefault.map((bloco, idx) => {
               const titulo = bloco.tituloNum || bloco.titulo || `Etapa ${idx + 1}`;
               const objetivo = bloco.objetivo || "";
@@ -2001,12 +2026,14 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
         {/* APRESENTAÇÃO — texto livre opcional do Template de Edição. */}
         {apresentacaoTpl && (
-          <div style={{
-            fontSize: 13, color: MD, lineHeight: 1.7,
-            whiteSpace: "pre-wrap", marginBottom: 20,
-          }}>
-            {apresentacaoTpl}
-          </div>
+          <Sec title="Apresentação" mt={20}>
+            <div style={{
+              fontSize: 13, color: MD, lineHeight: 1.7,
+              whiteSpace: "pre-wrap",
+            }}>
+              {apresentacaoTpl}
+            </div>
+          </Sec>
         )}
 
         <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 14px" }}>
@@ -2118,12 +2145,36 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           )
         }>
           {escopoTextoTpl ? (
-            <div style={{
-              fontSize: 13, color: MD, lineHeight: 1.65,
-              whiteSpace: "pre-wrap", marginTop: 4,
-            }}>
-              {escopoTextoTpl}
-            </div>
+            escopoTextoTpl.split(/\n+─{4,}\n+/g).map((bloco, idx) => {
+              const linhas = bloco.trim().split("\n");
+              const titulo = linhas[0] || "";
+              const corpo = linhas.slice(1).join("\n").trim();
+              return (
+                <div key={idx} style={{ marginBottom: 22 }}>
+                  <div style={{
+                    display: "inline-block",
+                    padding: "5px 14px",
+                    border: `1px solid ${LN}`,
+                    borderRadius: 8,
+                    background: "#fafbfc",
+                    fontSize: 13, fontWeight: 600,
+                    color: C, marginBottom: 10,
+                  }}>
+                    {titulo}
+                  </div>
+                  {corpo && (
+                    <div style={{
+                      whiteSpace: "pre-wrap",
+                      fontSize: 13,
+                      lineHeight: 1.65,
+                      color: MD,
+                    }}>
+                      {corpo}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           ) : escopoDefault.map((bloco, i) => {
             // Separa número (fixo) do texto (editável)
             const numMatch = bloco.tituloNum.match(/^(\d+\.\s*)(.*)$/);

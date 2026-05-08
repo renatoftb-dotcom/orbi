@@ -7494,12 +7494,15 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {/* APRESENTAÇÃO — texto livre opcional do Template de Edição.
                 Aparece logo abaixo do resumo, antes dos honorários. */}
             {apresentacaoTpl && (
-              <div style={{
-                fontSize: 13, color: "#374151", lineHeight: 1.65,
-                whiteSpace: "pre-wrap", marginBottom: 18, marginTop: 4,
-              }}>
-                {apresentacaoTpl}
-              </div>
+              <>
+                <div style={D.secTit}>Apresentação</div>
+                <div style={{
+                  fontSize: 13, color: "#374151", lineHeight: 1.65,
+                  whiteSpace: "pre-wrap", marginBottom: 18,
+                }}>
+                  {apresentacaoTpl}
+                </div>
+              </>
             )}
 
             {/* HONORÁRIOS:
@@ -7570,19 +7573,41 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             </div>
 
             {/* ESCOPO — Quando o usuário editou o escopo no Template de Edição
-                (escopoTextoTpl), renderiza como texto livre preformatado
-                (preserva line breaks e bullets do que ele digitou). Senão,
-                usa o escopoDefault estruturado com cards por etapa. */}
+                (escopoTextoTpl), divide o texto pelos separadores "────────"
+                e renderiza cada bloco com título destacado em badge cinza
+                arredondado + corpo preformatado. Senão, usa o escopoDefault
+                estruturado com cards por etapa. */}
             {escopoTextoTpl ? (
-              <div style={{
-                ...D.secTexto,
-                whiteSpace: "pre-wrap",
-                fontSize: 13,
-                lineHeight: 1.65,
-                marginTop: 8,
-              }}>
-                {escopoTextoTpl}
-              </div>
+              escopoTextoTpl.split(/\n+─{4,}\n+/g).map((bloco, idx) => {
+                const linhas = bloco.trim().split("\n");
+                const titulo = linhas[0] || "";
+                const corpo = linhas.slice(1).join("\n").trim();
+                return (
+                  <div key={idx} style={{ marginBottom: 24, breakInside: "avoid" }}>
+                    <div style={{
+                      display: "inline-block",
+                      padding: "5px 14px",
+                      border: "1px solid #e5e7eb",
+                      borderRadius: 8,
+                      background: "#fafbfc",
+                      fontSize: 13, fontWeight: 600,
+                      color: "#111", marginBottom: 10,
+                    }}>
+                      {titulo}
+                    </div>
+                    {corpo && (
+                      <div style={{
+                        whiteSpace: "pre-wrap",
+                        fontSize: 13,
+                        lineHeight: 1.65,
+                        color: "#374151",
+                      }}>
+                        {corpo}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
             ) : escopoDefault.map((bloco, idx) => {
               const titulo = bloco.tituloNum || bloco.titulo || `Etapa ${idx + 1}`;
               const objetivo = bloco.objetivo || "";
@@ -8054,12 +8079,14 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
         {/* APRESENTAÇÃO — texto livre opcional do Template de Edição. */}
         {apresentacaoTpl && (
-          <div style={{
-            fontSize: 13, color: MD, lineHeight: 1.7,
-            whiteSpace: "pre-wrap", marginBottom: 20,
-          }}>
-            {apresentacaoTpl}
-          </div>
+          <Sec title="Apresentação" mt={20}>
+            <div style={{
+              fontSize: 13, color: MD, lineHeight: 1.7,
+              whiteSpace: "pre-wrap",
+            }}>
+              {apresentacaoTpl}
+            </div>
+          </Sec>
         )}
 
         <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 14px" }}>
@@ -8171,12 +8198,36 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           )
         }>
           {escopoTextoTpl ? (
-            <div style={{
-              fontSize: 13, color: MD, lineHeight: 1.65,
-              whiteSpace: "pre-wrap", marginTop: 4,
-            }}>
-              {escopoTextoTpl}
-            </div>
+            escopoTextoTpl.split(/\n+─{4,}\n+/g).map((bloco, idx) => {
+              const linhas = bloco.trim().split("\n");
+              const titulo = linhas[0] || "";
+              const corpo = linhas.slice(1).join("\n").trim();
+              return (
+                <div key={idx} style={{ marginBottom: 22 }}>
+                  <div style={{
+                    display: "inline-block",
+                    padding: "5px 14px",
+                    border: `1px solid ${LN}`,
+                    borderRadius: 8,
+                    background: "#fafbfc",
+                    fontSize: 13, fontWeight: 600,
+                    color: C, marginBottom: 10,
+                  }}>
+                    {titulo}
+                  </div>
+                  {corpo && (
+                    <div style={{
+                      whiteSpace: "pre-wrap",
+                      fontSize: 13,
+                      lineHeight: 1.65,
+                      color: MD,
+                    }}>
+                      {corpo}
+                    </div>
+                  )}
+                </div>
+              );
+            })
           ) : escopoDefault.map((bloco, i) => {
             // Separa número (fixo) do texto (editável)
             const numMatch = bloco.tituloNum.match(/^(\d+\.\s*)(.*)$/);
@@ -8518,6 +8569,50 @@ const TPL_DEFAULT_APRESENTACAO = "";   // livre por padrão
 const TPL_DEFAULT_OBSERVACOES = "";    // livre por padrão
 
 // ─────────────────────────────────────────────────────────────
+// Auto-bullet on Enter — quando o usuário aperta Enter numa linha que
+// começa com "•" (ou "-"/"*"), insere um bullet automaticamente na
+// nova linha. Se a linha atual está VAZIA (só o bullet sem conteúdo),
+// remove o bullet — exit list mode (comportamento típico de editores).
+// ─────────────────────────────────────────────────────────────
+function tplHandleEnterBullet(e, valor, setValor) {
+  if (e.key !== "Enter") return;
+  const ta = e.target;
+  if (!ta || typeof ta.selectionStart !== "number") return;
+
+  const cursorPos = ta.selectionStart;
+  const beforeCursor = valor.substring(0, cursorPos);
+  const lineStart = beforeCursor.lastIndexOf("\n") + 1;
+  const currentLine = beforeCursor.substring(lineStart);
+
+  const bulletMatch = currentLine.match(/^([•\-*])(\s+)/);
+  if (!bulletMatch) return;
+
+  const bulletPrefix = bulletMatch[0]; // "• " ou "- " etc.
+  const restOfLine = currentLine.substring(bulletPrefix.length);
+
+  // Se a linha do bullet está vazia (só o bullet), remove ele — sai da lista.
+  if (restOfLine.trim() === "") {
+    e.preventDefault();
+    const newValue = valor.substring(0, lineStart) + valor.substring(cursorPos);
+    setValor(newValue);
+    requestAnimationFrame(() => {
+      try { ta.setSelectionRange(lineStart, lineStart); } catch {}
+    });
+    return;
+  }
+
+  // Linha tem conteúdo — continua o bullet na linha seguinte.
+  e.preventDefault();
+  const insertion = "\n" + bulletPrefix;
+  const newValue = beforeCursor + insertion + valor.substring(cursorPos);
+  setValor(newValue);
+  const newPos = cursorPos + insertion.length;
+  requestAnimationFrame(() => {
+    try { ta.setSelectionRange(newPos, newPos); } catch {}
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────
 
@@ -8722,6 +8817,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={descricaoProjeto}
           onChange={e => setDescricaoProjeto(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, descricaoProjeto, setDescricaoProjeto)}
           placeholder="Construção nova de uma residência..."
           style={{ ...textareaBase, minHeight: 90 }}
           rows={3}
@@ -8739,6 +8835,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={apresentacao}
           onChange={e => setApresentacao(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, apresentacao, setApresentacao)}
           placeholder="Olá, [nome]! Apresentamos esta proposta para..."
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
@@ -8753,6 +8850,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={observacoes}
           onChange={e => setObservacoes(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, observacoes, setObservacoes)}
           placeholder="Considerações finais, prazos especiais, condições particulares..."
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
@@ -8770,6 +8868,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={escopo}
           onChange={e => setEscopo(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, escopo, setEscopo)}
           style={{ ...textareaBase, minHeight: 360 }}
           rows={18}
         />
@@ -8783,6 +8882,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={naoInclusos}
           onChange={e => setNaoInclusos(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, naoInclusos, setNaoInclusos)}
           style={{ ...textareaBase, minHeight: 200 }}
           rows={10}
         />
@@ -8796,6 +8896,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={prazo}
           onChange={e => setPrazo(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, prazo, setPrazo)}
           style={{ ...textareaBase, minHeight: 80 }}
           rows={3}
         />
@@ -8809,6 +8910,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={aceite}
           onChange={e => setAceite(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, aceite, setAceite)}
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />

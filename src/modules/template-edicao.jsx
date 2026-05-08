@@ -34,6 +34,50 @@ const TPL_DEFAULT_APRESENTACAO = "";   // livre por padrão
 const TPL_DEFAULT_OBSERVACOES = "";    // livre por padrão
 
 // ─────────────────────────────────────────────────────────────
+// Auto-bullet on Enter — quando o usuário aperta Enter numa linha que
+// começa com "•" (ou "-"/"*"), insere um bullet automaticamente na
+// nova linha. Se a linha atual está VAZIA (só o bullet sem conteúdo),
+// remove o bullet — exit list mode (comportamento típico de editores).
+// ─────────────────────────────────────────────────────────────
+function tplHandleEnterBullet(e, valor, setValor) {
+  if (e.key !== "Enter") return;
+  const ta = e.target;
+  if (!ta || typeof ta.selectionStart !== "number") return;
+
+  const cursorPos = ta.selectionStart;
+  const beforeCursor = valor.substring(0, cursorPos);
+  const lineStart = beforeCursor.lastIndexOf("\n") + 1;
+  const currentLine = beforeCursor.substring(lineStart);
+
+  const bulletMatch = currentLine.match(/^([•\-*])(\s+)/);
+  if (!bulletMatch) return;
+
+  const bulletPrefix = bulletMatch[0]; // "• " ou "- " etc.
+  const restOfLine = currentLine.substring(bulletPrefix.length);
+
+  // Se a linha do bullet está vazia (só o bullet), remove ele — sai da lista.
+  if (restOfLine.trim() === "") {
+    e.preventDefault();
+    const newValue = valor.substring(0, lineStart) + valor.substring(cursorPos);
+    setValor(newValue);
+    requestAnimationFrame(() => {
+      try { ta.setSelectionRange(lineStart, lineStart); } catch {}
+    });
+    return;
+  }
+
+  // Linha tem conteúdo — continua o bullet na linha seguinte.
+  e.preventDefault();
+  const insertion = "\n" + bulletPrefix;
+  const newValue = beforeCursor + insertion + valor.substring(cursorPos);
+  setValor(newValue);
+  const newPos = cursorPos + insertion.length;
+  requestAnimationFrame(() => {
+    try { ta.setSelectionRange(newPos, newPos); } catch {}
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────
 
@@ -238,6 +282,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={descricaoProjeto}
           onChange={e => setDescricaoProjeto(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, descricaoProjeto, setDescricaoProjeto)}
           placeholder="Construção nova de uma residência..."
           style={{ ...textareaBase, minHeight: 90 }}
           rows={3}
@@ -255,6 +300,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={apresentacao}
           onChange={e => setApresentacao(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, apresentacao, setApresentacao)}
           placeholder="Olá, [nome]! Apresentamos esta proposta para..."
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
@@ -269,6 +315,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={observacoes}
           onChange={e => setObservacoes(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, observacoes, setObservacoes)}
           placeholder="Considerações finais, prazos especiais, condições particulares..."
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
@@ -286,6 +333,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={escopo}
           onChange={e => setEscopo(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, escopo, setEscopo)}
           style={{ ...textareaBase, minHeight: 360 }}
           rows={18}
         />
@@ -299,6 +347,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={naoInclusos}
           onChange={e => setNaoInclusos(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, naoInclusos, setNaoInclusos)}
           style={{ ...textareaBase, minHeight: 200 }}
           rows={10}
         />
@@ -312,6 +361,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={prazo}
           onChange={e => setPrazo(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, prazo, setPrazo)}
           style={{ ...textareaBase, minHeight: 80 }}
           rows={3}
         />
@@ -325,6 +375,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           className="vk-tpl-textarea"
           value={aceite}
           onChange={e => setAceite(e.target.value)}
+          onKeyDown={e => tplHandleEnterBullet(e, aceite, setAceite)}
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
