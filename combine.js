@@ -31,6 +31,10 @@ const ORDER = [
   // template-edicao.jsx vem antes de orcamento-teste.jsx pq esta usa
   // <TemplateEdicao /> diretamente.
   "template-edicao.jsx",
+  // orcamento-onboarding.jsx (Beta) — fluxo guiado de criação de orçamento.
+  // Vem antes de orcamento-teste.jsx pq o componente <TesteOrcamento> usa
+  // <OrcamentoOnboarding /> diretamente quando dev_mode=true.
+  "orcamento-onboarding.jsx",
   "orcamento-teste.jsx",
   "escritorio.jsx",
   "admin.jsx",

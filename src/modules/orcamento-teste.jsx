@@ -89,6 +89,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [filtro, setFiltro] = useState("ativos");
   const [busca, setBusca] = useState("");
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
+  // Onboarding Beta — só aparece em empresas com dev_mode (Vicke Dev).
+  // Quando true, renderiza <OrcamentoOnboarding> tela cheia em vez da lista.
+  const [onboardingBetaAberto, setOnboardingBetaAberto] = useState(false);
   const [buscaCliente, setBuscaCliente] = useState("");
   const perm = getPermissoes();
   // Visualização (persistida em localStorage): tabela | cards
@@ -506,6 +509,18 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       })
     : clientes.slice(0, 20);
 
+  // Onboarding Beta tela cheia (só dev_mode)
+  if (onboardingBetaAberto) {
+    return (
+      <OrcamentoOnboarding
+        data={data}
+        save={save}
+        onVoltar={() => setOnboardingBetaAberto(false)}
+        onConcluido={() => setOnboardingBetaAberto(false)}
+      />
+    );
+  }
+
   return (
     <div style={{
       background:"#fff",
@@ -521,15 +536,29 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Lista de todos os orçamentos do escritório</div>
         </div>
         {perm.podeEditar && (
-        <button
-          onClick={() => setModalNovoAberto(true)}
-          style={{
-            background:"#111", color:"#fff", border:"1px solid #111",
-            borderRadius:7, padding:"8px 14px", fontSize:13, fontWeight:500,
-            cursor:"pointer", fontFamily:"inherit",
-          }}>
-          + Novo Orçamento
-        </button>
+        <div style={{ display:"flex", gap:8 }}>
+          {temDevMode(data.escritorio) && (
+            <button
+              onClick={() => setOnboardingBetaAberto(true)}
+              style={{
+                background:"#fff", color:"#92400e",
+                border:"1px solid #d97706", borderRadius:7,
+                padding:"8px 14px", fontSize:13, fontWeight:500,
+                cursor:"pointer", fontFamily:"inherit",
+              }}>
+              + Novo (Beta) 🧪
+            </button>
+          )}
+          <button
+            onClick={() => setModalNovoAberto(true)}
+            style={{
+              background:"#111", color:"#fff", border:"1px solid #111",
+              borderRadius:7, padding:"8px 14px", fontSize:13, fontWeight:500,
+              cursor:"pointer", fontFamily:"inherit",
+            }}>
+            + Novo Orçamento
+          </button>
+        </div>
         )}
       </div>
 
