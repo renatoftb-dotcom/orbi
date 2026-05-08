@@ -417,8 +417,14 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     }
     return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
   })();
-  // Valor final (edição manual preserva, senão usa dinâmico)
-  const resumoFinal = resumoEdit !== null ? resumoEdit : resumoDinamico;
+  // Texto vindo do Template de Edição (Fase 4+). Prioridade: template > edit
+  // inline (resumoEdit) > dinâmico computado. Se o usuário pulou o template
+  // ou abriu uma proposta antiga sem template, txTpl fica vazio e o fallback
+  // mantém o comportamento legado.
+  const txTpl = data?.template?.textos || {};
+  const resumoFinal = (txTpl.descricaoProjeto && txTpl.descricaoProjeto.trim())
+    ? txTpl.descricaoProjeto
+    : (resumoEdit !== null ? resumoEdit : resumoDinamico);
 
   // Manipuladores de etapas (isolar, adicionar, remover, editar %)
   function toggleIsolarEtapa(id) {
@@ -638,6 +644,21 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
        ...(incluiArq || engAtiva ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
        ...(engAtiva ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
       ];
+
+  // Overrides do Template de Edição (Fase 5+). Quando o usuário editou os
+  // textos no template, eles têm prioridade sobre os defaults dinâmicos.
+  // Parsing: o template guarda como texto livre; aqui convertemos linhas
+  // com bullets ("• item") em arrays estruturados pro modelo renderizar.
+  const naoInclTpl = (txTpl.naoInclusos && txTpl.naoInclusos.trim())
+    ? txtParseListaDeTexto(txTpl.naoInclusos).map(l => ({ label: l, sub: null }))
+    : null;
+  const prazoTpl = (txTpl.prazo && txTpl.prazo.trim())
+    ? txtParseListaDeTexto(txTpl.prazo)
+    : null;
+  const aceiteTpl = (txTpl.aceite && txTpl.aceite.trim()) ? txTpl.aceite : null;
+  const apresentacaoTpl = (txTpl.apresentacao && txTpl.apresentacao.trim()) ? txTpl.apresentacao : null;
+  const observacoesTpl = (txTpl.observacoes && txTpl.observacoes.trim()) ? txTpl.observacoes : null;
+  const escopoTextoTpl = (txTpl.escopo && txTpl.escopo.trim()) ? txTpl.escopo : null;
 
   const C = "#111827";
   const LT = "#828a98";
@@ -1194,9 +1215,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     // Modelo Padrão salva como array, então o Direto também tem que
     // ler como array. Compatibilidade total entre os 2 modelos.
 
-    // Filtra prazos: igual o Padrão faz, esconde linha de Engenharia
-    // se eng não está ativa
-    const prazosLista = (prazoEdit || prazoDefault).filter(p => {
+    // Filtra prazos: prioriza template > editEdit inline > default. Esconde
+    // linha de Engenharia se eng não está ativa.
+    const prazosLista = (prazoTpl || prazoEdit || prazoDefault).filter(p => {
       if (typeof p !== "string") return true;
       if (p.toLowerCase().includes("engenharia")) {
         if (!engAtiva) return false;
@@ -1206,8 +1227,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
     // naoInclEdit pode estar em formato antigo (array de strings) ou
     // novo (array de { label, sub }). Normaliza pra { label, sub }.
+    // Prioridade: template > naoInclEdit > naoInclDefault.
     const naoInclususLista = (() => {
-      const fonte = naoInclEdit || naoInclDefault;
+      const fonte = naoInclTpl || naoInclEdit || naoInclDefault;
       if (!Array.isArray(fonte)) return [];
       return fonte.map(item => {
         if (typeof item === "string") return { label: item, sub: null };
@@ -1403,7 +1425,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {/* Resumo do projeto (auto-gerado) — em modo lock, renderiza
                 como texto puro pra não cortar com overflow do input. */}
             <div style={D.descricaoProjeto}>
-              {lockEdicao ? (
+              {(lockEdicao || txTpl.descricaoProjeto) ? (
                 <span>{resumoFinal}</span>
               ) : (
                 <InputControlado
@@ -1415,6 +1437,17 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 />
               )}
             </div>
+
+            {/* APRESENTAÇÃO — texto livre opcional do Template de Edição.
+                Aparece logo abaixo do resumo, antes dos honorários. */}
+            {apresentacaoTpl && (
+              <div style={{
+                fontSize: 13, color: "#374151", lineHeight: 1.65,
+                whiteSpace: "pre-wrap", marginBottom: 18, marginTop: 4,
+              }}>
+                {apresentacaoTpl}
+              </div>
+            )}
 
             {/* HONORÁRIOS:
                   - Cards de serviços (Arquitetura, Engenharia) com valores SEM imposto
@@ -1483,12 +1516,21 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme detalhado abaixo:
             </div>
 
-            {/* ESCOPO — usa escopoDefault, que é o array calculado pelo
-                componente principal levando em conta TODAS as flags:
-                isPadrao, incluiArq, engAtiva, temIsoladas, idsIsolados,
-                etapas custom. Vem já filtrado e numerado (tituloNum).
-                Não duplica filtro aqui — fonte única de verdade. */}
-            {escopoDefault.map((bloco, idx) => {
+            {/* ESCOPO — Quando o usuário editou o escopo no Template de Edição
+                (escopoTextoTpl), renderiza como texto livre preformatado
+                (preserva line breaks e bullets do que ele digitou). Senão,
+                usa o escopoDefault estruturado com cards por etapa. */}
+            {escopoTextoTpl ? (
+              <div style={{
+                ...D.secTexto,
+                whiteSpace: "pre-wrap",
+                fontSize: 13,
+                lineHeight: 1.65,
+                marginTop: 8,
+              }}>
+                {escopoTextoTpl}
+              </div>
+            ) : escopoDefault.map((bloco, idx) => {
               const titulo = bloco.tituloNum || bloco.titulo || `Etapa ${idx + 1}`;
               const objetivo = bloco.objetivo || "";
               const itens = bloco.itens || [];
@@ -1588,11 +1630,24 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               </>
             )}
 
-            {/* ACEITE — Patch: envolto pra não quebrar entre páginas no PDF */}
+            {/* OBSERVAÇÕES — texto livre opcional do Template de Edição.
+                Aparece antes do aceite, depois dos não-inclusos/prazos. */}
+            {observacoesTpl && (
+              <div style={{
+                fontSize: 13, color: "#374151", lineHeight: 1.65,
+                whiteSpace: "pre-wrap", marginTop: 24, marginBottom: 8,
+              }}>
+                {observacoesTpl}
+              </div>
+            )}
+
+            {/* ACEITE — Patch: envolto pra não quebrar entre páginas no PDF.
+                Texto vem do Template de Edição quando preenchido, senão usa
+                o texto padrão hardcoded. */}
             <div className="aceite-footer-bloco">
               <div style={D.secTit}>Aceite da proposta</div>
-              <div style={D.secTexto}>
-                Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.
+              <div style={{ ...D.secTexto, whiteSpace: "pre-wrap" }}>
+                {aceiteTpl || "Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail."}
               </div>
               <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:36 }}>
                 <div style={{ fontSize:11, color:"#9ca3af" }}>
@@ -1923,7 +1978,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         })()}
         {resumoFinal && (
           <div style={{ marginBottom:20, position:"relative" }}>
-            {editandoResumo ? (
+            {(editandoResumo && !txTpl.descricaoProjeto) ? (
               <textarea
                 autoFocus
                 value={resumoFinal}
@@ -1935,12 +1990,22 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               />
             ) : (
               <div
-                onClick={() => setEditandoResumo(true)}
-                title="Clique para editar"
-                style={{ fontSize:13, color:MD, lineHeight:1.7, cursor:"pointer" }}>
+                onClick={() => { if (!txTpl.descricaoProjeto) setEditandoResumo(true); }}
+                title={txTpl.descricaoProjeto ? "Editado pelo Template" : "Clique para editar"}
+                style={{ fontSize:13, color:MD, lineHeight:1.7, cursor: txTpl.descricaoProjeto ? "default" : "pointer" }}>
                 {resumoFinal}
               </div>
             )}
+          </div>
+        )}
+
+        {/* APRESENTAÇÃO — texto livre opcional do Template de Edição. */}
+        {apresentacaoTpl && (
+          <div style={{
+            fontSize: 13, color: MD, lineHeight: 1.7,
+            whiteSpace: "pre-wrap", marginBottom: 20,
+          }}>
+            {apresentacaoTpl}
           </div>
         )}
 
@@ -2037,6 +2102,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         </Sec>
 
         <Sec title="Escopo dos serviços" action={
+          escopoTextoTpl ? null : (
           <span
             onClick={() => {
               const newId = Date.now();
@@ -2049,8 +2115,16 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             style={{ fontSize:10, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
               border:`1px solid ${LN}`, background:"#f3f4f6", whiteSpace:"nowrap", userSelect:"none" }}
             className="no-print">+ bloco</span>
+          )
         }>
-          {escopoDefault.map((bloco, i) => {
+          {escopoTextoTpl ? (
+            <div style={{
+              fontSize: 13, color: MD, lineHeight: 1.65,
+              whiteSpace: "pre-wrap", marginTop: 4,
+            }}>
+              {escopoTextoTpl}
+            </div>
+          ) : escopoDefault.map((bloco, i) => {
             // Separa número (fixo) do texto (editável)
             const numMatch = bloco.tituloNum.match(/^(\d+\.\s*)(.*)$/);
             const numPrefix = numMatch ? numMatch[1] : "";
@@ -2183,33 +2257,47 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         </Sec>
 
         <Sec title="Serviços não inclusos">
+          {/* Prioridade: naoInclTpl (do Template Edição) > naoInclEdit
+              (legado inline) > naoInclDefault (dinâmico). Quando vem do
+              template, edição inline é desabilitada (cliques não fazem
+              nada porque a fonte canônica é o template). */}
           <div style={{ columns:"2", columnGap:32, marginBottom:8 }}>
-            {(naoInclEdit || naoInclDefault).map((item, i) => (
+            {(naoInclTpl || naoInclEdit || naoInclDefault).map((item, i) => (
               <div key={i} style={{ ...bl, breakInside:"avoid", marginBottom:4, alignItems:"flex-start" }}>
                 <span style={dot}>•</span>
-                <TextoEditavel valor={item.label} onChange={v => {
-                  const arr = [...(naoInclEdit || naoInclDefault)];
-                  arr[i] = { ...arr[i], label: v };
-                  setNaoInclEdit(arr);
-                }} style={{ fontSize:13, color:MD, flex:1 }} />
+                {naoInclTpl ? (
+                  <span style={{ fontSize:13, color:MD, flex:1 }}>{item.label}</span>
+                ) : (
+                  <TextoEditavel valor={item.label} onChange={v => {
+                    const arr = [...(naoInclEdit || naoInclDefault)];
+                    arr[i] = { ...arr[i], label: v };
+                    setNaoInclEdit(arr);
+                  }} style={{ fontSize:13, color:MD, flex:1 }} />
+                )}
                 {item.sub && <span style={{ fontSize:11, color:LT, marginLeft:4 }}>{item.sub}</span>}
-                <span onClick={() => setNaoInclEdit((naoInclEdit || naoInclDefault).filter((_,k)=>k!==i))}
-                  className="no-print"
-                  style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
+                {!naoInclTpl && (
+                  <span onClick={() => setNaoInclEdit((naoInclEdit || naoInclDefault).filter((_,k)=>k!==i))}
+                    className="no-print"
+                    style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
+                )}
               </div>
             ))}
           </div>
-          <div style={{ marginBottom:8 }}>
-            <span onClick={() => setNaoInclEdit([...(naoInclEdit||naoInclDefault), { label:"Novo item", sub:null }])}
-              className="no-print"
-              style={{ fontSize:11, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
-                background:"#f3f4f6", border:"1px solid #c8cdd6" }}>+ item</span>
-          </div>
+          {!naoInclTpl && (
+            <div style={{ marginBottom:8 }}>
+              <span onClick={() => setNaoInclEdit([...(naoInclEdit||naoInclDefault), { label:"Novo item", sub:null }])}
+                className="no-print"
+                style={{ fontSize:11, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
+                  background:"#f3f4f6", border:"1px solid #c8cdd6" }}>+ item</span>
+            </div>
+          )}
           <div style={{ fontSize:12, color:LT, fontStyle:"italic" }}>Todos os serviços não inclusos podem ser contratados como serviços adicionais.</div>
         </Sec>
 
         <Sec title="Prazo de execução">
-          {(prazoEdit || prazoDefault).filter(p => {
+          {/* Prioridade: prazoTpl (Template Edição) > prazoEdit (legado) >
+              prazoDefault. Edição inline desabilitada quando vem do template. */}
+          {(prazoTpl || prazoEdit || prazoDefault).filter(p => {
               if (p.toLowerCase().includes("engenharia")) {
                 if (!engAtiva) return false; // toggle desligado OU eng não isolada
               }
@@ -2217,19 +2305,44 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             }).map((p, i) => (
             <div key={i} style={{ ...bl, marginBottom:6 }}>
               <span style={dot}>•</span>
-              <TextoEditavel valor={p} onChange={v => {
-                const arr = [...(prazoEdit || prazoDefault)];
-                arr[i] = v;
-                setPrazoEdit(arr);
-              }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} multiline={true} />
+              {prazoTpl ? (
+                <span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{p}</span>
+              ) : (
+                <TextoEditavel valor={p} onChange={v => {
+                  const arr = [...(prazoEdit || prazoDefault)];
+                  arr[i] = v;
+                  setPrazoEdit(arr);
+                }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} multiline={true} />
+              )}
             </div>
           ))}
         </Sec>
+
+        {/* OBSERVAÇÕES — texto livre opcional do Template de Edição. */}
+        {observacoesTpl && (
+          <Sec title="Observações finais">
+            <div style={{
+              fontSize: 13, color: MD, lineHeight: 1.65,
+              whiteSpace: "pre-wrap",
+            }}>
+              {observacoesTpl}
+            </div>
+          </Sec>
+        )}
 
         {/* Patch: bloco "Aceite + footer" envolto pra não quebrar entre páginas
             no PDF. Se não couber inteiro, vai todo pra próxima página. */}
         <div className="aceite-footer-bloco">
           <Sec title="Aceite da proposta">
+            {/* Texto do aceite — vem do Template de Edição quando preenchido. */}
+            {aceiteTpl && (
+              <div style={{
+                fontSize: 13, color: MD, lineHeight: 1.65,
+                whiteSpace: "pre-wrap", marginBottom: 18,
+              }}>
+                {aceiteTpl}
+              </div>
+            )}
             <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:8 }}>
               <div>
                 <div style={{ fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Cliente</div>

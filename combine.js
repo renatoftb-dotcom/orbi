@@ -16,6 +16,10 @@ const ORDER = [
   "outros.jsx",
   "clientes.jsx",
   "resultado-pdf.jsx",
+  // shared-textos.jsx vem antes de quem o consome (modelo-padrao.jsx,
+  // template-edicao.jsx). Contém defaults/helpers de texto da proposta —
+  // fonte única pra evitar duplicação entre modelo e template.
+  "shared-textos.jsx",
   // modelo-padrao.jsx vem ANTES de orcamento-teste.jsx — embora função
   // declarations hoist independente de ordem, deixar antes torna a leitura
   // do bundle final mais natural (templates antes do form que os usa).

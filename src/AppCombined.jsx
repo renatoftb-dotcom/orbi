@@ -5830,6 +5830,224 @@ function defaultModelo(orc, arqTotal, engTotal, grandTotal, fmt, fmtM2, nUnid, e
 
 
 // ════════════════════════════════════════════════════════════
+// shared-textos.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// SHARED-TEXTOS — defaults e helpers compartilhados de texto da proposta
+// ═══════════════════════════════════════════════════════════════
+// Lugar único pros textos padrão que aparecem na proposta (escopo das
+// etapas, serviços não inclusos, prazos, termo de aceite) + helpers que
+// formatam/parseiam esses textos.
+//
+// Antes da Fase 5 essas constantes/funções estavam duplicadas em 3
+// lugares (modelo-padrao.jsx, resultado-pdf.jsx, template-edicao.jsx).
+// Agora o template lê daqui, o modelo-padrao lê daqui (no fallback) e
+// cada novo modelo de orçamento lê daqui.
+//
+// Posicionamento no combine.js: ANTES de modelo-padrao.jsx e
+// template-edicao.jsx (consts precisam estar definidas em ordem).
+//
+// Observação sobre PDF: resultado-pdf.jsx ainda mantém suas próprias
+// cópias por enquanto — o backend renderiza PDF via SSR/Puppeteer e
+// alterações ali precisam ir junto. Migração desse arquivo fica pra
+// uma próxima fase.
+// ═══════════════════════════════════════════════════════════════
+
+// ─── Defaults estruturados ───────────────────────────────────
+
+const TXT_DEFAULT_ESCOPO_ETAPAS = [
+  {
+    titulo: "1. Estudo Preliminar",
+    objetivo: "Desenvolver o conceito arquitetônico inicial, organizando os ambientes, a implantação e a linguagem estética do projeto.",
+    itens: [
+      "Reunião de briefing e entendimento das necessidades do cliente",
+      "Definição do programa de necessidades",
+      "Estudo de implantação da edificação no terreno",
+      "Desenvolvimento da concepção arquitetônica inicial",
+      "Definição preliminar de: layout, fluxos, volumetria, setorização e linguagem estética",
+      "Compatibilização entre funcionalidade, conforto, estética e viabilidade construtiva",
+      "Ajustes conforme alinhamento com o cliente",
+    ],
+    entregaveis: [
+      "Planta baixa preliminar",
+      "Estudo volumétrico / fachada conceitual",
+      "Implantação inicial",
+      "Imagens, croquis ou perspectivas conceituais",
+      "Apresentação para validação do conceito arquitetônico",
+    ],
+    obs: "É nesta etapa que o projeto ganha forma. O estudo preliminar define a essência da proposta e orienta todas as fases seguintes.",
+  },
+  {
+    titulo: "2. Aprovação na Prefeitura",
+    objetivo: "Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.",
+    itens: [
+      "Adequação do projeto às exigências legais e urbanísticas do município",
+      "Elaboração dos desenhos técnicos exigidos para aprovação",
+      "Montagem da documentação técnica necessária ao processo",
+      "Inserção de informações obrigatórias conforme normas municipais",
+      "Preparação de pranchas, quadros de áreas e demais peças gráficas",
+      "Apoio técnico durante o processo de aprovação",
+      "Atendimento a eventuais comunique-se ou exigências técnicas da prefeitura",
+    ],
+    entregaveis: [
+      "Projeto legal para aprovação",
+      "Plantas, cortes, fachadas e implantação conforme exigência municipal",
+      "Quadros de áreas",
+      "Arquivos e documentação técnica para protocolo",
+    ],
+    obs: "Não inclusos nesta etapa: taxas municipais, emolumentos, ART/RRT, levantamentos complementares, certidões e exigências extraordinárias de órgãos externos, salvo se expressamente previsto.",
+  },
+  {
+    titulo: "3. Projeto Executivo",
+    objetivo: "Desenvolver o projeto arquitetônico em nível detalhado para execução da obra, fornecendo todas as informações necessárias para construção com precisão.",
+    itens: [
+      "Desenvolvimento técnico completo do projeto aprovado",
+      "Detalhamento arquitetônico para obra",
+      "Definição precisa de: dimensões, níveis, cotas, eixos, paginações, esquadrias, acabamentos e elementos construtivos",
+      "Elaboração de desenhos técnicos executivos",
+      "Compatibilização arquitetônica com premissas de obra",
+      "Apoio técnico para leitura e entendimento do projeto pela equipe executora",
+    ],
+    entregaveis: [
+      "Planta baixa executiva",
+      "Planta de locação e implantação",
+      "Planta de cobertura",
+      "Cortes e fachadas executivos",
+      "Planta de layout e pontos arquitetônicos",
+      "Planta de esquadrias e pisos",
+      "Detalhamentos construtivos",
+      "Quadro de esquadrias e quadro de áreas final",
+    ],
+    obs: "É a etapa que transforma a ideia em construção real. Um bom projeto executivo reduz improvisos, retrabalhos e falhas de execução na obra.",
+  },
+];
+
+const TXT_DEFAULT_NAO_INCLUSOS = [
+  "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
+  "Impostos",
+  "Projetos de climatização",
+  "Projeto de prevenção de incêndio",
+  "Projeto de automação",
+  "Projeto de paisagismo",
+  "Projeto de interiores",
+  "Projeto de Marcenaria (Móveis internos)",
+  "Projeto estrutural de estruturas metálicas",
+  "Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura",
+  "Sondagem e Planialtimétrico do terreno",
+  "Acompanhamento semanal de obra",
+  "Gestão e execução de obra",
+  "Vistoria para Caixa Econômica Federal",
+  "RRT de Execução de obra",
+];
+
+const TXT_DEFAULT_PRAZO = [
+  "Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação.",
+  "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura.",
+];
+
+const TXT_DEFAULT_ACEITE =
+  "Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.";
+
+// ─── Formatadores: estrutura → texto editável ────────────────
+
+// Formata o array de etapas como bloco de texto contínuo, com cada etapa
+// separada por uma linha de divisão. Usado pra pré-popular a textarea
+// "Escopo dos serviços" do template.
+function txtFormatarEscopoComoTexto(etapas) {
+  return etapas.map(et => {
+    const linhas = [];
+    linhas.push(et.titulo);
+    linhas.push("");
+    linhas.push("Objetivo: " + et.objetivo);
+    linhas.push("");
+    linhas.push("Inclui:");
+    et.itens.forEach(i => linhas.push("• " + i));
+    linhas.push("");
+    linhas.push("Entregáveis:");
+    et.entregaveis.forEach(e => linhas.push("• " + e));
+    if (et.obs) {
+      linhas.push("");
+      linhas.push(et.obs);
+    }
+    return linhas.join("\n");
+  }).join("\n\n────────\n\n");
+}
+
+// Formata array de strings como lista com bullet por linha.
+function txtFormatarListaComoTexto(lista) {
+  return lista.map(item => "• " + item).join("\n");
+}
+
+// ─── Parser: texto → array (caminho reverso) ─────────────────
+
+// Pega texto livre digitado pelo usuário no template e quebra em itens
+// (uma linha = um item). Strip leading bullets ("• ", "- ", "* ") e
+// linhas vazias. Usado quando o modelo precisa reusar a lista
+// estruturada (ex: renderizar não inclusos como bullets visuais).
+function txtParseListaDeTexto(texto) {
+  if (!texto || typeof texto !== "string") return [];
+  return texto.split("\n")
+    .map(l => l.trim().replace(/^[•\-*]\s*/, "").trim())
+    .filter(l => l.length > 0);
+}
+
+// ─── Helper de descrição dinâmica do projeto ─────────────────
+
+// Gera uma frase descritiva dinâmica do projeto (ex: "Construção nova de
+// uma residência térrea, com 224m² de área construída, composta por 9
+// ambientes: ..."). Usada como pré-preenchimento da textarea
+// "Descrição do projeto" no template e como fallback no modelo quando
+// o usuário não personaliza esse campo.
+//
+// Depende de `formatComodo` (declarada em orcamento-teste.jsx) — usa
+// fallback simples se ainda não estiver disponível no escopo global.
+function txtComputarDescricaoProjeto(data) {
+  if (!data) return "";
+  const fmtN2 = v => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtArea = v => v > 0 ? fmtN2(v) + "m²" : null;
+  const tipoObraLower = (data.tipoObra || "").toLowerCase();
+  const prefixo = tipoObraLower.includes("reforma") ? "Reforma de " : "Construção nova de ";
+  const calc = data.calculo || {};
+
+  // Caso comercial (conjunto comercial com grupoQtds)
+  if (data.grupoQtds && calc.blocosCom) {
+    const partes = [];
+    const nL = data.grupoQtds["Por Loja"] || 0;
+    const nA = data.grupoQtds["Espaço Âncora"] || 0;
+    const nAp = data.grupoQtds["Por Apartamento"] || 0;
+    const nG = data.grupoQtds["Galpao"] || 0;
+    if (nL > 0) { const b = calc.blocosCom.find(x => x.label === "Loja"); if (b) partes.push(`${nL} loja${nL !== 1 ? "s" : ""} (${fmtArea(b.area1 * nL)})`); }
+    if (nA > 0) { const b = calc.blocosCom.find(x => x.label === "Âncora"); if (b) partes.push(`${nA} ${nA === 1 ? "Espaço Âncora" : "Espaços Âncoras"} (${fmtArea(b.area1 * nA)})`); }
+    if (nAp > 0) { const b = calc.blocosCom.find(x => x.label === "Apartamento"); if (b) partes.push(`${nAp} apartamento${nAp !== 1 ? "s" : ""} (${fmtArea(b.area1 * nAp)})`); }
+    if (nG > 0) { const b = calc.blocosCom.find(x => x.label === "Galpão"); if (b) partes.push(`${nG} ${nG !== 1 ? "galpões" : "galpão"} (${fmtArea(b.area1 * nG)})`); }
+    const bc = calc.blocosCom.find(x => x.label === "Área Comum"); if (bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`);
+    const lista = partes.length > 1 ? partes.slice(0, -1).join(", ") + " e " + partes[partes.length - 1] : partes[0] || "";
+    return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(calc.areaTot || calc.areaTotal)}.`;
+  }
+
+  // Caso residencial
+  const nUnid = calc.nRep || 1;
+  const areaUni = calc.areaTotal || calc.areaTot || 0;
+  const areaTotR = Math.round(areaUni * nUnid * 100) / 100;
+  const comodos = data.comodos || [];
+  const totalAmb = comodos.reduce((s, c) => s + (c.qtd || 0), 0);
+  const fc = (typeof formatComodo === "function") ? formatComodo : (n, q) => `${q} ${n}`;
+  const itensFmt = comodos.filter(c => (c.qtd || 0) > 0).map(c => fc(c.nome, c.qtd));
+  const listaStr = itensFmt.length > 1
+    ? itensFmt.slice(0, -1).join(", ") + " e " + itensFmt[itensFmt.length - 1]
+    : itensFmt[0] || "";
+  const tipDesc = (data.tipologia || "").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
+  const numFem = ["", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
+  if (nUnid > 1) {
+    const nExt = nUnid >= 1 && nUnid <= 10 ? numFem[nUnid] : String(nUnid);
+    return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
+  }
+  return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
+}
+
+
+// ════════════════════════════════════════════════════════════
 // modelo-padrao.jsx
 // ════════════════════════════════════════════════════════════
 
@@ -6252,8 +6470,14 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     }
     return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
   })();
-  // Valor final (edição manual preserva, senão usa dinâmico)
-  const resumoFinal = resumoEdit !== null ? resumoEdit : resumoDinamico;
+  // Texto vindo do Template de Edição (Fase 4+). Prioridade: template > edit
+  // inline (resumoEdit) > dinâmico computado. Se o usuário pulou o template
+  // ou abriu uma proposta antiga sem template, txTpl fica vazio e o fallback
+  // mantém o comportamento legado.
+  const txTpl = data?.template?.textos || {};
+  const resumoFinal = (txTpl.descricaoProjeto && txTpl.descricaoProjeto.trim())
+    ? txTpl.descricaoProjeto
+    : (resumoEdit !== null ? resumoEdit : resumoDinamico);
 
   // Manipuladores de etapas (isolar, adicionar, remover, editar %)
   function toggleIsolarEtapa(id) {
@@ -6473,6 +6697,21 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
        ...(incluiArq || engAtiva ? ["Concluída e aprovada cada etapa, inicia-se automaticamente o prazo da etapa seguinte."] : []),
        ...(engAtiva ? ["Projetos de Engenharia: 30 dias úteis após aprovação do projeto na Prefeitura."] : []),
       ];
+
+  // Overrides do Template de Edição (Fase 5+). Quando o usuário editou os
+  // textos no template, eles têm prioridade sobre os defaults dinâmicos.
+  // Parsing: o template guarda como texto livre; aqui convertemos linhas
+  // com bullets ("• item") em arrays estruturados pro modelo renderizar.
+  const naoInclTpl = (txTpl.naoInclusos && txTpl.naoInclusos.trim())
+    ? txtParseListaDeTexto(txTpl.naoInclusos).map(l => ({ label: l, sub: null }))
+    : null;
+  const prazoTpl = (txTpl.prazo && txTpl.prazo.trim())
+    ? txtParseListaDeTexto(txTpl.prazo)
+    : null;
+  const aceiteTpl = (txTpl.aceite && txTpl.aceite.trim()) ? txTpl.aceite : null;
+  const apresentacaoTpl = (txTpl.apresentacao && txTpl.apresentacao.trim()) ? txTpl.apresentacao : null;
+  const observacoesTpl = (txTpl.observacoes && txTpl.observacoes.trim()) ? txTpl.observacoes : null;
+  const escopoTextoTpl = (txTpl.escopo && txTpl.escopo.trim()) ? txTpl.escopo : null;
 
   const C = "#111827";
   const LT = "#828a98";
@@ -7029,9 +7268,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     // Modelo Padrão salva como array, então o Direto também tem que
     // ler como array. Compatibilidade total entre os 2 modelos.
 
-    // Filtra prazos: igual o Padrão faz, esconde linha de Engenharia
-    // se eng não está ativa
-    const prazosLista = (prazoEdit || prazoDefault).filter(p => {
+    // Filtra prazos: prioriza template > editEdit inline > default. Esconde
+    // linha de Engenharia se eng não está ativa.
+    const prazosLista = (prazoTpl || prazoEdit || prazoDefault).filter(p => {
       if (typeof p !== "string") return true;
       if (p.toLowerCase().includes("engenharia")) {
         if (!engAtiva) return false;
@@ -7041,8 +7280,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
     // naoInclEdit pode estar em formato antigo (array de strings) ou
     // novo (array de { label, sub }). Normaliza pra { label, sub }.
+    // Prioridade: template > naoInclEdit > naoInclDefault.
     const naoInclususLista = (() => {
-      const fonte = naoInclEdit || naoInclDefault;
+      const fonte = naoInclTpl || naoInclEdit || naoInclDefault;
       if (!Array.isArray(fonte)) return [];
       return fonte.map(item => {
         if (typeof item === "string") return { label: item, sub: null };
@@ -7238,7 +7478,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {/* Resumo do projeto (auto-gerado) — em modo lock, renderiza
                 como texto puro pra não cortar com overflow do input. */}
             <div style={D.descricaoProjeto}>
-              {lockEdicao ? (
+              {(lockEdicao || txTpl.descricaoProjeto) ? (
                 <span>{resumoFinal}</span>
               ) : (
                 <InputControlado
@@ -7250,6 +7490,17 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 />
               )}
             </div>
+
+            {/* APRESENTAÇÃO — texto livre opcional do Template de Edição.
+                Aparece logo abaixo do resumo, antes dos honorários. */}
+            {apresentacaoTpl && (
+              <div style={{
+                fontSize: 13, color: "#374151", lineHeight: 1.65,
+                whiteSpace: "pre-wrap", marginBottom: 18, marginTop: 4,
+              }}>
+                {apresentacaoTpl}
+              </div>
+            )}
 
             {/* HONORÁRIOS:
                   - Cards de serviços (Arquitetura, Engenharia) com valores SEM imposto
@@ -7318,12 +7569,21 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               O projeto compreenderá {incluiArq ? "o projeto arquitetônico" : ""}{incluiArq && incluiEng ? " e " : ""}{incluiEng ? "engenharia complementar (estrutural, elétrico e hidrossanitário)" : ""}, conforme detalhado abaixo:
             </div>
 
-            {/* ESCOPO — usa escopoDefault, que é o array calculado pelo
-                componente principal levando em conta TODAS as flags:
-                isPadrao, incluiArq, engAtiva, temIsoladas, idsIsolados,
-                etapas custom. Vem já filtrado e numerado (tituloNum).
-                Não duplica filtro aqui — fonte única de verdade. */}
-            {escopoDefault.map((bloco, idx) => {
+            {/* ESCOPO — Quando o usuário editou o escopo no Template de Edição
+                (escopoTextoTpl), renderiza como texto livre preformatado
+                (preserva line breaks e bullets do que ele digitou). Senão,
+                usa o escopoDefault estruturado com cards por etapa. */}
+            {escopoTextoTpl ? (
+              <div style={{
+                ...D.secTexto,
+                whiteSpace: "pre-wrap",
+                fontSize: 13,
+                lineHeight: 1.65,
+                marginTop: 8,
+              }}>
+                {escopoTextoTpl}
+              </div>
+            ) : escopoDefault.map((bloco, idx) => {
               const titulo = bloco.tituloNum || bloco.titulo || `Etapa ${idx + 1}`;
               const objetivo = bloco.objetivo || "";
               const itens = bloco.itens || [];
@@ -7423,11 +7683,24 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               </>
             )}
 
-            {/* ACEITE — Patch: envolto pra não quebrar entre páginas no PDF */}
+            {/* OBSERVAÇÕES — texto livre opcional do Template de Edição.
+                Aparece antes do aceite, depois dos não-inclusos/prazos. */}
+            {observacoesTpl && (
+              <div style={{
+                fontSize: 13, color: "#374151", lineHeight: 1.65,
+                whiteSpace: "pre-wrap", marginTop: 24, marginBottom: 8,
+              }}>
+                {observacoesTpl}
+              </div>
+            )}
+
+            {/* ACEITE — Patch: envolto pra não quebrar entre páginas no PDF.
+                Texto vem do Template de Edição quando preenchido, senão usa
+                o texto padrão hardcoded. */}
             <div className="aceite-footer-bloco">
               <div style={D.secTit}>Aceite da proposta</div>
-              <div style={D.secTexto}>
-                Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.
+              <div style={{ ...D.secTexto, whiteSpace: "pre-wrap" }}>
+                {aceiteTpl || "Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail."}
               </div>
               <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:36 }}>
                 <div style={{ fontSize:11, color:"#9ca3af" }}>
@@ -7758,7 +8031,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         })()}
         {resumoFinal && (
           <div style={{ marginBottom:20, position:"relative" }}>
-            {editandoResumo ? (
+            {(editandoResumo && !txTpl.descricaoProjeto) ? (
               <textarea
                 autoFocus
                 value={resumoFinal}
@@ -7770,12 +8043,22 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               />
             ) : (
               <div
-                onClick={() => setEditandoResumo(true)}
-                title="Clique para editar"
-                style={{ fontSize:13, color:MD, lineHeight:1.7, cursor:"pointer" }}>
+                onClick={() => { if (!txTpl.descricaoProjeto) setEditandoResumo(true); }}
+                title={txTpl.descricaoProjeto ? "Editado pelo Template" : "Clique para editar"}
+                style={{ fontSize:13, color:MD, lineHeight:1.7, cursor: txTpl.descricaoProjeto ? "default" : "pointer" }}>
                 {resumoFinal}
               </div>
             )}
+          </div>
+        )}
+
+        {/* APRESENTAÇÃO — texto livre opcional do Template de Edição. */}
+        {apresentacaoTpl && (
+          <div style={{
+            fontSize: 13, color: MD, lineHeight: 1.7,
+            whiteSpace: "pre-wrap", marginBottom: 20,
+          }}>
+            {apresentacaoTpl}
           </div>
         )}
 
@@ -7872,6 +8155,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         </Sec>
 
         <Sec title="Escopo dos serviços" action={
+          escopoTextoTpl ? null : (
           <span
             onClick={() => {
               const newId = Date.now();
@@ -7884,8 +8168,16 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             style={{ fontSize:10, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
               border:`1px solid ${LN}`, background:"#f3f4f6", whiteSpace:"nowrap", userSelect:"none" }}
             className="no-print">+ bloco</span>
+          )
         }>
-          {escopoDefault.map((bloco, i) => {
+          {escopoTextoTpl ? (
+            <div style={{
+              fontSize: 13, color: MD, lineHeight: 1.65,
+              whiteSpace: "pre-wrap", marginTop: 4,
+            }}>
+              {escopoTextoTpl}
+            </div>
+          ) : escopoDefault.map((bloco, i) => {
             // Separa número (fixo) do texto (editável)
             const numMatch = bloco.tituloNum.match(/^(\d+\.\s*)(.*)$/);
             const numPrefix = numMatch ? numMatch[1] : "";
@@ -8018,33 +8310,47 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         </Sec>
 
         <Sec title="Serviços não inclusos">
+          {/* Prioridade: naoInclTpl (do Template Edição) > naoInclEdit
+              (legado inline) > naoInclDefault (dinâmico). Quando vem do
+              template, edição inline é desabilitada (cliques não fazem
+              nada porque a fonte canônica é o template). */}
           <div style={{ columns:"2", columnGap:32, marginBottom:8 }}>
-            {(naoInclEdit || naoInclDefault).map((item, i) => (
+            {(naoInclTpl || naoInclEdit || naoInclDefault).map((item, i) => (
               <div key={i} style={{ ...bl, breakInside:"avoid", marginBottom:4, alignItems:"flex-start" }}>
                 <span style={dot}>•</span>
-                <TextoEditavel valor={item.label} onChange={v => {
-                  const arr = [...(naoInclEdit || naoInclDefault)];
-                  arr[i] = { ...arr[i], label: v };
-                  setNaoInclEdit(arr);
-                }} style={{ fontSize:13, color:MD, flex:1 }} />
+                {naoInclTpl ? (
+                  <span style={{ fontSize:13, color:MD, flex:1 }}>{item.label}</span>
+                ) : (
+                  <TextoEditavel valor={item.label} onChange={v => {
+                    const arr = [...(naoInclEdit || naoInclDefault)];
+                    arr[i] = { ...arr[i], label: v };
+                    setNaoInclEdit(arr);
+                  }} style={{ fontSize:13, color:MD, flex:1 }} />
+                )}
                 {item.sub && <span style={{ fontSize:11, color:LT, marginLeft:4 }}>{item.sub}</span>}
-                <span onClick={() => setNaoInclEdit((naoInclEdit || naoInclDefault).filter((_,k)=>k!==i))}
-                  className="no-print"
-                  style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
+                {!naoInclTpl && (
+                  <span onClick={() => setNaoInclEdit((naoInclEdit || naoInclDefault).filter((_,k)=>k!==i))}
+                    className="no-print"
+                    style={{ fontSize:10, color:"#d1d5db", cursor:"pointer", marginLeft:4, flexShrink:0, paddingTop:2 }}>✕</span>
+                )}
               </div>
             ))}
           </div>
-          <div style={{ marginBottom:8 }}>
-            <span onClick={() => setNaoInclEdit([...(naoInclEdit||naoInclDefault), { label:"Novo item", sub:null }])}
-              className="no-print"
-              style={{ fontSize:11, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
-                background:"#f3f4f6", border:"1px solid #c8cdd6" }}>+ item</span>
-          </div>
+          {!naoInclTpl && (
+            <div style={{ marginBottom:8 }}>
+              <span onClick={() => setNaoInclEdit([...(naoInclEdit||naoInclDefault), { label:"Novo item", sub:null }])}
+                className="no-print"
+                style={{ fontSize:11, color:LT, cursor:"pointer", padding:"2px 8px", borderRadius:4,
+                  background:"#f3f4f6", border:"1px solid #c8cdd6" }}>+ item</span>
+            </div>
+          )}
           <div style={{ fontSize:12, color:LT, fontStyle:"italic" }}>Todos os serviços não inclusos podem ser contratados como serviços adicionais.</div>
         </Sec>
 
         <Sec title="Prazo de execução">
-          {(prazoEdit || prazoDefault).filter(p => {
+          {/* Prioridade: prazoTpl (Template Edição) > prazoEdit (legado) >
+              prazoDefault. Edição inline desabilitada quando vem do template. */}
+          {(prazoTpl || prazoEdit || prazoDefault).filter(p => {
               if (p.toLowerCase().includes("engenharia")) {
                 if (!engAtiva) return false; // toggle desligado OU eng não isolada
               }
@@ -8052,19 +8358,44 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             }).map((p, i) => (
             <div key={i} style={{ ...bl, marginBottom:6 }}>
               <span style={dot}>•</span>
-              <TextoEditavel valor={p} onChange={v => {
-                const arr = [...(prazoEdit || prazoDefault)];
-                arr[i] = v;
-                setPrazoEdit(arr);
-              }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} multiline={true} />
+              {prazoTpl ? (
+                <span style={{ fontSize:13, color:MD, lineHeight:1.6 }}>{p}</span>
+              ) : (
+                <TextoEditavel valor={p} onChange={v => {
+                  const arr = [...(prazoEdit || prazoDefault)];
+                  arr[i] = v;
+                  setPrazoEdit(arr);
+                }} style={{ fontSize:13, color:MD, lineHeight:1.6 }} multiline={true} />
+              )}
             </div>
           ))}
         </Sec>
+
+        {/* OBSERVAÇÕES — texto livre opcional do Template de Edição. */}
+        {observacoesTpl && (
+          <Sec title="Observações finais">
+            <div style={{
+              fontSize: 13, color: MD, lineHeight: 1.65,
+              whiteSpace: "pre-wrap",
+            }}>
+              {observacoesTpl}
+            </div>
+          </Sec>
+        )}
 
         {/* Patch: bloco "Aceite + footer" envolto pra não quebrar entre páginas
             no PDF. Se não couber inteiro, vai todo pra próxima página. */}
         <div className="aceite-footer-bloco">
           <Sec title="Aceite da proposta">
+            {/* Texto do aceite — vem do Template de Edição quando preenchido. */}
+            {aceiteTpl && (
+              <div style={{
+                fontSize: 13, color: MD, lineHeight: 1.65,
+                whiteSpace: "pre-wrap", marginBottom: 18,
+              }}>
+                {aceiteTpl}
+              </div>
+            )}
             <div data-mobile-stack="1" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:32, marginTop:8 }}>
               <div>
                 <div style={{ fontSize:10, fontWeight:600, color:LT, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:8 }}>Cliente</div>
@@ -8174,185 +8505,17 @@ function getModeloEntry(id) {
 // ═══════════════════════════════════════════════════════════════
 
 // ─────────────────────────────────────────────────────────────
-// Defaults — escopo, não inclusos, prazo, aceite
-// Replicam os defaults usados pelo ModeloPadrao/PDF, formatados como texto
-// livre pra o usuário ler/editar como num documento Word.
+// Defaults e helpers vêm de shared-textos.jsx — fonte única pra todos os
+// textos padrão da proposta (também usados por modelo-padrao.jsx).
+//   - TXT_DEFAULT_ESCOPO_ETAPAS / TXT_DEFAULT_NAO_INCLUSOS / TXT_DEFAULT_PRAZO
+//     / TXT_DEFAULT_ACEITE
+//   - txtFormatarEscopoComoTexto / txtFormatarListaComoTexto
+//   - txtComputarDescricaoProjeto
+// Apresentação e Observações continuam vazias por padrão (texto livre).
 // ─────────────────────────────────────────────────────────────
-
-const TPL_DEFAULT_ESCOPO_ETAPAS = [
-  {
-    titulo: "1. Estudo Preliminar",
-    objetivo: "Desenvolver o conceito arquitetônico inicial, organizando os ambientes, a implantação e a linguagem estética do projeto.",
-    itens: [
-      "Reunião de briefing e entendimento das necessidades do cliente",
-      "Definição do programa de necessidades",
-      "Estudo de implantação da edificação no terreno",
-      "Desenvolvimento da concepção arquitetônica inicial",
-      "Definição preliminar de: layout, fluxos, volumetria, setorização e linguagem estética",
-      "Compatibilização entre funcionalidade, conforto, estética e viabilidade construtiva",
-      "Ajustes conforme alinhamento com o cliente",
-    ],
-    entregaveis: [
-      "Planta baixa preliminar",
-      "Estudo volumétrico / fachada conceitual",
-      "Implantação inicial",
-      "Imagens, croquis ou perspectivas conceituais",
-      "Apresentação para validação do conceito arquitetônico",
-    ],
-    obs: "É nesta etapa que o projeto ganha forma. O estudo preliminar define a essência da proposta e orienta todas as fases seguintes.",
-  },
-  {
-    titulo: "2. Aprovação na Prefeitura",
-    objetivo: "Adequar e preparar o projeto arquitetônico para protocolo e aprovação junto aos órgãos públicos competentes.",
-    itens: [
-      "Adequação do projeto às exigências legais e urbanísticas do município",
-      "Elaboração dos desenhos técnicos exigidos para aprovação",
-      "Montagem da documentação técnica necessária ao processo",
-      "Inserção de informações obrigatórias conforme normas municipais",
-      "Preparação de pranchas, quadros de áreas e demais peças gráficas",
-      "Apoio técnico durante o processo de aprovação",
-      "Atendimento a eventuais comunique-se ou exigências técnicas da prefeitura",
-    ],
-    entregaveis: [
-      "Projeto legal para aprovação",
-      "Plantas, cortes, fachadas e implantação conforme exigência municipal",
-      "Quadros de áreas",
-      "Arquivos e documentação técnica para protocolo",
-    ],
-    obs: "Não inclusos nesta etapa: taxas municipais, emolumentos, ART/RRT, levantamentos complementares, certidões e exigências extraordinárias de órgãos externos, salvo se expressamente previsto.",
-  },
-  {
-    titulo: "3. Projeto Executivo",
-    objetivo: "Desenvolver o projeto arquitetônico em nível detalhado para execução da obra, fornecendo todas as informações necessárias para construção com precisão.",
-    itens: [
-      "Desenvolvimento técnico completo do projeto aprovado",
-      "Detalhamento arquitetônico para obra",
-      "Definição precisa de: dimensões, níveis, cotas, eixos, paginações, esquadrias, acabamentos e elementos construtivos",
-      "Elaboração de desenhos técnicos executivos",
-      "Compatibilização arquitetônica com premissas de obra",
-      "Apoio técnico para leitura e entendimento do projeto pela equipe executora",
-    ],
-    entregaveis: [
-      "Planta baixa executiva",
-      "Planta de locação e implantação",
-      "Planta de cobertura",
-      "Cortes e fachadas executivos",
-      "Planta de layout e pontos arquitetônicos",
-      "Planta de esquadrias e pisos",
-      "Detalhamentos construtivos",
-      "Quadro de esquadrias e quadro de áreas final",
-    ],
-    obs: "É a etapa que transforma a ideia em construção real. Um bom projeto executivo reduz improvisos, retrabalhos e falhas de execução na obra.",
-  },
-];
-
-const TPL_DEFAULT_NAO_INCLUSOS = [
-  "Taxas municipais, emolumentos e registros (CAU/Prefeitura)",
-  "Impostos",
-  "Projetos de climatização",
-  "Projeto de prevenção de incêndio",
-  "Projeto de automação",
-  "Projeto de paisagismo",
-  "Projeto de interiores",
-  "Projeto de Marcenaria (Móveis internos)",
-  "Projeto estrutural de estruturas metálicas",
-  "Projeto estrutural para muros de contenção (arrimo) acima de 1 m de altura",
-  "Sondagem e Planialtimétrico do terreno",
-  "Acompanhamento semanal de obra",
-  "Gestão e execução de obra",
-  "Vistoria para Caixa Econômica Federal",
-  "RRT de Execução de obra",
-];
-
-const TPL_DEFAULT_PRAZO = [
-  "Prazo estimado para entrega do Projeto Arquitetônico: 30 dias úteis após contratação.",
-  "Prazo estimado para entrega dos Projetos de Engenharia: 30 dias úteis após aprovação na prefeitura.",
-];
-
-const TPL_DEFAULT_ACEITE =
-  "Aceitando esta proposta, o cliente concorda com os termos, valores, escopo e prazos descritos. A formalização se dá pela assinatura abaixo, ou pelo aceite digital encaminhado por e-mail.";
 
 const TPL_DEFAULT_APRESENTACAO = "";   // livre por padrão
 const TPL_DEFAULT_OBSERVACOES = "";    // livre por padrão
-
-// ─────────────────────────────────────────────────────────────
-// Formatadores — convertem dados estruturados em texto editável
-// ─────────────────────────────────────────────────────────────
-
-function formatarEscopoComoTexto(etapas) {
-  return etapas.map(et => {
-    const linhas = [];
-    linhas.push(et.titulo);
-    linhas.push("");
-    linhas.push("Objetivo: " + et.objetivo);
-    linhas.push("");
-    linhas.push("Inclui:");
-    et.itens.forEach(i => linhas.push("• " + i));
-    linhas.push("");
-    linhas.push("Entregáveis:");
-    et.entregaveis.forEach(e => linhas.push("• " + e));
-    if (et.obs) {
-      linhas.push("");
-      linhas.push(et.obs);
-    }
-    return linhas.join("\n");
-  }).join("\n\n────────\n\n");
-}
-
-function formatarListaComoTexto(lista) {
-  return lista.map(item => "• " + item).join("\n");
-}
-
-// Gera descrição dinâmica do projeto (ex: "Construção nova de uma residência
-// térrea, com 224m² de área construída, composta por 9 ambientes: ...").
-// Lógica REPLICADA do modelo-padrao.jsx (resumoDinamico). TODO Fase 5: extrair
-// pra um shared-textos.jsx único e remover a duplicação. Depende de
-// formatComodo (declarado em orcamento-teste.jsx, disponível via escopo
-// global após combine).
-function computarDescricaoProjeto(data) {
-  if (!data) return "";
-  const fmtN2 = v => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const fmtArea = v => v > 0 ? fmtN2(v) + "m²" : null;
-  const tipoObraLower = (data.tipoObra || "").toLowerCase();
-  const prefixo = tipoObraLower.includes("reforma") ? "Reforma de " : "Construção nova de ";
-  const calc = data.calculo || {};
-
-  // Caso comercial (conjunto comercial com grupoQtds)
-  if (data.grupoQtds && calc.blocosCom) {
-    const partes = [];
-    const nL = data.grupoQtds["Por Loja"] || 0;
-    const nA = data.grupoQtds["Espaço Âncora"] || 0;
-    const nAp = data.grupoQtds["Por Apartamento"] || 0;
-    const nG = data.grupoQtds["Galpao"] || 0;
-    if (nL > 0) { const b = calc.blocosCom.find(x => x.label === "Loja"); if (b) partes.push(`${nL} loja${nL !== 1 ? "s" : ""} (${fmtArea(b.area1 * nL)})`); }
-    if (nA > 0) { const b = calc.blocosCom.find(x => x.label === "Âncora"); if (b) partes.push(`${nA} ${nA === 1 ? "Espaço Âncora" : "Espaços Âncoras"} (${fmtArea(b.area1 * nA)})`); }
-    if (nAp > 0) { const b = calc.blocosCom.find(x => x.label === "Apartamento"); if (b) partes.push(`${nAp} apartamento${nAp !== 1 ? "s" : ""} (${fmtArea(b.area1 * nAp)})`); }
-    if (nG > 0) { const b = calc.blocosCom.find(x => x.label === "Galpão"); if (b) partes.push(`${nG} ${nG !== 1 ? "galpões" : "galpão"} (${fmtArea(b.area1 * nG)})`); }
-    const bc = calc.blocosCom.find(x => x.label === "Área Comum"); if (bc) partes.push(`Área Comum (${fmtArea(bc.area1)})`);
-    const lista = partes.length > 1 ? partes.slice(0, -1).join(", ") + " e " + partes[partes.length - 1] : partes[0] || "";
-    return `${prefixo}conjunto comercial, contendo ${lista}, totalizando ${fmtArea(calc.areaTot || calc.areaTotal)}.`;
-  }
-
-  // Caso residencial
-  const nUnid = calc.nRep || 1;
-  const areaUni = calc.areaTotal || calc.areaTot || 0;
-  const areaTotR = Math.round(areaUni * nUnid * 100) / 100;
-  const comodos = data.comodos || [];
-  const totalAmb = comodos.reduce((s, c) => s + (c.qtd || 0), 0);
-  // formatComodo vem do escopo global (declarado em orcamento-teste.jsx)
-  const fc = (typeof formatComodo === "function") ? formatComodo : (n, q) => `${q} ${n}`;
-  const itensFmt = comodos.filter(c => (c.qtd || 0) > 0).map(c => fc(c.nome, c.qtd));
-  const listaStr = itensFmt.length > 1
-    ? itensFmt.slice(0, -1).join(", ") + " e " + itensFmt[itensFmt.length - 1]
-    : itensFmt[0] || "";
-  const tipDesc = (data.tipologia || "").toLowerCase().includes("sobrado") ? "com dois pavimentos" : "térrea";
-  const numFem = ["", "uma", "duas", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez"];
-  if (nUnid > 1) {
-    const nExt = nUnid >= 1 && nUnid <= 10 ? numFem[nUnid] : String(nUnid);
-    return `${prefixo}${nExt} residências ${tipDesc} idênticas, com ${fmtN2(areaUni)}m² por unidade, totalizando ${fmtN2(areaTotR)}m² de área construída. Cada unidade composta por ${totalAmb} ambientes: ${listaStr}.`;
-  }
-  return `${prefixo}uma residência ${tipDesc}, com ${fmtN2(areaUni)}m² de área construída, composta por ${totalAmb} ambientes: ${listaStr}.`;
-}
 
 // ─────────────────────────────────────────────────────────────
 // Componente principal
@@ -8368,22 +8531,22 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   // Descrição do projeto — gerada dinamicamente da data (cômodos, áreas, etc.)
   // ou usa o valor salvo se já editado antes.
   const [descricaoProjeto, setDescricaoProjeto] = useState(
-    tx.descricaoProjeto !== undefined ? tx.descricaoProjeto : computarDescricaoProjeto(safeData)
+    tx.descricaoProjeto !== undefined ? tx.descricaoProjeto : txtComputarDescricaoProjeto(safeData)
   );
   const [apresentacao, setApresentacao] = useState(
     tx.apresentacao !== undefined ? tx.apresentacao : TPL_DEFAULT_APRESENTACAO
   );
   const [escopo, setEscopo] = useState(
-    tx.escopo !== undefined ? tx.escopo : formatarEscopoComoTexto(TPL_DEFAULT_ESCOPO_ETAPAS)
+    tx.escopo !== undefined ? tx.escopo : txtFormatarEscopoComoTexto(TXT_DEFAULT_ESCOPO_ETAPAS)
   );
   const [naoInclusos, setNaoInclusos] = useState(
-    tx.naoInclusos !== undefined ? tx.naoInclusos : formatarListaComoTexto(TPL_DEFAULT_NAO_INCLUSOS)
+    tx.naoInclusos !== undefined ? tx.naoInclusos : txtFormatarListaComoTexto(TXT_DEFAULT_NAO_INCLUSOS)
   );
   const [prazo, setPrazo] = useState(
-    tx.prazo !== undefined ? tx.prazo : formatarListaComoTexto(TPL_DEFAULT_PRAZO)
+    tx.prazo !== undefined ? tx.prazo : txtFormatarListaComoTexto(TXT_DEFAULT_PRAZO)
   );
   const [aceite, setAceite] = useState(
-    tx.aceite !== undefined ? tx.aceite : TPL_DEFAULT_ACEITE
+    tx.aceite !== undefined ? tx.aceite : TXT_DEFAULT_ACEITE
   );
   const [observacoes, setObservacoes] = useState(
     tx.observacoes !== undefined ? tx.observacoes : TPL_DEFAULT_OBSERVACOES
