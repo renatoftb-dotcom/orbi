@@ -247,6 +247,16 @@ const api = {
     concluir: (dados)  => post("/api/onboarding/concluir", dados),
   },
 
+  // ── DEV MODE (rotas de reset gated por escritorio.dev_mode no backend) ──
+  // Disponível só pra empresas em modo dev (Vicke Dev). UI esconde os
+  // botões pra outras empresas; backend re-checa.
+  dev: {
+    resetOrcamentos:         () => post("/api/dev/reset/orcamentos", {}),
+    resetOnboardingEmpresa:  () => post("/api/dev/reset/onboarding-empresa", {}),
+    resetOnboardingOrcamento:() => post("/api/dev/reset/onboarding-orcamento", {}),
+    resetTudo:               () => post("/api/dev/reset/tudo", {}),
+  },
+
   // ── CUB top-level (atalho pra usar fora do contexto admin) ──
   // Permite api.cub.atual(...) sem ter que digitar api.admin.cub.atual.
   // Usado pelo onboarding e pelo orçamento (Sprint 3).

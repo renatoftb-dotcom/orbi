@@ -78,6 +78,104 @@ function getPermissoes() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// FEATURE FLAGS por empresa
+// ═══════════════════════════════════════════════════════════════
+// Empresas em modo dev (escritorio.dev_mode === true) ganham botões de
+// reset e veem features experimentais. Padovan e qualquer empresa real
+// continuam vendo só o app estável. Padrão SaaS comum (LaunchDarkly etc).
+//
+// dev_mode: ativa o "ambiente de desenvolvimento dentro do app" — botões
+//   de reset, features beta, banner indicando o modo. Ativado manualmente
+//   via SQL: UPDATE escritorio SET dados=jsonb_set(dados,'{dev_mode}','true')
+//   WHERE empresa_id='<id>';
+//
+// features.<nome>: flags por feature (ex: onboarding_orcamento_v2).
+//   Ativa só o pedaço, sem precisar do dev_mode global.
+function temDevMode(escritorio) {
+  return escritorio?.dev_mode === true;
+}
+
+function temFeature(escritorio, nome) {
+  return escritorio?.features?.[nome] === true || temDevMode(escritorio);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BANNER MODO DEV — botões de reset visíveis só em empresas dev
+// ═══════════════════════════════════════════════════════════════
+// Card discreto no topo do app pra empresas com escritorio.dev_mode=true.
+// Padovan e demais não veem nem o banner nem os botões. Backend re-checa.
+// Cada botão tem confirmação inline (window.confirm) pra evitar reset
+// acidental. Após reset, recarrega a página pra ler estado fresco.
+function BannerModoDev({ escritorio }) {
+  if (!temDevMode(escritorio)) return null;
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function rodarReset(label, fn, perguntaConfirm) {
+    if (!window.confirm(perguntaConfirm)) return;
+    setBusy(true); setMsg("Resetando " + label + "…");
+    try {
+      await fn();
+      setMsg("✓ " + label + " resetado. Recarregando…");
+      setTimeout(() => window.location.reload(), 600);
+    } catch (e) {
+      setBusy(false);
+      setMsg("✗ Erro: " + (e?.message || "falha no reset"));
+    }
+  }
+
+  const btn = {
+    fontSize: 11.5, padding: "5px 10px", borderRadius: 6,
+    border: "1px solid #d97706", background: "#fff", color: "#92400e",
+    cursor: busy ? "wait" : "pointer", fontFamily: "inherit",
+    opacity: busy ? 0.5 : 1, whiteSpace: "nowrap",
+  };
+  const sep = { width: 1, alignSelf: "stretch", background: "#f59e0b33" };
+
+  return (
+    <div style={{
+      background: "#fffbeb", borderBottom: "1px solid #fde68a",
+      padding: "8px 16px", display: "flex", alignItems: "center",
+      gap: 12, flexWrap: "wrap", fontSize: 12, color: "#78350f",
+    }}>
+      <span style={{ fontWeight: 600 }}>🧪 Modo Dev</span>
+      <span style={{ color: "#a16207" }}>·</span>
+      <span style={{ flex: "1 1 auto", minWidth: 100 }}>
+        Empresa em desenvolvimento. Resets só afetam esta empresa.
+      </span>
+      <button style={btn} disabled={busy}
+        onClick={() => rodarReset("orçamentos", api.dev.resetOrcamentos,
+          "Apagar TODOS os orçamentos e propostas desta empresa? Clientes/projetos serão mantidos.")}>
+        Resetar orçamentos
+      </button>
+      <span style={sep} />
+      <button style={btn} disabled={busy}
+        onClick={() => rodarReset("onboarding empresa", api.dev.resetOnboardingEmpresa,
+          "Apagar dados do escritório (nome, logo, responsáveis, PIX) e marcar onboarding inicial como pendente?")}>
+        Resetar onboarding empresa
+      </button>
+      <span style={sep} />
+      <button style={btn} disabled={busy}
+        onClick={() => rodarReset("onboarding orçamento", api.dev.resetOnboardingOrcamento,
+          "Apagar a flag de onboarding de orçamento concluído (pra refazer o tutorial)?")}>
+        Resetar onboarding orçamento
+      </button>
+      <span style={sep} />
+      <button
+        style={{ ...btn, borderColor: "#dc2626", color: "#991b1b" }}
+        disabled={busy}
+        onClick={() => rodarReset("tudo", api.dev.resetTudo,
+          "ATENÇÃO: apagar TUDO (clientes, fornecedores, materiais, obras, lançamentos, orçamentos, receitas) desta empresa? Empresa, usuários e escritório (com dev_mode) ficam intactos.")}>
+        Resetar tudo
+      </button>
+      {msg && (
+        <span style={{ marginLeft: 8, fontSize: 11.5, color: "#78350f" }}>{msg}</span>
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // PAGE CONTAINER (padrão de largura das páginas)
 // ═══════════════════════════════════════════════════════════════
 // Envelopa módulos que são listas/formulários, limitando largura pra

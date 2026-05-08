@@ -16,6 +16,50 @@ Orbi (também chamado **Vicke** internamente — marca antiga ainda hard-coded e
 - **Módulos grandes — edite cirurgicamente, não reescreva:** `src/modules/orcamento-teste.jsx` (~4400 linhas) e `src/modules/resultado-pdf.jsx` (~1000 linhas). Use substituições de string específicas; nunca reescreva esses arquivos por inteiro.
 - **Smoke test em HTML standalone antes do deploy.** Ao iterar em um único módulo, teste-o em uma página HTML standalone (carregando React + o módulo via CDN) antes de rodar `npm run cpush`. Isso pega bugs de escopo/ordem que o dev server esconde.
 
+## Modo Dev — empresa de teste isolada
+
+Pra iterar em features novas (ex: novo onboarding de orçamento) sem afetar clientes em produção (Padovan etc), o sistema tem um modo dev por empresa. Empresas com `escritorio.dados.dev_mode = true` ganham um banner amarelo no topo do app com 4 botões de reset.
+
+**Setup inicial (uma vez):**
+
+1. Criar empresa "Vicke Dev" via admin → "Nova empresa" (modal padrão). Cria usuário admin junto.
+2. Ativar `dev_mode` na empresa criada (PostgreSQL no Railway):
+   ```sql
+   UPDATE escritorio
+      SET dados = jsonb_set(COALESCE(dados, '{}'::jsonb), '{dev_mode}', 'true')
+    WHERE empresa_id = '<id-da-vicke-dev>';
+   ```
+   Substitua `<id-da-vicke-dev>` pelo `id` da empresa criada (visível na lista do admin).
+
+3. Logout do master e login com user da Vicke Dev. Banner "🧪 Modo Dev" aparece no topo.
+
+**Botões de reset disponíveis** (gated por `dev_mode` no backend):
+
+- **Resetar orçamentos** — apaga todos os orçamentos e propostas da empresa dev. Mantém clientes/projetos.
+- **Resetar onboarding empresa** — limpa `escritorio.dados` (mantém `dev_mode`) e marca `precisa_fazer_onboarding=true` nos usuários.
+- **Resetar onboarding orçamento** — remove a flag `onboarding_orcamento_concluido` do escritório.
+- **Resetar tudo** — apaga clientes, fornecedores, materiais, obras, lançamentos, orçamentos, receitas. Mantém empresa, usuários e escritório (com `dev_mode`).
+
+**Defesa em profundidade:** as rotas `POST /api/dev/reset/*` no backend re-checam o flag. Mesmo se um JWT de Padovan chamar essas rotas, retorna 403.
+
+**Feature flags por empresa:** use `temFeature(escritorio, "nome")` em `shared.jsx`. Lê `escritorio.features.<nome>` (ou retorna true se `dev_mode=true`). Adicione a flag via SQL idêntico ao de cima, trocando o path:
+```sql
+UPDATE escritorio SET dados = jsonb_set(dados, '{features,onboarding_orcamento_v2}', 'true') WHERE empresa_id = '...';
+```
+
+## Branch dev + preview deploys (Vercel)
+
+Pra desenvolvimento contínuo sem afetar produção (URL principal `orbi.log.br` / `vicke.com.br`):
+
+```
+git checkout -b dev      # cria branch dev local
+git push -u origin dev   # publica
+```
+
+Vercel detecta branches novas e cria URL de preview automática (algo como `orbi-git-dev-<user>.vercel.app`). Cada `git push` na `dev` redeploya só o preview. Quando estável, abre PR `dev → main` e merge.
+
+Backend (Railway) por padrão segue o mesmo branch `main`. Pra ter um backend preview separado por branch, configure environments no Railway (fora do escopo deste repo).
+
 ## Comandos
 
 Frontend (rode da raiz do repositório):

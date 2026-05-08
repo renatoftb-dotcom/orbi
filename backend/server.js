@@ -1315,6 +1315,111 @@ app.post("/api/backup/importar", async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// DEV MODE — rotas de reset gated por escritorio.dados.dev_mode
+// ══════════════════════════════════════════════════════════════
+// Defesa em profundidade: além do gating no frontend (que só mostra os
+// botões pra empresas com dev_mode=true), as rotas backend re-checam.
+// Empresa "Vicke Dev" precisa ter dev_mode=true ativado manualmente:
+//   UPDATE escritorio SET dados = jsonb_set(dados, '{dev_mode}', 'true')
+//   WHERE empresa_id = '<id-da-empresa>';
+//
+// Padovan, master e qualquer empresa real continuam protegidas: as queries
+// retornam 403 mesmo se chamadas com JWT válido.
+
+async function getDevModeFlag(empresaId) {
+  const { rows } = await query(
+    "SELECT (dados->>'dev_mode')::boolean AS dev FROM escritorio WHERE empresa_id = $1",
+    [empresaId]
+  );
+  return rows[0]?.dev === true;
+}
+
+async function devModeOnly(req, res, next) {
+  try {
+    const eid = empresaId(req, res); if (!eid) return;
+    const ok = await getDevModeFlag(eid);
+    if (!ok) return err(res, "Operação restrita a empresas em modo dev", 403);
+    next();
+  } catch (e) { err(res, e.message); }
+}
+
+// Reset de orçamentos (apaga orcamentos_projeto + receitas vinculadas).
+app.post("/api/dev/reset/orcamentos", devModeOnly, async (req, res) => {
+  try {
+    const eid = empresaId(req, res); if (!eid) return;
+    await query("DELETE FROM receitas_financeiro WHERE empresa_id=$1 AND orc_id IS NOT NULL", [eid]);
+    await query("DELETE FROM orcamentos_projeto WHERE empresa_id=$1", [eid]);
+    console.log(`[dev] Reset orçamentos · empresa=${eid} · user=${req.user.email}`);
+    ok(res, { resetado: "orcamentos" });
+  } catch (e) { err(res, e.message); }
+});
+
+// Reset do onboarding inicial da empresa (escritório, dados gerais).
+// Marca precisa_fazer_onboarding=true em todos os usuários da empresa
+// e zera escritorio.dados (mantém logo e dev_mode).
+app.post("/api/dev/reset/onboarding-empresa", devModeOnly, async (req, res) => {
+  try {
+    const eid = empresaId(req, res); if (!eid) return;
+    // Coluna pode não existir (depende de migration externa). Tenta sem quebrar.
+    try {
+      await query(
+        "UPDATE usuarios SET precisa_fazer_onboarding=TRUE WHERE empresa_id=$1",
+        [eid]
+      );
+    } catch (_) {
+      // Coluna não existe — ignora silenciosamente. Frontend pode usar
+      // localStorage como flag alternativa.
+    }
+    // Zera dados do escritório, preservando dev_mode pra continuar em modo dev.
+    await query(
+      `UPDATE escritorio
+         SET dados = jsonb_build_object('dev_mode', dados->'dev_mode'),
+             logo = NULL,
+             atualizado_em = NOW()
+       WHERE empresa_id = $1`,
+      [eid]
+    );
+    console.log(`[dev] Reset onboarding-empresa · empresa=${eid} · user=${req.user.email}`);
+    ok(res, { resetado: "onboarding-empresa" });
+  } catch (e) { err(res, e.message); }
+});
+
+// Reset do onboarding de orçamento — limpa flag em escritorio.dados.
+// A flag `onboarding_orcamento_concluido` será adicionada quando criarmos
+// o fluxo novo. Por enquanto, só zera ela.
+app.post("/api/dev/reset/onboarding-orcamento", devModeOnly, async (req, res) => {
+  try {
+    const eid = empresaId(req, res); if (!eid) return;
+    await query(
+      `UPDATE escritorio
+         SET dados = dados - 'onboarding_orcamento_concluido',
+             atualizado_em = NOW()
+       WHERE empresa_id = $1`,
+      [eid]
+    );
+    console.log(`[dev] Reset onboarding-orcamento · empresa=${eid} · user=${req.user.email}`);
+    ok(res, { resetado: "onboarding-orcamento" });
+  } catch (e) { err(res, e.message); }
+});
+
+// Reset total — apaga clientes, fornecedores, materiais, obras, lançamentos,
+// orçamentos, receitas. Mantém: empresa, usuários, escritório (com dev_mode).
+app.post("/api/dev/reset/tudo", devModeOnly, async (req, res) => {
+  try {
+    const eid = empresaId(req, res); if (!eid) return;
+    await query("DELETE FROM receitas_financeiro WHERE empresa_id=$1", [eid]);
+    await query("DELETE FROM orcamentos_projeto WHERE empresa_id=$1", [eid]);
+    await query("DELETE FROM lancamentos WHERE empresa_id=$1", [eid]);
+    await query("DELETE FROM obras WHERE empresa_id=$1", [eid]);
+    await query("DELETE FROM materiais WHERE empresa_id=$1", [eid]);
+    await query("DELETE FROM fornecedores WHERE empresa_id=$1", [eid]);
+    await query("DELETE FROM clientes WHERE empresa_id=$1", [eid]);
+    console.log(`[dev] Reset TUDO · empresa=${eid} · user=${req.user.email}`);
+    ok(res, { resetado: "tudo" });
+  } catch (e) { err(res, e.message); }
+});
+
+// ══════════════════════════════════════════════════════════════
 // HEALTH (sem auth — Railway healthcheck)
 // ══════════════════════════════════════════════════════════════
 app.get("/api/health", (req, res) => {

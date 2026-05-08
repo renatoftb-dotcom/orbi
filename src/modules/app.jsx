@@ -1907,6 +1907,7 @@ export default function ModuloClientesFornecedores() {
               }}
             />
           ) : (<>
+          <BannerModoDev escritorio={data?.escritorio} />
           {aba === "home" && isMaster && <DashboardMaster setAba={setAba} data={data} tentarTrocar={tentarTrocar} />}
           {aba === "home" && !isMaster && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
           {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
