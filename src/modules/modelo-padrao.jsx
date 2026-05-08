@@ -1453,9 +1453,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               )}
             </div>
 
-            {/* Título "Escopo" acima da descrição da obra — mesmo padrão dos
-                outros títulos do template Direto (D.secTit). */}
-            <div style={D.secTit}>Escopo</div>
+            {/* Título "Referência" acima da descrição da obra — mesmo padrão
+                dos outros títulos do template Direto (D.secTit). */}
+            <div style={D.secTit}>Referência</div>
 
             {/* Resumo do projeto (auto-gerado) — em modo lock, renderiza
                 como texto puro pra não cortar com overflow do input. */}
@@ -2033,7 +2033,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           <div style={{ fontSize:11, color:LT }}><TextoEditavel valor={cidadeEdit} onChange={setCidadeEdit} style={{}} />, {dataStr} · Válido até <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{}} /></div>
         </div>
 
-        <div style={{ borderTop:`1.5px solid ${C}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+        <div style={{ borderTop:`1.5px solid ${C}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
           <div>
             <div style={{ fontSize:24, fontWeight:600, color:C }}>{clienteNome || "Cliente"}</div>
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloFinal} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
@@ -2072,11 +2072,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         })()}
         {resumoFinal && (
           <>
-            {/* Título "Escopo" acima da descrição da obra. Usa o mesmo padrão
-                dos outros títulos de seção (linha ao lado, fontSize 10,
+            {/* Título "Referência" acima da descrição da obra. Usa o mesmo
+                padrão dos outros títulos de seção (linha ao lado, fontSize 10,
                 uppercase, negrito). */}
             <div style={secH(28)}>
-              <span style={secL}>Escopo</span>
+              <span style={secL}>Referência</span>
               <div style={secLn} />
             </div>
             <div style={{ marginBottom:20, position:"relative" }}>

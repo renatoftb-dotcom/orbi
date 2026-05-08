@@ -7506,9 +7506,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               )}
             </div>
 
-            {/* Título "Escopo" acima da descrição da obra — mesmo padrão dos
-                outros títulos do template Direto (D.secTit). */}
-            <div style={D.secTit}>Escopo</div>
+            {/* Título "Referência" acima da descrição da obra — mesmo padrão
+                dos outros títulos do template Direto (D.secTit). */}
+            <div style={D.secTit}>Referência</div>
 
             {/* Resumo do projeto (auto-gerado) — em modo lock, renderiza
                 como texto puro pra não cortar com overflow do input. */}
@@ -8086,7 +8086,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           <div style={{ fontSize:11, color:LT }}><TextoEditavel valor={cidadeEdit} onChange={setCidadeEdit} style={{}} />, {dataStr} · Válido até <TextoEditavel valor={validadeEdit} onChange={setValidadeEdit} style={{}} /></div>
         </div>
 
-        <div style={{ borderTop:`1.5px solid ${C}`, borderBottom:`0.5px solid ${LN}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+        <div style={{ borderTop:`1.5px solid ${C}`, padding:"12px 0", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
           <div>
             <div style={{ fontSize:24, fontWeight:600, color:C }}>{clienteNome || "Cliente"}</div>
             <div style={{ fontSize:10, color:LT, marginTop:3, letterSpacing:"0.04em" }}><TextoEditavel valor={subTituloFinal} onChange={setSubTituloEdit} style={{ fontSize:10 }} /></div>
@@ -8125,11 +8125,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         })()}
         {resumoFinal && (
           <>
-            {/* Título "Escopo" acima da descrição da obra. Usa o mesmo padrão
-                dos outros títulos de seção (linha ao lado, fontSize 10,
+            {/* Título "Referência" acima da descrição da obra. Usa o mesmo
+                padrão dos outros títulos de seção (linha ao lado, fontSize 10,
                 uppercase, negrito). */}
             <div style={secH(28)}>
-              <span style={secL}>Escopo</span>
+              <span style={secL}>Referência</span>
               <div style={secLn} />
             </div>
             <div style={{ marginBottom:20, position:"relative" }}>
@@ -13354,8 +13354,13 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
   const tituloBg = accent === '#fbbf24' ? '#fef3c7' : 'transparent';
 
   // ── Renderiza uma célula da tabela Arq×Pacote ─────────────────
+  // Forma "recomendada" pro caso sem antecipado: pega a primeira que estiver
+  // visível na tabela (parcelas tem precedência sobre final por causa da
+  // ORDER de formasParaTabela). Só uma célula recebe o destaque verde.
+  const formaRecPacoteSemAnt = recPacoteSemAnt ? formasParaTabela[0] : null;
   function renderCelula(tipoCard, formaId) {
-    const isRec = formaId === 'antecipado' && tipoCard === colunaRecomendada;
+    const isRec = (formaId === 'antecipado' && tipoCard === colunaRecomendada)
+               || (recPacoteSemAnt && tipoCard === 'pac' && formaId === formaRecPacoteSemAnt);
     // Patch (Toggle Arq/Eng): coluna 'arq' usa valorApenas (que adapta
     // pra valorEng quando só Eng está ativo).
     const valorBase = tipoCard === 'arq' ? valorApenas : valorPac;
@@ -13483,84 +13488,26 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
 
     return (
       <>
-        {/* DESKTOP — grid 3 colunas (igual antes) */}
+        {/* DESKTOP — grid 3 colunas (mesmo padrão pra todos os cenários):
+            headers de coluna no topo com linha cinza embaixo, células por
+            linha abaixo. A célula recomendada ganha borda verde + pill
+            (cell-level), via `isRec` no renderCelula. Aplica-se tanto pro
+            cenário com antecipado quanto pro cenário recPacoteSemAnt. */}
         <div className="vk-bfp-tabela vk-bfp-desktop-only" style={{ display: 'grid', gridTemplateColumns: colsTemplate, gap: 0, marginBottom: temPorEtapa ? 28 : 0 }}>
           <div></div>
-          {/* Headers — só aparecem no fluxo padrão (sem antecipado + Pacote
-              recomendado vira BIG ITEMs em ambas as colunas, com headers
-              internos). Quando recPacoteSemAnt=true, os headers ficam DENTRO
-              dos cards pra evitar duplicação visual + linha extra. */}
-          {showArq && !recPacoteSemAnt && (
+          {showArq && (
             <div className="vk-bfp-header" style={{
               fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
               letterSpacing: '0.05em', padding: '0 16px 12px',
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>{labelApenas}</div>
           )}
-          {showPacote && !recPacoteSemAnt && (
+          {showPacote && (
             <div className="vk-bfp-header" style={{
               fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
               letterSpacing: '0.05em', padding: '0 16px 12px',
               borderBottom: '0.5px solid #e5e7eb', fontWeight: 500,
             }}>Pacote completo</div>
-          )}
-
-          {/* BIG ITEM Apenas Arquitetura — borda cinza neutra, mesmo layout
-              compacto do Pacote Completo (header sem linha embaixo, valor
-              próximo do título). Só ativa quando recPacoteSemAnt. */}
-          {showArq && recPacoteSemAnt && (
-            <div style={{
-              gridColumn: 2,
-              gridRow: `1 / span ${formasParaTabela.length + 1}`,
-              border: '1px solid #e5e7eb', borderRadius: 8,
-              position: 'relative',
-              alignSelf: 'start',
-            }}>
-              <div style={{
-                fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-                letterSpacing: '0.05em', padding: '14px 16px 4px',
-                fontWeight: 500,
-              }}>{labelApenas}</div>
-              {formasParaTabela.map((formaId, idx) => {
-                const isLast = idx === formasParaTabela.length - 1;
-                return (
-                  <div key={formaId + '-arq-rec'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
-                    {renderCelula('arq', formaId)}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* BIG ITEM Pacote Completo — borda verde + pill RECOMENDADO. */}
-          {showPacote && recPacoteSemAnt && (
-            <div style={{
-              gridColumn: showArq ? 3 : 2,
-              gridRow: `1 / span ${formasParaTabela.length + 1}`,
-              border: `1.5px solid ${VERDE}`, borderRadius: 8,
-              position: 'relative',
-              alignSelf: 'start',
-            }}>
-              <div style={{
-                position: 'absolute', top: -8, left: 10,
-                fontSize: 9, color: '#fff', background: VERDE,
-                padding: '3px 8px', borderRadius: 999,
-                letterSpacing: '0.05em', fontWeight: 600,
-              }}>RECOMENDADO</div>
-              <div style={{
-                fontSize: 11, color: '#6b7280', textTransform: 'uppercase',
-                letterSpacing: '0.05em', padding: '14px 16px 4px',
-                fontWeight: 500,
-              }}>Pacote completo</div>
-              {formasParaTabela.map((formaId, idx) => {
-                const isLast = idx === formasParaTabela.length - 1;
-                return (
-                  <div key={formaId + '-pac-rec'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
-                    {renderCelula('pac', formaId)}
-                  </div>
-                );
-              })}
-            </div>
           )}
 
           {formasParaTabela.flatMap((formaId, idx) => {
@@ -13573,16 +13520,14 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
                 lineHeight: 1.3,
               }}>{getLabelLinha(formaId)}</div>
             ];
-            // Cells per-row só quando NÃO é o cenário recPacoteSemAnt (nesse
-            // caso ambas as colunas são BIG ITEMs e renderizam internamente).
-            if (showArq && !recPacoteSemAnt) {
+            if (showArq) {
               cells.push(
                 <div key={formaId + '-arq'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
                   {renderCelula('arq', formaId)}
                 </div>
               );
             }
-            if (showPacote && !recPacoteSemAnt) {
+            if (showPacote) {
               cells.push(
                 <div key={formaId + '-pac'} style={{ borderBottom: isLast ? 'none' : '0.5px solid #f3f4f6' }}>
                   {renderCelula('pac', formaId)}
