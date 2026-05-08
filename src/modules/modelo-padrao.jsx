@@ -673,8 +673,20 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const bl    = { display:"flex", gap:8, marginBottom:4 };
   const dot   = { color:LT, flexShrink:0 };
 
-  const Sec = ({title, mt, children, action}) => (
-    <div>
+  // Sec (Editorial): wrapper de seção com regras automáticas de spacing e
+  // page-break.
+  //   - mt: margem superior do título da seção (default 28)
+  //   - mb: margem inferior do bloco inteiro (default 24) — garante respiro
+  //         consistente entre seções, independente do que vem antes/depois
+  //   - breakInside avoid: pra PDF/impressão, impede que a seção quebre no
+  //     meio entre páginas. Lista grande pode quebrar (limite do navegador),
+  //     mas seções pequenas e cards ficam íntegros.
+  const Sec = ({title, mt, mb=24, children, action}) => (
+    <div className="proposta-section" style={{
+      marginBottom: mb,
+      breakInside: "avoid",
+      pageBreakInside: "avoid",
+    }}>
       <div style={secH(mt)}>
         <span style={secL}>{title}</span>
         <div style={secLn} />
@@ -1242,6 +1254,24 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         {/* Estilos: lock de edição (UI) + supressão de elementos UI no PDF
             + media queries mobile (responsividade) */}
         <style>{`
+          /* Page-break + spacing dinâmicos — mesmo CSS que o Editorial usa.
+             Cada bloco com classe "proposta-section" evita quebrar entre
+             páginas no PDF e respeita spacing consistente entre seções. */
+          .vk-prev-direto .proposta-section {
+            break-inside: avoid;
+            page-break-inside: avoid;
+          }
+          @media print {
+            .vk-prev-direto .proposta-section {
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+            .vk-prev-direto h1, .vk-prev-direto h2, .vk-prev-direto h3 {
+              break-after: avoid;
+              page-break-after: avoid;
+            }
+          }
+
           /* Default desktop: esconde versão mobile da tabela bfp */
           .vk-prev-direto .vk-bfp-mobile-only { display: none; }
           @media (max-width: 640px) {
@@ -1441,15 +1471,19 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {/* APRESENTAÇÃO — texto livre opcional do Template de Edição.
                 Aparece logo abaixo do resumo, antes dos honorários. */}
             {apresentacaoTpl && (
-              <>
+              <div className="proposta-section" style={{
+                marginBottom: 24,
+                breakInside: "avoid",
+                pageBreakInside: "avoid",
+              }}>
                 <div style={D.secTit}>Apresentação</div>
                 <div style={{
                   fontSize: 13, color: "#374151", lineHeight: 1.65,
-                  whiteSpace: "pre-wrap", marginBottom: 18,
+                  whiteSpace: "pre-wrap",
                 }}>
                   {apresentacaoTpl}
                 </div>
-              </>
+              </div>
             )}
 
             {/* HONORÁRIOS:
@@ -1530,7 +1564,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 const titulo = linhas[0] || "";
                 const corpo = linhas.slice(1).join("\n").trim();
                 return (
-                  <div key={idx} style={{ marginBottom: 24, breakInside: "avoid" }}>
+                  <div key={idx} className="proposta-section" style={{
+                    marginBottom: 24,
+                    breakInside: "avoid",
+                    pageBreakInside: "avoid",
+                  }}>
                     <div style={{
                       display: "inline-block",
                       padding: "5px 14px",
@@ -1658,9 +1696,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {/* OBSERVAÇÕES — texto livre opcional do Template de Edição.
                 Aparece antes do aceite, depois dos não-inclusos/prazos. */}
             {observacoesTpl && (
-              <div style={{
+              <div className="proposta-section" style={{
                 fontSize: 13, color: "#374151", lineHeight: 1.65,
-                whiteSpace: "pre-wrap", marginTop: 24, marginBottom: 8,
+                whiteSpace: "pre-wrap",
+                marginTop: 24, marginBottom: 24,
+                breakInside: "avoid", pageBreakInside: "avoid",
               }}>
                 {observacoesTpl}
               </div>
@@ -1761,6 +1801,30 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         /* Default (desktop): mostra desktop (grid preservado), esconde mobile.
            A media query mobile inverte: esconde desktop, mostra mobile (block). */
         .vk-bfp-mobile-only { display: none; }
+
+        /* ═══════════════════════════════════════════════════════
+           PAGE-BREAK + SPACING DINÂMICOS
+           ═══════════════════════════════════════════════════════
+           Aplicado a TODA seção da proposta. Garante:
+            - Cada bloco evita quebrar entre páginas no PDF
+            - Spacing consistente entre seções (24px) independente do que
+              o usuário editar (com ou sem Apresentação, Observações, etc.)
+            - Títulos não ficam órfãos na base da página */
+        .proposta-section {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+        @media print {
+          .proposta-section {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          h1, h2, h3, .secao-titulo {
+            break-after: avoid;
+            page-break-after: avoid;
+          }
+        }
+
         /* Patch CRÍTICO: regra de no-print precisa estar aqui (no <style> global
            do Editorial) porque o style do Direto só carrega quando template ===
            "02-direto". Antes, ao gerar PDF do Editorial via Puppeteer, a regra
@@ -2036,7 +2100,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
           </Sec>
         )}
 
-        <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 0 14px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, margin:"28px 0 14px" }}>
           <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#828a98", fontWeight:600, whiteSpace:"nowrap" }}>Valores dos projetos</span>
           <div style={{ flex:1, height:1, background:"#e5e7eb" }} />
           {valorEditado && (
@@ -2150,7 +2214,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               const titulo = linhas[0] || "";
               const corpo = linhas.slice(1).join("\n").trim();
               return (
-                <div key={idx} style={{ marginBottom: 22 }}>
+                <div key={idx} className="proposta-section" style={{
+                  marginBottom: 22,
+                  breakInside: "avoid",
+                  pageBreakInside: "avoid",
+                }}>
                   <div style={{
                     display: "inline-block",
                     padding: "5px 14px",
