@@ -215,6 +215,28 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     tv.parcPacote != null ? Number(tv.parcPacote) : (Number(safeData.parcPacote) || 4)
   );
 
+  // Por etapa (Fase 6d) — modalidades de etapa a etapa e etapas completas.
+  // Aparecem apenas quando tipoPgto === "etapas" no Etapa 5.
+  //   descEtCtrt/parcEtCtrt = "Contratação etapa a etapa" (cliente contrata 1 de cada vez)
+  //   descPacCtrt/parcPacCtrt = "Etapas completas" (cliente contrata todas juntas)
+  const [descEtCtrt, setDescEtCtrt] = useState(
+    tv.descEtCtrt != null ? Number(tv.descEtCtrt) : (Number(safeData.descEtCtrt) || 5)
+  );
+  const [parcEtCtrt, setParcEtCtrt] = useState(
+    tv.parcEtCtrt != null ? Number(tv.parcEtCtrt) : (Number(safeData.parcEtCtrt) || 2)
+  );
+  const [descPacCtrt, setDescPacCtrt] = useState(
+    tv.descPacCtrt != null ? Number(tv.descPacCtrt) : (Number(safeData.descPacCtrt) || 15)
+  );
+  const [parcPacCtrt, setParcPacCtrt] = useState(
+    tv.parcPacCtrt != null ? Number(tv.parcPacCtrt) : (Number(safeData.parcPacCtrt) || 8)
+  );
+
+  // Modo de pagamento atual (vem da Etapa 5). "padrao" = Antecipado/Parcelas;
+  // "etapas" = Por etapa (modalidades). Controla qual UI renderizar.
+  const tipoPgtoAtual = safeData.tipoPgto || "padrao";
+  const ehPorEtapa = tipoPgtoAtual === "etapas";
+
   function handleProsseguir() {
     onProsseguir({
       textos: {
@@ -233,6 +255,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         descPacote: Number(descPacote) || 0,
         parcArq:    Math.max(1, Math.round(Number(parcArq) || 1)),
         parcPacote: Math.max(1, Math.round(Number(parcPacote) || 1)),
+        descEtCtrt:  Number(descEtCtrt)  || 0,
+        parcEtCtrt:  Math.max(1, Math.round(Number(parcEtCtrt)  || 1)),
+        descPacCtrt: Number(descPacCtrt) || 0,
+        parcPacCtrt: Math.max(1, Math.round(Number(parcPacCtrt) || 1)),
       },
     });
   }
@@ -664,74 +690,143 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         </div>
       </div>
 
-      {/* Card 5 — Pagamento (Fase 6c) */}
+      {/* Card 5 — Pagamento (Fase 6c/6d) */}
       <div id="secao-pagamento" style={card}>
         <div style={cardTitle}>Forma de pagamento</div>
         <div style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.5, marginBottom: 16 }}>
-          Configure descontos do pagamento antecipado e quantidade de parcelas. Os valores das parcelas atualizam em tempo real conforme você edita.
+          {ehPorEtapa
+            ? "Configure descontos e parcelas das modalidades por etapa. Os valores atualizam em tempo real conforme você edita."
+            : "Configure descontos do pagamento antecipado e quantidade de parcelas. Os valores das parcelas atualizam em tempo real conforme você edita."}
         </div>
 
-        {/* Antecipado — desconto e economia */}
-        <div style={{
-          fontSize: 11, fontWeight: 700, color: "#9ca3af",
-          textTransform: "uppercase", letterSpacing: 1,
-          marginBottom: 10, marginTop: 4,
-        }}>Antecipado · desconto à vista</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
-          {(safeData.incluiArq !== false) && (
-            <div>
-              <label style={labelTextarea}>Apenas Arquitetura</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <NumStepper valor={descArq} onChange={setDescArq} min={0} max={100} step={1} width={48} suffix="%" />
-                <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                  → {fmtBRL((Number(valorArq) || 0) * (1 - (Number(descArq) || 0) / 100))}
+        {/* Modo "padrão": Antecipado + Parcelado por escopo (Arq / Pacote) */}
+        {!ehPorEtapa && (
+          <>
+            {/* Antecipado — desconto e economia */}
+            <div style={{
+              fontSize: 11, fontWeight: 700, color: "#9ca3af",
+              textTransform: "uppercase", letterSpacing: 1,
+              marginBottom: 10, marginTop: 4,
+            }}>Antecipado · desconto à vista</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
+              {(safeData.incluiArq !== false) && (
+                <div>
+                  <label style={labelTextarea}>Apenas Arquitetura</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <NumStepper valor={descArq} onChange={setDescArq} min={0} max={100} step={1} width={48} suffix="%" />
+                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                      → {fmtBRL((Number(valorArq) || 0) * (1 - (Number(descArq) || 0) / 100))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          )}
-          {(safeData.incluiArq !== false && safeData.incluiEng) && (
-            <div>
-              <label style={labelTextarea}>Pacote Completo</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <NumStepper valor={descPacote} onChange={setDescPacote} min={0} max={100} step={1} width={48} suffix="%" />
-                <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                  → {fmtBRL(((Number(valorArq) || 0) + (Number(valorEng) || 0)) * (1 - (Number(descPacote) || 0) / 100))}
+              )}
+              {(safeData.incluiArq !== false && safeData.incluiEng) && (
+                <div>
+                  <label style={labelTextarea}>Pacote Completo</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <NumStepper valor={descPacote} onChange={setDescPacote} min={0} max={100} step={1} width={48} suffix="%" />
+                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                      → {fmtBRL(((Number(valorArq) || 0) + (Number(valorEng) || 0)) * (1 - (Number(descPacote) || 0) / 100))}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Parcelado */}
-        <div style={{
-          fontSize: 11, fontWeight: 700, color: "#9ca3af",
-          textTransform: "uppercase", letterSpacing: 1,
-          marginBottom: 10, marginTop: 4,
-        }}>Parcelado · entrada + parcelas mensais</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-          {(safeData.incluiArq !== false) && (
-            <div>
-              <label style={labelTextarea}>Apenas Arquitetura</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <NumStepper valor={parcArq} onChange={(n) => setParcArq(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
-                <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                  → {parcArq}× {fmtBRL((Number(valorArq) || 0) / Math.max(1, parcArq))}
+            {/* Parcelado */}
+            <div style={{
+              fontSize: 11, fontWeight: 700, color: "#9ca3af",
+              textTransform: "uppercase", letterSpacing: 1,
+              marginBottom: 10, marginTop: 4,
+            }}>Parcelado · entrada + parcelas mensais</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              {(safeData.incluiArq !== false) && (
+                <div>
+                  <label style={labelTextarea}>Apenas Arquitetura</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <NumStepper valor={parcArq} onChange={(n) => setParcArq(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
+                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                      → {parcArq}× {fmtBRL((Number(valorArq) || 0) / Math.max(1, parcArq))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {(safeData.incluiArq !== false && safeData.incluiEng) && (
+                <div>
+                  <label style={labelTextarea}>Pacote Completo</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <NumStepper valor={parcPacote} onChange={(n) => setParcPacote(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
+                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                      → {parcPacote}× {fmtBRL(((Number(valorArq) || 0) + (Number(valorEng) || 0)) / Math.max(1, parcPacote))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Modo "por etapa": Etapa-a-etapa + Etapas completas */}
+        {ehPorEtapa && (() => {
+          const totGeral = (Number(valorArq) || 0) + (Number(valorEng) || 0);
+          return (
+            <>
+              {/* Contratação etapa a etapa — descontos e parcelas */}
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: "#9ca3af",
+                textTransform: "uppercase", letterSpacing: 1,
+                marginBottom: 10, marginTop: 4,
+              }}>Contratação etapa a etapa</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
+                <div>
+                  <label style={labelTextarea}>Desconto antecipado</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <NumStepper valor={descEtCtrt} onChange={setDescEtCtrt} min={0} max={100} step={1} width={48} suffix="%" />
+                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                      → economia de {fmtBRL(totGeral * (Number(descEtCtrt) || 0) / 100)}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label style={labelTextarea}>Parcelas por etapa</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <NumStepper valor={parcEtCtrt} onChange={(n) => setParcEtCtrt(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
+                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                      → {parcEtCtrt}× por etapa
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-          {(safeData.incluiArq !== false && safeData.incluiEng) && (
-            <div>
-              <label style={labelTextarea}>Pacote Completo</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <NumStepper valor={parcPacote} onChange={(n) => setParcPacote(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
-                <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                  → {parcPacote}× {fmtBRL(((Number(valorArq) || 0) + (Number(valorEng) || 0)) / Math.max(1, parcPacote))}
+
+              {/* Etapas completas — pacote fechado de todas as etapas */}
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: "#9ca3af",
+                textTransform: "uppercase", letterSpacing: 1,
+                marginBottom: 10, marginTop: 4,
+              }}>Etapas completas (pacote fechado)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div>
+                  <label style={labelTextarea}>Desconto antecipado</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <NumStepper valor={descPacCtrt} onChange={setDescPacCtrt} min={0} max={100} step={1} width={48} suffix="%" />
+                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                      → {fmtBRL(totGeral * (1 - (Number(descPacCtrt) || 0) / 100))}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label style={labelTextarea}>Parcelas totais</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <NumStepper valor={parcPacCtrt} onChange={(n) => setParcPacCtrt(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
+                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                      → {parcPacCtrt}× {fmtBRL(totGeral / Math.max(1, parcPacCtrt))}
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
-        </div>
+            </>
+          );
+        })()}
       </div>
 
         </div>{/* fim do conteúdo (lado direito do grid) */}

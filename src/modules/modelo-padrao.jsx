@@ -231,10 +231,23 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   // Flag pra UI saber se Pagamento vem do Template (esconde inputs inline).
   const pagtoVemTpl = (_tplPagto.descArq != null) || (_tplPagto.parcArq != null) ||
                       (_tplPagto.descPacote != null) || (_tplPagto.parcPacote != null);
-  const [descEtCtrtLocal,  setDescEtCtrtLocal]  = useState(snap?.descEtCtrt  ?? data.descEtCtrt  ?? 5);
-  const [parcEtCtrtLocal,  setParcEtCtrtLocal]  = useState(snap?.parcEtCtrt  ?? data.parcEtCtrt  ?? 2);
-  const [descPacCtrtLocal, setDescPacCtrtLocal] = useState(snap?.descPacCtrt ?? data.descPacCtrt ?? 15);
-  const [parcPacCtrtLocal, setParcPacCtrtLocal] = useState(snap?.parcPacCtrt ?? data.parcPacCtrt ?? 8);
+  // Por etapa (Fase 6d) — mesmo padrão de override do Antecipado/Parcelado.
+  // Quando data.template.valores tem o campo, ele vence; setters mantém compat.
+  const [_descEtCtrtState,  setDescEtCtrtStateLocal]  = useState(snap?.descEtCtrt  ?? data.descEtCtrt  ?? 5);
+  const [_parcEtCtrtState,  setParcEtCtrtStateLocal]  = useState(snap?.parcEtCtrt  ?? data.parcEtCtrt  ?? 2);
+  const [_descPacCtrtState, setDescPacCtrtStateLocal] = useState(snap?.descPacCtrt ?? data.descPacCtrt ?? 15);
+  const [_parcPacCtrtState, setParcPacCtrtStateLocal] = useState(snap?.parcPacCtrt ?? data.parcPacCtrt ?? 8);
+  const descEtCtrtLocal  = (_tplPagto.descEtCtrt  != null) ? Number(_tplPagto.descEtCtrt)  : _descEtCtrtState;
+  const parcEtCtrtLocal  = (_tplPagto.parcEtCtrt  != null) ? Number(_tplPagto.parcEtCtrt)  : _parcEtCtrtState;
+  const descPacCtrtLocal = (_tplPagto.descPacCtrt != null) ? Number(_tplPagto.descPacCtrt) : _descPacCtrtState;
+  const parcPacCtrtLocal = (_tplPagto.parcPacCtrt != null) ? Number(_tplPagto.parcPacCtrt) : _parcPacCtrtState;
+  const setDescEtCtrtLocal  = setDescEtCtrtStateLocal;
+  const setParcEtCtrtLocal  = setParcEtCtrtStateLocal;
+  const setDescPacCtrtLocal = setDescPacCtrtStateLocal;
+  const setParcPacCtrtLocal = setParcPacCtrtStateLocal;
+  // Estende a flag pagtoVemTpl pra cobrir os campos por-etapa também.
+  const pagtoEtapaVemTpl = (_tplPagto.descEtCtrt  != null) || (_tplPagto.parcEtCtrt  != null) ||
+                           (_tplPagto.descPacCtrt != null) || (_tplPagto.parcPacCtrt != null);
 
   const fmtV = v => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const fmtN = v => v.toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
