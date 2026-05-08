@@ -78,6 +78,81 @@ function tplHandleEnterBullet(e, valor, setValor) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// InputMoeda — input de valor BRL com formatação automática e recálculo
+// inline. O parent recebe o número parseado a cada keystroke (pra propagar
+// recálculo de totais/parcelas em tempo real). On blur reformata pra
+// padrão BR (1.234,56) pra ficar bonito quando o usuário sai do campo.
+// ─────────────────────────────────────────────────────────────
+function TplInputMoeda({ valor, onChange, style, ...rest }) {
+  const formatar = v => {
+    const n = Number(v) || 0;
+    return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  const [raw, setRaw] = useState(formatar(valor));
+  const ultimoValorPropRef = useRef(valor);
+
+  // Sincroniza display quando o valor externo muda (ex: orcamento recalculou
+  // e enviou novo default), mas NÃO durante a digitação do próprio input.
+  useEffect(() => {
+    if (ultimoValorPropRef.current !== valor) {
+      ultimoValorPropRef.current = valor;
+      setRaw(formatar(valor));
+    }
+  }, [valor]);
+
+  function handleChange(e) {
+    const txt = e.target.value;
+    setRaw(txt);
+    // Aceita "1.234,56" ou "1234.56" — limpa pontos de milhar e troca
+    // vírgula decimal por ponto antes do parseFloat.
+    const limpo = txt.replace(/\./g, "").replace(",", ".");
+    const n = parseFloat(limpo);
+    const novo = isNaN(n) ? 0 : n;
+    ultimoValorPropRef.current = novo;
+    onChange(novo);
+  }
+
+  function handleBlur() {
+    // Reformata pro display final BR
+    setRaw(formatar(valor));
+  }
+
+  return (
+    <div style={{ position: "relative", ...style }}>
+      <span style={{
+        position: "absolute", left: 12, top: "50%",
+        transform: "translateY(-50%)",
+        color: "#9ca3af", fontSize: 13,
+        pointerEvents: "none",
+        fontVariantNumeric: "tabular-nums",
+      }}>R$</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={raw}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        style={{
+          width: "100%",
+          border: "1px solid #d1d5db",
+          borderRadius: 10,
+          padding: "11px 12px 11px 36px",
+          fontSize: 14,
+          fontFamily: "inherit",
+          outline: "none",
+          fontVariantNumeric: "tabular-nums",
+          boxSizing: "border-box",
+          transition: "border-color 0.12s",
+        }}
+        onFocus={e => { e.currentTarget.style.borderColor = "#111"; }}
+        onBlurCapture={e => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+        {...rest}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────
 
@@ -112,15 +187,34 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     tx.observacoes !== undefined ? tx.observacoes : TPL_DEFAULT_OBSERVACOES
   );
 
+  // Valores (Fase 6b) — R$ Arquitetura e Engenharia. Defaults vêm do
+  // cálculo do orçamento; se o usuário já editou no template antes,
+  // preserva o valor salvo. Recálculo inline (parcelas/totais) virá nas
+  // sub-fases 6c+; aqui já capturamos os valores e exibimos o total.
+  const tv = safeData.template?.valores || {};
+  const calcRef = safeData.calculo || {};
+  const [valorArq, setValorArq] = useState(
+    tv.valorArq != null ? Number(tv.valorArq) : (Number(calcRef.precoArq) || 0)
+  );
+  const [valorEng, setValorEng] = useState(
+    tv.valorEng != null ? Number(tv.valorEng) : (Number(calcRef.precoEng) || 0)
+  );
+
   function handleProsseguir() {
     onProsseguir({
-      descricaoProjeto: descricaoProjeto.trim(),
-      apresentacao: apresentacao.trim(),
-      escopo: escopo.trim(),
-      naoInclusos: naoInclusos.trim(),
-      prazo: prazo.trim(),
-      aceite: aceite.trim(),
-      observacoes: observacoes.trim(),
+      textos: {
+        descricaoProjeto: descricaoProjeto.trim(),
+        apresentacao: apresentacao.trim(),
+        escopo: escopo.trim(),
+        naoInclusos: naoInclusos.trim(),
+        prazo: prazo.trim(),
+        aceite: aceite.trim(),
+        observacoes: observacoes.trim(),
+      },
+      valores: {
+        valorArq: Number(valorArq) || 0,
+        valorEng: Number(valorEng) || 0,
+      },
     });
   }
 
@@ -204,7 +298,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     { id: "secao-resumo",      label: "Resumo" },
     { id: "secao-apresentacao",label: "Apresentação" },
     { id: "secao-escopo",      label: "Escopo & termos" },
-    { id: "secao-valores",     label: "Valores",        placeholder: true },
+    { id: "secao-valores",     label: "Valores" },
     { id: "secao-pagamento",   label: "Pagamento",      placeholder: true },
   ];
 
@@ -510,6 +604,45 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
+      </div>
+
+      {/* Card 4 — Valores (Fase 6b) */}
+      <div id="secao-valores" style={card}>
+        <div style={cardTitle}>Valores</div>
+        <div style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.5, marginBottom: 14 }}>
+          Edite manualmente os valores de Arquitetura e Engenharia. O total e os recálculos de pagamento atualizam em tempo real.
+        </div>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: (safeData.incluiArq !== false && safeData.incluiEng) ? "1fr 1fr" : "1fr",
+          gap: 16,
+        }}>
+          {(safeData.incluiArq !== false) && (
+            <div>
+              <label style={labelTextarea}>Arquitetura</label>
+              <TplInputMoeda valor={valorArq} onChange={setValorArq} />
+            </div>
+          )}
+          {safeData.incluiEng && (
+            <div>
+              <label style={labelTextarea}>Engenharia</label>
+              <TplInputMoeda valor={valorEng} onChange={setValorEng} />
+            </div>
+          )}
+        </div>
+
+        {/* Total dinâmico — atualiza inline conforme o usuário edita */}
+        <div style={{
+          marginTop: 18, paddingTop: 14,
+          borderTop: "1px solid #f3f4f6",
+          display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        }}>
+          <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>Total</span>
+          <span style={{ fontSize: 18, color: "#111", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+            {fmtBRL((Number(valorArq) || 0) + (Number(valorEng) || 0))}
+          </span>
+        </div>
       </div>
 
         </div>{/* fim do conteúdo (lado direito do grid) */}

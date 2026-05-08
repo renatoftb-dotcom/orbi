@@ -5887,6 +5887,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // render). Apresentacao/escopo/observacoes começam vazios e são
   // preenchidos com defaults dentro do TemplateEdicao.
   const [templateTextos, setTemplateTextos] = useState(orcBase?.template?.textos || null);
+  // Valores do Template de Edição (Fase 6b) — R$ Arq e Eng com recálculo
+  // inline. Quando preenchidos, têm prioridade sobre arqEdit/engEdit do
+  // modelo (que ficam só como fallback pro fluxo antigo).
+  const [templateValores, setTemplateValores] = useState(orcBase?.template?.valores || null);
   // previewRemountKey: incrementa a cada vez que o usuário sai da Etapa 5 pra
   // o Preview. Isso força o React a remontar o PropostaPreview (e seus
   // useState internos), garantindo que valores stale não persistam quando o
@@ -7743,10 +7747,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // Pulada em modo read-only (templateEdicaoConfirmada já vem true) e quando
     // o usuário clicou "Pular esta etapa" no template anterior.
     if (!templateEdicaoConfirmada) {
-      // Mescla os textos atuais em liveData pro template re-popular ao reabrir
+      // Mescla textos + valores atuais em liveData pro template re-popular
+      // ao reabrir (preserva edições anteriores).
       const liveDataComTemplate = {
         ...liveData,
-        template: { textos: templateTextos || undefined },
+        template: {
+          textos: templateTextos || undefined,
+          valores: templateValores || undefined,
+        },
       };
       return (
         <TemplateEdicao
@@ -7756,13 +7764,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             // Volta pra Etapa 5 (Forma de Pagamento)
             setEtapaPagamentoConfirmada(false);
           }}
-          onProsseguir={(textos) => {
-            // Salva os textos editados e avança pro preview
-            setTemplateTextos(textos);
+          onProsseguir={(payload) => {
+            // payload = { textos, valores } — Fase 6b
+            setTemplateTextos(payload.textos);
+            setTemplateValores(payload.valores);
             setTemplateEdicaoConfirmada(true);
           }}
           onPular={() => {
-            // Avança sem salvar textos — o modelo usa defaults internos
+            // Avança sem salvar — modelo usa defaults internos
             setTemplateEdicaoConfirmada(true);
           }}
         />
@@ -7775,10 +7784,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // entra no JSONB do escritório automaticamente).
     const ModeloComponente = getModeloOrcamento(esc.modelo_default);
 
-    // Mescla os textos do template em liveData pra disponibilizar pro modelo
-    // (Fase 5+ vai usar esses textos no render).
-    const liveDataParaModelo = templateTextos
-      ? { ...liveData, template: { textos: templateTextos } }
+    // Mescla textos + valores do template em liveData. Quando preenchidos,
+    // o modelo usa eles com prioridade sobre os defaults internos.
+    const liveDataParaModelo = (templateTextos || templateValores)
+      ? { ...liveData, template: { textos: templateTextos, valores: templateValores } }
       : liveData;
 
     return <ModeloComponente

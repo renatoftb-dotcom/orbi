@@ -6316,14 +6316,32 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   // onde não faz sentido recalcular. Em edição normal, calculo atual ganha.
   // Trade-off: edição manual inline do valor não é preservada entre sessões
   // de edição — mas esse caso é raro e evitar o bug principal é prioridade.
-  const [arqEdit, setArqEdit]               = useState(() => {
+  // arqEdit/engEdit: valores monetários efetivos. PRIORIDADE:
+  //   1. data.template.valores.valorArq/valorEng (Fase 6b — Template de Edição)
+  //   2. local state (edição inline do modelo, fluxo legado)
+  //   3. snap?.arqEdit (proposta salva em modo lockEdicao)
+  //   4. calculo.precoArq do orçamento
+  // Quando o template tem valor preenchido, ele sempre vence — edição
+  // inline do modelo fica desabilitada visualmente nesse caso.
+  const [arqEditState, setArqEditState]     = useState(() => {
     if (lockEdicao && snap?.arqEdit != null) return snap.arqEdit;
     return incluiArq ? (calculo.precoArq || 0) : 0;
   });
-  const [engEdit, setEngEdit]               = useState(() => {
+  const [engEditState, setEngEditState]     = useState(() => {
     if (lockEdicao && snap?.engEdit != null) return snap.engEdit;
     return incluiEng ? (calculo.precoEng || 0) : 0;
   });
+  const _tvTpl = data?.template?.valores || {};
+  const arqEdit = (_tvTpl.valorArq != null) ? Number(_tvTpl.valorArq) : arqEditState;
+  const engEdit = (_tvTpl.valorEng != null) ? Number(_tvTpl.valorEng) : engEditState;
+  // Setters mantém compat: o legacy chama setArqEdit/setEngEdit; quando o
+  // template está ativo, esses sets entram no estado local mas NÃO refletem
+  // no display (template sempre vence). UI inline de edição é escondida nesse
+  // caso pra evitar confusão.
+  const setArqEdit = setArqEditState;
+  const setEngEdit = setEngEditState;
+  // Flag pra UI saber se deve esconder inputs editáveis (template ativo).
+  const valoresVemTpl = (_tvTpl.valorArq != null) || (_tvTpl.valorEng != null);
   const [resumoEdit, setResumoEdit]         = useState(snap?.resumoEdit ?? null);
   const [editandoArq, setEditandoArq]       = useState(false);
   const [editandoEng, setEditandoEng]       = useState(false);
@@ -8196,7 +8214,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         <div style={{ display:"flex", alignItems:"center", gap:10, margin:"28px 0 14px" }}>
           <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#828a98", fontWeight:700, whiteSpace:"nowrap" }}>Valores dos projetos</span>
           <div style={{ flex:1, height:1, background:"#e5e7eb" }} />
-          {valorEditado && (
+          {valorEditado && !valoresVemTpl && (
             <button className="no-print" onClick={() => { setArqEdit(arqOriginal); setEngEdit(engOriginal); }}
               style={{ fontSize:11, color:"#dc2626", background:"#fef2f2", border:"1px solid #fca5a5",
                 borderRadius:6, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", fontWeight:600 }}>
@@ -8210,7 +8228,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
-                {editandoArq ? (
+                {(editandoArq && !valoresVemTpl) ? (
                   <input autoFocus type="text"
                     key={arqCI}
                     defaultValue={(temIsoladas ? arqIsoladaSI : arqCI).toFixed(2).replace(".",",")}
@@ -8219,7 +8237,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
-                  <span onClick={() => setEditandoArq(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
+                  <span
+                    onClick={() => { if (!valoresVemTpl) setEditandoArq(true); }}
+                    title={valoresVemTpl ? "Editado pelo Template" : "Clique para editar"}
+                    style={{ cursor: valoresVemTpl ? "default" : "pointer" }}>
                     {fmtV(temIsoladas ? arqIsoladaSI : arqCI)}
                   </span>
                 )}
@@ -8232,7 +8253,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {engAtiva && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia{incluiArq && <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}> (Opcional)</span>}</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
-                {editandoEng ? (
+                {(editandoEng && !valoresVemTpl) ? (
                   <input autoFocus type="text"
                     key={engCI}
                     defaultValue={engCI.toFixed(2).replace(".",",")}
@@ -8241,7 +8262,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
-                  <span onClick={() => setEditandoEng(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
+                  <span
+                    onClick={() => { if (!valoresVemTpl) setEditandoEng(true); }}
+                    title={valoresVemTpl ? "Editado pelo Template" : "Clique para editar"}
+                    style={{ cursor: valoresVemTpl ? "default" : "pointer" }}>
                     {fmtV(engCI)}
                   </span>
                 )}
@@ -8723,6 +8747,81 @@ function tplHandleEnterBullet(e, valor, setValor) {
 }
 
 // ─────────────────────────────────────────────────────────────
+// InputMoeda — input de valor BRL com formatação automática e recálculo
+// inline. O parent recebe o número parseado a cada keystroke (pra propagar
+// recálculo de totais/parcelas em tempo real). On blur reformata pra
+// padrão BR (1.234,56) pra ficar bonito quando o usuário sai do campo.
+// ─────────────────────────────────────────────────────────────
+function TplInputMoeda({ valor, onChange, style, ...rest }) {
+  const formatar = v => {
+    const n = Number(v) || 0;
+    return n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  const [raw, setRaw] = useState(formatar(valor));
+  const ultimoValorPropRef = useRef(valor);
+
+  // Sincroniza display quando o valor externo muda (ex: orcamento recalculou
+  // e enviou novo default), mas NÃO durante a digitação do próprio input.
+  useEffect(() => {
+    if (ultimoValorPropRef.current !== valor) {
+      ultimoValorPropRef.current = valor;
+      setRaw(formatar(valor));
+    }
+  }, [valor]);
+
+  function handleChange(e) {
+    const txt = e.target.value;
+    setRaw(txt);
+    // Aceita "1.234,56" ou "1234.56" — limpa pontos de milhar e troca
+    // vírgula decimal por ponto antes do parseFloat.
+    const limpo = txt.replace(/\./g, "").replace(",", ".");
+    const n = parseFloat(limpo);
+    const novo = isNaN(n) ? 0 : n;
+    ultimoValorPropRef.current = novo;
+    onChange(novo);
+  }
+
+  function handleBlur() {
+    // Reformata pro display final BR
+    setRaw(formatar(valor));
+  }
+
+  return (
+    <div style={{ position: "relative", ...style }}>
+      <span style={{
+        position: "absolute", left: 12, top: "50%",
+        transform: "translateY(-50%)",
+        color: "#9ca3af", fontSize: 13,
+        pointerEvents: "none",
+        fontVariantNumeric: "tabular-nums",
+      }}>R$</span>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={raw}
+        onChange={handleChange}
+        onBlur={handleBlur}
+        style={{
+          width: "100%",
+          border: "1px solid #d1d5db",
+          borderRadius: 10,
+          padding: "11px 12px 11px 36px",
+          fontSize: 14,
+          fontFamily: "inherit",
+          outline: "none",
+          fontVariantNumeric: "tabular-nums",
+          boxSizing: "border-box",
+          transition: "border-color 0.12s",
+        }}
+        onFocus={e => { e.currentTarget.style.borderColor = "#111"; }}
+        onBlurCapture={e => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+        {...rest}
+      />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────
 
@@ -8757,15 +8856,34 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     tx.observacoes !== undefined ? tx.observacoes : TPL_DEFAULT_OBSERVACOES
   );
 
+  // Valores (Fase 6b) — R$ Arquitetura e Engenharia. Defaults vêm do
+  // cálculo do orçamento; se o usuário já editou no template antes,
+  // preserva o valor salvo. Recálculo inline (parcelas/totais) virá nas
+  // sub-fases 6c+; aqui já capturamos os valores e exibimos o total.
+  const tv = safeData.template?.valores || {};
+  const calcRef = safeData.calculo || {};
+  const [valorArq, setValorArq] = useState(
+    tv.valorArq != null ? Number(tv.valorArq) : (Number(calcRef.precoArq) || 0)
+  );
+  const [valorEng, setValorEng] = useState(
+    tv.valorEng != null ? Number(tv.valorEng) : (Number(calcRef.precoEng) || 0)
+  );
+
   function handleProsseguir() {
     onProsseguir({
-      descricaoProjeto: descricaoProjeto.trim(),
-      apresentacao: apresentacao.trim(),
-      escopo: escopo.trim(),
-      naoInclusos: naoInclusos.trim(),
-      prazo: prazo.trim(),
-      aceite: aceite.trim(),
-      observacoes: observacoes.trim(),
+      textos: {
+        descricaoProjeto: descricaoProjeto.trim(),
+        apresentacao: apresentacao.trim(),
+        escopo: escopo.trim(),
+        naoInclusos: naoInclusos.trim(),
+        prazo: prazo.trim(),
+        aceite: aceite.trim(),
+        observacoes: observacoes.trim(),
+      },
+      valores: {
+        valorArq: Number(valorArq) || 0,
+        valorEng: Number(valorEng) || 0,
+      },
     });
   }
 
@@ -8849,7 +8967,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     { id: "secao-resumo",      label: "Resumo" },
     { id: "secao-apresentacao",label: "Apresentação" },
     { id: "secao-escopo",      label: "Escopo & termos" },
-    { id: "secao-valores",     label: "Valores",        placeholder: true },
+    { id: "secao-valores",     label: "Valores" },
     { id: "secao-pagamento",   label: "Pagamento",      placeholder: true },
   ];
 
@@ -9155,6 +9273,45 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           style={{ ...textareaBase, minHeight: 100 }}
           rows={4}
         />
+      </div>
+
+      {/* Card 4 — Valores (Fase 6b) */}
+      <div id="secao-valores" style={card}>
+        <div style={cardTitle}>Valores</div>
+        <div style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.5, marginBottom: 14 }}>
+          Edite manualmente os valores de Arquitetura e Engenharia. O total e os recálculos de pagamento atualizam em tempo real.
+        </div>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: (safeData.incluiArq !== false && safeData.incluiEng) ? "1fr 1fr" : "1fr",
+          gap: 16,
+        }}>
+          {(safeData.incluiArq !== false) && (
+            <div>
+              <label style={labelTextarea}>Arquitetura</label>
+              <TplInputMoeda valor={valorArq} onChange={setValorArq} />
+            </div>
+          )}
+          {safeData.incluiEng && (
+            <div>
+              <label style={labelTextarea}>Engenharia</label>
+              <TplInputMoeda valor={valorEng} onChange={setValorEng} />
+            </div>
+          )}
+        </div>
+
+        {/* Total dinâmico — atualiza inline conforme o usuário edita */}
+        <div style={{
+          marginTop: 18, paddingTop: 14,
+          borderTop: "1px solid #f3f4f6",
+          display: "flex", justifyContent: "space-between", alignItems: "baseline",
+        }}>
+          <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>Total</span>
+          <span style={{ fontSize: 18, color: "#111", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+            {fmtBRL((Number(valorArq) || 0) + (Number(valorEng) || 0))}
+          </span>
+        </div>
       </div>
 
         </div>{/* fim do conteúdo (lado direito do grid) */}
@@ -15084,6 +15241,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // render). Apresentacao/escopo/observacoes começam vazios e são
   // preenchidos com defaults dentro do TemplateEdicao.
   const [templateTextos, setTemplateTextos] = useState(orcBase?.template?.textos || null);
+  // Valores do Template de Edição (Fase 6b) — R$ Arq e Eng com recálculo
+  // inline. Quando preenchidos, têm prioridade sobre arqEdit/engEdit do
+  // modelo (que ficam só como fallback pro fluxo antigo).
+  const [templateValores, setTemplateValores] = useState(orcBase?.template?.valores || null);
   // previewRemountKey: incrementa a cada vez que o usuário sai da Etapa 5 pra
   // o Preview. Isso força o React a remontar o PropostaPreview (e seus
   // useState internos), garantindo que valores stale não persistam quando o
@@ -16940,10 +17101,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // Pulada em modo read-only (templateEdicaoConfirmada já vem true) e quando
     // o usuário clicou "Pular esta etapa" no template anterior.
     if (!templateEdicaoConfirmada) {
-      // Mescla os textos atuais em liveData pro template re-popular ao reabrir
+      // Mescla textos + valores atuais em liveData pro template re-popular
+      // ao reabrir (preserva edições anteriores).
       const liveDataComTemplate = {
         ...liveData,
-        template: { textos: templateTextos || undefined },
+        template: {
+          textos: templateTextos || undefined,
+          valores: templateValores || undefined,
+        },
       };
       return (
         <TemplateEdicao
@@ -16953,13 +17118,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             // Volta pra Etapa 5 (Forma de Pagamento)
             setEtapaPagamentoConfirmada(false);
           }}
-          onProsseguir={(textos) => {
-            // Salva os textos editados e avança pro preview
-            setTemplateTextos(textos);
+          onProsseguir={(payload) => {
+            // payload = { textos, valores } — Fase 6b
+            setTemplateTextos(payload.textos);
+            setTemplateValores(payload.valores);
             setTemplateEdicaoConfirmada(true);
           }}
           onPular={() => {
-            // Avança sem salvar textos — o modelo usa defaults internos
+            // Avança sem salvar — modelo usa defaults internos
             setTemplateEdicaoConfirmada(true);
           }}
         />
@@ -16972,10 +17138,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // entra no JSONB do escritório automaticamente).
     const ModeloComponente = getModeloOrcamento(esc.modelo_default);
 
-    // Mescla os textos do template em liveData pra disponibilizar pro modelo
-    // (Fase 5+ vai usar esses textos no render).
-    const liveDataParaModelo = templateTextos
-      ? { ...liveData, template: { textos: templateTextos } }
+    // Mescla textos + valores do template em liveData. Quando preenchidos,
+    // o modelo usa eles com prioridade sobre os defaults internos.
+    const liveDataParaModelo = (templateTextos || templateValores)
+      ? { ...liveData, template: { textos: templateTextos, valores: templateValores } }
       : liveData;
 
     return <ModeloComponente

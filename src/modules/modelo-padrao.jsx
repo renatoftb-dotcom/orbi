@@ -241,14 +241,32 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   // onde não faz sentido recalcular. Em edição normal, calculo atual ganha.
   // Trade-off: edição manual inline do valor não é preservada entre sessões
   // de edição — mas esse caso é raro e evitar o bug principal é prioridade.
-  const [arqEdit, setArqEdit]               = useState(() => {
+  // arqEdit/engEdit: valores monetários efetivos. PRIORIDADE:
+  //   1. data.template.valores.valorArq/valorEng (Fase 6b — Template de Edição)
+  //   2. local state (edição inline do modelo, fluxo legado)
+  //   3. snap?.arqEdit (proposta salva em modo lockEdicao)
+  //   4. calculo.precoArq do orçamento
+  // Quando o template tem valor preenchido, ele sempre vence — edição
+  // inline do modelo fica desabilitada visualmente nesse caso.
+  const [arqEditState, setArqEditState]     = useState(() => {
     if (lockEdicao && snap?.arqEdit != null) return snap.arqEdit;
     return incluiArq ? (calculo.precoArq || 0) : 0;
   });
-  const [engEdit, setEngEdit]               = useState(() => {
+  const [engEditState, setEngEditState]     = useState(() => {
     if (lockEdicao && snap?.engEdit != null) return snap.engEdit;
     return incluiEng ? (calculo.precoEng || 0) : 0;
   });
+  const _tvTpl = data?.template?.valores || {};
+  const arqEdit = (_tvTpl.valorArq != null) ? Number(_tvTpl.valorArq) : arqEditState;
+  const engEdit = (_tvTpl.valorEng != null) ? Number(_tvTpl.valorEng) : engEditState;
+  // Setters mantém compat: o legacy chama setArqEdit/setEngEdit; quando o
+  // template está ativo, esses sets entram no estado local mas NÃO refletem
+  // no display (template sempre vence). UI inline de edição é escondida nesse
+  // caso pra evitar confusão.
+  const setArqEdit = setArqEditState;
+  const setEngEdit = setEngEditState;
+  // Flag pra UI saber se deve esconder inputs editáveis (template ativo).
+  const valoresVemTpl = (_tvTpl.valorArq != null) || (_tvTpl.valorEng != null);
   const [resumoEdit, setResumoEdit]         = useState(snap?.resumoEdit ?? null);
   const [editandoArq, setEditandoArq]       = useState(false);
   const [editandoEng, setEditandoEng]       = useState(false);
@@ -2121,7 +2139,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         <div style={{ display:"flex", alignItems:"center", gap:10, margin:"28px 0 14px" }}>
           <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:"#828a98", fontWeight:700, whiteSpace:"nowrap" }}>Valores dos projetos</span>
           <div style={{ flex:1, height:1, background:"#e5e7eb" }} />
-          {valorEditado && (
+          {valorEditado && !valoresVemTpl && (
             <button className="no-print" onClick={() => { setArqEdit(arqOriginal); setEngEdit(engOriginal); }}
               style={{ fontSize:11, color:"#dc2626", background:"#fef2f2", border:"1px solid #fca5a5",
                 borderRadius:6, padding:"3px 10px", cursor:"pointer", fontFamily:"inherit", whiteSpace:"nowrap", fontWeight:600 }}>
@@ -2135,7 +2153,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {incluiArq && <div style={{ paddingRight:20 }}>
               <div style={tag}>Arquitetura</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
-                {editandoArq ? (
+                {(editandoArq && !valoresVemTpl) ? (
                   <input autoFocus type="text"
                     key={arqCI}
                     defaultValue={(temIsoladas ? arqIsoladaSI : arqCI).toFixed(2).replace(".",",")}
@@ -2144,7 +2162,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
-                  <span onClick={() => setEditandoArq(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
+                  <span
+                    onClick={() => { if (!valoresVemTpl) setEditandoArq(true); }}
+                    title={valoresVemTpl ? "Editado pelo Template" : "Clique para editar"}
+                    style={{ cursor: valoresVemTpl ? "default" : "pointer" }}>
                     {fmtV(temIsoladas ? arqIsoladaSI : arqCI)}
                   </span>
                 )}
@@ -2157,7 +2178,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             {engAtiva && <div style={{ paddingLeft: incluiArq ? 20 : 0 }}>
               <div style={tag}>Engenharia{incluiArq && <span style={{ fontSize:10, color:LT, textTransform:"none", letterSpacing:0 }}> (Opcional)</span>}</div>
               <div style={{ fontSize:20, fontWeight:600, color:C }}>
-                {editandoEng ? (
+                {(editandoEng && !valoresVemTpl) ? (
                   <input autoFocus type="text"
                     key={engCI}
                     defaultValue={engCI.toFixed(2).replace(".",",")}
@@ -2166,7 +2187,10 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     style={{ fontSize:20, fontWeight:600, color:C, fontFamily:"inherit", background:"#fffde7",
                       border:"1px solid #b0b7c3", borderRadius:4, padding:"2px 6px", outline:"none", width:"100%" }} />
                 ) : (
-                  <span onClick={() => setEditandoEng(true)} title="Clique para editar" style={{ cursor:"pointer" }}>
+                  <span
+                    onClick={() => { if (!valoresVemTpl) setEditandoEng(true); }}
+                    title={valoresVemTpl ? "Editado pelo Template" : "Clique para editar"}
+                    style={{ cursor: valoresVemTpl ? "default" : "pointer" }}>
                     {fmtV(engCI)}
                   </span>
                 )}
