@@ -6285,11 +6285,27 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const [etapasIsoladasLocal, setEtapasIsoladasLocal] = useState(new Set(snap?.etapasIsoladas || data.etapasIsoladas || []));
   const etapasIsoladas = Array.from(etapasIsoladasLocal);
   const [mostrarTabelaEtapas, setMostrarTabelaEtapas] = useState(snap?.mostrarTabelaEtapas ?? data.mostrarTabelaEtapas ?? true);
-  // Descontos/parcelas — locais também
-  const [descArqLocal,     setDescArqLocal]     = useState(snap?.descArq     ?? data.descArq     ?? 5);
-  const [parcArqLocal,     setParcArqLocal]     = useState(snap?.parcArq     ?? data.parcArq     ?? 3);
-  const [descPacoteLocal,  setDescPacoteLocal]  = useState(snap?.descPacote  ?? data.descPacote  ?? 10);
-  const [parcPacoteLocal,  setParcPacoteLocal]  = useState(snap?.parcPacote  ?? data.parcPacote  ?? 4);
+  // Descontos/parcelas — locais também. Mesmo padrão de override do
+  // arqEdit (Fase 6b): state interno + camada efetiva que prefere
+  // data.template.valores quando preenchido. Setters mantém compat
+  // com o código legado (apenas atualizam state local; quando template
+  // está ativo, mudança no state local não reflete no display).
+  const [_descArqState,     setDescArqStateLocal]     = useState(snap?.descArq     ?? data.descArq     ?? 5);
+  const [_parcArqState,     setParcArqStateLocal]     = useState(snap?.parcArq     ?? data.parcArq     ?? 3);
+  const [_descPacoteState,  setDescPacoteStateLocal]  = useState(snap?.descPacote  ?? data.descPacote  ?? 10);
+  const [_parcPacoteState,  setParcPacoteStateLocal]  = useState(snap?.parcPacote  ?? data.parcPacote  ?? 4);
+  const _tplPagto = data?.template?.valores || {};
+  const descArqLocal    = (_tplPagto.descArq    != null) ? Number(_tplPagto.descArq)    : _descArqState;
+  const parcArqLocal    = (_tplPagto.parcArq    != null) ? Number(_tplPagto.parcArq)    : _parcArqState;
+  const descPacoteLocal = (_tplPagto.descPacote != null) ? Number(_tplPagto.descPacote) : _descPacoteState;
+  const parcPacoteLocal = (_tplPagto.parcPacote != null) ? Number(_tplPagto.parcPacote) : _parcPacoteState;
+  const setDescArqLocal     = setDescArqStateLocal;
+  const setParcArqLocal     = setParcArqStateLocal;
+  const setDescPacoteLocal  = setDescPacoteStateLocal;
+  const setParcPacoteLocal  = setParcPacoteStateLocal;
+  // Flag pra UI saber se Pagamento vem do Template (esconde inputs inline).
+  const pagtoVemTpl = (_tplPagto.descArq != null) || (_tplPagto.parcArq != null) ||
+                      (_tplPagto.descPacote != null) || (_tplPagto.parcPacote != null);
   const [descEtCtrtLocal,  setDescEtCtrtLocal]  = useState(snap?.descEtCtrt  ?? data.descEtCtrt  ?? 5);
   const [parcEtCtrtLocal,  setParcEtCtrtLocal]  = useState(snap?.parcEtCtrt  ?? data.parcEtCtrt  ?? 2);
   const [descPacCtrtLocal, setDescPacCtrtLocal] = useState(snap?.descPacCtrt ?? data.descPacCtrt ?? 15);
@@ -8858,8 +8874,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
 
   // Valores (Fase 6b) — R$ Arquitetura e Engenharia. Defaults vêm do
   // cálculo do orçamento; se o usuário já editou no template antes,
-  // preserva o valor salvo. Recálculo inline (parcelas/totais) virá nas
-  // sub-fases 6c+; aqui já capturamos os valores e exibimos o total.
+  // preserva o valor salvo. Recálculo inline cascata em 6c.
   const tv = safeData.template?.valores || {};
   const calcRef = safeData.calculo || {};
   const [valorArq, setValorArq] = useState(
@@ -8867,6 +8882,22 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   );
   const [valorEng, setValorEng] = useState(
     tv.valorEng != null ? Number(tv.valorEng) : (Number(calcRef.precoEng) || 0)
+  );
+
+  // Pagamento (Fase 6c) — descontos do antecipado e quantidade de parcelas
+  // pro modo "padrão" (Antecipado/Parcelas). Por etapa fica pra 6d.
+  // Defaults vêm de safeData (vem do form/Etapa 5) ou hardcoded.
+  const [descArq, setDescArq] = useState(
+    tv.descArq != null ? Number(tv.descArq) : (Number(safeData.descArq) || 5)
+  );
+  const [descPacote, setDescPacote] = useState(
+    tv.descPacote != null ? Number(tv.descPacote) : (Number(safeData.descPacote) || 10)
+  );
+  const [parcArq, setParcArq] = useState(
+    tv.parcArq != null ? Number(tv.parcArq) : (Number(safeData.parcArq) || 3)
+  );
+  const [parcPacote, setParcPacote] = useState(
+    tv.parcPacote != null ? Number(tv.parcPacote) : (Number(safeData.parcPacote) || 4)
   );
 
   function handleProsseguir() {
@@ -8881,8 +8912,12 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         observacoes: observacoes.trim(),
       },
       valores: {
-        valorArq: Number(valorArq) || 0,
-        valorEng: Number(valorEng) || 0,
+        valorArq:   Number(valorArq)   || 0,
+        valorEng:   Number(valorEng)   || 0,
+        descArq:    Number(descArq)    || 0,
+        descPacote: Number(descPacote) || 0,
+        parcArq:    Math.max(1, Math.round(Number(parcArq) || 1)),
+        parcPacote: Math.max(1, Math.round(Number(parcPacote) || 1)),
       },
     });
   }
@@ -8968,7 +9003,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     { id: "secao-apresentacao",label: "Apresentação" },
     { id: "secao-escopo",      label: "Escopo & termos" },
     { id: "secao-valores",     label: "Valores" },
-    { id: "secao-pagamento",   label: "Pagamento",      placeholder: true },
+    { id: "secao-pagamento",   label: "Pagamento" },
   ];
 
   // Seção ativa controla highlight da sidebar quando o usuário scrolla.
@@ -9311,6 +9346,76 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           <span style={{ fontSize: 18, color: "#111", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
             {fmtBRL((Number(valorArq) || 0) + (Number(valorEng) || 0))}
           </span>
+        </div>
+      </div>
+
+      {/* Card 5 — Pagamento (Fase 6c) */}
+      <div id="secao-pagamento" style={card}>
+        <div style={cardTitle}>Forma de pagamento</div>
+        <div style={{ fontSize: 12.5, color: "#9ca3af", lineHeight: 1.5, marginBottom: 16 }}>
+          Configure descontos do pagamento antecipado e quantidade de parcelas. Os valores das parcelas atualizam em tempo real conforme você edita.
+        </div>
+
+        {/* Antecipado — desconto e economia */}
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: "#9ca3af",
+          textTransform: "uppercase", letterSpacing: 1,
+          marginBottom: 10, marginTop: 4,
+        }}>Antecipado · desconto à vista</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
+          {(safeData.incluiArq !== false) && (
+            <div>
+              <label style={labelTextarea}>Apenas Arquitetura</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <NumStepper valor={descArq} onChange={setDescArq} min={0} max={100} step={1} width={48} suffix="%" />
+                <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                  → {fmtBRL((Number(valorArq) || 0) * (1 - (Number(descArq) || 0) / 100))}
+                </div>
+              </div>
+            </div>
+          )}
+          {(safeData.incluiArq !== false && safeData.incluiEng) && (
+            <div>
+              <label style={labelTextarea}>Pacote Completo</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <NumStepper valor={descPacote} onChange={setDescPacote} min={0} max={100} step={1} width={48} suffix="%" />
+                <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                  → {fmtBRL(((Number(valorArq) || 0) + (Number(valorEng) || 0)) * (1 - (Number(descPacote) || 0) / 100))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Parcelado */}
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: "#9ca3af",
+          textTransform: "uppercase", letterSpacing: 1,
+          marginBottom: 10, marginTop: 4,
+        }}>Parcelado · entrada + parcelas mensais</div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          {(safeData.incluiArq !== false) && (
+            <div>
+              <label style={labelTextarea}>Apenas Arquitetura</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <NumStepper valor={parcArq} onChange={(n) => setParcArq(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
+                <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                  → {parcArq}× {fmtBRL((Number(valorArq) || 0) / Math.max(1, parcArq))}
+                </div>
+              </div>
+            </div>
+          )}
+          {(safeData.incluiArq !== false && safeData.incluiEng) && (
+            <div>
+              <label style={labelTextarea}>Pacote Completo</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <NumStepper valor={parcPacote} onChange={(n) => setParcPacote(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
+                <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
+                  → {parcPacote}× {fmtBRL(((Number(valorArq) || 0) + (Number(valorEng) || 0)) / Math.max(1, parcPacote))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

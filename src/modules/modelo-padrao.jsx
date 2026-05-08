@@ -210,11 +210,27 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const [etapasIsoladasLocal, setEtapasIsoladasLocal] = useState(new Set(snap?.etapasIsoladas || data.etapasIsoladas || []));
   const etapasIsoladas = Array.from(etapasIsoladasLocal);
   const [mostrarTabelaEtapas, setMostrarTabelaEtapas] = useState(snap?.mostrarTabelaEtapas ?? data.mostrarTabelaEtapas ?? true);
-  // Descontos/parcelas — locais também
-  const [descArqLocal,     setDescArqLocal]     = useState(snap?.descArq     ?? data.descArq     ?? 5);
-  const [parcArqLocal,     setParcArqLocal]     = useState(snap?.parcArq     ?? data.parcArq     ?? 3);
-  const [descPacoteLocal,  setDescPacoteLocal]  = useState(snap?.descPacote  ?? data.descPacote  ?? 10);
-  const [parcPacoteLocal,  setParcPacoteLocal]  = useState(snap?.parcPacote  ?? data.parcPacote  ?? 4);
+  // Descontos/parcelas — locais também. Mesmo padrão de override do
+  // arqEdit (Fase 6b): state interno + camada efetiva que prefere
+  // data.template.valores quando preenchido. Setters mantém compat
+  // com o código legado (apenas atualizam state local; quando template
+  // está ativo, mudança no state local não reflete no display).
+  const [_descArqState,     setDescArqStateLocal]     = useState(snap?.descArq     ?? data.descArq     ?? 5);
+  const [_parcArqState,     setParcArqStateLocal]     = useState(snap?.parcArq     ?? data.parcArq     ?? 3);
+  const [_descPacoteState,  setDescPacoteStateLocal]  = useState(snap?.descPacote  ?? data.descPacote  ?? 10);
+  const [_parcPacoteState,  setParcPacoteStateLocal]  = useState(snap?.parcPacote  ?? data.parcPacote  ?? 4);
+  const _tplPagto = data?.template?.valores || {};
+  const descArqLocal    = (_tplPagto.descArq    != null) ? Number(_tplPagto.descArq)    : _descArqState;
+  const parcArqLocal    = (_tplPagto.parcArq    != null) ? Number(_tplPagto.parcArq)    : _parcArqState;
+  const descPacoteLocal = (_tplPagto.descPacote != null) ? Number(_tplPagto.descPacote) : _descPacoteState;
+  const parcPacoteLocal = (_tplPagto.parcPacote != null) ? Number(_tplPagto.parcPacote) : _parcPacoteState;
+  const setDescArqLocal     = setDescArqStateLocal;
+  const setParcArqLocal     = setParcArqStateLocal;
+  const setDescPacoteLocal  = setDescPacoteStateLocal;
+  const setParcPacoteLocal  = setParcPacoteStateLocal;
+  // Flag pra UI saber se Pagamento vem do Template (esconde inputs inline).
+  const pagtoVemTpl = (_tplPagto.descArq != null) || (_tplPagto.parcArq != null) ||
+                      (_tplPagto.descPacote != null) || (_tplPagto.parcPacote != null);
   const [descEtCtrtLocal,  setDescEtCtrtLocal]  = useState(snap?.descEtCtrt  ?? data.descEtCtrt  ?? 5);
   const [parcEtCtrtLocal,  setParcEtCtrtLocal]  = useState(snap?.parcEtCtrt  ?? data.parcEtCtrt  ?? 2);
   const [descPacCtrtLocal, setDescPacCtrtLocal] = useState(snap?.descPacCtrt ?? data.descPacCtrt ?? 15);
