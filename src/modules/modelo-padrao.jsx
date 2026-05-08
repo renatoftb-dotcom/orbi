@@ -191,16 +191,25 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const setTipoPgtoLocal = setTipoPgtoStateLocal;
   // Merge da estrutura formaPagamento: template vence campo a campo sobre data.formaPagamento.
   // Usado em <BlocoFormaPagamentoView> (preview) e na construção do PDF.
+  // Cobre: formas, contratacoes, etapa.{modalidades,etapas,isoladas}, final.{entArq,entPac}.
+  const _tvForFp = data?.template?.valores || {};
   const formaPagamentoEfetiva = (() => {
     const base = data.formaPagamento || {};
-    if (!_tplFp) return base;
+    if (!_tplFp && !_tvForFp.entArq && !_tvForFp.entPacote) return base;
     return {
       ...base,
-      ...(Array.isArray(_tplFp.formas)       ? { formas:       _tplFp.formas }       : {}),
-      ...(Array.isArray(_tplFp.contratacoes) ? { contratacoes: _tplFp.contratacoes } : {}),
+      ...(_tplFp && Array.isArray(_tplFp.formas)       ? { formas:       _tplFp.formas }       : {}),
+      ...(_tplFp && Array.isArray(_tplFp.contratacoes) ? { contratacoes: _tplFp.contratacoes } : {}),
       etapa: {
         ...(base.etapa || {}),
-        ...(Array.isArray(_tplFp.modalidadesEtapa) ? { modalidades: _tplFp.modalidadesEtapa } : {}),
+        ...(_tplFp && Array.isArray(_tplFp.modalidadesEtapa) ? { modalidades: _tplFp.modalidadesEtapa } : {}),
+        ...(_tplFp && Array.isArray(_tplFp.etapas)   ? { etapas:   _tplFp.etapas }   : {}),
+        ...(_tplFp && Array.isArray(_tplFp.isoladas) ? { isoladas: _tplFp.isoladas } : {}),
+      },
+      final: {
+        ...(base.final || {}),
+        ...(_tvForFp.entArq    != null ? { entArq: Number(_tvForFp.entArq) }    : {}),
+        ...(_tvForFp.entPacote != null ? { entPac: Number(_tvForFp.entPacote) } : {}),
       },
     };
   })();
@@ -228,6 +237,32 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   });
   const [etapasIsoladasLocal, setEtapasIsoladasLocal] = useState(new Set(snap?.etapasIsoladas || data.etapasIsoladas || []));
   const etapasIsoladas = Array.from(etapasIsoladasLocal);
+
+  // Override sync (Fase 6d.2): quando o user edita etapas/isoladas no Template
+  // e volta pro modelo, sincroniza o state local. Deep-compare via JSON.stringify
+  // pra evitar loop por mudança de referência do parent.
+  const _tplEtapasJson   = _tplFp?.etapas   ? JSON.stringify(_tplFp.etapas)   : null;
+  const _tplIsoladasJson = _tplFp?.isoladas ? JSON.stringify(_tplFp.isoladas) : null;
+  useEffect(() => {
+    if (_tplEtapasJson) {
+      try {
+        const arr = JSON.parse(_tplEtapasJson);
+        if (Array.isArray(arr) && arr.length > 0) {
+          setEtapasPctLocal(arr.map(e => ({ ...e })));
+        }
+      } catch (_) {}
+    }
+  }, [_tplEtapasJson]);
+  useEffect(() => {
+    if (_tplIsoladasJson) {
+      try {
+        const arr = JSON.parse(_tplIsoladasJson);
+        if (Array.isArray(arr)) {
+          setEtapasIsoladasLocal(new Set(arr));
+        }
+      } catch (_) {}
+    }
+  }, [_tplIsoladasJson]);
   const [mostrarTabelaEtapas, setMostrarTabelaEtapas] = useState(snap?.mostrarTabelaEtapas ?? data.mostrarTabelaEtapas ?? true);
   // Descontos/parcelas — locais também. Mesmo padrão de override do
   // arqEdit (Fase 6b): state interno + camada efetiva que prefere

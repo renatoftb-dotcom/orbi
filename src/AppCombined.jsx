@@ -6266,16 +6266,25 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const setTipoPgtoLocal = setTipoPgtoStateLocal;
   // Merge da estrutura formaPagamento: template vence campo a campo sobre data.formaPagamento.
   // Usado em <BlocoFormaPagamentoView> (preview) e na construção do PDF.
+  // Cobre: formas, contratacoes, etapa.{modalidades,etapas,isoladas}, final.{entArq,entPac}.
+  const _tvForFp = data?.template?.valores || {};
   const formaPagamentoEfetiva = (() => {
     const base = data.formaPagamento || {};
-    if (!_tplFp) return base;
+    if (!_tplFp && !_tvForFp.entArq && !_tvForFp.entPacote) return base;
     return {
       ...base,
-      ...(Array.isArray(_tplFp.formas)       ? { formas:       _tplFp.formas }       : {}),
-      ...(Array.isArray(_tplFp.contratacoes) ? { contratacoes: _tplFp.contratacoes } : {}),
+      ...(_tplFp && Array.isArray(_tplFp.formas)       ? { formas:       _tplFp.formas }       : {}),
+      ...(_tplFp && Array.isArray(_tplFp.contratacoes) ? { contratacoes: _tplFp.contratacoes } : {}),
       etapa: {
         ...(base.etapa || {}),
-        ...(Array.isArray(_tplFp.modalidadesEtapa) ? { modalidades: _tplFp.modalidadesEtapa } : {}),
+        ...(_tplFp && Array.isArray(_tplFp.modalidadesEtapa) ? { modalidades: _tplFp.modalidadesEtapa } : {}),
+        ...(_tplFp && Array.isArray(_tplFp.etapas)   ? { etapas:   _tplFp.etapas }   : {}),
+        ...(_tplFp && Array.isArray(_tplFp.isoladas) ? { isoladas: _tplFp.isoladas } : {}),
+      },
+      final: {
+        ...(base.final || {}),
+        ...(_tvForFp.entArq    != null ? { entArq: Number(_tvForFp.entArq) }    : {}),
+        ...(_tvForFp.entPacote != null ? { entPac: Number(_tvForFp.entPacote) } : {}),
       },
     };
   })();
@@ -6303,6 +6312,32 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   });
   const [etapasIsoladasLocal, setEtapasIsoladasLocal] = useState(new Set(snap?.etapasIsoladas || data.etapasIsoladas || []));
   const etapasIsoladas = Array.from(etapasIsoladasLocal);
+
+  // Override sync (Fase 6d.2): quando o user edita etapas/isoladas no Template
+  // e volta pro modelo, sincroniza o state local. Deep-compare via JSON.stringify
+  // pra evitar loop por mudança de referência do parent.
+  const _tplEtapasJson   = _tplFp?.etapas   ? JSON.stringify(_tplFp.etapas)   : null;
+  const _tplIsoladasJson = _tplFp?.isoladas ? JSON.stringify(_tplFp.isoladas) : null;
+  useEffect(() => {
+    if (_tplEtapasJson) {
+      try {
+        const arr = JSON.parse(_tplEtapasJson);
+        if (Array.isArray(arr) && arr.length > 0) {
+          setEtapasPctLocal(arr.map(e => ({ ...e })));
+        }
+      } catch (_) {}
+    }
+  }, [_tplEtapasJson]);
+  useEffect(() => {
+    if (_tplIsoladasJson) {
+      try {
+        const arr = JSON.parse(_tplIsoladasJson);
+        if (Array.isArray(arr)) {
+          setEtapasIsoladasLocal(new Set(arr));
+        }
+      } catch (_) {}
+    }
+  }, [_tplIsoladasJson]);
   const [mostrarTabelaEtapas, setMostrarTabelaEtapas] = useState(snap?.mostrarTabelaEtapas ?? data.mostrarTabelaEtapas ?? true);
   // Descontos/parcelas — locais também. Mesmo padrão de override do
   // arqEdit (Fase 6b): state interno + camada efetiva que prefere
@@ -8933,7 +8968,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   );
 
   // Por etapa (Fase 6d) — modalidades de etapa a etapa e etapas completas.
-  // Aparecem apenas quando tipoPgto === "etapas" no Etapa 5.
+  // Aparecem apenas quando "etapa" está nas formas selecionadas.
   //   descEtCtrt/parcEtCtrt = "Contratação etapa a etapa" (cliente contrata 1 de cada vez)
   //   descPacCtrt/parcPacCtrt = "Etapas completas" (cliente contrata todas juntas)
   const [descEtCtrt, setDescEtCtrt] = useState(
@@ -8947,6 +8982,16 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   );
   const [parcPacCtrt, setParcPacCtrt] = useState(
     tv.parcPacCtrt != null ? Number(tv.parcPacCtrt) : (Number(safeData.parcPacCtrt) || 8)
+  );
+
+  // Entrada + final (forma "final" da Etapa 5) — % de entrada por contratação.
+  // Pré-vem de safeData.formaPagamento.final ou template.valores; fallback 50%.
+  const _fpFin = safeData.formaPagamento?.final || {};
+  const [entArq, setEntArq] = useState(
+    tv.entArq != null ? Number(tv.entArq) : (Number(_fpFin.entArq) || 50)
+  );
+  const [entPacote, setEntPacote] = useState(
+    tv.entPacote != null ? Number(tv.entPacote) : (Number(_fpFin.entPac) || 50)
   );
 
   // Estrutura da forma de pagamento (Fase 6d.1) — agora editável no Template.
@@ -8969,6 +9014,75 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   // tipoPgto derivado: "etapa" presente → "etapas", senão "padrao".
   const ehPorEtapa = formasTpl.includes("etapa");
   const tipoPgtoTpl = ehPorEtapa ? "etapas" : "padrao";
+
+  // Contratações (Apenas Arq / Pacote) — apareceram em modo padrão.
+  const [contratacoesTpl, setContratacoesTpl] = useState(() => {
+    const ini = fpFromTemplate?.contratacoes ?? fpFromEtapa.contratacoes ?? ["arq", "pac"];
+    return Array.isArray(ini) ? [...ini] : ["arq", "pac"];
+  });
+
+  // Etapas (modo etapa) — array {id, nome, pct, eng?}. Pré-seleção:
+  // 1) template.formaPagamento.etapas (edição anterior)
+  // 2) safeData.formaPagamento.etapa.etapas (vindo da Etapa 5)
+  // 3) safeData.etapasPct (snapshot legado)
+  // 4) defaults (Viabilidade 10%, Preliminar 30%, Aprovação 12%, Executivo 38% + Eng)
+  const _defaultEtapas = [
+    { id: 1, nome: "Estudo de Viabilidade",   pct: 10 },
+    { id: 2, nome: "Estudo Preliminar",       pct: 30 },
+    { id: 3, nome: "Aprovação na Prefeitura", pct: 12 },
+    { id: 4, nome: "Projeto Executivo",       pct: 38 },
+    { id: 5, nome: "Engenharia",              pct: 10, eng: true },
+  ];
+  const [etapasPctTpl, setEtapasPctTpl] = useState(() => {
+    const ini = fpFromTemplate?.etapas
+              ?? fpFromEtapa.etapa?.etapas
+              ?? safeData.etapasPct
+              ?? _defaultEtapas;
+    if (!Array.isArray(ini)) return _defaultEtapas;
+    const out = ini.map(e => ({ ...e }));
+    if (!out.some(e => e.id === 5)) out.push({ id: 5, nome: "Engenharia", pct: 10, eng: true });
+    return out;
+  });
+  const [isoladasTpl, setIsoladasTpl] = useState(() => {
+    const ini = fpFromTemplate?.isoladas
+              ?? fpFromEtapa.etapa?.isoladas
+              ?? safeData.etapasIsoladas
+              ?? [];
+    return new Set(Array.isArray(ini) ? ini : []);
+  });
+
+  // Helpers de etapa
+  function toggleContratacaoTpl(tipo) {
+    if (contratacoesTpl.includes(tipo)) {
+      if (contratacoesTpl.length <= 1) return; // mantém pelo menos 1
+      setContratacoesTpl(contratacoesTpl.filter(x => x !== tipo));
+    } else {
+      setContratacoesTpl([...contratacoesTpl, tipo]);
+    }
+  }
+  function toggleIsoladaTpl(id) {
+    setIsoladasTpl(prev => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id); else novo.add(id);
+      return novo;
+    });
+  }
+  function atualizarEtapaPctTpl(id, novo) {
+    const v = Math.max(0, Math.min(100, Math.round(Number(novo) || 0)));
+    setEtapasPctTpl(prev => prev.map(e => e.id === id ? { ...e, pct: v } : e));
+  }
+  function atualizarEtapaNomeTpl(id, nome) {
+    setEtapasPctTpl(prev => prev.map(e => e.id === id ? { ...e, nome } : e));
+  }
+  function adicionarEtapaTpl() {
+    const maxId = Math.max(9, ...etapasPctTpl.map(e => e.id));
+    setEtapasPctTpl(prev => [...prev, { id: maxId + 1, nome: "Nova etapa", pct: 0 }]);
+  }
+  function removerEtapaTpl(id) {
+    if (id === 5) return;
+    setEtapasPctTpl(prev => prev.filter(e => e.id !== id));
+    setIsoladasTpl(prev => { const n = new Set(prev); n.delete(id); return n; });
+  }
 
   // Toggle de forma — replica a lógica da Etapa 5 (toggleForma em
   // orcamento-teste.jsx:4848). Antecipado coexiste com qualquer; demais
@@ -9012,10 +9126,15 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         parcEtCtrt:  Math.max(1, Math.round(Number(parcEtCtrt)  || 1)),
         descPacCtrt: Number(descPacCtrt) || 0,
         parcPacCtrt: Math.max(1, Math.round(Number(parcPacCtrt) || 1)),
+        entArq:     Number(entArq)     || 0,
+        entPacote:  Number(entPacote)  || 0,
       },
       formaPagamento: {
         tipoPgto: tipoPgtoTpl,
         formas: [...formasTpl],
+        contratacoes: [...contratacoesTpl],
+        etapas: etapasPctTpl.map(e => ({ ...e })),
+        isoladas: Array.from(isoladasTpl),
       },
     });
   }
@@ -9502,131 +9621,476 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           })}
         </div>
 
-        {/* Modo "padrão": Antecipado + Parcelado por escopo (Arq / Pacote) */}
-        {!ehPorEtapa && (
-          <>
-            {/* Antecipado — desconto e economia */}
-            <div style={{
-              fontSize: 11, fontWeight: 700, color: "#9ca3af",
-              textTransform: "uppercase", letterSpacing: 1,
-              marginBottom: 10, marginTop: 4,
-            }}>Antecipado · desconto à vista</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
-              {(safeData.incluiArq !== false) && (
-                <div>
-                  <label style={labelTextarea}>Apenas Arquitetura</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <NumStepper valor={descArq} onChange={setDescArq} min={0} max={100} step={1} width={48} suffix="%" />
-                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                      → {fmtBRL((Number(valorArq) || 0) * (1 - (Number(descArq) || 0) / 100))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {(safeData.incluiArq !== false && safeData.incluiEng) && (
-                <div>
-                  <label style={labelTextarea}>Pacote Completo</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <NumStepper valor={descPacote} onChange={setDescPacote} min={0} max={100} step={1} width={48} suffix="%" />
-                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                      → {fmtBRL(((Number(valorArq) || 0) + (Number(valorEng) || 0)) * (1 - (Number(descPacote) || 0) / 100))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
+        {/* CSS auxiliar pros cards/etapas/modalidades — replicado da Etapa 5
+            mas com prefixo .vk-tpl-fp2-* pra não conflitar. */}
+        <style>{`
+          .vk-tpl-fp2-card {
+            display: flex; gap: 0; padding: 0;
+            background: #fff; border: 1px solid #e5e7eb;
+            border-radius: 10px; margin-bottom: 12px; overflow: hidden;
+            transition: all 0.12s;
+          }
+          .vk-tpl-fp2-card.selected {
+            border-color: #111 !important; border-width: 1.5px !important;
+            background: #fafbfc !important;
+          }
+          .vk-tpl-fp2-card.selected .vk-tpl-fp2-radio { border: 6px solid #111 !important; }
+          .vk-tpl-fp2-radio:hover { border-color: #9ca3af; }
+          .vk-tpl-fp2-radio {
+            flex-shrink: 0; width: 22px; height: 22px;
+            border-radius: 50%; border: 1.5px solid #d1d5db;
+            background: #fff; cursor: pointer; padding: 0;
+            transition: all 0.12s; margin-top: 2px;
+          }
+          .vk-tpl-fp2-linha {
+            display: grid; grid-template-columns: 130px 1fr;
+            gap: 10px; align-items: center; padding: 6px 0;
+          }
+          .vk-tpl-fp2-linha + .vk-tpl-fp2-linha {
+            border-top: 0.5px solid #f3f4f6; padding-top: 10px; margin-top: 4px;
+          }
+          .vk-tpl-fp2-linha-label { font-size: 12.5px; color: #6b7280; }
+          .vk-tpl-fp2-linha-input { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+          .vk-tpl-fp2-resumo-bloco + .vk-tpl-fp2-resumo-bloco {
+            padding-top: 10px; margin-top: 10px; border-top: 0.5px solid #e5e7eb;
+          }
+          .vk-tpl-fp2-resumo-label {
+            font-size: 11px; font-weight: 600; color: #6b7280;
+            text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
+          }
+          .vk-tpl-fp2-resumo-principal { font-size: 14px; font-weight: 600; color: #111; line-height: 1.3; }
+          .vk-tpl-fp2-resumo-eco { font-size: 11px; color: #047857; }
+          .vk-tpl-fp2-resumo-sub-label { font-size: 11.5px; color: #6b7280; margin-bottom: 2px; }
+          .vk-tpl-fp2-resumo-sub-valor { font-size: 13px; font-weight: 500; color: #111; line-height: 1.3; margin-bottom: 4px; }
+          .vk-tpl-fp2-etapa-row {
+            display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
+            gap: 8px; padding: 8px 14px;
+            border-bottom: 0.5px solid #f3f4f6; align-items: center;
+          }
+          .vk-tpl-fp2-etapa-row.eng { background: #fafbfc; }
+          .vk-tpl-fp2-etapa-row:not(.incluida) { opacity: 0.45; }
+          .vk-tpl-fp2-etapa-row:not(.incluida) .vk-tpl-fp2-etapa-nome,
+          .vk-tpl-fp2-etapa-row:not(.incluida) .vk-tpl-fp2-etapa-valor {
+            text-decoration: line-through; color: #9ca3af;
+          }
+          .vk-tpl-fp2-checkbox {
+            cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+            width: 18px; height: 18px;
+            border-radius: 4px; border: 1.5px solid #d1d5db;
+            background: #fff; transition: all 0.12s; user-select: none; margin: 0 auto;
+          }
+          .vk-tpl-fp2-etapa-row.incluida .vk-tpl-fp2-checkbox {
+            background: #111; border-color: #111;
+          }
+          .vk-tpl-fp2-checkbox-inner { color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
+          .vk-tpl-fp2-checkbox:hover { border-color: #6b7280; }
+          .vk-tpl-fp2-etapa-row.incluida .vk-tpl-fp2-checkbox:hover {
+            background: #1f2937; border-color: #1f2937;
+          }
+          .vk-tpl-fp2-etapa-nome {
+            background: transparent; border: 0; font-size: 13px;
+            font-family: inherit; color: #111; padding: 2px 4px;
+            border-radius: 3px; width: 100%;
+          }
+          .vk-tpl-fp2-etapa-nome:hover { background: #f9fafb; }
+          .vk-tpl-fp2-etapa-nome:focus { background: #fff; outline: 1px solid #111; }
+          .vk-tpl-fp2-etapa-valor { font-size: 12.5px; text-align: right; color: #374151; }
+          .vk-tpl-fp2-etapa-rm {
+            cursor: pointer; text-align: center;
+            color: #d1d5db; user-select: none; font-size: 14px;
+          }
+          .vk-tpl-fp2-etapa-rm:hover { color: #6b7280; }
+          .vk-tpl-fp2-etapa-header {
+            display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
+            gap: 8px; padding: 10px 14px;
+            border-bottom: 1.5px solid #111; align-items: center;
+          }
+          .vk-tpl-fp2-etapa-total {
+            display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
+            gap: 8px; padding: 10px 14px;
+            border-top: 1.5px solid #111; align-items: center;
+            background: #fafbfc;
+          }
+          @media (max-width: 720px) {
+            .vk-tpl-fp2-card { flex-direction: column; }
+            .vk-tpl-fp2-card > div:last-child {
+              width: 100% !important; border-left: none !important;
+              border-top: 0.5px solid #e5e7eb !important;
+            }
+            .vk-tpl-fp2-linha { grid-template-columns: 110px 1fr; }
+          }
+        `}</style>
 
-            {/* Parcelado */}
-            <div style={{
-              fontSize: 11, fontWeight: 700, color: "#9ca3af",
-              textTransform: "uppercase", letterSpacing: 1,
-              marginBottom: 10, marginTop: 4,
-            }}>Parcelado · entrada + parcelas mensais</div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-              {(safeData.incluiArq !== false) && (
-                <div>
-                  <label style={labelTextarea}>Apenas Arquitetura</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <NumStepper valor={parcArq} onChange={(n) => setParcArq(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
-                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                      → {parcArq}× {fmtBRL((Number(valorArq) || 0) / Math.max(1, parcArq))}
-                    </div>
-                  </div>
-                </div>
-              )}
-              {(safeData.incluiArq !== false && safeData.incluiEng) && (
-                <div>
-                  <label style={labelTextarea}>Pacote Completo</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <NumStepper valor={parcPacote} onChange={(n) => setParcPacote(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
-                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                      → {parcPacote}× {fmtBRL(((Number(valorArq) || 0) + (Number(valorEng) || 0)) / Math.max(1, parcPacote))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </>
-        )}
+        {/* UI dinâmica — replica TODA Etapa 5 Tela 2: cards Apenas Arq/Pacote
+            quando há formas !== etapa, tabela de etapas + 2 modalidades quando
+            etapa selecionada. Cascade reativo às escolhas. */}
+        {(() => {
+          const fmtBRLfp = v => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+          const fmtCurto = v => "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+          const incluiArqV = safeData.incluiArq !== false;
+          const incluiEngV = !!safeData.incluiEng;
+          const valorArqN  = Number(valorArq) || 0;
+          const valorEngN  = Number(valorEng) || 0;
+          const valorPacN  = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0);
 
-        {/* Modo "por etapa": Etapa-a-etapa + Etapas completas */}
-        {ehPorEtapa && (() => {
-          const totGeral = (Number(valorArq) || 0) + (Number(valorEng) || 0);
+          // Ordem fixa das formas, igual Etapa 5
+          const ordemFormas = ["antecipado", "parcelas", "final", "etapa"];
+          const ativas = ordemFormas.filter(f => formasTpl.includes(f));
+          const formasParaCards = ehPorEtapa ? [] : ativas.filter(f => f !== "etapa");
+          const temAntecipadoMod = formasTpl.includes("antecipado");
+
+          // Helpers de cálculo
+          const calcAnt = (base, pct) => {
+            const valor = base * (1 - (Number(pct) || 0) / 100);
+            return { valor, eco: base - valor };
+          };
+          const calcParc = (base, n) => base / Math.max(1, Number(n) || 1);
+          const calcEntFin = (base, pct) => {
+            const p = Number(pct) || 0;
+            return { ent: base * (p / 100), fin: base * (1 - p / 100) };
+          };
+
+          // Render de uma linha de form dentro de um card de contratação
+          const renderLinhaForma = (tipo, formaId) => {
+            if (formaId === "antecipado") {
+              const v = tipo === "arq" ? descArq : descPacote;
+              const setter = tipo === "arq" ? setDescArq : setDescPacote;
+              return (
+                <div className="vk-tpl-fp2-linha" key="antecipado">
+                  <span className="vk-tpl-fp2-linha-label">Antecipado · desc.</span>
+                  <div className="vk-tpl-fp2-linha-input">
+                    <NumStepper valor={v} onChange={setter} min={0} max={100} step={1} width={28} />
+                    <span style={{ fontSize: 12.5, color: "#6b7280" }}>%</span>
+                  </div>
+                </div>
+              );
+            }
+            if (formaId === "parcelas") {
+              const v = tipo === "arq" ? parcArq : parcPacote;
+              const setter = tipo === "arq" ? setParcArq : setParcPacote;
+              return (
+                <div className="vk-tpl-fp2-linha" key="parcelas">
+                  <span className="vk-tpl-fp2-linha-label">Entrada + parcelas</span>
+                  <div className="vk-tpl-fp2-linha-input">
+                    <NumStepper valor={v} onChange={n => setter(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
+                    <span style={{ fontSize: 12.5, color: "#6b7280" }}>×</span>
+                  </div>
+                </div>
+              );
+            }
+            if (formaId === "final") {
+              const v = tipo === "arq" ? entArq : entPacote;
+              const setter = tipo === "arq" ? setEntArq : setEntPacote;
+              return (
+                <div className="vk-tpl-fp2-linha" key="final">
+                  <span className="vk-tpl-fp2-linha-label">Entrada + final</span>
+                  <div className="vk-tpl-fp2-linha-input">
+                    <NumStepper valor={v} onChange={setter} min={0} max={100} step={1} width={28} />
+                    <span style={{ fontSize: 12.5, color: "#6b7280" }}>%</span>
+                    <span style={{ color: "#d1d5db", fontSize: 11, margin: "0 4px" }}>+</span>
+                    <span style={{ fontSize: 12.5, color: "#6b7280" }}>final</span>
+                    <span style={{ fontSize: 13, fontWeight: 500, color: "#6b7280", padding: "4px 8px", background: "#f3f4f6", borderRadius: 5 }}>
+                      {100 - v}%
+                    </span>
+                  </div>
+                </div>
+              );
+            }
+            return null;
+          };
+
+          // Render do resumo lateral do card
+          const renderResumo = (tipo) => {
+            const base = tipo === "arq" ? valorArqN : valorPacN;
+            const blocos = [];
+            if (formasParaCards.includes("antecipado")) {
+              const desc = tipo === "arq" ? descArq : descPacote;
+              const { valor, eco } = calcAnt(base, desc);
+              blocos.push(
+                <div className="vk-tpl-fp2-resumo-bloco" key="antecipado">
+                  <div className="vk-tpl-fp2-resumo-label">Antecipado</div>
+                  <div className="vk-tpl-fp2-resumo-principal">{fmtBRLfp(Math.round(valor * 100) / 100)}</div>
+                  {desc > 0 && <div className="vk-tpl-fp2-resumo-eco">economia {fmtCurto(eco)}</div>}
+                </div>
+              );
+            }
+            if (formasParaCards.includes("parcelas")) {
+              const parc = tipo === "arq" ? parcArq : parcPacote;
+              const v = calcParc(base, parc);
+              const valorParc = Math.round(v * 100) / 100;
+              blocos.push(
+                <div className="vk-tpl-fp2-resumo-bloco" key="parcelas">
+                  <div className="vk-tpl-fp2-resumo-label">Entrada + parcelas</div>
+                  {parc === 1 ? (
+                    <div className="vk-tpl-fp2-resumo-principal" style={{ fontSize: 13.5 }}>{fmtBRLfp(valorParc)} à vista</div>
+                  ) : (
+                    <>
+                      <div className="vk-tpl-fp2-resumo-sub-label">Entrada</div>
+                      <div className="vk-tpl-fp2-resumo-sub-valor">{fmtBRLfp(valorParc)}</div>
+                      <div className="vk-tpl-fp2-resumo-sub-label">+ {parc - 1}× de</div>
+                      <div className="vk-tpl-fp2-resumo-sub-valor">{fmtBRLfp(valorParc)}</div>
+                    </>
+                  )}
+                </div>
+              );
+            }
+            if (formasParaCards.includes("final")) {
+              const ent = tipo === "arq" ? entArq : entPacote;
+              const { ent: vEnt, fin: vFin } = calcEntFin(base, ent);
+              blocos.push(
+                <div className="vk-tpl-fp2-resumo-bloco" key="final">
+                  <div className="vk-tpl-fp2-resumo-label">Entrada + final</div>
+                  <div className="vk-tpl-fp2-resumo-sub-label">Entrada</div>
+                  <div className="vk-tpl-fp2-resumo-sub-valor">{fmtBRLfp(Math.round(vEnt * 100) / 100)}</div>
+                  <div className="vk-tpl-fp2-resumo-sub-label">Pgto final</div>
+                  <div className="vk-tpl-fp2-resumo-sub-valor">{fmtBRLfp(Math.round(vFin * 100) / 100)}</div>
+                </div>
+              );
+            }
+            return (
+              <div style={{ width: 200, padding: "18px 20px", background: "#fafbfc", borderLeft: "0.5px solid #e5e7eb", fontSize: 12, color: "#374151" }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Resumo</div>
+                <div>{blocos}</div>
+              </div>
+            );
+          };
+
+          // Render de um card de contratação (Apenas Arq / Pacote)
+          const renderCard = (tipo, titulo) => {
+            const sel = contratacoesTpl.includes(tipo);
+            return (
+              <div key={tipo} className={"vk-tpl-fp2-card" + (sel ? " selected" : "")}>
+                <div style={{ flex: 1, padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 16 }}>
+                  <button type="button" className="vk-tpl-fp2-radio" onClick={() => toggleContratacaoTpl(tipo)} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: "#111", marginBottom: 14 }}>{titulo}</div>
+                    {formasParaCards.map(f => renderLinhaForma(tipo, f))}
+                  </div>
+                </div>
+                {renderResumo(tipo)}
+              </div>
+            );
+          };
+
+          // Cálculo de etapas — só usado no modo etapa
+          const etapasFiltradas = etapasPctTpl.filter(e => {
+            if (e.eng && !incluiEngV) return false;
+            if (!e.eng && !incluiArqV) return false;
+            return true;
+          });
+          const temIso = isoladasTpl.size > 0;
+          let pctTotal = 0, valorTotal = 0, qtdEtapasMostradas = 0;
+          if (temIso) {
+            etapasFiltradas.forEach(e => {
+              if (e.eng && isoladasTpl.has(5)) {
+                valorTotal += valorEngN; qtdEtapasMostradas++;
+              } else if (!e.eng && isoladasTpl.has(e.id)) {
+                pctTotal += e.pct; valorTotal += valorArqN * (e.pct / 100); qtdEtapasMostradas++;
+              }
+            });
+          } else {
+            etapasFiltradas.forEach(e => {
+              if (!e.eng) pctTotal += e.pct;
+              qtdEtapasMostradas++;
+            });
+            valorTotal = (incluiArqV ? valorArqN : 0) + (incluiEngV ? valorEngN : 0);
+          }
+          const mostraEtUnica = qtdEtapasMostradas >= 1;
+          const mostraCompletas = qtdEtapasMostradas >= 2;
+          const mostraResumoUnica = qtdEtapasMostradas === 1;
+          const baseUnica = valorTotal;
+          const baseCompleto = valorTotal;
+          const unicaAnt = baseUnica * (1 - (Number(descEtCtrt) || 0) / 100);
+          const unicaEco = baseUnica - unicaAnt;
+          const unicaParcVal = baseUnica / Math.max(1, parcEtCtrt);
+          const completoAnt = baseCompleto * (1 - (Number(descPacCtrt) || 0) / 100);
+          const completoEco = baseCompleto - completoAnt;
+          const completoParcVal = baseCompleto / Math.max(1, parcPacCtrt);
+
+          const mostraPacote = incluiArqV && incluiEngV;
+          const tituloApenas = (incluiArqV && !incluiEngV) ? "Apenas Arquitetura"
+                            : (!incluiArqV && incluiEngV) ? "Apenas Engenharia"
+                            : "Apenas Arquitetura";
+
           return (
             <>
-              {/* Contratação etapa a etapa — descontos e parcelas */}
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: "#9ca3af",
-                textTransform: "uppercase", letterSpacing: 1,
-                marginBottom: 10, marginTop: 4,
-              }}>Contratação etapa a etapa</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 14 }}>
-                <div>
-                  <label style={labelTextarea}>Desconto antecipado</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <NumStepper valor={descEtCtrt} onChange={setDescEtCtrt} min={0} max={100} step={1} width={48} suffix="%" />
-                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                      → economia de {fmtBRL(totGeral * (Number(descEtCtrt) || 0) / 100)}
-                    </div>
+              {/* Cards de contratação — modo padrão */}
+              {formasParaCards.length > 0 && (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#111", marginBottom: 6 }}>
+                    Como o cliente vai poder contratar?
                   </div>
-                </div>
-                <div>
-                  <label style={labelTextarea}>Parcelas por etapa</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <NumStepper valor={parcEtCtrt} onChange={(n) => setParcEtCtrt(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
-                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                      → {parcEtCtrt}× por etapa
+                  {mostraPacote && (
+                    <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10, lineHeight: 1.4 }}>
+                      Marque <strong style={{ color: "#111" }}>os dois</strong> pra cliente escolher entre Arq sozinha ou pacote completo. Marque <strong style={{ color: "#111" }}>só Pacote</strong> pra forçar contratação conjunta.
                     </div>
-                  </div>
-                </div>
-              </div>
+                  )}
+                  {renderCard("arq", tituloApenas)}
+                  {mostraPacote && (
+                    <>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, margin: "8px 0", fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 500 }}>
+                        <span style={{ flex: 1, height: 0, borderTop: "0.5px solid #e5e7eb" }}></span>
+                        <span>ou</span>
+                        <span style={{ flex: 1, height: 0, borderTop: "0.5px solid #e5e7eb" }}></span>
+                      </div>
+                      {renderCard("pac", "Pacote Arq + Eng")}
+                    </>
+                  )}
+                </>
+              )}
 
-              {/* Etapas completas — pacote fechado de todas as etapas */}
-              <div style={{
-                fontSize: 11, fontWeight: 700, color: "#9ca3af",
-                textTransform: "uppercase", letterSpacing: 1,
-                marginBottom: 10, marginTop: 4,
-              }}>Etapas completas (pacote fechado)</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div>
-                  <label style={labelTextarea}>Desconto antecipado</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <NumStepper valor={descPacCtrt} onChange={setDescPacCtrt} min={0} max={100} step={1} width={48} suffix="%" />
-                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                      → {fmtBRL(totGeral * (1 - (Number(descPacCtrt) || 0) / 100))}
+              {/* Tabela de etapas + 2 modalidades — modo etapa */}
+              {ehPorEtapa && (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#111", marginBottom: 6, marginTop: formasParaCards.length > 0 ? 24 : 0 }}>
+                    Pagamento por etapa
+                  </div>
+                  <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 12, lineHeight: 1.4 }}>
+                    Defina o percentual de cada etapa. <strong style={{ color: "#111" }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
+                  </div>
+
+                  <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
+                    <div className="vk-tpl-fp2-etapa-header">
+                      <span></span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em" }}>Etapa</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center" }}>%</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "right" }}>Valor</span>
+                      <span></span>
+                    </div>
+                    {etapasFiltradas.map(et => {
+                      const incluida = isoladasTpl.size === 0 || isoladasTpl.has(et.id);
+                      const valor = et.eng ? valorEngN : valorArqN * (et.pct / 100);
+                      const rowCls = "vk-tpl-fp2-etapa-row" + (incluida ? " incluida" : "") + (et.eng ? " eng" : "");
+                      return (
+                        <div key={et.id} className={rowCls}>
+                          <span className="vk-tpl-fp2-checkbox" onClick={() => toggleIsoladaTpl(et.id)}>
+                            <span className="vk-tpl-fp2-checkbox-inner">{incluida ? "✓" : ""}</span>
+                          </span>
+                          <span>
+                            <input type="text" className="vk-tpl-fp2-etapa-nome"
+                              value={et.nome}
+                              onChange={e => atualizarEtapaNomeTpl(et.id, e.target.value)}
+                              readOnly={!!et.eng} />
+                            {et.eng && <div style={{ fontSize: 10.5, color: "#9ca3af", paddingLeft: 4 }}>Estrutural · Elétrico · Hidrossanitário</div>}
+                          </span>
+                          {et.eng ? (
+                            <span style={{ textAlign: "center", color: "#d1d5db" }}>—</span>
+                          ) : (
+                            <span style={{ textAlign: "center", display: "flex", justifyContent: "center" }}>
+                              <NumStepper valor={et.pct} onChange={n => atualizarEtapaPctTpl(et.id, n)} min={0} max={100} step={1} width={28} />
+                            </span>
+                          )}
+                          <span className="vk-tpl-fp2-etapa-valor">{fmtBRLfp(Math.round(valor * 100) / 100)}</span>
+                          {(!et.eng && et.id > 4) ? (
+                            <span className="vk-tpl-fp2-etapa-rm" onClick={() => removerEtapaTpl(et.id)} title="Remover etapa">×</span>
+                          ) : <span></span>}
+                        </div>
+                      );
+                    })}
+                    {incluiArqV && (
+                      <div style={{ padding: "8px 14px" }}>
+                        <button type="button" onClick={adicionarEtapaTpl}
+                          style={{ width: "100%", fontSize: 11.5, color: "#6b7280", background: "transparent", border: "1px dashed #d1d5db", borderRadius: 6, padding: 8, cursor: "pointer", fontFamily: "inherit" }}>
+                          + Adicionar etapa
+                        </button>
+                      </div>
+                    )}
+                    <div className="vk-tpl-fp2-etapa-total">
+                      <span></span>
+                      <span style={{ fontWeight: 600, color: "#111", fontSize: 13 }}>Total</span>
+                      <span style={{ fontWeight: 600, color: "#111", fontSize: 13, textAlign: "center" }}>{pctTotal}%</span>
+                      <span style={{ fontWeight: 700, color: "#111", fontSize: 14, textAlign: "right" }}>{fmtBRLfp(Math.round(valorTotal * 100) / 100)}</span>
+                      <span></span>
                     </div>
                   </div>
-                </div>
-                <div>
-                  <label style={labelTextarea}>Parcelas totais</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <NumStepper valor={parcPacCtrt} onChange={(n) => setParcPacCtrt(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={48} suffix="x" />
-                    <div style={{ fontSize: 12.5, color: "#6b7280", flex: 1 }}>
-                      → {parcPacCtrt}× {fmtBRL(totGeral / Math.max(1, parcPacCtrt))}
-                    </div>
+
+                  <div style={{ marginTop: 16, marginBottom: 8, fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>
+                    Como o cliente pode contratar? <span style={{ color: "#9ca3af" }}>Configure as modalidades. Mostradas conforme a quantidade de etapas selecionadas.</span>
                   </div>
-                </div>
-              </div>
+
+                  {/* Modalidade 1: Contratação etapa a etapa */}
+                  {mostraEtUnica && (
+                    <div className="vk-tpl-fp2-card" style={{ display: "flex", marginBottom: 12 }}>
+                      <div style={{ flex: 1, padding: "14px 16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>Contratação etapa a etapa</span>
+                          <span style={{ fontSize: 11, color: "#9ca3af" }}>(quando há 1 etapa)</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: temAntecipadoMod ? "1fr 1fr" : "1fr", gap: 16 }}>
+                          {temAntecipadoMod && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ fontSize: 12.5, color: "#6b7280", minWidth: 100 }}>Antecipado · desc.</span>
+                              <NumStepper valor={descEtCtrt} onChange={setDescEtCtrt} min={0} max={100} step={1} width={28} />
+                              <span style={{ fontSize: 12, color: "#6b7280" }}>%</span>
+                            </div>
+                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 12.5, color: "#6b7280", minWidth: 80 }}>Parcelado</span>
+                            <NumStepper valor={parcEtCtrt} onChange={n => setParcEtCtrt(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
+                            <span style={{ fontSize: 12, color: "#6b7280" }}>×</span>
+                          </div>
+                        </div>
+                      </div>
+                      {mostraResumoUnica && (
+                        <div style={{ width: 200, padding: "14px 16px", background: "#fafbfc", borderLeft: "0.5px solid #e5e7eb" }}>
+                          <div className="vk-tpl-fp2-resumo-label">Resumo</div>
+                          {temAntecipadoMod && (
+                            <div className="vk-tpl-fp2-resumo-bloco">
+                              <div className="vk-tpl-fp2-resumo-label">Antecipado</div>
+                              <div className="vk-tpl-fp2-resumo-principal">{fmtBRLfp(Math.round(unicaAnt * 100) / 100)}</div>
+                              {descEtCtrt > 0 && <div className="vk-tpl-fp2-resumo-eco">economia {fmtCurto(unicaEco)}</div>}
+                            </div>
+                          )}
+                          <div className="vk-tpl-fp2-resumo-bloco">
+                            <div className="vk-tpl-fp2-resumo-label">Parcelado</div>
+                            <div className="vk-tpl-fp2-resumo-sub-valor">{parcEtCtrt}× {fmtBRLfp(Math.round(unicaParcVal * 100) / 100)}</div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Modalidade 2: Etapas completas */}
+                  {mostraCompletas && (
+                    <div className="vk-tpl-fp2-card" style={{ display: "flex" }}>
+                      <div style={{ flex: 1, padding: "14px 16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>Etapas completas</span>
+                          <span style={{ fontSize: 11, color: "#9ca3af" }}>(quando há 2+ etapas)</span>
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: temAntecipadoMod ? "1fr 1fr" : "1fr", gap: 16 }}>
+                          {temAntecipadoMod && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <span style={{ fontSize: 12.5, color: "#6b7280", minWidth: 100 }}>Antecipado · desc.</span>
+                              <NumStepper valor={descPacCtrt} onChange={setDescPacCtrt} min={0} max={100} step={1} width={28} />
+                              <span style={{ fontSize: 12, color: "#6b7280" }}>%</span>
+                            </div>
+                          )}
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <span style={{ fontSize: 12.5, color: "#6b7280", minWidth: 80 }}>Parcelado</span>
+                            <NumStepper valor={parcPacCtrt} onChange={n => setParcPacCtrt(Math.max(1, Math.round(n)))} min={1} max={24} step={1} width={28} />
+                            <span style={{ fontSize: 12, color: "#6b7280" }}>×</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ width: 200, padding: "14px 16px", background: "#fafbfc", borderLeft: "0.5px solid #e5e7eb" }}>
+                        <div className="vk-tpl-fp2-resumo-label">Resumo</div>
+                        {temAntecipadoMod && (
+                          <div className="vk-tpl-fp2-resumo-bloco">
+                            <div className="vk-tpl-fp2-resumo-label">Antecipado</div>
+                            <div className="vk-tpl-fp2-resumo-principal">{fmtBRLfp(Math.round(completoAnt * 100) / 100)}</div>
+                            {descPacCtrt > 0 && <div className="vk-tpl-fp2-resumo-eco">economia {fmtCurto(completoEco)}</div>}
+                          </div>
+                        )}
+                        <div className="vk-tpl-fp2-resumo-bloco">
+                          <div className="vk-tpl-fp2-resumo-label">Parcelado</div>
+                          <div className="vk-tpl-fp2-resumo-sub-valor">{parcPacCtrt}× {fmtBRLfp(Math.round(completoParcVal * 100) / 100)}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </>
           );
         })()}
