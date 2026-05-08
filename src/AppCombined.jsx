@@ -8840,13 +8840,98 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   };
   const spacer = (h = 18) => <div style={{ height: h }} />;
 
+  // Definição das seções pra sidebar de navegação. Cada seção tem:
+  //   - id: âncora pro scroll (matches id no card abaixo)
+  //   - label: nome exibido no menu
+  //   - placeholder (opcional): true = seção ainda não implementada,
+  //     mostra estilo cinza disabled na sidebar.
+  const SECOES_SIDEBAR = [
+    { id: "secao-resumo",      label: "Resumo" },
+    { id: "secao-apresentacao",label: "Apresentação" },
+    { id: "secao-escopo",      label: "Escopo & termos" },
+    { id: "secao-valores",     label: "Valores",        placeholder: true },
+    { id: "secao-pagamento",   label: "Pagamento",      placeholder: true },
+  ];
+
+  // Seção ativa controla highlight da sidebar quando o usuário scrolla.
+  // Default é a primeira seção. Atualiza no click ou no scroll do conteúdo.
+  const [secaoAtiva, setSecaoAtiva] = useState(SECOES_SIDEBAR[0].id);
+
+  function scrollPraSecao(id) {
+    setSecaoAtiva(id);
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Wrap maior pra caber sidebar + conteúdo. mantém centralização.
+  const wrapNovo = {
+    maxWidth: 1080, margin: "0 auto",
+    padding: "32px 24px 60px",
+    fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+  };
+
   return (
-    <div style={wrap}>
+    <div style={wrapNovo}>
       <style>{`
         .vk-tpl-textarea:focus { border-color: #111 !important; }
         .vk-tpl-btn-primary:hover { background: #000 !important; }
         .vk-tpl-btn-secondary:hover { border-color: #9ca3af !important; }
         .vk-tpl-btn-ghost:hover { color: #6b7280 !important; }
+        .vk-tpl-sidebar-item {
+          display: block;
+          width: 100%;
+          text-align: left;
+          padding: 8px 12px;
+          margin-bottom: 4px;
+          background: transparent;
+          border: 1px solid transparent;
+          border-radius: 8px;
+          color: #6b7280;
+          font-size: 12.5px;
+          font-family: inherit;
+          cursor: pointer;
+          transition: background 0.12s, color 0.12s, border-color 0.12s;
+        }
+        .vk-tpl-sidebar-item:hover {
+          background: #fafbfc;
+          color: #111;
+        }
+        .vk-tpl-sidebar-item.is-active {
+          background: #f3f4f6;
+          color: #111;
+          font-weight: 600;
+        }
+        .vk-tpl-sidebar-item.is-placeholder {
+          color: #d1d5db;
+          cursor: not-allowed;
+          font-style: italic;
+        }
+        .vk-tpl-sidebar-item.is-placeholder:hover {
+          background: transparent;
+          color: #d1d5db;
+        }
+        @media (max-width: 720px) {
+          .vk-tpl-grid { grid-template-columns: 1fr !important; gap: 0 !important; }
+          .vk-tpl-sidebar {
+            position: static !important;
+            top: auto !important;
+            margin-bottom: 16px;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 10px;
+          }
+          .vk-tpl-sidebar-list {
+            display: flex !important;
+            flex-direction: row !important;
+            overflow-x: auto;
+            gap: 4px;
+          }
+          .vk-tpl-sidebar-item {
+            white-space: nowrap;
+            flex-shrink: 0;
+            margin-bottom: 0 !important;
+          }
+        }
       `}</style>
 
       {/* Header com Voltar + título */}
@@ -8876,8 +8961,54 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         </div>
       </div>
 
+      {/* Grid: sidebar + conteúdo. Em mobile (<720px), sidebar vira tabs
+          horizontais no topo via CSS media query. */}
+      <div className="vk-tpl-grid" style={{
+        display: "grid",
+        gridTemplateColumns: "200px 1fr",
+        gap: 24,
+        alignItems: "start",
+      }}>
+
+        {/* SIDEBAR de navegação — sticky no desktop, scroll horizontal em mobile */}
+        <nav className="vk-tpl-sidebar" style={{
+          position: "sticky",
+          top: 24,
+          alignSelf: "start",
+        }}>
+          <div style={{
+            fontSize: 10.5, fontWeight: 700, color: "#9ca3af",
+            textTransform: "uppercase", letterSpacing: 1,
+            marginBottom: 10, paddingLeft: 4,
+          }}>
+            Seções
+          </div>
+          <div className="vk-tpl-sidebar-list">
+            {SECOES_SIDEBAR.map(s => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => !s.placeholder && scrollPraSecao(s.id)}
+                className={
+                  "vk-tpl-sidebar-item" +
+                  (secaoAtiva === s.id && !s.placeholder ? " is-active" : "") +
+                  (s.placeholder ? " is-placeholder" : "")
+                }
+                title={s.placeholder ? "Em breve" : undefined}>
+                {s.label}
+                {s.placeholder && (
+                  <span style={{ fontSize: 9, marginLeft: 6, opacity: 0.7 }}>· em breve</span>
+                )}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        {/* CONTEÚDO: cards das seções, scroll vertical natural */}
+        <div>
+
       {/* Card 1 — Resumo dos dados estruturados (read-only) */}
-      <div style={card}>
+      <div id="secao-resumo" style={card}>
         <div style={cardTitle}>Resumo do orçamento</div>
         <div style={resumoRow}>
           <span style={{ color: "#6b7280" }}>Cliente</span>
@@ -8917,7 +9048,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
       </div>
 
       {/* Card 2 — Textos introdutórios */}
-      <div style={card}>
+      <div id="secao-apresentacao" style={card}>
         <div style={cardTitle}>Descrição, apresentação e observações</div>
 
         <label style={labelTextarea}>
@@ -8968,7 +9099,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
       </div>
 
       {/* Card 3 — Escopo e detalhes técnicos (pré-preenchidos com defaults) */}
-      <div style={card}>
+      <div id="secao-escopo" style={card}>
         <div style={cardTitle}>Escopo e detalhes técnicos</div>
 
         <label style={labelTextarea}>
@@ -9025,6 +9156,9 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           rows={4}
         />
       </div>
+
+        </div>{/* fim do conteúdo (lado direito do grid) */}
+      </div>{/* fim do grid sidebar+conteúdo */}
 
       {/* Botões de ação */}
       <div style={{
