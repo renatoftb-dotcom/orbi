@@ -193,8 +193,9 @@ function BannerModoDev({ escritorio }) {
 
 // CalloutsRenderer — auxiliar do TutorialOverlay tipo "callouts".
 // Mede múltiplos elementos via data-tutorial-id, renderiza círculo pulsante
-// em cada e mostra texto único centralizado abaixo do conjunto.
-function CalloutsRenderer({ ids, titulo, descricao }) {
+// em cada e mostra texto único ACIMA do conjunto. Pode ter acaoAoIniciar
+// (ex: desligar/ligar toggles em sincronia com a aparição da orientação).
+function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
   const [rects, setRects] = useState([]);
   useEffect(() => {
     let cancelado = false;
@@ -220,11 +221,21 @@ function CalloutsRenderer({ ids, titulo, descricao }) {
     };
   }, [ids.join("|")]);
 
-  // Calcula bounds pra posicionar texto logo abaixo
-  let textY = 80;
+  // Executa ação ao montar (ex: desliga/liga toggles)
+  useEffect(() => {
+    if (typeof acaoAoIniciar !== "function") return;
+    let cancelado = false;
+    Promise.resolve(acaoAoIniciar(() => cancelado)).catch(e =>
+      console.warn("[tutorial-callouts] acaoAoIniciar falhou:", e)
+    );
+    return () => { cancelado = true; };
+  }, []);
+
+  // Calcula bounds pra posicionar texto ACIMA do conjunto
+  let textBottomY = 60;
   if (rects.length > 0) {
-    const maxBottom = Math.max(...rects.map(r => r.top + r.height));
-    textY = maxBottom + 24;
+    const minTop = Math.min(...rects.map(r => r.top));
+    textBottomY = Math.max(60, minTop - 16);
   }
 
   return (
@@ -240,7 +251,9 @@ function CalloutsRenderer({ ids, titulo, descricao }) {
       ))}
       {(titulo || descricao) && rects.length > 0 && (
         <div className="vk-tut-callout-text" style={{
-          position: "fixed", top: textY, left: 0, right: 0,
+          position: "fixed",
+          bottom: `calc(100vh - ${textBottomY}px)`,
+          left: 0, right: 0,
           display: "flex", justifyContent: "center", padding: "0 24px",
           zIndex: 1003, pointerEvents: "none",
           fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
@@ -297,13 +310,21 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   const targetIdAtual = targetIdOverride || passo?.targetId;
 
   // Expõe setter pra ações chamarem de fora durante a execução do passo.
+  // proximo() avança imediatamente pro próximo passo (ou conclui se for o
+  // último) — útil pra encerrar uma animação longa antes do autoMs estourar.
   useEffect(() => {
     window.__vkTutorial = {
       setTargetId: (id) => setTargetIdOverride(id),
       clearTargetId: () => setTargetIdOverride(null),
+      proximo: () => setIdx(i => {
+        if (i < passos.length - 1) return i + 1;
+        // Último passo — chama onConcluir
+        setTimeout(() => onConcluir && onConcluir(), 0);
+        return i;
+      }),
     };
     return () => { delete window.__vkTutorial; };
-  }, []);
+  }, [passos.length]);
 
   // Reseta override ao mudar de passo (cada passo começa com seu próprio target)
   useEffect(() => { setTargetIdOverride(null); }, [idx]);
@@ -555,7 +576,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           .vk-tut-callout-circle { animation: vk-tut-callout-pulse 1.6s ease-in-out infinite; pointer-events: none; }
           .vk-tut-callout-text { animation: vk-tut-fs-fade 0.4s cubic-bezier(0.32, 0.72, 0, 1) both; }
         `}</style>
-        <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} />
+        <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} acaoAoIniciar={passo.acaoAoIniciar} />
       </>
     );
   }
@@ -16847,6 +16868,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       // Recolhe/expande um grupo individual de cômodos (ex: "Áreas Sociais").
       recolherGrupo: (nome) => setGruposAbertos(prev => ({ ...prev, [nome]: false })),
       expandirGrupo: (nome) => setGruposAbertos(prev => ({ ...prev, [nome]: true })),
+      // Liga/desliga toggles de Arq e Eng (usado no callout do tutorial).
+      setIncluiArq, setIncluiEng,
     };
     return () => { delete window.__vkOrc; };
   }, []);
@@ -29983,12 +30006,26 @@ export default function ModuloClientesFornecedores() {
             cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
-          // Toggles Arq + Eng — circular ambos com instrução (callouts).
+          // Toggles Arq + Eng — circular ambos com instrução acima.
+          // Toggles começam DESLIGADOS quando o callout aparece, e são
+          // ligados em conjunto após 1.4s pra reforçar a ação visualmente.
           {
             tipo: "callouts",
             targetIds: ["toggle-incluiArq", "toggle-incluiEng"],
             titulo: "Insira os projetos a serem orçados",
-            autoMs: 3200,
+            autoMs: 4000,
+            acaoAoIniciar: async (cancelado) => {
+              const orc = window.__vkOrc;
+              if (!orc) return;
+              // Desliga os toggles quando o callout aparece
+              orc.setIncluiArq && orc.setIncluiArq(false);
+              orc.setIncluiEng && orc.setIncluiEng(false);
+              await new Promise(r => setTimeout(r, 1400));
+              if (cancelado()) return;
+              // Liga ambos em conjunto — usuário vê o efeito de "ativar"
+              orc.setIncluiArq && orc.setIncluiArq(true);
+              orc.setIncluiEng && orc.setIncluiEng(true);
+            },
           },
           // Cômodos — animação por grupo. Pra cada cômodo:
           //   1. Cursor anda até o cômodo
@@ -30057,6 +30094,9 @@ export default function ModuloClientesFornecedores() {
                 await sleep(t.recolhe);
               }
               tut.clearTargetId && tut.clearTargetId();
+              // Avança imediatamente — não espera autoMs estourar (que ficaria
+              // 10+ segundos parado depois do último cômodo).
+              tut.proximo && tut.proximo();
             },
           },
           // ── Etapa de Forma de Pagamento ──

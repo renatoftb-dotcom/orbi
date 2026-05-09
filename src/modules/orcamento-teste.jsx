@@ -6060,6 +6060,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       // Recolhe/expande um grupo individual de cômodos (ex: "Áreas Sociais").
       recolherGrupo: (nome) => setGruposAbertos(prev => ({ ...prev, [nome]: false })),
       expandirGrupo: (nome) => setGruposAbertos(prev => ({ ...prev, [nome]: true })),
+      // Liga/desliga toggles de Arq e Eng (usado no callout do tutorial).
+      setIncluiArq, setIncluiEng,
     };
     return () => { delete window.__vkOrc; };
   }, []);

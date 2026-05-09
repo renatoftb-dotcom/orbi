@@ -2126,12 +2126,26 @@ export default function ModuloClientesFornecedores() {
             cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
-          // Toggles Arq + Eng — circular ambos com instrução (callouts).
+          // Toggles Arq + Eng — circular ambos com instrução acima.
+          // Toggles começam DESLIGADOS quando o callout aparece, e são
+          // ligados em conjunto após 1.4s pra reforçar a ação visualmente.
           {
             tipo: "callouts",
             targetIds: ["toggle-incluiArq", "toggle-incluiEng"],
             titulo: "Insira os projetos a serem orçados",
-            autoMs: 3200,
+            autoMs: 4000,
+            acaoAoIniciar: async (cancelado) => {
+              const orc = window.__vkOrc;
+              if (!orc) return;
+              // Desliga os toggles quando o callout aparece
+              orc.setIncluiArq && orc.setIncluiArq(false);
+              orc.setIncluiEng && orc.setIncluiEng(false);
+              await new Promise(r => setTimeout(r, 1400));
+              if (cancelado()) return;
+              // Liga ambos em conjunto — usuário vê o efeito de "ativar"
+              orc.setIncluiArq && orc.setIncluiArq(true);
+              orc.setIncluiEng && orc.setIncluiEng(true);
+            },
           },
           // Cômodos — animação por grupo. Pra cada cômodo:
           //   1. Cursor anda até o cômodo
@@ -2200,6 +2214,9 @@ export default function ModuloClientesFornecedores() {
                 await sleep(t.recolhe);
               }
               tut.clearTargetId && tut.clearTargetId();
+              // Avança imediatamente — não espera autoMs estourar (que ficaria
+              // 10+ segundos parado depois do último cômodo).
+              tut.proximo && tut.proximo();
             },
           },
           // ── Etapa de Forma de Pagamento ──
