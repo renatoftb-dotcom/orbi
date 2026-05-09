@@ -1139,11 +1139,23 @@ app.put("/api/escritorio", async (req, res) => {
     // frontend SEMPRE envia o campo logo no save (mesmo que null), então
     // não há perda silenciosa. Se algum dia houver endpoint de save parcial,
     // usar PATCH com COALESCE seletivo, não esse PUT.
+    //
+    // Preservação de flags internas: chaves como `dev_mode`, `features`,
+    // `onboarding_orcamento_concluido` NÃO vêm do form de cadastro. O save
+    // agora preserva essas chaves se já existiam (evita "perder" dev_mode
+    // quando o user completa o onboarding inicial).
     const { logo, ...dados } = req.body || {};
     const logoFinal = logo !== undefined ? logo : null;
     await query(
       `INSERT INTO escritorio (empresa_id, dados, logo) VALUES ($1, $2, $3)
-       ON CONFLICT(empresa_id) DO UPDATE SET dados=$2, logo=$3, atualizado_em=NOW()`,
+       ON CONFLICT(empresa_id) DO UPDATE SET
+         dados = $2::jsonb || COALESCE((
+           SELECT jsonb_object_agg(k, v)
+             FROM jsonb_each(escritorio.dados)
+            WHERE k IN ('dev_mode', 'features', 'onboarding_orcamento_concluido')
+         ), '{}'::jsonb),
+         logo = $3,
+         atualizado_em = NOW()`,
       [eid, dados, logoFinal]
     );
     ok(res, { ...dados, logo: logoFinal });
