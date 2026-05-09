@@ -16122,6 +16122,7 @@ function EtapaFormaPagamento({
     return (
       <div
         key={tipo}
+        data-tutorial-id={`card-contratacao-${tipo}`}
         className={'vk-fp-card' + (sel ? ' selected' : '')}>
         {/* Patch: clicar no card NÃO faz toggle (evita desmarcar sem querer
             ao tentar editar inputs internos). Só o radio dispara toggle. */}
@@ -16700,7 +16701,7 @@ function EtapaFormaPagamento({
 
         <div style={{ display: 'flex', gap: 8, marginTop: 32 }}>
           <button type="button" style={S.btnSecondary} onClick={() => setSubTela('selecao')}>← Voltar</button>
-          <button type="button" style={{ ...S.btnPrimary, flex: 1 }} onClick={() => {
+          <button type="button" data-tutorial-id="botao-continuar-proposta" style={{ ...S.btnPrimary, flex: 1 }} onClick={() => {
             // Validação: pelo menos uma forma deve ter contratação selecionada
             if (formasParaCards.length > 0 && contratacoesSelecionadas.length === 0) {
               setErroValidacao('Selecione ao menos uma forma de contratação (Apenas Arquitetura ou Pacote).');
@@ -30246,6 +30247,24 @@ export default function ModuloClientesFornecedores() {
             targetId: "botao-continuar-pagamento",
             titulo: "Continuar",
             descricao: "Pronto! Avançar pra próxima etapa.",
+            posicao: "top", autoMs: 2400,
+            acao: "click",
+          },
+          // ── Etapa 2 da Forma de Pagamento: "Defina os valores" ──
+          // Sinaliza os cards de contratação com callout azul, indicando
+          // que o usuário pode ajustar descontos e número de parcelas.
+          {
+            tipo: "callouts",
+            targetIds: ["card-contratacao-arq", "card-contratacao-pac"],
+            titulo: "Você pode alterar descontos e parcelas",
+            descricao: "Ajuste o desconto antecipado e o número de parcelas em cada cenário.",
+            autoMs: 4500,
+          },
+          // Click no botão "Continuar para proposta" (com sinalização)
+          {
+            targetId: "botao-continuar-proposta",
+            titulo: "Continuar",
+            descricao: "Avançar pra geração da proposta.",
             posicao: "top", autoMs: 2400,
             acao: "click",
           },

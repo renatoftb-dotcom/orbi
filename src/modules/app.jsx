@@ -2251,6 +2251,24 @@ export default function ModuloClientesFornecedores() {
             posicao: "top", autoMs: 2400,
             acao: "click",
           },
+          // ── Etapa 2 da Forma de Pagamento: "Defina os valores" ──
+          // Sinaliza os cards de contratação com callout azul, indicando
+          // que o usuário pode ajustar descontos e número de parcelas.
+          {
+            tipo: "callouts",
+            targetIds: ["card-contratacao-arq", "card-contratacao-pac"],
+            titulo: "Você pode alterar descontos e parcelas",
+            descricao: "Ajuste o desconto antecipado e o número de parcelas em cada cenário.",
+            autoMs: 4500,
+          },
+          // Click no botão "Continuar para proposta" (com sinalização)
+          {
+            targetId: "botao-continuar-proposta",
+            titulo: "Continuar",
+            descricao: "Avançar pra geração da proposta.",
+            posicao: "top", autoMs: 2400,
+            acao: "click",
+          },
         ]}
         onConcluir={() => setTutorialBetaAtivo(false)}
         onCancelar={() => { setTutorialBetaAtivo(false); setOrcamentoTelaCheia(null); setAba("home"); }}
