@@ -2186,6 +2186,46 @@ export default function ModuloClientesFornecedores() {
               tut.clearTargetId && tut.clearTargetId();
             },
           },
+          // ── Etapa de Forma de Pagamento ──
+          // Click no botão "Definir forma de pagamento" (sidebar do resumo)
+          {
+            targetId: "botao-definir-pagamento",
+            cursorOnly: true, autoMs: 1600,
+            acao: "click",
+          },
+          // Frases introdutórias com balão amarelo (sem ação)
+          {
+            targetId: "botao-continuar-pagamento",
+            titulo: "Forma de pagamento",
+            descricao: "Agora vamos definir a forma de pagamento.",
+            posicao: "top", autoMs: 2400,
+          },
+          {
+            targetId: "botao-continuar-pagamento",
+            titulo: "Forma de pagamento",
+            descricao: "Vamos oferecer um desconto para pagamento antecipado, ou um parcelamento sem desconto.",
+            posicao: "top", autoMs: 3400,
+          },
+          // Selecionar "Pagamento antecipado com desconto"
+          {
+            targetId: "forma-pagamento-antecipado",
+            cursorOnly: true, autoMs: 1600,
+            acao: "click",
+          },
+          // Selecionar "Entrada + parcelas a cada 30 dias"
+          {
+            targetId: "forma-pagamento-parcelas",
+            cursorOnly: true, autoMs: 1600,
+            acao: "click",
+          },
+          // Click no botão "Continuar" (com sinalização — balão amarelo)
+          {
+            targetId: "botao-continuar-pagamento",
+            titulo: "Continuar",
+            descricao: "Pronto! Avançar pra próxima etapa.",
+            posicao: "top", autoMs: 2400,
+            acao: "click",
+          },
         ]}
         onConcluir={() => setTutorialBetaAtivo(false)}
         onCancelar={() => setTutorialBetaAtivo(false)}

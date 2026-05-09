@@ -15673,6 +15673,7 @@ function EtapaFormaPagamento({
                   <button
                     key={f.id}
                     type="button"
+                    data-tutorial-id={`forma-pagamento-${f.id}`}
                     className={'vk-fp-opt' + (sel ? ' selected' : '')}
                     onClick={() => toggleForma(f.id)}>
                     <span className="vk-fp-check">
@@ -15695,6 +15696,7 @@ function EtapaFormaPagamento({
             <button type="button" style={S.btnSecondary} onClick={onVoltar}>← Voltar</button>
             <button
               type="button"
+              data-tutorial-id="botao-continuar-pagamento"
               style={{ ...S.btnPrimary, flex: 1, opacity: formasSelecionadas.length > 0 ? 1 : 0.5 }}
               onClick={avancarParaConfig}>
               Continuar →
@@ -19582,6 +19584,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   }} fmtNum={fmtNum} C={C} temImposto={temImposto} aliqImp={aliqImp} />
                 </div>
                 <button
+                  data-tutorial-id="botao-definir-pagamento"
                   style={{ width:"100%", marginTop:10, background:"#111", color:"#fff", border:"1px solid #111", borderRadius:8, padding:"11px 16px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#000"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="#111"; }}
@@ -29902,6 +29905,46 @@ export default function ModuloClientesFornecedores() {
               }
               tut.clearTargetId && tut.clearTargetId();
             },
+          },
+          // ── Etapa de Forma de Pagamento ──
+          // Click no botão "Definir forma de pagamento" (sidebar do resumo)
+          {
+            targetId: "botao-definir-pagamento",
+            cursorOnly: true, autoMs: 1600,
+            acao: "click",
+          },
+          // Frases introdutórias com balão amarelo (sem ação)
+          {
+            targetId: "botao-continuar-pagamento",
+            titulo: "Forma de pagamento",
+            descricao: "Agora vamos definir a forma de pagamento.",
+            posicao: "top", autoMs: 2400,
+          },
+          {
+            targetId: "botao-continuar-pagamento",
+            titulo: "Forma de pagamento",
+            descricao: "Vamos oferecer um desconto para pagamento antecipado, ou um parcelamento sem desconto.",
+            posicao: "top", autoMs: 3400,
+          },
+          // Selecionar "Pagamento antecipado com desconto"
+          {
+            targetId: "forma-pagamento-antecipado",
+            cursorOnly: true, autoMs: 1600,
+            acao: "click",
+          },
+          // Selecionar "Entrada + parcelas a cada 30 dias"
+          {
+            targetId: "forma-pagamento-parcelas",
+            cursorOnly: true, autoMs: 1600,
+            acao: "click",
+          },
+          // Click no botão "Continuar" (com sinalização — balão amarelo)
+          {
+            targetId: "botao-continuar-pagamento",
+            titulo: "Continuar",
+            descricao: "Pronto! Avançar pra próxima etapa.",
+            posicao: "top", autoMs: 2400,
+            acao: "click",
           },
         ]}
         onConcluir={() => setTutorialBetaAtivo(false)}
