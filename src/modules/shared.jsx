@@ -554,10 +554,16 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   };
   const chrome = (
     <>
-      <div onClick={e => e.stopPropagation()} style={{
-        position: "fixed", inset: 0, background: "transparent",
-        zIndex: 998, cursor: "default",
-      }} />
+      {/* Bloqueador: captura mouseDown + click + keydown da app inteira.
+          Tutorial usa el.click() programático que NÃO passa pelo overlay. */}
+      <div
+        onMouseDownCapture={e => { e.stopPropagation(); e.preventDefault(); }}
+        onClickCapture={e => { e.stopPropagation(); e.preventDefault(); }}
+        onContextMenuCapture={e => { e.stopPropagation(); e.preventDefault(); }}
+        style={{
+          position: "fixed", inset: 0, background: "transparent",
+          zIndex: 998, cursor: "default",
+        }} />
       <div style={{
         position: "fixed", bottom: 16, right: 16,
         display: "flex", gap: 8, zIndex: 1010,
@@ -581,7 +587,8 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   if (estagio === "welcome" && welcome) {
     return (
       <>
-        <div onClick={onCancelar} style={{
+        {/* Backdrop SEM onClick — usuário só fecha via botões do modal */}
+        <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000,
         }} />
         <div style={{
