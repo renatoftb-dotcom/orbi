@@ -197,6 +197,14 @@ function BannerModoDev({ escritorio }) {
 // (ex: desligar/ligar toggles em sincronia com a aparição da orientação).
 function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
   const [rects, setRects] = useState([]);
+  const textRef = useRef(null);
+  const [textW, setTextW] = useState(280);
+  useEffect(() => {
+    if (textRef.current) {
+      const r = textRef.current.getBoundingClientRect();
+      if (r.width > 0) setTextW(r.width);
+    }
+  }, [titulo, descricao]);
   useEffect(() => {
     let cancelado = false;
     let tentativas = 0;
@@ -231,80 +239,80 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
     return () => { cancelado = true; };
   }, []);
 
-  // Calcula bounds pra posicionar texto ACIMA do conjunto e desenhar
-  // linhas de chamada de cada círculo até a base do texto.
+  // Layout: UMA elipse SVG envolvendo o conjunto inteiro de elementos +
+  // UMA linha conectora saindo da borda superior-direita da elipse até a
+  // quina inferior-esquerda do texto. Texto fica à direita do conjunto,
+  // na altura do topo. Estilo "callout" clássico de captura de atenção.
   const COR_AZUL = "#1e3a8a";
-  let textBottomY = 60;
-  let textCenterX = (typeof window !== "undefined" ? window.innerWidth : 800) / 2;
+  const TEXT_MAX_W = 220;
+
+  // Bounds do conjunto + centro/raios da elipse com padding
+  let cx = 0, cy = 0, rx = 0, ry = 0;
+  let textLeft = 24, textTop = 24;
+  let lineX1 = 0, lineY1 = 0, lineX2 = 0, lineY2 = 0;
   if (rects.length > 0) {
-    const minTop = Math.min(...rects.map(r => r.top));
-    textBottomY = Math.max(60, minTop - 32);
-    // Centro horizontal do conjunto pra ancorar o texto e linhas
     const minLeft = Math.min(...rects.map(r => r.left));
+    const minTop = Math.min(...rects.map(r => r.top));
     const maxRight = Math.max(...rects.map(r => r.left + r.width));
-    textCenterX = (minLeft + maxRight) / 2;
+    const maxBottom = Math.max(...rects.map(r => r.top + r.height));
+    cx = (minLeft + maxRight) / 2;
+    cy = (minTop + maxBottom) / 2;
+    rx = (maxRight - minLeft) / 2 + 36;  // padding horizontal generoso
+    ry = (maxBottom - minTop) / 2 + 18;  // padding vertical menor
+
+    // Texto à direita do conjunto, ligeiramente acima do topo
+    textLeft = maxRight + 70;
+    textTop = Math.max(24, minTop - 28);
+
+    // Linha: sai do nordeste da elipse (ângulo ~25° acima da horizontal)
+    // e vai até a quina inferior-esquerda do texto
+    const ang = Math.PI / 7; // ~25.7° em radianos
+    lineX1 = cx + rx * Math.cos(ang);
+    lineY1 = cy - ry * Math.sin(ang);
+    lineX2 = textLeft - 8;
+    lineY2 = textTop + (textW > 0 ? 30 : 30); // aproximadamente próximo da base do título
   }
 
   return (
     <>
-      {/* Linhas de chamada conectando cada círculo à base do texto */}
-      {rects.length > 0 && (titulo || descricao) && (
+      {/* Elipse SVG envolvendo todos os elementos + linha conectora */}
+      {rects.length > 0 && (
         <svg style={{
           position: "fixed", inset: 0,
           width: "100%", height: "100%",
-          zIndex: 1002, pointerEvents: "none",
+          zIndex: 1001, pointerEvents: "none",
         }}>
-          {rects.map((r, i) => {
-            const cx = r.left + r.width / 2;
-            const cy = r.top - 6; // topo do círculo
-            return (
-              <line key={i}
-                x1={textCenterX} y1={textBottomY + 4}
-                x2={cx} y2={cy}
-                stroke={COR_AZUL} strokeWidth="1.5"
-                strokeDasharray="4 3"
-                strokeOpacity="0.7"
-              />
-            );
-          })}
+          <ellipse cx={cx} cy={cy} rx={rx} ry={ry}
+            fill="none" stroke={COR_AZUL} strokeWidth="1.5" />
+          {(titulo || descricao) && (
+            <line x1={lineX1} y1={lineY1} x2={lineX2} y2={lineY2}
+              stroke={COR_AZUL} strokeWidth="1.5" />
+          )}
         </svg>
       )}
 
-      {/* Círculos azul escuro pulsantes em cada elemento */}
-      {rects.map((r, i) => (
-        <div key={i} className="vk-tut-callout-circle" style={{
-          position: "fixed",
-          top: r.top - 8, left: r.left - 8,
-          width: r.width + 16, height: r.height + 16,
-          border: `2.5px solid ${COR_AZUL}`, borderRadius: 12,
-          zIndex: 1001,
-        }} />
-      ))}
-
-      {/* Texto centralizado acima dos elementos, em azul escuro */}
+      {/* Texto alinhado à esquerda, à direita do conjunto, em preto */}
       {(titulo || descricao) && rects.length > 0 && (
-        <div className="vk-tut-callout-text" style={{
+        <div ref={textRef} className="vk-tut-callout-text" style={{
           position: "fixed",
-          bottom: `calc(100vh - ${textBottomY}px)`,
-          left: 0, right: 0,
-          display: "flex", justifyContent: "center", padding: "0 24px",
+          top: textTop, left: textLeft,
+          maxWidth: TEXT_MAX_W,
           zIndex: 1003, pointerEvents: "none",
           fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          textAlign: "left",
         }}>
-          <div style={{ maxWidth: 720, textAlign: "center" }}>
-            {titulo && (
-              <h2 style={{
-                fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
-                lineHeight: 1.2, margin: 0, color: COR_AZUL,
-              }}>{titulo}</h2>
-            )}
-            {descricao && (
-              <p style={{
-                fontSize: 16, fontWeight: 400, color: COR_AZUL, opacity: 0.75,
-                lineHeight: 1.55, marginTop: 12, marginBottom: 0,
-              }}>{descricao}</p>
-            )}
-          </div>
+          {titulo && (
+            <h2 style={{
+              fontSize: 22, fontWeight: 500, letterSpacing: "-0.022em",
+              lineHeight: 1.25, margin: 0, color: "#111",
+            }}>{titulo}</h2>
+          )}
+          {descricao && (
+            <p style={{
+              fontSize: 14.5, fontWeight: 400, color: "#6b7280",
+              lineHeight: 1.5, marginTop: 8, marginBottom: 0,
+            }}>{descricao}</p>
+          )}
         </div>
       )}
     </>
@@ -339,6 +347,10 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   // movam o cursor pra outros elementos sem trocar de passo. Setado via
   // window.__vkTutorial.setTargetId(id). Limpado quando passo muda.
   const [targetIdOverride, setTargetIdOverride] = useState(null);
+  // Esconde a UI do tutorial (spotlight/balão/cursor) ANTES de executar a
+  // ação final do passo, pra evitar que a sinalização "vaze" pra próxima
+  // tela enquanto o React processa a transição.
+  const [ocultarUI, setOcultarUI] = useState(false);
   const passo = passos[idx] || null;
   const targetIdAtual = targetIdOverride || passo?.targetId;
 
@@ -359,8 +371,8 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     return () => { delete window.__vkTutorial; };
   }, [passos.length]);
 
-  // Reseta override ao mudar de passo (cada passo começa com seu próprio target)
-  useEffect(() => { setTargetIdOverride(null); }, [idx]);
+  // Reseta override e visibilidade ao mudar de passo
+  useEffect(() => { setTargetIdOverride(null); setOcultarUI(false); }, [idx]);
 
   // Mede o elemento alvo. Re-mede em scroll/resize. Tenta a cada 200ms
   // por até 1.5s pra suportar elementos que ainda estão renderizando.
@@ -465,45 +477,58 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     return () => { cancelado = true; };
   }, [estagio, idx]);
 
-  // Auto-avança após autoMs do passo atual. Antes de avançar, executa
-  // a `acao` opcional (click no botão alvo, preenche input, etc.).
+  // Auto-avança após autoMs do passo atual. Sequência:
+  //   1. Esconde UI do tutorial (spotlight/balão/cursor)
+  //   2. Executa a ação (click, fill) — agora sem sinalização visível
+  //   3. Avança pro próximo passo (ou conclui)
+  // Esconder ANTES da ação evita que o spotlight da página atual "vaze"
+  // pra próxima tela enquanto o React processa a mudança.
   // "type" é tratado em useEffect separado e NÃO re-executa aqui.
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
     const ms = passo.autoMs || 3500;
     const t = setTimeout(() => {
-      // Executa ação se definida — usa o elemento mais recente do DOM
-      if (passo.acao && passo.acao !== "click" && passo.acao?.tipo === "type") {
-        // Já foi disparado no useEffect de digitação. Só avança.
-      } else if (passo.acao) {
-        const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
-        if (el) {
-          try {
-            if (passo.acao === "click") {
-              el.click();
-            } else if (typeof passo.acao === "function") {
-              passo.acao(el);
-            } else if (passo.acao && passo.acao.tipo === "fill") {
-              // Preenche input usando setter nativo + dispatch event pra
-              // o React detectar a mudança via onChange.
-              const proto = el.tagName === "TEXTAREA"
-                ? window.HTMLTextAreaElement.prototype
-                : window.HTMLInputElement.prototype;
-              const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
-              setter.call(el, String(passo.acao.valor || ""));
-              el.dispatchEvent(new Event("input", { bubbles: true }));
-              el.dispatchEvent(new Event("change", { bubbles: true }));
+      const temAcaoFinal = passo.acao &&
+        !(passo.acao && passo.acao.tipo === "type");
+      // Esconde UI imediatamente se vai executar uma ação (click/fill/fn)
+      if (temAcaoFinal) setOcultarUI(true);
+
+      // Executa a ação no próximo tick pro React renderizar com UI escondida
+      const exec = () => {
+        if (passo.acao && passo.acao.tipo === "type") {
+          // Já foi disparado no useEffect de digitação. Só avança.
+        } else if (passo.acao) {
+          const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
+          if (el) {
+            try {
+              if (passo.acao === "click") {
+                el.click();
+              } else if (typeof passo.acao === "function") {
+                passo.acao(el);
+              } else if (passo.acao && passo.acao.tipo === "fill") {
+                const proto = el.tagName === "TEXTAREA"
+                  ? window.HTMLTextAreaElement.prototype
+                  : window.HTMLInputElement.prototype;
+                const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+                setter.call(el, String(passo.acao.valor || ""));
+                el.dispatchEvent(new Event("input", { bubbles: true }));
+                el.dispatchEvent(new Event("change", { bubbles: true }));
+              }
+            } catch (e) {
+              console.warn("[tutorial] acao falhou:", e);
             }
-          } catch (e) {
-            console.warn("[tutorial] acao falhou:", e);
           }
         }
-      }
-      if (idx < passos.length - 1) setIdx(idx + 1);
-      else {
-        // Pequeno delay no último passo pra dar tempo da última ação rolar
-        setTimeout(() => onConcluir && onConcluir(), 400);
-      }
+        if (idx < passos.length - 1) setIdx(idx + 1);
+        else {
+          // Último passo — chama onConcluir após pequeno buffer pra garantir
+          // que a transição da app processou.
+          setTimeout(() => onConcluir && onConcluir(), 200);
+        }
+      };
+      // Se escondeu UI, dá 1 tick pro DOM atualizar antes de executar
+      if (temAcaoFinal) setTimeout(exec, 30);
+      else exec();
     }, ms);
     return () => clearTimeout(t);
   }, [estagio, idx]);
@@ -550,6 +575,9 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   }
 
   if (!passo) return null;
+  // Tutorial pediu pra esconder a UI antes de avançar — não renderiza nada
+  // mesmo que o passo ainda esteja "ativo" no state.
+  if (ocultarUI) return null;
 
   // Modo fullscreen — texto no TOPO da tela com fundo BRANCO sólido cobrindo
   // tudo abaixo. Evita que as opções da próxima etapa apareçam por trás
