@@ -194,13 +194,13 @@ function BannerModoDev({ escritorio }) {
 function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
   const [rects, setRects] = useState([]);
   const textRef = useRef(null);
-  const [textW, setTextW] = useState(280);
+  const [textBox, setTextBox] = useState({ w: 280, h: 60 });
   useEffect(() => {
     if (textRef.current) {
       const r = textRef.current.getBoundingClientRect();
-      if (r.width > 0) setTextW(r.width);
+      if (r.width > 0) setTextBox({ w: r.width, h: r.height });
     }
-  }, [titulo, descricao]);
+  }, [titulo, descricao, rects.length]);
   useEffect(() => {
     let cancelado = false;
     let tentativas = 0;
@@ -235,17 +235,23 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
     return () => { cancelado = true; };
   }, []);
 
-  // Layout: borda amarela pulsante em CADA elemento (mesmo estilo do
-  // spotlight padrão — .vk-tut-spotlight com vk-tut-pulse-border). Texto
-  // único posicionado acima do conjunto, em preto. Padrão coerente com
-  // os outros tipos de sinalização do tutorial.
-  const TEXT_MAX_W = 320;
-  let textLeft = 24, textTop = 24;
+  // Layout: borda amarela pulsante em cada elemento + balão único à
+  // ESQUERDA do conjunto, alinhado verticalmente no meio entre os
+  // elementos. 2 setas SVG saem do canto direito do balão e vão até a
+  // borda esquerda de cada elemento.
+  const TEXT_MAX_W = 280;
+  const GAP = 28; // distância entre balão e elementos
+  let balaoLeft = 16, balaoTop = 16;
+  let balaoRight = 0, balaoCY = 0;
   if (rects.length > 0) {
     const minLeft = Math.min(...rects.map(r => r.left));
     const minTop = Math.min(...rects.map(r => r.top));
-    textLeft = Math.max(16, minLeft);
-    textTop = Math.max(16, minTop - 64);
+    const maxBottom = Math.max(...rects.map(r => r.top + r.height));
+    const conjuntoCY = (minTop + maxBottom) / 2;
+    balaoLeft = Math.max(16, minLeft - textBox.w - GAP);
+    balaoTop = Math.max(16, conjuntoCY - textBox.h / 2);
+    balaoRight = balaoLeft + textBox.w;
+    balaoCY = balaoTop + textBox.h / 2;
   }
 
   return (
@@ -261,18 +267,44 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
         }} />
       ))}
 
-      {/* Texto acima do conjunto, alinhado à esquerda, em preto */}
+      {/* Setas SVG conectando o balão (canto direito) a cada elemento */}
+      {(titulo || descricao) && rects.length > 0 && (
+        <svg style={{
+          position: "fixed", inset: 0, width: "100%", height: "100%",
+          zIndex: 1002, pointerEvents: "none",
+        }}>
+          <defs>
+            <marker id="vk-arrow-head" viewBox="0 0 10 10"
+              refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" />
+            </marker>
+          </defs>
+          {rects.map((r, i) => {
+            const x1 = balaoRight + 2;
+            const y1 = balaoCY;
+            const x2 = r.left - 10;
+            const y2 = r.top + r.height / 2;
+            return (
+              <line key={i} x1={x1} y1={y1} x2={x2} y2={y2}
+                stroke="#f59e0b" strokeWidth="1.8"
+                markerEnd="url(#vk-arrow-head)" />
+            );
+          })}
+        </svg>
+      )}
+
+      {/* Balão tooltip à esquerda — caixa branca com sombra */}
       {(titulo || descricao) && rects.length > 0 && (
         <div ref={textRef} className="vk-tut-tooltip" style={{
           position: "fixed",
-          top: textTop, left: textLeft,
-          maxWidth: TEXT_MAX_W,
+          top: balaoTop, left: balaoLeft,
+          maxWidth: TEXT_MAX_W, minWidth: 220,
           zIndex: 1003, pointerEvents: "none",
           fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
           textAlign: "left",
-          background: "#fff", padding: "10px 14px",
-          borderRadius: 8, border: "1px solid #fde68a",
-          boxShadow: "0 8px 20px rgba(0,0,0,0.10)",
+          background: "#fff", padding: "14px 18px",
+          borderRadius: 10,
+          boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
         }}>
           {titulo && (
             <div style={{
@@ -282,7 +314,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
           )}
           {descricao && (
             <div style={{
-              fontSize: 13, color: "#111", lineHeight: 1.5,
+              fontSize: 13.5, color: "#111", lineHeight: 1.5,
             }}>{descricao}</div>
           )}
         </div>

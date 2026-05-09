@@ -2222,10 +2222,13 @@ export default function ModuloClientesFornecedores() {
             },
           },
           // ── Etapa de Forma de Pagamento ──
-          // Click no botão "Definir forma de pagamento" (sidebar do resumo)
+          // Sinalização padrão (spotlight + balão amarelo) no botão
+          // "Definir forma de pagamento" — mesmo padrão dos outros avisos.
           {
             targetId: "botao-definir-pagamento",
-            cursorOnly: true, autoMs: 1600,
+            titulo: "Forma de pagamento",
+            descricao: "Pronto pra definir como o cliente vai pagar.",
+            posicao: "top", autoMs: 2400,
             acao: "click",
           },
           // Tela cheia com instrução (mesmo estilo do "Dê uma referência...")
