@@ -231,24 +231,57 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
     return () => { cancelado = true; };
   }, []);
 
-  // Calcula bounds pra posicionar texto ACIMA do conjunto
+  // Calcula bounds pra posicionar texto ACIMA do conjunto e desenhar
+  // linhas de chamada de cada círculo até a base do texto.
+  const COR_AZUL = "#1e3a8a";
   let textBottomY = 60;
+  let textCenterX = (typeof window !== "undefined" ? window.innerWidth : 800) / 2;
   if (rects.length > 0) {
     const minTop = Math.min(...rects.map(r => r.top));
-    textBottomY = Math.max(60, minTop - 16);
+    textBottomY = Math.max(60, minTop - 32);
+    // Centro horizontal do conjunto pra ancorar o texto e linhas
+    const minLeft = Math.min(...rects.map(r => r.left));
+    const maxRight = Math.max(...rects.map(r => r.left + r.width));
+    textCenterX = (minLeft + maxRight) / 2;
   }
 
   return (
     <>
+      {/* Linhas de chamada conectando cada círculo à base do texto */}
+      {rects.length > 0 && (titulo || descricao) && (
+        <svg style={{
+          position: "fixed", inset: 0,
+          width: "100%", height: "100%",
+          zIndex: 1002, pointerEvents: "none",
+        }}>
+          {rects.map((r, i) => {
+            const cx = r.left + r.width / 2;
+            const cy = r.top - 6; // topo do círculo
+            return (
+              <line key={i}
+                x1={textCenterX} y1={textBottomY + 4}
+                x2={cx} y2={cy}
+                stroke={COR_AZUL} strokeWidth="1.5"
+                strokeDasharray="4 3"
+                strokeOpacity="0.7"
+              />
+            );
+          })}
+        </svg>
+      )}
+
+      {/* Círculos azul escuro pulsantes em cada elemento */}
       {rects.map((r, i) => (
         <div key={i} className="vk-tut-callout-circle" style={{
           position: "fixed",
           top: r.top - 8, left: r.left - 8,
           width: r.width + 16, height: r.height + 16,
-          border: "2.5px solid #f59e0b", borderRadius: 12,
+          border: `2.5px solid ${COR_AZUL}`, borderRadius: 12,
           zIndex: 1001,
         }} />
       ))}
+
+      {/* Texto centralizado acima dos elementos, em azul escuro */}
       {(titulo || descricao) && rects.length > 0 && (
         <div className="vk-tut-callout-text" style={{
           position: "fixed",
@@ -262,12 +295,12 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
             {titulo && (
               <h2 style={{
                 fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
-                lineHeight: 1.2, margin: 0, color: "#111",
+                lineHeight: 1.2, margin: 0, color: COR_AZUL,
               }}>{titulo}</h2>
             )}
             {descricao && (
               <p style={{
-                fontSize: 16, fontWeight: 400, color: "#6b7280",
+                fontSize: 16, fontWeight: 400, color: COR_AZUL, opacity: 0.75,
                 lineHeight: 1.55, marginTop: 12, marginBottom: 0,
               }}>{descricao}</p>
             )}
@@ -518,11 +551,11 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   if (!passo) return null;
 
-  // Modo fullscreen — texto no TOPO da tela (não centralizado), fundo
-  // levemente desfocado pra atenção sem cobrir totalmente as opções abaixo.
-  // Mesmo estilo tipográfico do "Dê uma referência a esse projeto" (26px,
-  // font-weight 500, letter-spacing -0.022em). O texto some após autoMs e
-  // revela as opções que já estão renderizadas embaixo.
+  // Modo fullscreen — texto no TOPO da tela com fundo BRANCO sólido cobrindo
+  // tudo abaixo. Evita que as opções da próxima etapa apareçam por trás
+  // sobrepondo a orientação. Ao avançar pro próximo passo, o overlay some
+  // e revela as opções de uma vez. Mesmo estilo tipográfico do
+  // "Dê uma referência a esse projeto" (26px, font-weight 500).
   if (passo.tipo === "fullscreen") {
     return (
       <>
@@ -532,12 +565,11 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           .vk-tut-fs-line2 { animation: vk-tut-fs-fade 0.35s cubic-bezier(0.32, 0.72, 0, 1) both; animation-delay: 0.4s; opacity: 0; }
         `}</style>
         <div style={{
-          position: "fixed", top: 0, left: 0, right: 0,
-          paddingTop: 60, paddingBottom: 32, paddingLeft: 24, paddingRight: 24,
-          background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.92) 70%, rgba(255,255,255,0) 100%)",
-          zIndex: 1000, display: "flex", justifyContent: "center",
+          position: "fixed", inset: 0,
+          background: "#fff",
+          zIndex: 1000, display: "flex", justifyContent: "center", alignItems: "flex-start",
+          paddingTop: "20vh", paddingLeft: 24, paddingRight: 24,
           fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
-          pointerEvents: "none",
         }}>
           <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
             <h2 style={{
@@ -560,18 +592,17 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     );
   }
 
-  // Modo "callouts" — círculo ao redor de múltiplos elementos com texto
-  // único embaixo. Útil pra apontar 2+ elementos que devem ser olhados
-  // juntos (ex: toggles Arq + Eng com instrução "Insira os projetos a
-  // serem orçados"). Cada targetId vira um círculo pulsante.
+  // Modo "callouts" — círculo azul escuro ao redor de múltiplos elementos
+  // com texto único acima e linhas conectoras (callout) ligando cada
+  // círculo ao texto. Texto também em azul escuro.
   if (passo.tipo === "callouts") {
     const ids = passo.targetIds || [];
     return (
       <>
         <style>{`
           @keyframes vk-tut-callout-pulse {
-            0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25), 0 0 24px rgba(245, 158, 11, 0.5); border-color: #f59e0b; }
-            50%      { box-shadow: 0 0 0 9px rgba(245, 158, 11, 0.4),  0 0 36px rgba(245, 158, 11, 0.7); border-color: #d97706; }
+            0%, 100% { box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.20), 0 0 22px rgba(30, 58, 138, 0.40); border-color: #1e3a8a; }
+            50%      { box-shadow: 0 0 0 9px rgba(30, 58, 138, 0.35), 0 0 32px rgba(30, 58, 138, 0.60); border-color: #1e40af; }
           }
           .vk-tut-callout-circle { animation: vk-tut-callout-pulse 1.6s ease-in-out infinite; pointer-events: none; }
           .vk-tut-callout-text { animation: vk-tut-fs-fade 0.4s cubic-bezier(0.32, 0.72, 0, 1) both; }
