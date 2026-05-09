@@ -2244,13 +2244,13 @@ export default function ModuloClientesFornecedores() {
           // Selecionar "Pagamento antecipado com desconto"
           {
             targetId: "forma-pagamento-antecipado",
-            cursorOnly: true, autoMs: 1600,
+            cursorOnly: true, comSpotlight: true, autoMs: 1800,
             acao: "click",
           },
           // Selecionar "Entrada + parcelas a cada 30 dias"
           {
             targetId: "forma-pagamento-parcelas",
-            cursorOnly: true, autoMs: 1600,
+            cursorOnly: true, comSpotlight: true, autoMs: 1800,
             acao: "click",
           },
           // Click no botão "Continuar" (com sinalização — balão amarelo)

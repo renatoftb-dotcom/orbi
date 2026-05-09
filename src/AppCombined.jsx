@@ -285,8 +285,10 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
         }} />
       )}
 
-      {/* UM spotlight único envolvendo todo o conjunto, com brilho forte */}
-      {rects.length > 0 && (
+      {/* Spotlight: 1 único quando "top" (elementos lado a lado, ex: toggles)
+          ou N individuais quando "left" (elementos separados, ex: cards
+          com "OU" no meio). Cada um pulsa com brilho forte. */}
+      {rects.length > 0 && posicao === "top" && (
         <div className="vk-tut-spot-co" style={{
           position: "fixed",
           top: spotT, left: spotL,
@@ -295,6 +297,15 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           zIndex: 1001, pointerEvents: "none",
         }} />
       )}
+      {rects.length > 0 && posicao !== "top" && rects.map((r, i) => (
+        <div key={i} className="vk-tut-spot-co" style={{
+          position: "fixed",
+          top: r.top - PAD_Y, left: r.left - PAD_X,
+          width: r.width + PAD_X * 2, height: r.height + PAD_Y * 2,
+          border: "3px solid #f59e0b", borderRadius: 12,
+          zIndex: 1001, pointerEvents: "none",
+        }} />
+      ))}
 
       {/* Seta CSS triangular única apontando pra baixo (modo "top") */}
       {(titulo || descricao) && rects.length > 0 && posicao === "top" && (
@@ -30558,13 +30569,13 @@ export default function ModuloClientesFornecedores() {
           // Selecionar "Pagamento antecipado com desconto"
           {
             targetId: "forma-pagamento-antecipado",
-            cursorOnly: true, autoMs: 1600,
+            cursorOnly: true, comSpotlight: true, autoMs: 1800,
             acao: "click",
           },
           // Selecionar "Entrada + parcelas a cada 30 dias"
           {
             targetId: "forma-pagamento-parcelas",
-            cursorOnly: true, autoMs: 1600,
+            cursorOnly: true, comSpotlight: true, autoMs: 1800,
             acao: "click",
           },
           // Click no botão "Continuar" (com sinalização — balão amarelo)
