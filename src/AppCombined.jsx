@@ -401,6 +401,36 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   if (!passo) return null;
 
+  // Modo cursor-only — esconde spotlight + tooltip, mostra apenas o cursor
+  // de mouse SVG se movendo até o elemento. Útil pras opções (Médio, Térreo,
+  // etc.) que já mudam de cor ao serem selecionadas, dispensando o spotlight.
+  if (passo.cursorOnly) {
+    return (
+      <>
+        <style>{`
+          @keyframes vk-tut-cursor-fade { from { opacity: 0; } to { opacity: 1; } }
+          .vk-tut-cursor { animation: vk-tut-cursor-fade 0.25s ease-out; }
+        `}</style>
+        {rect && (
+          <div className="vk-tut-cursor" style={{
+            position: "fixed", zIndex: 1003, pointerEvents: "none",
+            // Posiciona a "ponta" do cursor sobre o centro do elemento
+            top:  rect.top + rect.height / 2 - 4,
+            left: rect.left + rect.width / 2 - 4,
+            transition: "top 0.5s cubic-bezier(0.32, 0.72, 0, 1), left 0.5s cubic-bezier(0.32, 0.72, 0, 1)",
+            filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.3))",
+          }}>
+            {/* SVG cursor padrão */}
+            <svg width="22" height="28" viewBox="0 0 22 28" fill="none">
+              <path d="M2 2 L2 22 L7 17 L11 25 L14 23.5 L10 16 L17 16 Z"
+                fill="#111" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
+            </svg>
+          </div>
+        )}
+      </>
+    );
+  }
+
   // Calcula posição do balão tooltip e da seta baseado no rect e em "posicao"
   const tooltipMargem = 18;
   const posPref = passo.posicao || "right";
@@ -19150,6 +19180,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       const isKbFoc = comodoAberto === nome && comodoQtdFocada === n;
                       return (
                       <button key={n}
+                        data-comodo-btn={`${nome}-${n}`}
                         onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); setComodoQtdFocada(null); }}
                         style={{
                           width:26, height:26,
@@ -19429,12 +19460,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     </>
                   )}
 
-                  {/* Escolhidos — escondidos quando o grupo está recolhido.
-                      (Antes ficavam sempre visíveis, mas isso fazia o chevron
-                      parecer não funcionar quando todos os cômodos do grupo
-                      estavam definidos: a setinha mudava de estado mas nada
-                      visualmente mudava na tela.) */}
-                  {!recolhido && escolhidos.length > 0 && (
+                  {/* Escolhidos — quando o grupo está RECOLHIDO, mostra apenas
+                      os cômodos com qtd > 0 (chips compactos com a quantidade).
+                      Quando ABERTO, mostra todos os escolhidos (incluindo tocados
+                      com qtd 0, pra o user ajustar). Assim o recolher serve pra
+                      "esconder o que ainda não foi definido" sem perder o
+                      panorama do que já foi escolhido. */}
+                  {(() => {
+                    const escolhidosVisiveis = recolhido
+                      ? escolhidos.filter(n => (qtds[n] || 0) > 0)
+                      : escolhidos;
+                    if (escolhidosVisiveis.length === 0) return null;
+                    return (
                     <div style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
                       gap:"8px 8px",
@@ -19443,7 +19480,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       borderTop:  (!recolhido && disponiveis.length > 0) ? "1px dashed #e5e7eb" : "none",
                       width:"100%",
                     }}>
-                      {escolhidos.map(nome => {
+                      {escolhidosVisiveis.map(nome => {
                         const q = qtds[nome] || 0;
                         const m2Total = getArea(nome) * q;
                         return (
@@ -19473,7 +19510,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         );
                       })}
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
               })}
@@ -29754,42 +29792,32 @@ export default function ModuloClientesFornecedores() {
             targetId: "campo-referencia",
             titulo: "Passo 7",
             descricao: "Vamos dar uma referência pro projeto: 'Casa Vicke'.",
-            posicao: "bottom", autoMs: 2400,
+            posicao: "right", autoMs: 2400,
             acao: { tipo: "type", valor: "Casa Vicke", delayChar: 55, confirmEnter: true },
           },
           {
             targetId: "opcao-tipoObra-construcao-nova",
-            titulo: "Passo 8",
-            descricao: "Tipo de obra: Construção nova.",
-            posicao: "right", autoMs: 2200,
+            cursorOnly: true, autoMs: 1400,
             acao: "click",
           },
           {
             targetId: "opcao-tipoProjeto-residencial",
-            titulo: "Passo 9",
-            descricao: "Tipo de projeto: Residencial.",
-            posicao: "right", autoMs: 2200,
+            cursorOnly: true, autoMs: 1400,
             acao: "click",
           },
           {
             targetId: "opcao-padrao-medio",
-            titulo: "Passo 10",
-            descricao: "Padrão: Médio.",
-            posicao: "right", autoMs: 2000,
+            cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
           {
             targetId: "opcao-tipologia-terreo",
-            titulo: "Passo 11",
-            descricao: "Tipologia: Térreo.",
-            posicao: "right", autoMs: 2000,
+            cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
           {
             targetId: "opcao-tamanho-medio",
-            titulo: "Passo 12",
-            descricao: "Tamanho dos ambientes: Médio.",
-            posicao: "right", autoMs: 2000,
+            cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
           // Cômodos — animação sequencial: pra cada cômodo abre o popup
@@ -29824,13 +29852,24 @@ export default function ModuloClientesFornecedores() {
               ];
               for (const [nome, qtd] of lista) {
                 if (cancelado()) return;
+                // Abre popup do cômodo (efeito hover)
                 orc.abrirPopup(nome);
-                await sleep(280);
+                await sleep(260);
                 if (cancelado()) return;
-                orc.setQtdAbs(nome, qtd);
-                await sleep(380);
+                // Em vez de setQtdAbs direto, clica no botão da qtd —
+                // assim o user vê o número virando preto antes de fechar.
+                const btn = document.querySelector(`[data-comodo-btn="${nome}-${qtd}"]`);
+                if (btn) {
+                  // Pequeno delay pra ver o destaque do botão antes do click
+                  await sleep(180);
+                  btn.click();
+                } else {
+                  // Fallback: seta direto se botão não encontrado
+                  orc.setQtdAbs(nome, qtd);
+                  orc.fecharPopup && orc.fecharPopup();
+                }
+                await sleep(280);
               }
-              orc.fecharPopup && orc.fecharPopup();
             },
           },
         ]}

@@ -2100,42 +2100,32 @@ export default function ModuloClientesFornecedores() {
             targetId: "campo-referencia",
             titulo: "Passo 7",
             descricao: "Vamos dar uma referência pro projeto: 'Casa Vicke'.",
-            posicao: "bottom", autoMs: 2400,
+            posicao: "right", autoMs: 2400,
             acao: { tipo: "type", valor: "Casa Vicke", delayChar: 55, confirmEnter: true },
           },
           {
             targetId: "opcao-tipoObra-construcao-nova",
-            titulo: "Passo 8",
-            descricao: "Tipo de obra: Construção nova.",
-            posicao: "right", autoMs: 2200,
+            cursorOnly: true, autoMs: 1400,
             acao: "click",
           },
           {
             targetId: "opcao-tipoProjeto-residencial",
-            titulo: "Passo 9",
-            descricao: "Tipo de projeto: Residencial.",
-            posicao: "right", autoMs: 2200,
+            cursorOnly: true, autoMs: 1400,
             acao: "click",
           },
           {
             targetId: "opcao-padrao-medio",
-            titulo: "Passo 10",
-            descricao: "Padrão: Médio.",
-            posicao: "right", autoMs: 2000,
+            cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
           {
             targetId: "opcao-tipologia-terreo",
-            titulo: "Passo 11",
-            descricao: "Tipologia: Térreo.",
-            posicao: "right", autoMs: 2000,
+            cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
           {
             targetId: "opcao-tamanho-medio",
-            titulo: "Passo 12",
-            descricao: "Tamanho dos ambientes: Médio.",
-            posicao: "right", autoMs: 2000,
+            cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
           // Cômodos — animação sequencial: pra cada cômodo abre o popup
@@ -2170,13 +2160,24 @@ export default function ModuloClientesFornecedores() {
               ];
               for (const [nome, qtd] of lista) {
                 if (cancelado()) return;
+                // Abre popup do cômodo (efeito hover)
                 orc.abrirPopup(nome);
-                await sleep(280);
+                await sleep(260);
                 if (cancelado()) return;
-                orc.setQtdAbs(nome, qtd);
-                await sleep(380);
+                // Em vez de setQtdAbs direto, clica no botão da qtd —
+                // assim o user vê o número virando preto antes de fechar.
+                const btn = document.querySelector(`[data-comodo-btn="${nome}-${qtd}"]`);
+                if (btn) {
+                  // Pequeno delay pra ver o destaque do botão antes do click
+                  await sleep(180);
+                  btn.click();
+                } else {
+                  // Fallback: seta direto se botão não encontrado
+                  orc.setQtdAbs(nome, qtd);
+                  orc.fecharPopup && orc.fecharPopup();
+                }
+                await sleep(280);
               }
-              orc.fecharPopup && orc.fecharPopup();
             },
           },
         ]}

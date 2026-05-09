@@ -8552,6 +8552,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       const isKbFoc = comodoAberto === nome && comodoQtdFocada === n;
                       return (
                       <button key={n}
+                        data-comodo-btn={`${nome}-${n}`}
                         onClick={e => { e.stopPropagation(); setQtdAbs(nome, n); setTravado(false); setComodoAberto(null); setComodoQtdFocada(null); }}
                         style={{
                           width:26, height:26,
@@ -8831,12 +8832,18 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                     </>
                   )}
 
-                  {/* Escolhidos — escondidos quando o grupo está recolhido.
-                      (Antes ficavam sempre visíveis, mas isso fazia o chevron
-                      parecer não funcionar quando todos os cômodos do grupo
-                      estavam definidos: a setinha mudava de estado mas nada
-                      visualmente mudava na tela.) */}
-                  {!recolhido && escolhidos.length > 0 && (
+                  {/* Escolhidos — quando o grupo está RECOLHIDO, mostra apenas
+                      os cômodos com qtd > 0 (chips compactos com a quantidade).
+                      Quando ABERTO, mostra todos os escolhidos (incluindo tocados
+                      com qtd 0, pra o user ajustar). Assim o recolher serve pra
+                      "esconder o que ainda não foi definido" sem perder o
+                      panorama do que já foi escolhido. */}
+                  {(() => {
+                    const escolhidosVisiveis = recolhido
+                      ? escolhidos.filter(n => (qtds[n] || 0) > 0)
+                      : escolhidos;
+                    if (escolhidosVisiveis.length === 0) return null;
+                    return (
                     <div style={{
                       display:"flex", flexDirection:"row", flexWrap:"wrap", alignItems:"center",
                       gap:"8px 8px",
@@ -8845,7 +8852,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       borderTop:  (!recolhido && disponiveis.length > 0) ? "1px dashed #e5e7eb" : "none",
                       width:"100%",
                     }}>
-                      {escolhidos.map(nome => {
+                      {escolhidosVisiveis.map(nome => {
                         const q = qtds[nome] || 0;
                         const m2Total = getArea(nome) * q;
                         return (
@@ -8875,7 +8882,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         );
                       })}
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
               })}

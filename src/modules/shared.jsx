@@ -397,6 +397,36 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   if (!passo) return null;
 
+  // Modo cursor-only — esconde spotlight + tooltip, mostra apenas o cursor
+  // de mouse SVG se movendo até o elemento. Útil pras opções (Médio, Térreo,
+  // etc.) que já mudam de cor ao serem selecionadas, dispensando o spotlight.
+  if (passo.cursorOnly) {
+    return (
+      <>
+        <style>{`
+          @keyframes vk-tut-cursor-fade { from { opacity: 0; } to { opacity: 1; } }
+          .vk-tut-cursor { animation: vk-tut-cursor-fade 0.25s ease-out; }
+        `}</style>
+        {rect && (
+          <div className="vk-tut-cursor" style={{
+            position: "fixed", zIndex: 1003, pointerEvents: "none",
+            // Posiciona a "ponta" do cursor sobre o centro do elemento
+            top:  rect.top + rect.height / 2 - 4,
+            left: rect.left + rect.width / 2 - 4,
+            transition: "top 0.5s cubic-bezier(0.32, 0.72, 0, 1), left 0.5s cubic-bezier(0.32, 0.72, 0, 1)",
+            filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.3))",
+          }}>
+            {/* SVG cursor padrão */}
+            <svg width="22" height="28" viewBox="0 0 22 28" fill="none">
+              <path d="M2 2 L2 22 L7 17 L11 25 L14 23.5 L10 16 L17 16 Z"
+                fill="#111" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
+            </svg>
+          </div>
+        )}
+      </>
+    );
+  }
+
   // Calcula posição do balão tooltip e da seta baseado no rect e em "posicao"
   const tooltipMargem = 18;
   const posPref = passo.posicao || "right";
