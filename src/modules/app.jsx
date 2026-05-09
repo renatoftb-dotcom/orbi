@@ -2096,9 +2096,28 @@ export default function ModuloClientesFornecedores() {
             acao: "click",   // salva o cliente
           },
           // ── Dentro do orçamento (cliente foi salvo, tela do form abriu) ──
+          // Callouts dos toggles Arq + Eng — JÁ no início, antes de digitar
+          // a referência. Toggles começam DESLIGADOS, são LIGADOS junto com
+          // a aparição da orientação.
+          {
+            tipo: "callouts",
+            targetIds: ["toggle-incluiArq", "toggle-incluiEng"],
+            titulo: "Insira os projetos a serem orçados",
+            autoMs: 4000,
+            acaoAoIniciar: async (cancelado) => {
+              const orc = window.__vkOrc;
+              if (!orc) return;
+              orc.setIncluiArq && orc.setIncluiArq(false);
+              orc.setIncluiEng && orc.setIncluiEng(false);
+              await new Promise(r => setTimeout(r, 1400));
+              if (cancelado()) return;
+              orc.setIncluiArq && orc.setIncluiArq(true);
+              orc.setIncluiEng && orc.setIncluiEng(true);
+            },
+          },
           {
             targetId: "campo-referencia",
-            cursorOnly: true, autoMs: 3200,
+            cursorOnly: true, autoMs: 2200,
             acao: { tipo: "type", valor: "Casa Vicke", delayChar: 100, confirmEnter: true },
           },
           {
@@ -2125,27 +2144,6 @@ export default function ModuloClientesFornecedores() {
             targetId: "opcao-tamanho-medio",
             cursorOnly: true, autoMs: 1300,
             acao: "click",
-          },
-          // Toggles Arq + Eng — circular ambos com instrução acima.
-          // Toggles começam DESLIGADOS quando o callout aparece, e são
-          // ligados em conjunto após 1.4s pra reforçar a ação visualmente.
-          {
-            tipo: "callouts",
-            targetIds: ["toggle-incluiArq", "toggle-incluiEng"],
-            titulo: "Insira os projetos a serem orçados",
-            autoMs: 4000,
-            acaoAoIniciar: async (cancelado) => {
-              const orc = window.__vkOrc;
-              if (!orc) return;
-              // Desliga os toggles quando o callout aparece
-              orc.setIncluiArq && orc.setIncluiArq(false);
-              orc.setIncluiEng && orc.setIncluiEng(false);
-              await new Promise(r => setTimeout(r, 1400));
-              if (cancelado()) return;
-              // Liga ambos em conjunto — usuário vê o efeito de "ativar"
-              orc.setIncluiArq && orc.setIncluiArq(true);
-              orc.setIncluiEng && orc.setIncluiEng(true);
-            },
           },
           // Cômodos — animação por grupo. Pra cada cômodo:
           //   1. Cursor anda até o cômodo
@@ -2255,7 +2253,7 @@ export default function ModuloClientesFornecedores() {
           },
         ]}
         onConcluir={() => setTutorialBetaAtivo(false)}
-        onCancelar={() => setTutorialBetaAtivo(false)}
+        onCancelar={() => { setTutorialBetaAtivo(false); setOrcamentoTelaCheia(null); setAba("home"); }}
       />
     )}
     </>

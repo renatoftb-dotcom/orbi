@@ -350,6 +350,9 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   // ação final do passo, pra evitar que a sinalização "vaze" pra próxima
   // tela enquanto o React processa a transição.
   const [ocultarUI, setOcultarUI] = useState(false);
+  // Pausa: quando true, o autoMs não dispara avanço. Botão "Continuar"
+  // retoma do início do passo atual (re-arma o setTimeout).
+  const [pausado, setPausado] = useState(false);
   const passo = passos[idx] || null;
   const targetIdAtual = targetIdOverride || passo?.targetId;
 
@@ -485,6 +488,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   // "type" é tratado em useEffect separado e NÃO re-executa aqui.
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
+    if (pausado) return;
     const ms = passo.autoMs || 3500;
     const t = setTimeout(() => {
       const temAcaoFinal = passo.acao &&
@@ -530,7 +534,48 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
       else exec();
     }, ms);
     return () => clearTimeout(t);
-  }, [estagio, idx]);
+  }, [estagio, idx, pausado]);
+
+  // Chrome do tutorial: overlay bloqueante de cliques + barra de controle
+  // (Parar/Continuar/Pular). Renderizado em todos os estágios — usuário
+  // não consegue clicar em nada da app enquanto o tutorial roda.
+  // - Bloqueador (z-index 998): captura clicks da app. Tutorial usa
+  //   el.click() programático que NÃO passa pelo overlay.
+  // - Barra (z-index 1010): bottom-right. "Parar" vira "Continuar"
+  //   quando pausado. "Pular" cancela.
+  const _btnBase = {
+    padding: "8px 14px", fontSize: 13, fontWeight: 500,
+    borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
+    border: "1px solid #d1d5db", background: "#fff", color: "#374151",
+  };
+  const _btnPrimary = {
+    ..._btnBase,
+    border: "1px solid #111", background: "#111", color: "#fff",
+  };
+  const chrome = (
+    <>
+      <div onClick={e => e.stopPropagation()} style={{
+        position: "fixed", inset: 0, background: "transparent",
+        zIndex: 998, cursor: "default",
+      }} />
+      <div style={{
+        position: "fixed", bottom: 16, right: 16,
+        display: "flex", gap: 8, zIndex: 1010,
+        background: "rgba(255,255,255,0.95)",
+        padding: "8px 10px", borderRadius: 10,
+        border: "1px solid #e5e7eb",
+        boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
+        fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+      }}>
+        {pausado ? (
+          <button style={_btnPrimary} onClick={() => setPausado(false)}>▶ Continuar</button>
+        ) : (
+          <button style={_btnBase} onClick={() => setPausado(true)}>⏸ Parar</button>
+        )}
+        <button style={_btnBase} onClick={() => onCancelar && onCancelar()}>✕ Pular</button>
+      </div>
+    </>
+  );
 
   // Welcome: modal central de boas-vindas
   if (estagio === "welcome" && welcome) {
@@ -575,8 +620,8 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   if (!passo) return null;
   // Tutorial pediu pra esconder a UI antes de avançar — não renderiza nada
-  // mesmo que o passo ainda esteja "ativo" no state.
-  if (ocultarUI) return null;
+  // do passo, mas mantém o chrome (bloqueador + barra) visível.
+  if (ocultarUI) return chrome;
 
   // Modo fullscreen — texto no TOPO da tela com fundo BRANCO sólido cobrindo
   // tudo abaixo. Evita que as opções da próxima etapa apareçam por trás
@@ -586,6 +631,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   if (passo.tipo === "fullscreen") {
     return (
       <>
+        {chrome}
         <style>{`
           @keyframes vk-tut-fs-fade { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
           .vk-tut-fs-card { animation: vk-tut-fs-fade 0.35s cubic-bezier(0.32, 0.72, 0, 1) both; }
@@ -626,6 +672,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     const ids = passo.targetIds || [];
     return (
       <>
+        {chrome}
         <style>{`
           @keyframes vk-tut-callout-pulse {
             0%, 100% { box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.20), 0 0 22px rgba(30, 58, 138, 0.40); border-color: #1e3a8a; }
@@ -645,6 +692,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   if (passo.cursorOnly) {
     return (
       <>
+        {chrome}
         <style>{`
           @keyframes vk-tut-cursor-fade { from { opacity: 0; } to { opacity: 1; } }
           .vk-tut-cursor { animation: vk-tut-cursor-fade 0.25s ease-out; }
@@ -710,6 +758,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   return (
     <>
+      {chrome}
       <style>{`
         @keyframes vk-tut-pulse-border {
           0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2), 0 0 24px rgba(245, 158, 11, 0.5); border-color: #f59e0b; }
