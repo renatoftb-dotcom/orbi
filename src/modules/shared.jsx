@@ -176,6 +176,234 @@ function BannerModoDev({ escritorio }) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// TUTORIAL OVERLAY — guia passo-a-passo destacando elementos da UI
+// ═══════════════════════════════════════════════════════════════
+// Spotlight + seta + balão descritivo apontando pra elementos com
+// `data-tutorial-id="..."`. Usado pelo onboarding do orçamento (Beta)
+// pra conduzir o user pela primeira vez.
+//
+// Props:
+//   passos        — [{ targetId, titulo, descricao, posicao?, autoMs? }]
+//                   targetId: valor de data-tutorial-id no DOM
+//                   posicao: "top"|"bottom"|"left"|"right" (default "right")
+//                   autoMs: ms até auto-avançar (default 3500ms)
+//   welcome       — { titulo, descricao } opcional. Tela inicial antes dos passos.
+//   onConcluir    — callback após o último passo
+//   onCancelar    — callback se o user clicar "Pular tutorial"
+function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
+  const [estagio, setEstagio] = useState(welcome ? "welcome" : "passo");
+  const [idx, setIdx] = useState(0);
+  const [rect, setRect] = useState(null);
+  const passo = passos[idx] || null;
+
+  // Mede o elemento alvo. Re-mede em scroll/resize. Tenta a cada 200ms
+  // por até 1.5s pra suportar elementos que ainda estão renderizando.
+  useEffect(() => {
+    if (estagio !== "passo" || !passo) return;
+    let cancelado = false;
+    let tentativas = 0;
+    function medir() {
+      if (cancelado) return;
+      const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
+      if (el) {
+        const r = el.getBoundingClientRect();
+        setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
+        if (r.top < 0 || r.bottom > window.innerHeight) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      } else if (tentativas < 8) {
+        tentativas++;
+        setTimeout(medir, 200);
+      } else {
+        setRect(null);
+      }
+    }
+    medir();
+    window.addEventListener("resize", medir);
+    window.addEventListener("scroll", medir, true);
+    return () => {
+      cancelado = true;
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("scroll", medir, true);
+    };
+  }, [estagio, passo?.targetId]);
+
+  // Auto-avança após autoMs do passo atual
+  useEffect(() => {
+    if (estagio !== "passo" || !passo) return;
+    const ms = passo.autoMs || 3500;
+    const t = setTimeout(() => {
+      if (idx < passos.length - 1) setIdx(idx + 1);
+      else onConcluir && onConcluir();
+    }, ms);
+    return () => clearTimeout(t);
+  }, [estagio, idx]);
+
+  // Welcome: modal central de boas-vindas
+  if (estagio === "welcome" && welcome) {
+    return (
+      <>
+        <div onClick={onCancelar} style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000,
+        }} />
+        <div style={{
+          position: "fixed", top: "50%", left: "50%",
+          transform: "translate(-50%, -50%)",
+          background: "#fff", borderRadius: 14,
+          padding: "32px 36px", maxWidth: 440, width: "calc(100% - 48px)",
+          zIndex: 1001, boxShadow: "0 24px 48px rgba(0,0,0,0.2)",
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>🧪</div>
+          <h2 style={{ fontSize: 20, fontWeight: 600, color: "#111", margin: "0 0 10px", letterSpacing: -0.3 }}>
+            {welcome.titulo}
+          </h2>
+          <p style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.6, margin: "0 0 24px" }}>
+            {welcome.descricao}
+          </p>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button onClick={onCancelar} style={{
+              background: "transparent", color: "#6b7280",
+              border: "1px solid #e5e7eb", borderRadius: 8,
+              padding: "9px 16px", fontSize: 13, fontWeight: 500,
+              cursor: "pointer", fontFamily: "inherit",
+            }}>Cancelar</button>
+            <button onClick={() => setEstagio("passo")} style={{
+              background: "#111", color: "#fff",
+              border: "1px solid #111", borderRadius: 8,
+              padding: "9px 18px", fontSize: 13, fontWeight: 500,
+              cursor: "pointer", fontFamily: "inherit",
+            }}>Começar →</button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  if (!passo) return null;
+
+  // Calcula posição do balão tooltip e da seta baseado no rect e em "posicao"
+  const tooltipMargem = 18;
+  const posPref = passo.posicao || "right";
+  let tooltipStyle = {};
+  let setaStyle = {};
+  if (rect) {
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    if (posPref === "right") {
+      tooltipStyle = { top: cy - 50, left: rect.left + rect.width + tooltipMargem + 12 };
+      setaStyle = {
+        top: cy - 14, left: rect.left + rect.width + 4,
+        borderTop: "14px solid transparent", borderBottom: "14px solid transparent",
+        borderRight: "16px solid #f59e0b", width: 0, height: 0,
+      };
+    } else if (posPref === "left") {
+      tooltipStyle = { top: cy - 50, right: window.innerWidth - rect.left + tooltipMargem + 12 };
+      setaStyle = {
+        top: cy - 14, left: rect.left - 20,
+        borderTop: "14px solid transparent", borderBottom: "14px solid transparent",
+        borderLeft: "16px solid #f59e0b", width: 0, height: 0,
+      };
+    } else if (posPref === "bottom") {
+      tooltipStyle = { top: rect.top + rect.height + tooltipMargem + 12, left: cx - 160 };
+      setaStyle = {
+        top: rect.top + rect.height + 4, left: cx - 14,
+        borderLeft: "14px solid transparent", borderRight: "14px solid transparent",
+        borderBottom: "16px solid #f59e0b", width: 0, height: 0,
+      };
+    } else { // top
+      tooltipStyle = { bottom: window.innerHeight - rect.top + tooltipMargem + 12, left: cx - 160 };
+      setaStyle = {
+        top: rect.top - 20, left: cx - 14,
+        borderLeft: "14px solid transparent", borderRight: "14px solid transparent",
+        borderTop: "16px solid #f59e0b", width: 0, height: 0,
+      };
+    }
+  }
+
+  return (
+    <>
+      <style>{`
+        @keyframes vk-tut-pulse-border {
+          0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.2), 0 0 24px rgba(245, 158, 11, 0.5); border-color: #f59e0b; }
+          50%      { box-shadow: 0 0 0 8px rgba(245, 158, 11, 0.4), 0 0 32px rgba(245, 158, 11, 0.7); border-color: #d97706; }
+        }
+        @keyframes vk-tut-pulse-arrow {
+          0%, 100% { opacity: 0.7; transform: scale(1); }
+          50%      { opacity: 1;   transform: scale(1.15); }
+        }
+        @keyframes vk-tut-fade-in {
+          from { opacity: 0; transform: translateY(4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+        .vk-tut-spotlight { animation: vk-tut-pulse-border 1.6s ease-in-out infinite; }
+        .vk-tut-arrow     { animation: vk-tut-pulse-arrow 1s ease-in-out infinite; }
+        .vk-tut-tooltip   { animation: vk-tut-fade-in 0.25s ease-out; }
+      `}</style>
+
+      {/* Backdrop semi-transparente — leve pra user ainda ver as outras telas */}
+      <div onClick={onCancelar} style={{
+        position: "fixed", inset: 0, background: "rgba(15, 23, 42, 0.35)",
+        zIndex: 1000, transition: "opacity 0.2s",
+      }} />
+
+      {/* Spotlight em volta do elemento alvo (border + shadow pulsante) */}
+      {rect && (
+        <div className="vk-tut-spotlight" style={{
+          position: "fixed",
+          top: rect.top - 6, left: rect.left - 6,
+          width: rect.width + 12, height: rect.height + 12,
+          border: "2.5px solid #f59e0b",
+          borderRadius: 10,
+          zIndex: 1001, pointerEvents: "none",
+        }} />
+      )}
+
+      {/* Seta apontando do tooltip pro elemento */}
+      {rect && (
+        <div className="vk-tut-arrow" style={{
+          position: "fixed", zIndex: 1002, pointerEvents: "none",
+          ...setaStyle,
+        }} />
+      )}
+
+      {/* Tooltip com título + descrição */}
+      {rect && (
+        <div className="vk-tut-tooltip" style={{
+          position: "fixed", zIndex: 1003,
+          background: "#fff", borderRadius: 10,
+          padding: "14px 18px", maxWidth: 320, minWidth: 240,
+          boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          ...tooltipStyle,
+        }}>
+          {passo.titulo && (
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#92400e",
+              textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>
+              {passo.titulo}
+            </div>
+          )}
+          <div style={{ fontSize: 13.5, color: "#111", lineHeight: 1.5 }}>
+            {passo.descricao}
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between",
+            alignItems: "center", marginTop: 12, gap: 8 }}>
+            <div style={{ fontSize: 11, color: "#9ca3af" }}>
+              {idx + 1} de {passos.length}
+            </div>
+            <button onClick={onCancelar} style={{
+              background: "transparent", color: "#9ca3af",
+              border: "none", fontSize: 11, cursor: "pointer",
+              fontFamily: "inherit", padding: 0,
+            }}>Pular tutorial</button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
 // PAGE CONTAINER (padrão de largura das páginas)
 // ═══════════════════════════════════════════════════════════════
 // Envelopa módulos que são listas/formulários, limitando largura pra

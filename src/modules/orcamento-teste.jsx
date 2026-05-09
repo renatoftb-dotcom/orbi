@@ -93,48 +93,34 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   // Quando true, renderiza <OrcamentoOnboarding> tela cheia em vez da lista.
   const [onboardingBetaAberto, setOnboardingBetaAberto] = useState(false);
 
-  // Simulação Beta — POC de "guided action": clica Beta → executa sequência
-  // visual de cliques (Menu → Orçamentos → Novo Orçamento → Cadastrar cliente).
-  // Estado: null (parado) ou array de passos { label, status: pending|running|done }
-  const [simulacao, setSimulacao] = useState(null);
+  // Tutorial Beta — overlay guiado que destaca elementos da UI com seta
+  // pulsante e balão descritivo. Auto-avança entre passos. Primeiro tem
+  // modal de boas-vindas, depois sequência de spotlights.
+  const [tutorialAtivo, setTutorialAtivo] = useState(false);
 
-  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-
-  async function iniciarSimulacao() {
-    const passos = [
-      { label: "Menu → Orçamentos" },
-      { label: "+ Novo Orçamento" },
-      { label: "+ Cadastrar novo cliente" },
-    ];
-    setSimulacao(passos.map(p => ({ ...p, status: "pending" })));
-    const marcar = (idx, status) =>
-      setSimulacao(prev => prev.map((p, i) => i === idx ? { ...p, status } : p));
-
-    // Passo 1 — já estamos na aba Orçamentos (botão Beta vive nela)
-    marcar(0, "running");
-    await sleep(700);
-    marcar(0, "done");
-    await sleep(300);
-
-    // Passo 2 — abre modal "Novo Orçamento"
-    marcar(1, "running");
-    setModalNovoAberto(true);
-    await sleep(900);
-    marcar(1, "done");
-    await sleep(400);
-
-    // Passo 3 — fecha modal, vai pra Clientes e abre cadastro novo
-    marcar(2, "running");
-    setModalNovoAberto(false);
-    setBuscaCliente("");
-    if (onCadastrarCliente) onCadastrarCliente();
-    await sleep(700);
-    marcar(2, "done");
-
-    // Limpa overlay após pequeno delay pra usuário ver o ✓ final
-    await sleep(900);
-    setSimulacao(null);
-  }
+  const tutorialPassos = [
+    {
+      targetId: "menu-projetos",
+      titulo: "Passo 1",
+      descricao: "Vamos selecionar Projetos no menu lateral.",
+      posicao: "right",
+      autoMs: 3500,
+    },
+    {
+      targetId: "menu-projetos-orcamentos",
+      titulo: "Passo 2",
+      descricao: "Agora dentro de Projetos, escolha Orçamentos.",
+      posicao: "right",
+      autoMs: 3500,
+    },
+    {
+      targetId: "botao-novo-orcamento",
+      titulo: "Passo 3",
+      descricao: "Clique em + Novo Orçamento pra começar.",
+      posicao: "bottom",
+      autoMs: 4000,
+    },
+  ];
   const [buscaCliente, setBuscaCliente] = useState("");
   const perm = getPermissoes();
   // Visualização (persistida em localStorage): tabela | cards
@@ -571,51 +557,17 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       padding:"28px 32px 60px",
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
-      {/* Overlay da simulação Beta — toast no canto superior direito.
-          Mostra os 3 passos sendo executados em tempo real. */}
-      {simulacao && (
-        <>
-          <style>{`
-            @keyframes vk-sim-pulse {
-              0%, 100% { opacity: 0.4; transform: scale(0.85); }
-              50%      { opacity: 1;   transform: scale(1.05); }
-            }
-            .vk-sim-running { animation: vk-sim-pulse 0.9s ease-in-out infinite; }
-          `}</style>
-          <div style={{
-            position: "fixed", top: 80, right: 24, zIndex: 200,
-            background: "#fff", border: "1px solid #fde68a",
-            borderRadius: 10, padding: "14px 18px",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-            minWidth: 260, fontFamily: "inherit",
-          }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#92400e",
-              textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 10 }}>
-              🧪 Executando ações
-            </div>
-            {simulacao.map((p, i) => (
-              <div key={i} style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "6px 0", fontSize: 13,
-                color: p.status === "done" ? "#111" : p.status === "running" ? "#374151" : "#9ca3af",
-              }}>
-                <span
-                  className={p.status === "running" ? "vk-sim-running" : ""}
-                  style={{
-                    width: 18, height: 18, borderRadius: "50%",
-                    display: "inline-flex", alignItems: "center", justifyContent: "center",
-                    fontSize: 11, fontWeight: 700,
-                    background: p.status === "done" ? "#16a34a" : p.status === "running" ? "#d97706" : "#e5e7eb",
-                    color: p.status === "pending" ? "#9ca3af" : "#fff",
-                    flexShrink: 0,
-                  }}>
-                  {p.status === "done" ? "✓" : p.status === "running" ? "●" : i + 1}
-                </span>
-                <span>{p.label}</span>
-              </div>
-            ))}
-          </div>
-        </>
+      {/* Tutorial Beta — overlay guiado com spotlight + seta + balão */}
+      {tutorialAtivo && (
+        <TutorialOverlay
+          welcome={{
+            titulo: "Vamos simular o seu primeiro orçamento",
+            descricao: "Vamos criar um cliente e orçamento de teste juntos. Depois você pode excluir tudo pelo banner de Modo Dev.",
+          }}
+          passos={tutorialPassos}
+          onConcluir={() => setTutorialAtivo(false)}
+          onCancelar={() => setTutorialAtivo(false)}
+        />
       )}
       <div style={{ maxWidth:1100, width:"100%" }}>
       {/* Header */}
@@ -628,19 +580,20 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
         <div style={{ display:"flex", gap:8 }}>
           {temDevMode(data.escritorio) && (
             <button
-              onClick={iniciarSimulacao}
-              disabled={simulacao !== null}
+              onClick={() => setTutorialAtivo(true)}
+              disabled={tutorialAtivo}
               style={{
                 background:"#fff", color:"#92400e",
                 border:"1px solid #d97706", borderRadius:7,
                 padding:"8px 14px", fontSize:13, fontWeight:500,
-                cursor: simulacao ? "wait" : "pointer", fontFamily:"inherit",
-                opacity: simulacao ? 0.5 : 1,
+                cursor: tutorialAtivo ? "wait" : "pointer", fontFamily:"inherit",
+                opacity: tutorialAtivo ? 0.5 : 1,
               }}>
               + Novo (Beta) 🧪
             </button>
           )}
           <button
+            data-tutorial-id="botao-novo-orcamento"
             onClick={() => setModalNovoAberto(true)}
             style={{
               background:"#111", color:"#fff", border:"1px solid #111",

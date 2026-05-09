@@ -1602,6 +1602,7 @@ export default function ModuloClientesFornecedores() {
                   <div key={k} style={{ display:"flex", flexDirection:"column", position:"relative" }}>
                     <button
                       id={k === "projetos" ? "trigger-projetos" : undefined}
+                      data-tutorial-id={k === "projetos" ? "menu-projetos" : undefined}
                       title={colapsadaEf ? label : undefined}
                       style={{
                         ...itemStyle(ativoNeleMesmoOuSubitem),
@@ -1647,6 +1648,7 @@ export default function ModuloClientesFornecedores() {
                           return (
                             <button
                               key={s.k}
+                              data-tutorial-id={`menu-${s.k.replace(":", "-")}`}
                               style={{
                                 padding:"6px 10px", borderRadius:6,
                                 fontSize:12.5,
