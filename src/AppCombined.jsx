@@ -103,6 +103,18 @@ function temFeature(escritorio, nome) {
   return escritorio?.features?.[nome] === true || temDevMode(escritorio);
 }
 
+// Helper: converte string em slug ascii-safe (lowercase, sem acentos,
+// hífens em vez de espaços/símbolos). Usado nos data-tutorial-id dos
+// botões dinâmicos pra o tutorial conseguir target via querySelector
+// sem se preocupar com encoding de acentos/aspas.
+function tutorialSlug(s) {
+  return String(s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 // ═══════════════════════════════════════════════════════════════
 // BANNER MODO DEV — botões de reset visíveis só em empresas dev
 // ═══════════════════════════════════════════════════════════════
@@ -271,6 +283,17 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         else {
           // Dispara change ao final pra forms que escutam blur/change
           try { el.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+          // Confirmação opcional via Enter (ex: form de referência)
+          if (passo.acao.confirmEnter) {
+            setTimeout(() => {
+              try {
+                const ev = new KeyboardEvent("keydown", {
+                  key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true,
+                });
+                el.dispatchEvent(ev);
+              } catch (e) { console.warn("[tutorial] confirmEnter falhou:", e); }
+            }, 200);
+          }
         }
       }
       passoChar();
@@ -16592,6 +16615,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setComodosTocados(new Set());
   }, [tipoProjeto]);
 
+  // Tutorial Beta — expõe setters do form via window pra o tutorial
+  // injetar cômodos sem precisar simular cliques individuais. Limpado ao
+  // desmontar pra não vazar referência stale.
+  useEffect(() => {
+    window.__vkOrc = {
+      setQtds: (novoMap) => {
+        setQtds(novoMap || {});
+        setComodosTocados(new Set(Object.entries(novoMap || {}).filter(([,q]) => q > 0).map(([n]) => n)));
+      },
+    };
+    return () => { delete window.__vkOrc; };
+  }, []);
+
   // ── Salvar como rascunho ao voltar ─────────────────────────
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   // Após confirmar no modal, este callback é chamado (usado quando o
@@ -18695,6 +18731,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         }}
                         className={"vk-flow2-input" + (opcaoEscolhida ? " is-chosen" : "")}
                         type="text"
+                        data-tutorial-id="campo-referencia"
                         placeholder="Ex: Casa de Praia, Residência Padovan, Bairro Vila Nova..."
                         value={referenciaTemp}
                         onChange={e => setReferenciaTemp(e.target.value)}
@@ -18742,6 +18779,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           <button
                             key={op}
                             className={cls}
+                            data-tutorial-id={`opcao-${etapaAtual}-${tutorialSlug(op)}`}
                             style={{ animationDelay: `${i * 50}ms` }}
                             disabled={!!opcaoEscolhida}
                             onClick={() => {
@@ -29681,6 +29719,79 @@ export default function ModuloClientesFornecedores() {
             descricao: "Pronto! Clique em Cadastrar cliente pra salvar.",
             posicao: "top", autoMs: 3500,
             acao: "click",   // salva o cliente
+          },
+          // ── Dentro do orçamento (cliente foi salvo, tela do form abriu) ──
+          {
+            targetId: "campo-referencia",
+            titulo: "Passo 7",
+            descricao: "Vamos dar uma referência pro projeto: 'Casa Vicke'.",
+            posicao: "bottom", autoMs: 2400,
+            acao: { tipo: "type", valor: "Casa Vicke", delayChar: 55, confirmEnter: true },
+          },
+          {
+            targetId: "opcao-tipoObra-construcao-nova",
+            titulo: "Passo 8",
+            descricao: "Tipo de obra: Construção nova.",
+            posicao: "right", autoMs: 2200,
+            acao: "click",
+          },
+          {
+            targetId: "opcao-tipoProjeto-residencial",
+            titulo: "Passo 9",
+            descricao: "Tipo de projeto: Residencial.",
+            posicao: "right", autoMs: 2200,
+            acao: "click",
+          },
+          {
+            targetId: "opcao-padrao-medio",
+            titulo: "Passo 10",
+            descricao: "Padrão: Médio.",
+            posicao: "right", autoMs: 2000,
+            acao: "click",
+          },
+          {
+            targetId: "opcao-tipologia-terrea",
+            titulo: "Passo 11",
+            descricao: "Tipologia: Térrea.",
+            posicao: "right", autoMs: 2000,
+            acao: "click",
+          },
+          {
+            targetId: "opcao-tamanho-medio",
+            titulo: "Passo 12",
+            descricao: "Tamanho dos ambientes: Médio.",
+            posicao: "right", autoMs: 2000,
+            acao: "click",
+          },
+          // Cômodos — ação custom: injeta o map inteiro de uma vez via
+          // window.__vkOrc.setQtds (exposto pelo FormOrcamentoProjetoTeste).
+          // Spotlight fica num container do form pra dar feedback visual.
+          {
+            targetId: "campo-referencia",
+            titulo: "Passo 13",
+            descricao: "Adicionando os cômodos: 2 garagens, hall, sala TV, living, escritório, lavabo, cozinha, lavanderia, depósito, área de lazer, piscina, lavabo lazer, 2 suítes, 2 closets e 1 suíte master.",
+            posicao: "bottom", autoMs: 4500,
+            acao: () => {
+              if (window.__vkOrc?.setQtds) {
+                window.__vkOrc.setQtds({
+                  "Garagem": 2,
+                  "Hall de Entrada": 1,
+                  "Sala de TV": 1,
+                  "Living": 1,
+                  "Escritório": 1,
+                  "Lavabo": 1,
+                  "Cozinha": 1,
+                  "Lavanderia": 1,
+                  "Depósito": 1,
+                  "Área de Lazer": 1,
+                  "Piscina": 1,
+                  "Lavabo Lazer": 1,
+                  "Suíte": 2,
+                  "Closet Suíte": 2,
+                  "Suíte Master": 1,
+                });
+              }
+            },
           },
         ]}
         onConcluir={() => setTutorialBetaAtivo(false)}

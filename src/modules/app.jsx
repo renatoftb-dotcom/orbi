@@ -2095,6 +2095,79 @@ export default function ModuloClientesFornecedores() {
             posicao: "top", autoMs: 3500,
             acao: "click",   // salva o cliente
           },
+          // ── Dentro do orçamento (cliente foi salvo, tela do form abriu) ──
+          {
+            targetId: "campo-referencia",
+            titulo: "Passo 7",
+            descricao: "Vamos dar uma referência pro projeto: 'Casa Vicke'.",
+            posicao: "bottom", autoMs: 2400,
+            acao: { tipo: "type", valor: "Casa Vicke", delayChar: 55, confirmEnter: true },
+          },
+          {
+            targetId: "opcao-tipoObra-construcao-nova",
+            titulo: "Passo 8",
+            descricao: "Tipo de obra: Construção nova.",
+            posicao: "right", autoMs: 2200,
+            acao: "click",
+          },
+          {
+            targetId: "opcao-tipoProjeto-residencial",
+            titulo: "Passo 9",
+            descricao: "Tipo de projeto: Residencial.",
+            posicao: "right", autoMs: 2200,
+            acao: "click",
+          },
+          {
+            targetId: "opcao-padrao-medio",
+            titulo: "Passo 10",
+            descricao: "Padrão: Médio.",
+            posicao: "right", autoMs: 2000,
+            acao: "click",
+          },
+          {
+            targetId: "opcao-tipologia-terrea",
+            titulo: "Passo 11",
+            descricao: "Tipologia: Térrea.",
+            posicao: "right", autoMs: 2000,
+            acao: "click",
+          },
+          {
+            targetId: "opcao-tamanho-medio",
+            titulo: "Passo 12",
+            descricao: "Tamanho dos ambientes: Médio.",
+            posicao: "right", autoMs: 2000,
+            acao: "click",
+          },
+          // Cômodos — ação custom: injeta o map inteiro de uma vez via
+          // window.__vkOrc.setQtds (exposto pelo FormOrcamentoProjetoTeste).
+          // Spotlight fica num container do form pra dar feedback visual.
+          {
+            targetId: "campo-referencia",
+            titulo: "Passo 13",
+            descricao: "Adicionando os cômodos: 2 garagens, hall, sala TV, living, escritório, lavabo, cozinha, lavanderia, depósito, área de lazer, piscina, lavabo lazer, 2 suítes, 2 closets e 1 suíte master.",
+            posicao: "bottom", autoMs: 4500,
+            acao: () => {
+              if (window.__vkOrc?.setQtds) {
+                window.__vkOrc.setQtds({
+                  "Garagem": 2,
+                  "Hall de Entrada": 1,
+                  "Sala de TV": 1,
+                  "Living": 1,
+                  "Escritório": 1,
+                  "Lavabo": 1,
+                  "Cozinha": 1,
+                  "Lavanderia": 1,
+                  "Depósito": 1,
+                  "Área de Lazer": 1,
+                  "Piscina": 1,
+                  "Lavabo Lazer": 1,
+                  "Suíte": 2,
+                  "Closet Suíte": 2,
+                  "Suíte Master": 1,
+                });
+              }
+            },
+          },
         ]}
         onConcluir={() => setTutorialBetaAtivo(false)}
         onCancelar={() => setTutorialBetaAtivo(false)}

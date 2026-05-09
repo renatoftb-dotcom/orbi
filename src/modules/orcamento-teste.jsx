@@ -6030,6 +6030,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     setComodosTocados(new Set());
   }, [tipoProjeto]);
 
+  // Tutorial Beta — expõe setters do form via window pra o tutorial
+  // injetar cômodos sem precisar simular cliques individuais. Limpado ao
+  // desmontar pra não vazar referência stale.
+  useEffect(() => {
+    window.__vkOrc = {
+      setQtds: (novoMap) => {
+        setQtds(novoMap || {});
+        setComodosTocados(new Set(Object.entries(novoMap || {}).filter(([,q]) => q > 0).map(([n]) => n)));
+      },
+    };
+    return () => { delete window.__vkOrc; };
+  }, []);
+
   // ── Salvar como rascunho ao voltar ─────────────────────────
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   // Após confirmar no modal, este callback é chamado (usado quando o
@@ -8133,6 +8146,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                         }}
                         className={"vk-flow2-input" + (opcaoEscolhida ? " is-chosen" : "")}
                         type="text"
+                        data-tutorial-id="campo-referencia"
                         placeholder="Ex: Casa de Praia, Residência Padovan, Bairro Vila Nova..."
                         value={referenciaTemp}
                         onChange={e => setReferenciaTemp(e.target.value)}
@@ -8180,6 +8194,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                           <button
                             key={op}
                             className={cls}
+                            data-tutorial-id={`opcao-${etapaAtual}-${tutorialSlug(op)}`}
                             style={{ animationDelay: `${i * 50}ms` }}
                             disabled={!!opcaoEscolhida}
                             onClick={() => {

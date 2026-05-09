@@ -99,6 +99,18 @@ function temFeature(escritorio, nome) {
   return escritorio?.features?.[nome] === true || temDevMode(escritorio);
 }
 
+// Helper: converte string em slug ascii-safe (lowercase, sem acentos,
+// hífens em vez de espaços/símbolos). Usado nos data-tutorial-id dos
+// botões dinâmicos pra o tutorial conseguir target via querySelector
+// sem se preocupar com encoding de acentos/aspas.
+function tutorialSlug(s) {
+  return String(s || "")
+    .toLowerCase()
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
 // ═══════════════════════════════════════════════════════════════
 // BANNER MODO DEV — botões de reset visíveis só em empresas dev
 // ═══════════════════════════════════════════════════════════════
@@ -267,6 +279,17 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         else {
           // Dispara change ao final pra forms que escutam blur/change
           try { el.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+          // Confirmação opcional via Enter (ex: form de referência)
+          if (passo.acao.confirmEnter) {
+            setTimeout(() => {
+              try {
+                const ev = new KeyboardEvent("keydown", {
+                  key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true,
+                });
+                el.dispatchEvent(ev);
+              } catch (e) { console.warn("[tutorial] confirmEnter falhou:", e); }
+            }, 200);
+          }
         }
       }
       passoChar();
