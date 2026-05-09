@@ -195,7 +195,7 @@ function BannerModoDev({ escritorio }) {
 // Mede múltiplos elementos via data-tutorial-id, renderiza círculo pulsante
 // em cada e mostra texto único ACIMA do conjunto. Pode ter acaoAoIniciar
 // (ex: desligar/ligar toggles em sincronia com a aparição da orientação).
-function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
+function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "left" }) {
   const [rects, setRects] = useState([]);
   const textRef = useRef(null);
   const [textBox, setTextBox] = useState({ w: 280, h: 60 });
@@ -239,23 +239,33 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
     return () => { cancelado = true; };
   }, []);
 
-  // Layout: borda amarela pulsante em cada elemento + balão único à
-  // ESQUERDA do conjunto, alinhado verticalmente no meio entre os
-  // elementos. 2 setas SVG saem do canto direito do balão e vão até a
-  // borda esquerda de cada elemento.
+  // Layout: borda amarela pulsante em cada elemento + balão único.
+  // Posicionamento depende de `posicao`:
+  //   "top"  → balão ACIMA do conjunto, seta CSS apontando pra baixo
+  //   "left" → balão À ESQUERDA, alinhado verticalmente no meio entre
+  //            elementos, com setas SVG (1 por elemento) conectando.
   const TEXT_MAX_W = 280;
-  const GAP = 28; // distância entre balão e elementos
-  let balaoLeft = 16, balaoTop = 16;
-  let balaoRight = 0, balaoCY = 0;
+  const GAP = 28;
+  let balaoLeft = 16, balaoTop = 16, balaoRight = 0, balaoCY = 0, balaoCX = 0;
+  let conjuntoCenterX = 0, conjuntoMinTop = 0;
   if (rects.length > 0) {
     const minLeft = Math.min(...rects.map(r => r.left));
     const minTop = Math.min(...rects.map(r => r.top));
+    const maxRight = Math.max(...rects.map(r => r.left + r.width));
     const maxBottom = Math.max(...rects.map(r => r.top + r.height));
-    const conjuntoCY = (minTop + maxBottom) / 2;
-    balaoLeft = Math.max(16, minLeft - textBox.w - GAP);
-    balaoTop = Math.max(16, conjuntoCY - textBox.h / 2);
+    conjuntoCenterX = (minLeft + maxRight) / 2;
+    conjuntoMinTop = minTop;
+    if (posicao === "top") {
+      balaoLeft = Math.max(16, conjuntoCenterX - textBox.w / 2);
+      balaoTop = Math.max(16, minTop - textBox.h - 24);
+    } else {
+      const conjuntoCY = (minTop + maxBottom) / 2;
+      balaoLeft = Math.max(16, minLeft - textBox.w - GAP);
+      balaoTop = Math.max(16, conjuntoCY - textBox.h / 2);
+    }
     balaoRight = balaoLeft + textBox.w;
     balaoCY = balaoTop + textBox.h / 2;
+    balaoCX = balaoLeft + textBox.w / 2;
   }
 
   return (
@@ -271,8 +281,20 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
         }} />
       ))}
 
-      {/* Setas SVG conectando o balão (canto direito) a cada elemento */}
-      {(titulo || descricao) && rects.length > 0 && (
+      {/* Seta CSS triangular única apontando pra baixo (modo "top") */}
+      {(titulo || descricao) && rects.length > 0 && posicao === "top" && (
+        <div className="vk-tut-arrow" style={{
+          position: "fixed", zIndex: 1002, pointerEvents: "none",
+          top: conjuntoMinTop - 20, left: conjuntoCenterX - 14,
+          borderLeft: "14px solid transparent",
+          borderRight: "14px solid transparent",
+          borderTop: "16px solid #f59e0b",
+          width: 0, height: 0,
+        }} />
+      )}
+
+      {/* Setas SVG (uma por elemento) — modo "left" */}
+      {(titulo || descricao) && rects.length > 0 && posicao === "left" && (
         <svg style={{
           position: "fixed", inset: 0, width: "100%", height: "100%",
           zIndex: 1002, pointerEvents: "none",
@@ -297,7 +319,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
         </svg>
       )}
 
-      {/* Balão tooltip à esquerda — caixa branca com sombra */}
+      {/* Balão tooltip — caixa branca com sombra */}
       {(titulo || descricao) && rects.length > 0 && (
         <div ref={textRef} className="vk-tut-tooltip" style={{
           position: "fixed",
@@ -766,7 +788,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           .vk-tut-callout-circle { animation: vk-tut-callout-pulse 1.6s ease-in-out infinite; pointer-events: none; }
           .vk-tut-callout-text { animation: vk-tut-fs-fade 0.4s cubic-bezier(0.32, 0.72, 0, 1) both; }
         `}</style>
-        <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} acaoAoIniciar={passo.acaoAoIniciar} />
+        <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} acaoAoIniciar={passo.acaoAoIniciar} posicao={passo.posicao} />
       </>
     );
   }
@@ -16797,6 +16819,113 @@ function EtapaFormaPagamento({
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ESCOLHA DE MODELO DE ORÇAMENTO
+// ═══════════════════════════════════════════════════════════════
+// Tela de seleção entre os templates visuais disponíveis. Aparece
+// uma vez por orçamento, depois da etapa de pagamento. Os templates
+// são definidos em modelo-padrao.jsx (TEMPLATES_PROPOSTA).
+// Cada card mostra preview da paleta + nome + descrição.
+function EscolhaModeloOrcamento({ onVoltar, onSelecionar }) {
+  const templates = (typeof TEMPLATES_PROPOSTA !== "undefined" ? TEMPLATES_PROPOSTA : []);
+  return (
+    <div style={{
+      background: "#fff", minHeight: "100vh",
+      padding: "60px 24px",
+      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+      display: "flex", flexDirection: "column", alignItems: "center",
+    }}>
+      <div style={{ maxWidth: 880, width: "100%" }}>
+        <div style={{ marginBottom: 36, textAlign: "center" }}>
+          <div style={{
+            fontSize: 11, fontWeight: 600, color: "#9ca3af",
+            textTransform: "uppercase", letterSpacing: 1.6, marginBottom: 8,
+          }}>Modelo de orçamento</div>
+          <h1 style={{
+            fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
+            lineHeight: 1.2, margin: 0, color: "#111",
+          }}>Escolha o modelo da proposta</h1>
+          <p style={{
+            fontSize: 14.5, color: "#6b7280",
+            lineHeight: 1.55, marginTop: 10, marginBottom: 0,
+          }}>Você pode trocar o modelo a qualquer momento depois.</p>
+        </div>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
+          gap: 20,
+        }}>
+          {templates.map(t => (
+            <button key={t.id}
+              type="button"
+              onClick={() => onSelecionar(t.id)}
+              style={{
+                background: "#fff", border: "1px solid #e5e7eb",
+                borderRadius: 12, padding: 0, cursor: "pointer",
+                textAlign: "left", fontFamily: "inherit",
+                overflow: "hidden", transition: "all 0.15s",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = "#111"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 12px 24px rgba(0,0,0,0.08)"; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+            >
+              {/* Preview visual: faixa colorida com mockup simplificado */}
+              <div style={{
+                background: t.id === "02-direto" ? t.accent : "#fafaf7",
+                height: 140,
+                position: "relative",
+                display: "flex", flexDirection: "column",
+                padding: t.id === "02-direto" ? "16px 18px" : "20px 22px",
+              }}>
+                {t.id === "02-direto" ? (
+                  // Mockup do "Direto": header amarelo, título grande
+                  <>
+                    <div style={{ fontSize: 9, fontWeight: 700, color: "#78350f", letterSpacing: 1.2, textTransform: "uppercase" }}>Proposta · 12/05/2025</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: "#111", marginTop: 6 }}>Casa Vicke</div>
+                    <div style={{ marginTop: "auto", display: "flex", gap: 8 }}>
+                      <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.15)", borderRadius: 3 }} />
+                      <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.15)", borderRadius: 3 }} />
+                    </div>
+                  </>
+                ) : (
+                  // Mockup do "Editorial": minimalista P&B
+                  <>
+                    <div style={{ fontSize: 9, fontWeight: 600, color: "#828a98", letterSpacing: 1.2, textTransform: "uppercase" }}>Proposta Comercial</div>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: "#111", marginTop: 6, letterSpacing: "-0.02em" }}>Casa Vicke</div>
+                    <div style={{ marginTop: "auto", borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "flex", gap: 8 }}>
+                      <div style={{ flex: 1, height: 4, background: "#e5e7eb", borderRadius: 2 }} />
+                      <div style={{ flex: 1, height: 4, background: "#e5e7eb", borderRadius: 2 }} />
+                    </div>
+                  </>
+                )}
+              </div>
+              {/* Texto do card */}
+              <div style={{ padding: "16px 20px" }}>
+                <div style={{ fontSize: 16, fontWeight: 600, color: "#111", marginBottom: 4 }}>{t.label}</div>
+                <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>{t.desc}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 28 }}>
+          <button
+            type="button"
+            onClick={onVoltar}
+            style={{
+              background: "transparent", color: "#6b7280",
+              border: "1px solid #e5e7eb", borderRadius: 8,
+              padding: "10px 18px", fontSize: 13, fontWeight: 500,
+              cursor: "pointer", fontFamily: "inherit",
+            }}>
+            ← Voltar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, onVoltar, modoVer, modoAbertura, escritorio, usuario, cub }) {
   // Normaliza escritorio (defaults vazios se algo faltar)
   const esc = escritorio || {};
@@ -16922,6 +17051,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   // Estrutura editada no Template (Fase 6d.1) — modo, formas, contratacoes,
   // modalidadesEtapa. Quando preenchido, vence sobre data.tipoPgto / data.formaPagamento.
   const [templateFormaPagamento, setTemplateFormaPagamento] = useState(orcBase?.template?.formaPagamento || null);
+  // Modelo de orçamento escolhido (Fase 6e) — id do template visual.
+  // Persistido em orcBase.templateId (snapshot) ou começa null (mostra tela
+  // de escolha). Pulado em modo read-only ou quando já foi escolhido antes.
+  const [modeloEscolhido, setModeloEscolhido] = useState(orcBase?.templateId || null);
   // previewRemountKey: incrementa a cada vez que o usuário sai da Etapa 5 pra
   // o Preview. Isso força o React a remontar o PropostaPreview (e seus
   // useState internos), garantindo que valores stale não persistam quando o
@@ -18808,6 +18941,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       );
     }
 
+    // Escolha do modelo de orçamento (Fase 6e) — tela de seleção visual
+    // entre os templates disponíveis. Aparece UMA vez por orçamento (após
+    // etapa de pagamento, antes do template de edição). Pulada quando já
+    // tem modeloEscolhido (vindo do snapshot) ou em modo read-only.
+    if (!modeloEscolhido && !propostaReadOnlyForce) {
+      return (
+        <EscolhaModeloOrcamento
+          onVoltar={() => setEtapaPagamentoConfirmada(false)}
+          onSelecionar={(id) => setModeloEscolhido(id)}
+        />
+      );
+    }
+
     // Template de Edição (Fase 4) — tela intermediária entre Etapa 5 e Preview.
     // Pulada em modo read-only (templateEdicaoConfirmada já vem true) e quando
     // o usuário clicou "Pular esta etapa" no template anterior.
@@ -18853,9 +18999,14 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
     // Mescla textos + valores + formaPagamento do template em liveData. Quando
     // preenchidos, o modelo usa eles com prioridade sobre os defaults internos.
-    const liveDataParaModelo = (templateTextos || templateValores || templateFormaPagamento)
-      ? { ...liveData, template: { textos: templateTextos, valores: templateValores, formaPagamento: templateFormaPagamento } }
-      : liveData;
+    // Também passa o templateId escolhido na tela de seleção (Fase 6e).
+    const liveDataParaModelo = {
+      ...liveData,
+      ...(modeloEscolhido ? { templateId: modeloEscolhido } : {}),
+      ...(templateTextos || templateValores || templateFormaPagamento
+        ? { template: { textos: templateTextos, valores: templateValores, formaPagamento: templateFormaPagamento } }
+        : {}),
+    };
 
     return <ModeloComponente
       key={previewRemountKey}
@@ -30178,6 +30329,7 @@ export default function ModuloClientesFornecedores() {
             tipo: "callouts",
             targetIds: ["toggle-incluiArq", "toggle-incluiEng"],
             titulo: "Insira os projetos a serem orçados",
+            posicao: "top",
             autoMs: 4000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;

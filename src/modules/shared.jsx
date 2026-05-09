@@ -191,7 +191,7 @@ function BannerModoDev({ escritorio }) {
 // Mede múltiplos elementos via data-tutorial-id, renderiza círculo pulsante
 // em cada e mostra texto único ACIMA do conjunto. Pode ter acaoAoIniciar
 // (ex: desligar/ligar toggles em sincronia com a aparição da orientação).
-function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
+function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "left" }) {
   const [rects, setRects] = useState([]);
   const textRef = useRef(null);
   const [textBox, setTextBox] = useState({ w: 280, h: 60 });
@@ -235,23 +235,33 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
     return () => { cancelado = true; };
   }, []);
 
-  // Layout: borda amarela pulsante em cada elemento + balão único à
-  // ESQUERDA do conjunto, alinhado verticalmente no meio entre os
-  // elementos. 2 setas SVG saem do canto direito do balão e vão até a
-  // borda esquerda de cada elemento.
+  // Layout: borda amarela pulsante em cada elemento + balão único.
+  // Posicionamento depende de `posicao`:
+  //   "top"  → balão ACIMA do conjunto, seta CSS apontando pra baixo
+  //   "left" → balão À ESQUERDA, alinhado verticalmente no meio entre
+  //            elementos, com setas SVG (1 por elemento) conectando.
   const TEXT_MAX_W = 280;
-  const GAP = 28; // distância entre balão e elementos
-  let balaoLeft = 16, balaoTop = 16;
-  let balaoRight = 0, balaoCY = 0;
+  const GAP = 28;
+  let balaoLeft = 16, balaoTop = 16, balaoRight = 0, balaoCY = 0, balaoCX = 0;
+  let conjuntoCenterX = 0, conjuntoMinTop = 0;
   if (rects.length > 0) {
     const minLeft = Math.min(...rects.map(r => r.left));
     const minTop = Math.min(...rects.map(r => r.top));
+    const maxRight = Math.max(...rects.map(r => r.left + r.width));
     const maxBottom = Math.max(...rects.map(r => r.top + r.height));
-    const conjuntoCY = (minTop + maxBottom) / 2;
-    balaoLeft = Math.max(16, minLeft - textBox.w - GAP);
-    balaoTop = Math.max(16, conjuntoCY - textBox.h / 2);
+    conjuntoCenterX = (minLeft + maxRight) / 2;
+    conjuntoMinTop = minTop;
+    if (posicao === "top") {
+      balaoLeft = Math.max(16, conjuntoCenterX - textBox.w / 2);
+      balaoTop = Math.max(16, minTop - textBox.h - 24);
+    } else {
+      const conjuntoCY = (minTop + maxBottom) / 2;
+      balaoLeft = Math.max(16, minLeft - textBox.w - GAP);
+      balaoTop = Math.max(16, conjuntoCY - textBox.h / 2);
+    }
     balaoRight = balaoLeft + textBox.w;
     balaoCY = balaoTop + textBox.h / 2;
+    balaoCX = balaoLeft + textBox.w / 2;
   }
 
   return (
@@ -267,8 +277,20 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
         }} />
       ))}
 
-      {/* Setas SVG conectando o balão (canto direito) a cada elemento */}
-      {(titulo || descricao) && rects.length > 0 && (
+      {/* Seta CSS triangular única apontando pra baixo (modo "top") */}
+      {(titulo || descricao) && rects.length > 0 && posicao === "top" && (
+        <div className="vk-tut-arrow" style={{
+          position: "fixed", zIndex: 1002, pointerEvents: "none",
+          top: conjuntoMinTop - 20, left: conjuntoCenterX - 14,
+          borderLeft: "14px solid transparent",
+          borderRight: "14px solid transparent",
+          borderTop: "16px solid #f59e0b",
+          width: 0, height: 0,
+        }} />
+      )}
+
+      {/* Setas SVG (uma por elemento) — modo "left" */}
+      {(titulo || descricao) && rects.length > 0 && posicao === "left" && (
         <svg style={{
           position: "fixed", inset: 0, width: "100%", height: "100%",
           zIndex: 1002, pointerEvents: "none",
@@ -293,7 +315,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
         </svg>
       )}
 
-      {/* Balão tooltip à esquerda — caixa branca com sombra */}
+      {/* Balão tooltip — caixa branca com sombra */}
       {(titulo || descricao) && rects.length > 0 && (
         <div ref={textRef} className="vk-tut-tooltip" style={{
           position: "fixed",
@@ -762,7 +784,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           .vk-tut-callout-circle { animation: vk-tut-callout-pulse 1.6s ease-in-out infinite; pointer-events: none; }
           .vk-tut-callout-text { animation: vk-tut-fs-fade 0.4s cubic-bezier(0.32, 0.72, 0, 1) both; }
         `}</style>
-        <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} acaoAoIniciar={passo.acaoAoIniciar} />
+        <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} acaoAoIniciar={passo.acaoAoIniciar} posicao={passo.posicao} />
       </>
     );
   }

@@ -2103,6 +2103,7 @@ export default function ModuloClientesFornecedores() {
             tipo: "callouts",
             targetIds: ["toggle-incluiArq", "toggle-incluiEng"],
             titulo: "Insira os projetos a serem orçados",
+            posicao: "top",
             autoMs: 4000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;
