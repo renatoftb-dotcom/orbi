@@ -187,10 +187,15 @@ function BannerModoDev({ escritorio }) {
 // pra conduzir o user pela primeira vez.
 //
 // Props:
-//   passos        — [{ targetId, titulo, descricao, posicao?, autoMs? }]
+//   passos        — [{ targetId, titulo, descricao, posicao?, autoMs?, acao? }]
 //                   targetId: valor de data-tutorial-id no DOM
 //                   posicao: "top"|"bottom"|"left"|"right" (default "right")
 //                   autoMs: ms até auto-avançar (default 3500ms)
+//                   acao: opcional, executada DEPOIS do delay autoMs e ANTES de
+//                         avançar pro próximo passo. Tipos:
+//                           "click" — faz el.click() no targetId atual
+//                           { tipo: "fill", valor: "X" } — preenche input
+//                           function(el) — handler custom recebe o elemento
 //   welcome       — { titulo, descricao } opcional. Tela inicial antes dos passos.
 //   onConcluir    — callback após o último passo
 //   onCancelar    — callback se o user clicar "Pular tutorial"
@@ -232,13 +237,42 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     };
   }, [estagio, passo?.targetId]);
 
-  // Auto-avança após autoMs do passo atual
+  // Auto-avança após autoMs do passo atual. Antes de avançar, executa
+  // a `acao` opcional (click no botão alvo, preenche input, etc.).
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
     const ms = passo.autoMs || 3500;
     const t = setTimeout(() => {
+      // Executa ação se definida — usa o elemento mais recente do DOM
+      if (passo.acao) {
+        const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
+        if (el) {
+          try {
+            if (passo.acao === "click") {
+              el.click();
+            } else if (typeof passo.acao === "function") {
+              passo.acao(el);
+            } else if (passo.acao && passo.acao.tipo === "fill") {
+              // Preenche input usando setter nativo + dispatch event pra
+              // o React detectar a mudança via onChange.
+              const proto = el.tagName === "TEXTAREA"
+                ? window.HTMLTextAreaElement.prototype
+                : window.HTMLInputElement.prototype;
+              const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+              setter.call(el, String(passo.acao.valor || ""));
+              el.dispatchEvent(new Event("input", { bubbles: true }));
+              el.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          } catch (e) {
+            console.warn("[tutorial] acao falhou:", e);
+          }
+        }
+      }
       if (idx < passos.length - 1) setIdx(idx + 1);
-      else onConcluir && onConcluir();
+      else {
+        // Pequeno delay no último passo pra dar tempo da última ação rolar
+        setTimeout(() => onConcluir && onConcluir(), 400);
+      }
     }, ms);
     return () => clearTimeout(t);
   }, [estagio, idx]);
@@ -4402,7 +4436,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       <div style={{ marginBottom:16 }}>
         <div style={C.secTit}>Dados principais</div>
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
-          <div><label style={C.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input style={C.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
+          <div><label style={C.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input data-tutorial-id="cliente-nome" style={C.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
           <div><label style={C.label}>{form.tipo==="PJ"?"CNPJ":"CPF"}</label><input style={C.input} value={form.cpfCnpj} onChange={e=>setForm({...form,cpfCnpj:e.target.value})} /></div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
@@ -4459,7 +4493,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       </div>
       <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
         <button style={C.btnSec} onClick={()=>setView("kanban")}>Cancelar</button>
-        <button style={C.btn} onClick={saveCliente}>{form.id?"Salvar alterações":"Cadastrar cliente"}</button>
+        <button data-tutorial-id="cliente-salvar" style={C.btn} onClick={saveCliente}>{form.id?"Salvar alterações":"Cadastrar cliente"}</button>
       </div>
     </div>
   );
@@ -10558,38 +10592,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [filtro, setFiltro] = useState("ativos");
   const [busca, setBusca] = useState("");
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
-  // Onboarding Beta — só aparece em empresas com dev_mode (Vicke Dev).
-  // Quando true, renderiza <OrcamentoOnboarding> tela cheia em vez da lista.
+  // Onboarding Beta — placeholder; estado preservado pra integração legada
+  // mas não usado: o tutorial vive no app.jsx desde a Fase 9.
   const [onboardingBetaAberto, setOnboardingBetaAberto] = useState(false);
-
-  // Tutorial Beta — overlay guiado que destaca elementos da UI com seta
-  // pulsante e balão descritivo. Auto-avança entre passos. Primeiro tem
-  // modal de boas-vindas, depois sequência de spotlights.
-  const [tutorialAtivo, setTutorialAtivo] = useState(false);
-
-  const tutorialPassos = [
-    {
-      targetId: "menu-projetos",
-      titulo: "Passo 1",
-      descricao: "Vamos selecionar Projetos no menu lateral.",
-      posicao: "right",
-      autoMs: 3500,
-    },
-    {
-      targetId: "menu-projetos-orcamentos",
-      titulo: "Passo 2",
-      descricao: "Agora dentro de Projetos, escolha Orçamentos.",
-      posicao: "right",
-      autoMs: 3500,
-    },
-    {
-      targetId: "botao-novo-orcamento",
-      titulo: "Passo 3",
-      descricao: "Clique em + Novo Orçamento pra começar.",
-      posicao: "bottom",
-      autoMs: 4000,
-    },
-  ];
   const [buscaCliente, setBuscaCliente] = useState("");
   const perm = getPermissoes();
   // Visualização (persistida em localStorage): tabela | cards
@@ -11026,18 +11031,6 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       padding:"28px 32px 60px",
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
-      {/* Tutorial Beta — overlay guiado com spotlight + seta + balão */}
-      {tutorialAtivo && (
-        <TutorialOverlay
-          welcome={{
-            titulo: "Vamos simular o seu primeiro orçamento",
-            descricao: "Vamos criar um cliente e orçamento de teste juntos. Depois você pode excluir tudo pelo banner de Modo Dev.",
-          }}
-          passos={tutorialPassos}
-          onConcluir={() => setTutorialAtivo(false)}
-          onCancelar={() => setTutorialAtivo(false)}
-        />
-      )}
       <div style={{ maxWidth:1100, width:"100%" }}>
       {/* Header */}
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, marginBottom:20 }}>
@@ -11046,32 +11039,16 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Lista de todos os orçamentos do escritório</div>
         </div>
         {perm.podeEditar && (
-        <div style={{ display:"flex", gap:8 }}>
-          {temDevMode(data.escritorio) && (
-            <button
-              onClick={() => setTutorialAtivo(true)}
-              disabled={tutorialAtivo}
-              style={{
-                background:"#fff", color:"#92400e",
-                border:"1px solid #d97706", borderRadius:7,
-                padding:"8px 14px", fontSize:13, fontWeight:500,
-                cursor: tutorialAtivo ? "wait" : "pointer", fontFamily:"inherit",
-                opacity: tutorialAtivo ? 0.5 : 1,
-              }}>
-              + Novo (Beta) 🧪
-            </button>
-          )}
-          <button
-            data-tutorial-id="botao-novo-orcamento"
-            onClick={() => setModalNovoAberto(true)}
-            style={{
-              background:"#111", color:"#fff", border:"1px solid #111",
-              borderRadius:7, padding:"8px 14px", fontSize:13, fontWeight:500,
-              cursor:"pointer", fontFamily:"inherit",
-            }}>
-            + Novo Orçamento
-          </button>
-        </div>
+        <button
+          data-tutorial-id="botao-novo-orcamento"
+          onClick={() => setModalNovoAberto(true)}
+          style={{
+            background:"#111", color:"#fff", border:"1px solid #111",
+            borderRadius:7, padding:"8px 14px", fontSize:13, fontWeight:500,
+            cursor:"pointer", fontFamily:"inherit",
+          }}>
+          + Novo Orçamento
+        </button>
         )}
       </div>
 
@@ -12838,6 +12815,7 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
             <div style={{ flex:1, height:1, background:"#f3f4f6" }} />
           </div>
           <button
+            data-tutorial-id="modal-cadastrar-novo-cliente"
             onClick={onCadastrarNovo}
             style={{
               width:"100%", padding:"10px 14px",
@@ -28456,6 +28434,9 @@ export default function ModuloClientesFornecedores() {
   const [projetosKey, setProjetosKey]         = useState(0);
   const [orcamentosKey, setOrcamentosKey]     = useState(0);
   const [obrasKey, setObrasKey]               = useState(0);
+  // Tutorial Beta — disparado pelo item "+ Novo (Beta) 🧪" no sidebar.
+  // Só visível em empresas com escritorio.dev_mode=true (ex: Vicke Dev).
+  const [tutorialBetaAtivo, setTutorialBetaAtivo] = useState(false);
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
   // Sidebar colapsada: estado persistido em localStorage. False = full
@@ -29032,6 +29013,10 @@ export default function ModuloClientesFornecedores() {
     // Módulos Financeiro, Fornecedores e Notas Fiscais foram removidos do menu
     // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
     // por enquanto pra não quebrar dados antigos, só ocultos do menu.
+    // Item especial — Tutorial Beta (só dev_mode). Não navega, dispara overlay.
+    ...(temDevMode(data?.escritorio) ? [
+      { k:"tutorial-beta", tipo:"tutorialBeta", label:"+ Novo (Beta) 🧪" },
+    ] : []),
   ];
 
   // colapsadaEf: "colapsada efetiva" — em mobile, sidebar nunca está colapsada
@@ -29146,6 +29131,27 @@ export default function ModuloClientesFornecedores() {
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
             {MENU.map(item => {
               const {k, label, count, sub, icon} = item;
+              // Item especial Tutorial Beta — não é uma aba, dispara overlay.
+              if (item.tipo === "tutorialBeta") {
+                return (
+                  <button key={k} onClick={() => setTutorialBetaAtivo(true)}
+                    title={colapsadaEf ? label : undefined}
+                    style={{
+                      display:"flex", alignItems:"center",
+                      justifyContent: colapsadaEf ? "center" : "flex-start",
+                      gap: 10,
+                      padding: colapsadaEf ? "10px 8px" : "8px 12px",
+                      borderRadius: 7, cursor: "pointer", fontSize: 13,
+                      fontWeight: 500, color: "#92400e",
+                      background: "#fffbeb", border: "1px dashed #f59e0b",
+                      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+                      width: "100%", textAlign: "left",
+                      marginTop: 4,
+                    }}>
+                    {colapsadaEf ? "🧪" : label}
+                  </button>
+                );
+              }
               if (sub && sub.length) {
                 const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
                 return (
@@ -29566,6 +29572,62 @@ export default function ModuloClientesFornecedores() {
     <VersionWatcher />
     <BotaoFeedbackFlutuante usuario={usuario} />
     {conflitoModal}
+    {/* Tutorial Beta — overlay guiado disparado pelo item "+ Novo (Beta) 🧪"
+        no sidebar. Só aparece em empresas com dev_mode (Vicke Dev). */}
+    {tutorialBetaAtivo && (
+      <TutorialOverlay
+        welcome={{
+          titulo: "Vamos simular seu primeiro orçamento",
+          descricao: "Vamos criar um cliente e um orçamento de teste juntos. Depois você pode excluir tudo pelo banner de Modo Dev.",
+        }}
+        passos={[
+          {
+            targetId: "menu-projetos",
+            titulo: "Passo 1",
+            descricao: "Vamos selecionar Projetos no menu lateral.",
+            posicao: "right", autoMs: 3000,
+            acao: "click",   // abre o accordion
+          },
+          {
+            targetId: "menu-projetos-orcamentos",
+            titulo: "Passo 2",
+            descricao: "Agora dentro de Projetos, escolha Orçamentos.",
+            posicao: "right", autoMs: 3000,
+            acao: "click",   // navega pra aba Orçamentos
+          },
+          {
+            targetId: "botao-novo-orcamento",
+            titulo: "Passo 3",
+            descricao: "Clique em + Novo Orçamento pra começar.",
+            posicao: "bottom", autoMs: 3000,
+            acao: "click",   // abre o modal de seleção de cliente
+          },
+          {
+            targetId: "modal-cadastrar-novo-cliente",
+            titulo: "Passo 4",
+            descricao: "Como ainda não temos cliente, clique em + Cadastrar novo cliente.",
+            posicao: "top", autoMs: 3500,
+            acao: "click",   // vai pra aba Clientes + abre form
+          },
+          {
+            targetId: "cliente-nome",
+            titulo: "Passo 5",
+            descricao: "Vamos preencher o nome com 'Cliente Teste'.",
+            posicao: "right", autoMs: 3000,
+            acao: { tipo: "fill", valor: "Cliente Teste" },
+          },
+          {
+            targetId: "cliente-salvar",
+            titulo: "Passo 6",
+            descricao: "Pronto! Clique em Cadastrar cliente pra salvar.",
+            posicao: "top", autoMs: 3500,
+            acao: "click",   // salva o cliente
+          },
+        ]}
+        onConcluir={() => setTutorialBetaAtivo(false)}
+        onCancelar={() => setTutorialBetaAtivo(false)}
+      />
+    )}
     </>
   );
 }

@@ -906,6 +906,9 @@ export default function ModuloClientesFornecedores() {
   const [projetosKey, setProjetosKey]         = useState(0);
   const [orcamentosKey, setOrcamentosKey]     = useState(0);
   const [obrasKey, setObrasKey]               = useState(0);
+  // Tutorial Beta — disparado pelo item "+ Novo (Beta) 🧪" no sidebar.
+  // Só visível em empresas com escritorio.dev_mode=true (ex: Vicke Dev).
+  const [tutorialBetaAtivo, setTutorialBetaAtivo] = useState(false);
   const [financeiroKey, setFinanceiroKey]     = useState(0);
   const [escritorioKey, setEscritorioKey]     = useState(0);
   // Sidebar colapsada: estado persistido em localStorage. False = full
@@ -1482,6 +1485,10 @@ export default function ModuloClientesFornecedores() {
     // Módulos Financeiro, Fornecedores e Notas Fiscais foram removidos do menu
     // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
     // por enquanto pra não quebrar dados antigos, só ocultos do menu.
+    // Item especial — Tutorial Beta (só dev_mode). Não navega, dispara overlay.
+    ...(temDevMode(data?.escritorio) ? [
+      { k:"tutorial-beta", tipo:"tutorialBeta", label:"+ Novo (Beta) 🧪" },
+    ] : []),
   ];
 
   // colapsadaEf: "colapsada efetiva" — em mobile, sidebar nunca está colapsada
@@ -1596,6 +1603,27 @@ export default function ModuloClientesFornecedores() {
           <nav style={{ flex:1, padding:"12px 8px", display:"flex", flexDirection:"column", gap:2, overflowY:"auto" }}>
             {MENU.map(item => {
               const {k, label, count, sub, icon} = item;
+              // Item especial Tutorial Beta — não é uma aba, dispara overlay.
+              if (item.tipo === "tutorialBeta") {
+                return (
+                  <button key={k} onClick={() => setTutorialBetaAtivo(true)}
+                    title={colapsadaEf ? label : undefined}
+                    style={{
+                      display:"flex", alignItems:"center",
+                      justifyContent: colapsadaEf ? "center" : "flex-start",
+                      gap: 10,
+                      padding: colapsadaEf ? "10px 8px" : "8px 12px",
+                      borderRadius: 7, cursor: "pointer", fontSize: 13,
+                      fontWeight: 500, color: "#92400e",
+                      background: "#fffbeb", border: "1px dashed #f59e0b",
+                      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+                      width: "100%", textAlign: "left",
+                      marginTop: 4,
+                    }}>
+                    {colapsadaEf ? "🧪" : label}
+                  </button>
+                );
+              }
               if (sub && sub.length) {
                 const ativoNeleMesmoOuSubitem = aba === k || (typeof aba === "string" && aba.indexOf(k + ":") === 0);
                 return (
@@ -2016,6 +2044,62 @@ export default function ModuloClientesFornecedores() {
     <VersionWatcher />
     <BotaoFeedbackFlutuante usuario={usuario} />
     {conflitoModal}
+    {/* Tutorial Beta — overlay guiado disparado pelo item "+ Novo (Beta) 🧪"
+        no sidebar. Só aparece em empresas com dev_mode (Vicke Dev). */}
+    {tutorialBetaAtivo && (
+      <TutorialOverlay
+        welcome={{
+          titulo: "Vamos simular seu primeiro orçamento",
+          descricao: "Vamos criar um cliente e um orçamento de teste juntos. Depois você pode excluir tudo pelo banner de Modo Dev.",
+        }}
+        passos={[
+          {
+            targetId: "menu-projetos",
+            titulo: "Passo 1",
+            descricao: "Vamos selecionar Projetos no menu lateral.",
+            posicao: "right", autoMs: 3000,
+            acao: "click",   // abre o accordion
+          },
+          {
+            targetId: "menu-projetos-orcamentos",
+            titulo: "Passo 2",
+            descricao: "Agora dentro de Projetos, escolha Orçamentos.",
+            posicao: "right", autoMs: 3000,
+            acao: "click",   // navega pra aba Orçamentos
+          },
+          {
+            targetId: "botao-novo-orcamento",
+            titulo: "Passo 3",
+            descricao: "Clique em + Novo Orçamento pra começar.",
+            posicao: "bottom", autoMs: 3000,
+            acao: "click",   // abre o modal de seleção de cliente
+          },
+          {
+            targetId: "modal-cadastrar-novo-cliente",
+            titulo: "Passo 4",
+            descricao: "Como ainda não temos cliente, clique em + Cadastrar novo cliente.",
+            posicao: "top", autoMs: 3500,
+            acao: "click",   // vai pra aba Clientes + abre form
+          },
+          {
+            targetId: "cliente-nome",
+            titulo: "Passo 5",
+            descricao: "Vamos preencher o nome com 'Cliente Teste'.",
+            posicao: "right", autoMs: 3000,
+            acao: { tipo: "fill", valor: "Cliente Teste" },
+          },
+          {
+            targetId: "cliente-salvar",
+            titulo: "Passo 6",
+            descricao: "Pronto! Clique em Cadastrar cliente pra salvar.",
+            posicao: "top", autoMs: 3500,
+            acao: "click",   // salva o cliente
+          },
+        ]}
+        onConcluir={() => setTutorialBetaAtivo(false)}
+        onCancelar={() => setTutorialBetaAtivo(false)}
+      />
+    )}
     </>
   );
 }

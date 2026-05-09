@@ -709,7 +709,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       <div style={{ marginBottom:16 }}>
         <div style={C.secTit}>Dados principais</div>
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
-          <div><label style={C.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input style={C.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
+          <div><label style={C.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input data-tutorial-id="cliente-nome" style={C.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
           <div><label style={C.label}>{form.tipo==="PJ"?"CNPJ":"CPF"}</label><input style={C.input} value={form.cpfCnpj} onChange={e=>setForm({...form,cpfCnpj:e.target.value})} /></div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
@@ -766,7 +766,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       </div>
       <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
         <button style={C.btnSec} onClick={()=>setView("kanban")}>Cancelar</button>
-        <button style={C.btn} onClick={saveCliente}>{form.id?"Salvar alterações":"Cadastrar cliente"}</button>
+        <button data-tutorial-id="cliente-salvar" style={C.btn} onClick={saveCliente}>{form.id?"Salvar alterações":"Cadastrar cliente"}</button>
       </div>
     </div>
   );

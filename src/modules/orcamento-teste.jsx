@@ -89,38 +89,9 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
   const [filtro, setFiltro] = useState("ativos");
   const [busca, setBusca] = useState("");
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
-  // Onboarding Beta — só aparece em empresas com dev_mode (Vicke Dev).
-  // Quando true, renderiza <OrcamentoOnboarding> tela cheia em vez da lista.
+  // Onboarding Beta — placeholder; estado preservado pra integração legada
+  // mas não usado: o tutorial vive no app.jsx desde a Fase 9.
   const [onboardingBetaAberto, setOnboardingBetaAberto] = useState(false);
-
-  // Tutorial Beta — overlay guiado que destaca elementos da UI com seta
-  // pulsante e balão descritivo. Auto-avança entre passos. Primeiro tem
-  // modal de boas-vindas, depois sequência de spotlights.
-  const [tutorialAtivo, setTutorialAtivo] = useState(false);
-
-  const tutorialPassos = [
-    {
-      targetId: "menu-projetos",
-      titulo: "Passo 1",
-      descricao: "Vamos selecionar Projetos no menu lateral.",
-      posicao: "right",
-      autoMs: 3500,
-    },
-    {
-      targetId: "menu-projetos-orcamentos",
-      titulo: "Passo 2",
-      descricao: "Agora dentro de Projetos, escolha Orçamentos.",
-      posicao: "right",
-      autoMs: 3500,
-    },
-    {
-      targetId: "botao-novo-orcamento",
-      titulo: "Passo 3",
-      descricao: "Clique em + Novo Orçamento pra começar.",
-      posicao: "bottom",
-      autoMs: 4000,
-    },
-  ];
   const [buscaCliente, setBuscaCliente] = useState("");
   const perm = getPermissoes();
   // Visualização (persistida em localStorage): tabela | cards
@@ -557,18 +528,6 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       padding:"28px 32px 60px",
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
-      {/* Tutorial Beta — overlay guiado com spotlight + seta + balão */}
-      {tutorialAtivo && (
-        <TutorialOverlay
-          welcome={{
-            titulo: "Vamos simular o seu primeiro orçamento",
-            descricao: "Vamos criar um cliente e orçamento de teste juntos. Depois você pode excluir tudo pelo banner de Modo Dev.",
-          }}
-          passos={tutorialPassos}
-          onConcluir={() => setTutorialAtivo(false)}
-          onCancelar={() => setTutorialAtivo(false)}
-        />
-      )}
       <div style={{ maxWidth:1100, width:"100%" }}>
       {/* Header */}
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", gap:16, marginBottom:20 }}>
@@ -577,32 +536,16 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Lista de todos os orçamentos do escritório</div>
         </div>
         {perm.podeEditar && (
-        <div style={{ display:"flex", gap:8 }}>
-          {temDevMode(data.escritorio) && (
-            <button
-              onClick={() => setTutorialAtivo(true)}
-              disabled={tutorialAtivo}
-              style={{
-                background:"#fff", color:"#92400e",
-                border:"1px solid #d97706", borderRadius:7,
-                padding:"8px 14px", fontSize:13, fontWeight:500,
-                cursor: tutorialAtivo ? "wait" : "pointer", fontFamily:"inherit",
-                opacity: tutorialAtivo ? 0.5 : 1,
-              }}>
-              + Novo (Beta) 🧪
-            </button>
-          )}
-          <button
-            data-tutorial-id="botao-novo-orcamento"
-            onClick={() => setModalNovoAberto(true)}
-            style={{
-              background:"#111", color:"#fff", border:"1px solid #111",
-              borderRadius:7, padding:"8px 14px", fontSize:13, fontWeight:500,
-              cursor:"pointer", fontFamily:"inherit",
-            }}>
-            + Novo Orçamento
-          </button>
-        </div>
+        <button
+          data-tutorial-id="botao-novo-orcamento"
+          onClick={() => setModalNovoAberto(true)}
+          style={{
+            background:"#111", color:"#fff", border:"1px solid #111",
+            borderRadius:7, padding:"8px 14px", fontSize:13, fontWeight:500,
+            cursor:"pointer", fontFamily:"inherit",
+          }}>
+          + Novo Orçamento
+        </button>
         )}
       </div>
 
@@ -2369,6 +2312,7 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
             <div style={{ flex:1, height:1, background:"#f3f4f6" }} />
           </div>
           <button
+            data-tutorial-id="modal-cadastrar-novo-cliente"
             onClick={onCadastrarNovo}
             style={{
               width:"100%", padding:"10px 14px",

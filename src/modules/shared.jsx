@@ -183,10 +183,15 @@ function BannerModoDev({ escritorio }) {
 // pra conduzir o user pela primeira vez.
 //
 // Props:
-//   passos        — [{ targetId, titulo, descricao, posicao?, autoMs? }]
+//   passos        — [{ targetId, titulo, descricao, posicao?, autoMs?, acao? }]
 //                   targetId: valor de data-tutorial-id no DOM
 //                   posicao: "top"|"bottom"|"left"|"right" (default "right")
 //                   autoMs: ms até auto-avançar (default 3500ms)
+//                   acao: opcional, executada DEPOIS do delay autoMs e ANTES de
+//                         avançar pro próximo passo. Tipos:
+//                           "click" — faz el.click() no targetId atual
+//                           { tipo: "fill", valor: "X" } — preenche input
+//                           function(el) — handler custom recebe o elemento
 //   welcome       — { titulo, descricao } opcional. Tela inicial antes dos passos.
 //   onConcluir    — callback após o último passo
 //   onCancelar    — callback se o user clicar "Pular tutorial"
@@ -228,13 +233,42 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     };
   }, [estagio, passo?.targetId]);
 
-  // Auto-avança após autoMs do passo atual
+  // Auto-avança após autoMs do passo atual. Antes de avançar, executa
+  // a `acao` opcional (click no botão alvo, preenche input, etc.).
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
     const ms = passo.autoMs || 3500;
     const t = setTimeout(() => {
+      // Executa ação se definida — usa o elemento mais recente do DOM
+      if (passo.acao) {
+        const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
+        if (el) {
+          try {
+            if (passo.acao === "click") {
+              el.click();
+            } else if (typeof passo.acao === "function") {
+              passo.acao(el);
+            } else if (passo.acao && passo.acao.tipo === "fill") {
+              // Preenche input usando setter nativo + dispatch event pra
+              // o React detectar a mudança via onChange.
+              const proto = el.tagName === "TEXTAREA"
+                ? window.HTMLTextAreaElement.prototype
+                : window.HTMLInputElement.prototype;
+              const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+              setter.call(el, String(passo.acao.valor || ""));
+              el.dispatchEvent(new Event("input", { bubbles: true }));
+              el.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+          } catch (e) {
+            console.warn("[tutorial] acao falhou:", e);
+          }
+        }
+      }
       if (idx < passos.length - 1) setIdx(idx + 1);
-      else onConcluir && onConcluir();
+      else {
+        // Pequeno delay no último passo pra dar tempo da última ação rolar
+        setTimeout(() => onConcluir && onConcluir(), 400);
+      }
     }, ms);
     return () => clearTimeout(t);
   }, [estagio, idx]);
