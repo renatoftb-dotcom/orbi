@@ -5878,16 +5878,25 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
           boxShadow: "0 18px 40px rgba(0,0,0,0.08)",
         }}>
           {ModeloComponente ? (
-            <ModeloComponente
-              key={tplAtual?.id}
-              data={previewData}
-              escritorio={escritorio}
-              onVoltar={() => {}}
-              onSalvarProposta={() => {}}
-              propostaReadOnly={true}
-              propostaSnapshot={null}
-              lockEdicao={true}
-            />
+            // Wrapper aplica zoom out 50% — modelo renderiza em tamanho real
+            // mas é exibido em 50% (transform: scale 0.5). width: 200% pra
+            // ocupar a largura visual total do container apesar do scale.
+            <div style={{
+              transform: "scale(0.5)",
+              transformOrigin: "top left",
+              width: "200%",
+            }}>
+              <ModeloComponente
+                key={tplAtual?.id}
+                data={previewData}
+                escritorio={escritorio}
+                onVoltar={() => {}}
+                onSalvarProposta={() => {}}
+                propostaReadOnly={true}
+                propostaSnapshot={null}
+                lockEdicao={true}
+              />
+            </div>
           ) : (
             <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
               Modelo não disponível.
