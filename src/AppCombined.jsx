@@ -803,7 +803,32 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         <style>{`
           @keyframes vk-tut-cursor-fade { from { opacity: 0; } to { opacity: 1; } }
           .vk-tut-cursor { animation: vk-tut-cursor-fade 0.25s ease-out; }
+          @keyframes vk-tut-spot-co {
+            0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25), 0 0 28px rgba(245, 158, 11, 0.55); border-color: #f59e0b; }
+            50%      { box-shadow: 0 0 0 9px rgba(245, 158, 11, 0.45), 0 0 40px rgba(245, 158, 11, 0.80); border-color: #d97706; }
+          }
+          .vk-tut-spot-co { animation: vk-tut-spot-co 1.4s ease-in-out infinite; }
         `}</style>
+        {/* Backdrop escurecido (modo comSpotlight) — destaca o spotlight */}
+        {passo.comSpotlight && (
+          <div style={{
+            position: "fixed", inset: 0,
+            background: "rgba(15, 23, 42, 0.35)",
+            zIndex: 1000, pointerEvents: "none",
+            transition: "opacity 0.2s",
+          }} />
+        )}
+        {/* Spotlight pulsante em volta do alvo (modo comSpotlight) */}
+        {passo.comSpotlight && rect && (
+          <div className="vk-tut-spot-co" style={{
+            position: "fixed",
+            top: rect.top - 6, left: rect.left - 6,
+            width: rect.width + 12, height: rect.height + 12,
+            border: "2.5px solid #f59e0b", borderRadius: 10,
+            zIndex: 1001, pointerEvents: "none",
+            transition: "top 0.5s cubic-bezier(0.32, 0.72, 0, 1), left 0.5s cubic-bezier(0.32, 0.72, 0, 1), width 0.5s, height 0.5s",
+          }} />
+        )}
         {rect && (
           <div className="vk-tut-cursor" style={{
             position: "fixed", zIndex: 1003, pointerEvents: "none",
@@ -30434,7 +30459,7 @@ export default function ModuloClientesFornecedores() {
           // padrão; nas demais acelera pra não cansar.
           {
             targetId: "painel-comodos",
-            cursorOnly: true, autoMs: 50000,
+            cursorOnly: true, comSpotlight: true, autoMs: 50000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;
               const tut = window.__vkTutorial;

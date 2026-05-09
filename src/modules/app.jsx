@@ -2160,7 +2160,7 @@ export default function ModuloClientesFornecedores() {
           // padrão; nas demais acelera pra não cansar.
           {
             targetId: "painel-comodos",
-            cursorOnly: true, autoMs: 50000,
+            cursorOnly: true, comSpotlight: true, autoMs: 50000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;
               const tut = window.__vkTutorial;
