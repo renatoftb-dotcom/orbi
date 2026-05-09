@@ -2106,10 +2106,13 @@ export default function ModuloClientesFornecedores() {
             autoMs: 4000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;
+              const tut = window.__vkTutorial;
               if (!orc) return;
               orc.setIncluiArq && orc.setIncluiArq(false);
               orc.setIncluiEng && orc.setIncluiEng(false);
-              await new Promise(r => setTimeout(r, 1400));
+              // Sleep que respeita pausa
+              if (tut) await tut.sleep(1400);
+              else await new Promise(r => setTimeout(r, 1400));
               if (cancelado()) return;
               orc.setIncluiArq && orc.setIncluiArq(true);
               orc.setIncluiEng && orc.setIncluiEng(true);
@@ -2162,7 +2165,8 @@ export default function ModuloClientesFornecedores() {
               const tut = window.__vkTutorial;
               if (!orc || !tut) return;
               orc.expandirComodos && orc.expandirComodos();
-              const sleep = ms => new Promise(r => setTimeout(r, ms));
+              // Sleep que respeita pausa (congela enquanto pausado)
+              const sleep = (ms) => tut.sleep(ms);
               const grupos = [
                 { nome: "Áreas Sociais", rapido: false, comodos: [
                   ["Garagem", 2], ["Hall de entrada", 1], ["Sala TV", 1],

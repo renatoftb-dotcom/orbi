@@ -327,25 +327,46 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   // ação final do passo, pra evitar que a sinalização "vaze" pra próxima
   // tela enquanto o React processa a transição.
   const [ocultarUI, setOcultarUI] = useState(false);
-  // Pausa: quando true, o autoMs não dispara avanço. Botão "Continuar"
-  // retoma do início do passo atual (re-arma o setTimeout).
+  // Pausa: quando true, o autoMs preserva o tempo restante e ações async
+  // (digitação, loop de cômodos) entram em loop de espera até despausar.
   const [pausado, setPausado] = useState(false);
+  const pausadoRef = useRef(false);
+  useEffect(() => { pausadoRef.current = pausado; }, [pausado]);
   const passo = passos[idx] || null;
   const targetIdAtual = targetIdOverride || passo?.targetId;
 
   // Expõe setter pra ações chamarem de fora durante a execução do passo.
   // proximo() avança imediatamente pro próximo passo (ou conclui se for o
-  // último) — útil pra encerrar uma animação longa antes do autoMs estourar.
+  // último). esperarSeNecessario() é usado por animações async pra parar
+  // quando o user pausa o tutorial.
   useEffect(() => {
     window.__vkTutorial = {
       setTargetId: (id) => setTargetIdOverride(id),
       clearTargetId: () => setTargetIdOverride(null),
       proximo: () => setIdx(i => {
         if (i < passos.length - 1) return i + 1;
-        // Último passo — chama onConcluir
         setTimeout(() => onConcluir && onConcluir(), 0);
         return i;
       }),
+      // Aguarda enquanto pausado (polling 100ms). Async funcs do tutorial
+      // chamam isso entre steps pra "congelar" sem state machine complexo.
+      esperarSeNecessario: async () => {
+        while (pausadoRef.current) {
+          await new Promise(r => setTimeout(r, 100));
+        }
+      },
+      // Sleep que respeita pausa: divide o tempo em pedaços de 100ms,
+      // checa pausado entre cada pedaço. Substitui setTimeout cru.
+      sleep: async (ms) => {
+        const passo = 80;
+        let restante = ms;
+        while (restante > 0) {
+          while (pausadoRef.current) await new Promise(r => setTimeout(r, 100));
+          const dt = Math.min(passo, restante);
+          await new Promise(r => setTimeout(r, dt));
+          restante -= dt;
+        }
+      },
     };
     return () => { delete window.__vkTutorial; };
   }, [passos.length]);
@@ -452,28 +473,33 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
       const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
       el.focus && el.focus();
       let i = 0;
-      function passoChar() {
-        if (cancelado) return;
-        i++;
-        try {
-          setter.call(el, valor.slice(0, i));
-          el.dispatchEvent(new Event("input", { bubbles: true }));
-        } catch (e) { console.warn("[tutorial] type falhou:", e); }
-        if (i < valor.length) setTimeout(passoChar, delay);
-        else {
-          // Dispara change ao final pra forms que escutam blur/change
-          try { el.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
-          // Confirmação opcional via Enter (ex: form de referência)
-          if (passo.acao.confirmEnter) {
-            setTimeout(() => {
-              try {
-                const ev = new KeyboardEvent("keydown", {
-                  key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true,
-                });
-                el.dispatchEvent(ev);
-              } catch (e) { console.warn("[tutorial] confirmEnter falhou:", e); }
-            }, 200);
+      async function passoChar() {
+        while (i < valor.length) {
+          if (cancelado) return;
+          // Pausa o tutorial → digitação congela aqui
+          while (pausadoRef.current) {
+            if (cancelado) return;
+            await new Promise(r => setTimeout(r, 100));
           }
+          i++;
+          try {
+            setter.call(el, valor.slice(0, i));
+            el.dispatchEvent(new Event("input", { bubbles: true }));
+          } catch (e) { console.warn("[tutorial] type falhou:", e); }
+          if (i < valor.length) await new Promise(r => setTimeout(r, delay));
+        }
+        // Dispara change ao final pra forms que escutam blur/change
+        try { el.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+        // Confirmação opcional via Enter (ex: form de referência)
+        if (passo.acao.confirmEnter) {
+          await new Promise(r => setTimeout(r, 200));
+          if (cancelado) return;
+          try {
+            const ev = new KeyboardEvent("keydown", {
+              key: "Enter", code: "Enter", keyCode: 13, which: 13, bubbles: true,
+            });
+            el.dispatchEvent(ev);
+          } catch (e) { console.warn("[tutorial] confirmEnter falhou:", e); }
         }
       }
       passoChar();
@@ -489,10 +515,20 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   // Esconder ANTES da ação evita que o spotlight da página atual "vaze"
   // pra próxima tela enquanto o React processa a mudança.
   // "type" é tratado em useEffect separado e NÃO re-executa aqui.
+  // tempoRestanteRef: armazena ms restantes do passo atual. Resetado quando
+  // o passo muda. Decrementa quando NÃO pausado, fica congelado quando pausado.
+  const tempoRestanteRef = useRef(0);
+  useEffect(() => {
+    if (estagio !== "passo" || !passo) return;
+    tempoRestanteRef.current = passo.autoMs || 3500;
+  }, [estagio, idx]);
+
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
     if (pausado) return;
-    const ms = passo.autoMs || 3500;
+    // Usa o tempo restante (não o autoMs original) — preserva pausas
+    const ms = tempoRestanteRef.current > 0 ? tempoRestanteRef.current : (passo.autoMs || 3500);
+    const inicio = Date.now();
     const t = setTimeout(() => {
       const temAcaoFinal = passo.acao &&
         !(passo.acao && passo.acao.tipo === "type");
@@ -536,7 +572,12 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
       if (temAcaoFinal) setTimeout(exec, 30);
       else exec();
     }, ms);
-    return () => clearTimeout(t);
+    return () => {
+      clearTimeout(t);
+      // Atualiza tempo restante baseado no que passou desde o último start
+      const decorrido = Date.now() - inicio;
+      tempoRestanteRef.current = Math.max(0, tempoRestanteRef.current - decorrido);
+    };
   }, [estagio, idx, pausado]);
 
   // Chrome do tutorial: overlay bloqueante de cliques + barra de controle
@@ -30108,10 +30149,13 @@ export default function ModuloClientesFornecedores() {
             autoMs: 4000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;
+              const tut = window.__vkTutorial;
               if (!orc) return;
               orc.setIncluiArq && orc.setIncluiArq(false);
               orc.setIncluiEng && orc.setIncluiEng(false);
-              await new Promise(r => setTimeout(r, 1400));
+              // Sleep que respeita pausa
+              if (tut) await tut.sleep(1400);
+              else await new Promise(r => setTimeout(r, 1400));
               if (cancelado()) return;
               orc.setIncluiArq && orc.setIncluiArq(true);
               orc.setIncluiEng && orc.setIncluiEng(true);
@@ -30164,7 +30208,8 @@ export default function ModuloClientesFornecedores() {
               const tut = window.__vkTutorial;
               if (!orc || !tut) return;
               orc.expandirComodos && orc.expandirComodos();
-              const sleep = ms => new Promise(r => setTimeout(r, ms));
+              // Sleep que respeita pausa (congela enquanto pausado)
+              const sleep = (ms) => tut.sleep(ms);
               const grupos = [
                 { nome: "Áreas Sociais", rapido: false, comodos: [
                   ["Garagem", 2], ["Hall de entrada", 1], ["Sala TV", 1],
