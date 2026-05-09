@@ -239,82 +239,55 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
     return () => { cancelado = true; };
   }, []);
 
-  // Layout: UMA elipse SVG envolvendo o conjunto inteiro de elementos +
-  // UMA linha conectora saindo da borda superior-direita da elipse até a
-  // quina inferior-esquerda do texto. Texto fica à direita do conjunto,
-  // na altura do topo. Estilo "callout" clássico de captura de atenção.
-  const COR_AZUL = "#1e3a8a";
-  const TEXT_MAX_W = 220;
-
-  // Bounds do conjunto + centro/raios da elipse com padding
-  let cx = 0, cy = 0, rx = 0, ry = 0;
+  // Layout: borda amarela pulsante em CADA elemento (mesmo estilo do
+  // spotlight padrão — .vk-tut-spotlight com vk-tut-pulse-border). Texto
+  // único posicionado acima do conjunto, em preto. Padrão coerente com
+  // os outros tipos de sinalização do tutorial.
+  const TEXT_MAX_W = 320;
   let textLeft = 24, textTop = 24;
-  let lineX1 = 0, lineY1 = 0, lineX2 = 0, lineY2 = 0;
   if (rects.length > 0) {
     const minLeft = Math.min(...rects.map(r => r.left));
     const minTop = Math.min(...rects.map(r => r.top));
-    const maxRight = Math.max(...rects.map(r => r.left + r.width));
-    const maxBottom = Math.max(...rects.map(r => r.top + r.height));
-    cx = (minLeft + maxRight) / 2;
-    cy = (minTop + maxBottom) / 2;
-    rx = (maxRight - minLeft) / 2 + 36;  // padding horizontal generoso
-    ry = (maxBottom - minTop) / 2 + 18;  // padding vertical menor
-
-    // Texto à direita do conjunto, BEM ACIMA dos toggles pra não sobrepor
-    // info do header/cliente que fica ao lado da barra de toggles. Garante
-    // pelo menos 16px de margem do topo da viewport.
-    textLeft = maxRight + 80;
-    textTop = Math.max(16, minTop - 110);
-
-    // Linha: sai do nordeste da elipse (ângulo mais íngreme pra acompanhar
-    // o texto que subiu) e vai até a quina inferior-esquerda do texto
-    const ang = Math.PI / 4.5; // ~40° acima da horizontal
-    lineX1 = cx + rx * Math.cos(ang);
-    lineY1 = cy - ry * Math.sin(ang);
-    lineX2 = textLeft - 8;
-    // Aproximadamente meio da altura do título (h2 fontSize 22 * lineHeight 1.25)
-    lineY2 = textTop + 14;
+    textLeft = Math.max(16, minLeft);
+    textTop = Math.max(16, minTop - 64);
   }
 
   return (
     <>
-      {/* Elipse SVG envolvendo todos os elementos + linha conectora */}
-      {rects.length > 0 && (
-        <svg style={{
-          position: "fixed", inset: 0,
-          width: "100%", height: "100%",
+      {/* Borda amarela pulsante em cada elemento (igual ao spotlight) */}
+      {rects.map((r, i) => (
+        <div key={i} className="vk-tut-spotlight" style={{
+          position: "fixed",
+          top: r.top - 6, left: r.left - 6,
+          width: r.width + 12, height: r.height + 12,
+          border: "2.5px solid #f59e0b", borderRadius: 10,
           zIndex: 1001, pointerEvents: "none",
-        }}>
-          <ellipse cx={cx} cy={cy} rx={rx} ry={ry}
-            fill="none" stroke={COR_AZUL} strokeWidth="1.5" />
-          {(titulo || descricao) && (
-            <line x1={lineX1} y1={lineY1} x2={lineX2} y2={lineY2}
-              stroke={COR_AZUL} strokeWidth="1.5" />
-          )}
-        </svg>
-      )}
+        }} />
+      ))}
 
-      {/* Texto alinhado à esquerda, à direita do conjunto, em preto */}
+      {/* Texto acima do conjunto, alinhado à esquerda, em preto */}
       {(titulo || descricao) && rects.length > 0 && (
-        <div ref={textRef} className="vk-tut-callout-text" style={{
+        <div ref={textRef} className="vk-tut-tooltip" style={{
           position: "fixed",
           top: textTop, left: textLeft,
           maxWidth: TEXT_MAX_W,
           zIndex: 1003, pointerEvents: "none",
           fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
           textAlign: "left",
+          background: "#fff", padding: "10px 14px",
+          borderRadius: 8, border: "1px solid #fde68a",
+          boxShadow: "0 8px 20px rgba(0,0,0,0.10)",
         }}>
           {titulo && (
-            <h2 style={{
-              fontSize: 22, fontWeight: 500, letterSpacing: "-0.022em",
-              lineHeight: 1.25, margin: 0, color: "#111",
-            }}>{titulo}</h2>
+            <div style={{
+              fontSize: 11, fontWeight: 700, color: "#92400e",
+              textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4,
+            }}>{titulo}</div>
           )}
           {descricao && (
-            <p style={{
-              fontSize: 14.5, fontWeight: 400, color: "#6b7280",
-              lineHeight: 1.5, marginTop: 8, marginBottom: 0,
-            }}>{descricao}</p>
+            <div style={{
+              fontSize: 13, color: "#111", lineHeight: 1.5,
+            }}>{descricao}</div>
           )}
         </div>
       )}
@@ -379,6 +352,32 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   // Reseta override e visibilidade ao mudar de passo
   useEffect(() => { setTargetIdOverride(null); setOcultarUI(false); }, [idx]);
+
+  // Bloqueio GLOBAL de eventos de interação — ignora eventos sintéticos
+  // disparados pelo próprio tutorial (el.click() programático tem isTrusted
+  // = false). Cobre clicks reais do user em qualquer lugar da app, mesmo
+  // em elementos com z-index acima do bloqueador visual.
+  // Eventos disparados de dentro da barra de controle são deixados passar.
+  useEffect(() => {
+    const dentroDoChrome = (el) => {
+      while (el) {
+        if (el.dataset && el.dataset.vkTutorialChrome) return true;
+        el = el.parentElement;
+      }
+      return false;
+    };
+    const handler = (e) => {
+      if (!e.isTrusted) return; // ações programáticas do tutorial passam
+      if (dentroDoChrome(e.target)) return; // botões da barra funcionam
+      e.stopPropagation();
+      e.preventDefault();
+      e.stopImmediatePropagation && e.stopImmediatePropagation();
+    };
+    const opts = { capture: true };
+    const eventos = ["click", "mousedown", "mouseup", "pointerdown", "pointerup", "touchstart", "touchend", "contextmenu", "keydown", "keyup"];
+    eventos.forEach(ev => document.addEventListener(ev, handler, opts));
+    return () => eventos.forEach(ev => document.removeEventListener(ev, handler, opts));
+  }, []);
 
   // Mede o elemento alvo. Re-mede em scroll/resize. Tenta a cada 200ms
   // por até 1.5s pra suportar elementos que ainda estão renderizando.
@@ -568,7 +567,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           position: "fixed", inset: 0, background: "transparent",
           zIndex: 998, cursor: "default",
         }} />
-      <div style={{
+      <div data-vk-tutorial-chrome="true" style={{
         position: "fixed", bottom: 16, right: 16,
         display: "flex", gap: 8, zIndex: 1010,
         background: "rgba(255,255,255,0.95)",
@@ -595,7 +594,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         <div style={{
           position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 1000,
         }} />
-        <div style={{
+        <div data-vk-tutorial-chrome="true" style={{
           position: "fixed", top: "50%", left: "50%",
           transform: "translate(-50%, -50%)",
           background: "#fff", borderRadius: 14,
@@ -629,7 +628,9 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     );
   }
 
-  if (!passo) return null;
+  // Sempre renderiza o chrome (bloqueador + barra) mesmo se passo for null
+  // ou estiver oculto durante uma transição.
+  if (!passo) return chrome;
   // Tutorial pediu pra esconder a UI antes de avançar — não renderiza nada
   // do passo, mas mantém o chrome (bloqueador + barra) visível.
   if (ocultarUI) return chrome;
@@ -16130,7 +16131,9 @@ function EtapaFormaPagamento({
           <button type="button" className="vk-fp-radio" onClick={() => toggleContratacao(tipo)} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 500, color: '#111', marginBottom: 14 }}>{titulo}</div>
-            {formasParaCards.map(f => renderLinhaForma(tipo, f))}
+            <div data-tutorial-id={`config-pgto-${tipo}`}>
+              {formasParaCards.map(f => renderLinhaForma(tipo, f))}
+            </div>
           </div>
         </div>
         {renderResumo(tipo)}
@@ -30251,12 +30254,12 @@ export default function ModuloClientesFornecedores() {
             acao: "click",
           },
           // ── Etapa 2 da Forma de Pagamento: "Defina os valores" ──
-          // Sinaliza os cards de contratação com callout azul, indicando
-          // que o usuário pode ajustar descontos e número de parcelas.
+          // Sinaliza com círculo amarelo a área de descontos/parcelas dentro
+          // de cada card (Apenas Arq + Pacote), mostrando ONDE editar.
           {
             tipo: "callouts",
-            targetIds: ["card-contratacao-arq", "card-contratacao-pac"],
-            titulo: "Você pode alterar descontos e parcelas",
+            targetIds: ["config-pgto-arq", "config-pgto-pac"],
+            titulo: "Definir desconto e número de parcelas",
             descricao: "Ajuste o desconto antecipado e o número de parcelas em cada cenário.",
             autoMs: 4500,
           },

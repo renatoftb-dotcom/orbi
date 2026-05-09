@@ -2252,12 +2252,12 @@ export default function ModuloClientesFornecedores() {
             acao: "click",
           },
           // ── Etapa 2 da Forma de Pagamento: "Defina os valores" ──
-          // Sinaliza os cards de contratação com callout azul, indicando
-          // que o usuário pode ajustar descontos e número de parcelas.
+          // Sinaliza com círculo amarelo a área de descontos/parcelas dentro
+          // de cada card (Apenas Arq + Pacote), mostrando ONDE editar.
           {
             tipo: "callouts",
-            targetIds: ["card-contratacao-arq", "card-contratacao-pac"],
-            titulo: "Você pode alterar descontos e parcelas",
+            targetIds: ["config-pgto-arq", "config-pgto-pac"],
+            titulo: "Definir desconto e número de parcelas",
             descricao: "Ajuste o desconto antecipado e o número de parcelas em cada cenário.",
             autoMs: 4500,
           },

@@ -5204,7 +5204,9 @@ function EtapaFormaPagamento({
           <button type="button" className="vk-fp-radio" onClick={() => toggleContratacao(tipo)} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 500, color: '#111', marginBottom: 14 }}>{titulo}</div>
-            {formasParaCards.map(f => renderLinhaForma(tipo, f))}
+            <div data-tutorial-id={`config-pgto-${tipo}`}>
+              {formasParaCards.map(f => renderLinhaForma(tipo, f))}
+            </div>
           </div>
         </div>
         {renderResumo(tipo)}
