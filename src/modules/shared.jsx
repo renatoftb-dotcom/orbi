@@ -256,17 +256,20 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar }) {
     rx = (maxRight - minLeft) / 2 + 36;  // padding horizontal generoso
     ry = (maxBottom - minTop) / 2 + 18;  // padding vertical menor
 
-    // Texto à direita do conjunto, ligeiramente acima do topo
-    textLeft = maxRight + 70;
-    textTop = Math.max(24, minTop - 28);
+    // Texto à direita do conjunto, BEM ACIMA dos toggles pra não sobrepor
+    // info do header/cliente que fica ao lado da barra de toggles. Garante
+    // pelo menos 16px de margem do topo da viewport.
+    textLeft = maxRight + 80;
+    textTop = Math.max(16, minTop - 110);
 
-    // Linha: sai do nordeste da elipse (ângulo ~25° acima da horizontal)
-    // e vai até a quina inferior-esquerda do texto
-    const ang = Math.PI / 7; // ~25.7° em radianos
+    // Linha: sai do nordeste da elipse (ângulo mais íngreme pra acompanhar
+    // o texto que subiu) e vai até a quina inferior-esquerda do texto
+    const ang = Math.PI / 4.5; // ~40° acima da horizontal
     lineX1 = cx + rx * Math.cos(ang);
     lineY1 = cy - ry * Math.sin(ang);
     lineX2 = textLeft - 8;
-    lineY2 = textTop + (textW > 0 ? 30 : 30); // aproximadamente próximo da base do título
+    // Aproximadamente meio da altura do título (h2 fontSize 22 * lineHeight 1.25)
+    lineY2 = textTop + 14;
   }
 
   return (
