@@ -16820,107 +16820,140 @@ function EtapaFormaPagamento({
 }
 
 // ═══════════════════════════════════════════════════════════════
-// ESCOLHA DE MODELO DE ORÇAMENTO
+// ESCOLHA DE MODELO DE ORÇAMENTO — carrossel com preview real
 // ═══════════════════════════════════════════════════════════════
-// Tela de seleção entre os templates visuais disponíveis. Aparece
-// uma vez por orçamento, depois da etapa de pagamento. Os templates
-// são definidos em modelo-padrao.jsx (TEMPLATES_PROPOSTA).
-// Cada card mostra preview da paleta + nome + descrição.
-function EscolhaModeloOrcamento({ onVoltar, onSelecionar }) {
+// Tela de seleção entre os templates visuais. Cada slide renderiza
+// o ModeloComponente REAL com lockEdicao=true, mostrando a proposta
+// completa (sem quebra de páginas) num container scrollável.
+// Setas laterais navegam entre os modelos. Botão "Usar este modelo"
+// confirma a escolha.
+function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
   const templates = (typeof TEMPLATES_PROPOSTA !== "undefined" ? TEMPLATES_PROPOSTA : []);
+  const [idx, setIdx] = useState(0);
+  const tplAtual = templates[idx] || templates[0];
+  const ModeloComponente = (typeof getModeloOrcamento !== "undefined")
+    ? getModeloOrcamento(escritorio?.modelo_default)
+    : null;
+  const previewData = { ...data, templateId: tplAtual?.id };
+
+  function ir(delta) {
+    setIdx(i => (i + delta + templates.length) % templates.length);
+  }
+
+  const setaBtn = (lado) => ({
+    position: "absolute", top: "50%", transform: "translateY(-50%)",
+    [lado]: 16, zIndex: 5,
+    width: 44, height: 44, borderRadius: "50%",
+    background: "#fff", border: "1px solid #e5e7eb",
+    boxShadow: "0 6px 16px rgba(0,0,0,0.12)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    cursor: "pointer", fontSize: 18, fontFamily: "inherit", color: "#111",
+  });
+
   return (
     <div style={{
-      background: "#fff", minHeight: "100vh",
-      padding: "60px 24px",
+      background: "#fafaf7", minHeight: "100vh",
+      padding: "32px 24px",
       fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
       display: "flex", flexDirection: "column", alignItems: "center",
     }}>
-      <div style={{ maxWidth: 880, width: "100%" }}>
-        <div style={{ marginBottom: 36, textAlign: "center" }}>
-          <div style={{
-            fontSize: 11, fontWeight: 600, color: "#9ca3af",
-            textTransform: "uppercase", letterSpacing: 1.6, marginBottom: 8,
-          }}>Modelo de orçamento</div>
-          <h1 style={{
-            fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
-            lineHeight: 1.2, margin: 0, color: "#111",
-          }}>Escolha o modelo da proposta</h1>
-          <p style={{
-            fontSize: 14.5, color: "#6b7280",
-            lineHeight: 1.55, marginTop: 10, marginBottom: 0,
-          }}>Você pode trocar o modelo a qualquer momento depois.</p>
-        </div>
-
+      {/* Header */}
+      <div style={{ maxWidth: 1080, width: "100%", marginBottom: 16, textAlign: "center" }}>
         <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-          gap: 20,
+          fontSize: 11, fontWeight: 600, color: "#9ca3af",
+          textTransform: "uppercase", letterSpacing: 1.6, marginBottom: 6,
+        }}>Modelo de orçamento</div>
+        <h1 style={{
+          fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
+          lineHeight: 1.2, margin: 0, color: "#111",
+        }}>Escolha o modelo da proposta</h1>
+        <p style={{
+          fontSize: 14, color: "#6b7280",
+          lineHeight: 1.55, marginTop: 8, marginBottom: 0,
+        }}>Use as setas pra ver os modelos disponíveis e clique em "Usar este modelo".</p>
+      </div>
+
+      {/* Carrossel: setas + slot com modelo renderizado */}
+      <div style={{
+        position: "relative", width: "100%", maxWidth: 1080,
+        marginTop: 8,
+      }}>
+        {templates.length > 1 && (
+          <button type="button"
+            data-tutorial-id="modelo-seta-esquerda"
+            onClick={() => ir(-1)}
+            aria-label="Anterior"
+            style={setaBtn("left")}>‹</button>
+        )}
+        {templates.length > 1 && (
+          <button type="button"
+            data-tutorial-id="modelo-seta-direita"
+            onClick={() => ir(1)}
+            aria-label="Próximo"
+            style={setaBtn("right")}>›</button>
+        )}
+
+        <div data-tutorial-id="modelo-preview-container" style={{
+          background: "#fff",
+          border: "1px solid #e5e7eb", borderRadius: 12,
+          height: "62vh", overflow: "auto",
+          boxShadow: "0 18px 40px rgba(0,0,0,0.08)",
         }}>
-          {templates.map(t => (
-            <button key={t.id}
-              type="button"
-              onClick={() => onSelecionar(t.id)}
-              style={{
-                background: "#fff", border: "1px solid #e5e7eb",
-                borderRadius: 12, padding: 0, cursor: "pointer",
-                textAlign: "left", fontFamily: "inherit",
-                overflow: "hidden", transition: "all 0.15s",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "#111"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 12px 24px rgba(0,0,0,0.08)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
-            >
-              {/* Preview visual: faixa colorida com mockup simplificado */}
-              <div style={{
-                background: t.id === "02-direto" ? t.accent : "#fafaf7",
-                height: 140,
-                position: "relative",
-                display: "flex", flexDirection: "column",
-                padding: t.id === "02-direto" ? "16px 18px" : "20px 22px",
-              }}>
-                {t.id === "02-direto" ? (
-                  // Mockup do "Direto": header amarelo, título grande
-                  <>
-                    <div style={{ fontSize: 9, fontWeight: 700, color: "#78350f", letterSpacing: 1.2, textTransform: "uppercase" }}>Proposta · 12/05/2025</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: "#111", marginTop: 6 }}>Casa Vicke</div>
-                    <div style={{ marginTop: "auto", display: "flex", gap: 8 }}>
-                      <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.15)", borderRadius: 3 }} />
-                      <div style={{ flex: 1, height: 6, background: "rgba(0,0,0,0.15)", borderRadius: 3 }} />
-                    </div>
-                  </>
-                ) : (
-                  // Mockup do "Editorial": minimalista P&B
-                  <>
-                    <div style={{ fontSize: 9, fontWeight: 600, color: "#828a98", letterSpacing: 1.2, textTransform: "uppercase" }}>Proposta Comercial</div>
-                    <div style={{ fontSize: 16, fontWeight: 500, color: "#111", marginTop: 6, letterSpacing: "-0.02em" }}>Casa Vicke</div>
-                    <div style={{ marginTop: "auto", borderTop: "1px solid #e5e7eb", paddingTop: 10, display: "flex", gap: 8 }}>
-                      <div style={{ flex: 1, height: 4, background: "#e5e7eb", borderRadius: 2 }} />
-                      <div style={{ flex: 1, height: 4, background: "#e5e7eb", borderRadius: 2 }} />
-                    </div>
-                  </>
-                )}
-              </div>
-              {/* Texto do card */}
-              <div style={{ padding: "16px 20px" }}>
-                <div style={{ fontSize: 16, fontWeight: 600, color: "#111", marginBottom: 4 }}>{t.label}</div>
-                <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.5 }}>{t.desc}</div>
-              </div>
-            </button>
-          ))}
+          {ModeloComponente ? (
+            <ModeloComponente
+              key={tplAtual?.id}
+              data={previewData}
+              escritorio={escritorio}
+              onVoltar={() => {}}
+              onSalvarProposta={() => {}}
+              propostaReadOnly={true}
+              propostaSnapshot={null}
+              lockEdicao={true}
+            />
+          ) : (
+            <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>
+              Modelo não disponível.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Footer: nome do modelo + indicador + botão */}
+      <div style={{
+        maxWidth: 1080, width: "100%", marginTop: 18,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        gap: 16, flexWrap: "wrap",
+      }}>
+        <button type="button" onClick={onVoltar} style={{
+          background: "transparent", color: "#6b7280",
+          border: "1px solid #e5e7eb", borderRadius: 8,
+          padding: "10px 16px", fontSize: 13, fontWeight: 500,
+          cursor: "pointer", fontFamily: "inherit",
+        }}>← Voltar</button>
+
+        <div style={{ textAlign: "center", flex: 1 }}>
+          <div style={{ fontSize: 16, fontWeight: 600, color: "#111" }}>{tplAtual?.label}</div>
+          <div style={{ fontSize: 12.5, color: "#6b7280", marginTop: 2 }}>{tplAtual?.desc}</div>
+          <div style={{ display: "inline-flex", gap: 6, marginTop: 8 }}>
+            {templates.map((_, i) => (
+              <span key={i} style={{
+                width: 7, height: 7, borderRadius: "50%",
+                background: i === idx ? "#111" : "#d1d5db",
+                transition: "background 0.15s",
+              }} />
+            ))}
+          </div>
         </div>
 
-        <div style={{ display: "flex", justifyContent: "flex-start", marginTop: 28 }}>
-          <button
-            type="button"
-            onClick={onVoltar}
-            style={{
-              background: "transparent", color: "#6b7280",
-              border: "1px solid #e5e7eb", borderRadius: 8,
-              padding: "10px 18px", fontSize: 13, fontWeight: 500,
-              cursor: "pointer", fontFamily: "inherit",
-            }}>
-            ← Voltar
-          </button>
-        </div>
+        <button type="button"
+          data-tutorial-id="modelo-usar"
+          onClick={() => onSelecionar(tplAtual.id)}
+          style={{
+            background: "#111", color: "#fff",
+            border: "1px solid #111", borderRadius: 8,
+            padding: "10px 20px", fontSize: 13, fontWeight: 600,
+            cursor: "pointer", fontFamily: "inherit",
+          }}>Usar este modelo →</button>
       </div>
     </div>
   );
@@ -18948,6 +18981,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     if (!modeloEscolhido && !propostaReadOnlyForce) {
       return (
         <EscolhaModeloOrcamento
+          data={liveData}
+          escritorio={esc}
           onVoltar={() => setEtapaPagamentoConfirmada(false)}
           onSelecionar={(id) => setModeloEscolhido(id)}
         />
@@ -30409,13 +30444,15 @@ export default function ModuloClientesFornecedores() {
                   ["Suíte", 2], ["Closet Suíte", 2], ["Suíte Master", 1],
                 ]},
               ];
+              const tLento  = { andar: 600, abrir: 450, andarBtn: 600, verPreto: 600, recolhe: 500 };
+              const tRapido = { andar: 280, abrir: 220, andarBtn: 280, verPreto: 350, recolhe: 320 };
               for (const g of grupos) {
                 if (cancelado()) return;
-                // Tempos por velocidade do grupo (lenta demonstração / rápido)
-                const t = g.rapido
-                  ? { andar: 280, abrir: 220, andarBtn: 280, verPreto: 350, recolhe: 320 }
-                  : { andar: 600, abrir: 450, andarBtn: 600, verPreto: 600, recolhe: 500 };
-                for (const [nome, qtd] of g.comodos) {
+                for (let i = 0; i < g.comodos.length; i++) {
+                  const [nome, qtd] = g.comodos[i];
+                  // Acelera após o 2º cômodo da primeira seção (Áreas Sociais).
+                  // Demais grupos já são rápidos por padrão.
+                  const t = (g.rapido || i >= 2) ? tRapido : tLento;
                   if (cancelado()) return;
                   // 1. Cursor anda até o cômodo na lista de disponíveis
                   tut.setTargetId(`css:[data-comodo-nome="${nome}"]`);
@@ -30440,7 +30477,7 @@ export default function ModuloClientesFornecedores() {
                 // Terminou o grupo — recolhe pra dar foco no próximo
                 if (cancelado()) return;
                 orc.recolherGrupo && orc.recolherGrupo(g.nome);
-                await sleep(t.recolhe);
+                await sleep(tRapido.recolhe);
               }
               tut.clearTargetId && tut.clearTargetId();
               // Avança imediatamente — não espera autoMs estourar (que ficaria
@@ -30500,6 +30537,33 @@ export default function ModuloClientesFornecedores() {
             targetId: "botao-continuar-proposta",
             titulo: "Continuar",
             descricao: "Avançar pra geração da proposta.",
+            posicao: "top", autoMs: 2400,
+            acao: "click",
+          },
+          // ── Tela de Escolha de Modelo de Orçamento ──
+          // Mostra um modelo de cada vez. Tutorial demonstra a navegação:
+          // clica seta direita (vê o "Direto"), volta com seta esquerda
+          // (volta pro "Padrão"), e confirma com "Usar este modelo".
+          {
+            targetId: "modelo-preview-container",
+            titulo: "Escolha o modelo",
+            descricao: "Use as setas pra ver os modelos disponíveis.",
+            posicao: "top", autoMs: 3000,
+          },
+          {
+            targetId: "modelo-seta-direita",
+            cursorOnly: true, autoMs: 1800,
+            acao: "click",
+          },
+          {
+            targetId: "modelo-seta-esquerda",
+            cursorOnly: true, autoMs: 1800,
+            acao: "click",
+          },
+          {
+            targetId: "modelo-usar",
+            titulo: "Usar este modelo",
+            descricao: "Vamos seguir com o modelo Padrão.",
             posicao: "top", autoMs: 2400,
             acao: "click",
           },

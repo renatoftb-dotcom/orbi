@@ -2183,13 +2183,15 @@ export default function ModuloClientesFornecedores() {
                   ["Suíte", 2], ["Closet Suíte", 2], ["Suíte Master", 1],
                 ]},
               ];
+              const tLento  = { andar: 600, abrir: 450, andarBtn: 600, verPreto: 600, recolhe: 500 };
+              const tRapido = { andar: 280, abrir: 220, andarBtn: 280, verPreto: 350, recolhe: 320 };
               for (const g of grupos) {
                 if (cancelado()) return;
-                // Tempos por velocidade do grupo (lenta demonstração / rápido)
-                const t = g.rapido
-                  ? { andar: 280, abrir: 220, andarBtn: 280, verPreto: 350, recolhe: 320 }
-                  : { andar: 600, abrir: 450, andarBtn: 600, verPreto: 600, recolhe: 500 };
-                for (const [nome, qtd] of g.comodos) {
+                for (let i = 0; i < g.comodos.length; i++) {
+                  const [nome, qtd] = g.comodos[i];
+                  // Acelera após o 2º cômodo da primeira seção (Áreas Sociais).
+                  // Demais grupos já são rápidos por padrão.
+                  const t = (g.rapido || i >= 2) ? tRapido : tLento;
                   if (cancelado()) return;
                   // 1. Cursor anda até o cômodo na lista de disponíveis
                   tut.setTargetId(`css:[data-comodo-nome="${nome}"]`);
@@ -2214,7 +2216,7 @@ export default function ModuloClientesFornecedores() {
                 // Terminou o grupo — recolhe pra dar foco no próximo
                 if (cancelado()) return;
                 orc.recolherGrupo && orc.recolherGrupo(g.nome);
-                await sleep(t.recolhe);
+                await sleep(tRapido.recolhe);
               }
               tut.clearTargetId && tut.clearTargetId();
               // Avança imediatamente — não espera autoMs estourar (que ficaria
@@ -2274,6 +2276,33 @@ export default function ModuloClientesFornecedores() {
             targetId: "botao-continuar-proposta",
             titulo: "Continuar",
             descricao: "Avançar pra geração da proposta.",
+            posicao: "top", autoMs: 2400,
+            acao: "click",
+          },
+          // ── Tela de Escolha de Modelo de Orçamento ──
+          // Mostra um modelo de cada vez. Tutorial demonstra a navegação:
+          // clica seta direita (vê o "Direto"), volta com seta esquerda
+          // (volta pro "Padrão"), e confirma com "Usar este modelo".
+          {
+            targetId: "modelo-preview-container",
+            titulo: "Escolha o modelo",
+            descricao: "Use as setas pra ver os modelos disponíveis.",
+            posicao: "top", autoMs: 3000,
+          },
+          {
+            targetId: "modelo-seta-direita",
+            cursorOnly: true, autoMs: 1800,
+            acao: "click",
+          },
+          {
+            targetId: "modelo-seta-esquerda",
+            cursorOnly: true, autoMs: 1800,
+            acao: "click",
+          },
+          {
+            targetId: "modelo-usar",
+            titulo: "Usar este modelo",
+            descricao: "Vamos seguir com o modelo Padrão.",
             posicao: "top", autoMs: 2400,
             acao: "click",
           },
