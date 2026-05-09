@@ -2138,34 +2138,45 @@ export default function ModuloClientesFornecedores() {
             posicao: "right", autoMs: 2000,
             acao: "click",
           },
-          // Cômodos — ação custom: injeta o map inteiro de uma vez via
-          // window.__vkOrc.setQtds (exposto pelo FormOrcamentoProjetoTeste).
-          // Spotlight fica num container do form pra dar feedback visual.
+          // Cômodos — animação sequencial: pra cada cômodo abre o popup
+          // (efeito hover), aguarda, marca a quantidade, fecha. Tudo via
+          // window.__vkOrc exposto pelo FormOrcamentoProjetoTeste.
           {
-            targetId: "campo-referencia",
+            targetId: "painel-comodos",
             titulo: "Passo 13",
-            descricao: "Adicionando os cômodos: 2 garagens, hall, sala TV, living, escritório, lavabo, cozinha, lavanderia, depósito, área de lazer, piscina, lavabo lazer, 2 suítes, 2 closets e 1 suíte master.",
-            posicao: "bottom", autoMs: 4500,
-            acao: () => {
-              if (window.__vkOrc?.setQtds) {
-                window.__vkOrc.setQtds({
-                  "Garagem": 2,
-                  "Hall de entrada": 1,
-                  "Sala TV": 1,
-                  "Living": 1,
-                  "Escritório": 1,
-                  "Lavabo": 1,
-                  "Cozinha": 1,
-                  "Lavanderia": 1,
-                  "Depósito": 1,
-                  "Área de lazer": 1,
-                  "Piscina": 1,
-                  "Lavabo Lazer": 1,
-                  "Suíte": 2,
-                  "Closet Suíte": 2,
-                  "Suíte Master": 1,
-                });
+            descricao: "Adicionando os cômodos um a um: 2 garagens, hall, sala TV, living, escritório, lavabo, cozinha, lavanderia, depósito, área de lazer, piscina, lavabo lazer, 2 suítes, 2 closets e 1 suíte master.",
+            posicao: "left", autoMs: 13500,
+            acaoAoIniciar: async (cancelado) => {
+              const orc = window.__vkOrc;
+              if (!orc) return;
+              orc.expandirComodos && orc.expandirComodos();
+              const sleep = ms => new Promise(r => setTimeout(r, ms));
+              const lista = [
+                ["Garagem", 2],
+                ["Hall de entrada", 1],
+                ["Sala TV", 1],
+                ["Living", 1],
+                ["Escritório", 1],
+                ["Lavabo", 1],
+                ["Cozinha", 1],
+                ["Lavanderia", 1],
+                ["Depósito", 1],
+                ["Área de lazer", 1],
+                ["Piscina", 1],
+                ["Lavabo Lazer", 1],
+                ["Suíte", 2],
+                ["Closet Suíte", 2],
+                ["Suíte Master", 1],
+              ];
+              for (const [nome, qtd] of lista) {
+                if (cancelado()) return;
+                orc.abrirPopup(nome);
+                await sleep(280);
+                if (cancelado()) return;
+                orc.setQtdAbs(nome, qtd);
+                await sleep(380);
               }
+              orc.fecharPopup && orc.fecharPopup();
             },
           },
         ]}

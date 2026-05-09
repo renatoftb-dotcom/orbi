@@ -6031,14 +6031,30 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, [tipoProjeto]);
 
   // Tutorial Beta — expõe setters do form via window pra o tutorial
-  // injetar cômodos sem precisar simular cliques individuais. Limpado ao
-  // desmontar pra não vazar referência stale.
+  // injetar cômodos com animação visual (popup abre, número aparece).
+  // Setters de useState são estáveis entre renders, dá pra usar com [] deps.
+  // setComodoAberto é definido mais abaixo (function declaration hoist).
   useEffect(() => {
     window.__vkOrc = {
       setQtds: (novoMap) => {
         setQtds(novoMap || {});
         setComodosTocados(new Set(Object.entries(novoMap || {}).filter(([,q]) => q > 0).map(([n]) => n)));
       },
+      // Adiciona um cômodo individual com qtd; mostra como "tocado" e atualiza estado.
+      setQtdAbs: (nome, val) => {
+        const v = Math.max(0, parseInt(val) || 0);
+        setQtds(prev => {
+          const next = { ...prev };
+          if (v === 0) delete next[nome]; else next[nome] = v;
+          return next;
+        });
+        setComodosTocados(prev => { const next = new Set(prev); next.add(nome); return next; });
+      },
+      // Abre/fecha popup de quantidade do cômodo (efeito hover).
+      abrirPopup: (nome) => setComodoAberto(nome),
+      fecharPopup:        () => setComodoAberto(null),
+      // Garante que o card de cômodos esteja expandido (ele pode estar recolhido).
+      expandirComodos:    () => setCardComodosRecolhido(false),
     };
     return () => { delete window.__vkOrc; };
   }, []);
@@ -8316,7 +8332,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
-        <div data-vk-orc-comodos-shell style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
+        <div data-vk-orc-comodos-shell data-tutorial-id="painel-comodos" style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
           marginTop:0,
           maxWidth:1100,

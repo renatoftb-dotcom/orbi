@@ -245,6 +245,19 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     };
   }, [estagio, passo?.targetId]);
 
+  // Ação custom executada AO INICIAR o passo (em paralelo ao autoMs). Útil
+  // pra animações longas que devem rodar enquanto o balão fica visível
+  // (ex: sequência de cliques que preenche cômodos um por um).
+  useEffect(() => {
+    if (estagio !== "passo" || !passo) return;
+    if (typeof passo.acaoAoIniciar !== "function") return;
+    let cancelado = false;
+    Promise.resolve(passo.acaoAoIniciar(() => cancelado)).catch(e =>
+      console.warn("[tutorial] acaoAoIniciar falhou:", e)
+    );
+    return () => { cancelado = true; };
+  }, [estagio, idx]);
+
   // Digitação animada (acao.tipo === "type"): roda em paralelo ao autoMs,
   // não no fim. Usa setter nativo + dispatch "input" pra o React reagir.
   // Cancela se o passo mudar antes de terminar.

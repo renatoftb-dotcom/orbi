@@ -249,6 +249,19 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     };
   }, [estagio, passo?.targetId]);
 
+  // Ação custom executada AO INICIAR o passo (em paralelo ao autoMs). Útil
+  // pra animações longas que devem rodar enquanto o balão fica visível
+  // (ex: sequência de cliques que preenche cômodos um por um).
+  useEffect(() => {
+    if (estagio !== "passo" || !passo) return;
+    if (typeof passo.acaoAoIniciar !== "function") return;
+    let cancelado = false;
+    Promise.resolve(passo.acaoAoIniciar(() => cancelado)).catch(e =>
+      console.warn("[tutorial] acaoAoIniciar falhou:", e)
+    );
+    return () => { cancelado = true; };
+  }, [estagio, idx]);
+
   // Digitação animada (acao.tipo === "type"): roda em paralelo ao autoMs,
   // não no fim. Usa setter nativo + dispatch "input" pra o React reagir.
   // Cancela se o passo mudar antes de terminar.
@@ -16616,14 +16629,30 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
   }, [tipoProjeto]);
 
   // Tutorial Beta — expõe setters do form via window pra o tutorial
-  // injetar cômodos sem precisar simular cliques individuais. Limpado ao
-  // desmontar pra não vazar referência stale.
+  // injetar cômodos com animação visual (popup abre, número aparece).
+  // Setters de useState são estáveis entre renders, dá pra usar com [] deps.
+  // setComodoAberto é definido mais abaixo (function declaration hoist).
   useEffect(() => {
     window.__vkOrc = {
       setQtds: (novoMap) => {
         setQtds(novoMap || {});
         setComodosTocados(new Set(Object.entries(novoMap || {}).filter(([,q]) => q > 0).map(([n]) => n)));
       },
+      // Adiciona um cômodo individual com qtd; mostra como "tocado" e atualiza estado.
+      setQtdAbs: (nome, val) => {
+        const v = Math.max(0, parseInt(val) || 0);
+        setQtds(prev => {
+          const next = { ...prev };
+          if (v === 0) delete next[nome]; else next[nome] = v;
+          return next;
+        });
+        setComodosTocados(prev => { const next = new Set(prev); next.add(nome); return next; });
+      },
+      // Abre/fecha popup de quantidade do cômodo (efeito hover).
+      abrirPopup: (nome) => setComodoAberto(nome),
+      fecharPopup:        () => setComodoAberto(null),
+      // Garante que o card de cômodos esteja expandido (ele pode estar recolhido).
+      expandirComodos:    () => setCardComodosRecolhido(false),
     };
     return () => { delete window.__vkOrc; };
   }, []);
@@ -18901,7 +18930,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       {/* ── Cômodos + Resumo ── */}
       {!!(tamanho || isComercial) && !!configAtual && (
-        <div data-vk-orc-comodos-shell style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
+        <div data-vk-orc-comodos-shell data-tutorial-id="painel-comodos" style={{ display:"grid", gridTemplateColumns:"1.4fr 1fr", gap:20, alignItems:"start",
           animation:"slideUp 0.5s ease forwards",
           marginTop:0,
           maxWidth:1100,
@@ -29763,34 +29792,45 @@ export default function ModuloClientesFornecedores() {
             posicao: "right", autoMs: 2000,
             acao: "click",
           },
-          // Cômodos — ação custom: injeta o map inteiro de uma vez via
-          // window.__vkOrc.setQtds (exposto pelo FormOrcamentoProjetoTeste).
-          // Spotlight fica num container do form pra dar feedback visual.
+          // Cômodos — animação sequencial: pra cada cômodo abre o popup
+          // (efeito hover), aguarda, marca a quantidade, fecha. Tudo via
+          // window.__vkOrc exposto pelo FormOrcamentoProjetoTeste.
           {
-            targetId: "campo-referencia",
+            targetId: "painel-comodos",
             titulo: "Passo 13",
-            descricao: "Adicionando os cômodos: 2 garagens, hall, sala TV, living, escritório, lavabo, cozinha, lavanderia, depósito, área de lazer, piscina, lavabo lazer, 2 suítes, 2 closets e 1 suíte master.",
-            posicao: "bottom", autoMs: 4500,
-            acao: () => {
-              if (window.__vkOrc?.setQtds) {
-                window.__vkOrc.setQtds({
-                  "Garagem": 2,
-                  "Hall de entrada": 1,
-                  "Sala TV": 1,
-                  "Living": 1,
-                  "Escritório": 1,
-                  "Lavabo": 1,
-                  "Cozinha": 1,
-                  "Lavanderia": 1,
-                  "Depósito": 1,
-                  "Área de lazer": 1,
-                  "Piscina": 1,
-                  "Lavabo Lazer": 1,
-                  "Suíte": 2,
-                  "Closet Suíte": 2,
-                  "Suíte Master": 1,
-                });
+            descricao: "Adicionando os cômodos um a um: 2 garagens, hall, sala TV, living, escritório, lavabo, cozinha, lavanderia, depósito, área de lazer, piscina, lavabo lazer, 2 suítes, 2 closets e 1 suíte master.",
+            posicao: "left", autoMs: 13500,
+            acaoAoIniciar: async (cancelado) => {
+              const orc = window.__vkOrc;
+              if (!orc) return;
+              orc.expandirComodos && orc.expandirComodos();
+              const sleep = ms => new Promise(r => setTimeout(r, ms));
+              const lista = [
+                ["Garagem", 2],
+                ["Hall de entrada", 1],
+                ["Sala TV", 1],
+                ["Living", 1],
+                ["Escritório", 1],
+                ["Lavabo", 1],
+                ["Cozinha", 1],
+                ["Lavanderia", 1],
+                ["Depósito", 1],
+                ["Área de lazer", 1],
+                ["Piscina", 1],
+                ["Lavabo Lazer", 1],
+                ["Suíte", 2],
+                ["Closet Suíte", 2],
+                ["Suíte Master", 1],
+              ];
+              for (const [nome, qtd] of lista) {
+                if (cancelado()) return;
+                orc.abrirPopup(nome);
+                await sleep(280);
+                if (cancelado()) return;
+                orc.setQtdAbs(nome, qtd);
+                await sleep(380);
               }
+              orc.fecharPopup && orc.fecharPopup();
             },
           },
         ]}
