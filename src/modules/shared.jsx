@@ -419,6 +419,44 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   if (!passo) return null;
 
+  // Modo fullscreen — texto grande no centro da tela, sem spotlight nem
+  // cursor. Reproduz o estilo do título principal do orçamento (vk-flow2-title:
+  // 26px, font-weight 500, letter-spacing -0.022em). Útil pra introduzir
+  // uma nova etapa do tutorial sem destacar elemento específico.
+  if (passo.tipo === "fullscreen") {
+    return (
+      <>
+        <style>{`
+          @keyframes vk-tut-fs-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+          .vk-tut-fs-card { animation: vk-tut-fs-fade 0.35s cubic-bezier(0.32, 0.72, 0, 1) both; }
+          .vk-tut-fs-line2 { animation: vk-tut-fs-fade 0.35s cubic-bezier(0.32, 0.72, 0, 1) both; animation-delay: 0.4s; opacity: 0; }
+        `}</style>
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(255,255,255,0.92)",
+          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: 24, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        }}>
+          <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
+            <h2 style={{
+              fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
+              lineHeight: 1.2, margin: 0, color: "#111",
+            }}>
+              {passo.titulo}
+            </h2>
+            {passo.descricao && (
+              <p className="vk-tut-fs-line2" style={{
+                fontSize: 16, fontWeight: 400, color: "#6b7280",
+                lineHeight: 1.55, marginTop: 18, marginBottom: 0,
+              }}>
+                {passo.descricao}
+              </p>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
   // Modo cursor-only — esconde spotlight + tooltip, mostra apenas o cursor
   // de mouse SVG se movendo até o elemento. Útil pras opções (Médio, Térreo,
   // etc.) que já mudam de cor ao serem selecionadas, dispensando o spotlight.

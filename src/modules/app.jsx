@@ -2193,18 +2193,12 @@ export default function ModuloClientesFornecedores() {
             cursorOnly: true, autoMs: 1600,
             acao: "click",
           },
-          // Frases introdutórias com balão amarelo (sem ação)
+          // Tela cheia com instrução (mesmo estilo do "Dê uma referência...")
           {
-            targetId: "botao-continuar-pagamento",
-            titulo: "Forma de pagamento",
-            descricao: "Agora vamos definir a forma de pagamento.",
-            posicao: "top", autoMs: 2400,
-          },
-          {
-            targetId: "botao-continuar-pagamento",
-            titulo: "Forma de pagamento",
+            tipo: "fullscreen",
+            titulo: "Agora vamos definir a forma de pagamento",
             descricao: "Vamos oferecer um desconto para pagamento antecipado, ou um parcelamento sem desconto.",
-            posicao: "top", autoMs: 3400,
+            autoMs: 4200,
           },
           // Selecionar "Pagamento antecipado com desconto"
           {
