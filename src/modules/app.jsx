@@ -2098,8 +2098,8 @@ export default function ModuloClientesFornecedores() {
           // ── Dentro do orçamento (cliente foi salvo, tela do form abriu) ──
           {
             targetId: "campo-referencia",
-            cursorOnly: true, autoMs: 2400,
-            acao: { tipo: "type", valor: "Casa Vicke", delayChar: 55, confirmEnter: true },
+            cursorOnly: true, autoMs: 3200,
+            acao: { tipo: "type", valor: "Casa Vicke", delayChar: 100, confirmEnter: true },
           },
           {
             targetId: "opcao-tipoObra-construcao-nova",
@@ -2126,15 +2126,25 @@ export default function ModuloClientesFornecedores() {
             cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
+          // Toggles Arq + Eng — circular ambos com instrução (callouts).
+          {
+            tipo: "callouts",
+            targetIds: ["toggle-incluiArq", "toggle-incluiEng"],
+            titulo: "Insira os projetos a serem orçados",
+            autoMs: 3200,
+          },
           // Cômodos — animação por grupo. Pra cada cômodo:
-          //   1. Cursor anda até o nome do cômodo (data-comodo-link)
+          //   1. Cursor anda até o cômodo
           //   2. Abre popup (hover simulado)
           //   3. Cursor anda até o botão da qtd correta
-          //   4. Click — botão fica preto, popup fecha
+          //   4. Seta qtd via state (botão fica preto)
+          //   5. Aguarda visualmente, depois fecha popup
           // Ao terminar TODOS os cômodos do grupo: recolhe o grupo, próximo.
+          // Velocidade lenta na 1ª seção (Áreas Sociais) pra explicar o
+          // padrão; nas demais acelera pra não cansar.
           {
             targetId: "painel-comodos",
-            cursorOnly: true, autoMs: 30000,
+            cursorOnly: true, autoMs: 50000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;
               const tut = window.__vkTutorial;
@@ -2142,46 +2152,52 @@ export default function ModuloClientesFornecedores() {
               orc.expandirComodos && orc.expandirComodos();
               const sleep = ms => new Promise(r => setTimeout(r, ms));
               const grupos = [
-                { nome: "Áreas Sociais", comodos: [
+                { nome: "Áreas Sociais", rapido: false, comodos: [
                   ["Garagem", 2], ["Hall de entrada", 1], ["Sala TV", 1],
                   ["Living", 1], ["Escritório", 1], ["Lavabo", 1],
                 ]},
-                { nome: "Serviço", comodos: [
+                { nome: "Serviço", rapido: true, comodos: [
                   ["Cozinha", 1], ["Lavanderia", 1], ["Depósito", 1],
                 ]},
-                { nome: "Lazer", comodos: [
+                { nome: "Lazer", rapido: true, comodos: [
                   ["Área de lazer", 1], ["Piscina", 1], ["Lavabo Lazer", 1],
                 ]},
-                { nome: "Dormitórios", comodos: [
+                { nome: "Dormitórios", rapido: true, comodos: [
                   ["Suíte", 2], ["Closet Suíte", 2], ["Suíte Master", 1],
                 ]},
               ];
               for (const g of grupos) {
                 if (cancelado()) return;
+                // Tempos por velocidade do grupo (lenta demonstração / rápido)
+                const t = g.rapido
+                  ? { andar: 280, abrir: 220, andarBtn: 280, verPreto: 350, recolhe: 320 }
+                  : { andar: 600, abrir: 450, andarBtn: 600, verPreto: 600, recolhe: 500 };
                 for (const [nome, qtd] of g.comodos) {
                   if (cancelado()) return;
                   // 1. Cursor anda até o cômodo na lista de disponíveis
                   tut.setTargetId(`css:[data-comodo-nome="${nome}"]`);
-                  await sleep(550);
+                  await sleep(t.andar);
                   if (cancelado()) return;
                   // 2. Abre popup (efeito hover)
                   orc.abrirPopup(nome);
-                  await sleep(450);
+                  await sleep(t.abrir);
                   if (cancelado()) return;
                   // 3. Cursor anda até o botão da qtd dentro do popup
                   tut.setTargetId(`css:[data-comodo-btn="${nome}-${qtd}"]`);
-                  await sleep(550);
+                  await sleep(t.andarBtn);
                   if (cancelado()) return;
-                  // 4. Click — botão fica preto, popup fecha
-                  const btn = document.querySelector(`[data-comodo-btn="${nome}-${qtd}"]`);
-                  if (btn) btn.click();
-                  else { orc.setQtdAbs(nome, qtd); orc.fecharPopup && orc.fecharPopup(); }
-                  await sleep(450);
+                  // 4. Seta qtd direto (sem fechar popup ainda) — botão fica preto
+                  orc.setQtdAbs(nome, qtd);
+                  // 5. Aguarda pra user ver o "preto", depois fecha popup
+                  await sleep(t.verPreto);
+                  if (cancelado()) return;
+                  orc.fecharPopup && orc.fecharPopup();
+                  await sleep(180);
                 }
                 // Terminou o grupo — recolhe pra dar foco no próximo
                 if (cancelado()) return;
                 orc.recolherGrupo && orc.recolherGrupo(g.nome);
-                await sleep(500);
+                await sleep(t.recolhe);
               }
               tut.clearTargetId && tut.clearTargetId();
             },

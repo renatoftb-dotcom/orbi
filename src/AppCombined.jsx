@@ -191,6 +191,80 @@ function BannerModoDev({ escritorio }) {
   );
 }
 
+// CalloutsRenderer — auxiliar do TutorialOverlay tipo "callouts".
+// Mede múltiplos elementos via data-tutorial-id, renderiza círculo pulsante
+// em cada e mostra texto único centralizado abaixo do conjunto.
+function CalloutsRenderer({ ids, titulo, descricao }) {
+  const [rects, setRects] = useState([]);
+  useEffect(() => {
+    let cancelado = false;
+    let tentativas = 0;
+    function medir() {
+      if (cancelado) return;
+      const novos = ids.map(id => {
+        const el = document.querySelector(`[data-tutorial-id="${id}"]`);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { top: r.top, left: r.left, width: r.width, height: r.height };
+      }).filter(Boolean);
+      if (novos.length === ids.length) setRects(novos);
+      else if (tentativas < 8) { tentativas++; setTimeout(medir, 200); }
+    }
+    medir();
+    window.addEventListener("resize", medir);
+    window.addEventListener("scroll", medir, true);
+    return () => {
+      cancelado = true;
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("scroll", medir, true);
+    };
+  }, [ids.join("|")]);
+
+  // Calcula bounds pra posicionar texto logo abaixo
+  let textY = 80;
+  if (rects.length > 0) {
+    const maxBottom = Math.max(...rects.map(r => r.top + r.height));
+    textY = maxBottom + 24;
+  }
+
+  return (
+    <>
+      {rects.map((r, i) => (
+        <div key={i} className="vk-tut-callout-circle" style={{
+          position: "fixed",
+          top: r.top - 8, left: r.left - 8,
+          width: r.width + 16, height: r.height + 16,
+          border: "2.5px solid #f59e0b", borderRadius: 12,
+          zIndex: 1001,
+        }} />
+      ))}
+      {(titulo || descricao) && rects.length > 0 && (
+        <div className="vk-tut-callout-text" style={{
+          position: "fixed", top: textY, left: 0, right: 0,
+          display: "flex", justifyContent: "center", padding: "0 24px",
+          zIndex: 1003, pointerEvents: "none",
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        }}>
+          <div style={{ maxWidth: 720, textAlign: "center" }}>
+            {titulo && (
+              <h2 style={{
+                fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
+                lineHeight: 1.2, margin: 0, color: "#111",
+              }}>{titulo}</h2>
+            )}
+            {descricao && (
+              <p style={{
+                fontSize: 16, fontWeight: 400, color: "#6b7280",
+                lineHeight: 1.55, marginTop: 12, marginBottom: 0,
+              }}>{descricao}</p>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════
 // TUTORIAL OVERLAY — guia passo-a-passo destacando elementos da UI
 // ═══════════════════════════════════════════════════════════════
@@ -423,22 +497,26 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   if (!passo) return null;
 
-  // Modo fullscreen — texto grande no centro da tela, sem spotlight nem
-  // cursor. Reproduz o estilo do título principal do orçamento (vk-flow2-title:
-  // 26px, font-weight 500, letter-spacing -0.022em). Útil pra introduzir
-  // uma nova etapa do tutorial sem destacar elemento específico.
+  // Modo fullscreen — texto no TOPO da tela (não centralizado), fundo
+  // levemente desfocado pra atenção sem cobrir totalmente as opções abaixo.
+  // Mesmo estilo tipográfico do "Dê uma referência a esse projeto" (26px,
+  // font-weight 500, letter-spacing -0.022em). O texto some após autoMs e
+  // revela as opções que já estão renderizadas embaixo.
   if (passo.tipo === "fullscreen") {
     return (
       <>
         <style>{`
-          @keyframes vk-tut-fs-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+          @keyframes vk-tut-fs-fade { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
           .vk-tut-fs-card { animation: vk-tut-fs-fade 0.35s cubic-bezier(0.32, 0.72, 0, 1) both; }
           .vk-tut-fs-line2 { animation: vk-tut-fs-fade 0.35s cubic-bezier(0.32, 0.72, 0, 1) both; animation-delay: 0.4s; opacity: 0; }
         `}</style>
         <div style={{
-          position: "fixed", inset: 0, background: "rgba(255,255,255,0.92)",
-          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 24, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          position: "fixed", top: 0, left: 0, right: 0,
+          paddingTop: 60, paddingBottom: 32, paddingLeft: 24, paddingRight: 24,
+          background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.92) 70%, rgba(255,255,255,0) 100%)",
+          zIndex: 1000, display: "flex", justifyContent: "center",
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          pointerEvents: "none",
         }}>
           <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
             <h2 style={{
@@ -450,13 +528,34 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
             {passo.descricao && (
               <p className="vk-tut-fs-line2" style={{
                 fontSize: 16, fontWeight: 400, color: "#6b7280",
-                lineHeight: 1.55, marginTop: 18, marginBottom: 0,
+                lineHeight: 1.55, marginTop: 14, marginBottom: 0,
               }}>
                 {passo.descricao}
               </p>
             )}
           </div>
         </div>
+      </>
+    );
+  }
+
+  // Modo "callouts" — círculo ao redor de múltiplos elementos com texto
+  // único embaixo. Útil pra apontar 2+ elementos que devem ser olhados
+  // juntos (ex: toggles Arq + Eng com instrução "Insira os projetos a
+  // serem orçados"). Cada targetId vira um círculo pulsante.
+  if (passo.tipo === "callouts") {
+    const ids = passo.targetIds || [];
+    return (
+      <>
+        <style>{`
+          @keyframes vk-tut-callout-pulse {
+            0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25), 0 0 24px rgba(245, 158, 11, 0.5); border-color: #f59e0b; }
+            50%      { box-shadow: 0 0 0 9px rgba(245, 158, 11, 0.4),  0 0 36px rgba(245, 158, 11, 0.7); border-color: #d97706; }
+          }
+          .vk-tut-callout-circle { animation: vk-tut-callout-pulse 1.6s ease-in-out infinite; pointer-events: none; }
+          .vk-tut-callout-text { animation: vk-tut-fs-fade 0.4s cubic-bezier(0.32, 0.72, 0, 1) both; }
+        `}</style>
+        <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} />
       </>
     );
   }
@@ -18638,7 +18737,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           { key:"incluiEng",        val:incluiEng,        set:setIncluiEng,        label:"Engenharia"   },
           { key:"incluiMarcenaria", val:incluiMarcenaria, set:setIncluiMarcenaria, label:"Marcenaria"   },
         ].map(({ key, val, set, label }) => (
-          <label key={key} onClick={() => set(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
+          <label key={key} data-tutorial-id={`toggle-${key}`} onClick={() => set(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
             <span style={{
               position:"relative", display:"inline-block",
               width:36, height:20, borderRadius:10, flexShrink:0,
@@ -29856,8 +29955,8 @@ export default function ModuloClientesFornecedores() {
           // ── Dentro do orçamento (cliente foi salvo, tela do form abriu) ──
           {
             targetId: "campo-referencia",
-            cursorOnly: true, autoMs: 2400,
-            acao: { tipo: "type", valor: "Casa Vicke", delayChar: 55, confirmEnter: true },
+            cursorOnly: true, autoMs: 3200,
+            acao: { tipo: "type", valor: "Casa Vicke", delayChar: 100, confirmEnter: true },
           },
           {
             targetId: "opcao-tipoObra-construcao-nova",
@@ -29884,15 +29983,25 @@ export default function ModuloClientesFornecedores() {
             cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
+          // Toggles Arq + Eng — circular ambos com instrução (callouts).
+          {
+            tipo: "callouts",
+            targetIds: ["toggle-incluiArq", "toggle-incluiEng"],
+            titulo: "Insira os projetos a serem orçados",
+            autoMs: 3200,
+          },
           // Cômodos — animação por grupo. Pra cada cômodo:
-          //   1. Cursor anda até o nome do cômodo (data-comodo-link)
+          //   1. Cursor anda até o cômodo
           //   2. Abre popup (hover simulado)
           //   3. Cursor anda até o botão da qtd correta
-          //   4. Click — botão fica preto, popup fecha
+          //   4. Seta qtd via state (botão fica preto)
+          //   5. Aguarda visualmente, depois fecha popup
           // Ao terminar TODOS os cômodos do grupo: recolhe o grupo, próximo.
+          // Velocidade lenta na 1ª seção (Áreas Sociais) pra explicar o
+          // padrão; nas demais acelera pra não cansar.
           {
             targetId: "painel-comodos",
-            cursorOnly: true, autoMs: 30000,
+            cursorOnly: true, autoMs: 50000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;
               const tut = window.__vkTutorial;
@@ -29900,46 +30009,52 @@ export default function ModuloClientesFornecedores() {
               orc.expandirComodos && orc.expandirComodos();
               const sleep = ms => new Promise(r => setTimeout(r, ms));
               const grupos = [
-                { nome: "Áreas Sociais", comodos: [
+                { nome: "Áreas Sociais", rapido: false, comodos: [
                   ["Garagem", 2], ["Hall de entrada", 1], ["Sala TV", 1],
                   ["Living", 1], ["Escritório", 1], ["Lavabo", 1],
                 ]},
-                { nome: "Serviço", comodos: [
+                { nome: "Serviço", rapido: true, comodos: [
                   ["Cozinha", 1], ["Lavanderia", 1], ["Depósito", 1],
                 ]},
-                { nome: "Lazer", comodos: [
+                { nome: "Lazer", rapido: true, comodos: [
                   ["Área de lazer", 1], ["Piscina", 1], ["Lavabo Lazer", 1],
                 ]},
-                { nome: "Dormitórios", comodos: [
+                { nome: "Dormitórios", rapido: true, comodos: [
                   ["Suíte", 2], ["Closet Suíte", 2], ["Suíte Master", 1],
                 ]},
               ];
               for (const g of grupos) {
                 if (cancelado()) return;
+                // Tempos por velocidade do grupo (lenta demonstração / rápido)
+                const t = g.rapido
+                  ? { andar: 280, abrir: 220, andarBtn: 280, verPreto: 350, recolhe: 320 }
+                  : { andar: 600, abrir: 450, andarBtn: 600, verPreto: 600, recolhe: 500 };
                 for (const [nome, qtd] of g.comodos) {
                   if (cancelado()) return;
                   // 1. Cursor anda até o cômodo na lista de disponíveis
                   tut.setTargetId(`css:[data-comodo-nome="${nome}"]`);
-                  await sleep(550);
+                  await sleep(t.andar);
                   if (cancelado()) return;
                   // 2. Abre popup (efeito hover)
                   orc.abrirPopup(nome);
-                  await sleep(450);
+                  await sleep(t.abrir);
                   if (cancelado()) return;
                   // 3. Cursor anda até o botão da qtd dentro do popup
                   tut.setTargetId(`css:[data-comodo-btn="${nome}-${qtd}"]`);
-                  await sleep(550);
+                  await sleep(t.andarBtn);
                   if (cancelado()) return;
-                  // 4. Click — botão fica preto, popup fecha
-                  const btn = document.querySelector(`[data-comodo-btn="${nome}-${qtd}"]`);
-                  if (btn) btn.click();
-                  else { orc.setQtdAbs(nome, qtd); orc.fecharPopup && orc.fecharPopup(); }
-                  await sleep(450);
+                  // 4. Seta qtd direto (sem fechar popup ainda) — botão fica preto
+                  orc.setQtdAbs(nome, qtd);
+                  // 5. Aguarda pra user ver o "preto", depois fecha popup
+                  await sleep(t.verPreto);
+                  if (cancelado()) return;
+                  orc.fecharPopup && orc.fecharPopup();
+                  await sleep(180);
                 }
                 // Terminou o grupo — recolhe pra dar foco no próximo
                 if (cancelado()) return;
                 orc.recolherGrupo && orc.recolherGrupo(g.nome);
-                await sleep(500);
+                await sleep(t.recolhe);
               }
               tut.clearTargetId && tut.clearTargetId();
             },

@@ -187,6 +187,80 @@ function BannerModoDev({ escritorio }) {
   );
 }
 
+// CalloutsRenderer — auxiliar do TutorialOverlay tipo "callouts".
+// Mede múltiplos elementos via data-tutorial-id, renderiza círculo pulsante
+// em cada e mostra texto único centralizado abaixo do conjunto.
+function CalloutsRenderer({ ids, titulo, descricao }) {
+  const [rects, setRects] = useState([]);
+  useEffect(() => {
+    let cancelado = false;
+    let tentativas = 0;
+    function medir() {
+      if (cancelado) return;
+      const novos = ids.map(id => {
+        const el = document.querySelector(`[data-tutorial-id="${id}"]`);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { top: r.top, left: r.left, width: r.width, height: r.height };
+      }).filter(Boolean);
+      if (novos.length === ids.length) setRects(novos);
+      else if (tentativas < 8) { tentativas++; setTimeout(medir, 200); }
+    }
+    medir();
+    window.addEventListener("resize", medir);
+    window.addEventListener("scroll", medir, true);
+    return () => {
+      cancelado = true;
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("scroll", medir, true);
+    };
+  }, [ids.join("|")]);
+
+  // Calcula bounds pra posicionar texto logo abaixo
+  let textY = 80;
+  if (rects.length > 0) {
+    const maxBottom = Math.max(...rects.map(r => r.top + r.height));
+    textY = maxBottom + 24;
+  }
+
+  return (
+    <>
+      {rects.map((r, i) => (
+        <div key={i} className="vk-tut-callout-circle" style={{
+          position: "fixed",
+          top: r.top - 8, left: r.left - 8,
+          width: r.width + 16, height: r.height + 16,
+          border: "2.5px solid #f59e0b", borderRadius: 12,
+          zIndex: 1001,
+        }} />
+      ))}
+      {(titulo || descricao) && rects.length > 0 && (
+        <div className="vk-tut-callout-text" style={{
+          position: "fixed", top: textY, left: 0, right: 0,
+          display: "flex", justifyContent: "center", padding: "0 24px",
+          zIndex: 1003, pointerEvents: "none",
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        }}>
+          <div style={{ maxWidth: 720, textAlign: "center" }}>
+            {titulo && (
+              <h2 style={{
+                fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
+                lineHeight: 1.2, margin: 0, color: "#111",
+              }}>{titulo}</h2>
+            )}
+            {descricao && (
+              <p style={{
+                fontSize: 16, fontWeight: 400, color: "#6b7280",
+                lineHeight: 1.55, marginTop: 12, marginBottom: 0,
+              }}>{descricao}</p>
+            )}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════
 // TUTORIAL OVERLAY — guia passo-a-passo destacando elementos da UI
 // ═══════════════════════════════════════════════════════════════
@@ -419,22 +493,26 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
 
   if (!passo) return null;
 
-  // Modo fullscreen — texto grande no centro da tela, sem spotlight nem
-  // cursor. Reproduz o estilo do título principal do orçamento (vk-flow2-title:
-  // 26px, font-weight 500, letter-spacing -0.022em). Útil pra introduzir
-  // uma nova etapa do tutorial sem destacar elemento específico.
+  // Modo fullscreen — texto no TOPO da tela (não centralizado), fundo
+  // levemente desfocado pra atenção sem cobrir totalmente as opções abaixo.
+  // Mesmo estilo tipográfico do "Dê uma referência a esse projeto" (26px,
+  // font-weight 500, letter-spacing -0.022em). O texto some após autoMs e
+  // revela as opções que já estão renderizadas embaixo.
   if (passo.tipo === "fullscreen") {
     return (
       <>
         <style>{`
-          @keyframes vk-tut-fs-fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+          @keyframes vk-tut-fs-fade { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
           .vk-tut-fs-card { animation: vk-tut-fs-fade 0.35s cubic-bezier(0.32, 0.72, 0, 1) both; }
           .vk-tut-fs-line2 { animation: vk-tut-fs-fade 0.35s cubic-bezier(0.32, 0.72, 0, 1) both; animation-delay: 0.4s; opacity: 0; }
         `}</style>
         <div style={{
-          position: "fixed", inset: 0, background: "rgba(255,255,255,0.92)",
-          zIndex: 1000, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 24, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          position: "fixed", top: 0, left: 0, right: 0,
+          paddingTop: 60, paddingBottom: 32, paddingLeft: 24, paddingRight: 24,
+          background: "linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(255,255,255,0.92) 70%, rgba(255,255,255,0) 100%)",
+          zIndex: 1000, display: "flex", justifyContent: "center",
+          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          pointerEvents: "none",
         }}>
           <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
             <h2 style={{
@@ -446,13 +524,34 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
             {passo.descricao && (
               <p className="vk-tut-fs-line2" style={{
                 fontSize: 16, fontWeight: 400, color: "#6b7280",
-                lineHeight: 1.55, marginTop: 18, marginBottom: 0,
+                lineHeight: 1.55, marginTop: 14, marginBottom: 0,
               }}>
                 {passo.descricao}
               </p>
             )}
           </div>
         </div>
+      </>
+    );
+  }
+
+  // Modo "callouts" — círculo ao redor de múltiplos elementos com texto
+  // único embaixo. Útil pra apontar 2+ elementos que devem ser olhados
+  // juntos (ex: toggles Arq + Eng com instrução "Insira os projetos a
+  // serem orçados"). Cada targetId vira um círculo pulsante.
+  if (passo.tipo === "callouts") {
+    const ids = passo.targetIds || [];
+    return (
+      <>
+        <style>{`
+          @keyframes vk-tut-callout-pulse {
+            0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25), 0 0 24px rgba(245, 158, 11, 0.5); border-color: #f59e0b; }
+            50%      { box-shadow: 0 0 0 9px rgba(245, 158, 11, 0.4),  0 0 36px rgba(245, 158, 11, 0.7); border-color: #d97706; }
+          }
+          .vk-tut-callout-circle { animation: vk-tut-callout-pulse 1.6s ease-in-out infinite; pointer-events: none; }
+          .vk-tut-callout-text { animation: vk-tut-fs-fade 0.4s cubic-bezier(0.32, 0.72, 0, 1) both; }
+        `}</style>
+        <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} />
       </>
     );
   }

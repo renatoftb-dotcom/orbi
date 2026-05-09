@@ -7950,7 +7950,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           { key:"incluiEng",        val:incluiEng,        set:setIncluiEng,        label:"Engenharia"   },
           { key:"incluiMarcenaria", val:incluiMarcenaria, set:setIncluiMarcenaria, label:"Marcenaria"   },
         ].map(({ key, val, set, label }) => (
-          <label key={key} onClick={() => set(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
+          <label key={key} data-tutorial-id={`toggle-${key}`} onClick={() => set(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
             <span style={{
               position:"relative", display:"inline-block",
               width:36, height:20, borderRadius:10, flexShrink:0,
