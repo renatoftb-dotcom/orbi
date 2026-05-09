@@ -800,16 +800,16 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           @keyframes vk-tut-cursor-fade { from { opacity: 0; } to { opacity: 1; } }
           .vk-tut-cursor { animation: vk-tut-cursor-fade 0.25s ease-out; }
           @keyframes vk-tut-spot-co {
-            0%, 100% { box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.25), 0 0 28px rgba(245, 158, 11, 0.55); border-color: #f59e0b; }
-            50%      { box-shadow: 0 0 0 9px rgba(245, 158, 11, 0.45), 0 0 40px rgba(245, 158, 11, 0.80); border-color: #d97706; }
+            0%, 100% { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.45), 0 0 36px rgba(245, 158, 11, 0.80); border-color: #f59e0b; }
+            50%      { box-shadow: 0 0 0 11px rgba(245, 158, 11, 0.65), 0 0 52px rgba(245, 158, 11, 1.0); border-color: #d97706; }
           }
-          .vk-tut-spot-co { animation: vk-tut-spot-co 1.4s ease-in-out infinite; }
+          .vk-tut-spot-co { animation: vk-tut-spot-co 1.2s ease-in-out infinite; }
         `}</style>
         {/* Backdrop escurecido (modo comSpotlight) — destaca o spotlight */}
         {passo.comSpotlight && (
           <div style={{
             position: "fixed", inset: 0,
-            background: "rgba(15, 23, 42, 0.35)",
+            background: "rgba(15, 23, 42, 0.55)",
             zIndex: 1000, pointerEvents: "none",
             transition: "opacity 0.2s",
           }} />
@@ -820,9 +820,9 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
             position: "fixed",
             top: rect.top - 6, left: rect.left - 6,
             width: rect.width + 12, height: rect.height + 12,
-            border: "2.5px solid #f59e0b", borderRadius: 10,
+            border: "3px solid #f59e0b", borderRadius: 10,
             zIndex: 1001, pointerEvents: "none",
-            transition: "top 0.5s cubic-bezier(0.32, 0.72, 0, 1), left 0.5s cubic-bezier(0.32, 0.72, 0, 1), width 0.5s, height 0.5s",
+            transition: "top 0.4s cubic-bezier(0.32, 0.72, 0, 1), left 0.4s cubic-bezier(0.32, 0.72, 0, 1), width 0.4s, height 0.4s",
           }} />
         )}
         {rect && (

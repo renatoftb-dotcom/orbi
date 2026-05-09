@@ -2183,8 +2183,8 @@ export default function ModuloClientesFornecedores() {
                   ["Suíte", 2], ["Closet Suíte", 2], ["Suíte Master", 1],
                 ]},
               ];
-              const tLento  = { andar: 600, abrir: 450, andarBtn: 600, verPreto: 600, recolhe: 500 };
-              const tRapido = { andar: 280, abrir: 220, andarBtn: 280, verPreto: 350, recolhe: 320 };
+              const tLento  = { andar: 450, abrir: 320, andarBtn: 450, verPreto: 450, recolhe: 400 };
+              const tRapido = { andar: 200, abrir: 160, andarBtn: 200, verPreto: 240, recolhe: 240 };
               for (const g of grupos) {
                 if (cancelado()) return;
                 for (let i = 0; i < g.comodos.length; i++) {
