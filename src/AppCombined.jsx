@@ -239,28 +239,34 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
     return () => { cancelado = true; };
   }, []);
 
-  // Layout: borda amarela pulsante em cada elemento + balão único.
-  // Posicionamento depende de `posicao`:
-  //   "top"  → balão ACIMA do conjunto, seta CSS apontando pra baixo
-  //   "left" → balão À ESQUERDA, alinhado verticalmente no meio entre
-  //            elementos, com setas SVG (1 por elemento) conectando.
+  // Layout: UM ÚNICO spotlight envolvendo TODO o conjunto de elementos
+  // (com padding generoso pra textos longos não vazarem) + backdrop
+  // escurecido + balão único. Brilho intenso (mesma animação do
+  // comSpotlight do cursorOnly). Posicionamento depende de `posicao`.
   const TEXT_MAX_W = 280;
   const GAP = 28;
+  const PAD_X = 14, PAD_Y = 10; // padding em volta do conjunto
   let balaoLeft = 16, balaoTop = 16, balaoRight = 0, balaoCY = 0, balaoCX = 0;
   let conjuntoCenterX = 0, conjuntoMinTop = 0;
+  // Bounds do spotlight único
+  let spotL = 0, spotT = 0, spotW = 0, spotH = 0;
   if (rects.length > 0) {
     const minLeft = Math.min(...rects.map(r => r.left));
     const minTop = Math.min(...rects.map(r => r.top));
     const maxRight = Math.max(...rects.map(r => r.left + r.width));
     const maxBottom = Math.max(...rects.map(r => r.top + r.height));
     conjuntoCenterX = (minLeft + maxRight) / 2;
-    conjuntoMinTop = minTop;
+    conjuntoMinTop = minTop - PAD_Y;
+    spotL = minLeft - PAD_X;
+    spotT = minTop - PAD_Y;
+    spotW = (maxRight - minLeft) + PAD_X * 2;
+    spotH = (maxBottom - minTop) + PAD_Y * 2;
     if (posicao === "top") {
       balaoLeft = Math.max(16, conjuntoCenterX - textBox.w / 2);
-      balaoTop = Math.max(16, minTop - textBox.h - 24);
+      balaoTop = Math.max(16, conjuntoMinTop - textBox.h - 18);
     } else {
       const conjuntoCY = (minTop + maxBottom) / 2;
-      balaoLeft = Math.max(16, minLeft - textBox.w - GAP);
+      balaoLeft = Math.max(16, spotL - textBox.w - GAP);
       balaoTop = Math.max(16, conjuntoCY - textBox.h / 2);
     }
     balaoRight = balaoLeft + textBox.w;
@@ -270,16 +276,25 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
 
   return (
     <>
-      {/* Borda amarela pulsante em cada elemento (igual ao spotlight) */}
-      {rects.map((r, i) => (
-        <div key={i} className="vk-tut-spotlight" style={{
+      {/* Backdrop escurecido — destaca o spotlight (mesmo padrão cursorOnly) */}
+      {rects.length > 0 && (
+        <div style={{
+          position: "fixed", inset: 0,
+          background: "rgba(15, 23, 42, 0.55)",
+          zIndex: 1000, pointerEvents: "none",
+        }} />
+      )}
+
+      {/* UM spotlight único envolvendo todo o conjunto, com brilho forte */}
+      {rects.length > 0 && (
+        <div className="vk-tut-spot-co" style={{
           position: "fixed",
-          top: r.top - 6, left: r.left - 6,
-          width: r.width + 12, height: r.height + 12,
-          border: "2.5px solid #f59e0b", borderRadius: 10,
+          top: spotT, left: spotL,
+          width: spotW, height: spotH,
+          border: "3px solid #f59e0b", borderRadius: 12,
           zIndex: 1001, pointerEvents: "none",
         }} />
-      ))}
+      )}
 
       {/* Seta CSS triangular única apontando pra baixo (modo "top") */}
       {(titulo || descricao) && rects.length > 0 && posicao === "top" && (
@@ -781,11 +796,11 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
       <>
         {chrome}
         <style>{`
-          @keyframes vk-tut-callout-pulse {
-            0%, 100% { box-shadow: 0 0 0 4px rgba(30, 58, 138, 0.20), 0 0 22px rgba(30, 58, 138, 0.40); border-color: #1e3a8a; }
-            50%      { box-shadow: 0 0 0 9px rgba(30, 58, 138, 0.35), 0 0 32px rgba(30, 58, 138, 0.60); border-color: #1e40af; }
+          @keyframes vk-tut-spot-co {
+            0%, 100% { box-shadow: 0 0 0 5px rgba(245, 158, 11, 0.45), 0 0 36px rgba(245, 158, 11, 0.80); border-color: #f59e0b; }
+            50%      { box-shadow: 0 0 0 11px rgba(245, 158, 11, 0.65), 0 0 52px rgba(245, 158, 11, 1.0); border-color: #d97706; }
           }
-          .vk-tut-callout-circle { animation: vk-tut-callout-pulse 1.6s ease-in-out infinite; pointer-events: none; }
+          .vk-tut-spot-co { animation: vk-tut-spot-co 1.2s ease-in-out infinite; }
           .vk-tut-callout-text { animation: vk-tut-fs-fade 0.4s cubic-bezier(0.32, 0.72, 0, 1) both; }
         `}</style>
         <CalloutsRenderer ids={ids} titulo={passo.titulo} descricao={passo.descricao} acaoAoIniciar={passo.acaoAoIniciar} posicao={passo.posicao} />
