@@ -2306,6 +2306,29 @@ export default function ModuloClientesFornecedores() {
             posicao: "top", autoMs: 2400,
             acao: "click",
           },
+          // ── Proposta Preview: gerar PDF ──
+          {
+            targetId: "botao-gerar-pdf",
+            titulo: "Gerar PDF",
+            descricao: "Pronto pra gerar o PDF da proposta.",
+            posicao: "left", autoMs: 2800,
+            acao: "click",
+          },
+          // Modal de confirmação aparece — clica em "Salvar e gerar PDF"
+          {
+            targetId: "modal-confirmar-salvar",
+            titulo: "Confirmar",
+            descricao: "Salvar a proposta e gerar o PDF.",
+            posicao: "top", autoMs: 2400,
+            acao: "click",
+          },
+          // Tela final — concluído
+          {
+            tipo: "fullscreen",
+            titulo: "Tutorial concluído!",
+            descricao: "Seu primeiro orçamento e proposta foram gerados. Agora é com você.",
+            autoMs: 4000,
+          },
         ]}
         onConcluir={() => setTutorialBetaAtivo(false)}
         onCancelar={() => { setTutorialBetaAtivo(false); setOrcamentoTelaCheia(null); setAba("home"); }}

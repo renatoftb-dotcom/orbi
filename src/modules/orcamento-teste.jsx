@@ -7971,7 +7971,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           data={liveData}
           escritorio={esc}
           onVoltar={() => setEtapaPagamentoConfirmada(false)}
-          onSelecionar={(id) => setModeloEscolhido(id)}
+          onSelecionar={(id) => {
+            setModeloEscolhido(id);
+            // Pula a tela de Template de Edição — vai direto pro modelo
+            setTemplateEdicaoConfirmada(true);
+          }}
         />
       );
     }

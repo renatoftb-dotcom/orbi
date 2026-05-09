@@ -1400,11 +1400,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             ← Voltar
           </button>
           {(propostaInfo || lockEdicao) ? (
-            <button onClick={handlePdf} style={{ background:"#111", border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+            <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:"#111", border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               Gerar PDF
             </button>
           ) : (
-            <button onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
+            <button data-tutorial-id="botao-gerar-pdf" onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
               style={{ background:"#111", border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
@@ -1999,11 +1999,11 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             ← Voltar
           </button>
           {(propostaInfo || lockEdicao) ? (
-            <button onClick={handlePdf} style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+            <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               Gerar PDF
             </button>
           ) : (
-            <button onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
+            <button data-tutorial-id="botao-gerar-pdf" onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
               style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
@@ -2038,7 +2038,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#374151" }}>
                     Cancelar
                   </button>
-                  <button onClick={handleSalvarProposta}
+                  <button data-tutorial-id="modal-confirmar-salvar" onClick={handleSalvarProposta}
                     style={{ background:"#111", border:"1px solid #111", borderRadius:7, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
                     Salvar e gerar PDF
                   </button>
