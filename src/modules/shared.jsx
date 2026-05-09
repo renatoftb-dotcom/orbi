@@ -211,17 +211,39 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   const [estagio, setEstagio] = useState(welcome ? "welcome" : "passo");
   const [idx, setIdx] = useState(0);
   const [rect, setRect] = useState(null);
+  // targetIdOverride: permite que ações em curso (ex: animação de cômodos)
+  // movam o cursor pra outros elementos sem trocar de passo. Setado via
+  // window.__vkTutorial.setTargetId(id). Limpado quando passo muda.
+  const [targetIdOverride, setTargetIdOverride] = useState(null);
   const passo = passos[idx] || null;
+  const targetIdAtual = targetIdOverride || passo?.targetId;
+
+  // Expõe setter pra ações chamarem de fora durante a execução do passo.
+  useEffect(() => {
+    window.__vkTutorial = {
+      setTargetId: (id) => setTargetIdOverride(id),
+      clearTargetId: () => setTargetIdOverride(null),
+    };
+    return () => { delete window.__vkTutorial; };
+  }, []);
+
+  // Reseta override ao mudar de passo (cada passo começa com seu próprio target)
+  useEffect(() => { setTargetIdOverride(null); }, [idx]);
 
   // Mede o elemento alvo. Re-mede em scroll/resize. Tenta a cada 200ms
   // por até 1.5s pra suportar elementos que ainda estão renderizando.
+  // Aceita também querySelector cru (data-comodo-btn etc) via prefixo "css:".
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
+    if (!targetIdAtual) { setRect(null); return; }
     let cancelado = false;
     let tentativas = 0;
+    const sel = targetIdAtual.startsWith("css:")
+      ? targetIdAtual.slice(4)
+      : `[data-tutorial-id="${targetIdAtual}"]`;
     function medir() {
       if (cancelado) return;
-      const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
+      const el = document.querySelector(sel);
       if (el) {
         const r = el.getBoundingClientRect();
         setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
@@ -243,7 +265,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
       window.removeEventListener("resize", medir);
       window.removeEventListener("scroll", medir, true);
     };
-  }, [estagio, passo?.targetId]);
+  }, [estagio, targetIdAtual]);
 
   // Ação custom executada AO INICIAR o passo (em paralelo ao autoMs). Útil
   // pra animações longas que devem rodar enquanto o balão fica visível

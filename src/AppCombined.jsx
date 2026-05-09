@@ -215,17 +215,39 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   const [estagio, setEstagio] = useState(welcome ? "welcome" : "passo");
   const [idx, setIdx] = useState(0);
   const [rect, setRect] = useState(null);
+  // targetIdOverride: permite que ações em curso (ex: animação de cômodos)
+  // movam o cursor pra outros elementos sem trocar de passo. Setado via
+  // window.__vkTutorial.setTargetId(id). Limpado quando passo muda.
+  const [targetIdOverride, setTargetIdOverride] = useState(null);
   const passo = passos[idx] || null;
+  const targetIdAtual = targetIdOverride || passo?.targetId;
+
+  // Expõe setter pra ações chamarem de fora durante a execução do passo.
+  useEffect(() => {
+    window.__vkTutorial = {
+      setTargetId: (id) => setTargetIdOverride(id),
+      clearTargetId: () => setTargetIdOverride(null),
+    };
+    return () => { delete window.__vkTutorial; };
+  }, []);
+
+  // Reseta override ao mudar de passo (cada passo começa com seu próprio target)
+  useEffect(() => { setTargetIdOverride(null); }, [idx]);
 
   // Mede o elemento alvo. Re-mede em scroll/resize. Tenta a cada 200ms
   // por até 1.5s pra suportar elementos que ainda estão renderizando.
+  // Aceita também querySelector cru (data-comodo-btn etc) via prefixo "css:".
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
+    if (!targetIdAtual) { setRect(null); return; }
     let cancelado = false;
     let tentativas = 0;
+    const sel = targetIdAtual.startsWith("css:")
+      ? targetIdAtual.slice(4)
+      : `[data-tutorial-id="${targetIdAtual}"]`;
     function medir() {
       if (cancelado) return;
-      const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
+      const el = document.querySelector(sel);
       if (el) {
         const r = el.getBoundingClientRect();
         setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
@@ -247,7 +269,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
       window.removeEventListener("resize", medir);
       window.removeEventListener("scroll", medir, true);
     };
-  }, [estagio, passo?.targetId]);
+  }, [estagio, targetIdAtual]);
 
   // Ação custom executada AO INICIAR o passo (em paralelo ao autoMs). Útil
   // pra animações longas que devem rodar enquanto o balão fica visível
@@ -16683,6 +16705,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       fecharPopup:        () => setComodoAberto(null),
       // Garante que o card de cômodos esteja expandido (ele pode estar recolhido).
       expandirComodos:    () => setCardComodosRecolhido(false),
+      // Recolhe/expande um grupo individual de cômodos (ex: "Áreas Sociais").
+      recolherGrupo: (nome) => setGruposAbertos(prev => ({ ...prev, [nome]: false })),
+      expandirGrupo: (nome) => setGruposAbertos(prev => ({ ...prev, [nome]: true })),
     };
     return () => { delete window.__vkOrc; };
   }, []);
@@ -29790,9 +29815,7 @@ export default function ModuloClientesFornecedores() {
           // ── Dentro do orçamento (cliente foi salvo, tela do form abriu) ──
           {
             targetId: "campo-referencia",
-            titulo: "Passo 7",
-            descricao: "Vamos dar uma referência pro projeto: 'Casa Vicke'.",
-            posicao: "right", autoMs: 2400,
+            cursorOnly: true, autoMs: 2400,
             acao: { tipo: "type", valor: "Casa Vicke", delayChar: 55, confirmEnter: true },
           },
           {
@@ -29820,56 +29843,64 @@ export default function ModuloClientesFornecedores() {
             cursorOnly: true, autoMs: 1300,
             acao: "click",
           },
-          // Cômodos — animação sequencial: pra cada cômodo abre o popup
-          // (efeito hover), aguarda, marca a quantidade, fecha. Tudo via
-          // window.__vkOrc exposto pelo FormOrcamentoProjetoTeste.
+          // Cômodos — animação por grupo. Pra cada cômodo:
+          //   1. Cursor anda até o nome do cômodo (data-comodo-link)
+          //   2. Abre popup (hover simulado)
+          //   3. Cursor anda até o botão da qtd correta
+          //   4. Click — botão fica preto, popup fecha
+          // Ao terminar TODOS os cômodos do grupo: recolhe o grupo, próximo.
           {
             targetId: "painel-comodos",
-            titulo: "Passo 13",
-            descricao: "Adicionando os cômodos um a um: 2 garagens, hall, sala TV, living, escritório, lavabo, cozinha, lavanderia, depósito, área de lazer, piscina, lavabo lazer, 2 suítes, 2 closets e 1 suíte master.",
-            posicao: "left", autoMs: 13500,
+            cursorOnly: true, autoMs: 30000,
             acaoAoIniciar: async (cancelado) => {
               const orc = window.__vkOrc;
-              if (!orc) return;
+              const tut = window.__vkTutorial;
+              if (!orc || !tut) return;
               orc.expandirComodos && orc.expandirComodos();
               const sleep = ms => new Promise(r => setTimeout(r, ms));
-              const lista = [
-                ["Garagem", 2],
-                ["Hall de entrada", 1],
-                ["Sala TV", 1],
-                ["Living", 1],
-                ["Escritório", 1],
-                ["Lavabo", 1],
-                ["Cozinha", 1],
-                ["Lavanderia", 1],
-                ["Depósito", 1],
-                ["Área de lazer", 1],
-                ["Piscina", 1],
-                ["Lavabo Lazer", 1],
-                ["Suíte", 2],
-                ["Closet Suíte", 2],
-                ["Suíte Master", 1],
+              const grupos = [
+                { nome: "Áreas Sociais", comodos: [
+                  ["Garagem", 2], ["Hall de entrada", 1], ["Sala TV", 1],
+                  ["Living", 1], ["Escritório", 1], ["Lavabo", 1],
+                ]},
+                { nome: "Serviço", comodos: [
+                  ["Cozinha", 1], ["Lavanderia", 1], ["Depósito", 1],
+                ]},
+                { nome: "Lazer", comodos: [
+                  ["Área de lazer", 1], ["Piscina", 1], ["Lavabo Lazer", 1],
+                ]},
+                { nome: "Dormitórios", comodos: [
+                  ["Suíte", 2], ["Closet Suíte", 2], ["Suíte Master", 1],
+                ]},
               ];
-              for (const [nome, qtd] of lista) {
+              for (const g of grupos) {
                 if (cancelado()) return;
-                // Abre popup do cômodo (efeito hover)
-                orc.abrirPopup(nome);
-                await sleep(260);
-                if (cancelado()) return;
-                // Em vez de setQtdAbs direto, clica no botão da qtd —
-                // assim o user vê o número virando preto antes de fechar.
-                const btn = document.querySelector(`[data-comodo-btn="${nome}-${qtd}"]`);
-                if (btn) {
-                  // Pequeno delay pra ver o destaque do botão antes do click
-                  await sleep(180);
-                  btn.click();
-                } else {
-                  // Fallback: seta direto se botão não encontrado
-                  orc.setQtdAbs(nome, qtd);
-                  orc.fecharPopup && orc.fecharPopup();
+                for (const [nome, qtd] of g.comodos) {
+                  if (cancelado()) return;
+                  // 1. Cursor anda até o cômodo na lista de disponíveis
+                  tut.setTargetId(`css:[data-comodo-nome="${nome}"]`);
+                  await sleep(550);
+                  if (cancelado()) return;
+                  // 2. Abre popup (efeito hover)
+                  orc.abrirPopup(nome);
+                  await sleep(450);
+                  if (cancelado()) return;
+                  // 3. Cursor anda até o botão da qtd dentro do popup
+                  tut.setTargetId(`css:[data-comodo-btn="${nome}-${qtd}"]`);
+                  await sleep(550);
+                  if (cancelado()) return;
+                  // 4. Click — botão fica preto, popup fecha
+                  const btn = document.querySelector(`[data-comodo-btn="${nome}-${qtd}"]`);
+                  if (btn) btn.click();
+                  else { orc.setQtdAbs(nome, qtd); orc.fecharPopup && orc.fecharPopup(); }
+                  await sleep(450);
                 }
-                await sleep(280);
+                // Terminou o grupo — recolhe pra dar foco no próximo
+                if (cancelado()) return;
+                orc.recolherGrupo && orc.recolherGrupo(g.nome);
+                await sleep(500);
               }
+              tut.clearTargetId && tut.clearTargetId();
             },
           },
         ]}

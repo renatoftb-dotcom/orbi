@@ -6055,6 +6055,9 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       fecharPopup:        () => setComodoAberto(null),
       // Garante que o card de cômodos esteja expandido (ele pode estar recolhido).
       expandirComodos:    () => setCardComodosRecolhido(false),
+      // Recolhe/expande um grupo individual de cômodos (ex: "Áreas Sociais").
+      recolherGrupo: (nome) => setGruposAbertos(prev => ({ ...prev, [nome]: false })),
+      expandirGrupo: (nome) => setGruposAbertos(prev => ({ ...prev, [nome]: true })),
     };
     return () => { delete window.__vkOrc; };
   }, []);
