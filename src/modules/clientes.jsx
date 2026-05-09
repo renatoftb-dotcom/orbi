@@ -251,7 +251,7 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   );
 }
 
-function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto, abrirCadastroNovo, onCadastroNovoAberto }) {
+function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto, abrirCadastroNovo, onCadastroNovoAberto, onClienteSalvoVoltarOrcamento }) {
   // IMPORTANTE: Todos os hooks devem ser declarados ANTES de qualquer return condicional.
   // Ordem dos hooks deve ser constante entre renders (regra do React).
   const perm = getPermissoes();
@@ -282,6 +282,10 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirClienteDetail]);
 
+  // Flag interna: quando o cadastro vem do fluxo de Novo Orçamento, ao salvar
+  // não voltamos pra kanban — abrimos o orçamento pra esse cliente direto.
+  const [veioDeNovoOrcamento, setVeioDeNovoOrcamento] = useState(false);
+
   // Ao receber sinal do módulo Orçamentos, abre direto o formulário de novo cliente
   useEffect(() => {
     if (abrirCadastroNovo) {
@@ -295,6 +299,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
       });
       setView("form");
+      setVeioDeNovoOrcamento(true);
       if (onCadastroNovoAberto) onCadastroNovoAberto();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -329,10 +334,19 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
   function saveCliente() {
     if (!form.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome do cliente", tipo: "aviso" }); return; }
-    const novos = form.id
-      ? data.clientes.map(c => c.id === form.id ? form : c)
-      : [...data.clientes, { ...form, id: uid() }];
+    const ehNovo = !form.id;
+    const clienteFinal = ehNovo ? { ...form, id: uid() } : form;
+    const novos = ehNovo
+      ? [...data.clientes, clienteFinal]
+      : data.clientes.map(c => c.id === form.id ? clienteFinal : c);
     save({ ...data, clientes: novos });
+    // Fluxo "Novo Orçamento → Cadastrar Cliente": após salvar, vai direto
+    // pra tela de orçamento desse cliente em vez de voltar pra kanban.
+    if (ehNovo && veioDeNovoOrcamento && onClienteSalvoVoltarOrcamento) {
+      setVeioDeNovoOrcamento(false);
+      onClienteSalvoVoltarOrcamento(clienteFinal);
+      return;
+    }
     setView("kanban");
   }
 

@@ -233,14 +233,59 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     };
   }, [estagio, passo?.targetId]);
 
+  // Digitação animada (acao.tipo === "type"): roda em paralelo ao autoMs,
+  // não no fim. Usa setter nativo + dispatch "input" pra o React reagir.
+  // Cancela se o passo mudar antes de terminar.
+  useEffect(() => {
+    if (estagio !== "passo" || !passo) return;
+    if (passo.acao?.tipo !== "type") return;
+    let cancelado = false;
+    let tentativas = 0;
+    function digitar() {
+      if (cancelado) return;
+      const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
+      if (!el) {
+        if (tentativas++ < 8) setTimeout(digitar, 200);
+        return;
+      }
+      const valor = String(passo.acao.valor || "");
+      const delay = Number(passo.acao.delayChar) || 60;
+      const proto = el.tagName === "TEXTAREA"
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      el.focus && el.focus();
+      let i = 0;
+      function passoChar() {
+        if (cancelado) return;
+        i++;
+        try {
+          setter.call(el, valor.slice(0, i));
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+        } catch (e) { console.warn("[tutorial] type falhou:", e); }
+        if (i < valor.length) setTimeout(passoChar, delay);
+        else {
+          // Dispara change ao final pra forms que escutam blur/change
+          try { el.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+        }
+      }
+      passoChar();
+    }
+    digitar();
+    return () => { cancelado = true; };
+  }, [estagio, idx]);
+
   // Auto-avança após autoMs do passo atual. Antes de avançar, executa
   // a `acao` opcional (click no botão alvo, preenche input, etc.).
+  // "type" é tratado em useEffect separado e NÃO re-executa aqui.
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
     const ms = passo.autoMs || 3500;
     const t = setTimeout(() => {
       // Executa ação se definida — usa o elemento mais recente do DOM
-      if (passo.acao) {
+      if (passo.acao && passo.acao !== "click" && passo.acao?.tipo === "type") {
+        // Já foi disparado no useEffect de digitação. Só avança.
+      } else if (passo.acao) {
         const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
         if (el) {
           try {

@@ -237,14 +237,59 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
     };
   }, [estagio, passo?.targetId]);
 
+  // Digitação animada (acao.tipo === "type"): roda em paralelo ao autoMs,
+  // não no fim. Usa setter nativo + dispatch "input" pra o React reagir.
+  // Cancela se o passo mudar antes de terminar.
+  useEffect(() => {
+    if (estagio !== "passo" || !passo) return;
+    if (passo.acao?.tipo !== "type") return;
+    let cancelado = false;
+    let tentativas = 0;
+    function digitar() {
+      if (cancelado) return;
+      const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
+      if (!el) {
+        if (tentativas++ < 8) setTimeout(digitar, 200);
+        return;
+      }
+      const valor = String(passo.acao.valor || "");
+      const delay = Number(passo.acao.delayChar) || 60;
+      const proto = el.tagName === "TEXTAREA"
+        ? window.HTMLTextAreaElement.prototype
+        : window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+      el.focus && el.focus();
+      let i = 0;
+      function passoChar() {
+        if (cancelado) return;
+        i++;
+        try {
+          setter.call(el, valor.slice(0, i));
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+        } catch (e) { console.warn("[tutorial] type falhou:", e); }
+        if (i < valor.length) setTimeout(passoChar, delay);
+        else {
+          // Dispara change ao final pra forms que escutam blur/change
+          try { el.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+        }
+      }
+      passoChar();
+    }
+    digitar();
+    return () => { cancelado = true; };
+  }, [estagio, idx]);
+
   // Auto-avança após autoMs do passo atual. Antes de avançar, executa
   // a `acao` opcional (click no botão alvo, preenche input, etc.).
+  // "type" é tratado em useEffect separado e NÃO re-executa aqui.
   useEffect(() => {
     if (estagio !== "passo" || !passo) return;
     const ms = passo.autoMs || 3500;
     const t = setTimeout(() => {
       // Executa ação se definida — usa o elemento mais recente do DOM
-      if (passo.acao) {
+      if (passo.acao && passo.acao !== "click" && passo.acao?.tipo === "type") {
+        // Já foi disparado no useEffect de digitação. Só avança.
+      } else if (passo.acao) {
         const el = document.querySelector(`[data-tutorial-id="${passo.targetId}"]`);
         if (el) {
           try {
@@ -3978,7 +4023,7 @@ function ClienteExpandivel({ cliente, data, waLink, isMobile }) {
   );
 }
 
-function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto, abrirCadastroNovo, onCadastroNovoAberto }) {
+function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteDetailAberto, abrirCadastroNovo, onCadastroNovoAberto, onClienteSalvoVoltarOrcamento }) {
   // IMPORTANTE: Todos os hooks devem ser declarados ANTES de qualquer return condicional.
   // Ordem dos hooks deve ser constante entre renders (regra do React).
   const perm = getPermissoes();
@@ -4009,6 +4054,10 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirClienteDetail]);
 
+  // Flag interna: quando o cadastro vem do fluxo de Novo Orçamento, ao salvar
+  // não voltamos pra kanban — abrimos o orçamento pra esse cliente direto.
+  const [veioDeNovoOrcamento, setVeioDeNovoOrcamento] = useState(false);
+
   // Ao receber sinal do módulo Orçamentos, abre direto o formulário de novo cliente
   useEffect(() => {
     if (abrirCadastroNovo) {
@@ -4022,6 +4071,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
       });
       setView("form");
+      setVeioDeNovoOrcamento(true);
       if (onCadastroNovoAberto) onCadastroNovoAberto();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4056,10 +4106,19 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
   function saveCliente() {
     if (!form.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome do cliente", tipo: "aviso" }); return; }
-    const novos = form.id
-      ? data.clientes.map(c => c.id === form.id ? form : c)
-      : [...data.clientes, { ...form, id: uid() }];
+    const ehNovo = !form.id;
+    const clienteFinal = ehNovo ? { ...form, id: uid() } : form;
+    const novos = ehNovo
+      ? [...data.clientes, clienteFinal]
+      : data.clientes.map(c => c.id === form.id ? clienteFinal : c);
     save({ ...data, clientes: novos });
+    // Fluxo "Novo Orçamento → Cadastrar Cliente": após salvar, vai direto
+    // pra tela de orçamento desse cliente em vez de voltar pra kanban.
+    if (ehNovo && veioDeNovoOrcamento && onClienteSalvoVoltarOrcamento) {
+      setVeioDeNovoOrcamento(false);
+      onClienteSalvoVoltarOrcamento(clienteFinal);
+      return;
+    }
     setView("kanban");
   }
 
@@ -29468,7 +29527,7 @@ export default function ModuloClientesFornecedores() {
           <BannerModoDev escritorio={data?.escritorio} />
           {aba === "home" && isMaster && <DashboardMaster setAba={setAba} data={data} tentarTrocar={tentarTrocar} />}
           {aba === "home" && !isMaster && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
-          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
+          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} onClienteSalvoVoltarOrcamento={(c) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: null, modo: "editar" })} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
           {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={{ ...data, _usuario: usuario }} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
@@ -29613,8 +29672,8 @@ export default function ModuloClientesFornecedores() {
             targetId: "cliente-nome",
             titulo: "Passo 5",
             descricao: "Vamos preencher o nome com 'Cliente Teste'.",
-            posicao: "right", autoMs: 3000,
-            acao: { tipo: "fill", valor: "Cliente Teste" },
+            posicao: "right", autoMs: 2200,
+            acao: { tipo: "type", valor: "Cliente Teste", delayChar: 60 },
           },
           {
             targetId: "cliente-salvar",

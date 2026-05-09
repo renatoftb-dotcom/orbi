@@ -1940,7 +1940,7 @@ export default function ModuloClientesFornecedores() {
           <BannerModoDev escritorio={data?.escritorio} />
           {aba === "home" && isMaster && <DashboardMaster setAba={setAba} data={data} tentarTrocar={tentarTrocar} />}
           {aba === "home" && !isMaster && <HomeMenu setAba={setAba} data={data} tentarTrocar={tentarTrocar} isMaster={isMaster} />}
-          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} />}
+          {aba === "clientes"               && <Clientes key={clientesKey} data={data} save={save} onReload={()=>setClientesKey(n=>n+1)} onAbrirOrcamento={(c, orc, modo) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: orc, modo: modo || "editar" })} orcamentoAberto={!!orcamentoTelaCheia} abrirClienteDetail={clienteRetorno} onClienteDetailAberto={() => setClienteRetorno(null)} abrirCadastroNovo={cadastroNovoCliente} onCadastroNovoAberto={() => setCadastroNovoCliente(false)} onClienteSalvoVoltarOrcamento={(c) => setOrcamentoTelaCheia({ clienteOrc: c, orcBase: null, modo: "editar" })} />}
           {aba === "projetos:etapas"        && <Etapas key={projetosKey} data={data} save={save} />}
           {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={{ ...data, _usuario: usuario }} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
@@ -2085,8 +2085,8 @@ export default function ModuloClientesFornecedores() {
             targetId: "cliente-nome",
             titulo: "Passo 5",
             descricao: "Vamos preencher o nome com 'Cliente Teste'.",
-            posicao: "right", autoMs: 3000,
-            acao: { tipo: "fill", valor: "Cliente Teste" },
+            posicao: "right", autoMs: 2200,
+            acao: { tipo: "type", valor: "Cliente Teste", delayChar: 60 },
           },
           {
             targetId: "cliente-salvar",
