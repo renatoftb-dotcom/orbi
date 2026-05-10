@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "//": "redeploy trigger",
   "headers": [
     {
       "source": "/",
