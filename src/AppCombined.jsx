@@ -7708,7 +7708,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   // ou não tem escopo, mantém comportamento legado.
   const escopoLocked = !!escopoTextoTpl;
 
-  const C = "#111827";
+  const C = "#000000";
   const LT = "#828a98";
   const MD = "#6b7280";
   const LN = "#e5e7eb";
