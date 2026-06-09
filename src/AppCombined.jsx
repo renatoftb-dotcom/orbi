@@ -25599,7 +25599,13 @@ const RATIO_MUITO_BAIXO = 0.5;  // valor < 50% do calculado
 const RATIO_MUITO_ALTO  = 2.0;  // valor > 200% do calculado
 
 // ── Componente principal ───────────────────────────────────────
-function TelaOnboarding({ usuario, onConcluido, onLogout }) {
+function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
+  // Detecta se o escritório já tem cadastro preenchido em sessão anterior.
+  // Critério: nome + cidade (campos obrigatórios do BlocoCadastroEscritorio).
+  // Usado pra pular a tela de cadastro do escritório no fluxo de
+  // recalibragem (Configurações → "Resetar e refazer calibragem"), evitando
+  // re-pedir dados que já existem e que sobrescreveriam o cadastro salvo.
+  const escritorioJaPreenchido = !!(escritorio?.nome && escritorio?.cidade);
   // Estado das respostas. null = ainda não respondeu.
   const [profissao, setProfissao]       = useState(null);  // "arquiteto" | "engenheiro"
   const [porte, setPorte]               = useState(null);
@@ -25679,11 +25685,16 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
     }
   }, [aceitouCalculado, estado, usuario]);
 
-  // Caminho inline do cadastro: ativo quando "Sim, esse valor está bom" OU
-  // quando o usuário ajustou o preço e reconfirmou. Determina quando o bloco
-  // de cadastro aparece, quando o save button aparece e quando o auto-scroll
-  // alinha o topo do cadastro com a viewport.
-  const cadastroInlineAtivo = aceitouCalculado === true || precoRecalibradoOk === true;
+  // Calibragem confirmada: usuário aceitou o calculado OU reajustou e
+  // reconfirmou. Usada como pré-condição pra concluir o onboarding em ambos
+  // os fluxos (primeiro acesso e recalibragem).
+  const calibragemConfirmada = aceitouCalculado === true || precoRecalibradoOk === true;
+
+  // Caminho inline do cadastro: ativo SOMENTE no primeiro acesso (quando
+  // o escritório ainda não tem cadastro). No fluxo de recalibragem em
+  // escritório já cadastrado, NÃO mostra o BlocoCadastroEscritorio — o
+  // usuário só confirma a nova calibragem e volta direto pro app.
+  const cadastroInlineAtivo = !escritorioJaPreenchido && calibragemConfirmada;
 
   // Quando o cadastro inline abre (qualquer um dos dois caminhos), posiciona
   // o topo do bloco no topo da viewport pra ele ver o cabeçalho + texto
@@ -25915,9 +25926,15 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
       (!analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto) || confirmandoAbsurdo
     );
 
-  // Pode "concluir" só quando o cadastro inline está ativo (Sim direto OU
-  // Quero ajustar reconfirmado) E o cadastro está válido.
-  const podeConcluir = todasRespondidas && cadastroInlineAtivo && cadastroValido;
+  // Pode "concluir" em duas situações:
+  // (a) Primeiro acesso: cadastro inline ativo + cadastro válido (precisa
+  //     digitar nome, cidade, etc.);
+  // (b) Recalibragem: escritório já preenchido + calibragem confirmada
+  //     (não exige cadastro inline, já que ele é pulado).
+  const podeConcluir = todasRespondidas && (
+    (cadastroInlineAtivo && cadastroValido) ||
+    (escritorioJaPreenchido && calibragemConfirmada)
+  );
 
   async function handleConcluir() {
     if (!podeConcluir) return;
@@ -25942,31 +25959,40 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
       // + reconfirmação) salvam o escritório inline. Falha aqui não bloqueia
       // o fluxo: onboarding já tá marcado como concluído no backend, e o
       // usuário pode completar/corrigir pela aba Escritório depois.
-      try {
-        await api.escritorio.save({
-          nome:      escNome.trim(),
-          email:     escEmail.trim(),
-          telefone:  escTelefone.trim(),
-          cidade:    escCidade.trim(),
-          estado:    escEstado,
-          instagram: escInstagram.trim(),
-          banco:     escBanco.trim(),
-          pixTipo:   escPixTipo,
-          pixChave:  escPixChave.trim(),
-          logo:      escLogo,
-          responsaveis: [{
-            id:   "r1",
-            nome: escRespNome.trim(),
-            cau:  escRespRegistro.trim(),
-            cpf:  "",
-          }],
-        });
-      } catch (e) {
-        console.warn("[onboarding] escritorio.save falhou:", e);
+      //
+      // Fluxo de RECALIBRAGEM (escritório já preenchido): pula o save
+      // inteiramente. O form do BlocoCadastroEscritorio nem foi mostrado
+      // nesse caso — fazer o save mandaria strings vazias e sobrescreveria
+      // o cadastro existente.
+      if (!escritorioJaPreenchido) {
+        try {
+          await api.escritorio.save({
+            nome:      escNome.trim(),
+            email:     escEmail.trim(),
+            telefone:  escTelefone.trim(),
+            cidade:    escCidade.trim(),
+            estado:    escEstado,
+            instagram: escInstagram.trim(),
+            banco:     escBanco.trim(),
+            pixTipo:   escPixTipo,
+            pixChave:  escPixChave.trim(),
+            logo:      escLogo,
+            responsaveis: [{
+              id:   "r1",
+              nome: escRespNome.trim(),
+              cau:  escRespRegistro.trim(),
+              cpf:  "",
+            }],
+          });
+        } catch (e) {
+          console.warn("[onboarding] escritorio.save falhou:", e);
+        }
       }
       // Pula TelaTransicao e vai direto pro app. Flag avisa o parent que o
       // escritório já foi salvo inline — assim ele NÃO refaz o pré-preenchimento
       // de estado (que sobrescreveria os dados completos com cache stale).
+      // Em recalibragem, o escritório também não deve ser pré-preenchido,
+      // então a flag vai true em ambos os casos.
       onConcluido(estado, { escritorioJaSalvo: true });
     } catch (e) {
       setErroSalvar(e.message || "Falha ao salvar perfil");
@@ -26171,8 +26197,11 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
           />
         )}
 
-        {/* ── Botão concluir (só aparece após cadastro inline aberto) ── */}
-        {todasRespondidas && cadastroInlineAtivo && (
+        {/* ── Botão concluir ──
+            Primeiro acesso: aparece quando cadastro inline está aberto.
+            Recalibragem: aparece logo que a calibragem é confirmada (sem
+            exigir cadastro inline). */}
+        {todasRespondidas && (cadastroInlineAtivo || (escritorioJaPreenchido && calibragemConfirmada)) && (
           <div style={{ marginTop:32, paddingTop:24, borderTop:"1px solid #f3f4f6" }}>
             {erroSalvar && (
               <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
@@ -26188,7 +26217,11 @@ function TelaOnboarding({ usuario, onConcluido, onLogout }) {
                 opacity: (!podeConcluir || salvando) ? 0.5 : 1,
                 cursor: (!podeConcluir || salvando) ? "not-allowed" : "pointer",
               }}>
-              {salvando ? "Salvando..." : "Salvar e começar a usar o VICKE"}
+              {salvando
+                ? "Salvando..."
+                : escritorioJaPreenchido
+                ? "Salvar calibragem e voltar"
+                : "Salvar e começar a usar o VICKE"}
             </button>
             <button
               onClick={onLogout}
@@ -29684,6 +29717,7 @@ export default function ModuloClientesFornecedores() {
       <>
       <TelaOnboarding
         usuario={usuario}
+        escritorio={data?.escritorio}
         onConcluido={async (estadoOnboarding, opts = {}) => {
           // Após salvar o cadastro inline (fluxo novo), o usuário cai direto
           // na home. O destino é definido imediatamente — antes dos awaits do

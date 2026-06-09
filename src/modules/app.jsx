@@ -1359,6 +1359,7 @@ export default function ModuloClientesFornecedores() {
       <>
       <TelaOnboarding
         usuario={usuario}
+        escritorio={data?.escritorio}
         onConcluido={async (estadoOnboarding, opts = {}) => {
           // Após salvar o cadastro inline (fluxo novo), o usuário cai direto
           // na home. O destino é definido imediatamente — antes dos awaits do
