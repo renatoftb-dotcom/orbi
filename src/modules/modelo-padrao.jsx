@@ -695,7 +695,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
 
   const C = "#000000";
   const LT = "#828a98";
-  const MD = "#6b7280";
+  const MD = "#000000";
   const LN = "#e5e7eb";
   const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
   const page  = { maxWidth:860, margin:"0 auto", padding:"32px 40px 80px" };
@@ -1190,9 +1190,9 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       // padronizados com Padrão (page: padding "32px 40px 80px").
       // Padding superior 32px deixa o conteúdo respirar do header amarelo.
       conteudo: { padding:"32px 40px 80px" },
-      saudacao: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:14 },
-      saudacaoB: { color:"#111", fontWeight:600 },
-      descricaoProjeto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:18, whiteSpace:"normal", wordBreak:"break-word" },
+      saudacao: { fontSize:13, color:"#000000", lineHeight:1.65, marginBottom:14 },
+      saudacaoB: { color:"#000000", fontWeight:600 },
+      descricaoProjeto: { fontSize:13, color:"#000000", lineHeight:1.65, marginBottom:18, whiteSpace:"normal", wordBreak:"break-word" },
       // Títulos de seção: estilo mockup — pequeno, amber 900, letterspacing,
       // com linha sutil embaixo. fontWeight 700 (negrito) pra padronizar com
       // os outros títulos da proposta.
@@ -1202,16 +1202,16 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         margin:"22px 0 10px", paddingBottom:6,
         borderBottom:"0.5px solid #e5e7eb",
       },
-      secTexto: { fontSize:13, color:"#374151", lineHeight:1.65, marginBottom:8, whiteSpace:"normal", wordBreak:"break-word" },
+      secTexto: { fontSize:13, color:"#000000", lineHeight:1.65, marginBottom:8, whiteSpace:"normal", wordBreak:"break-word" },
       // Estrutura de etapa
-      etapaTitulo: { fontSize:14, color:"#111", fontWeight:700, margin:"16px 0 6px" },
-      etapaObjetivo: { fontSize:12.5, color:"#6b7280", fontStyle:"italic", marginBottom:8, lineHeight:1.55 },
+      etapaTitulo: { fontSize:14, color:"#000000", fontWeight:700, margin:"16px 0 6px" },
+      etapaObjetivo: { fontSize:12.5, color:"#000000", fontStyle:"italic", marginBottom:8, lineHeight:1.55 },
       etapaSubsec: { fontSize:11, color:"#92400e", textTransform:"uppercase", letterSpacing:"0.06em", margin:"8px 0 4px", fontWeight:600 },
-      itemBullet: { fontSize:12.5, color:"#374151", paddingLeft:18, position:"relative", lineHeight:1.6, marginBottom:3 },
+      itemBullet: { fontSize:12.5, color:"#000000", paddingLeft:18, position:"relative", lineHeight:1.6, marginBottom:3 },
       bulletDot: { position:"absolute", left:2, color:"#9ca3af", fontSize:11, top:1 },
-      entregaveisInline: { fontSize:12, color:"#6b7280", marginTop:6, lineHeight:1.55, paddingLeft:0 },
+      entregaveisInline: { fontSize:12, color:"#000000", marginTop:6, lineHeight:1.55, paddingLeft:0 },
       entregaveisLabel: { color:"#92400e", fontWeight:600 },
-      etapaFraseFim: { fontSize:11.5, color:"#9ca3af", fontStyle:"italic", marginTop:6, lineHeight:1.5 },
+      etapaFraseFim: { fontSize:11.5, color:"#000000", fontStyle:"italic", marginTop:6, lineHeight:1.5 },
       grupoCols: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, margin:"6px 0" },
       // Cards de valor: bordas mais arredondadas (8px) igual ao mockup
       destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
