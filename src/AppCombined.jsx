@@ -21846,9 +21846,9 @@ function Admin({ usuario, data, save, initialTab }) {
   function fmtCubMes(d) {
     if (!d) return "—";
     try {
-      const dt = new Date(d);
+      const [year, month] = d.substring(0, 7).split('-');
       const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
-      return `${meses[dt.getMonth()]}/${dt.getFullYear()}`;
+      return `${meses[parseInt(month) - 1]}/${year}`;
     } catch { return "—"; }
   }
 
