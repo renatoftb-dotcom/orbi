@@ -252,7 +252,7 @@ function Admin({ usuario, data, save, initialTab }) {
       {/* Cabeçalho com descrição */}
       <div style={{ marginBottom:24, fontSize:13, color:"#6b7280", lineHeight:1.6 }}>
         O Custo Unitário Básico (CUB) é divulgado mensalmente pelos sindicatos da construção.
-        O sistema atualiza automaticamente todo dia 10 às 4h. Estados ativos: <b>SP, RJ, MG, SC, PR</b>.
+        O sistema atualiza automaticamente todo dia 10 às 4h. Estados ativos: <b>SP, RJ, MG, SC, PR, RS</b>.
         Use o botão para forçar atualização agora.
       </div>
 
