@@ -159,7 +159,10 @@ A maioria das tabelas de domínio (`clientes`, `fornecedores`, `materiais`, `obr
 O módulo de proposta/orçamento tem matemática de precificação não-óbvia. Não altere fórmulas sem confirmar com o usuário.
 
 - **Preço por m²:** `precoM2Ef = pb × fatorMult`, onde `fatorMult` já incorpora `indiceComodos` e `indicePadrao`.
-- **Preço base via CUB:** `precoBase = pct × CUB[estado][R-1][padrão]`. Validado contra cliente Padovan: `0,02388 × 2475,44 = R$59,11/m²`.
+- **Preço base via CUB:** `precoBase = pct × CUB[categoria][padrão]`, onde categoria é selecionada por tipo de projeto:
+  - **Residencial / Clínica:** `CUB[R-1][Baixo|Normal|Alto]` — validado contra Padovan: `0,02388 × 2475,44 = R$59,11/m²`
+  - **Conj. Comercial:** `CUB[CSL-8][Normal|Alto]` — Baixo fallback para Normal (CSL-8 não tem padrão Baixo)
+  - **Galpão:** `CUB[GI][Único]` — padrão único, sem variações
 - **Imposto é calculado por dentro:** `valor_bruto = liquido / (1 - aliq/100)`. PDFs mostram valores sem imposto, depois adicionam uma linha "Total sem impostos", uma linha "+ Impostos", e uma caixa escura "Total Geral com Impostos".
 - **Quatro states de desconto/parcelamento separados**, por contexto:
   - Padrão: `descontoEtapa` (5% / 3x), `descontoPacote` (10% / 4x)
