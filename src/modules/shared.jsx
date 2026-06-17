@@ -1404,8 +1404,60 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) return fallback;
 
   const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
-  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria: categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : "GI" };
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria: categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : categoriaCub === cub.PP4 ? "PP-4" : "GI" };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Preço base por GRUPO em Conj. Comercial (Sprint 3+)
+// ═══════════════════════════════════════════════════════════════
+// Em Conj. Comercial, diferentes grupos usam diferentes categorias de CUB:
+// - Por Loja, Espaço Âncora, Áreas Comuns → CSL-8 (Conj. Comercial)
+// - Por Apartamento → PP-4 (Prédio de 4 pavimentos)
+// - Galpão → GI (Galpão Industrial)
+function getPrecoBaseParaGrupo(grupo, padrao, usuario, cub) {
+  let categoriaCub = null;
+  let categoriaLabel = "R-1";
+
+  if (grupo === "Por Apartamento") {
+    categoriaCub = cub?.PP4;
+    categoriaLabel = "PP-4";
+  } else if (grupo === "Galpao") {
+    categoriaCub = cub?.GI;
+    categoriaLabel = "GI";
+  } else {
+    // Por Loja, Espaço Âncora, Áreas Comuns → CSL-8
+    categoriaCub = cub?.CSL8;
+    categoriaLabel = "CSL-8";
+  }
+
+  // Fallback se CUB não estiver disponível
+  if (!usuario || !cub || !categoriaCub) {
+    return { precoBase: 45, modo: "fixo", categoria: categoriaLabel };
+  }
+
+  const pct = (usuario.pct_calibrado != null && usuario.pct_calibrado > 0)
+    ? usuario.pct_calibrado
+    : usuario.pct_matriz_calculado;
+  if (!pct || pct <= 0) {
+    return { precoBase: 45, modo: "fixo", categoria: categoriaLabel };
+  }
+
+  // Mapeia padrão (Médio → Normal)
+  let padraoCub = padrao === "Médio" ? "Normal" : padrao;
+
+  // PP-4 e GI têm padrões limitados
+  if (categoriaLabel === "PP-4" && padraoCub === "Baixo") padraoCub = "Normal";
+  if (categoriaLabel === "GI") padraoCub = "Unico";
+
+  const cubObj = categoriaCub[padraoCub];
+  if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) {
+    return { precoBase: 45, modo: "fixo", categoria: categoriaLabel };
+  }
+
+  const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria: categoriaLabel };
+}
+
 var fmt = (v) => (v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 var fmtM2 = (v) => `${(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})} m²`;
 var fmtA  = (v, dec=2) => (v||0).toLocaleString("pt-BR",{minimumFractionDigits:dec,maximumFractionDigits:dec});

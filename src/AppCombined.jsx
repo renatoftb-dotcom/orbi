@@ -1408,8 +1408,60 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) return fallback;
 
   const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
-  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria: categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : "GI" };
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria: categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : categoriaCub === cub.PP4 ? "PP-4" : "GI" };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// Preço base por GRUPO em Conj. Comercial (Sprint 3+)
+// ═══════════════════════════════════════════════════════════════
+// Em Conj. Comercial, diferentes grupos usam diferentes categorias de CUB:
+// - Por Loja, Espaço Âncora, Áreas Comuns → CSL-8 (Conj. Comercial)
+// - Por Apartamento → PP-4 (Prédio de 4 pavimentos)
+// - Galpão → GI (Galpão Industrial)
+function getPrecoBaseParaGrupo(grupo, padrao, usuario, cub) {
+  let categoriaCub = null;
+  let categoriaLabel = "R-1";
+
+  if (grupo === "Por Apartamento") {
+    categoriaCub = cub?.PP4;
+    categoriaLabel = "PP-4";
+  } else if (grupo === "Galpao") {
+    categoriaCub = cub?.GI;
+    categoriaLabel = "GI";
+  } else {
+    // Por Loja, Espaço Âncora, Áreas Comuns → CSL-8
+    categoriaCub = cub?.CSL8;
+    categoriaLabel = "CSL-8";
+  }
+
+  // Fallback se CUB não estiver disponível
+  if (!usuario || !cub || !categoriaCub) {
+    return { precoBase: 45, modo: "fixo", categoria: categoriaLabel };
+  }
+
+  const pct = (usuario.pct_calibrado != null && usuario.pct_calibrado > 0)
+    ? usuario.pct_calibrado
+    : usuario.pct_matriz_calculado;
+  if (!pct || pct <= 0) {
+    return { precoBase: 45, modo: "fixo", categoria: categoriaLabel };
+  }
+
+  // Mapeia padrão (Médio → Normal)
+  let padraoCub = padrao === "Médio" ? "Normal" : padrao;
+
+  // PP-4 e GI têm padrões limitados
+  if (categoriaLabel === "PP-4" && padraoCub === "Baixo") padraoCub = "Normal";
+  if (categoriaLabel === "GI") padraoCub = "Unico";
+
+  const cubObj = categoriaCub[padraoCub];
+  if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) {
+    return { precoBase: 45, modo: "fixo", categoria: categoriaLabel };
+  }
+
+  const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria: categoriaLabel };
+}
+
 var fmt = (v) => (v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 var fmtM2 = (v) => `${(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})} m²`;
 var fmtA  = (v, dec=2) => (v||0).toLocaleString("pt-BR",{minimumFractionDigits:dec,maximumFractionDigits:dec});
@@ -17699,6 +17751,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const pb = _precoBaseInfo.precoBase;
 
     if (isComercial) {
+      // Em Conj. Comercial, cada grupo usa um CUB diferente
+      const pbLoja   = getPrecoBaseParaGrupo("Por Loja",        padrao, usuario, cub).precoBase;
+      const pbAncora = getPrecoBaseParaGrupo("Espaço Âncora",   padrao, usuario, cub).precoBase;
+      const pbComum  = getPrecoBaseParaGrupo("Áreas Comuns",    padrao, usuario, cub).precoBase;
+      const pbApto   = getPrecoBaseParaGrupo("Por Apartamento", padrao, usuario, cub).precoBase;
+      const pbGalpao = getPrecoBaseParaGrupo("Galpao",          padrao, usuario, cub).precoBase;
       const nomesLoja   = Object.keys(COMODOS_GALERIA_LOJA);
       const nomesAncora = Object.keys(COMODOS_GALERIA_ANCORA);
       const nomesComum  = Object.keys(COMODOS_GALERIA_COMUM);
@@ -17754,7 +17812,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const atApto1   = bApto.ab   * (1 + ACRESCIMO_AREA);
       const atGalpao1 = bGalpao.ab * (1 + 0.10);
 
-      const calcFaixas = (area, fator, isAnc=false) => {
+      const calcFaixas = (area, fator, isAnc=false, pb_uso=pb) => {
         const faixasDef = isAnc
           ? [{ate:300,d:0},{ate:500,d:.30},{ate:700,d:.35},{ate:1000,d:.40},{ate:Infinity,d:.45}]
           : [{ate:200,d:0},{ate:300,d:.30},{ate:400,d:.35},{ate:500,d:.40},{ate:600,d:.45},{ate:Infinity,d:.50}];
@@ -17762,7 +17820,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         for (const f of faixasDef) {
           if (rest<=0) break;
           const chunk = Math.min(rest, f.ate-acum);
-          total += pb * chunk * fator * (1-f.d);
+          total += pb_uso * chunk * fator * (1-f.d);
           rest -= chunk; acum = f.ate;
         }
         return Math.round(total*100)/100;
@@ -17778,11 +17836,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         return Math.round(total*100)/100;
       };
 
-      const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator)       : 0;
-      const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,  true) : 0;
-      const p1Comum  =               calcFaixas(atComum,  bComum.fator);
-      const p1Apto   = atApto1  >0 ? calcFaixas(atApto1,  bApto.fator)       : 0;
-      const p1Galpao = atGalpao1>0 ? calcFaixas(atGalpao1,bGalpao.fator)     : 0;
+      const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator,  false, pbLoja)   : 0;
+      const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,   true, pbAncora) : 0;
+      const p1Comum  =               calcFaixas(atComum,  bComum.fator, false, pbComum);
+      const p1Apto   = atApto1  >0 ? calcFaixas(atApto1,  bApto.fator,  false, pbApto)   : 0;
+      const p1Galpao = atGalpao1>0 ? calcFaixas(atGalpao1,bGalpao.fator,false, pbGalpao) : 0;
 
       const pLojas   = nLojas  >0&&atLoja1  >0 ? calcRep(p1Loja,   atLoja1,   nLojas)   : 0;
       const pAncoras = nAncoras>0&&atAnc1   >0 ? calcRep(p1Anc,    atAnc1,    nAncoras) : 0;
