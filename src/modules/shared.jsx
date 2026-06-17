@@ -1379,9 +1379,11 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
 
   // DEBUG: mostra o objeto usuario completo
   console.log("[getPrecoBaseDinamico] usuario completo:", usuario);
-
-  // Sem dados de pricing → fallback fixo (orçamento ainda funciona).
-  if (!usuario || !cub) return fallback;
+  console.log("[getPrecoBaseDinamico] cub existe?", !!cub, "cub:", cub);
+  if (!usuario || !cub) {
+    console.log("[getPrecoBaseDinamico] FALHOU: usuario=", !!usuario, "cub=", !!cub);
+    return fallback;
+  }
   const pct = (usuario.pct_calibrado != null && usuario.pct_calibrado > 0)
     ? usuario.pct_calibrado
     : usuario.pct_matriz_calculado;
