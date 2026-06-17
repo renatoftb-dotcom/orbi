@@ -2371,6 +2371,9 @@ async function loadAllData(estado = null) {
     giUnico,
   ] = await Promise.all([...promisesBase, ...cubPromises]);
 
+  // DEBUG: mostra valores brutos antes de processar
+  console.log("[loadAllData] CUB bruto:", { r1Baixo, r1Normal, r1Alto, csl8Normal, csl8Alto, giUnico });
+
   // Monta objeto cub estruturado por categoria.
   // Cada categoria pode ter padrões nulos se a API falhar.
   // getPrecoBaseDinamico já lida com isso retornando fallback fixo.
