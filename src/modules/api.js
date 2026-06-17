@@ -368,16 +368,16 @@ async function loadAllData(estado = null) {
     cub = {
       estado,
       R1: {
-        Baixo: r1Baixo,
-        Normal: r1Normal,
-        Alto: r1Alto,
+        Baixo: r1Baixo?.data || r1Baixo,
+        Normal: r1Normal?.data || r1Normal,
+        Alto: r1Alto?.data || r1Alto,
       },
       CSL8: {
-        Normal: csl8Normal,
-        Alto: csl8Alto,
+        Normal: csl8Normal?.data || csl8Normal,
+        Alto: csl8Alto?.data || csl8Alto,
       },
       GI: {
-        Unico: giUnico,
+        Unico: giUnico?.data || giUnico,
       },
     };
   }
