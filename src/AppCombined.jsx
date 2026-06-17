@@ -29590,10 +29590,16 @@ export default function ModuloClientesFornecedores() {
     };
   }, [usuario?.id, token]);
 
-  // loadData roda quando autenticado vira true OU quando o estado da empresa
-  // muda (ex: usuário acaba de concluir onboarding e o usuario.estado passou
-  // de null pra "SP" — precisa recarregar dados pra trazer o CUB do estado).
-  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
+  // loadData roda quando:
+  // 1. autenticado vira true (login bem-sucedido)
+  // 2. usuario?.estado muda após login (ex: concluiu onboarding, precisa carregar CUB)
+  // Lê estado do localStorage como fonte primária pra evitar race condition.
+  useEffect(() => {
+    if (autenticado) {
+      setLoading(true);
+      loadData();
+    }
+  }, [autenticado, usuario?.estado]);
 
   useEffect(() => {
     if (aba === "projetos") setAba("projetos:etapas");
