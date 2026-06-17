@@ -1404,7 +1404,9 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
   if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) return fallback;
 
   const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
-  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria: categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : "GI" };
+  const categoria = categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : "GI";
+  console.log(`[PREÇO BASE] ${tipoProjeto} ${padrao} → ${categoria} ${padraoCub} | pct=${pct.toFixed(4)} × CUB=${cubObj.valor_m2.toFixed(2)} = R$ ${precoBase.toFixed(2)}/m²`);
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria };
 }
 var fmt = (v) => (v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 var fmtM2 = (v) => `${(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})} m²`;
