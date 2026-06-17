@@ -14661,7 +14661,7 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
                 <span style={{ color:"#6b7280" }}>Percentual da empresa</span>
                 <span style={{ fontWeight:500 }}>{(calculo.cubInfo.pct * 100).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}%</span>
               </div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", background:"#f0fdf4", borderRadius:4, padding:"4px 8px" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", background:"#f0fdf4", borderRadius:4 }}>
                 <span style={{ color:"#4b5563" }}>Preço Base</span>
                 <span style={{ fontWeight:600, color:"#15803d" }}>R$ {calculo.cubInfo.cubM2.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})} × {(calculo.cubInfo.pct * 100).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}% = R$ {calculo.precoBaseVal.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
               </div>
