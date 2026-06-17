@@ -14616,6 +14616,42 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
 
   return (
     <>
+      {/* RESUMO DO CÁLCULO — CUB e precificação */}
+      {calculo.cubInfo && (
+        <div style={{ background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:6, padding:"10px 12px", marginBottom:14, fontSize:11 }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+            <div style={{ fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>Cálculo de Precificação</div>
+            <span style={{ fontSize:10, color:"#9ca3af", fontStyle:"italic" }}>{calculo.cubInfo.modo === "dinamico" ? "CUB " + calculo.cubInfo.categoria + " (" + calculo.cubInfo.padraoCub + ")" : "Preço fixo"}</span>
+          </div>
+          {calculo.cubInfo.modo === "dinamico" && calculo.cubInfo.pct != null && calculo.cubInfo.cubM2 != null ? (
+            <div style={{ display:"flex", flexDirection:"column", gap:6, fontSize:11, color:"#374151" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", paddingBottom:6, borderBottom:"1px solid #d1d5db" }}>
+                <span style={{ color:"#6b7280" }}>Categoria do CUB</span>
+                <span style={{ fontWeight:500 }}>{calculo.cubInfo.categoria === "R-1" ? "R-1 (Residencial)" : calculo.cubInfo.categoria === "CSL-8" ? "CSL-8 (Salas Comerciais)" : "GI (Galpão)"}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", paddingBottom:6, borderBottom:"1px solid #d1d5db" }}>
+                <span style={{ color:"#6b7280" }}>Padrão do CUB</span>
+                <span style={{ fontWeight:500 }}>{calculo.cubInfo.padraoCub === "Unico" ? "Único" : calculo.cubInfo.padraoCub === "Normal" ? "Normal (Médio)" : calculo.cubInfo.padraoCub}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", paddingBottom:6, borderBottom:"1px solid #d1d5db" }}>
+                <span style={{ color:"#6b7280" }}>Valor do CUB</span>
+                <span style={{ fontWeight:500 }}>R$ {calculo.cubInfo.cubM2.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", paddingBottom:6, borderBottom:"1px solid #d1d5db" }}>
+                <span style={{ color:"#6b7280" }}>Percentual da empresa</span>
+                <span style={{ fontWeight:500 }}>{(calculo.cubInfo.pct * 100).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}%</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"6px 0", background:"#f0fdf4", borderRadius:4, padding:"4px 8px" }}>
+                <span style={{ color:"#4b5563" }}>Preço Base</span>
+                <span style={{ fontWeight:600, color:"#15803d" }}>R$ {calculo.cubInfo.cubM2.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})} × {(calculo.cubInfo.pct * 100).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}% = R$ {calculo.precoBaseVal.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
+              </div>
+            </div>
+          ) : (
+            <div style={{ color:"#6b7280", fontSize:10, fontStyle:"italic" }}>Usando preço base fixo (sem dados de CUB)</div>
+          )}
+        </div>
+      )}
+
       {/* TOTAL GERAL — destaque no topo */}
       <div style={{ marginTop:0, marginBottom:14 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
@@ -17759,6 +17795,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         indiceComodos:0, indicePadrao:0, fatorMult:1, precoBaseVal:pb, precoM2Ef:pb,
         faixasArqDet:[], faixasEng:engCalc.faixas, totalAmbientes:0, acrescimoCirk:ACRESCIMO_AREA,
         blocosCom, precoFachada,
+        cubInfo: { categoria: _precoBaseInfo.categoria, modo: _precoBaseInfo.modo, pct: _precoBaseInfo.pct, cubM2: _precoBaseInfo.cubM2, padraoCub: _precoBaseInfo.padraoCub },
       };
     }
 
@@ -17849,6 +17886,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       totalAmbientes,
       acrescimoCirk: tcfg.acrescimoCirk,
       labelCirk: tcfg.labelCirk || String(Math.round(tcfg.acrescimoCirk*100)),
+      cubInfo: { categoria: _precoBaseInfo.categoria, modo: _precoBaseInfo.modo, pct: _precoBaseInfo.pct, cubM2: _precoBaseInfo.cubM2, padraoCub: _precoBaseInfo.padraoCub },
     };
   }, [qtds, tamanho, padrao, tipoProjeto, configAtual, qtdRep, grupoQtds, isComercial, grupoParams, grupoDeComodo, usuario, cub]);
 
