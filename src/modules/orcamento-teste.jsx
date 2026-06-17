@@ -6585,8 +6585,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // Padrão Médio do projeto = Normal do CUB (NBR 12721).
     const _precoBaseInfo = getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub);
     const pb = _precoBaseInfo.precoBase;
-    console.log(`[CUB DIAGNÓSTICO] tipo=${tipoProjeto} | cub=${cub?"carregado":"null"} | usuario=${usuario?"sim":"null"} | modo=${_precoBaseInfo.modo} | pct=${_precoBaseInfo.pct}`);
-    if (cub && cub.CSL8) console.log(`  └─ CSL8.Normal=${cub.CSL8.Normal?.valor_m2 || "undefined"}`);
+    console.log(`[FÓRMULA REAL] modo=${_precoBaseInfo.modo} | padrão=${padrao} | cubCategory=${_precoBaseInfo.categoria} | cubPadrão=${_precoBaseInfo.padraoCub} | cubValor=${_precoBaseInfo.cubM2} | pct=${_precoBaseInfo.pct*100}% | pb=${pb}`);
 
     if (isComercial) {
       const nomesLoja   = Object.keys(COMODOS_GALERIA_LOJA);
@@ -6668,7 +6667,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         return Math.round(total*100)/100;
       };
 
-      console.log(`[FATOR CÔMODOS LOJA] indiceComodos=${bLoja.ic.toFixed(4)} | indicePadrao=${ipLoja.toFixed(1)} | fatorMult=${bLoja.fator.toFixed(3)}`);
+      console.log(`[FÓRMULA CONJ.COMERCIAL] pb=${pb.toFixed(2)} × fator=${bLoja.fator.toFixed(3)} = precoM2=${(pb * bLoja.fator).toFixed(2)}`);
       const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator)       : 0;
       const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,  true) : 0;
       const p1Comum  =               calcFaixas(atComum,  bComum.fator);
