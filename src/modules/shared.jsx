@@ -1384,13 +1384,27 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
     : usuario.pct_matriz_calculado;
   if (!pct || pct <= 0) return fallback;
 
-  // Padrão Médio do projeto = Normal do CUB (NBR 12721).
-  const padraoCub = padrao === "Médio" ? "Normal" : padrao;
-  const cubObj = cub[padraoCub];
+  // Seleciona categoria de CUB por tipo de projeto
+  // Mapeia padrão projeto (Baixo/Médio/Alto) → padrão CUB
+  let categoriaCub = null;
+  let padraoCub = padrao === "Médio" ? "Normal" : padrao;  // Médio → Normal (NBR 12721)
+
+  if (tipoProjeto === "Conj. Comercial") {
+    categoriaCub = cub.CSL8;  // CSL-8 para salas comerciais
+    // CSL-8 só tem Normal e Alto; Baixo fallback para Normal
+    if (padraoCub === "Baixo") padraoCub = "Normal";
+  } else if (tipoProjeto === "Galpão") {
+    categoriaCub = cub.GI;    // GI para galpão
+    padraoCub = "Unico";      // GI tem apenas padrão único
+  } else {
+    categoriaCub = cub.R1;    // R-1 para Residencial, Clínica
+  }
+
+  const cubObj = categoriaCub ? categoriaCub[padraoCub] : null;
   if (!cubObj || !cubObj.valor_m2 || cubObj.valor_m2 <= 0) return fallback;
 
   const precoBase = Math.round(pct * cubObj.valor_m2 * 100) / 100;
-  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub };
+  return { precoBase, modo: "dinamico", pct, cubM2: cubObj.valor_m2, padraoCub, categoria: categoriaCub === cub.R1 ? "R-1" : categoriaCub === cub.CSL8 ? "CSL-8" : "GI" };
 }
 var fmt = (v) => (v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 var fmtM2 = (v) => `${(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})} m²`;

@@ -327,13 +327,21 @@ async function loadAllData(estado = null) {
   ];
 
   // Promises do CUB (só se estado disponível).
-  // Falhas individuais não derrubam o boot — usamos .catch(() => null)
-  // pra cada uma. Se CUB do estado não existir no banco, segue sem ele.
+  // Carrega categorias específicas por tipo de projeto:
+  // - R-1 para Residencial/Clínica (padrões: Baixo, Normal, Alto)
+  // - CSL-8 para Conj. Comercial (padrões: Normal, Alto + fallback Baixo→Normal)
+  // - GI para Galpão (padrão único)
   const cubPromises = estado ? [
+    // R-1 (Residencial/Clínica)
     api.cub.atual(estado, "R-1", "Baixo").catch(() => null),
     api.cub.atual(estado, "R-1", "Normal").catch(() => null),
     api.cub.atual(estado, "R-1", "Alto").catch(() => null),
-  ] : [Promise.resolve(null), Promise.resolve(null), Promise.resolve(null)];
+    // CSL-8 (Conj. Comercial)
+    api.cub.atual(estado, "CSL-8", "Normal").catch(() => null),
+    api.cub.atual(estado, "CSL-8", "Alto").catch(() => null),
+    // GI (Galpão)
+    api.cub.atual(estado, "GI", "Único").catch(() => null),
+  ] : Array(6).fill(Promise.resolve(null));
 
   const [
     clientes,
@@ -344,21 +352,30 @@ async function loadAllData(estado = null) {
     orcamentosProjeto,
     receitasFinanceiro,
     escritorio,
-    cubBaixo,
-    cubNormal,
-    cubAlto,
+    r1Baixo, r1Normal, r1Alto,
+    csl8Normal, csl8Alto,
+    giUnico,
   ] = await Promise.all([...promisesBase, ...cubPromises]);
 
-  // Monta objeto cub. Cada nível pode ser null individualmente se a API
-  // daquele padrão falhar (ex: tem Normal mas não tem Alto pro estado).
+  // Monta objeto cub estruturado por categoria.
+  // Cada categoria pode ter padrões nulos se a API falhar.
   // getPrecoBaseDinamico já lida com isso retornando fallback fixo.
   let cub = null;
-  if (estado && (cubBaixo || cubNormal || cubAlto)) {
+  if (estado && (r1Baixo || r1Normal || r1Alto || csl8Normal || csl8Alto || giUnico)) {
     cub = {
       estado,
-      Baixo: cubBaixo,
-      Normal: cubNormal,
-      Alto: cubAlto,
+      R1: {
+        Baixo: r1Baixo,
+        Normal: r1Normal,
+        Alto: r1Alto,
+      },
+      CSL8: {
+        Normal: csl8Normal,
+        Alto: csl8Alto,
+      },
+      GI: {
+        Unico: giUnico,
+      },
     };
   }
 
