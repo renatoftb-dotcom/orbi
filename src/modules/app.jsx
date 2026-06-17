@@ -1141,7 +1141,7 @@ export default function ModuloClientesFornecedores() {
   // loadData roda quando autenticado vira true OU quando o estado da empresa
   // muda (ex: usuário acaba de concluir onboarding e o usuario.estado passou
   // de null pra "SP" — precisa recarregar dados pra trazer o CUB do estado).
-  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado, usuario?.estado]);
+  useEffect(() => { if (autenticado) { setLoading(true); loadData(); } }, [autenticado]);
 
   useEffect(() => {
     if (aba === "projetos") setAba("projetos:etapas");
