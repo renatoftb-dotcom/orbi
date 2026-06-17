@@ -6575,12 +6575,6 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     const pb = _precoBaseInfo.precoBase;
 
     if (isComercial) {
-      // Em Conj. Comercial, cada grupo usa um CUB diferente
-      const pbLoja   = getPrecoBaseParaGrupo("Por Loja",        padrao, usuario, cub).precoBase;
-      const pbAncora = getPrecoBaseParaGrupo("Espaço Âncora",   padrao, usuario, cub).precoBase;
-      const pbComum  = getPrecoBaseParaGrupo("Áreas Comuns",    padrao, usuario, cub).precoBase;
-      const pbApto   = getPrecoBaseParaGrupo("Por Apartamento", padrao, usuario, cub).precoBase;
-      const pbGalpao = getPrecoBaseParaGrupo("Galpao",          padrao, usuario, cub).precoBase;
       const nomesLoja   = Object.keys(COMODOS_GALERIA_LOJA);
       const nomesAncora = Object.keys(COMODOS_GALERIA_ANCORA);
       const nomesComum  = Object.keys(COMODOS_GALERIA_COMUM);
@@ -6636,7 +6630,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const atApto1   = bApto.ab   * (1 + ACRESCIMO_AREA);
       const atGalpao1 = bGalpao.ab * (1 + 0.10);
 
-      const calcFaixas = (area, fator, isAnc=false, pb_uso=pb) => {
+      const calcFaixas = (area, fator, isAnc=false) => {
         const faixasDef = isAnc
           ? [{ate:300,d:0},{ate:500,d:.30},{ate:700,d:.35},{ate:1000,d:.40},{ate:Infinity,d:.45}]
           : [{ate:200,d:0},{ate:300,d:.30},{ate:400,d:.35},{ate:500,d:.40},{ate:600,d:.45},{ate:Infinity,d:.50}];
@@ -6644,7 +6638,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         for (const f of faixasDef) {
           if (rest<=0) break;
           const chunk = Math.min(rest, f.ate-acum);
-          total += pb_uso * chunk * fator * (1-f.d);
+          total += pb * chunk * fator * (1-f.d);
           rest -= chunk; acum = f.ate;
         }
         return Math.round(total*100)/100;
@@ -6660,11 +6654,11 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         return Math.round(total*100)/100;
       };
 
-      const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator,  false, pbLoja)   : 0;
-      const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,   true, pbAncora) : 0;
-      const p1Comum  =               calcFaixas(atComum,  bComum.fator, false, pbComum);
-      const p1Apto   = atApto1  >0 ? calcFaixas(atApto1,  bApto.fator,  false, pbApto)   : 0;
-      const p1Galpao = atGalpao1>0 ? calcFaixas(atGalpao1,bGalpao.fator,false, pbGalpao) : 0;
+      const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator)       : 0;
+      const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,  true) : 0;
+      const p1Comum  =               calcFaixas(atComum,  bComum.fator);
+      const p1Apto   = atApto1  >0 ? calcFaixas(atApto1,  bApto.fator)       : 0;
+      const p1Galpao = atGalpao1>0 ? calcFaixas(atGalpao1,bGalpao.fator)     : 0;
 
       const pLojas   = nLojas  >0&&atLoja1  >0 ? calcRep(p1Loja,   atLoja1,   nLojas)   : 0;
       const pAncoras = nAncoras>0&&atAnc1   >0 ? calcRep(p1Anc,    atAnc1,    nAncoras) : 0;
