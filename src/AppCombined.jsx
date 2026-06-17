@@ -14675,6 +14675,10 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
                 <span style={{ color:"#4b5563" }}>Preço Base</span>
                 <span style={{ fontWeight:600, color:"#15803d" }}>R$ {calculo.cubInfo.cubM2.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})} × {(calculo.cubInfo.pct * 100).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}% = R$ {calculo.precoBaseVal.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
               </div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", marginTop:4, background:"#eff6ff", borderRadius:4 }}>
+                <span style={{ color:"#1e40af" }}>Fator de Cômodos</span>
+                <span style={{ fontWeight:600, color:"#1e40af" }}>× {calculo.fatorMult.toLocaleString("pt-BR", {minimumFractionDigits:3, maximumFractionDigits:3})} = R$ {calculo.precoM2Ef.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
+              </div>
             </div>
           ) : (
             <div style={{ color:"#6b7280", fontSize:10, fontStyle:"italic" }}>Usando preço base fixo (sem dados de CUB)</div>
