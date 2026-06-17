@@ -365,16 +365,16 @@ async function loadAllData(estado = null) {
     cub = {
       estado,
       R1: {
-        Baixo: r1Baixo,
-        Normal: r1Normal,
-        Alto: r1Alto,
+        Baixo: r1Baixo?.data,
+        Normal: r1Normal?.data,
+        Alto: r1Alto?.data,
       },
       CSL8: {
-        Normal: csl8Normal,
-        Alto: csl8Alto,
+        Normal: csl8Normal?.data,
+        Alto: csl8Alto?.data,
       },
       GI: {
-        Unico: giUnico,
+        Unico: giUnico?.data,
       },
     };
   }
