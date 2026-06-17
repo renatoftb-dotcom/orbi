@@ -3541,9 +3541,17 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
                 <span style={{ color:"#4b5563" }}>Preço Base</span>
                 <span style={{ fontWeight:600, color:"#15803d" }}>R$ {calculo.cubInfo.cubM2.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})} × {(calculo.cubInfo.pct * 100).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}% = R$ {calculo.precoBaseVal.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
               </div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", marginTop:4, background:"#eff6ff", borderRadius:4 }}>
-                <span style={{ color:"#1e40af" }}>Fator de Cômodos</span>
-                <span style={{ fontWeight:600, color:"#1e40af" }}>× {calculo.fatorMult.toLocaleString("pt-BR", {minimumFractionDigits:3, maximumFractionDigits:3})} = R$ {calculo.precoM2Ef.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", marginTop:4, fontSize:10, color:"#6b7280" }}>
+                <span>Índice Cômodos: {calculo.indiceComodos.toLocaleString("pt-BR", {minimumFractionDigits:4, maximumFractionDigits:4})}</span>
+                <span>Índice Padrão: {calculo.indicePadrao.toLocaleString("pt-BR", {minimumFractionDigits:1, maximumFractionDigits:1})}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", marginTop:2, background:"#eff6ff", borderRadius:4 }}>
+                <span style={{ color:"#1e40af" }}>Fator Multiplicador</span>
+                <span style={{ fontWeight:600, color:"#1e40af" }}>1 + {calculo.indiceComodos.toLocaleString("pt-BR", {minimumFractionDigits:4, maximumFractionDigits:4})} + {calculo.indicePadrao.toLocaleString("pt-BR", {minimumFractionDigits:1, maximumFractionDigits:1})} = {calculo.fatorMult.toLocaleString("pt-BR", {minimumFractionDigits:3, maximumFractionDigits:3})}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", marginTop:2, background:"#dbeafe", borderRadius:4 }}>
+                <span style={{ color:"#1e40af" }}>Preço Final</span>
+                <span style={{ fontWeight:600, color:"#1e40af" }}>R$ {calculo.precoBaseVal.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})} × {calculo.fatorMult.toLocaleString("pt-BR", {minimumFractionDigits:3, maximumFractionDigits:3})} = R$ {calculo.precoM2Ef.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
               </div>
             </div>
           ) : (
@@ -6660,6 +6668,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         return Math.round(total*100)/100;
       };
 
+      console.log(`[FATOR CÔMODOS LOJA] indiceComodos=${bLoja.ic.toFixed(4)} | indicePadrao=${ipLoja.toFixed(1)} | fatorMult=${bLoja.fator.toFixed(3)}`);
       const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator)       : 0;
       const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,  true) : 0;
       const p1Comum  =               calcFaixas(atComum,  bComum.fator);
