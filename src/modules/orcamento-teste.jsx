@@ -6618,6 +6618,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const ipApto   = INDICE_PADRAO[gpApto.padrao   || padrao] || 0;
       const ipGalpao = INDICE_PADRAO[gpGalpao.padrao || padrao] || 0;
 
+      // Calcula preço base SEPARADO para cada tipo de bloco (cada um com seu próprio CUB)
+      const pbInfoLoja   = getPrecoBaseDinamico("Conj. Comercial", gpLoja.padrao || padrao, usuario, cub);
+      const pbInfoAnc    = getPrecoBaseDinamico("Conj. Comercial", gpAnc.padrao || padrao, usuario, cub);
+      const pbInfoComum  = getPrecoBaseDinamico("Conj. Comercial", gpComum.padrao || padrao, usuario, cub);
+      const pbInfoApto   = getPrecoBaseDinamico("Residencial", gpApto.padrao || padrao, usuario, cub);
+      const pbInfoGalpao = getPrecoBaseDinamico("Galpão", gpGalpao.padrao || padrao, usuario, cub);
+
+      const pbLoja   = pbInfoLoja.precoBase;
+      const pbAnc    = pbInfoAnc.precoBase;
+      const pbComum  = pbInfoComum.precoBase;
+      const pbApto   = pbInfoApto.precoBase;
+      const pbGalpao = pbInfoGalpao.precoBase;
+
       const calcBloco = (nomes, tam, ip) => {
         let ab = 0, ic = 0;
         nomes.forEach(nome => {
@@ -6643,7 +6656,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const atApto1   = bApto.ab   * (1 + ACRESCIMO_AREA);
       const atGalpao1 = bGalpao.ab * (1 + 0.10);
 
-      const calcFaixas = (area, fator, isAnc=false) => {
+      const calcFaixas = (area, fator, pbBloco, isAnc=false) => {
         const faixasDef = isAnc
           ? [{ate:300,d:0},{ate:500,d:.30},{ate:700,d:.35},{ate:1000,d:.40},{ate:Infinity,d:.45}]
           : [{ate:200,d:0},{ate:300,d:.30},{ate:400,d:.35},{ate:500,d:.40},{ate:600,d:.45},{ate:Infinity,d:.50}];
@@ -6651,7 +6664,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         for (const f of faixasDef) {
           if (rest<=0) break;
           const chunk = Math.min(rest, f.ate-acum);
-          total += pb * chunk * fator * (1-f.d);
+          total += pbBloco * chunk * fator * (1-f.d);
           rest -= chunk; acum = f.ate;
         }
         return Math.round(total*100)/100;
@@ -6667,12 +6680,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         return Math.round(total*100)/100;
       };
 
-      console.log(`[FÓRMULA CONJ.COMERCIAL] pb=${pb.toFixed(2)} × fator=${bLoja.fator.toFixed(3)} = precoM2=${(pb * bLoja.fator).toFixed(2)}`);
-      const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator)       : 0;
-      const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,  true) : 0;
-      const p1Comum  =               calcFaixas(atComum,  bComum.fator);
-      const p1Apto   = atApto1  >0 ? calcFaixas(atApto1,  bApto.fator)       : 0;
-      const p1Galpao = atGalpao1>0 ? calcFaixas(atGalpao1,bGalpao.fator)     : 0;
+      console.log(`[FÓRMULA CONJ.COMERCIAL] pbLoja=${pbLoja.toFixed(2)} pbApto=${pbApto.toFixed(2)} pbGalpao=${pbGalpao.toFixed(2)}`);
+      const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator,  pbLoja)   : 0;
+      const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,   pbAnc, true) : 0;
+      const p1Comum  =               calcFaixas(atComum,  bComum.fator, pbComum);
+      const p1Apto   = atApto1  >0 ? calcFaixas(atApto1,  bApto.fator,  pbApto)   : 0;
+      const p1Galpao = atGalpao1>0 ? calcFaixas(atGalpao1,bGalpao.fator,pbGalpao) : 0;
 
       const pLojas   = nLojas  >0&&atLoja1  >0 ? calcRep(p1Loja,   atLoja1,   nLojas)   : 0;
       const pAncoras = nAncoras>0&&atAnc1   >0 ? calcRep(p1Anc,    atAnc1,    nAncoras) : 0;
