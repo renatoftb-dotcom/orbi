@@ -4667,14 +4667,34 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   async function removeCliente(id) {
     const c = data.clientes.find(x => x.id === id);
     const nome = c?.nome || "este cliente";
+
+    // Conta orçamentos vinculados a este cliente
+    const orcsDoCliente = (data.orcamentosProjeto || []).filter(o => o.cliente_id === id);
+    const qtdOrcs = orcsDoCliente.length;
+
+    let mensagem = `${nome} será removido. Esta ação não pode ser desfeita.`;
+    if (qtdOrcs > 0) {
+      mensagem = `${nome} será removido com TODOS os ${qtdOrcs} orçamento${qtdOrcs !== 1 ? "s" : ""} vinculado${qtdOrcs !== 1 ? "s" : ""}.\n\n⚠️  Esta ação não pode ser desfeita.`;
+    }
+
     const ok = await dialogo.confirmar({
       titulo: "Remover cliente?",
-      mensagem: `${nome} será removido. Esta ação não pode ser desfeita.`,
-      confirmar: "Remover",
+      mensagem,
+      confirmar: qtdOrcs > 0 ? "Remover cliente e orçamentos" : "Remover",
       destrutivo: true,
     });
     if (!ok) return;
-    save({ ...data, clientes: data.clientes.filter(c => c.id !== id) });
+
+    // Se houver orçamentos, remove-os também
+    const novosOrcs = qtdOrcs > 0
+      ? (data.orcamentosProjeto || []).filter(o => o.cliente_id !== id)
+      : data.orcamentosProjeto;
+
+    save({
+      ...data,
+      clientes: data.clientes.filter(c => c.id !== id),
+      orcamentosProjeto: novosOrcs,
+    });
     setView("kanban");
   }
 
