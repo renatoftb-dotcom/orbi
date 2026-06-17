@@ -1381,6 +1381,9 @@ function getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub) {
                           : (tipoProjeto || "Residencial"));
   const fallback = { precoBase: tcfg.precoBase, modo: "fixo" };
 
+  // DEBUG: mostra o objeto usuario completo
+  console.log("[getPrecoBaseDinamico] usuario completo:", usuario);
+
   // Sem dados de pricing → fallback fixo (orçamento ainda funciona).
   if (!usuario || !cub) return fallback;
   const pct = (usuario.pct_calibrado != null && usuario.pct_calibrado > 0)
