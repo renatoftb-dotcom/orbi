@@ -26033,7 +26033,7 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
       const valor_calibrado = aceitouCalculado === false && analiseCalibragem && !analiseCalibragem.invalido
         ? analiseCalibragem.valor
         : null;
-      await api.onboarding.concluir({
+      const resultOnboarding = await api.onboarding.concluir({
         profissao,
         porte,
         experiencia,
@@ -26043,6 +26043,11 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
         estado,
         valor_calibrado,
       });
+
+      // Se backend retornou novo token (com estado + pct inclusos), atualiza localStorage
+      if (resultOnboarding.token) {
+        localStorage.setItem("vicke-token", resultOnboarding.token);
+      }
 
       // Cadastro inline: ambos os caminhos ("Sim, está bom" e "Quero ajustar"
       // + reconfirmação) salvam o escritório inline. Falha aqui não bloqueia
