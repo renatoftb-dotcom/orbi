@@ -6573,6 +6573,8 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     // Padrão Médio do projeto = Normal do CUB (NBR 12721).
     const _precoBaseInfo = getPrecoBaseDinamico(tipoProjeto, padrao, usuario, cub);
     const pb = _precoBaseInfo.precoBase;
+    console.log(`[CUB DIAGNÓSTICO] tipo=${tipoProjeto} | cub=${cub?"carregado":"null"} | usuario=${usuario?"sim":"null"} | modo=${_precoBaseInfo.modo} | pct=${_precoBaseInfo.pct}`);
+    if (cub && cub.CSL8) console.log(`  └─ CSL8.Normal=${cub.CSL8.Normal?.valor_m2 || "undefined"}`);
 
     if (isComercial) {
       const nomesLoja   = Object.keys(COMODOS_GALERIA_LOJA);
