@@ -3399,6 +3399,35 @@ function AreaDetalhe({ calculo, fmtNum }) {
       {aberto && (
         <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid #c8cdd6", display:"flex", flexDirection:"column", gap:5 }}>
           {calculo.isComercial ? (<>
+            {/* ── CUB (preço base) por tipo de bloco — está pegando o CUB? qual valor? ── */}
+            {(calculo.cubInfoBlocos||[]).length > 0 && (
+              <div style={{ border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 8px", marginBottom:4 }}>
+                <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>CUB — Preço base por m² (por tipo)</div>
+                {calculo.cubInfoBlocos.map((c, i) => {
+                  const ok = c.modo === "dinamico";
+                  return (
+                    <div key={i} style={{ marginTop: i>0?6:0, paddingTop: i>0?6:0, borderTop: i>0?"1px dashed #dde0e5":"none" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, fontWeight:600 }}>
+                        <span style={{ color:"#374151" }}>{c.label} <span style={{ fontWeight:400, color:"#9aa1ac" }}>({c.padraoSel})</span></span>
+                        <span style={{ color: ok?"#15803d":"#b91c1c" }}>
+                          {ok ? `✓ ${c.categoria} ${c.padraoCub}` : "⚠ FIXO (não pegou CUB)"}
+                        </span>
+                      </div>
+                      {ok ? (
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:2 }}>
+                          <span style={{ color:"#6b7280" }}>R$ {fmt2(c.cubM2)}/m² × {(c.pct*100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}%</span>
+                          <span style={{ color:"#15803d", fontWeight:600 }}>= R$ {fmt2(c.precoBase)}/m²</span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:10, color:"#b91c1c", marginTop:2 }}>
+                          Base fixa R$ {fmt2(c.precoBase)}/m² — verifique cub.{c.label==="Apartamento"?"R1":c.label==="Galpão"?"GI":"CSL8"} / pct de calibragem / onboarding.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
             {row(`+ ${pct(calculo.acrescimoCirk)} Circulação`, `+${fmt2(Math.round(calculo.areaBruta*calculo.acrescimoCirk*100)/100)} m²`)}
             {(calculo.blocosCom||[]).map((b,i) => (
@@ -6707,8 +6736,32 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         nAptos   >0&&atApto1  >0 ? {label:"Apartamento",  n:nAptos,   area1:atApto1,   precoUni:p1Apto,   precoTot:pAptos}   : null,
         nGalpoes >0&&atGalpao1>0 ? {label:"Galpão",       n:nGalpoes, area1:atGalpao1, precoUni:p1Galpao, precoTot:pGalpoes} : null,
       ].filter(Boolean);
+
+      // ── Diagnóstico de CUB por bloco (Resumo Cálculo) ──────────────
+      // Cada bloco usa o SEU CUB: Loja/Âncora/Comum → CSL-8, Apartamento → R-1,
+      // Galpão → GI. Mostra se veio do CUB (dinâmico) ou caiu em fixo, com
+      // categoria / padrão CUB / valor do CUB / % calibragem / preço base.
+      const _diagBloco = (label, info, padraoSel) => ({
+        label,
+        modo:      info.modo,                 // "dinamico" | "fixo"
+        categoria: info.categoria || null,    // "CSL-8" | "R-1" | "GI"
+        padraoSel,                            // padrão escolhido no bloco
+        padraoCub: info.padraoCub || null,    // padrão mapeado p/ o CUB
+        cubM2:     info.cubM2 || null,        // R$ do CUB/m²
+        pct:       info.pct || null,          // fração de calibragem
+        precoBase: info.precoBase,            // R$ base/m² resultante
+      });
+      const cubInfoBlocos = [
+        (nLojas>0&&atLoja1>0)     ? _diagBloco("Loja",        pbInfoLoja,   gpLoja.padrao||padrao)   : null,
+        (nAncoras>0&&atAnc1>0)    ? _diagBloco("Âncora",      pbInfoAnc,    gpAnc.padrao||padrao)    : null,
+        (atComum>0)               ? _diagBloco("Área Comum",  pbInfoComum,  gpComum.padrao||padrao)  : null,
+        (nAptos>0&&atApto1>0)     ? _diagBloco("Apartamento", pbInfoApto,   gpApto.padrao||padrao)   : null,
+        (nGalpoes>0&&atGalpao1>0) ? _diagBloco("Galpão",      pbInfoGalpao, gpGalpao.padrao||padrao) : null,
+      ].filter(Boolean);
+
       return {
         isComercial: true,
+        cubInfoBlocos,
         areaBruta: bLoja.ab*nLojas+bAnc.ab*nAncoras+bComum.ab+bApto.ab*nAptos+bGalpao.ab*nGalpoes,
         areaPiscina:0, areaTotal:areaTot, areaTot,
         precoArq1, precoArq:precoArq1, precoEng1, precoEng:precoEng1,

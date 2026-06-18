@@ -2382,16 +2382,16 @@ async function loadAllData(estado = null) {
     cub = {
       estado,
       R1: {
-        Baixo: r1Baixo,
-        Normal: r1Normal,
-        Alto: r1Alto,
+        Baixo: r1Baixo?.data || r1Baixo,
+        Normal: r1Normal?.data || r1Normal,
+        Alto: r1Alto?.data || r1Alto,
       },
       CSL8: {
-        Normal: csl8Normal,
-        Alto: csl8Alto,
+        Normal: csl8Normal?.data || csl8Normal,
+        Alto: csl8Alto?.data || csl8Alto,
       },
       GI: {
-        Unico: giUnico,
+        Unico: giUnico?.data || giUnico,
       },
     };
   }
@@ -14533,6 +14533,35 @@ function AreaDetalhe({ calculo, fmtNum }) {
       {aberto && (
         <div style={{ marginTop:12, paddingTop:10, borderTop:"1px solid #c8cdd6", display:"flex", flexDirection:"column", gap:5 }}>
           {calculo.isComercial ? (<>
+            {/* ── CUB (preço base) por tipo de bloco — está pegando o CUB? qual valor? ── */}
+            {(calculo.cubInfoBlocos||[]).length > 0 && (
+              <div style={{ border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 8px", marginBottom:4 }}>
+                <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>CUB — Preço base por m² (por tipo)</div>
+                {calculo.cubInfoBlocos.map((c, i) => {
+                  const ok = c.modo === "dinamico";
+                  return (
+                    <div key={i} style={{ marginTop: i>0?6:0, paddingTop: i>0?6:0, borderTop: i>0?"1px dashed #dde0e5":"none" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, fontWeight:600 }}>
+                        <span style={{ color:"#374151" }}>{c.label} <span style={{ fontWeight:400, color:"#9aa1ac" }}>({c.padraoSel})</span></span>
+                        <span style={{ color: ok?"#15803d":"#b91c1c" }}>
+                          {ok ? `✓ ${c.categoria} ${c.padraoCub}` : "⚠ FIXO (não pegou CUB)"}
+                        </span>
+                      </div>
+                      {ok ? (
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:2 }}>
+                          <span style={{ color:"#6b7280" }}>R$ {fmt2(c.cubM2)}/m² × {(c.pct*100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}%</span>
+                          <span style={{ color:"#15803d", fontWeight:600 }}>= R$ {fmt2(c.precoBase)}/m²</span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:10, color:"#b91c1c", marginTop:2 }}>
+                          Base fixa R$ {fmt2(c.precoBase)}/m² — verifique cub.{c.label==="Apartamento"?"R1":c.label==="Galpão"?"GI":"CSL8"} / pct de calibragem / onboarding.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
             {row(`+ ${pct(calculo.acrescimoCirk)} Circulação`, `+${fmt2(Math.round(calculo.areaBruta*calculo.acrescimoCirk*100)/100)} m²`)}
             {(calculo.blocosCom||[]).map((b,i) => (
@@ -17752,6 +17781,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const ipApto   = INDICE_PADRAO[gpApto.padrao   || padrao] || 0;
       const ipGalpao = INDICE_PADRAO[gpGalpao.padrao || padrao] || 0;
 
+      // Calcula preço base SEPARADO para cada tipo de bloco (cada um com seu próprio CUB)
+      const pbInfoLoja   = getPrecoBaseDinamico("Conj. Comercial", gpLoja.padrao || padrao, usuario, cub);
+      const pbInfoAnc    = getPrecoBaseDinamico("Conj. Comercial", gpAnc.padrao || padrao, usuario, cub);
+      const pbInfoComum  = getPrecoBaseDinamico("Conj. Comercial", gpComum.padrao || padrao, usuario, cub);
+      const pbInfoApto   = getPrecoBaseDinamico("Residencial", gpApto.padrao || padrao, usuario, cub);
+      const pbInfoGalpao = getPrecoBaseDinamico("Galpão", gpGalpao.padrao || padrao, usuario, cub);
+
+      const pbLoja   = pbInfoLoja.precoBase;
+      const pbAnc    = pbInfoAnc.precoBase;
+      const pbComum  = pbInfoComum.precoBase;
+      const pbApto   = pbInfoApto.precoBase;
+      const pbGalpao = pbInfoGalpao.precoBase;
+
       const calcBloco = (nomes, tam, ip) => {
         let ab = 0, ic = 0;
         nomes.forEach(nome => {
@@ -17777,7 +17819,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const atApto1   = bApto.ab   * (1 + ACRESCIMO_AREA);
       const atGalpao1 = bGalpao.ab * (1 + 0.10);
 
-      const calcFaixas = (area, fator, isAnc=false) => {
+      const calcFaixas = (area, fator, pbBloco, isAnc=false) => {
         const faixasDef = isAnc
           ? [{ate:300,d:0},{ate:500,d:.30},{ate:700,d:.35},{ate:1000,d:.40},{ate:Infinity,d:.45}]
           : [{ate:200,d:0},{ate:300,d:.30},{ate:400,d:.35},{ate:500,d:.40},{ate:600,d:.45},{ate:Infinity,d:.50}];
@@ -17785,7 +17827,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         for (const f of faixasDef) {
           if (rest<=0) break;
           const chunk = Math.min(rest, f.ate-acum);
-          total += pb * chunk * fator * (1-f.d);
+          total += pbBloco * chunk * fator * (1-f.d);
           rest -= chunk; acum = f.ate;
         }
         return Math.round(total*100)/100;
@@ -17801,12 +17843,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         return Math.round(total*100)/100;
       };
 
-      console.log(`[FÓRMULA CONJ.COMERCIAL] pb=${pb.toFixed(2)} × fator=${bLoja.fator.toFixed(3)} = precoM2=${(pb * bLoja.fator).toFixed(2)}`);
-      const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator)       : 0;
-      const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,  true) : 0;
-      const p1Comum  =               calcFaixas(atComum,  bComum.fator);
-      const p1Apto   = atApto1  >0 ? calcFaixas(atApto1,  bApto.fator)       : 0;
-      const p1Galpao = atGalpao1>0 ? calcFaixas(atGalpao1,bGalpao.fator)     : 0;
+      console.log(`[FÓRMULA CONJ.COMERCIAL] pbLoja=${pbLoja.toFixed(2)} pbApto=${pbApto.toFixed(2)} pbGalpao=${pbGalpao.toFixed(2)}`);
+      const p1Loja   = atLoja1  >0 ? calcFaixas(atLoja1,  bLoja.fator,  pbLoja)   : 0;
+      const p1Anc    = atAnc1   >0 ? calcFaixas(atAnc1,   bAnc.fator,   pbAnc, true) : 0;
+      const p1Comum  =               calcFaixas(atComum,  bComum.fator, pbComum);
+      const p1Apto   = atApto1  >0 ? calcFaixas(atApto1,  bApto.fator,  pbApto)   : 0;
+      const p1Galpao = atGalpao1>0 ? calcFaixas(atGalpao1,bGalpao.fator,pbGalpao) : 0;
 
       const pLojas   = nLojas  >0&&atLoja1  >0 ? calcRep(p1Loja,   atLoja1,   nLojas)   : 0;
       const pAncoras = nAncoras>0&&atAnc1   >0 ? calcRep(p1Anc,    atAnc1,    nAncoras) : 0;
@@ -17828,8 +17870,32 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         nAptos   >0&&atApto1  >0 ? {label:"Apartamento",  n:nAptos,   area1:atApto1,   precoUni:p1Apto,   precoTot:pAptos}   : null,
         nGalpoes >0&&atGalpao1>0 ? {label:"Galpão",       n:nGalpoes, area1:atGalpao1, precoUni:p1Galpao, precoTot:pGalpoes} : null,
       ].filter(Boolean);
+
+      // ── Diagnóstico de CUB por bloco (Resumo Cálculo) ──────────────
+      // Cada bloco usa o SEU CUB: Loja/Âncora/Comum → CSL-8, Apartamento → R-1,
+      // Galpão → GI. Mostra se veio do CUB (dinâmico) ou caiu em fixo, com
+      // categoria / padrão CUB / valor do CUB / % calibragem / preço base.
+      const _diagBloco = (label, info, padraoSel) => ({
+        label,
+        modo:      info.modo,                 // "dinamico" | "fixo"
+        categoria: info.categoria || null,    // "CSL-8" | "R-1" | "GI"
+        padraoSel,                            // padrão escolhido no bloco
+        padraoCub: info.padraoCub || null,    // padrão mapeado p/ o CUB
+        cubM2:     info.cubM2 || null,        // R$ do CUB/m²
+        pct:       info.pct || null,          // fração de calibragem
+        precoBase: info.precoBase,            // R$ base/m² resultante
+      });
+      const cubInfoBlocos = [
+        (nLojas>0&&atLoja1>0)     ? _diagBloco("Loja",        pbInfoLoja,   gpLoja.padrao||padrao)   : null,
+        (nAncoras>0&&atAnc1>0)    ? _diagBloco("Âncora",      pbInfoAnc,    gpAnc.padrao||padrao)    : null,
+        (atComum>0)               ? _diagBloco("Área Comum",  pbInfoComum,  gpComum.padrao||padrao)  : null,
+        (nAptos>0&&atApto1>0)     ? _diagBloco("Apartamento", pbInfoApto,   gpApto.padrao||padrao)   : null,
+        (nGalpoes>0&&atGalpao1>0) ? _diagBloco("Galpão",      pbInfoGalpao, gpGalpao.padrao||padrao) : null,
+      ].filter(Boolean);
+
       return {
         isComercial: true,
+        cubInfoBlocos,
         areaBruta: bLoja.ab*nLojas+bAnc.ab*nAncoras+bComum.ab+bApto.ab*nAptos+bGalpao.ab*nGalpoes,
         areaPiscina:0, areaTotal:areaTot, areaTot,
         precoArq1, precoArq:precoArq1, precoEng1, precoEng:precoEng1,
