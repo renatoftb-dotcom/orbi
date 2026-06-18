@@ -791,11 +791,39 @@ app.put("/api/clientes/:id", async (req, res) => {
 });
 
 app.delete("/api/clientes/:id", async (req, res) => {
+  const eid = empresaId(req, res); if (!eid) return;
+  // Deleta o cliente E tudo que pende dele, em cascata, dentro de uma
+  // transação (tudo apaga ou nada). Ordem: receitas → orçamentos → cliente,
+  // pra respeitar as dependências (receita aponta pra orçamento/cliente).
+  const client = await pool.connect();
   try {
-    const eid = empresaId(req, res); if (!eid) return;
-    await query("DELETE FROM clientes WHERE id=$1 AND empresa_id=$2", [req.params.id, eid]);
+    await client.query("BEGIN");
+    // Receitas vinculadas ao cliente (direto ou via orçamentos dele).
+    await client.query(
+      `DELETE FROM receitas_financeiro
+        WHERE empresa_id = $2
+          AND (cliente_id = $1
+               OR orc_id IN (SELECT id FROM orcamentos_projeto WHERE cliente_id = $1 AND empresa_id = $2))`,
+      [req.params.id, eid]
+    );
+    // Orçamentos do cliente.
+    await client.query(
+      "DELETE FROM orcamentos_projeto WHERE cliente_id=$1 AND empresa_id=$2",
+      [req.params.id, eid]
+    );
+    // O cliente em si.
+    await client.query(
+      "DELETE FROM clientes WHERE id=$1 AND empresa_id=$2",
+      [req.params.id, eid]
+    );
+    await client.query("COMMIT");
     ok(res, { id: req.params.id });
-  } catch(e) { err(res, e.message); }
+  } catch(e) {
+    await client.query("ROLLBACK").catch(() => {});
+    err(res, e.message);
+  } finally {
+    client.release();
+  }
 });
 
 // ══════════════════════════════════════════════════════════════
