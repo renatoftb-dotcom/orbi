@@ -126,6 +126,48 @@ const api = {
     clear:  ()     => put("/api/logo", { data: null }),
   },
 
+  // ── UPLOADS (Cloudinary) ────────────────────────────────────
+  // Substituirá gradualmente o padrão antigo de base64 no Postgres.
+  // 3 categorias: 'logo', 'capa_escritorio', 'imagem_projeto'.
+  // Limites por categoria checados no backend; frontend valida tamanho
+  // antes pra dar feedback rápido.
+  uploads: {
+    // Envia File/Blob via multipart. Retorna { url, public_id, width, height, bytes, formato }.
+    // Diferente das outras chamadas: NÃO usa req() porque precisa de FormData
+    // (multipart) em vez de JSON. Token vai no header como sempre.
+    send: async (arquivo, categoria) => {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+      const fd = new FormData();
+      fd.append("arquivo", arquivo);
+      fd.append("categoria", categoria);
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      // NÃO seta Content-Type — o browser monta o boundary do multipart sozinho.
+      const res = await fetch(`${_API_URL}/api/uploads`, {
+        method: "POST",
+        headers,
+        body: fd,
+      });
+      if (res.status === 401 && !_sessionExpiredHandled) {
+        _sessionExpiredHandled = true;
+        try { localStorage.removeItem("vicke-token"); localStorage.removeItem("vicke-user"); } catch {}
+        if (typeof location !== "undefined") location.reload();
+        throw new Error("Sessão expirada — faça login novamente");
+      }
+      const json = await res.json();
+      if (!json.ok) {
+        const erro = new Error(json.error || "Erro no upload");
+        erro.status = res.status;
+        throw erro;
+      }
+      return json.data;
+    },
+    // Remove imagem pelo public_id (do Cloudinary + marca inativa no log).
+    remove: (public_id) => req("DELETE", "/api/uploads", { public_id }),
+    // Lista uploads ativos da empresa (debug/admin). Retorna { uploads, quotas }.
+    list:   (categoria) => get(`/api/uploads${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ""}`),
+  },
+
   config: {
     get:  (chave)        => get(`/api/config/${chave}`),
     save: (chave, dados) => put(`/api/config/${chave}`, dados),
@@ -135,15 +177,20 @@ const api = {
   admin: {
     empresas: {
       list:   ()           => get("/admin/empresas"),
+      get:    (id)         => get(`/admin/empresas/${id}`),
       save:   (e)          => post("/admin/empresas", e),
       update: (id, e)      => put(`/admin/empresas/${id}`, e),
       delete: (id)         => del(`/admin/empresas/${id}`),
     },
     usuarios: {
-      list:   ()           => get("/admin/usuarios"),
-      save:   (u)          => post("/admin/usuarios", u),
-      update: (id, u)      => put(`/admin/usuarios/${id}`, u),
-      delete: (id)         => del(`/admin/usuarios/${id}`),
+      list:       ()           => get("/admin/usuarios"),
+      save:       (u)          => post("/admin/usuarios", u),
+      update:     (id, u)      => put(`/admin/usuarios/${id}`, u),
+      delete:     (id)         => del(`/admin/usuarios/${id}`),
+      // Reset administrativo: gera senha aleatória, retorna em texto puro.
+      // Master pode resetar qualquer usuário (qualquer empresa). Backend
+      // bloqueia self-reset (use /auth/trocar-senha pra trocar a própria).
+      resetSenha: (id)         => post(`/admin/usuarios/${id}/reset-senha`),
     },
     mensagens: {
       // Caixa de email do Master (Sprint 3 Bloco E).
@@ -153,18 +200,102 @@ const api = {
       marcarLida:  (id)     => put(`/admin/mensagens/${id}/lida`, {}),
       marcarNaoLida:(id)    => put(`/admin/mensagens/${id}/nao-lida`, {}),
       delete:      (id)     => del(`/admin/mensagens/${id}`),
+      responder:   (id, dados) => post(`/admin/mensagens/${id}/responder`, dados),
     },
     manutencao: ()         => post("/admin/manutencao"),
+    dashboard:  ()         => get("/admin/dashboard"),
+
+    // Caixa de feedback in-app — listagem master com filtros, controle de status.
+    // Diferente de admin.mensagens (que é caixa de email externo via Resend webhook).
+    feedback: {
+      list: (filtros = {}) => {
+        const qs = new URLSearchParams();
+        if (filtros.categoria) qs.set("categoria", filtros.categoria);
+        if (filtros.status)    qs.set("status", filtros.status);
+        if (filtros.busca)     qs.set("busca", filtros.busca);
+        const s = qs.toString();
+        return get(`/admin/feedback${s ? "?" + s : ""}`);
+      },
+      get:    (id)        => get(`/admin/feedback/${id}`),
+      update: (id, dados) => put(`/admin/feedback/${id}`, dados),
+      delete: (id)        => del(`/admin/feedback/${id}`),
+    },
+
+    // CUB — Custo Unitário Básico (Sprint 1)
+    cub: {
+      list:      ()           => get("/api/cub"),                    // todos os valores
+      listEstado:(uf)         => get(`/api/cub/${uf}`),              // valores de um estado
+      // Valor atual (mais recente) pra uma combinação estado/categoria/padrão.
+      // Usado no onboarding (mostra exemplo de cálculo) e no orçamento (Sprint 3).
+      // Padrão default = "Normal" (NBR 12721); UI pode mostrar como "Médio".
+      atual:     (estado, categoria = "R-1", padrao = "Normal") =>
+                   get(`/api/cub/atual?estado=${encodeURIComponent(estado)}&categoria=${encodeURIComponent(categoria)}&padrao=${encodeURIComponent(padrao)}`),
+      atualizar: (estados)    => post("/admin/cub/atualizar", estados ? { estados } : {}),
+      log:       (limit = 50) => get(`/admin/cub/log?limit=${limit}`),
+      status:    ()           => get("/admin/cub/status"),
+    },
+  },
+
+  // ── ONBOARDING (Sprint 3 — modelo pricing baseado em CUB) ──
+  // Tela bloqueante pra empresas novas: 6 perguntas + estado + calibragem.
+  // Resultado: pct_matriz_calculado / pct_calibrado salvos na empresa.
+  onboarding: {
+    // Retorna a matriz de ratings (faixas + labels) pra renderizar opções.
+    matriz:   ()       => get("/api/onboarding/matriz"),
+    // Body: { profissao, porte, experiencia, referencia, padrao_projetos,
+    //         capital, estado, valor_calibrado? }
+    concluir: (dados)  => post("/api/onboarding/concluir", dados),
+  },
+
+  // ── DEV MODE (rotas de reset gated por escritorio.dev_mode no backend) ──
+  // Disponível só pra empresas em modo dev (Vicke Dev). UI esconde os
+  // botões pra outras empresas; backend re-checa.
+  dev: {
+    resetOrcamentos:         () => post("/api/dev/reset/orcamentos", {}),
+    resetOnboardingEmpresa:  () => post("/api/dev/reset/onboarding-empresa", {}),
+    resetOnboardingOrcamento:() => post("/api/dev/reset/onboarding-orcamento", {}),
+    resetTudo:               () => post("/api/dev/reset/tudo", {}),
+  },
+
+  // ── CUB top-level (atalho pra usar fora do contexto admin) ──
+  // Permite api.cub.atual(...) sem ter que digitar api.admin.cub.atual.
+  // Usado pelo onboarding e pelo orçamento (Sprint 3).
+  cub: {
+    atual: (estado, categoria = "R-1", padrao = "Normal") =>
+             get(`/api/cub/atual?estado=${encodeURIComponent(estado)}&categoria=${encodeURIComponent(categoria)}&padrao=${encodeURIComponent(padrao)}`),
   },
 
   // ── EMPRESA/USUÁRIOS (admin do escritório) ─────────────────
   empresa: {
     usuarios: {
-      list:   ()           => get("/empresa/usuarios"),
-      save:   (u)          => post("/empresa/usuarios", u),
-      update: (id, u)      => put(`/empresa/usuarios/${id}`, u),
-      delete: (id)         => del(`/empresa/usuarios/${id}`),
+      list:       ()           => get("/empresa/usuarios"),
+      save:       (u)          => post("/empresa/usuarios", u),
+      update:     (id, u)      => put(`/empresa/usuarios/${id}`, u),
+      delete:     (id)         => del(`/empresa/usuarios/${id}`),
+      // Admin de empresa só reseta colegas da própria empresa (backend valida).
+      // Não pode resetar usuário master nem a si mesmo.
+      resetSenha: (id)         => post(`/empresa/usuarios/${id}/reset-senha`),
     },
+  },
+
+  // ── AUTH (qualquer usuário autenticado) ────────────────────
+  auth: {
+    me:           ()                          => get("/auth/me"),
+    // Troca da própria senha. Exige senha atual pra prevenir abuso de
+    // sessão sequestrada. Zera precisa_trocar_senha se a flag estiver setada.
+    trocarSenha:  (senha_atual, senha_nova)   => post("/auth/trocar-senha", { senha_atual, senha_nova }),
+    // Recuperação de senha self-service (público — sem token JWT).
+    // recuperar: usuário pede via email; backend manda link com token único.
+    // redefinir: usuário usa o token do link pra setar senha nova.
+    recuperar:    (email)                     => post("/auth/recuperar-senha", { email }),
+    redefinir:    (token, senha_nova)         => post("/auth/redefinir-senha", { token, senha_nova }),
+  },
+
+  // ── FEEDBACK IN-APP (qualquer usuário autenticado) ─────────
+  // Botão flutuante no app dispara aqui. Backend grava em feedback_app
+  // com snapshot de quem enviou + empresa.
+  feedback: {
+    enviar: (categoria, texto) => post("/feedback", { categoria, texto }),
   },
 
   backup: {
@@ -178,7 +309,44 @@ const api = {
 // ── Carrega todos os dados de uma vez ──────────────────────────
 // Substitui o DB.get("obramanager-v1") do sistema antigo.
 // Escritório agora vem com logo embutido (um só request).
-async function loadAllData() {
+// Sprint 3: também carrega CUB (Baixo/Normal/Alto) do estado da empresa
+// em paralelo, pra ficar disponível no orçamento desde o boot.
+// Se estado for null (empresa sem onboarding), pula a busca do CUB
+// — orçamento usa fallback R$ 45 fixo nesse caso.
+async function loadAllData(estado = null) {
+  // Promises base (sempre carregadas)
+  const promisesBase = [
+    api.clientes.list(),
+    api.fornecedores.list(),
+    api.materiais.list(),
+    api.obras.list(),
+    api.lancamentos.list(),
+    api.orcamentos.list(),
+    api.receitas.list(),
+    api.escritorio.get(),
+  ];
+
+  // Promises do CUB (só se estado disponível).
+  // Carrega categorias específicas por tipo de projeto:
+  // - R-1 para Residencial/Clínica (padrões: Baixo, Normal, Alto)
+  // - CSL-8 para Conj. Comercial (padrões: Normal, Alto + fallback Baixo→Normal)
+  // - PP-4 para Apartamento (Prédio Popular; padrões: Baixo, Normal)
+  // - GI para Galpão (padrão único)
+  const cubPromises = estado ? [
+    // R-1 (Residencial/Clínica)
+    api.cub.atual(estado, "R-1", "Baixo").catch(() => null),
+    api.cub.atual(estado, "R-1", "Normal").catch(() => null),
+    api.cub.atual(estado, "R-1", "Alto").catch(() => null),
+    // CSL-8 (Conj. Comercial)
+    api.cub.atual(estado, "CSL-8", "Normal").catch(() => null),
+    api.cub.atual(estado, "CSL-8", "Alto").catch(() => null),
+    // PP-4 (Apartamento — Prédio Popular)
+    api.cub.atual(estado, "PP-4", "Baixo").catch(() => null),
+    api.cub.atual(estado, "PP-4", "Normal").catch(() => null),
+    // GI (Galpão)
+    api.cub.atual(estado, "GI", "Único").catch(() => null),
+  ] : Array(8).fill(Promise.resolve(null));
+
   const [
     clientes,
     fornecedores,
@@ -188,16 +356,40 @@ async function loadAllData() {
     orcamentosProjeto,
     receitasFinanceiro,
     escritorio,
-  ] = await Promise.all([
-    api.clientes.list(),
-    api.fornecedores.list(),
-    api.materiais.list(),
-    api.obras.list(),
-    api.lancamentos.list(),
-    api.orcamentos.list(),
-    api.receitas.list(),
-    api.escritorio.get(),
-  ]);
+    r1Baixo, r1Normal, r1Alto,
+    csl8Normal, csl8Alto,
+    pp4Baixo, pp4Normal,
+    giUnico,
+  ] = await Promise.all([...promisesBase, ...cubPromises]);
+
+  // DEBUG: mostra valores brutos antes de processar
+  console.log("[loadAllData] CUB bruto:", { r1Baixo, r1Normal, r1Alto, csl8Normal, csl8Alto, pp4Baixo, pp4Normal, giUnico });
+
+  // Monta objeto cub estruturado por categoria.
+  // Cada categoria pode ter padrões nulos se a API falhar.
+  // getPrecoBaseDinamico já lida com isso retornando fallback fixo.
+  let cub = null;
+  if (estado && (r1Baixo || r1Normal || r1Alto || csl8Normal || csl8Alto || pp4Baixo || pp4Normal || giUnico)) {
+    cub = {
+      estado,
+      R1: {
+        Baixo: r1Baixo?.data || r1Baixo,
+        Normal: r1Normal?.data || r1Normal,
+        Alto: r1Alto?.data || r1Alto,
+      },
+      CSL8: {
+        Normal: csl8Normal?.data || csl8Normal,
+        Alto: csl8Alto?.data || csl8Alto,
+      },
+      PP4: {
+        Baixo: pp4Baixo?.data || pp4Baixo,
+        Normal: pp4Normal?.data || pp4Normal,
+      },
+      GI: {
+        Unico: giUnico?.data || giUnico,
+      },
+    };
+  }
 
   return {
     clientes,
@@ -209,6 +401,7 @@ async function loadAllData() {
     receitasFinanceiro,
     // escritorio já vem com { ...dados, logo } do backend
     escritorio: escritorio || {},
+    cub,
   };
 }
 
