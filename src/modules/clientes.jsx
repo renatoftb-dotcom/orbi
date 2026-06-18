@@ -355,7 +355,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const nome = c?.nome || "este cliente";
 
     // Conta orçamentos vinculados a este cliente
-    const orcsDoCliente = (data.orcamentosProjeto || []).filter(o => o.cliente_id === id);
+    const orcsDoCliente = (data.orcamentosProjeto || []).filter(o => o.clienteId === id);
     const qtdOrcs = orcsDoCliente.length;
 
     let mensagem = `${nome} será removido. Esta ação não pode ser desfeita.`;
@@ -373,7 +373,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
     // Se houver orçamentos, remove-os também
     const novosOrcs = qtdOrcs > 0
-      ? (data.orcamentosProjeto || []).filter(o => o.cliente_id !== id)
+      ? (data.orcamentosProjeto || []).filter(o => o.clienteId !== id)
       : data.orcamentosProjeto;
 
     save({

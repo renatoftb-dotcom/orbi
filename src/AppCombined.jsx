@@ -4687,7 +4687,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const nome = c?.nome || "este cliente";
 
     // Conta orçamentos vinculados a este cliente
-    const orcsDoCliente = (data.orcamentosProjeto || []).filter(o => o.cliente_id === id);
+    const orcsDoCliente = (data.orcamentosProjeto || []).filter(o => o.clienteId === id);
     const qtdOrcs = orcsDoCliente.length;
 
     let mensagem = `${nome} será removido. Esta ação não pode ser desfeita.`;
@@ -4705,7 +4705,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
     // Se houver orçamentos, remove-os também
     const novosOrcs = qtdOrcs > 0
-      ? (data.orcamentosProjeto || []).filter(o => o.cliente_id !== id)
+      ? (data.orcamentosProjeto || []).filter(o => o.clienteId !== id)
       : data.orcamentosProjeto;
 
     save({
@@ -14608,6 +14608,35 @@ function AreaDetalhe({ calculo, fmtNum }) {
               ))}
             </div>
           </>) : (<>
+            {/* CUB (preço base) por tipo de projeto — está pegando o CUB? qual valor? */}
+            {(calculo.cubInfoBlocos||[]).length > 0 && (
+              <div style={{ border:"1px solid #c8cdd6", borderRadius:6, padding:"6px 8px", marginBottom:4 }}>
+                <div style={{ fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>CUB — Preço base por m²</div>
+                {calculo.cubInfoBlocos.map((c, i) => {
+                  const ok = c.modo === "dinamico";
+                  return (
+                    <div key={i} style={{ marginTop: i>0?6:0, paddingTop: i>0?6:0, borderTop: i>0?"1px dashed #dde0e5":"none" }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, fontWeight:600 }}>
+                        <span style={{ color:"#374151" }}>{c.label} <span style={{ fontWeight:400, color:"#9aa1ac" }}>({c.padraoSel})</span></span>
+                        <span style={{ color: ok?"#15803d":"#b91c1c" }}>
+                          {ok ? `✓ ${c.categoria} ${c.padraoCub}` : "⚠ FIXO (não pegou CUB)"}
+                        </span>
+                      </div>
+                      {ok ? (
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, marginTop:2 }}>
+                          <span style={{ color:"#6b7280" }}>R$ {fmt2(c.cubM2)}/m² × {(c.pct*100).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})}%</span>
+                          <span style={{ color:"#15803d", fontWeight:600 }}>= R$ {fmt2(c.precoBase)}/m²</span>
+                        </div>
+                      ) : (
+                        <div style={{ fontSize:10, color:"#b91c1c", marginTop:2 }}>
+                          Base fixa R$ {fmt2(c.precoBase)}/m² — verifique cub.{c.cubKey||"R1"} / pct de calibragem / onboarding.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {calculo.nRep > 1 && row(`Área Total (${calculo.nRep}x)`, `${fmt2(calculo.areaTotal)} m² → Total ${fmt2(calculo.areaTot)} m²`)}
             {row("Total de ambientes", calculo.totalAmbientes)}
             {row("Área útil", fmt2(calculo.areaBruta)+" m²")}
@@ -17971,6 +18000,19 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       nRep, pctRep, unidades,
       indiceComodos, indicePadrao, fatorMult,
       precoBaseVal, precoM2Ef,
+      // Demonstração do CUB para tipos não-comerciais (bloco único):
+      // Residencial/Clínica → R-1, Galpão → GI. Mesmo formato do comercial.
+      cubInfoBlocos: [{
+        label: tipoProjeto || "Projeto",
+        modo: _precoBaseInfo.modo,
+        categoria: _precoBaseInfo.categoria || null,
+        padraoSel: padrao,
+        padraoCub: _precoBaseInfo.padraoCub || null,
+        cubM2: _precoBaseInfo.cubM2 || null,
+        pct: _precoBaseInfo.pct || null,
+        precoBase: precoBaseVal,
+        cubKey: (tipoProjeto === "Galpão") ? "GI" : "R1",
+      }],
       faixasArqDet, faixasEng: engCalc.faixas,
       totalAmbientes,
       acrescimoCirk: tcfg.acrescimoCirk,
@@ -20016,7 +20058,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 <div key={grupo} style={{ marginBottom:14 }}>
                   {/* Header: retângulo cinza com bordas arredondadas */}
                   <div data-vk-grupo-header style={{
-                    display:"flex", alignItems:"center", gap:10,
+                    display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", rowGap:6,
                     background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
                     padding:"5px 10px",
                     marginBottom: recolhido ? 0 : 8,
