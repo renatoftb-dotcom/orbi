@@ -14554,7 +14554,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
                         </div>
                       ) : (
                         <div style={{ fontSize:10, color:"#b91c1c", marginTop:2 }}>
-                          Base fixa R$ {fmt2(c.precoBase)}/m² — verifique cub.{c.label==="Apartamento"?"R1":c.label==="Galpão"?"GI":"CSL8"} / pct de calibragem / onboarding.
+                          Base fixa R$ {fmt2(c.precoBase)}/m² — verifique cub.{c.label==="Apartamento"?"PP4":c.label==="Galpão"?"GI":"CSL8"} / pct de calibragem / onboarding.
                         </div>
                       )}
                     </div>
@@ -14675,54 +14675,6 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
 
   return (
     <>
-      {/* RESUMO DO CÁLCULO — CUB e precificação */}
-      {calculo.cubInfo && (
-        <div style={{ background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:6, padding:"10px 12px", marginBottom:14, fontSize:11 }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-            <div style={{ fontSize:10, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, fontWeight:600 }}>Cálculo de Precificação</div>
-            <span style={{ fontSize:10, color:"#9ca3af", fontStyle:"italic" }}>{calculo.cubInfo.modo === "dinamico" ? "CUB " + calculo.cubInfo.categoria + " (" + calculo.cubInfo.padraoCub + ")" : "Preço fixo"}</span>
-          </div>
-          {calculo.cubInfo.modo === "dinamico" && calculo.cubInfo.pct != null && calculo.cubInfo.cubM2 != null ? (
-            <div style={{ display:"flex", flexDirection:"column", gap:6, fontSize:11, color:"#374151" }}>
-              <div style={{ display:"flex", justifyContent:"space-between", paddingBottom:6, borderBottom:"1px solid #d1d5db" }}>
-                <span style={{ color:"#6b7280" }}>Categoria do CUB</span>
-                <span style={{ fontWeight:500 }}>{calculo.cubInfo.categoria === "R-1" ? "R-1 (Residencial)" : calculo.cubInfo.categoria === "CSL-8" ? "CSL-8 (Salas Comerciais)" : "GI (Galpão)"}</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", paddingBottom:6, borderBottom:"1px solid #d1d5db" }}>
-                <span style={{ color:"#6b7280" }}>Padrão do CUB</span>
-                <span style={{ fontWeight:500 }}>{calculo.cubInfo.padraoCub === "Unico" ? "Único" : calculo.cubInfo.padraoCub === "Normal" ? "Normal (Médio)" : calculo.cubInfo.padraoCub}</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", paddingBottom:6, borderBottom:"1px solid #d1d5db" }}>
-                <span style={{ color:"#6b7280" }}>Valor do CUB</span>
-                <span style={{ fontWeight:500 }}>R$ {calculo.cubInfo.cubM2.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", paddingBottom:6, borderBottom:"1px solid #d1d5db" }}>
-                <span style={{ color:"#6b7280" }}>Percentual da empresa</span>
-                <span style={{ fontWeight:500 }}>{(calculo.cubInfo.pct * 100).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}%</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", background:"#f0fdf4", borderRadius:4 }}>
-                <span style={{ color:"#4b5563" }}>Preço Base</span>
-                <span style={{ fontWeight:600, color:"#15803d" }}>R$ {calculo.cubInfo.cubM2.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})} × {(calculo.cubInfo.pct * 100).toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}% = R$ {calculo.precoBaseVal.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", marginTop:4, fontSize:10, color:"#6b7280" }}>
-                <span>Índice Cômodos: {calculo.indiceComodos.toLocaleString("pt-BR", {minimumFractionDigits:4, maximumFractionDigits:4})}</span>
-                <span>Índice Padrão: {calculo.indicePadrao.toLocaleString("pt-BR", {minimumFractionDigits:1, maximumFractionDigits:1})}</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", marginTop:2, background:"#eff6ff", borderRadius:4 }}>
-                <span style={{ color:"#1e40af" }}>Fator Multiplicador</span>
-                <span style={{ fontWeight:600, color:"#1e40af" }}>1 + {calculo.indiceComodos.toLocaleString("pt-BR", {minimumFractionDigits:4, maximumFractionDigits:4})} + {calculo.indicePadrao.toLocaleString("pt-BR", {minimumFractionDigits:1, maximumFractionDigits:1})} = {calculo.fatorMult.toLocaleString("pt-BR", {minimumFractionDigits:3, maximumFractionDigits:3})}</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", padding:"4px 8px", marginTop:2, background:"#dbeafe", borderRadius:4 }}>
-                <span style={{ color:"#1e40af" }}>Preço Final</span>
-                <span style={{ fontWeight:600, color:"#1e40af" }}>R$ {calculo.precoBaseVal.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})} × {calculo.fatorMult.toLocaleString("pt-BR", {minimumFractionDigits:3, maximumFractionDigits:3})} = R$ {calculo.precoM2Ef.toLocaleString("pt-BR", {minimumFractionDigits:2, maximumFractionDigits:2})}/m²</span>
-              </div>
-            </div>
-          ) : (
-            <div style={{ color:"#6b7280", fontSize:10, fontStyle:"italic" }}>Usando preço base fixo (sem dados de CUB)</div>
-          )}
-        </div>
-      )}
-
       {/* TOTAL GERAL — destaque no topo */}
       <div style={{ marginTop:0, marginBottom:14 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
@@ -17785,7 +17737,26 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       const pbInfoLoja   = getPrecoBaseDinamico("Conj. Comercial", gpLoja.padrao || padrao, usuario, cub);
       const pbInfoAnc    = getPrecoBaseDinamico("Conj. Comercial", gpAnc.padrao || padrao, usuario, cub);
       const pbInfoComum  = getPrecoBaseDinamico("Conj. Comercial", gpComum.padrao || padrao, usuario, cub);
-      const pbInfoApto   = getPrecoBaseDinamico("Residencial", gpApto.padrao || padrao, usuario, cub);
+      // Apartamento usa CUB PP-4 (Prédio Popular), NÃO R-1. Calculado localmente
+      // porque getPrecoBaseDinamico (shared.jsx) não tem branch para PP-4.
+      // Mesma fórmula: pct_calibragem × CUB_PP4[padrão]. Fallback p/ fixo se faltar dado.
+      const pbInfoApto = (() => {
+        const _padraoSel = gpApto.padrao || padrao;
+        const _fixo = { precoBase: getTipoConfig("Residencial").precoBase, modo: "fixo" };
+        if (!usuario || !cub) return _fixo;
+        const _pct = (usuario.pct_calibrado != null && usuario.pct_calibrado > 0)
+          ? usuario.pct_calibrado : usuario.pct_matriz_calculado;
+        if (!_pct || _pct <= 0) return _fixo;
+        // PP-4 (NBR 12721) tem Baixo e Normal; Médio→Normal, Alto→Normal (não existe Alto).
+        let _padraoCub = _padraoSel === "Médio" ? "Normal" : _padraoSel;
+        if (_padraoCub === "Alto") _padraoCub = "Normal";
+        let _cubObj = cub.PP4 ? cub.PP4[_padraoCub] : null;
+        if ((!_cubObj || !_cubObj.valor_m2) && cub.PP4) _cubObj = cub.PP4.Normal; // fallback de padrão
+        if (!_cubObj || !_cubObj.valor_m2 || _cubObj.valor_m2 <= 0) return _fixo;
+        const _precoBase = Math.round(_pct * _cubObj.valor_m2 * 100) / 100;
+        console.log(`[PREÇO BASE] Apartamento ${_padraoSel} → PP-4 ${_padraoCub} | pct=${_pct.toFixed(4)} × CUB=${_cubObj.valor_m2.toFixed(2)} = R$ ${_precoBase.toFixed(2)}/m²`);
+        return { precoBase: _precoBase, modo: "dinamico", pct: _pct, cubM2: _cubObj.valor_m2, padraoCub: _padraoCub, categoria: "PP-4" };
+      })();
       const pbInfoGalpao = getPrecoBaseDinamico("Galpão", gpGalpao.padrao || padrao, usuario, cub);
 
       const pbLoja   = pbInfoLoja.precoBase;
@@ -17872,7 +17843,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       ].filter(Boolean);
 
       // ── Diagnóstico de CUB por bloco (Resumo Cálculo) ──────────────
-      // Cada bloco usa o SEU CUB: Loja/Âncora/Comum → CSL-8, Apartamento → R-1,
+      // Cada bloco usa o SEU CUB: Loja/Âncora/Comum → CSL-8, Apartamento → PP-4,
       // Galpão → GI. Mostra se veio do CUB (dinâmico) ou caiu em fixo, com
       // categoria / padrão CUB / valor do CUB / % calibragem / preço base.
       const _diagBloco = (label, info, padraoSel) => ({
