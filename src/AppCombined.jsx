@@ -5416,7 +5416,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
       <div style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-          <div style={{ width: 48, height: 48, borderRadius: 16, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>🏗️</div>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>{obraSelecionada.nome}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{obraSelecionada.responsavel || "Sem responsável"}</div>
@@ -5425,21 +5424,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <button onClick={() => editarObra(obraSelecionada)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
           )}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
-          <button onClick={() => setView("contratosDaObra")} style={{ border: "1px solid #2563eb", borderRadius: 16, padding: "16px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, transition: "all 0.2s", fontFamily: "inherit" }} onMouseEnter={e => { e.currentTarget.style.background = "#2563eb08"; }} onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}>
-            <div style={{ fontSize: 32 }}>📋</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#111", textAlign: "center" }}>Contratos</div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
+          <button onClick={() => setView("contratosDaObra")}
+            style={{ border: "1.5px solid #2563eb", borderRadius: 16, padding: "20px", background: "#eff6ff", boxShadow: "0 0 0 3px rgba(37, 99, 235, 0.15)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#2563eb", textAlign: "center" }}>Contratos</div>
             <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
           </button>
-          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }} style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
-            <div style={{ fontSize: 32 }}>📅</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
-            <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
+          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }}
+            style={{ border: "1.5px solid #d1d5db", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
+            <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Em breve</div>
           </button>
-          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }} style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
-            <div style={{ fontSize: 32 }}>📁</div>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
-            <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
+          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}
+            style={{ border: "1.5px solid #d1d5db", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
+            <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Em breve</div>
           </button>
         </div>
 
