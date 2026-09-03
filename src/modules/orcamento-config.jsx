@@ -176,26 +176,26 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
   // Estilos — mesma paleta minimalista do escritorio.jsx pra manter
   // consistência visual entre as abas de Configuração.
   const S = {
-    wrap:     { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header:   { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
-    titulo:   { fontSize:18, fontWeight:700, color:"#111", margin:0 },
+    wrap:     { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#262421", maxWidth:1200, margin:"0 auto" },
+    header:   { borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"24px 32px" },
+    titulo:   { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
     sub:      { fontSize:13, color:"#9ca3af", marginTop:3 },
     body:     { padding:"32px", maxWidth:760 },
     secao:    { marginBottom:32 },
     secTitulo:{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     label:    { fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
-    valor:    { fontSize:14, color:"#111" },
-    vazio:    { fontSize:14, color:"#d1d5db", fontStyle:"italic" },
+    valor:    { fontSize:14, color:"#262421" },
+    vazio:    { fontSize:14, color:"#9ca3af", fontStyle:"italic" },
     grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:18 },
-    btn:      { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btn:      { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     btnDanger:{ background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     aviso:    { fontSize:13, color:"#6b7280", lineHeight:1.6, background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius: 12, padding:"14px 16px", marginBottom:16 },
     avisoSemPerm: { fontSize:13, color:"#92400e", lineHeight:1.6, background:"#fffbeb", border:"1px solid #fde68a", borderRadius: 12, padding:"14px 16px" },
     // Box de destaque do preço base R$/m². Visualmente diferente das células
     // do grid pra dar peso ao número que importa no dia a dia.
-    boxPrecoBase: { background:"#fafbfc", border:"2px solid #d1d5db", borderRadius: 14, padding:"18px 20px", marginTop:4 },
+    boxPrecoBase: { background:"#fafbfc", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, padding:"18px 20px", marginTop:4 },
     boxLabel:     { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.6, fontWeight:600, marginBottom:6 },
-    boxValor:     { fontSize:28, fontWeight:700, color:"#111", lineHeight:1, display:"flex", alignItems:"baseline", gap:6 },
+    boxValor:     { fontSize:28, fontWeight:700, color:"#262421", lineHeight:1, display:"flex", alignItems:"baseline", gap:6 },
     boxUnidade:   { fontSize:14, fontWeight:500, color:"#9ca3af" },
     boxFormula:   { fontSize:12, color:"#9ca3af", marginTop:8 },
   };
@@ -274,7 +274,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
           ) : (
             <>
               <div style={S.aviso}>
-                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"2px solid #d1d5db", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"2px solid #d1d5db", fontSize:12 }}>pct_calibrado</code>) da empresa.
+                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1.5px solid rgba(38,36,33,0.16)", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1.5px solid rgba(38,36,33,0.16)", fontSize:12 }}>pct_calibrado</code>) da empresa.
                 Você cai direto na tela de onboarding pra refazer a calibragem — sem precisar fazer login novamente.
                 Clientes, projetos e orçamentos <strong>não</strong> são afetados.
               </div>

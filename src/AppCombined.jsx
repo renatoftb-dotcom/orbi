@@ -24024,6 +24024,7 @@ async function apiPost(path, body) {
 // ───────────────────────────────────────────────────────────────
 // Estilos compartilhados pelas 3 telas
 // ───────────────────────────────────────────────────────────────
+// Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 function getEstilos(loading) {
   return {
     wrap: {
@@ -24032,22 +24033,22 @@ function getEstilos(loading) {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "#fff",
+      background: "#f5f3f0",
       padding: "20px",
     },
     box: { width: "100%", maxWidth: 360 },
     header: { textAlign: "center", marginBottom: 32 },
-    titulo: { fontSize: 22, fontWeight: 700, color: "#111", letterSpacing: -0.5, margin: 0 },
-    sub: { fontSize: 13, color: "#9ca3af", marginTop: 6 },
-    card: { background: "#fff", border: "2px solid #d1d5db", borderRadius: 16, padding: "28px 24px" },
+    titulo: { fontSize: 22, fontWeight: 800, color: "#262421", letterSpacing: -0.5, margin: 0 },
+    sub: { fontSize: 13, color: "#78716c", marginTop: 6 },
+    card: { background: "#fff", border: "1.5px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "28px 24px", boxShadow: "0 18px 50px -28px rgba(38,36,33,0.35)" },
     label: { fontSize: 13, color: "#6b7280", display: "block", marginBottom: 6 },
     input: {
       width: "100%",
-      border: "1px solid #d1d5db",
-      borderRadius: 14,
+      border: "1.5px solid rgba(38,36,33,0.16)",
+      borderRadius: 12,
       padding: "11px 14px",
       fontSize: 14,
-      color: "#111",
+      color: "#262421",
       outline: "none",
       background: "#fff",
       boxSizing: "border-box",
@@ -24057,10 +24058,10 @@ function getEstilos(loading) {
     grupo: { marginBottom: 16 },
     btn: {
       width: "100%",
-      background: "#111",
+      background: "#262421",
       color: "#fff",
       border: "none",
-      borderRadius: 14,
+      borderRadius: 12,
       padding: "12px 0",
       fontSize: 14,
       fontWeight: 600,
@@ -24073,8 +24074,8 @@ function getEstilos(loading) {
       width: "100%",
       background: "#fff",
       color: "#374151",
-      border: "1px solid #d1d5db",
-      borderRadius: 14,
+      border: "1.5px solid rgba(38,36,33,0.16)",
+      borderRadius: 12,
       padding: "12px 0",
       fontSize: 14,
       fontWeight: 500,
@@ -24084,7 +24085,7 @@ function getEstilos(loading) {
     },
     erro: { fontSize: 13, color: "#dc2626", textAlign: "center", marginTop: 12, minHeight: 20 },
     info: { fontSize: 13, color: "#059669", textAlign: "center", marginTop: 12, minHeight: 20 },
-    rodape: { textAlign: "center", marginTop: 24, fontSize: 12, color: "#d1d5db" },
+    rodape: { textAlign: "center", marginTop: 24, fontSize: 12, color: "#9ca3af" },
     // Link "Criar conta" / "Voltar pro login"
     linkSec: {
       textAlign: "center",
@@ -24095,7 +24096,7 @@ function getEstilos(loading) {
     linkBtn: {
       background: "none",
       border: "none",
-      color: "#111",
+      color: "#b5652f",
       fontWeight: 600,
       cursor: "pointer",
       padding: 0,
@@ -24570,11 +24571,11 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
   const inputCodigo = {
     width: 44,
     height: 52,
-    border: "1.5px solid #d1d5db",
+    border: "1.5px solid rgba(38,36,33,0.16)",
     borderRadius: 12,
     fontSize: 22,
     fontWeight: 600,
-    color: "#111",
+    color: "#262421",
     textAlign: "center",
     outline: "none",
     background: "#fff",
@@ -24606,8 +24607,8 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
                 value={d}
                 onChange={e => handleChangeDigito(idx, e.target.value)}
                 onKeyDown={e => handleKeyDown(idx, e)}
-                onFocus={e => { e.currentTarget.style.borderColor = "#111"; }}
-                onBlur={e => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+                onFocus={e => { e.currentTarget.style.borderColor = "#b5652f"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = "rgba(38,36,33,0.16)"; }}
                 style={inputCodigo}
                 disabled={loading}
               />
@@ -24621,7 +24622,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
           <div style={{ textAlign:"center", marginTop:16 }}>
             <button
               style={{
-                background:"none", border:"none", color: cooldown > 0 ? "#d1d5db" : "#6b7280",
+                background:"none", border:"none", color: cooldown > 0 ? "#c9c4bd" : "#6b7280",
                 fontSize: 13, cursor: cooldown > 0 ? "default" : "pointer", fontFamily:"inherit",
                 padding: 4,
               }}
@@ -24813,7 +24814,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
             <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}>
               <div style={{
                 width:48, height:48, borderRadius:"50%",
-                background:"#111", color:"#fff",
+                background:"#262421", color:"#fff",
                 display:"flex", alignItems:"center", justifyContent:"center",
               }}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -24821,7 +24822,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
                 </svg>
               </div>
             </div>
-            <div style={{ fontSize:14, fontWeight:600, color:"#111", textAlign:"center", marginBottom:6 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:"#262421", textAlign:"center", marginBottom:6 }}>
               Pronto!
             </div>
             <div style={{ fontSize:13, color:"#6b7280", textAlign:"center", lineHeight:1.5 }}>
@@ -25120,13 +25121,13 @@ function Mensagens({ usuario }) {
 
   const S = {
     wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", height:"100vh", display:"flex", flexDirection:"column", background:"#fff" },
-    header: { borderBottom:"2px solid #d1d5db", padding:"20px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
-    titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
+    header: { borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"20px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
+    titulo: { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
     filtros: { display:"flex", gap:4, padding:"12px 32px", borderBottom:"1px solid #f3f4f6" },
     btnFiltro: (ativo) => ({
-      background: ativo ? "#f3f4f6" : "transparent",
-      color: ativo ? "#111" : "#6b7280",
+      background: ativo ? "#fdf6f0" : "transparent",
+      color: ativo ? "#b5652f" : "#6b7280",
       border: "none",
       borderRadius: 6,
       padding: "6px 12px",
@@ -25136,48 +25137,48 @@ function Mensagens({ usuario }) {
       fontFamily: "inherit",
     }),
     body: { flex:1, display:"flex", overflow:"hidden" },
-    listaCol: { width:380, minWidth:380, borderRight:"2px solid #d1d5db", overflowY:"auto", background:"#fff" },
+    listaCol: { width:380, minWidth:380, borderRight:"1.5px solid rgba(38,36,33,0.16)", overflowY:"auto", background:"#fff" },
     detalheCol: { flex:1, overflowY:"auto", background:"#fafbfc" },
     item: (selecionada, lida) => ({
       padding:"14px 18px",
       borderBottom:"1px solid #f3f4f6",
       cursor:"pointer",
       background: selecionada ? "#f9fafb" : "#fff",
-      borderLeft: selecionada ? "3px solid #111" : "3px solid transparent",
+      borderLeft: selecionada ? "3px solid #262421" : "3px solid transparent",
       transition: "background 0.1s",
       paddingLeft: selecionada ? 15 : 18,
     }),
-    nome: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 700, color:"#111", marginBottom:2, display:"flex", justifyContent:"space-between", alignItems:"center" }),
-    assunto: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 600, color: lida ? "#374151" : "#111", marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }),
+    nome: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 700, color:"#262421", marginBottom:2, display:"flex", justifyContent:"space-between", alignItems:"center" }),
+    assunto: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 600, color: lida ? "#374151" : "#262421", marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }),
     preview: { fontSize:12, color:"#9ca3af", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
     data: { fontSize:11, color:"#9ca3af", fontWeight:400 },
     pontoNaoLida: { display:"inline-block", width:8, height:8, background:"#3b82f6", borderRadius:"50%", marginRight:8, flexShrink:0 },
     vazio: { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"60px 20px" },
 
-    detHeader: { padding:"24px 32px", borderBottom:"2px solid #d1d5db", background:"#fff" },
-    detAssunto: { fontSize:18, fontWeight:700, color:"#111", marginBottom:12 },
+    detHeader: { padding:"24px 32px", borderBottom:"1.5px solid rgba(38,36,33,0.16)", background:"#fff" },
+    detAssunto: { fontSize:18, fontWeight:700, color:"#262421", marginBottom:12 },
     detLinha: { fontSize:13, color:"#6b7280", marginBottom:4 },
-    detLinhaForte: { fontSize:14, color:"#111", fontWeight:500 },
+    detLinhaForte: { fontSize:14, color:"#262421", fontWeight:500 },
     detAcoes: { display:"flex", gap:8, marginTop:16 },
     detBody: { padding:"32px", background:"#fff", margin:"24px 32px", borderRadius: 12, border:"1px solid #f3f4f6" },
-    detHtml: { fontSize:14, color:"#111", lineHeight:1.6 },
-    btnAcao: { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
-    btnAcaoPrimaria: { background:"#111", color:"#fff", border:"1px solid #111", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
+    detHtml: { fontSize:14, color:"#262421", lineHeight:1.6 },
+    btnAcao: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
+    btnAcaoPrimaria: { background:"#262421", color:"#fff", border:"1px solid #262421", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     btnAcaoDestrutiva: { background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     badge: { display:"inline-block", fontSize:11, fontWeight:600, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius: 14, padding:"2px 8px", marginLeft:8 },
     // Modal de Responder
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
-    modal: { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, width:"100%", maxWidth:680, maxHeight:"85vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
+    modal: { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, width:"100%", maxWidth:680, maxHeight:"85vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
     modalHeader: { padding:"20px 24px 16px", borderBottom:"1px solid #f3f4f6" },
-    modalTitulo: { fontSize:16, fontWeight:700, color:"#111", margin:0 },
+    modalTitulo: { fontSize:16, fontWeight:700, color:"#262421", margin:0 },
     modalBody: { padding:"20px 24px", flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:14 },
     modalLabel: { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4, display:"block" },
-    modalInput: { width:"100%", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
+    modalInput: { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
     modalReadonly: { fontSize:13, color:"#374151", padding:"10px 12px", background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 12 },
-    modalTextarea: { width:"100%", border:"2px solid #d1d5db", borderRadius: 12, padding:"12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", minHeight:200, resize:"vertical", lineHeight:1.5 },
+    modalTextarea: { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", minHeight:200, resize:"vertical", lineHeight:1.5 },
     modalFooter: { padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:10 },
-    btnEnviar: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnCancelar: { background:"#fff", color:"#6b7280", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnEnviar: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnCancelar: { background:"#fff", color:"#6b7280", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   };
 
   if (loading) {
@@ -28135,26 +28136,26 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
   // Estilos — mesma paleta minimalista do escritorio.jsx pra manter
   // consistência visual entre as abas de Configuração.
   const S = {
-    wrap:     { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header:   { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
-    titulo:   { fontSize:18, fontWeight:700, color:"#111", margin:0 },
+    wrap:     { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#262421", maxWidth:1200, margin:"0 auto" },
+    header:   { borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"24px 32px" },
+    titulo:   { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
     sub:      { fontSize:13, color:"#9ca3af", marginTop:3 },
     body:     { padding:"32px", maxWidth:760 },
     secao:    { marginBottom:32 },
     secTitulo:{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     label:    { fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
-    valor:    { fontSize:14, color:"#111" },
-    vazio:    { fontSize:14, color:"#d1d5db", fontStyle:"italic" },
+    valor:    { fontSize:14, color:"#262421" },
+    vazio:    { fontSize:14, color:"#9ca3af", fontStyle:"italic" },
     grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:18 },
-    btn:      { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btn:      { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     btnDanger:{ background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     aviso:    { fontSize:13, color:"#6b7280", lineHeight:1.6, background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius: 12, padding:"14px 16px", marginBottom:16 },
     avisoSemPerm: { fontSize:13, color:"#92400e", lineHeight:1.6, background:"#fffbeb", border:"1px solid #fde68a", borderRadius: 12, padding:"14px 16px" },
     // Box de destaque do preço base R$/m². Visualmente diferente das células
     // do grid pra dar peso ao número que importa no dia a dia.
-    boxPrecoBase: { background:"#fafbfc", border:"2px solid #d1d5db", borderRadius: 14, padding:"18px 20px", marginTop:4 },
+    boxPrecoBase: { background:"#fafbfc", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, padding:"18px 20px", marginTop:4 },
     boxLabel:     { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.6, fontWeight:600, marginBottom:6 },
-    boxValor:     { fontSize:28, fontWeight:700, color:"#111", lineHeight:1, display:"flex", alignItems:"baseline", gap:6 },
+    boxValor:     { fontSize:28, fontWeight:700, color:"#262421", lineHeight:1, display:"flex", alignItems:"baseline", gap:6 },
     boxUnidade:   { fontSize:14, fontWeight:500, color:"#9ca3af" },
     boxFormula:   { fontSize:12, color:"#9ca3af", marginTop:8 },
   };
@@ -28233,7 +28234,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
           ) : (
             <>
               <div style={S.aviso}>
-                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"2px solid #d1d5db", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"2px solid #d1d5db", fontSize:12 }}>pct_calibrado</code>) da empresa.
+                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1.5px solid rgba(38,36,33,0.16)", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1.5px solid rgba(38,36,33,0.16)", fontSize:12 }}>pct_calibrado</code>) da empresa.
                 Você cai direto na tela de onboarding pra refazer a calibragem — sem precisar fazer login novamente.
                 Clientes, projetos e orçamentos <strong>não</strong> são afetados.
               </div>

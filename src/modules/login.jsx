@@ -38,6 +38,7 @@ async function apiPost(path, body) {
 // ───────────────────────────────────────────────────────────────
 // Estilos compartilhados pelas 3 telas
 // ───────────────────────────────────────────────────────────────
+// Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 function getEstilos(loading) {
   return {
     wrap: {
@@ -46,22 +47,22 @@ function getEstilos(loading) {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "#fff",
+      background: "#f5f3f0",
       padding: "20px",
     },
     box: { width: "100%", maxWidth: 360 },
     header: { textAlign: "center", marginBottom: 32 },
-    titulo: { fontSize: 22, fontWeight: 700, color: "#111", letterSpacing: -0.5, margin: 0 },
-    sub: { fontSize: 13, color: "#9ca3af", marginTop: 6 },
-    card: { background: "#fff", border: "2px solid #d1d5db", borderRadius: 16, padding: "28px 24px" },
+    titulo: { fontSize: 22, fontWeight: 800, color: "#262421", letterSpacing: -0.5, margin: 0 },
+    sub: { fontSize: 13, color: "#78716c", marginTop: 6 },
+    card: { background: "#fff", border: "1.5px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "28px 24px", boxShadow: "0 18px 50px -28px rgba(38,36,33,0.35)" },
     label: { fontSize: 13, color: "#6b7280", display: "block", marginBottom: 6 },
     input: {
       width: "100%",
-      border: "1px solid #d1d5db",
-      borderRadius: 14,
+      border: "1.5px solid rgba(38,36,33,0.16)",
+      borderRadius: 12,
       padding: "11px 14px",
       fontSize: 14,
-      color: "#111",
+      color: "#262421",
       outline: "none",
       background: "#fff",
       boxSizing: "border-box",
@@ -71,10 +72,10 @@ function getEstilos(loading) {
     grupo: { marginBottom: 16 },
     btn: {
       width: "100%",
-      background: "#111",
+      background: "#262421",
       color: "#fff",
       border: "none",
-      borderRadius: 14,
+      borderRadius: 12,
       padding: "12px 0",
       fontSize: 14,
       fontWeight: 600,
@@ -87,8 +88,8 @@ function getEstilos(loading) {
       width: "100%",
       background: "#fff",
       color: "#374151",
-      border: "1px solid #d1d5db",
-      borderRadius: 14,
+      border: "1.5px solid rgba(38,36,33,0.16)",
+      borderRadius: 12,
       padding: "12px 0",
       fontSize: 14,
       fontWeight: 500,
@@ -98,7 +99,7 @@ function getEstilos(loading) {
     },
     erro: { fontSize: 13, color: "#dc2626", textAlign: "center", marginTop: 12, minHeight: 20 },
     info: { fontSize: 13, color: "#059669", textAlign: "center", marginTop: 12, minHeight: 20 },
-    rodape: { textAlign: "center", marginTop: 24, fontSize: 12, color: "#d1d5db" },
+    rodape: { textAlign: "center", marginTop: 24, fontSize: 12, color: "#9ca3af" },
     // Link "Criar conta" / "Voltar pro login"
     linkSec: {
       textAlign: "center",
@@ -109,7 +110,7 @@ function getEstilos(loading) {
     linkBtn: {
       background: "none",
       border: "none",
-      color: "#111",
+      color: "#b5652f",
       fontWeight: 600,
       cursor: "pointer",
       padding: 0,
@@ -584,11 +585,11 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
   const inputCodigo = {
     width: 44,
     height: 52,
-    border: "1.5px solid #d1d5db",
+    border: "1.5px solid rgba(38,36,33,0.16)",
     borderRadius: 12,
     fontSize: 22,
     fontWeight: 600,
-    color: "#111",
+    color: "#262421",
     textAlign: "center",
     outline: "none",
     background: "#fff",
@@ -620,8 +621,8 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
                 value={d}
                 onChange={e => handleChangeDigito(idx, e.target.value)}
                 onKeyDown={e => handleKeyDown(idx, e)}
-                onFocus={e => { e.currentTarget.style.borderColor = "#111"; }}
-                onBlur={e => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+                onFocus={e => { e.currentTarget.style.borderColor = "#b5652f"; }}
+                onBlur={e => { e.currentTarget.style.borderColor = "rgba(38,36,33,0.16)"; }}
                 style={inputCodigo}
                 disabled={loading}
               />
@@ -635,7 +636,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
           <div style={{ textAlign:"center", marginTop:16 }}>
             <button
               style={{
-                background:"none", border:"none", color: cooldown > 0 ? "#d1d5db" : "#6b7280",
+                background:"none", border:"none", color: cooldown > 0 ? "#c9c4bd" : "#6b7280",
                 fontSize: 13, cursor: cooldown > 0 ? "default" : "pointer", fontFamily:"inherit",
                 padding: 4,
               }}
@@ -827,7 +828,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
             <div style={{ display:"flex", justifyContent:"center", marginBottom:14 }}>
               <div style={{
                 width:48, height:48, borderRadius:"50%",
-                background:"#111", color:"#fff",
+                background:"#262421", color:"#fff",
                 display:"flex", alignItems:"center", justifyContent:"center",
               }}>
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -835,7 +836,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
                 </svg>
               </div>
             </div>
-            <div style={{ fontSize:14, fontWeight:600, color:"#111", textAlign:"center", marginBottom:6 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:"#262421", textAlign:"center", marginBottom:6 }}>
               Pronto!
             </div>
             <div style={{ fontSize:13, color:"#6b7280", textAlign:"center", lineHeight:1.5 }}>
