@@ -362,7 +362,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           )}
           {descricao && (
             <div style={{
-              fontSize: 13.5, color: "#111", lineHeight: 1.5,
+              fontSize: 13.5, color: "#262421", lineHeight: 1.5,
             }}>{descricao}</div>
           )}
         </div>
@@ -666,11 +666,11 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   const _btnBase = {
     padding: "8px 14px", fontSize: 13, fontWeight: 500,
     borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
-    border: "1px solid #d1d5db", background: "#fff", color: "#374151",
+    border: "1.5px solid rgba(38,36,33,0.16)", background: "#fff", color: "#374151",
   };
   const _btnPrimary = {
     ..._btnBase,
-    border: "1px solid #111", background: "#111", color: "#fff",
+    border: "1px solid #262421", background: "#262421", color: "#fff",
   };
   const chrome = (
     <>
@@ -689,7 +689,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         display: "flex", gap: 8, zIndex: 1010,
         background: "rgba(255,255,255,0.95)",
         padding: "8px 10px", borderRadius: 14,
-        border: "2px solid #d1d5db",
+        border: "1.5px solid rgba(38,36,33,0.16)",
         boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
         fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       }}>
@@ -720,7 +720,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🧪</div>
-          <h2 style={{ fontSize: 20, fontWeight: 600, color: "#111", margin: "0 0 10px", letterSpacing: -0.3 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 600, color: "#262421", margin: "0 0 10px", letterSpacing: -0.3 }}>
             {welcome.titulo}
           </h2>
           <p style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.6, margin: "0 0 24px" }}>
@@ -729,13 +729,13 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={onCancelar} style={{
               background: "transparent", color: "#6b7280",
-              border: "2px solid #d1d5db", borderRadius: 12,
+              border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12,
               padding: "9px 16px", fontSize: 13, fontWeight: 500,
               cursor: "pointer", fontFamily: "inherit",
             }}>Cancelar</button>
             <button onClick={() => setEstagio("passo")} style={{
-              background: "#111", color: "#fff",
-              border: "1px solid #111", borderRadius: 12,
+              background: "#262421", color: "#fff",
+              border: "1px solid #262421", borderRadius: 12,
               padding: "9px 18px", fontSize: 13, fontWeight: 500,
               cursor: "pointer", fontFamily: "inherit",
             }}>Começar →</button>
@@ -776,7 +776,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
             <h2 style={{
               fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
-              lineHeight: 1.2, margin: 0, color: "#111",
+              lineHeight: 1.2, margin: 0, color: "#262421",
             }}>
               {passo.titulo}
             </h2>
@@ -863,7 +863,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
             {/* SVG cursor padrão */}
             <svg width="22" height="28" viewBox="0 0 22 28" fill="none">
               <path d="M2 2 L2 22 L7 17 L11 25 L14 23.5 L10 16 L17 16 Z"
-                fill="#111" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
+                fill="#262421" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round" />
             </svg>
           </div>
         )}
@@ -973,7 +973,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
               {passo.titulo}
             </div>
           )}
-          <div style={{ fontSize: 13.5, color: "#111", lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13.5, color: "#262421", lineHeight: 1.5 }}>
             {passo.descricao}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between",
@@ -1562,7 +1562,7 @@ function DialogosHost() {
   const modalTopo = modais[modais.length - 1] || null;
 
   const coresAlert = {
-    info:    { borda: "#e5e7eb", texto: "#111" },
+    info:    { borda: "rgba(38,36,33,0.14)", texto: "#262421" },
     sucesso: { borda: "#bbf7d0", texto: "#15803d" },
     erro:    { borda: "#fecaca", texto: "#b91c1c" },
     aviso:   { borda: "#fde68a", texto: "#b45309" },
@@ -1588,7 +1588,7 @@ function DialogosHost() {
             onClick={e => e.stopPropagation()}
             style={{
               background: "#fff",
-              border: `1px solid ${modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.borda || "#e5e7eb") : "#e5e7eb"}`,
+              border: `1px solid ${modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.borda || "rgba(38,36,33,0.14)") : "rgba(38,36,33,0.14)"}`,
               borderRadius: 16,
               padding: "24px 28px",
               maxWidth: 440,
@@ -1601,7 +1601,7 @@ function DialogosHost() {
               <div style={{
                 fontSize: 15,
                 fontWeight: 700,
-                color: modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.texto || "#111") : "#111",
+                color: modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.texto || "#262421") : "#262421",
                 marginBottom: modalTopo.mensagem ? 10 : 18,
               }}>
                 {modalTopo.titulo}
@@ -1625,7 +1625,7 @@ function DialogosHost() {
                   style={{
                     background: "#fff",
                     color: "#6b7280",
-                    border: "2px solid #d1d5db",
+                    border: "1.5px solid rgba(38,36,33,0.16)",
                     borderRadius: 12,
                     padding: "8px 18px",
                     fontSize: 13,
@@ -1640,7 +1640,7 @@ function DialogosHost() {
                 autoFocus
                 onClick={() => fecharModal(modalTopo.id, modalTopo.tipo === "confirm" ? true : undefined)}
                 style={{
-                  background: modalTopo.destrutivo ? "#dc2626" : "#111",
+                  background: modalTopo.destrutivo ? "#dc2626" : "#262421",
                   color: "#fff",
                   border: "none",
                   borderRadius: 12,
@@ -1840,7 +1840,7 @@ function VersionWatcher() {
         bottom: 20,
         right: 20,
         zIndex: 100002, // acima de toasts (100001) e modais (100000)
-        background: "#111",
+        background: "#262421",
         color: "#fff",
         padding: "14px 18px",
         borderRadius: 14,
@@ -1867,7 +1867,7 @@ function VersionWatcher() {
         }}
         style={{
           background: "#fff",
-          color: "#111",
+          color: "#262421",
           border: "none",
           borderRadius: 7,
           padding: "7px 14px",
