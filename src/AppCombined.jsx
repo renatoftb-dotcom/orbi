@@ -4646,6 +4646,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     servicos:{ projeto:false, acompanhamentoObra:false, gestaoObra:false, empreendimento:false }
   };
   const [form, setForm] = useState(emptyCliente);
+  const [abaCliente, setAbaCliente] = useState("cadastro");
 
   // Early return: só DEPOIS de todos os hooks serem declarados (regra do React)
   if (abrindoOrcamento) return null;
@@ -5024,10 +5025,12 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const iniciais = cliente.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase();
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===colunaDoCliente(cliente))||COLUNAS[0];
+
     return (
-      <div style={{ padding: isMobile ? "16px" : "28px 32px", maxWidth:780, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, flexWrap:"wrap" }}>
-          <button style={C.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
+      <div style={{ padding: isMobile ? "16px" : "28px 32px", maxWidth:900, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+        {/* Header */}
+        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, flexWrap:"wrap" }}>
+          <button style={C.btnGhost} onClick={()=>{ setView("kanban"); setAbaCliente("cadastro"); }}>← Voltar</button>
           <div style={{ flex:1 }} />
           <select value={colunaDoCliente(cliente)} onChange={e=>moverCliente(cliente.id, e.target.value)}
             style={{ ...C.input, width:"auto", fontSize:12, padding:"6px 10px", cursor:"pointer" }}>
@@ -5036,11 +5039,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <button style={C.btnSec} onClick={()=>openEdit(cliente)}>Editar</button>
           {!isMobile && <button style={{...C.btnGhost,color:"#dc2626"}} onClick={()=>removeCliente(cliente.id)}>Remover</button>}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:24 }}>
-          <div style={{ width: isMobile ? 44 : 56, height: isMobile ? 44 : 56, borderRadius:14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize: isMobile ? 15 : 18, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
+
+        {/* Cliente Info */}
+        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:28 }}>
+          <div style={{ width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius:14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize: isMobile ? 16 : 20, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize: isMobile ? 16 : 20, fontWeight:700, color:"#111", overflow:"hidden", textOverflow:"ellipsis" }}>{cliente.nome}</div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+            <div style={{ fontSize: isMobile ? 18 : 22, fontWeight:700, color:"#111", overflow:"hidden", textOverflow:"ellipsis" }}>{cliente.nome}</div>
+            <div style={{ fontSize:12, color:"#9ca3af", marginTop:4, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
               {!isMobile && cliente.cpfCnpj}
               <span style={C.tag(corAv)}>{cliente.tipo}</span>
               <span style={C.tag(col.cor)}>{col.label||"Sem status"}</span>
@@ -5048,9 +5053,66 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           </div>
           {isMobile && <button style={{...C.btnGhost,color:"#dc2626",fontSize:12}} onClick={()=>removeCliente(cliente.id)}>Remover</button>}
         </div>
-        <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} isMobile={isMobile} />
-        <hr style={C.divider} />
-        <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
+
+        {/* Navegação de abas com cards */}
+        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16, marginBottom:28 }}>
+          {[
+            { id:"cadastro", icon:"📋", titulo:"Cadastro", desc:"Dados pessoais e endereço" },
+            { id:"projetos", icon:"📐", titulo:"Projetos", desc:"Projetos e orçamentos" },
+            { id:"obras", icon:"🏗️", titulo:"Obras", desc:"Gestão de obras" },
+          ].map(aba => (
+            <button
+              key={aba.id}
+              onClick={() => setAbaCliente(aba.id)}
+              style={{
+                border: abaCliente === aba.id ? "3px solid #f59e0b" : "2px solid #e5e7eb",
+                borderRadius: 14,
+                padding: "20px 18px",
+                background: "#fff",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                gap: 12,
+                textAlign: "center",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={e => {
+                if (abaCliente !== aba.id) {
+                  e.currentTarget.style.borderColor = "#d1d5db";
+                  e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
+                }
+              }}
+              onMouseLeave={e => {
+                if (abaCliente !== aba.id) {
+                  e.currentTarget.style.borderColor = "#e5e7eb";
+                  e.currentTarget.style.boxShadow = "none";
+                }
+              }}>
+              <div style={{ fontSize: 40 }}>{aba.icon}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{aba.titulo}</div>
+              <div style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4 }}>{aba.desc}</div>
+            </button>
+          ))}
+        </div>
+
+        {/* Conteúdo da aba selecionada */}
+        {abaCliente === "cadastro" && (
+          <>
+            <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} isMobile={isMobile} />
+            <hr style={C.divider} />
+            <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
+          </>
+        )}
+
+        {abaCliente === "projetos" && (
+          <div style={{ padding:"20px 0", color:"#9ca3af", textAlign:"center", fontSize:13 }}>Projetos — em desenvolvimento</div>
+        )}
+
+        {abaCliente === "obras" && (
+          <div style={{ padding:"20px 0", color:"#9ca3af", textAlign:"center", fontSize:13 }}>Obras — em desenvolvimento</div>
+        )}
       </div>
     );
   }
