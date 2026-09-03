@@ -4995,7 +4995,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===colunaDoCliente(cliente))||COLUNAS[0];
 
-    const VKD = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#b5652f", cobreClaro:"#fdf6f0", inkSoft:"#78716c" };
+    const VKD = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#1e3a5f", cobreClaro:"#eef3f8", inkSoft:"#78716c" };
     return (
       <div style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}</style>
@@ -5026,7 +5026,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                   borderRadius: 16,
                   padding: "20px",
                   background: abaCliente === aba.id ? VKD.cobreClaro : "#fff",
-                  boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(181,101,47,0.16)" : "none",
+                  boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(30,58,95,0.16)" : "none",
                   cursor: "pointer",
                   fontFamily: "'Inter', system-ui, sans-serif",
                   display: "flex",
