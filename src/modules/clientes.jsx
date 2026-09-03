@@ -753,10 +753,11 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               key={aba.id}
               onClick={() => setAbaCliente(aba.id)}
               style={{
-                border: abaCliente === aba.id ? "3px solid #2563eb" : "2px solid #d1d5db",
+                border: abaCliente === aba.id ? "1.5px solid #2563eb" : "1.5px solid #d1d5db",
                 borderRadius: 16,
                 padding: "20px",
                 background: abaCliente === aba.id ? "#eff6ff" : "#fff",
+                boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(37, 99, 235, 0.15)" : "none",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 display: "flex",
