@@ -808,36 +808,48 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   }
 
   // ── FORMULÁRIO ───────────────────────────────────────────────
-  // Visual inspirado no formulário público do Morada do Sol: inputs com
-  // altura fixa e borda fina neutra, foco com glow azul, seções em uppercase
-  // com cor de destaque, botão sólido sem borda, container com sombra suave
-  // em vez de borda pesada. Escopo: só este formulário (não o objeto C
-  // global, que outras telas do módulo continuam usando).
+  // Réplica literal do visual do formulário público do Morada do Sol
+  // (parquemoradadosol.com.br/documentos/...): fundo creme, fontes Fraunces
+  // (títulos) + Outfit (corpo), verde escuro + dourado como cores de marca,
+  // inputs com borda neutra translúcida e foco com glow verde, botão sólido
+  // verde escuro, seções em dourado uppercase. Escopo: só este formulário.
+  const MDS = {
+    creme:     "#faf6ee",
+    verdeDk:   "#143229",
+    verde:     "#1f4a3d",
+    dourado:   "#d4a648",
+    douradoDk: "#a87e2f",
+    ink:       "#1a1612",
+    inkSoft:   "#5a5046",
+  };
   const FC = {
-    input:  { border:"1.5px solid rgba(17,17,17,0.14)", borderRadius:12, height:46, padding:"0 14px", fontSize:14, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-    label:  { fontSize:11.5, color:"#6b7280", fontWeight:500, display:"block", marginBottom:6 },
-    secTit: { fontSize:11, fontWeight:700, color:"#2563eb", textTransform:"uppercase", letterSpacing:1.5, marginBottom:14 },
-    btn:    { background:"#111", color:"#fff", border:"none", borderRadius:12, height:46, padding:"0 24px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(17,17,17,0.14)", borderRadius:12, height:46, padding:"0 20px", fontSize:14, cursor:"pointer", fontFamily:"inherit" },
-    btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
-    divider: { border:"none", borderTop:"1px solid rgba(17,17,17,0.08)", margin:"22px 0" },
+    input:  { border:"1.5px solid rgba(26,22,18,0.16)", borderRadius:9, height:46, padding:"0 14px", fontSize:15, color:MDS.ink, outline:"none", background:"#fff", fontFamily:"'Outfit', system-ui, sans-serif", width:"100%", boxSizing:"border-box" },
+    label:  { fontSize:10, color:MDS.douradoDk, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.14em", display:"block", marginBottom:6 },
+    secTit: { fontSize:11, fontWeight:600, color:MDS.douradoDk, textTransform:"uppercase", letterSpacing:"0.22em", marginBottom:16 },
+    btn:    { background:MDS.verdeDk, color:MDS.creme, border:"none", borderRadius:9, height:48, padding:"0 24px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Outfit', system-ui, sans-serif" },
+    btnSec: { background:"transparent", color:MDS.verdeDk, boxShadow:`inset 0 0 0 1.5px ${MDS.dourado}`, border:"none", borderRadius:9, height:42, padding:"0 20px", fontSize:13.5, fontWeight:600, cursor:"pointer", fontFamily:"'Outfit', system-ui, sans-serif" },
+    btnGhost: { background:"none", border:"none", color:MDS.inkSoft, cursor:"pointer", fontFamily:"'Outfit', system-ui, sans-serif", fontSize:13 },
+    divider: { border:"none", borderTop:"1px solid rgba(26,22,18,0.1)", margin:"22px 0" },
   };
   return (
-    <div style={{ padding: isMobile ? "16px" : "40px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:MDS.creme, minHeight:"100%", fontFamily:"'Outfit', system-ui, -apple-system, sans-serif" }}>
       <style>{`
-        .vk-fc-input:focus { border-color:#2563eb !important; box-shadow:0 0 0 3px rgba(37,99,235,0.12); }
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Outfit:wght@400;500;600;700&display=swap');
+        .vk-fc-input:focus { border-color:${MDS.verde} !important; box-shadow:0 0 0 3px rgba(31,74,61,0.12); }
+        .vk-fc-tipo.ativo { border-color:${MDS.dourado} !important; background:#fffbf3 !important; box-shadow:0 0 0 3px rgba(212,166,72,0.18); }
+        .vk-fc-check { accent-color:${MDS.verde}; }
       `}</style>
-      <div style={{ maxWidth:640, margin:"0 auto", background:"#fff", borderRadius:16, padding: isMobile ? "20px" : "28px 30px 32px", boxShadow:"0 18px 50px -28px rgba(17,17,17,0.35)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
+      <div style={{ maxWidth:640, margin:"0 auto", background:"#fff", borderRadius:16, padding: isMobile ? "22px 18px 26px" : "28px 26px 32px", boxShadow:"0 18px 50px -28px rgba(20,50,41,0.4)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
           <button style={FC.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
-          <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
         </div>
-        <div style={{ marginBottom:16 }}>
+        <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize:27, fontWeight:600, letterSpacing:"-0.02em", color:MDS.verdeDk, margin:"0 0 8px" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
+        <div style={{ marginBottom:16, marginTop:20 }}>
           <div style={FC.secTit}>Tipo de pessoa</div>
           <div style={{ display:"flex", gap:8 }}>
             {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
-              <button key={v} onClick={()=>setForm({...form,tipo:v})}
-                style={{ border:"1.5px solid rgba(17,17,17,0.14)", borderRadius:12, height:42, padding:"0 18px", fontSize:13.5, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+              <button key={v} className={"vk-fc-tipo" + (form.tipo===v ? " ativo" : "")} onClick={()=>setForm({...form,tipo:v})}
+                style={{ border:"1.5px solid rgba(26,22,18,0.14)", borderRadius:10, height:42, padding:"0 18px", fontSize:13.5, fontWeight:600, background:"#fff", color:MDS.verdeDk, cursor:"pointer", fontFamily:"'Outfit', system-ui, sans-serif" }}>{l}</button>
             ))}
           </div>
         </div>
@@ -845,15 +857,15 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <div style={{ marginBottom:16 }}>
           <div style={FC.secTit}>Dados principais</div>
           <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
-            <div><label style={FC.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input className="vk-fc-input" data-tutorial-id="cliente-nome" style={FC.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
+            <div><label style={FC.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"}</label><input className="vk-fc-input" data-tutorial-id="cliente-nome" style={FC.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
             <div><label style={FC.label}>{form.tipo==="PJ"?"CNPJ":"CPF"}</label><input className="vk-fc-input" style={FC.input} value={form.cpfCnpj} onChange={e=>setForm({...form,cpfCnpj:e.target.value})} /></div>
           </div>
           <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
             <div><label style={FC.label}>E-mail</label><input className="vk-fc-input" style={FC.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
             <div><label style={FC.label}>Cliente desde</label><input className="vk-fc-input" style={FC.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
           </div>
-          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"#374151"}}>
-            <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:MDS.inkSoft}}>
+            <input className="vk-fc-check" type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
           </label>
         </div>
         <hr style={FC.divider} />
@@ -879,18 +891,18 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             <button style={FC.btnSec} onClick={()=>setForm({...form,contatos:[...form.contatos,{id:uid(),nome:"",telefone:"",cargo:"",whatsapp:false}]})}>+ Adicionar</button>
           </div>
           {form.contatos?.map((ct,i)=>(
-            <div key={ct.id} style={{border:"1.5px solid rgba(17,17,17,0.10)",borderRadius:14,padding:"14px",marginBottom:10}}>
+            <div key={ct.id} style={{border:"1px dashed rgba(26,22,18,0.18)",borderRadius:10,padding:"14px",marginBottom:10}}>
               <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
                 <div style={isMobile ? { gridColumn:"1 / -1" } : {}}><label style={FC.label}>Nome</label><input className="vk-fc-input" style={FC.input} value={ct.nome} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:e.target.value}:x)})} /></div>
                 <div><label style={FC.label}>Telefone</label><input className="vk-fc-input" style={FC.input} value={ct.telefone} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:e.target.value}:x)})} /></div>
                 <div><label style={FC.label}>Cargo</label><input className="vk-fc-input" style={FC.input} value={ct.cargo} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:e.target.value}:x)})} /></div>
               </div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13,color:"#374151"}}>
-                  <input type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
-                  <span style={{color:"#16a34a"}}>WhatsApp</span>
+                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13,color:MDS.inkSoft}}>
+                  <input className="vk-fc-check" type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
+                  <span style={{color:"#2d7a4f"}}>WhatsApp</span>
                 </label>
-                {form.contatos.length>1&&<button style={{...FC.btnGhost,color:"#dc2626",fontSize:12}} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
+                {form.contatos.length>1&&<button style={{...FC.btnGhost,color:"#a32e12",fontSize:12}} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
               </div>
             </div>
           ))}
