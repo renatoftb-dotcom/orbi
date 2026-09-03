@@ -5065,7 +5065,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               key={aba.id}
               onClick={() => setAbaCliente(aba.id)}
               style={{
-                border: abaCliente === aba.id ? "2px solid #2563eb" : "2px solid #e5e7eb",
+                border: abaCliente === aba.id ? "3px solid #2563eb" : "2px solid #d1d5db",
                 borderRadius: 14,
                 padding: "18px",
                 background: abaCliente === aba.id ? "#eff6ff" : "#fff",
@@ -5078,13 +5078,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               }}
               onMouseEnter={e => {
                 if (abaCliente !== aba.id) {
-                  e.currentTarget.style.borderColor = "#d1d5db";
+                  e.currentTarget.style.borderColor = "#9ca3af";
                   e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
                 }
               }}
               onMouseLeave={e => {
                 if (abaCliente !== aba.id) {
-                  e.currentTarget.style.borderColor = "#e5e7eb";
+                  e.currentTarget.style.borderColor = "#d1d5db";
                   e.currentTarget.style.boxShadow = "none";
                 }
               }}>
