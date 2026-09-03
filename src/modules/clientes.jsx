@@ -737,7 +737,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const VKD = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#b5652f", cobreClaro:"#fdf6f0", inkSoft:"#78716c" };
     return (
       <div style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600;700&display=swap');`}</style>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}</style>
         <div style={{ maxWidth:900, margin:"0 auto" }}>
           {/* Header */}
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, flexWrap:"wrap" }}>
@@ -747,7 +747,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           {/* Cliente Info — só o nome */}
           <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:28 }}>
             <div style={{ width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius:14, background:VKD.cobreClaro, color:VKD.cobre, display:"flex", alignItems:"center", justifyContent:"center", fontSize: isMobile ? 16 : 20, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
-            <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize: isMobile ? 20 : 25, fontWeight:600, color:VKD.grafite, overflow:"hidden", textOverflow:"ellipsis" }}>{cliente.nome}</div>
+            <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize: isMobile ? 19 : 23, fontWeight:800, color:VKD.grafite, overflow:"hidden", textOverflow:"ellipsis" }}>{cliente.nome}</div>
           </div>
 
           {/* Navegação de abas com cards */}
@@ -841,7 +841,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   return (
     <div style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:VK.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
         .vk-fc-input:focus { border-color:${VK.cobre} !important; box-shadow:0 0 0 3px rgba(181,101,47,0.14); }
         .vk-fc-tipo.ativo { border-color:${VK.cobre} !important; background:${VK.cobreClaro} !important; box-shadow:0 0 0 3px rgba(181,101,47,0.16); }
         .vk-fc-check { accent-color:${VK.cobre}; }
@@ -850,7 +850,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
           <button style={FC.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
         </div>
-        <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize:27, fontWeight:600, letterSpacing:"-0.02em", color:VK.grafite, margin:"0 0 8px" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
+        <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:24, fontWeight:800, letterSpacing:"-0.02em", color:VK.grafite, margin:"0 0 8px" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
         <div style={{ marginBottom:16, marginTop:20 }}>
           <div style={FC.secTit}>Tipo de pessoa</div>
           <div style={{ display:"flex", gap:8 }}>

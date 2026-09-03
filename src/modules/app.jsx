@@ -446,13 +446,14 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
   ];
 
   // Paleta oficial do Vicke (grafite + cobre) — ver memória de projeto
-  // "vicke_paleta_cores". Fraunces no título de boas-vindas, Inter no resto.
+  // "vicke_paleta_cores". Uma fonte só (Inter) em toda a hierarquia visual;
+  // diferenciação é por tamanho/cor/peso, não por família de fonte.
   const VK = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#b5652f", cobreClaro:"#fdf6f0", inkSoft:"#78716c" };
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"calc(100vh - 53px)", padding: isMobile ? "32px 16px" : "40px 32px", background:VK.fundo, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600;700&display=swap');`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}</style>
       <div style={{ textAlign:"center", marginBottom: isMobile ? 36 : 56 }}>
-        <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize: isMobile ? 26 : 30, fontWeight:600, color:VK.grafite, letterSpacing:"-0.02em", transition:"opacity 0.4s ease, transform 0.4s ease", opacity, transform }}>
+        <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize: isMobile ? 26 : 30, fontWeight:800, color:VK.grafite, letterSpacing:"-0.02em", transition:"opacity 0.4s ease, transform 0.4s ease", opacity, transform }}>
           {texto}
         </div>
         <div style={{ fontSize:13.5, color:VK.inkSoft, marginTop:8 }}>Selecione um módulo para começar</div>
@@ -1581,7 +1582,7 @@ export default function ModuloClientesFornecedores() {
         }}>
           {(isMobile || !colapsadaEf) && (
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize:16, fontWeight:600, color:"#262421", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
+              <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:15, fontWeight:700, color:"#262421", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
               <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>Vicke</div>
             </div>
           )}
