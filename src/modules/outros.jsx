@@ -60,7 +60,7 @@ function Etapas({ data, save }) {
   if (!data) {
     return (
       <div style={{ padding:"24px 28px" }}>
-        <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
         <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
       </div>
     );
@@ -127,7 +127,7 @@ function Etapas({ data, save }) {
     <div style={{ padding:"24px 28px", display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
       {/* Cabeçalho */}
       <div style={{ marginBottom:16 }}>
-        <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
         <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Acompanhamento dos projetos em andamento</div>
       </div>
 
@@ -141,8 +141,8 @@ function Etapas({ data, save }) {
           placeholder="Buscar cliente ou referência…"
           style={{
             flex:1, maxWidth:240, padding:"6px 12px",
-            border:"2px solid #d1d5db", borderRadius:6,
-            fontSize:12.5, color:"#111", background:"#fff",
+            border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6,
+            fontSize:12.5, color:"#262421", background:"#fff",
             fontFamily:"inherit", outline:"none",
           }}
         />
@@ -178,16 +178,16 @@ function FilterPill({ label, count, active, onClick, countColor }) {
     <button
       onClick={onClick}
       style={{
-        fontSize:12, color: active ? "#111" : "#6b7280",
-        border:"1px solid " + (active ? "#111" : "#e5e7eb"),
+        fontSize:12, color: active ? "#b5652f" : "#6b7280",
+        border:"1.5px solid " + (active ? "#b5652f" : "rgba(38,36,33,0.16)"),
         borderRadius:20, padding:"5px 12px",
-        background: active ? "#f9fafb" : "#fff",
+        background: active ? "#fdf6f0" : "#fff",
         cursor:"pointer", fontFamily:"inherit",
         display:"flex", alignItems:"center", gap:5,
       }}>
       {label}
       {count != null && count > 0 && (
-        <strong style={{ marginLeft:4, color: countColor || "#111" }}>{count}</strong>
+        <strong style={{ marginLeft:4, color: countColor || "#262421" }}>{count}</strong>
       )}
     </button>
   );
@@ -221,7 +221,7 @@ function KanbanColumn({ col, cards, clientes }) {
       </div>
       <div style={{ flex:1, padding:10, display:"flex", flexDirection:"column", gap:8, overflowY:"auto" }}>
         {cards.length === 0 ? (
-          <div style={{ fontSize:11, color:"#d1d5db", textAlign:"center", padding:"20px 0", fontStyle:"italic" }}>
+          <div style={{ fontSize:11, color:"#9ca3af", textAlign:"center", padding:"20px 0", fontStyle:"italic" }}>
             Nenhum projeto
           </div>
         ) : cards.map(card => (
@@ -249,14 +249,14 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
   return (
     <div style={{
       background:"#fff",
-      border: atrasado ? "1px solid #fecaca" : "2px solid #d1d5db",
+      border: atrasado ? "1px solid #fecaca" : "1.5px solid rgba(38,36,33,0.16)",
       borderRadius: 12, padding:12,
       cursor:"pointer", transition:"all 0.15s",
       display:"flex", flexDirection:"column", gap:8,
       ...(atrasado ? { background:"#fffbfb" } : {}),
     }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#d1d5db"; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = atrasado ? "#fecaca" : "#e5e7eb"; }}>
+    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#9ca3af"; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = atrasado ? "#fecaca" : "rgba(38,36,33,0.16)"; }}>
       {/* Tag de tipo */}
       <span style={{
         display:"inline-flex", alignItems:"center",
@@ -267,7 +267,7 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
       }}>{tag.label}</span>
 
       {/* Nome cliente */}
-      <div style={{ fontSize:13.5, fontWeight:600, color:"#111", lineHeight:1.3 }}>{nomeCli}</div>
+      <div style={{ fontSize:13.5, fontWeight:600, color:"#262421", lineHeight:1.3 }}>{nomeCli}</div>
       {ref && (
         <div style={{ fontSize:11.5, color:"#9ca3af", lineHeight:1.3 }}>{ref}</div>
       )}
@@ -275,8 +275,8 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
       {/* Meta: área + valor */}
       {(area > 0 || valor > 0) && (
         <div style={{ display:"flex", gap:10, fontSize:11, color:"#6b7280", marginTop:2 }}>
-          {area > 0 && <span><strong style={{ color:"#111", fontWeight:600 }}>{area}</strong> m²</span>}
-          {valor > 0 && <span>R$ <strong style={{ color:"#111", fontWeight:600 }}>{brlCurto(valor)}</strong></span>}
+          {area > 0 && <span><strong style={{ color:"#262421", fontWeight:600 }}>{area}</strong> m²</span>}
+          {valor > 0 && <span>R$ <strong style={{ color:"#262421", fontWeight:600 }}>{brlCurto(valor)}</strong></span>}
         </div>
       )}
 
@@ -329,7 +329,7 @@ function CardFooter({ projeto, col, dias, atrasado }) {
         </div>
         {projeto.responsavelAcompanha && (
           <div style={{ fontSize:11.5, color:"#374151", lineHeight:1.3 }}>
-            <strong style={{ fontWeight:600, color:"#111" }}>{projeto.responsavelAcompanha}</strong>
+            <strong style={{ fontWeight:600, color:"#262421" }}>{projeto.responsavelAcompanha}</strong>
             <span style={{ color:"#9ca3af", fontWeight:400 }}> — Acompanhamento</span>
           </div>
         )}
@@ -386,7 +386,7 @@ function CardFooter({ projeto, col, dias, atrasado }) {
 
 // ─── Linha de pessoa (executor ou revisor) ─────────────────
 function PessoaRow({ icon, nome, funcao, prazo, ativa, concluida, inativa, rejeitada, topBorder, dias }) {
-  let corNome = "#111", corFuncao = "#6b7280", corPrazo = "#6b7280", fontWeightPrazo = 400;
+  let corNome = "#262421", corFuncao = "#6b7280", corPrazo = "#6b7280", fontWeightPrazo = 400;
   if (concluida || inativa) { corNome = "#6b7280"; corFuncao = "#9ca3af"; corPrazo = "#9ca3af"; }
   if (rejeitada) { corNome = "#92400e"; corFuncao = "#b45309"; corPrazo = "#b45309"; fontWeightPrazo = 600; }
   if (ativa && dias != null) {
@@ -497,9 +497,9 @@ function Obras({ data, save }) {
 
   const pillStyle = (ativa) => ({
     padding: "6px 14px", borderRadius: 7, fontSize: 12,
-    border: "1px solid " + (ativa ? "#111" : "#e5e7eb"),
-    background: ativa ? "#111" : "#fff",
-    color: ativa ? "#fff" : "#6b7280",
+    border: "1.5px solid " + (ativa ? "#b5652f" : "rgba(38,36,33,0.16)"),
+    background: ativa ? "#fdf6f0" : "#fff",
+    color: ativa ? "#b5652f" : "#6b7280",
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });
 
@@ -507,7 +507,7 @@ function Obras({ data, save }) {
     <PageContainer>
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:4 }}>
         <div>
-          <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
+          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
           <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
         </div>
       </div>
@@ -529,14 +529,14 @@ function Obras({ data, save }) {
       {obrasFiltradas.length === 0 ? (
         <div style={{
           marginTop: 20, padding: "48px 24px", textAlign: "center",
-          border: "1px dashed #e5e7eb", borderRadius: 14, background: "#fafafa",
+          border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14, background: "#fafafa",
         }}>
           <div style={{ color:"#9ca3af", fontSize:13 }}>
             {filtro === "andamento" && "Nenhuma obra em andamento."}
             {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
             {filtro === "todas" && "Nenhuma obra cadastrada."}
           </div>
-          <div style={{ color:"#d1d5db", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
+          <div style={{ color:"#9ca3af", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
             Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#9ca3af" }}>Engenharia</strong> do Kanban de Projetos.
           </div>
         </div>
@@ -552,7 +552,7 @@ function Obras({ data, save }) {
             return (
               <div key={obra.id} style={{
                 background: concluida ? "#fafafa" : "#fff",
-                border:"2px solid #d1d5db", borderRadius:9,
+                border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9,
                 padding:"12px 16px",
                 display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
               }}>
@@ -562,7 +562,7 @@ function Obras({ data, save }) {
                       fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.6,
                       padding:"2px 7px", borderRadius:4, background:tag.bg, color:tag.color,
                     }}>{tag.label}</span>
-                    <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>{nomeCliente(obra.clienteId)}</div>
+                    <div style={{ fontSize:14, fontWeight:600, color:"#262421" }}>{nomeCliente(obra.clienteId)}</div>
                     {concluida && (
                       <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, padding:"2px 7px", borderRadius:4, background:"#f0fdf4", color:"#16a34a" }}>
                         Concluída
@@ -586,7 +586,7 @@ function Obras({ data, save }) {
                   )}
                   {concluida && (
                     <button onClick={() => reabrirObra(obra)}
-                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"2px solid #d1d5db", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                       Reabrir
                     </button>
                   )}
