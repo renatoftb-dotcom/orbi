@@ -1496,7 +1496,9 @@ export default function ModuloClientesFornecedores() {
     // Módulos Financeiro e Notas Fiscais continuam removidos do menu
     // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
     // por enquanto pra não quebrar dados antigos, só ocultos do menu.
-    // Fornecedores foi reativado com o label "Prestadores de Serviços".
+    // Fornecedores foi refeito do zero como "Prestadores de Serviços"
+    // (PrestadoresServico em outros.jsx) — cadastro simples de empreiteiros,
+    // eletricistas, pintores, gesseiros, lojas, esquadrias etc.
     // Item especial — Tutorial Beta (só dev_mode). Não navega, dispara overlay.
     ...(temDevMode(data?.escritorio) ? [
       { k:"tutorial-beta", tipo:"tutorialBeta", label:"+ Novo (Beta) 🧪" },
@@ -1957,7 +1959,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "projetos:orcamentos"    && <TesteOrcamento key={orcamentosKey} data={{ ...data, _usuario: usuario }} save={save} onCadastrarCliente={() => { setAba("clientes"); setClientesKey(n=>n+1); setCadastroNovoCliente(true); }} />}
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
-          {aba === "fornecedores"           && <Fornecedores key={fornecedoresKey} data={data} save={save} />}
+          {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}

@@ -961,324 +961,164 @@ function Financeiro({ data, save }) {
   );
 }
 
-function Fornecedores({ data, save }) {
+// ═══════════════════════════════════════════════════════════════
+// PRESTADORES DE SERVIÇO — cadastro de empreiteiros, eletricistas,
+// pintores, gesseiros, lojas, esquadrias de alumínio etc.
+// Reaproveita a coleção `data.fornecedores` (compatibilidade com
+// ImportarNF, que já vincula fornecedor automaticamente por nome),
+// mas o cadastro em si foi refeito do zero com campos mais simples.
+// ═══════════════════════════════════════════════════════════════
+const CATEGORIAS_PRESTADOR = [
+  "Empreiteiro", "Eletricista", "Pintor", "Encanador", "Gesseiro",
+  "Esquadria de Alumínio", "Marceneiro", "Serralheiro", "Pedreiro",
+  "Loja / Comércio", "Outro",
+];
+
+const PS = {
+  input:  { border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  label:  { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
+  btn:    { background:"#111", color:"#fff", border:"none", borderRadius:12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+  btnSec: { background:"#fff", color:"#374151", border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+  tag:    (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
+};
+
+function PrestadoresServico({ data, save }) {
   const [view, setView] = useState("list");
-  const [sel, setSel] = useState(null);
   const [busca, setBusca] = useState("");
-  const [filtroRating, setFiltroRating] = useState(0);
+  const [filtroCategoria, setFiltroCategoria] = useState("");
 
-  const emptyForn = {
-    nome:"", cnpj:"", email:"", telefone:"", categorias:[],
-    prazoEntrega:"", condicoesPagamento:"", rating:3,
-    contatos:[{id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false}],
-    observacoes:"", ativo:true, historicoPrecosIds:[]
+  const emptyPrestador = {
+    nome:"", categoria:CATEGORIAS_PRESTADOR[0], telefone:"", whatsapp:false,
+    email:"", observacoes:"", ativo:true,
   };
-  const [form, setForm] = useState(emptyForn);
+  const [form, setForm] = useState(emptyPrestador);
 
-  const filtrados = data.fornecedores.filter(f => {
-    const matchBusca = f.nome.toLowerCase().includes(busca.toLowerCase());
-    const matchRating = filtroRating === 0 || f.rating >= filtroRating;
-    return matchBusca && matchRating;
+  const prestadores = data.fornecedores || [];
+  const filtrados = prestadores.filter(p => {
+    const matchBusca = p.nome.toLowerCase().includes(busca.toLowerCase());
+    const matchCategoria = !filtroCategoria || p.categoria === filtroCategoria;
+    return matchBusca && matchCategoria;
   });
 
-  function openNew() { setForm(emptyForn); setView("form"); }
-  function openEdit(f) { setForm(f); setView("form"); }
-  function openDetail(f) { setSel(f); setView("detail"); }
+  function openNew() { setForm(emptyPrestador); setView("form"); }
+  function openEdit(p) { setForm(p); setView("form"); }
 
-  function saveForn(e) {
+  function salvar(e) {
     e.preventDefault();
+    if (!form.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome", tipo: "aviso" }); return; }
     const novos = form.id
-      ? data.fornecedores.map(f => f.id === form.id ? form : f)
-      : [...data.fornecedores, { ...form, id: uid() }];
+      ? prestadores.map(p => p.id === form.id ? form : p)
+      : [...prestadores, { ...form, id: uid() }];
     save({ ...data, fornecedores: novos });
     setView("list");
   }
 
-  function toggleCat(cat) {
-    const cats = form.categorias || [];
-    setForm({ ...form, categorias: cats.includes(cat) ? cats.filter(c=>c!==cat) : [...cats, cat] });
+  async function remover(id) {
+    const ok = await dialogo.confirmar({ titulo: "Remover prestador?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
+    if (!ok) return;
+    save({ ...data, fornecedores: prestadores.filter(p => p.id !== id) });
+  }
+
+  function waLink(telefone) {
+    const num = (telefone||"").replace(/\D/g, "");
+    const numero = num.startsWith("55") ? num : `55${num}`;
+    return `https://wa.me/${numero}`;
   }
 
   // LISTA
   if (view === "list") return (
-    <div style={S.moduleWrap}>
-      <div style={S.toolbar}>
-        <div style={S.toolbarLeft}>
-          <div style={S.searchWrap}>
-            <span style={S.searchIcon}>🔍</span>
-            <input style={S.searchInput} placeholder="Buscar prestador..." value={busca} onChange={e=>setBusca(e.target.value)} />
-          </div>
-          <div style={S.filterGroup}>
-            <span style={{ color:"#64748b", fontSize:12 }}>Rating mín:</span>
-            {[0,3,4,5].map(r => (
-              <button key={r} className="filter-btn" style={{ ...S.filterBtn, ...(filtroRating===r?S.filterBtnActive:{}) }} onClick={()=>setFiltroRating(r)}>
-                {r===0?"Todos":"★".repeat(r)}
-              </button>
-            ))}
-          </div>
+    <div style={{ padding:"28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
+        <div>
+          <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
+          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>{prestadores.length} cadastrado{prestadores.length !== 1 ? "s" : ""}</div>
         </div>
-        <button style={S.btnPrimary} onClick={openNew}>+ Novo Prestador</button>
+        <button style={PS.btn} onClick={openNew}>+ Novo prestador</button>
       </div>
 
-      <div style={S.statsRow}>
-        {[
-          ["Total", data.fornecedores.length, "#3b82f6"],
-          ["Ativos", data.fornecedores.filter(f=>f.ativo).length, "#10b981"],
-          ["5 estrelas", data.fornecedores.filter(f=>f.rating===5).length, "#f59e0b"],
-          ["Categorias", [...new Set(data.fornecedores.flatMap(f=>f.categorias||[]))].length, "#8b5cf6"],
-        ].map(([l,v,c]) => (
-          <div key={l} style={{ ...S.statCard, borderLeft:`3px solid ${c}` }}>
-            <span style={{ color:"#64748b", fontSize:11, textTransform:"uppercase", letterSpacing:1 }}>{l}</span>
-            <span style={{ color:c, fontWeight:800, fontSize:22 }}>{v}</span>
-          </div>
-        ))}
+      <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
+        <input style={{ ...PS.input, maxWidth:280 }} placeholder="Buscar por nome..." value={busca} onChange={e=>setBusca(e.target.value)} />
+        <select style={{ ...PS.input, maxWidth:220, cursor:"pointer" }} value={filtroCategoria} onChange={e=>setFiltroCategoria(e.target.value)}>
+          <option value="">Todas as categorias</option>
+          {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
+        </select>
       </div>
 
-      <div style={S.cardGrid}>
-        {filtrados.map(f => {
-          const compras = data.lancamentos.filter(l => l.fornecedorId === f.id);
-          const totalComprado = compras.reduce((s,l)=>s+l.total,0);
-          return (
-            <div key={f.id} className="client-card" style={S.clientCard} onClick={() => openDetail(f)}>
-              <div style={S.clientCardHeader}>
-                <div style={{ ...S.avatar, background:"linear-gradient(135deg,#f59e0b,#d97706)" }}>
-                  {f.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase()}
-                </div>
-                <div style={{ flex:1 }}>
-                  <div style={S.clientName}>{f.nome}</div>
-                  <div style={S.clientCpf}>{f.cnpj}</div>
-                </div>
-                <div style={{ display:"flex", gap:2 }}>
-                  {[1,2,3,4,5].map(s => <span key={s} style={{ fontSize:12, color: s<=f.rating?"#f59e0b":"#1e293b" }}>★</span>)}
-                </div>
-              </div>
-
-              <div style={{ display:"flex", flexWrap:"wrap", gap:4, margin:"10px 0" }}>
-                {(f.categorias||[]).map(c => <span key={c} style={S.catTag}>{c}</span>)}
-              </div>
-
-              <div style={S.clientInfo}>
-                {f.prazoEntrega && <div style={S.infoRow}><span style={S.infoIcon}>🚚</span><span>Prazo: {f.prazoEntrega} dias</span></div>}
-                {f.condicoesPagamento && <div style={S.infoRow}><span style={S.infoIcon}>💳</span><span>{f.condicoesPagamento}</span></div>}
-                {totalComprado > 0 && <div style={S.infoRow}><span style={S.infoIcon}>📊</span><span>{compras.length} compras · {totalComprado.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</span></div>}
-              </div>
-
-              <div style={S.clientFooter}>
-                <span style={{ ...S.statusDot, color: f.ativo?"#4ade80":"#f87171" }}>● {f.ativo?"Ativo":"Inativo"}</span>
-              </div>
-              <div style={S.clientActions} onClick={e=>e.stopPropagation()}>
-                <button className="action-btn" style={S.actionBtn} onClick={()=>openEdit(f)}>✏ Editar</button>
-              </div>
-            </div>
-          );
-        })}
-        {filtrados.length === 0 && (
-          <div style={S.empty}>
-            <div style={S.emptyIcon}>🏭</div>
-            <div style={S.emptyText}>Nenhum prestador encontrado</div>
-            <button style={S.btnPrimary} onClick={openNew}>Cadastrar primeiro prestador</button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  // DETALHE FORNECEDOR
-  if (view === "detail" && sel) {
-    const forn = data.fornecedores.find(f=>f.id===sel.id) || sel;
-    const compras = data.lancamentos.filter(l=>l.fornecedorId===forn.id);
-    const totalComprado = compras.reduce((s,l)=>s+l.total,0);
-
-    // Histórico de preços por material
-    const historicoPrecos = {};
-    compras.forEach(l => {
-      const mat = data.materiais.find(m=>m.id===l.materialId);
-      if (!mat) return;
-      if (!historicoPrecos[mat.nome]) historicoPrecos[mat.nome] = [];
-      historicoPrecos[mat.nome].push({ data:l.data, preco:l.valorUnit, total:l.total, qtd:l.quantidade, unidade:mat.unidade });
-    });
-
-    return (
-      <div style={S.moduleWrap}>
-        <div style={S.detailHeader}>
-          <button style={S.backBtn} onClick={()=>setView("list")}>← Voltar</button>
-          <button style={S.btnPrimary} onClick={()=>openEdit(forn)}>✏ Editar</button>
+      {filtrados.length === 0 ? (
+        <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13, border:"1px dashed #d1d5db", borderRadius:16, background:"#fafafa" }}>
+          {prestadores.length === 0 ? "Nenhum prestador cadastrado." : "Nenhum resultado para essa busca."}{" "}
+          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#2563eb", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
         </div>
-        <div style={S.detailWrap}>
-          <div style={S.detailCard}>
-            <div style={S.detailProfile}>
-              <div style={{ ...S.avatarLg, background:"linear-gradient(135deg,#f59e0b,#d97706)" }}>
-                {forn.nome.split(" ").map(n=>n[0]).slice(0,2).join("").toUpperCase()}
+      ) : (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:14 }}>
+          {filtrados.map(p => (
+            <div key={p.id} style={{ border:"1.5px solid #d1d5db", borderRadius:16, padding:"16px 18px", background:"#fff" }}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"start", gap:8, marginBottom:8 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:"#111" }}>{p.nome}</div>
+                {p.ativo === false && <span style={PS.tag("#9ca3af")}>Inativo</span>}
               </div>
-              <div style={{ flex:1 }}>
-                <h2 style={{ color:"#f1f5f9", fontWeight:800, fontSize:20, margin:0 }}>{forn.nome}</h2>
-                <p style={{ color:"#64748b", fontSize:13, margin:"4px 0 8px" }}>{forn.cnpj}</p>
-                <div style={{ display:"flex", gap:4 }}>
-                  {[1,2,3,4,5].map(s=><span key={s} style={{ fontSize:18, color:s<=forn.rating?"#f59e0b":"#1e293b" }}>★</span>)}
-                  <span style={{ color:"#64748b", fontSize:13, marginLeft:6 }}>{forn.rating}/5</span>
-                </div>
+              <span style={PS.tag("#2563eb")}>{p.categoria}</span>
+              <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
+                {p.telefone && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.telefone}</div>}
+                {p.email && <div style={{ fontSize:12.5, color:"#6b7280", overflow:"hidden", textOverflow:"ellipsis" }}>{p.email}</div>}
               </div>
-              <div style={{ textAlign:"right" }}>
-                <div style={{ color:"#64748b", fontSize:11 }}>Total comprado</div>
-                <div style={{ color:"#f59e0b", fontWeight:800, fontSize:20 }}>{totalComprado.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</div>
-                <div style={{ color:"#64748b", fontSize:12 }}>{compras.length} compras</div>
-              </div>
-            </div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:16 }}>
-              {(forn.categorias||[]).map(c=><span key={c} style={S.catTag}>{c}</span>)}
-            </div>
-          </div>
-
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-            <div style={S.detailCard}>
-              <div style={S.detailCardTitle}>📋 Informações Comerciais</div>
-              <div style={S.detailFields}>
-                <DetailRow label="E-mail" value={forn.email} />
-                <DetailRow label="Telefone" value={forn.telefone} />
-                <DetailRow label="Prazo de Entrega" value={forn.prazoEntrega ? `${forn.prazoEntrega} dias úteis` : "—"} />
-                <DetailRow label="Condições de Pagamento" value={forn.condicoesPagamento || "—"} />
-              </div>
-            </div>
-            <div style={S.detailCard}>
-              <div style={S.detailCardTitle}>📞 Contatos</div>
-              {forn.contatos?.map(ct=>(
-                <div key={ct.id} style={S.contatoRow}>
-                  <div style={{ fontWeight:600, color:"#e2e8f0", fontSize:13 }}>{ct.nome} <span style={{ color:"#64748b", fontWeight:400 }}>({ct.cargo})</span></div>
-                  <div style={{ color:"#94a3b8", fontSize:12, marginTop:2 }}>
-                    {ct.telefone} {ct.whatsapp && <span style={S.waBadge}>WhatsApp</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Histórico de preços */}
-          {Object.keys(historicoPrecos).length > 0 && (
-            <div style={S.detailCard}>
-              <div style={S.detailCardTitle}>📈 Histórico de Preços por Material</div>
-              {Object.entries(historicoPrecos).map(([matNome, hist]) => (
-                <div key={matNome} style={{ marginBottom:20 }}>
-                  <div style={{ color:"#e2e8f0", fontWeight:700, fontSize:13, marginBottom:8 }}>{matNome}</div>
-                  <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                    <thead>
-                      <tr>{["Data","Qtd","Preço Unit.","Total"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr>
-                    </thead>
-                    <tbody>
-                      {hist.sort((a,b)=>new Date(b.data)-new Date(a.data)).map((h,i)=>(
-                        <tr key={i} style={{ borderBottom:"1px solid #0f172a" }}>
-                          <td style={S.td}>{new Date(h.data).toLocaleDateString("pt-BR")}</td>
-                          <td style={S.td}>{h.qtd} {h.unidade}</td>
-                          <td style={{ ...S.td, color:"#10b981", fontWeight:600 }}>{h.preco.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</td>
-                          <td style={{ ...S.td, color:"#f59e0b" }}>{h.total.toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {forn.observacoes && (
-            <div style={S.detailCard}>
-              <div style={S.detailCardTitle}>📝 Observações</div>
-              <p style={{ color:"#94a3b8", fontSize:13, lineHeight:1.6 }}>{forn.observacoes}</p>
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // FORMULÁRIO FORNECEDOR
-  return (
-    <div style={S.moduleWrap}>
-      <div style={S.formHeader}>
-        <button style={S.backBtn} onClick={()=>setView("list")}>← Voltar</button>
-        <h2 style={S.formTitle}>{form.id?"Editar Prestador":"Novo Prestador"}</h2>
-      </div>
-      <form onSubmit={saveForn} style={S.formWrap}>
-        <div style={S.formSection}>
-          <div style={S.sectionTitle}>Dados da Empresa</div>
-          <div style={S.formGrid2}>
-            <FormField label="Razão Social / Nome" value={form.nome} onChange={v=>setForm({...form,nome:v})} required />
-            <FormField label="CNPJ" value={form.cnpj} onChange={v=>setForm({...form,cnpj:v})} placeholder="00.000.000/0001-00" />
-          </div>
-          <div style={S.formGrid2}>
-            <FormField label="E-mail" type="email" value={form.email} onChange={v=>setForm({...form,email:v})} />
-            <FormField label="Telefone principal" value={form.telefone} onChange={v=>setForm({...form,telefone:v})} />
-          </div>
-        </div>
-
-        <div style={S.formSection}>
-          <div style={S.sectionTitle}>Categorias de Produtos</div>
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:8 }}>
-            {CATS_FORNECEDOR.map(cat=>(
-              <button type="button" key={cat} onClick={()=>toggleCat(cat)}
-                style={{ ...S.catToggle, ...(form.categorias?.includes(cat)?S.catToggleActive:{}) }}>
-                {cat}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div style={S.formSection}>
-          <div style={S.sectionTitle}>Condições Comerciais</div>
-          <div style={S.formGrid2}>
-            <FormField label="Prazo médio de entrega (dias)" type="number" value={form.prazoEntrega} onChange={v=>setForm({...form,prazoEntrega:v})} />
-            <FormField label="Condições de pagamento" value={form.condicoesPagamento} onChange={v=>setForm({...form,condicoesPagamento:v})} placeholder="Ex: 30/60/90 dias, À vista -5%..." />
-          </div>
-          <div style={{ marginTop:12 }}>
-            <label style={S.fieldLabel}>Avaliação geral</label>
-            <div style={{ display:"flex", gap:8, marginTop:6 }}>
-              {[1,2,3,4,5].map(s=>(
-                <button type="button" key={s} onClick={()=>setForm({...form,rating:s})}
-                  style={{ fontSize:24, background:"none", border:"none", cursor:"pointer", color:s<=form.rating?"#f59e0b":"#1e293b", transition:"color 0.15s" }}>
-                  ★
-                </button>
-              ))}
-              <span style={{ color:"#64748b", fontSize:13, alignSelf:"center" }}>{form.rating}/5</span>
-            </div>
-          </div>
-        </div>
-
-        <div style={S.formSection}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-            <div style={S.sectionTitle}>Contatos</div>
-            <button type="button" style={S.btnSecondary} onClick={()=>setForm({...form,contatos:[...form.contatos,{id:uid(),nome:"",telefone:"",cargo:"",whatsapp:false}]})}>
-              + Adicionar contato
-            </button>
-          </div>
-          {form.contatos?.map((ct,i)=>(
-            <div key={ct.id} style={S.contatoFormRow}>
-              <div style={S.formGrid3}>
-                <FormField label="Nome" value={ct.nome} onChange={v=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:v}:x)})} />
-                <FormField label="Telefone" value={ct.telefone} onChange={v=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:v}:x)})} />
-                <FormField label="Cargo" value={ct.cargo} onChange={v=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:v}:x)})} />
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:12, marginTop:8 }}>
-                <label style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", color:"#64748b", fontSize:13 }}>
-                  <input type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
-                  <span style={{ color:"#25d366" }}>WhatsApp</span>
-                </label>
-                {form.contatos.length > 1 && (
-                  <button type="button" style={{ ...S.btnSecondary, color:"#f87171", fontSize:12 }} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>
-                    Remover
-                  </button>
+              <div style={{ display:"flex", gap:8, marginTop:14 }}>
+                {p.whatsapp && p.telefone && (
+                  <a href={waLink(p.telefone)} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize:12, color:"#fff", textDecoration:"none", background:"#16a34a", border:"1px solid #16a34a", borderRadius:12, padding:"5px 12px", fontWeight:600 }}>WhatsApp</a>
                 )}
+                <button onClick={()=>openEdit(p)} style={{ ...PS.btnSec, fontSize:12, padding:"5px 12px" }}>Editar</button>
+                <button onClick={()=>remover(p.id)} style={{ ...PS.btnGhost, color:"#dc2626", fontSize:12 }}>Remover</button>
               </div>
             </div>
           ))}
         </div>
+      )}
+    </div>
+  );
 
-        <div style={S.formSection}>
-          <div style={S.sectionTitle}>Observações Internas</div>
-          <textarea style={S.textarea} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} placeholder="Condições especiais, notas de negociação, alertas..." rows={3} />
+  // FORMULÁRIO
+  return (
+    <div style={{ padding:"28px 32px", maxWidth:560, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
+        <button style={PS.btnGhost} onClick={()=>setView("list")}>← Voltar</button>
+        <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
+      </div>
+      <form onSubmit={salvar}>
+        <div style={{ marginBottom:14 }}>
+          <label style={PS.label}>Nome *</label>
+          <input style={PS.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} placeholder="Nome da pessoa ou empresa" autoFocus />
         </div>
-
-        <div style={S.formActions}>
-          <button type="button" style={S.btnCancel} onClick={()=>setView("list")}>Cancelar</button>
-          <button type="submit" style={S.btnPrimary}>{form.id?"Salvar alterações":"Cadastrar prestador"}</button>
+        <div style={{ marginBottom:14 }}>
+          <label style={PS.label}>Categoria</label>
+          <select style={{ ...PS.input, cursor:"pointer" }} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
+            {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+          <div>
+            <label style={PS.label}>Telefone</label>
+            <input style={PS.input} value={form.telefone} onChange={e=>setForm({...form,telefone:e.target.value})} placeholder="(00) 00000-0000" />
+          </div>
+          <div>
+            <label style={PS.label}>E-mail</label>
+            <input style={PS.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} />
+          </div>
+        </div>
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151", marginBottom:14 }}>
+          <input type="checkbox" checked={form.whatsapp} onChange={e=>setForm({...form,whatsapp:e.target.checked})} /> Este telefone é WhatsApp
+        </label>
+        <div style={{ marginBottom:14 }}>
+          <label style={PS.label}>Observações</label>
+          <textarea style={{ ...PS.input, resize:"vertical" }} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} placeholder="Condições, indicações, alertas..." />
+        </div>
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151", marginBottom:24 }}>
+          <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Prestador ativo
+        </label>
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+          <button type="button" style={PS.btnSec} onClick={()=>setView("list")}>Cancelar</button>
+          <button type="submit" style={PS.btn}>{form.id ? "Salvar alterações" : "Cadastrar prestador"}</button>
         </div>
       </form>
     </div>
