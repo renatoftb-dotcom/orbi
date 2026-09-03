@@ -40,7 +40,7 @@ function Admin({ usuario, data, save, initialTab }) {
         .vk-adm-tabela-mobile { display: block !important; border: none !important; }
         .vk-adm-tabela-mobile thead { display: none !important; }
         .vk-adm-tabela-mobile tbody { display: flex !important; flex-direction: column !important; gap: 8px !important; }
-        .vk-adm-tabela-mobile tr { display: flex !important; flex-direction: column !important; padding: 12px 14px !important; border: 2px solid #d1d5db !important; border-radius: 10px !important; background: #fff !important; }
+        .vk-adm-tabela-mobile tr { display: flex !important; flex-direction: column !important; padding: 12px 14px !important; border: 1.5px solid rgba(38,36,33,0.16) !important; border-radius: 10px !important; background: #fff !important; }
         .vk-adm-tabela-mobile td { display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 4px 0 !important; border: none !important; gap: 12px !important; }
         .vk-adm-tabela-mobile td::before {
           content: attr(data-label);
@@ -139,30 +139,30 @@ function Admin({ usuario, data, save, initialTab }) {
   }, [aba]);
 
   const S = {
-    wrap:    { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header:  { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
-    titulo:  { fontSize:18, fontWeight:700, color:"#111", margin:0 },
+    wrap:    { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#262421", maxWidth:1200, margin:"0 auto" },
+    header:  { borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"24px 32px" },
+    titulo:  { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
     sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
-    abas:    { display:"flex", gap:0, borderBottom:"2px solid #d1d5db", padding:"0 32px" },
-    aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
+    abas:    { display:"flex", gap:0, borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"0 32px" },
+    aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #b5652f" : "2px solid transparent", color: ativa ? "#b5652f" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body:    { padding:"32px" },
     bodyNarrow: { padding:"32px", maxWidth:760 },
     secao:   { marginBottom:32 },
     secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
-    btn:     { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec:  { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-    btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btn:     { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnSec:  { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnDestrutivo: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" },
-    modal:   { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
-    modalLg: { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modal:   { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modalLg: { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
-    input:   { width:"100%", border:"2px solid #d1d5db", borderRadius: 12, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
+    input:   { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
     tabela:  { width:"100%", borderCollapse:"collapse", fontSize:13 },
-    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"2px solid #d1d5db", background:"#fafbfc" },
+    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1.5px solid rgba(38,36,33,0.16)", background:"#fafbfc" },
     td:      { padding:"12px", borderBottom:"1px solid #f3f4f6", verticalAlign:"middle" },
-    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#111", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px" },
-    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
+    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#262421", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" },
+    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
     vazio:   { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"40px 0" },
   };
 
@@ -209,7 +209,7 @@ function Admin({ usuario, data, save, initialTab }) {
       {confirmManut && (
         <div style={S.overlay} onClick={() => setConfirmManut(false)}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:10 }}>Executar manutenção agora?</div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:10 }}>Executar manutenção agora?</div>
             <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.6 }}>
               Esta ação vai:<br/>
               · Expirar propostas com mais de 30 dias (marca como Perdido e apaga imagens)<br/>
@@ -306,7 +306,7 @@ function Admin({ usuario, data, save, initialTab }) {
                   ? { ...S.badgeAtiva, background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0" }
                   : s.ultimo_status === "falha"
                   ? S.badgeInativa
-                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#f9fafb", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px" };
+                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#f9fafb", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" };
                 const statusLabel = s.ultimo_status === "sucesso" ? "OK"
                                   : s.ultimo_status === "falha" ? "Falha"
                                   : "Nunca coletado";
@@ -597,7 +597,7 @@ function PainelEmpresas({ S }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Empresas cadastradas</div>
+          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Empresas cadastradas</div>
           <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
             {loading ? "Carregando..." : `${empresas.length} empresa(s) · ${empresas.filter(e => e.ativo).length} ativa(s)`}
           </div>
@@ -616,7 +616,7 @@ function PainelEmpresas({ S }) {
       )}
 
       {!loading && empresas.length > 0 && (
-        <div style={{ border:"2px solid #d1d5db", borderRadius: 14, overflow:"hidden" }}>
+        <div style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, overflow:"hidden" }}>
           <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
@@ -632,14 +632,14 @@ function PainelEmpresas({ S }) {
               {empresas.map(e => (
                 <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setEmpresaSelecionada(e)}>
                   <td style={S.td} data-label="Nome">
-                    <div style={{ fontWeight:600, color:"#111" }}>{e.nome}</div>
+                    <div style={{ fontWeight:600, color:"#262421" }}>{e.nome}</div>
                     <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{e.plano || "gratuito"}</div>
                   </td>
                   <td style={{ ...S.td, color:"#6b7280" }} data-label="CNPJ / CPF">{e.cnpj_cpf || "—"}</td>
                   <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Usuários">
                     {e.usuarios_ativos || 0}
                     {e.usuarios_total > e.usuarios_ativos && (
-                      <span style={{ color:"#d1d5db", marginLeft:4 }}>/ {e.usuarios_total}</span>
+                      <span style={{ color:"#9ca3af", marginLeft:4 }}>/ {e.usuarios_total}</span>
                     )}
                   </td>
                   <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Orçamentos">{e.orcamentos_total || 0}</td>
@@ -758,7 +758,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28, gap:16, flexWrap:"wrap" }}>
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-            <div style={{ fontSize:22, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>{data.nome}</div>
+            <div style={{ fontSize:22, fontWeight:600, color:"#262421", letterSpacing:-0.3 }}>{data.nome}</div>
             <span style={data.ativo ? S.badgeAtiva : S.badgeInativa}>
               {data.ativo ? "Ativa" : "Inativa"}
             </span>
@@ -850,7 +850,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
         ) : (!data.usuarios || data.usuarios.length === 0) ? (
           <div style={S.vazio}>Nenhum usuário cadastrado.</div>
         ) : (
-          <div style={{ border:"2px solid #d1d5db", borderRadius: 14, overflow:"hidden" }}>
+          <div style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, overflow:"hidden" }}>
             <table style={S.tabela} className="vk-adm-tabela-mobile">
               <thead>
                 <tr>
@@ -866,7 +866,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                 {data.usuarios.map(u => (
                   <tr key={u.id}>
                     <td style={S.td} data-label="Nome">
-                      <div style={{ fontWeight:500, color:"#111" }}>{u.nome}</div>
+                      <div style={{ fontWeight:500, color:"#262421" }}>{u.nome}</div>
                       {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
                       {u.precisa_trocar_senha && (
                         <div style={{ fontSize:10, color:"#6b7280", marginTop:3, fontWeight:600, textTransform:"uppercase", letterSpacing:0.4 }}>
@@ -919,9 +919,9 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       {!isMasterEmp && (
         <div style={{ ...S.secao, marginBottom:32 }}>
           <div style={S.secTit}>Ações administrativas</div>
-          <div style={{ border:"2px solid #d1d5db", background:"#fafafa", borderRadius: 14, padding:"16px" }}>
+          <div style={{ border:"1.5px solid rgba(38,36,33,0.16)", background:"#fafafa", borderRadius: 14, padding:"16px" }}>
             <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom:12 }}>
-              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#111" }}>Não tem como reverter.</strong>
+              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#262421" }}>Não tem como reverter.</strong>
               <br/>
               Pra cortar acesso temporariamente, use "Editar → Inativar" — preserva dados.
             </div>
@@ -988,7 +988,7 @@ function DetalheCampo({ label, valor }) {
   return (
     <div>
       <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>{label}</div>
-      <div style={{ fontSize:13, color:"#111", lineHeight:1.4 }}>{valor}</div>
+      <div style={{ fontSize:13, color:"#262421", lineHeight:1.4 }}>{valor}</div>
     </div>
   );
 }
@@ -997,9 +997,9 @@ function DetalheCampo({ label, valor }) {
 // `carregando` mostra "…" cinza no lugar do valor (evita flash de "0").
 function MetricaCard({ label, valor, carregando }) {
   return (
-    <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 14, padding:"14px 16px" }}>
+    <div style={{ background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, padding:"14px 16px" }}>
       <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
-      <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#d1d5db" : "#111", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
+      <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#c9c4bd" : "#262421", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
         {carregando ? "…" : (valor ?? 0)}
       </div>
     </div>
@@ -1027,7 +1027,7 @@ function BarraStatus({ status }) {
   const segs = [
     { key: "rascunhos", label: "Rascunhos", valor: status.rascunhos, cor: "#e5e7eb" },
     { key: "abertos",   label: "Abertos",   valor: status.abertos,   cor: "#9ca3af" },
-    { key: "ganhos",    label: "Ganhos",    valor: status.ganhos,    cor: "#111" },
+    { key: "ganhos",    label: "Ganhos",    valor: status.ganhos,    cor: "#262421" },
     { key: "perdidos",  label: "Perdidos",  valor: status.perdidos,  cor: "#991b1b" },
   ].filter(s => s.valor > 0);
 
@@ -1129,7 +1129,7 @@ function GraficoMensal({ mensal }) {
           // o azul (mês atual) quanto com o cinza (anteriores).
           const hGan = max > 0 ? (m.ganhos / max) * chartH : 0;
           const yGan = padTop + (chartH - hGan);
-          const corGanhos = "#111";
+          const corGanhos = "#262421";
 
           // Label do mês atual em azul + negrito pra reforçar o destaque.
           const labelCor = ehAtual ? "#1e3a8a" : "#9ca3af";
@@ -1182,7 +1182,7 @@ function GraficoMensal({ mensal }) {
           Criados
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          <span style={{ width:10, height:10, background:"#111", borderRadius:3, display:"inline-block" }} />
+          <span style={{ width:10, height:10, background:"#262421", borderRadius:3, display:"inline-block" }} />
           Ganhos
         </div>
       </div>
@@ -1217,21 +1217,21 @@ function TopUsuarios({ usuarios, fmtDataHora }) {
           }}>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"#262421", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {u.nome}
                 </div>
                 <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>
                   {u.email} · último login: {u.ultimo_login ? fmtDataHora(u.ultimo_login) : "nunca"}
                 </div>
               </div>
-              <div style={{ fontSize:12, fontWeight:600, color:"#111", fontVariantNumeric:"tabular-nums", minWidth:60, textAlign:"right" }}>
+              <div style={{ fontSize:12, fontWeight:600, color:"#262421", fontVariantNumeric:"tabular-nums", minWidth:60, textAlign:"right" }}>
                 {acoes} {acoes === 1 ? "ação" : "ações"}
               </div>
             </div>
             {/* Barra de progresso visual */}
             {acoes > 0 && (
               <div style={{ marginTop:8, height:3, background:"#f3f4f6", borderRadius:2, overflow:"hidden" }}>
-                <div style={{ width:`${pct}%`, height:"100%", background:"#111", transition:"width 0.3s" }} />
+                <div style={{ width:`${pct}%`, height:"100%", background:"#262421", transition:"width 0.3s" }} />
               </div>
             )}
           </div>
@@ -1272,7 +1272,7 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
           Excluir empresa definitivamente?
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
@@ -1290,10 +1290,10 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
           {/* Nome em destaque, FORA do label uppercase (S.label tem textTransform).
               Renderiza com fonte mono pra deixar capitalização inequívoca. */}
           <div style={{
-            background:"#f9fafb", border:"2px solid #d1d5db", borderRadius:6,
+            background:"#f9fafb", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6,
             padding:"6px 10px", marginBottom:8,
             fontFamily:"'SF Mono',Menlo,Consolas,monospace",
-            fontSize:13, color:"#111", fontWeight:600,
+            fontSize:13, color:"#262421", fontWeight:600,
             userSelect:"all", // facilita selecionar e copiar
           }}>
             {empresa.nome}
@@ -1304,7 +1304,7 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             style={{
               ...S.input,
               fontFamily:"'SF Mono',Menlo,Consolas,monospace",
-              borderColor: podeExcluir ? "#111" : (erroVisivel ? "#9ca3af" : "#e5e7eb"),
+              borderColor: podeExcluir ? "#262421" : (erroVisivel ? "#9ca3af" : "#e5e7eb"),
               borderWidth: podeExcluir ? 1.5 : 1,
             }}
             autoFocus
@@ -1316,8 +1316,8 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             </div>
           )}
           {podeExcluir && (
-            <div style={{ fontSize:11.5, color:"#111", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
-              <IconeMaster nome="check" tamanho={12} cor="#111" />
+            <div style={{ fontSize:11.5, color:"#262421", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
+              <IconeMaster nome="check" tamanho={12} cor="#262421" />
               Confere
             </div>
           )}
@@ -1368,11 +1368,11 @@ function ModalConfirmarResetSenha({ S, usuario, escopo = "admin", onFechar, onSu
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
           Resetar senha?
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
-          Será gerada uma nova senha temporária para <strong style={{ color:"#111" }}>{usuario.nome}</strong> ({usuario.email}).
+          Será gerada uma nova senha temporária para <strong style={{ color:"#262421" }}>{usuario.nome}</strong> ({usuario.email}).
           <br/><br/>
           A senha atual deixará de funcionar imediatamente. <strong>O usuário será obrigado a trocar a senha no próximo login.</strong>
           <br/><br/>
@@ -1417,11 +1417,11 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
           Nova senha gerada
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
-          Senha temporária para <strong style={{ color:"#111" }}>{usuario.nome}</strong> ({usuario.email}).
+          Senha temporária para <strong style={{ color:"#262421" }}>{usuario.nome}</strong> ({usuario.email}).
           Copie agora — depois de fechar este aviso, ela não aparece mais.
         </div>
         <div style={{ marginBottom:18 }}>
@@ -1434,7 +1434,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
               style={{
                 ...S.input,
                 fontFamily:"'SF Mono',Menlo,Consolas,monospace",
-                fontSize:15, fontWeight:600, color:"#111",
+                fontSize:15, fontWeight:600, color:"#262421",
                 background:"#fafbfc", flex:1, userSelect:"all",
               }}
             />
@@ -1442,8 +1442,8 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
               style={{
                 ...S.btnSec,
                 padding:"0 14px", whiteSpace:"nowrap",
-                background: copiado ? "#111" : "#fff",
-                borderColor: copiado ? "#111" : "#e5e7eb",
+                background: copiado ? "#262421" : "#fff",
+                borderColor: copiado ? "#262421" : "rgba(38,36,33,0.16)",
                 color: copiado ? "#fff" : "#374151",
                 display:"flex", alignItems:"center", gap:6,
               }}>
@@ -1452,7 +1452,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
             </button>
           </div>
         </div>
-        <div style={{ background:"#fafafa", border:"2px solid #d1d5db", color:"#374151", borderRadius: 12, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+        <div style={{ background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", color:"#374151", borderRadius: 12, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
           Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -1505,11 +1505,11 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
           Editar usuário
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
-          <strong style={{ color:"#111" }}>{usuario.nome}</strong>
+          <strong style={{ color:"#262421" }}>{usuario.nome}</strong>
           <span style={{ color:"#9ca3af" }}> · {usuario.email}</span>
         </div>
 
@@ -1536,8 +1536,8 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               style={{
                 flex:1, padding:"10px", borderRadius: 12, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
-                border: ativo ? "1px solid #111" : "2px solid #d1d5db",
-                background: ativo ? "#111" : "#fff",
+                border: ativo ? "1px solid #262421" : "1.5px solid rgba(38,36,33,0.16)",
+                background: ativo ? "#262421" : "#fff",
                 color: ativo ? "#fff" : "#6b7280",
                 fontWeight: ativo ? 600 : 400,
               }}>
@@ -1550,8 +1550,8 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               style={{
                 flex:1, padding:"10px", borderRadius: 12, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
-                border: !ativo ? "1px solid #111" : "2px solid #d1d5db",
-                background: !ativo ? "#111" : "#fff",
+                border: !ativo ? "1px solid #262421" : "1.5px solid rgba(38,36,33,0.16)",
+                background: !ativo ? "#262421" : "#fff",
                 color: !ativo ? "#fff" : "#6b7280",
                 fontWeight: !ativo ? 600 : 400,
               }}>
@@ -1559,7 +1559,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
             </button>
           </div>
           {!ativo && usuario.ativo && (
-            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
+            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
               Usuário inativo não consegue mais fazer login. As sessões existentes serão encerradas no próximo refresh.
             </div>
           )}
@@ -1634,7 +1634,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>Nova empresa</div>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:4 }}>Nova empresa</div>
         <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
           Cria a empresa e o primeiro administrador que poderá logar.
         </div>
@@ -1806,7 +1806,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
           <div>
-            <div style={{ fontSize:16, fontWeight:700, color:"#111" }}>Editar empresa</div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#262421" }}>Editar empresa</div>
             <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>ID: {empresa.id}</div>
           </div>
           <span style={form.ativo ? S.badgeAtiva : S.badgeInativa}>
@@ -1851,7 +1851,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, padding:"14px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius: 12, marginTop:4 }}>
             <div>
               <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Usuários</div>
-              <div style={{ fontSize:18, fontWeight:700, color:"#111", marginTop:2 }}>
+              <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginTop:2 }}>
                 {empresa.usuarios_ativos || 0}
                 {empresa.usuarios_total > empresa.usuarios_ativos && (
                   <span style={{ fontSize:12, color:"#9ca3af", fontWeight:400, marginLeft:4 }}>/ {empresa.usuarios_total}</span>
@@ -1860,11 +1860,11 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
             </div>
             <div>
               <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
-              <div style={{ fontSize:18, fontWeight:700, color:"#111", marginTop:2 }}>{empresa.orcamentos_total || 0}</div>
+              <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginTop:2 }}>{empresa.orcamentos_total || 0}</div>
             </div>
             <div>
               <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Criada em</div>
-              <div style={{ fontSize:13, fontWeight:600, color:"#111", marginTop:4 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:"#262421", marginTop:4 }}>
                 {empresa.criado_em ? new Date(empresa.criado_em).toLocaleDateString("pt-BR") : "—"}
               </div>
             </div>
@@ -1920,8 +1920,8 @@ const FEEDBACK_CAT_LABELS = {
 // (cinza/preto/branco) — diferenciação por intensidade do texto e fundo.
 // Aberta destaca com fundo preto pra chamar atenção; arquivada cinza pálido.
 const FEEDBACK_STATUS_LABELS = {
-  aberta:       { label: "Aberta",       cor: "#fff",    bg: "#111",     borda: "#111"    },
-  em_andamento: { label: "Em andamento", cor: "#111",    bg: "#fafafa",  borda: "#111"    },
+  aberta:       { label: "Aberta",       cor: "#fff",    bg: "#262421",   borda: "#262421"    },
+  em_andamento: { label: "Em andamento", cor: "#262421",    bg: "#fafafa",  borda: "#262421"    },
   resolvida:    { label: "Resolvida",    cor: "#6b7280", bg: "#fafafa",  borda: "#e5e7eb" },
   arquivada:    { label: "Arquivada",    cor: "#9ca3af", bg: "#f9fafb",  borda: "#e5e7eb" },
 };
@@ -1991,7 +1991,7 @@ function PainelFeedback({ S }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18, gap:16, flexWrap:"wrap" }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Caixa de Feedback</div>
+          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Caixa de Feedback</div>
           <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
             {loading
               ? "Carregando..."
@@ -2133,13 +2133,13 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
   const preview = fb.texto.length > 110 ? fb.texto.slice(0, 110) + "…" : fb.texto;
 
   return (
-    <div style={{ border:"2px solid #d1d5db", borderRadius: 14, background:"#fff" }}>
+    <div style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, background:"#fff" }}>
       {/* ── Linha clicável (expande/recolhe) ── */}
       <div onClick={onToggle}
         style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-            <span style={{ fontSize:12, fontWeight:600, color:"#111" }}>{cat.label}</span>
+            <span style={{ fontSize:12, fontWeight:600, color:"#262421" }}>{cat.label}</span>
             <span style={{
               fontSize:10, padding:"2px 7px", borderRadius:4,
               background:st.bg, color:st.cor, border:`1px solid ${st.borda}`,
@@ -2181,8 +2181,8 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
                       padding:"6px 12px", borderRadius:6, fontSize:12,
                       fontFamily:"inherit",
                       cursor: (salvando || ativo) ? "default" : "pointer",
-                      border: ativo ? "1px solid #111" : "2px solid #d1d5db",
-                      background: ativo ? "#111" : "#fff",
+                      border: ativo ? "1px solid #262421" : "1.5px solid rgba(38,36,33,0.16)",
+                      background: ativo ? "#262421" : "#fff",
                       color: ativo ? "#fff" : "#374151",
                       fontWeight: ativo ? 600 : 400,
                       transition:"all 0.12s",
@@ -2292,7 +2292,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#111" }}>Usuários master</div>
+          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Usuários master</div>
           <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
             {loading ? "Carregando..." : `${masterAtivos} de ${limite} masters ativos · acesso total ao SaaS`}
           </div>
@@ -2321,7 +2321,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
       )}
 
       {!loading && usuarios.length > 0 && (
-        <div style={{ border:"2px solid #d1d5db", borderRadius: 14, overflow:"hidden" }}>
+        <div style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, overflow:"hidden" }}>
           <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
@@ -2338,7 +2338,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                 return (
                   <tr key={u.id}>
                     <td style={S.td} data-label="Nome">
-                      <div style={{ fontWeight:600, color:"#111" }}>
+                      <div style={{ fontWeight:600, color:"#262421" }}>
                         {u.nome}
                         {ehVoce && (
                           <span style={{ fontSize:10, fontWeight:600, color:"#6b7280", background:"#f3f4f6", borderRadius:3, padding:"2px 6px", marginLeft:8, letterSpacing:0.3 }}>VOCÊ</span>
@@ -2424,7 +2424,7 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>Novo usuário master</div>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:4 }}>Novo usuário master</div>
         <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
           Masters têm acesso total ao SaaS, incluindo todas as empresas cliente.
         </div>
