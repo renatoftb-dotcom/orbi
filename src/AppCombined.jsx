@@ -5065,83 +5065,102 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   }
 
   // ── FORMULÁRIO ───────────────────────────────────────────────
+  // Visual inspirado no formulário público do Morada do Sol: inputs com
+  // altura fixa e borda fina neutra, foco com glow azul, seções em uppercase
+  // com cor de destaque, botão sólido sem borda, container com sombra suave
+  // em vez de borda pesada. Escopo: só este formulário (não o objeto C
+  // global, que outras telas do módulo continuam usando).
+  const FC = {
+    input:  { border:"1.5px solid rgba(17,17,17,0.14)", borderRadius:12, height:46, padding:"0 14px", fontSize:14, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+    label:  { fontSize:11.5, color:"#6b7280", fontWeight:500, display:"block", marginBottom:6 },
+    secTit: { fontSize:11, fontWeight:700, color:"#2563eb", textTransform:"uppercase", letterSpacing:1.5, marginBottom:14 },
+    btn:    { background:"#111", color:"#fff", border:"none", borderRadius:12, height:46, padding:"0 24px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(17,17,17,0.14)", borderRadius:12, height:46, padding:"0 20px", fontSize:14, cursor:"pointer", fontFamily:"inherit" },
+    btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+    divider: { border:"none", borderTop:"1px solid rgba(17,17,17,0.08)", margin:"22px 0" },
+  };
   return (
-    <div style={{ padding: isMobile ? "16px" : "28px 32px", maxWidth:680, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
-        <button style={C.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
-        <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
-      </div>
-      <div style={{ marginBottom:16 }}>
-        <div style={C.secTit}>Tipo de pessoa</div>
-        <div style={{ display:"flex", gap:8 }}>
-          {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
-            <button key={v} onClick={()=>setForm({...form,tipo:v})}
-              style={{ border:"2px solid #d1d5db", borderRadius: 12, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+    <div style={{ padding: isMobile ? "16px" : "40px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <style>{`
+        .vk-fc-input:focus { border-color:#2563eb !important; box-shadow:0 0 0 3px rgba(37,99,235,0.12); }
+      `}</style>
+      <div style={{ maxWidth:640, margin:"0 auto", background:"#fff", borderRadius:16, padding: isMobile ? "20px" : "28px 30px 32px", boxShadow:"0 18px 50px -28px rgba(17,17,17,0.35)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
+          <button style={FC.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
+          <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
+        </div>
+        <div style={{ marginBottom:16 }}>
+          <div style={FC.secTit}>Tipo de pessoa</div>
+          <div style={{ display:"flex", gap:8 }}>
+            {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setForm({...form,tipo:v})}
+                style={{ border:"1.5px solid rgba(17,17,17,0.14)", borderRadius:12, height:42, padding:"0 18px", fontSize:13.5, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+            ))}
+          </div>
+        </div>
+        <hr style={FC.divider} />
+        <div style={{ marginBottom:16 }}>
+          <div style={FC.secTit}>Dados principais</div>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
+            <div><label style={FC.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input className="vk-fc-input" data-tutorial-id="cliente-nome" style={FC.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
+            <div><label style={FC.label}>{form.tipo==="PJ"?"CNPJ":"CPF"}</label><input className="vk-fc-input" style={FC.input} value={form.cpfCnpj} onChange={e=>setForm({...form,cpfCnpj:e.target.value})} /></div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
+            <div><label style={FC.label}>E-mail</label><input className="vk-fc-input" style={FC.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
+            <div><label style={FC.label}>Cliente desde</label><input className="vk-fc-input" style={FC.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
+          </div>
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"#374151"}}>
+            <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
+          </label>
+        </div>
+        <hr style={FC.divider} />
+        <div style={{ marginBottom:16 }}>
+          <div style={FC.secTit}>Endereço</div>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
+            <div><label style={FC.label}>CEP</label><input className="vk-fc-input" style={FC.input} value={form.cep} onChange={e=>{setForm({...form,cep:e.target.value});buscarCEP(e.target.value);}} placeholder="00000-000" /></div>
+            <div><label style={FC.label}>Número</label><input className="vk-fc-input" style={FC.input} value={form.numero} onChange={e=>setForm({...form,numero:e.target.value})} /></div>
+            {!isMobile && <div><label style={FC.label}>Complemento</label><input className="vk-fc-input" style={FC.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
+            <div><label style={FC.label}>Logradouro</label><input className="vk-fc-input" style={FC.input} value={form.logradouro} onChange={e=>setForm({...form,logradouro:e.target.value})} /></div>
+            {isMobile && <div><label style={FC.label}>Complemento</label><input className="vk-fc-input" style={FC.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>}
+            <div><label style={FC.label}>Bairro</label><input className="vk-fc-input" style={FC.input} value={form.bairro} onChange={e=>setForm({...form,bairro:e.target.value})} /></div>
+            <div><label style={FC.label}>Cidade</label><input className="vk-fc-input" style={FC.input} value={form.cidade} onChange={e=>setForm({...form,cidade:e.target.value})} /></div>
+          </div>
+          <div style={{maxWidth:120}}><label style={FC.label}>Estado</label><select className="vk-fc-input" style={{...FC.input,cursor:"pointer"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_BR.map(e=><option key={e}>{e}</option>)}</select></div>
+        </div>
+        <hr style={FC.divider} />
+        <div style={{ marginBottom:20 }}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={FC.secTit}>Contatos</div>
+            <button style={FC.btnSec} onClick={()=>setForm({...form,contatos:[...form.contatos,{id:uid(),nome:"",telefone:"",cargo:"",whatsapp:false}]})}>+ Adicionar</button>
+          </div>
+          {form.contatos?.map((ct,i)=>(
+            <div key={ct.id} style={{border:"1.5px solid rgba(17,17,17,0.10)",borderRadius:14,padding:"14px",marginBottom:10}}>
+              <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
+                <div style={isMobile ? { gridColumn:"1 / -1" } : {}}><label style={FC.label}>Nome</label><input className="vk-fc-input" style={FC.input} value={ct.nome} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:e.target.value}:x)})} /></div>
+                <div><label style={FC.label}>Telefone</label><input className="vk-fc-input" style={FC.input} value={ct.telefone} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:e.target.value}:x)})} /></div>
+                <div><label style={FC.label}>Cargo</label><input className="vk-fc-input" style={FC.input} value={ct.cargo} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:e.target.value}:x)})} /></div>
+              </div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13,color:"#374151"}}>
+                  <input type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
+                  <span style={{color:"#16a34a"}}>WhatsApp</span>
+                </label>
+                {form.contatos.length>1&&<button style={{...FC.btnGhost,color:"#dc2626",fontSize:12}} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
+              </div>
+            </div>
           ))}
         </div>
-      </div>
-      <hr style={C.divider} />
-      <div style={{ marginBottom:16 }}>
-        <div style={C.secTit}>Dados principais</div>
-        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
-          <div><label style={C.label}>{form.tipo==="PJ"?"Razão social":"Nome completo"} *</label><input data-tutorial-id="cliente-nome" style={C.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} /></div>
-          <div><label style={C.label}>{form.tipo==="PJ"?"CNPJ":"CPF"}</label><input style={C.input} value={form.cpfCnpj} onChange={e=>setForm({...form,cpfCnpj:e.target.value})} /></div>
+        <hr style={FC.divider} />
+        <div style={{marginBottom:28}}>
+          <div style={FC.secTit}>Observações internas</div>
+          <textarea className="vk-fc-input" style={{...FC.input, height:"auto", padding:"12px 14px", resize:"vertical"}} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} />
         </div>
-        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap:12, marginBottom:12 }}>
-          <div><label style={C.label}>E-mail</label><input style={C.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
-          <div><label style={C.label}>Cliente desde</label><input style={C.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
+        <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+          <button style={FC.btnSec} onClick={()=>setView("kanban")}>Cancelar</button>
+          <button data-tutorial-id="cliente-salvar" style={FC.btn} onClick={saveCliente}>{form.id?"Salvar alterações":"Cadastrar cliente"}</button>
         </div>
-        <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:"#374151"}}>
-          <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
-        </label>
-      </div>
-      <hr style={C.divider} />
-      <div style={{ marginBottom:16 }}>
-        <div style={C.secTit}>Endereço</div>
-        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
-          <div><label style={C.label}>CEP</label><input style={C.input} value={form.cep} onChange={e=>{setForm({...form,cep:e.target.value});buscarCEP(e.target.value);}} placeholder="00000-000" /></div>
-          <div><label style={C.label}>Número</label><input style={C.input} value={form.numero} onChange={e=>setForm({...form,numero:e.target.value})} /></div>
-          {!isMobile && <div><label style={C.label}>Complemento</label><input style={C.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>}
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
-          <div><label style={C.label}>Logradouro</label><input style={C.input} value={form.logradouro} onChange={e=>setForm({...form,logradouro:e.target.value})} /></div>
-          {isMobile && <div><label style={C.label}>Complemento</label><input style={C.input} value={form.complemento} onChange={e=>setForm({...form,complemento:e.target.value})} /></div>}
-          <div><label style={C.label}>Bairro</label><input style={C.input} value={form.bairro} onChange={e=>setForm({...form,bairro:e.target.value})} /></div>
-          <div><label style={C.label}>Cidade</label><input style={C.input} value={form.cidade} onChange={e=>setForm({...form,cidade:e.target.value})} /></div>
-        </div>
-        <div style={{maxWidth:120}}><label style={C.label}>Estado</label><select style={{...C.input,cursor:"pointer"}} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>{ESTADOS_BR.map(e=><option key={e}>{e}</option>)}</select></div>
-      </div>
-      <hr style={C.divider} />
-      <div style={{ marginBottom:20 }}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-          <div style={C.secTit}>Contatos</div>
-          <button style={C.btnSec} onClick={()=>setForm({...form,contatos:[...form.contatos,{id:uid(),nome:"",telefone:"",cargo:"",whatsapp:false}]})}>+ Adicionar</button>
-        </div>
-        {form.contatos?.map((ct,i)=>(
-          <div key={ct.id} style={{border:"1px solid #f3f4f6",borderRadius: 14,padding:"14px",marginBottom:10}}>
-            <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
-              <div style={isMobile ? { gridColumn:"1 / -1" } : {}}><label style={C.label}>Nome</label><input style={C.input} value={ct.nome} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:e.target.value}:x)})} /></div>
-              <div><label style={C.label}>Telefone</label><input style={C.input} value={ct.telefone} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:e.target.value}:x)})} /></div>
-              <div><label style={C.label}>Cargo</label><input style={C.input} value={ct.cargo} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:e.target.value}:x)})} /></div>
-            </div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13,color:"#374151"}}>
-                <input type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
-                <span style={{color:"#16a34a"}}>WhatsApp</span>
-              </label>
-              {form.contatos.length>1&&<button style={{...C.btnGhost,color:"#dc2626",fontSize:12}} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
-            </div>
-          </div>
-        ))}
-      </div>
-      <hr style={C.divider} />
-      <div style={{marginBottom:28}}>
-        <div style={C.secTit}>Observações internas</div>
-        <textarea style={{...C.input,resize:"vertical"}} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} />
-      </div>
-      <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
-        <button style={C.btnSec} onClick={()=>setView("kanban")}>Cancelar</button>
-        <button data-tutorial-id="cliente-salvar" style={C.btn} onClick={saveCliente}>{form.id?"Salvar alterações":"Cadastrar cliente"}</button>
       </div>
     </div>
   );
