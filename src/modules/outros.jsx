@@ -249,14 +249,14 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
   return (
     <div style={{
       background:"#fff",
-      border: atrasado ? "1px solid #fecaca" : "1.5px solid rgba(38,36,33,0.16)",
+      border: atrasado ? "1px solid #fecaca" : "1px solid rgba(38,36,33,0.14)",
       borderRadius: 12, padding:12,
       cursor:"pointer", transition:"all 0.15s",
       display:"flex", flexDirection:"column", gap:8,
       ...(atrasado ? { background:"#fffbfb" } : {}),
     }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#9ca3af"; }}
-    onMouseLeave={e => { e.currentTarget.style.borderColor = atrasado ? "#fecaca" : "rgba(38,36,33,0.16)"; }}>
+    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#b5652f"; }}
+    onMouseLeave={e => { e.currentTarget.style.borderColor = atrasado ? "#fecaca" : "rgba(38,36,33,0.14)"; }}>
       {/* Tag de tipo */}
       <span style={{
         display:"inline-flex", alignItems:"center",
@@ -552,7 +552,7 @@ function Obras({ data, save }) {
             return (
               <div key={obra.id} style={{
                 background: concluida ? "#fafafa" : "#fff",
-                border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9,
+                border:"1px solid rgba(38,36,33,0.14)", borderRadius:9,
                 padding:"12px 16px",
                 display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
               }}>
@@ -1066,7 +1066,9 @@ function PrestadoresServico({ data, save }) {
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:14 }}>
           {filtrados.map(p => (
-            <div key={p.id} style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:16, padding:"16px 18px", background:"#fff" }}>
+            <div key={p.id} style={{ border:"1px solid rgba(38,36,33,0.14)", borderRadius:16, padding:"16px 18px", background:"#fff", transition:"border-color 0.15s, box-shadow 0.15s" }}
+              onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
+              onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"start", gap:8, marginBottom:8 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:"#262421" }}>{p.nome}</div>
                 {p.ativo === false && <span style={PS.tag("#9ca3af")}>Inativo</span>}
@@ -1106,7 +1108,7 @@ function PrestadoresServico({ data, save }) {
           <div style={{ display:"flex", gap:8 }}>
             {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
               <button type="button" key={v} onClick={()=>setForm({...form,tipo:v})}
-                style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#262421":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+                style={{ border:"1px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#262421":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
             ))}
           </div>
         </div>

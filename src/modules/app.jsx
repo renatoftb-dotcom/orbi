@@ -461,9 +461,9 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
       <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16, width:"100%", maxWidth:680 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif", position:"relative", boxShadow:"0 4px 16px -10px rgba(38,36,33,0.2)", transition:"all 0.15s ease" }}
+            style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif", position:"relative", boxShadow:"0 4px 16px -10px rgba(38,36,33,0.2)", transition:"all 0.15s ease" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor=VK.cobre; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.16)"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.16)"; e.currentTarget.style.boxShadow="0 4px 16px -10px rgba(38,36,33,0.2)"; }}>
+            onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="0 4px 16px -10px rgba(38,36,33,0.2)"; }}>
             <div style={{ fontSize:14, fontWeight:700, color:VK.grafite, marginBottom:4 }}>{m.label}</div>
             <div style={{ fontSize:12, color:VK.inkSoft }}>{m.desc}</div>
             {m.count > 0 && <div style={{ position:"absolute", top:12, right:12, background:VK.cobreClaro, color:VK.cobre, fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius: 14 }}>{m.count}</div>}
