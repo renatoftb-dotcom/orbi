@@ -29775,14 +29775,15 @@ export default function ModuloClientesFornecedores() {
   // Em desktop, usa a preferência salva do usuário.
   const colapsadaEf = isMobile ? false : sidebarColapsada;
 
+  // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
   const itemStyle = (ativo) => ({
     display:"flex", alignItems:"center",
     justifyContent: colapsadaEf ? "center" : "space-between",
     padding: colapsadaEf ? "10px 8px" : (isMobile ? "12px 14px" : "8px 12px"), // touch target maior em mobile
     borderRadius:7, cursor:"pointer", fontSize:13,
-    fontWeight: ativo ? 600 : 400, color: ativo ? "#111" : "#6b7280",
-    background: ativo ? "#f3f4f6" : "transparent",
-    border:"none", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+    fontWeight: ativo ? 600 : 400, color: ativo ? "#b5652f" : "#78716c",
+    background: ativo ? "#fdf6f0" : "transparent",
+    border:"none", fontFamily:"'Inter', system-ui, sans-serif",
     width:"100%", textAlign:"left",
   });
 
@@ -29814,7 +29815,7 @@ export default function ModuloClientesFornecedores() {
           // Drawer mobile
           position:"fixed", top:0, left:0, bottom:0,
           width: 260, // um pouco mais largo que o desktop expandido (260) pro toque ser confortável
-          background:"#fff", borderRight:"1px solid #e5e7eb",
+          background:"#fff", borderRight:"1px solid rgba(38,36,33,0.12)",
           display:"flex", flexDirection:"column",
           zIndex:991,
           transform: sidebarMobileAberta ? "translateX(0)" : "translateX(-100%)",
@@ -29825,7 +29826,7 @@ export default function ModuloClientesFornecedores() {
           width: colapsadaEf ? 56 : 220,
           minWidth: colapsadaEf ? 56 : 220,
           transition:"width 0.18s ease, min-width 0.18s ease",
-          background:"#fff", borderRight:"1px solid #e5e7eb",
+          background:"#fff", borderRight:"1px solid rgba(38,36,33,0.12)",
           display:"flex", flexDirection:"column",
         }
       }>
@@ -29834,14 +29835,14 @@ export default function ModuloClientesFornecedores() {
             Quando aberta: título à esquerda + toggle à direita. */}
         <div style={{
           padding: (!isMobile && colapsadaEf) ? "16px 8px" : "20px 16px 16px",
-          borderBottom:"1px solid #f3f4f6",
+          borderBottom:"1px solid rgba(38,36,33,0.08)",
           display:"flex", alignItems:"center",
           justifyContent: (!isMobile && colapsadaEf) ? "center" : "space-between",
           gap: 8,
         }}>
           {(isMobile || !colapsadaEf) && (
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:15, fontWeight:700, color:"#111", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
+              <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize:16, fontWeight:600, color:"#262421", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
               <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>Vicke</div>
             </div>
           )}
@@ -29862,7 +29863,7 @@ export default function ModuloClientesFornecedores() {
               display:"flex", alignItems:"center", justifyContent:"center",
               borderRadius:6, fontFamily:"inherit",
             }}
-            onMouseEnter={e => { if (!isMobile) { e.currentTarget.style.background="#f3f4f6"; e.currentTarget.style.color="#374151"; } }}
+            onMouseEnter={e => { if (!isMobile) { e.currentTarget.style.background="#fdf6f0"; e.currentTarget.style.color="#b5652f"; } }}
             onMouseLeave={e => { if (!isMobile) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}>
             {isMobile ? (
               // X de fechar em mobile
@@ -29915,11 +29916,11 @@ export default function ModuloClientesFornecedores() {
                         ...itemStyle(ativoNeleMesmoOuSubitem),
                         justifyContent: colapsadaEf ? "center" : "flex-start",
                         gap: 6,
-                        background: aba === k ? "#f3f4f6" : "transparent",
+                        background: aba === k ? "#fdf6f0" : "transparent",
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
-                        color: ativoNeleMesmoOuSubitem ? "#111" : "#6b7280",
+                        color: ativoNeleMesmoOuSubitem ? "#b5652f" : "#78716c",
                       }}
-                      onMouseEnter={e => { if (aba !== k) e.currentTarget.style.background="#f9fafb"; }}
+                      onMouseEnter={e => { if (aba !== k) e.currentTarget.style.background="#faf9f7"; }}
                       onMouseLeave={e => { if (aba !== k) e.currentTarget.style.background="transparent"; }}
                       onClick={(ev) => {
                         if (colapsadaEf) {
@@ -29934,7 +29935,7 @@ export default function ModuloClientesFornecedores() {
                       }}
                     >
                       <span style={{ display:"flex", alignItems:"center", gap:10, flex:1, justifyContent: colapsadaEf ? "center" : "flex-start" }}>
-                        {icon && <IconeMaster nome={icon} tamanho={16} cor={ativoNeleMesmoOuSubitem ? "#111" : "#6b7280"} />}
+                        {icon && <IconeMaster nome={icon} tamanho={16} cor={ativoNeleMesmoOuSubitem ? "#b5652f" : "#78716c"} />}
                         {!colapsadaEf && label}
                       </span>
                       {!colapsadaEf && (
@@ -29949,7 +29950,7 @@ export default function ModuloClientesFornecedores() {
                     </button>
                     {/* Submenus inline (accordion) — só quando expandida */}
                     {!colapsadaEf && projetosAberto && (
-                      <div style={{ display:"flex", flexDirection:"column", gap:1, marginLeft:14, paddingLeft:8, borderLeft:"1px solid #f3f4f6", marginTop:2 }}>
+                      <div style={{ display:"flex", flexDirection:"column", gap:1, marginLeft:14, paddingLeft:8, borderLeft:"1px solid rgba(38,36,33,0.1)", marginTop:2 }}>
                         {sub.map(s => {
                           const ativoSub = aba === s.k;
                           return (
@@ -29959,14 +29960,14 @@ export default function ModuloClientesFornecedores() {
                               style={{
                                 padding:"6px 10px", borderRadius:6,
                                 fontSize:12.5,
-                                color: ativoSub ? "#111" : "#9ca3af",
+                                color: ativoSub ? "#b5652f" : "#9ca3af",
                                 fontWeight: ativoSub ? 600 : 400,
-                                background: ativoSub ? "#f3f4f6" : "transparent",
+                                background: ativoSub ? "#fdf6f0" : "transparent",
                                 cursor:"pointer", border:"none",
-                                fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+                                fontFamily:"'Inter', system-ui, sans-serif",
                                 textAlign:"left", transition:"all 0.12s",
                               }}
-                              onMouseEnter={e => { if (!ativoSub) { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#6b7280"; } }}
+                              onMouseEnter={e => { if (!ativoSub) { e.currentTarget.style.background="#faf9f7"; e.currentTarget.style.color="#78716c"; } }}
                               onMouseLeave={e => { if (!ativoSub) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}
                               onClick={() => {
                                 tentarTrocar(() => {
@@ -29978,7 +29979,7 @@ export default function ModuloClientesFornecedores() {
                               }}
                             >
                               <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#111" : "#9ca3af"} />}
+                                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#b5652f" : "#9ca3af"} />}
                                 {s.label}
                               </span>
                             </button>
@@ -29992,7 +29993,7 @@ export default function ModuloClientesFornecedores() {
               return (
                 <button key={k} style={itemStyle(aba===k)}
                   title={colapsadaEf ? label : undefined}
-                  onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#f9fafb"; }}
+                  onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#faf9f7"; }}
                   onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
                   onClick={() => {
                     tentarTrocar(() => {
@@ -30006,7 +30007,7 @@ export default function ModuloClientesFornecedores() {
                     });
                   }}>
                   <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#111" : "#6b7280"} />}
+                    {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#b5652f" : "#78716c"} />}
                     {!colapsadaEf && label}
                   </span>
                   {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius: 12 }}>{count}</span>}
@@ -30014,7 +30015,7 @@ export default function ModuloClientesFornecedores() {
               );
             })}
           </nav>
-          <div style={{ padding:"8px 8px 12px", borderTop:"1px solid #f3f4f6", display:"flex", flexDirection:"column", gap:2 }}>
+          <div style={{ padding:"8px 8px 12px", borderTop:"1px solid rgba(38,36,33,0.08)", display:"flex", flexDirection:"column", gap:2 }}>
             {/* Header da seção — esconde quando sidebar colapsada (não cabe). */}
             {!isMaster && !colapsadaEf && (
               <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 12px 2px" }}>
@@ -30025,11 +30026,11 @@ export default function ModuloClientesFornecedores() {
             {!isMaster && (
               <button style={itemStyle(aba==="escritorio")}
                 title={colapsadaEf ? "Escritório" : undefined}
-                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
+                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#faf9f7"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#111" : "#6b7280"} />
+                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#b5652f" : "#78716c"} />
                   {!colapsadaEf && "Escritório"}
                 </span>
               </button>
@@ -30039,11 +30040,11 @@ export default function ModuloClientesFornecedores() {
                 Master também vê — útil pra Vicke caso queira testar o fluxo. */}
             <button style={itemStyle(aba==="orcamento")}
               title={colapsadaEf ? "Orçamento" : undefined}
-              onMouseEnter={e => { if(aba!=="orcamento") e.currentTarget.style.background="#f9fafb"; }}
+              onMouseEnter={e => { if(aba!=="orcamento") e.currentTarget.style.background="#faf9f7"; }}
               onMouseLeave={e => { if(aba!=="orcamento") e.currentTarget.style.background="transparent"; }}
               onClick={() => { tentarTrocar(() => { setAba("orcamento"); setOrcamentoTelaCheia(null); }); }}>
               <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <IconeMaster nome="orcamento" tamanho={16} cor={aba==="orcamento" ? "#111" : "#6b7280"} />
+                <IconeMaster nome="orcamento" tamanho={16} cor={aba==="orcamento" ? "#b5652f" : "#78716c"} />
                 {!colapsadaEf && "Orçamento"}
               </span>
             </button>
@@ -30052,11 +30053,11 @@ export default function ModuloClientesFornecedores() {
             {isMaster && (
               <button style={itemStyle(aba==="escritorio")}
                 title={colapsadaEf ? "Escritório (Master)" : undefined}
-                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#f9fafb"; }}
+                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#faf9f7"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#111" : "#6b7280"} />
+                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#b5652f" : "#78716c"} />
                   {!colapsadaEf && (
                     <>
                       Escritório
