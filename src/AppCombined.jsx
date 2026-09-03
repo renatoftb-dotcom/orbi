@@ -4452,41 +4452,46 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
   const totalRecebido = lancsCli.filter(r=>r.recebimento==="Recebido").reduce((s,r)=>s+(r.valor||0),0);
   const totalReceber  = lancsCli.filter(r=>r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const fmtV = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
-  const secBtn = () => ({ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", borderBottom:"1px solid #f3f4f6", padding:"12px 0", cursor:"pointer", fontFamily:"inherit", color:"#374151", fontSize:13, fontWeight:600 });
-  const card = { border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff" };
+  // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
+  const VK = { grafite:"#262421", cobre:"#b5652f", inkSoft:"#78716c" };
+  const secTit = { fontSize:11, fontWeight:600, color:VK.cobre, textTransform:"uppercase", letterSpacing:"0.18em", marginBottom:14 };
+  const secBtn = () => ({ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", borderBottom:"1px solid rgba(38,36,33,0.08)", padding:"12px 0", cursor:"pointer", fontFamily:"inherit", color:VK.grafite, fontSize:13, fontWeight:600 });
+  const card = { border:"1.5px solid rgba(38,36,33,0.14)", borderRadius:16, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff", boxShadow:"0 4px 16px -10px rgba(38,36,33,0.25)" };
+  const btn = { background:VK.grafite, color:"#fff", border:"none", borderRadius:9, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
+  const btnSec = { background:"transparent", color:VK.grafite, boxShadow:`inset 0 0 0 1.5px ${VK.cobre}`, border:"none", borderRadius:9, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
+  const inputSel = { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, padding:"7px 12px", fontSize:12, color:VK.grafite, background:"#fff", fontFamily:"inherit", cursor:"pointer", outline:"none" };
 
   return (
     <div>
       {/* Ações */}
       <div style={{ ...card, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-        <select value={colunaAtual} onChange={e=>onMoverColuna(e.target.value)}
-          style={{ ...C.input, width:"auto", fontSize:12, padding:"6px 10px", cursor:"pointer" }}>
+        <select value={colunaAtual} onChange={e=>onMoverColuna(e.target.value)} style={inputSel}>
           {COLUNAS.map(x=><option key={x.key} value={x.key}>{x.label}</option>)}
         </select>
-        <button style={C.btnSec} onClick={onEditar}>Editar</button>
+        <button style={btnSec} onClick={onEditar}>Editar</button>
         <div style={{ flex:1 }} />
-        <button style={{...C.btnGhost,color:"#dc2626"}} onClick={onRemover}>Remover cliente</button>
+        <button style={{ background:"none", border:"none", color:"#a32e12", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={onRemover}>Remover cliente</button>
       </div>
 
       {/* Dados principais */}
       <div style={card}>
-        <div style={C.secTit}>Dados principais</div>
+        <div style={secTit}>Dados principais</div>
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap:16 }}>
           <div>
-            <div style={{fontSize:11,color:"#9ca3af",marginBottom:3}}>Tipo</div>
-            <div style={{fontSize:13,color:"#374151",fontWeight:600}}>{cliente.tipo==="PJ"?"Pessoa jurídica":"Pessoa física"}</div>
+            <div style={{fontSize:11,color:VK.inkSoft,marginBottom:3}}>Tipo</div>
+            <div style={{fontSize:13,color:VK.grafite,fontWeight:600}}>{cliente.tipo==="PJ"?"Pessoa jurídica":"Pessoa física"}</div>
           </div>
           <div>
-            <div style={{fontSize:11,color:"#9ca3af",marginBottom:3}}>{cliente.tipo==="PJ"?"CNPJ":"CPF"}</div>
-            <div style={{fontSize:13,color:"#374151",fontWeight:600}}>{cliente.cpfCnpj||"—"}</div>
+            <div style={{fontSize:11,color:VK.inkSoft,marginBottom:3}}>{cliente.tipo==="PJ"?"CNPJ":"CPF"}</div>
+            <div style={{fontSize:13,color:VK.grafite,fontWeight:600}}>{cliente.cpfCnpj||"—"}</div>
           </div>
           <div>
-            <div style={{fontSize:11,color:"#9ca3af",marginBottom:3}}>E-mail</div>
-            <div style={{fontSize:13,color:"#374151",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis"}}>{cliente.email||"—"}</div>
+            <div style={{fontSize:11,color:VK.inkSoft,marginBottom:3}}>E-mail</div>
+            <div style={{fontSize:13,color:VK.grafite,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis"}}>{cliente.email||"—"}</div>
           </div>
           <div>
-            <div style={{fontSize:11,color:"#9ca3af",marginBottom:3}}>Cliente desde</div>
-            <div style={{fontSize:13,color:"#374151",fontWeight:600}}>{cliente.desde ? new Date(cliente.desde).toLocaleDateString("pt-BR") : "—"}</div>
+            <div style={{fontSize:11,color:VK.inkSoft,marginBottom:3}}>Cliente desde</div>
+            <div style={{fontSize:13,color:VK.grafite,fontWeight:600}}>{cliente.desde ? new Date(cliente.desde).toLocaleDateString("pt-BR") : "—"}</div>
           </div>
         </div>
       </div>
@@ -4495,18 +4500,18 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
       <div style={card}>
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 20 : 28 }}>
           <div>
-            <div style={C.secTit}>Endereço</div>
+            <div style={secTit}>Endereço</div>
             {[["CEP",cliente.cep],["Logradouro",`${cliente.logradouro||""}${cliente.numero?", "+cliente.numero:""}${cliente.complemento?" - "+cliente.complemento:""}`],["Bairro",cliente.bairro],["Cidade",`${cliente.cidade||""} — ${cliente.estado||""}`]].map(([l,v])=>(
-              <div key={l} style={C.row}><span style={{fontSize:12,color:"#9ca3af"}}>{l}</span><span style={{fontSize:13,color:"#374151"}}>{v||"—"}</span></div>
+              <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid rgba(38,36,33,0.06)" }}><span style={{fontSize:12,color:VK.inkSoft}}>{l}</span><span style={{fontSize:13,color:VK.grafite}}>{v||"—"}</span></div>
             ))}
           </div>
           <div>
-            <div style={C.secTit}>Contatos</div>
+            <div style={secTit}>Contatos</div>
             {cliente.contatos?.map(ct=>(
-              <div key={ct.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid #f9fafb" }}>
+              <div key={ct.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid rgba(38,36,33,0.06)" }}>
                 <div style={{ minWidth:0, flex:1 }}>
-                  <div style={{fontSize:13,fontWeight:600,color:"#111"}}>{ct.nome} <span style={{fontWeight:400,color:"#9ca3af"}}>({ct.cargo})</span></div>
-                  <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{ct.telefone}</div>
+                  <div style={{fontSize:13,fontWeight:600,color:VK.grafite}}>{ct.nome} <span style={{fontWeight:400,color:VK.inkSoft}}>({ct.cargo})</span></div>
+                  <div style={{fontSize:12,color:VK.inkSoft,marginTop:2}}>{ct.telefone}</div>
                 </div>
                 {ct.whatsapp && ct.telefone && (
                   <a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer"
@@ -4522,15 +4527,15 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
       <div style={card}>
         <button style={secBtn()} onClick={()=>toggle("financeiro")}>
           <span>Financeiro</span>
-          <span style={{fontSize:11,color:"#9ca3af"}}>{abertos.financeiro?"▲":"▼"}</span>
+          <span style={{fontSize:11,color:VK.inkSoft}}>{abertos.financeiro?"▲":"▼"}</span>
         </button>
         {abertos.financeiro&&(
           <div style={{paddingTop:16}}>
-            {lancsCli.length===0?<p style={{color:"#9ca3af",fontSize:13,margin:0}}>Nenhum lançamento.</p>:(
+            {lancsCli.length===0?<p style={{color:VK.inkSoft,fontSize:13,margin:0}}>Nenhum lançamento.</p>:(
               <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap:10 }}>
-                {[["Receita total",totalContabil,"#2563eb"],["Recebido",totalRecebido,"#16a34a"],["A receber",totalReceber,"#d97706"]].map(([l,v,cor])=>(
-                  <div key={l} style={{border:"2px solid #d1d5db",borderRadius: 14,padding:"14px"}}>
-                    <div style={{fontSize:11,color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{l}</div>
+                {[["Receita total",totalContabil,VK.cobre],["Recebido",totalRecebido,"#16a34a"],["A receber",totalReceber,"#d97706"]].map(([l,v,cor])=>(
+                  <div key={l} style={{border:"1.5px solid rgba(38,36,33,0.14)",borderRadius:14,padding:"14px"}}>
+                    <div style={{fontSize:11,color:VK.inkSoft,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{l}</div>
                     <div style={{fontSize:16,fontWeight:700,color:cor}}>{fmtV(v)}</div>
                   </div>
                 ))}
@@ -4986,58 +4991,61 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===colunaDoCliente(cliente))||COLUNAS[0];
 
+    const VKD = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#b5652f", cobreClaro:"#fdf6f0", inkSoft:"#78716c" };
     return (
-      <div style={{ padding: isMobile ? "16px" : "28px 32px", maxWidth:900, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-        {/* Header */}
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, flexWrap:"wrap" }}>
-          <button style={C.btnGhost} onClick={()=>{ setView("kanban"); setAbaCliente("cadastro"); }}>← Voltar</button>
-        </div>
+      <div style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
+        <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600;700&display=swap');`}</style>
+        <div style={{ maxWidth:900, margin:"0 auto" }}>
+          {/* Header */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, flexWrap:"wrap" }}>
+            <button style={{ background:"none", border:"none", color:VKD.inkSoft, cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={()=>{ setView("kanban"); setAbaCliente("cadastro"); }}>← Voltar</button>
+          </div>
 
-        {/* Cliente Info — só o nome */}
-        <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:28 }}>
-          <div style={{ width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius:14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize: isMobile ? 16 : 20, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
-          <div style={{ fontSize: isMobile ? 18 : 22, fontWeight:700, color:"#111", overflow:"hidden", textOverflow:"ellipsis" }}>{cliente.nome}</div>
-        </div>
+          {/* Cliente Info — só o nome */}
+          <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:28 }}>
+            <div style={{ width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius:14, background:VKD.cobreClaro, color:VKD.cobre, display:"flex", alignItems:"center", justifyContent:"center", fontSize: isMobile ? 16 : 20, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
+            <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize: isMobile ? 20 : 25, fontWeight:600, color:VKD.grafite, overflow:"hidden", textOverflow:"ellipsis" }}>{cliente.nome}</div>
+          </div>
 
-        {/* Navegação de abas com cards */}
-        <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16, marginBottom:28 }}>
-          {[
-            { id:"cadastro", titulo:"Cadastro" },
-            { id:"projetos", titulo:"Projetos" },
-            { id:"obras", titulo:"Obras" },
-          ].map(aba => (
-            <button
-              key={aba.id}
-              onClick={() => setAbaCliente(aba.id)}
-              style={{
-                border: abaCliente === aba.id ? "1.5px solid #2563eb" : "1.5px solid #d1d5db",
-                borderRadius: 16,
-                padding: "20px",
-                background: abaCliente === aba.id ? "#eff6ff" : "#fff",
-                boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(37, 99, 235, 0.15)" : "none",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={e => {
-                if (abaCliente !== aba.id) {
-                  e.currentTarget.style.borderColor = "#9ca3af";
-                  e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
-                }
-              }}
-              onMouseLeave={e => {
-                if (abaCliente !== aba.id) {
-                  e.currentTarget.style.borderColor = "#d1d5db";
-                  e.currentTarget.style.boxShadow = "none";
-                }
-              }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: abaCliente === aba.id ? "#2563eb" : "#111" }}>{aba.titulo}</div>
-            </button>
-          ))}
-        </div>
+          {/* Navegação de abas com cards */}
+          <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16, marginBottom:28 }}>
+            {[
+              { id:"cadastro", titulo:"Cadastro" },
+              { id:"projetos", titulo:"Projetos" },
+              { id:"obras", titulo:"Obras" },
+            ].map(aba => (
+              <button
+                key={aba.id}
+                onClick={() => setAbaCliente(aba.id)}
+                style={{
+                  border: abaCliente === aba.id ? `1.5px solid ${VKD.cobre}` : "1.5px solid rgba(38,36,33,0.16)",
+                  borderRadius: 16,
+                  padding: "20px",
+                  background: abaCliente === aba.id ? VKD.cobreClaro : "#fff",
+                  boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(181,101,47,0.16)" : "none",
+                  cursor: "pointer",
+                  fontFamily: "'Inter', system-ui, sans-serif",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "all 0.2s ease",
+                }}
+                onMouseEnter={e => {
+                  if (abaCliente !== aba.id) {
+                    e.currentTarget.style.borderColor = "rgba(38,36,33,0.35)";
+                    e.currentTarget.style.boxShadow = "0 1px 3px rgba(38,36,33,0.08)";
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (abaCliente !== aba.id) {
+                    e.currentTarget.style.borderColor = "rgba(38,36,33,0.16)";
+                    e.currentTarget.style.boxShadow = "none";
+                  }
+                }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: abaCliente === aba.id ? VKD.cobre : VKD.grafite }}>{aba.titulo}</div>
+              </button>
+            ))}
+          </div>
 
         {/* Conteúdo da aba selecionada */}
         {abaCliente === "cadastro" && (
@@ -5060,53 +5068,52 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         {abaCliente === "obras" && (
           <GestaoObraPanel cliente={cliente} data={data} save={save} isMobile={isMobile} />
         )}
+        </div>
       </div>
     );
   }
 
   // ── FORMULÁRIO ───────────────────────────────────────────────
-  // Réplica literal do visual do formulário público do Morada do Sol
-  // (parquemoradadosol.com.br/documentos/...): fundo creme, fontes Fraunces
-  // (títulos) + Outfit (corpo), verde escuro + dourado como cores de marca,
-  // inputs com borda neutra translúcida e foco com glow verde, botão sólido
-  // verde escuro, seções em dourado uppercase. Escopo: só este formulário.
-  const MDS = {
-    creme:     "#faf6ee",
-    verdeDk:   "#143229",
-    verde:     "#1f4a3d",
-    dourado:   "#d4a648",
-    douradoDk: "#a87e2f",
-    ink:       "#1a1612",
-    inkSoft:   "#5a5046",
+  // Paleta oficial do Vicke (grafite + cobre) — ver memória de projeto
+  // "vicke_paleta_cores". Técnica visual herdada do teste com o Morada do
+  // Sol (fundo levemente colorido, borda neutra translúcida, foco com glow,
+  // seções em uppercase com cor de destaque), mas cores próprias do Vicke.
+  const VK = {
+    fundo:      "#f5f3f0",
+    grafite:    "#262421",
+    cobre:      "#b5652f",
+    cobreClaro: "#fdf6f0",
+    ink:        "#262421",
+    inkSoft:    "#78716c",
   };
   const FC = {
-    input:  { border:"1.5px solid rgba(26,22,18,0.16)", borderRadius:9, height:46, padding:"0 14px", fontSize:15, color:MDS.ink, outline:"none", background:"#fff", fontFamily:"'Outfit', system-ui, sans-serif", width:"100%", boxSizing:"border-box" },
-    label:  { fontSize:10, color:MDS.douradoDk, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.14em", display:"block", marginBottom:6 },
-    secTit: { fontSize:11, fontWeight:600, color:MDS.douradoDk, textTransform:"uppercase", letterSpacing:"0.22em", marginBottom:16 },
-    btn:    { background:MDS.verdeDk, color:MDS.creme, border:"none", borderRadius:9, height:48, padding:"0 24px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Outfit', system-ui, sans-serif" },
-    btnSec: { background:"transparent", color:MDS.verdeDk, boxShadow:`inset 0 0 0 1.5px ${MDS.dourado}`, border:"none", borderRadius:9, height:42, padding:"0 20px", fontSize:13.5, fontWeight:600, cursor:"pointer", fontFamily:"'Outfit', system-ui, sans-serif" },
-    btnGhost: { background:"none", border:"none", color:MDS.inkSoft, cursor:"pointer", fontFamily:"'Outfit', system-ui, sans-serif", fontSize:13 },
-    divider: { border:"none", borderTop:"1px solid rgba(26,22,18,0.1)", margin:"22px 0" },
+    input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, height:46, padding:"0 14px", fontSize:15, color:VK.ink, outline:"none", background:"#fff", fontFamily:"'Inter', system-ui, sans-serif", width:"100%", boxSizing:"border-box" },
+    label:  { fontSize:10, color:VK.cobre, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.14em", display:"block", marginBottom:6 },
+    secTit: { fontSize:11, fontWeight:600, color:VK.cobre, textTransform:"uppercase", letterSpacing:"0.22em", marginBottom:16 },
+    btn:    { background:VK.grafite, color:"#fff", border:"none", borderRadius:9, height:48, padding:"0 24px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif" },
+    btnSec: { background:"transparent", color:VK.grafite, boxShadow:`inset 0 0 0 1.5px ${VK.cobre}`, border:"none", borderRadius:9, height:42, padding:"0 20px", fontSize:13.5, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif" },
+    btnGhost: { background:"none", border:"none", color:VK.inkSoft, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif", fontSize:13 },
+    divider: { border:"none", borderTop:"1px solid rgba(38,36,33,0.1)", margin:"22px 0" },
   };
   return (
-    <div style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:MDS.creme, minHeight:"100%", fontFamily:"'Outfit', system-ui, -apple-system, sans-serif" }}>
+    <div style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:VK.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Outfit:wght@400;500;600;700&display=swap');
-        .vk-fc-input:focus { border-color:${MDS.verde} !important; box-shadow:0 0 0 3px rgba(31,74,61,0.12); }
-        .vk-fc-tipo.ativo { border-color:${MDS.dourado} !important; background:#fffbf3 !important; box-shadow:0 0 0 3px rgba(212,166,72,0.18); }
-        .vk-fc-check { accent-color:${MDS.verde}; }
+        @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600;700&display=swap');
+        .vk-fc-input:focus { border-color:${VK.cobre} !important; box-shadow:0 0 0 3px rgba(181,101,47,0.14); }
+        .vk-fc-tipo.ativo { border-color:${VK.cobre} !important; background:${VK.cobreClaro} !important; box-shadow:0 0 0 3px rgba(181,101,47,0.16); }
+        .vk-fc-check { accent-color:${VK.cobre}; }
       `}</style>
-      <div style={{ maxWidth:640, margin:"0 auto", background:"#fff", borderRadius:16, padding: isMobile ? "22px 18px 26px" : "28px 26px 32px", boxShadow:"0 18px 50px -28px rgba(20,50,41,0.4)" }}>
+      <div style={{ maxWidth:640, margin:"0 auto", background:"#fff", borderRadius:16, padding: isMobile ? "22px 18px 26px" : "28px 26px 32px", boxShadow:"0 18px 50px -28px rgba(38,36,33,0.35)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
           <button style={FC.btnGhost} onClick={()=>setView("kanban")}>← Voltar</button>
         </div>
-        <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize:27, fontWeight:600, letterSpacing:"-0.02em", color:MDS.verdeDk, margin:"0 0 8px" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
+        <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize:27, fontWeight:600, letterSpacing:"-0.02em", color:VK.grafite, margin:"0 0 8px" }}>{form.id?"Editar cliente":"Novo cliente"}</div>
         <div style={{ marginBottom:16, marginTop:20 }}>
           <div style={FC.secTit}>Tipo de pessoa</div>
           <div style={{ display:"flex", gap:8 }}>
             {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
               <button key={v} className={"vk-fc-tipo" + (form.tipo===v ? " ativo" : "")} onClick={()=>setForm({...form,tipo:v})}
-                style={{ border:"1.5px solid rgba(26,22,18,0.14)", borderRadius:10, height:42, padding:"0 18px", fontSize:13.5, fontWeight:600, background:"#fff", color:MDS.verdeDk, cursor:"pointer", fontFamily:"'Outfit', system-ui, sans-serif" }}>{l}</button>
+                style={{ border:"1.5px solid rgba(38,36,33,0.14)", borderRadius:10, height:42, padding:"0 18px", fontSize:13.5, fontWeight:600, background:"#fff", color:VK.grafite, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif" }}>{l}</button>
             ))}
           </div>
         </div>
@@ -5121,7 +5128,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             <div><label style={FC.label}>E-mail</label><input className="vk-fc-input" style={FC.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
             <div><label style={FC.label}>Cliente desde</label><input className="vk-fc-input" style={FC.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
           </div>
-          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:MDS.inkSoft}}>
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
             <input className="vk-fc-check" type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
           </label>
         </div>
@@ -5148,14 +5155,14 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             <button style={FC.btnSec} onClick={()=>setForm({...form,contatos:[...form.contatos,{id:uid(),nome:"",telefone:"",cargo:"",whatsapp:false}]})}>+ Adicionar</button>
           </div>
           {form.contatos?.map((ct,i)=>(
-            <div key={ct.id} style={{border:"1px dashed rgba(26,22,18,0.18)",borderRadius:10,padding:"14px",marginBottom:10}}>
+            <div key={ct.id} style={{border:"1px dashed rgba(38,36,33,0.18)",borderRadius:10,padding:"14px",marginBottom:10}}>
               <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap:10, marginBottom:10 }}>
                 <div style={isMobile ? { gridColumn:"1 / -1" } : {}}><label style={FC.label}>Nome</label><input className="vk-fc-input" style={FC.input} value={ct.nome} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,nome:e.target.value}:x)})} /></div>
                 <div><label style={FC.label}>Telefone</label><input className="vk-fc-input" style={FC.input} value={ct.telefone} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,telefone:e.target.value}:x)})} /></div>
                 <div><label style={FC.label}>Cargo</label><input className="vk-fc-input" style={FC.input} value={ct.cargo} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,cargo:e.target.value}:x)})} /></div>
               </div>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13,color:MDS.inkSoft}}>
+                <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
                   <input className="vk-fc-check" type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
                   <span style={{color:"#2d7a4f"}}>WhatsApp</span>
                 </label>
