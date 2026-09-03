@@ -3505,7 +3505,7 @@ function Fornecedores({ data, save }) {
         <div style={S.toolbarLeft}>
           <div style={S.searchWrap}>
             <span style={S.searchIcon}>🔍</span>
-            <input style={S.searchInput} placeholder="Buscar fornecedor..." value={busca} onChange={e=>setBusca(e.target.value)} />
+            <input style={S.searchInput} placeholder="Buscar prestador..." value={busca} onChange={e=>setBusca(e.target.value)} />
           </div>
           <div style={S.filterGroup}>
             <span style={{ color:"#64748b", fontSize:12 }}>Rating mín:</span>
@@ -3516,7 +3516,7 @@ function Fornecedores({ data, save }) {
             ))}
           </div>
         </div>
-        <button style={S.btnPrimary} onClick={openNew}>+ Novo Fornecedor</button>
+        <button style={S.btnPrimary} onClick={openNew}>+ Novo Prestador</button>
       </div>
 
       <div style={S.statsRow}>
@@ -3574,8 +3574,8 @@ function Fornecedores({ data, save }) {
         {filtrados.length === 0 && (
           <div style={S.empty}>
             <div style={S.emptyIcon}>🏭</div>
-            <div style={S.emptyText}>Nenhum fornecedor encontrado</div>
-            <button style={S.btnPrimary} onClick={openNew}>Cadastrar primeiro fornecedor</button>
+            <div style={S.emptyText}>Nenhum prestador encontrado</div>
+            <button style={S.btnPrimary} onClick={openNew}>Cadastrar primeiro prestador</button>
           </div>
         )}
       </div>
@@ -3694,7 +3694,7 @@ function Fornecedores({ data, save }) {
     <div style={S.moduleWrap}>
       <div style={S.formHeader}>
         <button style={S.backBtn} onClick={()=>setView("list")}>← Voltar</button>
-        <h2 style={S.formTitle}>{form.id?"Editar Fornecedor":"Novo Fornecedor"}</h2>
+        <h2 style={S.formTitle}>{form.id?"Editar Prestador":"Novo Prestador"}</h2>
       </div>
       <form onSubmit={saveForn} style={S.formWrap}>
         <div style={S.formSection}>
@@ -3777,7 +3777,7 @@ function Fornecedores({ data, save }) {
 
         <div style={S.formActions}>
           <button type="button" style={S.btnCancel} onClick={()=>setView("list")}>Cancelar</button>
-          <button type="submit" style={S.btnPrimary}>{form.id?"Salvar alterações":"Cadastrar fornecedor"}</button>
+          <button type="submit" style={S.btnPrimary}>{form.id?"Salvar alterações":"Cadastrar prestador"}</button>
         </div>
       </form>
     </div>
@@ -28379,6 +28379,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "obras":
       // Casa com martelo / construção
       return (<svg {...props}><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 9h.01M15 9h.01M9 13h.01M15 13h.01M9 17h.01M15 17h.01"/></svg>);
+    case "prestadores":
+      // Maleta (briefcase) — prestadores de serviço / fornecedores
+      return (<svg {...props}><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>);
     case "escritorio":
       // Engrenagem / settings outline (mesmo ícone que manutenção mas menor uso)
       return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
@@ -29787,9 +29790,11 @@ export default function ModuloClientesFornecedores() {
       { k:"projetos:etapas",     icon:"projetos-andamento",  label:"Em Andamento" },
     ]},
     { k:"obras",       icon:"obras",      label:"Obras" },
-    // Módulos Financeiro, Fornecedores e Notas Fiscais foram removidos do menu
+    { k:"fornecedores", icon:"prestadores", label:"Prestadores de Serviços" },
+    // Módulos Financeiro e Notas Fiscais continuam removidos do menu
     // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
     // por enquanto pra não quebrar dados antigos, só ocultos do menu.
+    // Fornecedores foi reativado com o label "Prestadores de Serviços".
     // Item especial — Tutorial Beta (só dev_mode). Não navega, dispara overlay.
     ...(temDevMode(data?.escritorio) ? [
       { k:"tutorial-beta", tipo:"tutorialBeta", label:"+ Novo (Beta) 🧪" },

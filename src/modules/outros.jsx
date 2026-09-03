@@ -1006,7 +1006,7 @@ function Fornecedores({ data, save }) {
         <div style={S.toolbarLeft}>
           <div style={S.searchWrap}>
             <span style={S.searchIcon}>🔍</span>
-            <input style={S.searchInput} placeholder="Buscar fornecedor..." value={busca} onChange={e=>setBusca(e.target.value)} />
+            <input style={S.searchInput} placeholder="Buscar prestador..." value={busca} onChange={e=>setBusca(e.target.value)} />
           </div>
           <div style={S.filterGroup}>
             <span style={{ color:"#64748b", fontSize:12 }}>Rating mín:</span>
@@ -1017,7 +1017,7 @@ function Fornecedores({ data, save }) {
             ))}
           </div>
         </div>
-        <button style={S.btnPrimary} onClick={openNew}>+ Novo Fornecedor</button>
+        <button style={S.btnPrimary} onClick={openNew}>+ Novo Prestador</button>
       </div>
 
       <div style={S.statsRow}>
@@ -1075,8 +1075,8 @@ function Fornecedores({ data, save }) {
         {filtrados.length === 0 && (
           <div style={S.empty}>
             <div style={S.emptyIcon}>🏭</div>
-            <div style={S.emptyText}>Nenhum fornecedor encontrado</div>
-            <button style={S.btnPrimary} onClick={openNew}>Cadastrar primeiro fornecedor</button>
+            <div style={S.emptyText}>Nenhum prestador encontrado</div>
+            <button style={S.btnPrimary} onClick={openNew}>Cadastrar primeiro prestador</button>
           </div>
         )}
       </div>
@@ -1195,7 +1195,7 @@ function Fornecedores({ data, save }) {
     <div style={S.moduleWrap}>
       <div style={S.formHeader}>
         <button style={S.backBtn} onClick={()=>setView("list")}>← Voltar</button>
-        <h2 style={S.formTitle}>{form.id?"Editar Fornecedor":"Novo Fornecedor"}</h2>
+        <h2 style={S.formTitle}>{form.id?"Editar Prestador":"Novo Prestador"}</h2>
       </div>
       <form onSubmit={saveForn} style={S.formWrap}>
         <div style={S.formSection}>
@@ -1278,7 +1278,7 @@ function Fornecedores({ data, save }) {
 
         <div style={S.formActions}>
           <button type="button" style={S.btnCancel} onClick={()=>setView("list")}>Cancelar</button>
-          <button type="submit" style={S.btnPrimary}>{form.id?"Salvar alterações":"Cadastrar fornecedor"}</button>
+          <button type="submit" style={S.btnPrimary}>{form.id?"Salvar alterações":"Cadastrar prestador"}</button>
         </div>
       </form>
     </div>
