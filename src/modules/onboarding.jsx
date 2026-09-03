@@ -565,7 +565,7 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
         {!todasRespondidas && (
           <div style={{ marginBottom:32 }}>
             <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>VICKE</div>
-            <div style={{ fontSize:24, fontWeight:300, color:"#111", letterSpacing:-0.5, marginBottom:6 }}>
+            <div style={{ fontSize:24, fontWeight:300, color:"#262421", letterSpacing:-0.5, marginBottom:6 }}>
               Bem-vindo, {(usuario?.nome || "").split(" ")[0]}!
             </div>
             <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.5 }}>
@@ -788,7 +788,7 @@ function PerguntaBlock({ pergunta, sub, children }) {
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <div style={{ fontSize:15, fontWeight:500, color:"#111", marginBottom: sub ? 4 : 12, lineHeight:1.4 }}>
+      <div style={{ fontSize:15, fontWeight:500, color:"#262421", marginBottom: sub ? 4 : 12, lineHeight:1.4 }}>
         {pergunta}
       </div>
       {sub && (
@@ -803,7 +803,8 @@ function PerguntaBlock({ pergunta, sub, children }) {
   );
 }
 
-// Botão de opção. Quando selecionada, fica destacada com borda preta + check.
+// Botão de opção. Quando selecionada, fica destacada em cobre (borda + glow),
+// seguindo a paleta oficial do Vicke (grafite + cobre).
 function Opcao({ label, selecionada, onClick }) {
   return (
     <button
@@ -811,23 +812,24 @@ function Opcao({ label, selecionada, onClick }) {
       style={{
         display:"flex", alignItems:"center", gap:10,
         padding:"12px 14px",
-        background: selecionada ? "#fafbfc" : "#fff",
-        border: selecionada ? "1.5px solid #111" : "2px solid #d1d5db",
+        background: selecionada ? "#fdf6f0" : "#fff",
+        border: selecionada ? "1.5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
         borderRadius: 12,
+        boxShadow: selecionada ? "0 0 0 3px rgba(181,101,47,0.14)" : "none",
         cursor:"pointer",
         textAlign:"left",
         fontFamily:"inherit",
         fontSize:13.5,
-        color:"#111",
+        color:"#262421",
         fontWeight: selecionada ? 600 : 400,
         transition:"all 0.12s",
       }}
       onMouseEnter={e => { if (!selecionada) e.currentTarget.style.borderColor="#9ca3af"; }}
-      onMouseLeave={e => { if (!selecionada) e.currentTarget.style.borderColor="#d1d5db"; }}>
+      onMouseLeave={e => { if (!selecionada) e.currentTarget.style.borderColor="rgba(38,36,33,0.16)"; }}>
       <span style={{
         flexShrink:0,
         width:18, height:18, borderRadius:"50%",
-        border: selecionada ? "5px solid #111" : "1.5px solid #d1d5db",
+        border: selecionada ? "5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
         background:"#fff",
         transition:"all 0.12s",
       }} />
@@ -918,7 +920,7 @@ function InputMoedaBR({ valor, setValor, onConfirmar }) {
         autoFocus
         style={{
           width:"100%", boxSizing:"border-box",
-          border:"2px solid #d1d5db", borderRadius: 12,
+          border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12,
           padding:"11px 14px 11px 38px",
           fontSize:14, fontFamily:"inherit", outline:"none",
           fontVariantNumeric:"tabular-nums",
@@ -1013,7 +1015,7 @@ function BlocoResultado({
         <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, flexShrink:0 }}>
           VICKE · Análise Inteligente
         </div>
-        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#111", letterSpacing:-0.4, lineHeight:1.2, display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#262421", letterSpacing:-0.4, lineHeight:1.2, display:"flex", alignItems:"center", gap:10 }}>
           Resultado da sua calibragem
           {/* Indicador sutil quando troca de estado e CUB recarrega — evita
               flash em branco. Spinner pequeno + texto delicado. */}
@@ -1022,7 +1024,7 @@ function BlocoResultado({
               <span style={{
                 display:"inline-block",
                 width:10, height:10,
-                border:"1.5px solid #e5e7eb",
+                border:"1.5px solid rgba(38,36,33,0.14)",
                 borderTopColor:"#6b7280",
                 borderRadius:"50%",
                 animation:"vk-spin 0.8s linear infinite",
@@ -1075,7 +1077,7 @@ function BlocoResultado({
 
             {aceitouCalculado === false && (
               <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
-                <div style={{ fontSize:13, color:"#111", marginBottom:4 }}>
+                <div style={{ fontSize:13, color:"#262421", marginBottom:4 }}>
                   Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
                 </div>
                 <div style={{ fontSize:11.5, color:"#9ca3af", marginBottom:10, lineHeight:1.4 }}>
@@ -1103,7 +1105,7 @@ function BlocoResultado({
                     <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5, marginBottom:10 }}>
                       {moeda(analiseCalibragem.valor)} é {analiseCalibragem.ratio.toFixed(1)}× {analiseCalibragem.muitoAlto ? "maior" : "menor"} que o sugerido pela análise ({moeda(honorarioCalculado)}).
                     </div>
-                    <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#111", cursor:"pointer" }}>
+                    <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#262421", cursor:"pointer" }}>
                       <input
                         type="checkbox"
                         checked={confirmandoAbsurdo}
@@ -1131,7 +1133,7 @@ function BlocoResultado({
                     <button
                       onClick={() => setPrecoRecalibradoOk(true)}
                       style={{
-                        background: "#111", color: "#fff",
+                        background: "#262421", color: "#fff",
                         border: "none", borderRadius: 12,
                         padding: "11px 20px",
                         fontSize: 13, fontWeight: 600,
@@ -1140,7 +1142,7 @@ function BlocoResultado({
                         transition: "background 0.15s",
                       }}
                       onMouseEnter={e => e.currentTarget.style.background = "#000"}
-                      onMouseLeave={e => e.currentTarget.style.background = "#111"}>
+                      onMouseLeave={e => e.currentTarget.style.background = "#262421"}>
                       Prosseguir
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                         <line x1="12" y1="5" x2="12" y2="19"/>
@@ -1222,7 +1224,7 @@ function EtapaTexto({ casaCalc, onProximo }) {
       <div
         onClick={handleSkip}
         style={{
-          fontSize:16, color:"#111", lineHeight:1.7,
+          fontSize:16, color:"#262421", lineHeight:1.7,
           maxWidth: 760,
           textAlign:"justify",
           textAlignLast:"left",
@@ -1234,7 +1236,7 @@ function EtapaTexto({ casaCalc, onProximo }) {
           <span style={{
             display:"inline-block",
             width:2, height:"1em",
-            background:"#111",
+            background:"#262421",
             verticalAlign:"text-bottom",
             marginLeft:2,
             animation:"vk-cursor-blink 1s steps(2) infinite",
@@ -1252,7 +1254,7 @@ function EtapaTexto({ casaCalc, onProximo }) {
           onClick={onProximo}
           disabled={!terminou}
           style={{
-            background:"#111", color:"#fff",
+            background:"#262421", color:"#fff",
             border:"none", borderRadius: 12,
             padding:"12px 24px",
             fontSize:13, fontWeight:600,
@@ -1262,7 +1264,7 @@ function EtapaTexto({ casaCalc, onProximo }) {
             transition:"background 0.15s",
           }}
           onMouseEnter={e => terminou && (e.currentTarget.style.background = "#000")}
-          onMouseLeave={e => terminou && (e.currentTarget.style.background = "#111")}>
+          onMouseLeave={e => terminou && (e.currentTarget.style.background = "#262421")}>
           Próximo
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <line x1="5" y1="12" x2="19" y2="12"/>
@@ -1394,10 +1396,10 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 onClick={() => setEditando(aberto ? null : l.campo)}
                 style={{
                   width: "100%",
-                  border: aberto ? "1px solid #111" : "2px solid #d1d5db",
+                  border: aberto ? "1.5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
                   borderRadius: 14,
                   padding: "10px 12px",
-                  background: aberto ? "#f3f4f6" : "#fff",
+                  background: aberto ? "#fdf6f0" : "#fff",
                   cursor: "pointer",
                   fontFamily: "inherit",
                   textAlign: "left",
@@ -1415,7 +1417,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 }}
                 onMouseLeave={e => {
                   if (!aberto) {
-                    e.currentTarget.style.borderColor="#d1d5db";
+                    e.currentTarget.style.borderColor="rgba(38,36,33,0.16)";
                     e.currentTarget.style.background = "#fff";
                   }
                 }}
@@ -1428,7 +1430,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                     {l.label}
                   </div>
                   <div style={{
-                    fontSize: 12.5, color: "#111", fontWeight: 500, lineHeight: 1.25,
+                    fontSize: 12.5, color: "#262421", fontWeight: 500, lineHeight: 1.25,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
                     {l.valor}
@@ -1449,7 +1451,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                   position: "absolute",
                   top: 0, left: "calc(100% + 8px)",
                   background: "#fff",
-                  border: "2px solid #d1d5db",
+                  border: "1.5px solid rgba(38,36,33,0.16)",
                   borderRadius: 14,
                   boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
                   padding: 6,
@@ -1476,8 +1478,8 @@ function ResumoLateral({ respostas, setters, matriz }) {
                           fontSize: 12,
                           borderRadius: 6,
                           cursor: "pointer",
-                          background: selecionada ? "#f3f4f6" : "transparent",
-                          color: selecionada ? "#111" : "#374151",
+                          background: selecionada ? "#fdf6f0" : "transparent",
+                          color: selecionada ? "#b5652f" : "#374151",
                           fontWeight: selecionada ? 600 : 400,
                           transition: "background 0.1s",
                         }}
@@ -1603,7 +1605,7 @@ function FluxogramaCasa({ casaCalc }) {
         <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
           Em uma simulação com as seguintes características:
         </div>
-        <div style={{ fontSize: 14, color: "#111", fontWeight: 500, marginTop: 4 }}>
+        <div style={{ fontSize: 14, color: "#262421", fontWeight: 500, marginTop: 4 }}>
           Casa de padrão {padraoLabel} com ambientes médios
         </div>
       </div>
@@ -1618,7 +1620,7 @@ function FluxogramaCasa({ casaCalc }) {
         {/* ─── CARD CÔMODOS ──────────────────────────────────── */}
         <div style={{
           background: "#fff",
-          border: "2px solid #d1d5db",
+          border: "1.5px solid rgba(38,36,33,0.16)",
           borderRadius: 14,
           padding: "22px 24px",
           opacity: showCardC ? 1 : 0,
@@ -1645,7 +1647,7 @@ function FluxogramaCasa({ casaCalc }) {
                 transition: "opacity 0.25s ease-out, transform 0.25s ease-out",
               }}>
                 <span style={{ color: "#374151" }}>{displayName(c.nome, c.qtd)}</span>
-                <span style={{ color: "#111", fontWeight: 500 }}>
+                <span style={{ color: "#262421", fontWeight: 500 }}>
                   {total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
                 </span>
               </div>
@@ -1664,7 +1666,7 @@ function FluxogramaCasa({ casaCalc }) {
             transition: "opacity 0.3s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
           }}>
             <span style={{ color: "#6b7280", fontWeight: 500 }}>Subtotal área útil</span>
-            <span style={{ color: "#111", fontWeight: 600 }}>
+            <span style={{ color: "#262421", fontWeight: 600 }}>
               {casaCalc.areaBruta.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
             </span>
           </div>
@@ -1740,7 +1742,7 @@ function FluxogramaCasa({ casaCalc }) {
         {/* ─── CARD ÁREA TOTAL ───────────────────────────────── */}
         <div style={{
           background: "#fff",
-          border: "2px solid #d1d5db",
+          border: "1.5px solid rgba(38,36,33,0.16)",
           borderRadius: 14,
           padding: "28px 24px",
           textAlign: "center",
@@ -1755,7 +1757,7 @@ function FluxogramaCasa({ casaCalc }) {
             Área total
           </div>
           <div style={{
-            fontSize: 30, fontWeight: 500, color: "#111",
+            fontSize: 30, fontWeight: 500, color: "#262421",
             letterSpacing: -0.5, fontVariantNumeric: "tabular-nums",
             lineHeight: 1.1,
           }}>
@@ -1854,7 +1856,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   return (
     <div style={{
       background:"#fff",
-      border:"2px solid #d1d5db",
+      border:"1.5px solid rgba(38,36,33,0.16)",
       borderRadius:14,
       padding:"22px 24px",
       animation:"vk-fade-up 0.4s ease-out",
@@ -1935,7 +1937,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                     : topY - 10}
                   textAnchor="middle"
                   fontSize="12" fontWeight="600"
-                  fill="#111"
+                  fill="#262421"
                   fontFamily="'Inter', system-ui, -apple-system, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.5s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.tipo === "sub" ? "−" : ""}{moeda(Math.abs(s.delta))}
@@ -2001,7 +2003,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                         x={textX} y={ay}
                         textAnchor="start"
                         fontSize="10" fontWeight="500"
-                        fill="#111"
+                        fill="#262421"
                         fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                         R$ {valorPorM2}/m²
                       </text>
@@ -2071,7 +2073,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                         x={x2 + 4}
                         y={s.tipo === "add" ? y2 + 3 : y2 + 3}
                         fontSize="8.5"
-                        fill="#111"
+                        fill="#262421"
                         fontStyle="italic"
                         fontWeight="400"
                         fontFamily="'Inter', system-ui, -apple-system, sans-serif">
@@ -2181,8 +2183,8 @@ function BlocoCadastroEscritorio({
   // Estilo compartilhado dos inputs.
   const inputBase = {
     width: "100%", boxSizing: "border-box",
-    border: "1px solid #d1d5db", borderRadius: 12,
-    padding: "10px 12px", fontSize: 13, color: "#111",
+    border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12,
+    padding: "10px 12px", fontSize: 13, color: "#262421",
     outline: "none", background: "#fff", fontFamily: "inherit",
     transition: "border-color 0.12s",
   };
@@ -2201,7 +2203,7 @@ function BlocoCadastroEscritorio({
       scrollMarginTop: 16,
     }}>
       <style>{`
-        .vk-onb-cad input:focus, .vk-onb-cad select:focus { border-color: #111 !important; }
+        .vk-onb-cad input:focus, .vk-onb-cad select:focus { border-color: #b5652f !important; box-shadow: 0 0 0 3px rgba(181,101,47,0.12); }
         @media (max-width: 720px) {
           .vk-onb-cad-grid { grid-template-columns: 1fr !important; }
         }
@@ -2214,7 +2216,7 @@ function BlocoCadastroEscritorio({
         VICKE · Cadastro do Escritório
       </div>
       <div style={{
-        fontSize: 22, fontWeight: 300, color: "#111",
+        fontSize: 22, fontWeight: 300, color: "#262421",
         letterSpacing: -0.4, lineHeight: 1.2, marginBottom: 12,
       }}>
         Quase lá — vamos completar o cadastro
@@ -2232,7 +2234,7 @@ function BlocoCadastroEscritorio({
           <div style={{
             fontSize: 11, fontWeight: 700, color: "#9ca3af",
             textTransform: "uppercase", letterSpacing: 1, marginBottom: 12,
-          }}>Logo do escritório <span style={{ fontWeight: 400, color: "#d1d5db" }}>· opcional</span></div>
+          }}>Logo do escritório <span style={{ fontWeight: 400, color: "#9ca3af" }}>· opcional</span></div>
           <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             {/* Preview com drag & drop */}
             <label
@@ -2241,7 +2243,7 @@ function BlocoCadastroEscritorio({
               onDrop={handleDrop}
               style={{
                 width: 160, height: 100,
-                border: arrastando ? "1.5px solid #111" : (logo ? "2px solid #d1d5db" : "1.5px dashed #d1d5db"),
+                border: arrastando ? "1.5px solid #b5652f" : (logo ? "1.5px solid rgba(38,36,33,0.16)" : "1.5px dashed rgba(38,36,33,0.2)"),
                 borderRadius: 12,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: arrastando ? "#f3f4f6" : "#fafbfc",
@@ -2249,7 +2251,7 @@ function BlocoCadastroEscritorio({
                 cursor: "pointer", transition: "all 0.12s",
               }}
               onMouseEnter={e => { if (!arrastando && !logo) e.currentTarget.style.borderColor = "#9ca3af"; }}
-              onMouseLeave={e => { if (!arrastando && !logo) e.currentTarget.style.borderColor = "#d1d5db"; }}
+              onMouseLeave={e => { if (!arrastando && !logo) e.currentTarget.style.borderColor = "rgba(38,36,33,0.2)"; }}
               title={logo ? "Clique pra trocar ou arraste uma nova imagem" : "Clique ou arraste uma imagem"}>
               {logo ? (
                 <img src={logo} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
@@ -2274,7 +2276,7 @@ function BlocoCadastroEscritorio({
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 <label style={{
-                  background: "#111", color: "#fff", border: "none", borderRadius: 7,
+                  background: "#262421", color: "#fff", border: "none", borderRadius: 7,
                   padding: "7px 14px", fontSize: 12.5, fontWeight: 600,
                   cursor: "pointer", display: "inline-flex", alignItems: "center", fontFamily: "inherit",
                 }}>
@@ -2292,7 +2294,7 @@ function BlocoCadastroEscritorio({
                     onClick={() => { setLogo(null); setLogoErro(null); }}
                     style={{
                       background: "#fff", color: "#374151",
-                      border: "1px solid #d1d5db", borderRadius: 7,
+                      border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 7,
                       padding: "7px 14px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit",
                     }}>
                     Remover
@@ -2435,7 +2437,7 @@ function BlocoCadastroEscritorio({
         <div style={{
           fontSize: 11, fontWeight: 700, color: "#9ca3af",
           textTransform: "uppercase", letterSpacing: 1, marginBottom: 8,
-        }}>PIX e Banco <span style={{ fontWeight: 400, color: "#d1d5db" }}>· opcional</span></div>
+        }}>PIX e Banco <span style={{ fontWeight: 400, color: "#9ca3af" }}>· opcional</span></div>
         <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 16 }}>
           Aparece embaixo da forma de pagamento nas propostas. Pode preencher depois se preferir — só aparece no PDF se você informar a chave.
         </div>
@@ -2506,7 +2508,7 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
         {/* Ícone de sucesso (check em círculo preto) */}
         <div style={{
           width:56, height:56, borderRadius:"50%",
-          background:"#111", color:"#fff",
+          background:"#262421", color:"#fff",
           display:"flex", alignItems:"center", justifyContent:"center",
           margin:"0 auto 24px",
         }}>
@@ -2515,7 +2517,7 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
           </svg>
         </div>
 
-        <div style={{ fontSize:22, fontWeight:300, color:"#111", letterSpacing:-0.4, marginBottom:10 }}>
+        <div style={{ fontSize:22, fontWeight:300, color:"#262421", letterSpacing:-0.4, marginBottom:10 }}>
           Tudo certo, {primeiroNome}!
         </div>
         <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.55, marginBottom:36 }}>
@@ -2533,7 +2535,7 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
           <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>
             Por que isso importa
           </div>
-          <div style={{ fontSize:13, color:"#111", lineHeight:1.7 }}>
+          <div style={{ fontSize:13, color:"#262421", lineHeight:1.7 }}>
             Os dados do escritório (logo, endereço, contatos) aparecem nos seus orçamentos, propostas e PDFs enviados aos clientes. É a sua identidade visual no sistema.
           </div>
         </div>
@@ -2561,13 +2563,13 @@ const tela = {
   display:"flex", justifyContent:"center", alignItems:"flex-start",
 };
 const card = {
-  background:"#fff", border:"2px solid #d1d5db", borderRadius: 16,
+  background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16,
   padding:"32px 32px 24px", maxWidth:420, width:"100%",
   boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
   margin:"40px 20px",
 };
 const btnPrimario = {
-  background:"#111", color:"#fff", border:"none", borderRadius: 12,
+  background:"#262421", color:"#fff", border:"none", borderRadius: 12,
   padding:"11px 16px", fontSize:13.5, fontWeight:600, cursor:"pointer",
   fontFamily:"inherit",
 };
@@ -2576,7 +2578,7 @@ const btnSecundario = {
   padding:"8px", fontSize:12, cursor:"pointer", fontFamily:"inherit",
 };
 const tdLabel = { color:"#6b7280", padding:"4px 0" };
-const tdValor = { textAlign:"right", padding:"4px 0", color:"#111" };
+const tdValor = { textAlign:"right", padding:"4px 0", color:"#262421" };
 
 // ── Helpers ────────────────────────────────────────────────────
 function moeda(v) {
