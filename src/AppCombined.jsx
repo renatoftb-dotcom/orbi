@@ -28742,22 +28742,22 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
   ];
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"calc(100vh - 53px)", padding: isMobile ? "32px 16px" : "40px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"calc(100vh - 53px)", padding: isMobile ? "32px 16px" : "40px 32px", background:"#f6f7f9", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
       <div style={{ textAlign:"center", marginBottom: isMobile ? 36 : 56 }}>
-        <div style={{ fontSize: isMobile ? 24 : 28, fontWeight:300, color:"#111", letterSpacing:-0.5, transition:"opacity 0.4s ease, transform 0.4s ease", opacity, transform }}>
+        <div style={{ fontSize: isMobile ? 24 : 28, fontWeight:600, color:"#111", letterSpacing:-0.5, transition:"opacity 0.4s ease, transform 0.4s ease", opacity, transform }}>
           {texto}
         </div>
-        <div style={{ fontSize:13, color:"#d1d5db", marginTop:8 }}>Selecione um módulo para começar</div>
+        <div style={{ fontSize:13.5, color:"#6b7280", marginTop:8 }}>Selecione um módulo para começar</div>
       </div>
-      <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: isMobile ? 10 : 12, width:"100%", maxWidth:680 }}>
+      <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16, width:"100%", maxWidth:680 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"inherit", position:"relative" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor="#d1d5db"; }}>
-            <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:4 }}>{m.label}</div>
-            <div style={{ fontSize:12, color:"#9ca3af" }}>{m.desc}</div>
-            {m.count > 0 && <div style={{ position:"absolute", top:12, right:12, background:"#f3f4f6", color:"#6b7280", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius: 14 }}>{m.count}</div>}
+            style={{ background:"#fff", border:"1.5px solid #d1d5db", borderRadius: 16, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"inherit", position:"relative", boxShadow:"0 1px 2px rgba(17,17,17,0.05)", transition:"all 0.15s ease" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor="#2563eb"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(37, 99, 235, 0.15)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="#d1d5db"; e.currentTarget.style.boxShadow="0 1px 2px rgba(17,17,17,0.05)"; }}>
+            <div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:4 }}>{m.label}</div>
+            <div style={{ fontSize:12, color:"#6b7280" }}>{m.desc}</div>
+            {m.count > 0 && <div style={{ position:"absolute", top:12, right:12, background:"#eff6ff", color:"#2563eb", fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius: 14 }}>{m.count}</div>}
           </button>
         ))}
       </div>
@@ -29841,7 +29841,7 @@ export default function ModuloClientesFornecedores() {
           // Drawer mobile
           position:"fixed", top:0, left:0, bottom:0,
           width: 260, // um pouco mais largo que o desktop expandido (260) pro toque ser confortável
-          background:"#fff", borderRight:"1px solid #f3f4f6",
+          background:"#fff", borderRight:"1px solid #e5e7eb",
           display:"flex", flexDirection:"column",
           zIndex:991,
           transform: sidebarMobileAberta ? "translateX(0)" : "translateX(-100%)",
@@ -29852,7 +29852,7 @@ export default function ModuloClientesFornecedores() {
           width: colapsadaEf ? 56 : 220,
           minWidth: colapsadaEf ? 56 : 220,
           transition:"width 0.18s ease, min-width 0.18s ease",
-          background:"#fff", borderRight:"1px solid #f3f4f6",
+          background:"#fff", borderRight:"1px solid #e5e7eb",
           display:"flex", flexDirection:"column",
         }
       }>
@@ -29869,7 +29869,7 @@ export default function ModuloClientesFornecedores() {
           {(isMobile || !colapsadaEf) && (
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ fontSize:15, fontWeight:700, color:"#111", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
-              <div style={{ fontSize:11, color:"#d1d5db", marginTop:2 }}>Vicke</div>
+              <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>Vicke</div>
             </div>
           )}
           {/* Botão de toggle: muda comportamento conforme dispositivo.
@@ -30097,7 +30097,7 @@ export default function ModuloClientesFornecedores() {
               {!colapsadaEf && (
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:12, fontWeight:600, color:"#374151", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
-                  <div style={{ fontSize:11, color:"#d1d5db" }}>{usuario?.perfil || ""}</div>
+                  <div style={{ fontSize:11, color:"#9ca3af" }}>{usuario?.perfil || ""}</div>
                 </div>
               )}
               <button
@@ -30141,7 +30141,7 @@ export default function ModuloClientesFornecedores() {
           </div>
       </div>
 
-      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden" }}>
+      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#f6f7f9" }}>
         {/* ── Header mobile: aparece só em <768px. Tem hamburguer pra abrir
             o drawer da sidebar + nome do escritório (compacto). ── */}
         {isMobile && (
