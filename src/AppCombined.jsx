@@ -20562,12 +20562,12 @@ function Escritorio({ data, save }) {
   }
 
   const E = {
-    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header: { borderBottom:"2px solid #d1d5db", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
-    titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
+    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#262421", maxWidth:1200, margin:"0 auto" },
+    header: { borderBottom:"1.5px solid rgba(38,36,33,0.14)", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
+    titulo: { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
-    abas: { display:"flex", gap:0, borderBottom:"2px solid #d1d5db", padding:"0 32px" },
-    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
+    abas: { display:"flex", gap:0, borderBottom:"1.5px solid rgba(38,36,33,0.14)", padding:"0 32px" },
+    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #b5652f" : "2px solid transparent", color: ativa ? "#b5652f" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body: { padding:"32px", maxWidth:760 },
     secao: { marginBottom:32 },
     secTitulo: { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
@@ -20575,31 +20575,31 @@ function Escritorio({ data, save }) {
     grid3: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 },
     campo: { display:"flex", flexDirection:"column", gap:5 },
     label: { fontSize:12, color:"#6b7280", fontWeight:500 },
-    input: { border:"1px solid #d1d5db", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-    select: { border:"1px solid #d1d5db", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
+    input: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+    select: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
     divisor: { border:"none", borderTop:"1px solid #f3f4f6", margin:"24px 0" },
-    btn: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius: 12, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-    btnAdd: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
-    btnSalvo: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
+    btn: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnAdd: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
+    btnSalvo: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
     // Equipe
-    membroCard: { border:"2px solid #d1d5db", borderRadius: 14, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
-    membroNome: { fontSize:14, fontWeight:600, color:"#111", marginBottom:2 },
+    membroCard: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
+    membroNome: { fontSize:14, fontWeight:600, color:"#262421", marginBottom:2 },
     membroCargo: { fontSize:12, color:"#9ca3af" },
     membroInfo: { fontSize:12, color:"#6b7280", marginTop:6, display:"flex", gap:16 },
     // Modal
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.3)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
     modal: { background:"#fff", borderRadius:14, padding:"28px", width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 40px rgba(0,0,0,0.15)" },
-    modalTitulo: { fontSize:16, fontWeight:700, color:"#111", marginBottom:20 },
+    modalTitulo: { fontSize:16, fontWeight:700, color:"#262421", marginBottom:20 },
     // View
-    viewVal: { fontSize:14, color:"#111", marginBottom:2 },
+    viewVal: { fontSize:14, color:"#262421", marginBottom:2 },
     viewLabel: { fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
     viewBloco: { display:"flex", flexDirection:"column", gap:3 },
     // Modo visualização vs edição (item 4)
     secaoHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 },
-    btnEditar: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
+    btnEditar: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
     // Valor "vazio" — aparece quando campo não preenchido em modo visualização
-    viewVazio: { fontSize:14, color:"#d1d5db", fontStyle:"italic", marginBottom:2 },
+    viewVazio: { fontSize:14, color:"#9ca3af", fontStyle:"italic", marginBottom:2 },
   };
 
   // Tag de nível de usuário (reusável)
@@ -20634,7 +20634,7 @@ function Escritorio({ data, save }) {
           <div style={{
             width: 160,
             height: 100,
-            border: form.logo ? "2px solid #d1d5db" : "1.5px dashed #d1d5db",
+            border: form.logo ? "1.5px solid rgba(38,36,33,0.16)" : "1.5px dashed rgba(38,36,33,0.2)",
             borderRadius: 12,
             display: "flex",
             alignItems: "center",
@@ -20707,7 +20707,7 @@ function Escritorio({ data, save }) {
       {perm.podeAlterarConfig && (
         <div style={{
           display:"flex", justifyContent:"space-between", alignItems:"center", gap:8, marginBottom:20,
-          paddingBottom:16, borderBottom: editandoDados ? "1px dashed #e5e7eb" : "none",
+          paddingBottom:16, borderBottom: editandoDados ? "1px dashed rgba(38,36,33,0.14)" : "none",
         }}>
           {/* Esquerda: ação destrutiva (limpar) — só visível em modo edição */}
           <div>
@@ -20790,7 +20790,7 @@ function Escritorio({ data, save }) {
               </button>
             </div>
             {responsaveis.length === 0 && (
-              <div style={{ fontSize:13, color:"#d1d5db", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
+              <div style={{ fontSize:13, color:"#9ca3af", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
             )}
             {responsaveis.map((r, idx) => (
               <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:10, marginBottom:10, alignItems:"end" }}>
@@ -20802,7 +20802,7 @@ function Escritorio({ data, save }) {
                   </div>
                 ))}
                 <button onClick={() => setResponsaveis(rs => rs.filter((_,i) => i!==idx))}
-                  style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
+                  style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
               </div>
             ))}
           </>
@@ -20972,14 +20972,14 @@ function Escritorio({ data, save }) {
     <div style={E.body}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
         <div>
-          <div style={{ fontSize:14, color:"#111", fontWeight:600 }}>{equipe.length} membro{equipe.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize:14, color:"#262421", fontWeight:600 }}>{equipe.length} membro{equipe.length !== 1 ? "s" : ""}</div>
           <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>Gerencie os membros da equipe</div>
         </div>
         <button style={E.btn} onClick={() => setNovoMembro({...emptyMembro, id:uid()})}>+ Adicionar membro</button>
       </div>
 
       {equipe.length === 0 ? (
-        <div style={{ textAlign:"center", padding:"60px 0", color:"#d1d5db", fontSize:14 }}>
+        <div style={{ textAlign:"center", padding:"60px 0", color:"#9ca3af", fontSize:14 }}>
           Nenhum membro cadastrado ainda.
         </div>
       ) : (
@@ -20996,11 +20996,11 @@ function Escritorio({ data, save }) {
             </div>
             <div style={{ display:"flex", gap:6 }}>
               <button onClick={() => setNovoMembro(m)}
-                style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                 Editar
               </button>
               <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
-                style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
+                style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
             </div>
           </div>
         ))
@@ -21064,7 +21064,7 @@ function Escritorio({ data, save }) {
       <div style={E.body}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
           <div>
-            <div style={{ fontSize:14, color:"#111", fontWeight:600 }}>
+            <div style={{ fontSize:14, color:"#262421", fontWeight:600 }}>
               {usuarios.length} {usuarios.length === 1 ? "usuário" : "usuários"}
             </div>
             <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
@@ -21115,7 +21115,7 @@ function Escritorio({ data, save }) {
         )}
 
         {!loadingUsuarios && !erroUsuarios && usuarios.length === 0 && (
-          <div style={{ textAlign:"center", padding:"60px 0", color:"#d1d5db", fontSize:14 }}>
+          <div style={{ textAlign:"center", padding:"60px 0", color:"#9ca3af", fontSize:14 }}>
             Nenhum usuário cadastrado ainda.
           </div>
         )}
@@ -21154,7 +21154,7 @@ function Escritorio({ data, save }) {
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
                       background:"#fafafa", color:"#374151", fontWeight:600,
-                      border:"2px solid #d1d5db",
+                      border:"1.5px solid rgba(38,36,33,0.16)",
                       textTransform:"uppercase", letterSpacing:0.5,
                     }} title="Senha foi resetada — usuário precisa trocá-la no próximo login">
                       Trocar senha
@@ -21182,7 +21182,7 @@ function Escritorio({ data, save }) {
                     });
                     setConfirmSenha("");
                   }}
-                  style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                  style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                   Editar
                 </button>
                 {/* Reset de senha — só admin de empresa pode, não pra si mesmo,
@@ -21191,7 +21191,7 @@ function Escritorio({ data, save }) {
                   <button
                     onClick={() => setUsuarioParaResetar(u)}
                     title="Resetar senha do usuário"
-                    style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                     Resetar senha
                   </button>
                 )}
@@ -21199,7 +21199,7 @@ function Escritorio({ data, save }) {
                   <button
                     onClick={() => pedirConfirmacaoExcluir(u)}
                     title="Excluir usuário"
-                    style={{ background:"none", border:"none", color:"#d1d5db", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
+                    style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
                 )}
               </div>
             </div>
