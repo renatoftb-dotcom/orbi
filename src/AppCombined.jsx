@@ -4278,17 +4278,18 @@ if (typeof window !== "undefined" && typeof import.meta !== "undefined" && impor
   };
 }
 
+// Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 const C = {
-  input:    { border:"2px solid #d1d5db", borderRadius: 12, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  input:    { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
   label:    { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
-  btn:      { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec:   { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius: 12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btn:      { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+  btnSec:   { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
   grid3:    { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
-  secTit:   { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:14 },
-  divider:  { border:"none", borderTop:"1px solid #f3f4f6", margin:"20px 0" },
+  secTit:   { fontSize:11, fontWeight:700, color:"#b5652f", textTransform:"uppercase", letterSpacing:1, marginBottom:14 },
+  divider:  { border:"none", borderTop:"1px solid rgba(38,36,33,0.08)", margin:"20px 0" },
   row:      { display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid #f9fafb" },
 };
 
@@ -4621,7 +4622,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   if (!data || !Array.isArray(data.clientes)) {
     return (
       <div style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
-        <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Clientes</h2>
+        <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Clientes</h2>
         <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
       </div>
     );
@@ -4769,7 +4770,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         const corAlerta = chip.alerta === "vermelho" ? "#b91c1c" : chip.alerta === "amarelo" ? "#b45309" : null;
         return (
           <span key={i} style={{ color:"#374151" }}>
-            {i > 0 && <span style={{ color:"#d1d5db", margin:"0 6px" }}>·</span>}
+            {i > 0 && <span style={{ color:"#9ca3af", margin:"0 6px" }}>·</span>}
             <span>{chip.tipo}</span>
             <span style={{ color:"#9ca3af" }}> ({chip.estado})</span>
             {chip.info && (
@@ -4786,15 +4787,15 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       <div
         onClick={() => openDetail(c)}
         style={{
-          background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
+          background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12,
           padding:"10px 14px", marginBottom:6, cursor:"pointer",
           display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
           transition:"border-color 0.15s",
         }}
-        onMouseEnter={e=>e.currentTarget.style.borderColor="#d1d5db"}
-        onMouseLeave={e=>e.currentTarget.style.borderColor="#d1d5db"}>
+        onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(38,36,33,0.16)"}
+        onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(38,36,33,0.16)"}>
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:"#262421", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {c.nome}
           </div>
           <div style={{ fontSize:11.5, lineHeight:1.4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -4807,7 +4808,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               value={colunaDoCliente(c)}
               onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
               onClick={e => e.stopPropagation()}
-              style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"2px solid #d1d5db", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
+              style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
               {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
             </select>
           ) : (
@@ -4838,7 +4839,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           <div style={{ padding:"16px 16px 0", display:"flex", flexDirection:"column", gap:12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>Clientes</div>
+                <div style={{ fontSize:17, fontWeight:700, color:"#262421" }}>Clientes</div>
                 <div style={{ fontSize:12, color:"#9ca3af" }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
               </div>
               {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
@@ -4868,7 +4869,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           {/* Cards da aba ativa */}
           <div style={{ flex:1, overflowY:"auto", padding:"12px 16px" }}>
             {cardsAba.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"48px 0", color:"#d1d5db", fontSize:13 }}>
+              <div style={{ textAlign:"center", padding:"48px 0", color:"#9ca3af", fontSize:13 }}>
                 <div style={{ fontSize:28, marginBottom:8 }}>—</div>
                 Nenhum cliente em {colAtual.label}
               </div>
@@ -4886,7 +4887,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div>
-            <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
+            <div style={{ fontSize:18, fontWeight:700, color:"#262421" }}>Clientes</div>
             <div style={{ fontSize:13, color:"#9ca3af", marginTop:2 }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
@@ -4927,7 +4928,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                     </div>
                   ))}
                   {cards.length === 0 && (
-                    <div style={{ textAlign:"center", padding:"24px 0", color:"#d1d5db", fontSize:12 }}>
+                    <div style={{ textAlign:"center", padding:"24px 0", color:"#9ca3af", fontSize:12 }}>
                       Arraste um cliente aqui
                     </div>
                   )}
@@ -4949,7 +4950,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     return (
       <div style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
-          <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
+          <div style={{ fontSize:18, fontWeight:700, color:"#262421" }}>Clientes</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <input style={{ ...C.input, width: isMobile ? "100%" : 220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
             {!isMobile && <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>}
@@ -4963,19 +4964,19 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             const col = COLUNAS.find(x=>x.key===colunaDoCliente(c)) || COLUNAS[0];
             const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
             return (
-              <div key={c.id} style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
-                onMouseEnter={e=>e.currentTarget.style.borderColor="#111"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="#d1d5db"}
+              <div key={c.id} style={{ background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="#b5652f"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(38,36,33,0.16)"}
                 onClick={()=>openDetail(c)}>
                 <div style={{ width:40, height:40, borderRadius: 14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:"#111" }}>{c.nome}</div>
+                  <div style={{ fontSize:14, fontWeight:600, color:"#262421" }}>{c.nome}</div>
                   <div style={{ fontSize:12, color:"#9ca3af" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
                   <span style={C.tag(col.cor)}>{col.label}</span>
-                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"2px solid #d1d5db", borderRadius:6, padding:"4px 10px" }}>WA</a>}
-                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"2px solid #d1d5db", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a>}
+                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
                 </div>
               </div>
             );
@@ -5197,17 +5198,17 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
   };
 
   return (
-    <div style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px" }}>
+    <div style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Projetos</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Projetos</div>
           <div style={{ fontSize: 12, color: "#6b7280" }}>{orcamentos.length} projeto{orcamentos.length !== 1 ? "s" : ""}</div>
         </div>
         <button style={C.btn} onClick={() => onAbrirOrcamento(cliente, null, "novo")}>+ Novo projeto</button>
       </div>
 
       {orcamentos.length === 0 ? (
-        <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+        <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
           Nenhum projeto cadastrado.
         </div>
       ) : (
@@ -5218,11 +5219,11 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
               <div
                 key={orc.id}
                 onClick={() => onAbrirOrcamento(cliente, orc, "editar")}
-                style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = "#d1d5db"}
-                onMouseLeave={e => e.currentTarget.style.borderColor="#d1d5db"}>
+                style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(38,36,33,0.16)"}
+                onMouseLeave={e => e.currentTarget.style.borderColor="rgba(38,36,33,0.16)"}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
                   <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span style={C.tag(sts.cor)}>{sts.label}</span>
                     {orc.padrao && <span>Padrão: {orc.padrao}</span>}
@@ -5275,7 +5276,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "formContrato" && formContrato && obraSelecionada) {
     return (
-      <div style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("contratosDaObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Contratado *</label><input style={C.input} value={formContrato.nomeContratado} onChange={e => setFormContrato({ ...formContrato, nomeContratado: e.target.value })} placeholder="Nome da empresa/pessoa" /></div>
@@ -5302,11 +5303,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "form" && formObra) {
     return (
-      <div style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>Gestão de Obra</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#262421" }}>Gestão de Obra</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Nome da obra *</label><input style={C.input} value={formObra.nome} onChange={e => setFormObra({ ...formObra, nome: e.target.value })} /></div>
@@ -5327,18 +5328,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     return (
-      <div style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <div style={{ width: 40, height: 40, borderRadius: 14, background: "#2563eb15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>📋</div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Contratos</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Contratos</div>
             <div style={{ fontSize: 12, color: "#6b7280" }}>{obraSelecionada.nome}</div>
           </div>
         </div>
 
         {contratosDaObra.length === 0 ? (
-          <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+          <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
             Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setFormContrato({ id: uid(), clienteId: cliente.id, obraId: obraSelecionada.id, nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" }); setView("formContrato"); }} style={{ background: "transparent", border: "none", color: "#2563eb", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeiro contrato</button>}
           </div>
         ) : (
@@ -5346,9 +5347,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             {contratosDaObra.map(contrato => {
               const sts = statusContrato[contrato.status] || statusContrato.ativo;
               return (
-                <div key={contrato.id} style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
+                <div key={contrato.id} style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{contrato.nomeContratado}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{contrato.nomeContratado}</div>
                     <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
                       {contrato.valor && <span>R$ {parseFloat(contrato.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
@@ -5377,11 +5378,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "detalheObra" && obraSelecionada) {
     return (
-      <div style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>{obraSelecionada.nome}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#262421" }}>{obraSelecionada.nome}</div>
             <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{obraSelecionada.responsavel || "Sem responsável"}</div>
           </div>
           {perm.podeEditar && (
@@ -5395,12 +5396,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }}
-            style={{ border: "1.5px solid #d1d5db", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
+            style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
             <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Em breve</div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}
-            style={{ border: "1.5px solid #d1d5db", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
+            style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
             <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Em breve</div>
           </button>
@@ -5430,7 +5431,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
               )}
             </div>
             {obraSelecionada.descricao && (
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "2px solid #d1d5db" }}>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1.5px solid rgba(38,36,33,0.16)" }}>
                 <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Descrição</div>
                 <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{obraSelecionada.descricao}</div>
               </div>
@@ -5447,14 +5448,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   // Lista de obras — view padrão
   return (
-    <div style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+    <div style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
       <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Gestão de Obra</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Gestão de Obra</div>
         <div style={{ fontSize: 12, color: "#6b7280" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
       </div>
 
       {obras.length === 0 ? (
-        <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+        <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
           Nenhuma obra cadastrada. {perm.podeEditar && <button onClick={novaObra} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeira obra</button>}
         </div>
       ) : (
@@ -5463,10 +5464,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <div
               key={obra.id}
               onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }}
-              style={{ border: "1.5px solid #d1d5db", borderRadius: 12, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+              style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
               onMouseEnter={e => e.currentTarget.style.borderColor = "#9ca3af"}
-              onMouseLeave={e => e.currentTarget.style.borderColor = "#d1d5db"}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
+              onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(38,36,33,0.16)"}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{obra.nome}</div>
               {perm.podeEditar && (
                 <div onClick={e => e.stopPropagation()}>
                   <button onClick={() => editarObra(obra)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
@@ -28416,7 +28417,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   return (
     <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", maxWidth:1100, margin:"0 auto" }}>
       <div style={{ marginBottom: isMobile ? 18 : 28 }}>
-        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
+        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#262421", letterSpacing:-0.3 }}>Dashboard</div>
         <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
       </div>
 
@@ -28441,11 +28442,11 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
             style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
-            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#111"; }}
+            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#b5652f"; }}
             onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
               <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#111" }}>{m.label}</div>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#262421" }}>{m.label}</div>
             </div>
             {!isMobile && (
               <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
@@ -28517,12 +28518,12 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
             cursor: it.onClick ? "pointer" : "default",
             transition:"border-color 0.12s",
           }}
-          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#111"; }}
+          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#b5652f"; }}
           onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
           <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {it.label}
           </div>
-          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#111", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
+          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#262421", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
             {it.value}
           </div>
           {it.sub && (
@@ -28586,7 +28587,7 @@ function FeedItem({ ev, primeiro }) {
         background: meta.cor, marginTop:6,
       }} />
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, color:"#111", lineHeight:1.4 }}>
+        <div style={{ fontSize:13, color:"#262421", lineHeight:1.4 }}>
           {meta.descricao}
         </div>
         <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:2 }}>
@@ -28857,7 +28858,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           padding:"32px 32px 24px", maxWidth:420, width:"100%",
           boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
         }}>
-        <div style={{ fontSize:18, fontWeight:700, color:"#111", marginBottom:6, letterSpacing:-0.3 }}>
+        <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginBottom:6, letterSpacing:-0.3 }}>
           Trocar senha
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.5 }}>
@@ -28912,7 +28913,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 
         <button type="submit" disabled={loading}
           style={{
-            background:"#111", color:"#fff", border:"none", borderRadius: 12,
+            background:"#262421", color:"#fff", border:"none", borderRadius: 12,
             padding:"11px 16px", fontSize:13.5, fontWeight:600, cursor: loading ? "not-allowed" : "pointer",
             fontFamily:"inherit", width:"100%", marginBottom:10,
             opacity: loading ? 0.6 : 1,
@@ -28980,7 +28981,7 @@ function BotaoFeedbackFlutuante({ usuario }) {
           right: isMobile ? 16 : 24,
           bottom: isMobile ? 16 : 24,
           zIndex: 800,
-          background:"#111", color:"#fff", border:"none",
+          background:"#262421", color:"#fff", border:"none",
           borderRadius:"50%",
           width: isMobile ? 44 : 48,
           height: isMobile ? 44 : 48,
@@ -29048,13 +29049,13 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
           <div style={{ marginBottom:14, display:"flex", justifyContent:"center" }}>
             <div style={{
               width:48, height:48, borderRadius:"50%",
-              background:"#111", color:"#fff",
+              background:"#262421", color:"#fff",
               display:"flex", alignItems:"center", justifyContent:"center",
             }}>
               <IconeMaster nome="check" tamanho={22} cor="#fff" />
             </div>
           </div>
-          <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:6 }}>Recebido</div>
+          <div style={{ fontSize:16, fontWeight:600, color:"#262421", marginBottom:6 }}>Recebido</div>
           <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
             Obrigado pelo feedback.
           </div>
@@ -29075,7 +29076,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         maxWidth:480, width:"100%", maxHeight:"90vh", overflowY:"auto",
         boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
       }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
           Enviar feedback
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
@@ -29099,7 +29100,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
                   cursor: enviando ? "not-allowed" : "pointer",
                   border: categoria === c.id ? "1.5px solid #111" : "2px solid #d1d5db",
                   background: categoria === c.id ? "#fafbfc" : "#fff",
-                  color:"#111",
+                  color:"#262421",
                   fontWeight: categoria === c.id ? 600 : 400,
                 }}>
                 {c.label}
@@ -29151,7 +29152,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
           </button>
           <button onClick={enviar} disabled={enviando || !texto.trim()}
             style={{
-              background:"#111", color:"#fff", border:"none", borderRadius: 12,
+              background:"#262421", color:"#fff", border:"none", borderRadius: 12,
               padding:"9px 16px", fontSize:13, fontWeight:600,
               cursor: (enviando || !texto.trim()) ? "not-allowed" : "pointer",
               fontFamily:"inherit", opacity: (enviando || !texto.trim()) ? 0.5 : 1,
@@ -29584,7 +29585,7 @@ export default function ModuloClientesFornecedores() {
   const conflitoModal = conflitoSessao && (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:100050, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
       <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:8 }}>
           {conflitoSessao === "logout" ? "Sessão encerrada" : "Sessão alterada em outra aba"}
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.55 }}>
@@ -29595,7 +29596,7 @@ export default function ModuloClientesFornecedores() {
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
           <button
             onClick={() => { setConflitoSessao(null); window.location.reload(); }}
-            style={{ background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
+            style={{ background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
           >
             Atualizar agora
           </button>
@@ -29729,9 +29730,9 @@ export default function ModuloClientesFornecedores() {
       <>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
-          <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
+          <div style={{ fontSize:15, color:"#262421", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
           <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
-          <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
+          <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
           <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
@@ -30151,7 +30152,7 @@ export default function ModuloClientesFornecedores() {
               </svg>
             </button>
             <div style={{
-              fontSize:14, fontWeight:600, color:"#111",
+              fontSize:14, fontWeight:600, color:"#262421",
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1,
             }}>
               {nomeEscritorio}
@@ -30253,7 +30254,7 @@ export default function ModuloClientesFornecedores() {
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
           <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:14, padding:24, width:"100%", maxWidth:600, maxHeight:"85vh", display:"flex", flexDirection:"column", gap:16 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontWeight:700, fontSize:15, color:"#111" }}>Backup dos dados</div>
+              <div style={{ fontWeight:700, fontSize:15, color:"#262421" }}>Backup dos dados</div>
               <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
             <div style={{ color:"#6b7280", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
@@ -30261,7 +30262,7 @@ export default function ModuloClientesFornecedores() {
               style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius: 12, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button onClick={() => navigator.clipboard?.writeText(backupJson).catch(()=>{})}
-                style={{ background:"#111", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Copiar tudo</button>
+                style={{ background:"#262421", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Copiar tudo</button>
               <button onClick={() => setShowBackup(false)}
                 style={{ background:"#fff", color:"#6b7280", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>
             </div>
@@ -30312,14 +30313,14 @@ export default function ModuloClientesFornecedores() {
                 style={{
                   display:"flex", alignItems:"center", gap:10,
                   padding:"7px 10px", borderRadius:6, fontSize:12.5,
-                  border:"none", background: ativoSub ? "#f3f4f6" : "transparent",
-                  color: ativoSub ? "#111" : "#374151",
+                  border:"none", background: ativoSub ? "#fdf6f0" : "transparent",
+                  color: ativoSub ? "#b5652f" : "#374151",
                   fontWeight: ativoSub ? 600 : 400,
                   fontFamily:"inherit", cursor:"pointer", textAlign:"left",
                 }}
-                onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#f9fafb"; }}
+                onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#faf9f7"; }}
                 onMouseLeave={e => { if (!ativoSub) e.currentTarget.style.background="transparent"; }}>
-                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#111" : "#9ca3af"} />}
+                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#b5652f" : "#9ca3af"} />}
                 {s.label}
               </button>
             );

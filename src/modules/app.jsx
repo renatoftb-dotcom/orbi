@@ -149,7 +149,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   return (
     <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", maxWidth:1100, margin:"0 auto" }}>
       <div style={{ marginBottom: isMobile ? 18 : 28 }}>
-        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
+        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#262421", letterSpacing:-0.3 }}>Dashboard</div>
         <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
       </div>
 
@@ -174,11 +174,11 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
             style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
-            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#111"; }}
+            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#b5652f"; }}
             onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
               <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#111" }}>{m.label}</div>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#262421" }}>{m.label}</div>
             </div>
             {!isMobile && (
               <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
@@ -250,12 +250,12 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
             cursor: it.onClick ? "pointer" : "default",
             transition:"border-color 0.12s",
           }}
-          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#111"; }}
+          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#b5652f"; }}
           onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
           <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {it.label}
           </div>
-          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#111", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
+          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#262421", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
             {it.value}
           </div>
           {it.sub && (
@@ -319,7 +319,7 @@ function FeedItem({ ev, primeiro }) {
         background: meta.cor, marginTop:6,
       }} />
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, color:"#111", lineHeight:1.4 }}>
+        <div style={{ fontSize:13, color:"#262421", lineHeight:1.4 }}>
           {meta.descricao}
         </div>
         <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:2 }}>
@@ -590,7 +590,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           padding:"32px 32px 24px", maxWidth:420, width:"100%",
           boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
         }}>
-        <div style={{ fontSize:18, fontWeight:700, color:"#111", marginBottom:6, letterSpacing:-0.3 }}>
+        <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginBottom:6, letterSpacing:-0.3 }}>
           Trocar senha
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.5 }}>
@@ -645,7 +645,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 
         <button type="submit" disabled={loading}
           style={{
-            background:"#111", color:"#fff", border:"none", borderRadius: 12,
+            background:"#262421", color:"#fff", border:"none", borderRadius: 12,
             padding:"11px 16px", fontSize:13.5, fontWeight:600, cursor: loading ? "not-allowed" : "pointer",
             fontFamily:"inherit", width:"100%", marginBottom:10,
             opacity: loading ? 0.6 : 1,
@@ -713,7 +713,7 @@ function BotaoFeedbackFlutuante({ usuario }) {
           right: isMobile ? 16 : 24,
           bottom: isMobile ? 16 : 24,
           zIndex: 800,
-          background:"#111", color:"#fff", border:"none",
+          background:"#262421", color:"#fff", border:"none",
           borderRadius:"50%",
           width: isMobile ? 44 : 48,
           height: isMobile ? 44 : 48,
@@ -781,13 +781,13 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
           <div style={{ marginBottom:14, display:"flex", justifyContent:"center" }}>
             <div style={{
               width:48, height:48, borderRadius:"50%",
-              background:"#111", color:"#fff",
+              background:"#262421", color:"#fff",
               display:"flex", alignItems:"center", justifyContent:"center",
             }}>
               <IconeMaster nome="check" tamanho={22} cor="#fff" />
             </div>
           </div>
-          <div style={{ fontSize:16, fontWeight:600, color:"#111", marginBottom:6 }}>Recebido</div>
+          <div style={{ fontSize:16, fontWeight:600, color:"#262421", marginBottom:6 }}>Recebido</div>
           <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
             Obrigado pelo feedback.
           </div>
@@ -808,7 +808,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         maxWidth:480, width:"100%", maxHeight:"90vh", overflowY:"auto",
         boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
       }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
           Enviar feedback
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
@@ -832,7 +832,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
                   cursor: enviando ? "not-allowed" : "pointer",
                   border: categoria === c.id ? "1.5px solid #111" : "2px solid #d1d5db",
                   background: categoria === c.id ? "#fafbfc" : "#fff",
-                  color:"#111",
+                  color:"#262421",
                   fontWeight: categoria === c.id ? 600 : 400,
                 }}>
                 {c.label}
@@ -884,7 +884,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
           </button>
           <button onClick={enviar} disabled={enviando || !texto.trim()}
             style={{
-              background:"#111", color:"#fff", border:"none", borderRadius: 12,
+              background:"#262421", color:"#fff", border:"none", borderRadius: 12,
               padding:"9px 16px", fontSize:13, fontWeight:600,
               cursor: (enviando || !texto.trim()) ? "not-allowed" : "pointer",
               fontFamily:"inherit", opacity: (enviando || !texto.trim()) ? 0.5 : 1,
@@ -1317,7 +1317,7 @@ export default function ModuloClientesFornecedores() {
   const conflitoModal = conflitoSessao && (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:100050, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
       <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:8 }}>
           {conflitoSessao === "logout" ? "Sessão encerrada" : "Sessão alterada em outra aba"}
         </div>
         <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.55 }}>
@@ -1328,7 +1328,7 @@ export default function ModuloClientesFornecedores() {
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
           <button
             onClick={() => { setConflitoSessao(null); window.location.reload(); }}
-            style={{ background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
+            style={{ background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
           >
             Atualizar agora
           </button>
@@ -1462,9 +1462,9 @@ export default function ModuloClientesFornecedores() {
       <>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
-          <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
+          <div style={{ fontSize:15, color:"#262421", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
           <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
-          <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
+          <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
           <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
@@ -1884,7 +1884,7 @@ export default function ModuloClientesFornecedores() {
               </svg>
             </button>
             <div style={{
-              fontSize:14, fontWeight:600, color:"#111",
+              fontSize:14, fontWeight:600, color:"#262421",
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1,
             }}>
               {nomeEscritorio}
@@ -1986,7 +1986,7 @@ export default function ModuloClientesFornecedores() {
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
           <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:14, padding:24, width:"100%", maxWidth:600, maxHeight:"85vh", display:"flex", flexDirection:"column", gap:16 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontWeight:700, fontSize:15, color:"#111" }}>Backup dos dados</div>
+              <div style={{ fontWeight:700, fontSize:15, color:"#262421" }}>Backup dos dados</div>
               <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
             <div style={{ color:"#6b7280", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
@@ -1994,7 +1994,7 @@ export default function ModuloClientesFornecedores() {
               style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius: 12, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button onClick={() => navigator.clipboard?.writeText(backupJson).catch(()=>{})}
-                style={{ background:"#111", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Copiar tudo</button>
+                style={{ background:"#262421", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Copiar tudo</button>
               <button onClick={() => setShowBackup(false)}
                 style={{ background:"#fff", color:"#6b7280", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>
             </div>
@@ -2045,14 +2045,14 @@ export default function ModuloClientesFornecedores() {
                 style={{
                   display:"flex", alignItems:"center", gap:10,
                   padding:"7px 10px", borderRadius:6, fontSize:12.5,
-                  border:"none", background: ativoSub ? "#f3f4f6" : "transparent",
-                  color: ativoSub ? "#111" : "#374151",
+                  border:"none", background: ativoSub ? "#fdf6f0" : "transparent",
+                  color: ativoSub ? "#b5652f" : "#374151",
                   fontWeight: ativoSub ? 600 : 400,
                   fontFamily:"inherit", cursor:"pointer", textAlign:"left",
                 }}
-                onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#f9fafb"; }}
+                onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#faf9f7"; }}
                 onMouseLeave={e => { if (!ativoSub) e.currentTarget.style.background="transparent"; }}>
-                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#111" : "#9ca3af"} />}
+                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#b5652f" : "#9ca3af"} />}
                 {s.label}
               </button>
             );
