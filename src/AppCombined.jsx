@@ -28706,23 +28706,27 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
     { k:"escritorio",       label:"Escritório",   desc:"Dados e equipe" },
   ];
 
+  // Paleta oficial do Vicke (grafite + cobre) — ver memória de projeto
+  // "vicke_paleta_cores". Fraunces no título de boas-vindas, Inter no resto.
+  const VK = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#b5652f", cobreClaro:"#fdf6f0", inkSoft:"#78716c" };
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"calc(100vh - 53px)", padding: isMobile ? "32px 16px" : "40px 32px", background:"#f6f7f9", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"calc(100vh - 53px)", padding: isMobile ? "32px 16px" : "40px 32px", background:VK.fundo, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@600&family=Inter:wght@400;500;600;700&display=swap');`}</style>
       <div style={{ textAlign:"center", marginBottom: isMobile ? 36 : 56 }}>
-        <div style={{ fontSize: isMobile ? 24 : 28, fontWeight:600, color:"#111", letterSpacing:-0.5, transition:"opacity 0.4s ease, transform 0.4s ease", opacity, transform }}>
+        <div style={{ fontFamily:"'Fraunces', Georgia, serif", fontSize: isMobile ? 26 : 30, fontWeight:600, color:VK.grafite, letterSpacing:"-0.02em", transition:"opacity 0.4s ease, transform 0.4s ease", opacity, transform }}>
           {texto}
         </div>
-        <div style={{ fontSize:13.5, color:"#6b7280", marginTop:8 }}>Selecione um módulo para começar</div>
+        <div style={{ fontSize:13.5, color:VK.inkSoft, marginTop:8 }}>Selecione um módulo para começar</div>
       </div>
       <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16, width:"100%", maxWidth:680 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"1.5px solid #d1d5db", borderRadius: 16, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"inherit", position:"relative", boxShadow:"0 1px 2px rgba(17,17,17,0.05)", transition:"all 0.15s ease" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor="#2563eb"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(37, 99, 235, 0.15)"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor="#d1d5db"; e.currentTarget.style.boxShadow="0 1px 2px rgba(17,17,17,0.05)"; }}>
-            <div style={{ fontSize:14, fontWeight:700, color:"#111", marginBottom:4 }}>{m.label}</div>
-            <div style={{ fontSize:12, color:"#6b7280" }}>{m.desc}</div>
-            {m.count > 0 && <div style={{ position:"absolute", top:12, right:12, background:"#eff6ff", color:"#2563eb", fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius: 14 }}>{m.count}</div>}
+            style={{ background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif", position:"relative", boxShadow:"0 4px 16px -10px rgba(38,36,33,0.2)", transition:"all 0.15s ease" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=VK.cobre; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.16)"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.16)"; e.currentTarget.style.boxShadow="0 4px 16px -10px rgba(38,36,33,0.2)"; }}>
+            <div style={{ fontSize:14, fontWeight:700, color:VK.grafite, marginBottom:4 }}>{m.label}</div>
+            <div style={{ fontSize:12, color:VK.inkSoft }}>{m.desc}</div>
+            {m.count > 0 && <div style={{ position:"absolute", top:12, right:12, background:VK.cobreClaro, color:VK.cobre, fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius: 14 }}>{m.count}</div>}
           </button>
         ))}
       </div>
@@ -30110,7 +30114,7 @@ export default function ModuloClientesFornecedores() {
           </div>
       </div>
 
-      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#f6f7f9" }}>
+      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#f5f3f0" }}>
         {/* ── Header mobile: aparece só em <768px. Tem hamburguer pra abrir
             o drawer da sidebar + nome do escritório (compacto). ── */}
         {isMobile && (
