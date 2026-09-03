@@ -689,7 +689,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         display: "flex", gap: 8, zIndex: 1010,
         background: "rgba(255,255,255,0.95)",
         padding: "8px 10px", borderRadius: 10,
-        border: "1px solid #e5e7eb",
+        border: "2px solid #d1d5db",
         boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
         fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
       }}>
@@ -729,7 +729,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={onCancelar} style={{
               background: "transparent", color: "#6b7280",
-              border: "1px solid #e5e7eb", borderRadius: 8,
+              border: "2px solid #d1d5db", borderRadius: 8,
               padding: "9px 16px", fontSize: 13, fontWeight: 500,
               cursor: "pointer", fontFamily: "inherit",
             }}>Cancelar</button>
@@ -1625,7 +1625,7 @@ function DialogosHost() {
                   style={{
                     background: "#fff",
                     color: "#6b7280",
-                    border: "1px solid #e5e7eb",
+                    border: "2px solid #d1d5db",
                     borderRadius: 8,
                     padding: "8px 18px",
                     fontSize: 13,

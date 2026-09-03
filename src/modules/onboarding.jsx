@@ -812,7 +812,7 @@ function Opcao({ label, selecionada, onClick }) {
         display:"flex", alignItems:"center", gap:10,
         padding:"12px 14px",
         background: selecionada ? "#fafbfc" : "#fff",
-        border: selecionada ? "1.5px solid #111" : "1px solid #e5e7eb",
+        border: selecionada ? "1.5px solid #111" : "2px solid #d1d5db",
         borderRadius:8,
         cursor:"pointer",
         textAlign:"left",
@@ -823,7 +823,7 @@ function Opcao({ label, selecionada, onClick }) {
         transition:"all 0.12s",
       }}
       onMouseEnter={e => { if (!selecionada) e.currentTarget.style.borderColor="#9ca3af"; }}
-      onMouseLeave={e => { if (!selecionada) e.currentTarget.style.borderColor="#e5e7eb"; }}>
+      onMouseLeave={e => { if (!selecionada) e.currentTarget.style.borderColor="#d1d5db"; }}>
       <span style={{
         flexShrink:0,
         width:18, height:18, borderRadius:"50%",
@@ -918,7 +918,7 @@ function InputMoedaBR({ valor, setValor, onConfirmar }) {
         autoFocus
         style={{
           width:"100%", boxSizing:"border-box",
-          border:"1px solid #e5e7eb", borderRadius:8,
+          border:"2px solid #d1d5db", borderRadius:8,
           padding:"11px 14px 11px 38px",
           fontSize:14, fontFamily:"inherit", outline:"none",
           fontVariantNumeric:"tabular-nums",
@@ -1394,7 +1394,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 onClick={() => setEditando(aberto ? null : l.campo)}
                 style={{
                   width: "100%",
-                  border: aberto ? "1px solid #111" : "1px solid #e5e7eb",
+                  border: aberto ? "1px solid #111" : "2px solid #d1d5db",
                   borderRadius: 10,
                   padding: "10px 12px",
                   background: aberto ? "#f3f4f6" : "#fff",
@@ -1415,7 +1415,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 }}
                 onMouseLeave={e => {
                   if (!aberto) {
-                    e.currentTarget.style.borderColor = "#e5e7eb";
+                    e.currentTarget.style.borderColor="#d1d5db";
                     e.currentTarget.style.background = "#fff";
                   }
                 }}
@@ -1449,7 +1449,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                   position: "absolute",
                   top: 0, left: "calc(100% + 8px)",
                   background: "#fff",
-                  border: "1px solid #e5e7eb",
+                  border: "2px solid #d1d5db",
                   borderRadius: 10,
                   boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
                   padding: 6,
@@ -1618,7 +1618,7 @@ function FluxogramaCasa({ casaCalc }) {
         {/* ─── CARD CÔMODOS ──────────────────────────────────── */}
         <div style={{
           background: "#fff",
-          border: "1px solid #e5e7eb",
+          border: "2px solid #d1d5db",
           borderRadius: 14,
           padding: "22px 24px",
           opacity: showCardC ? 1 : 0,
@@ -1740,7 +1740,7 @@ function FluxogramaCasa({ casaCalc }) {
         {/* ─── CARD ÁREA TOTAL ───────────────────────────────── */}
         <div style={{
           background: "#fff",
-          border: "1px solid #e5e7eb",
+          border: "2px solid #d1d5db",
           borderRadius: 14,
           padding: "28px 24px",
           textAlign: "center",
@@ -1854,7 +1854,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   return (
     <div style={{
       background:"#fff",
-      border:"1px solid #e5e7eb",
+      border:"2px solid #d1d5db",
       borderRadius:14,
       padding:"22px 24px",
       animation:"vk-fade-up 0.4s ease-out",
@@ -2241,7 +2241,7 @@ function BlocoCadastroEscritorio({
               onDrop={handleDrop}
               style={{
                 width: 160, height: 100,
-                border: arrastando ? "1.5px solid #111" : (logo ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db"),
+                border: arrastando ? "1.5px solid #111" : (logo ? "2px solid #d1d5db" : "1.5px dashed #d1d5db"),
                 borderRadius: 8,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: arrastando ? "#f3f4f6" : "#fafbfc",
@@ -2561,7 +2561,7 @@ const tela = {
   display:"flex", justifyContent:"center", alignItems:"flex-start",
 };
 const card = {
-  background:"#fff", border:"1px solid #e5e7eb", borderRadius:12,
+  background:"#fff", border:"2px solid #d1d5db", borderRadius:12,
   padding:"32px 32px 24px", maxWidth:420, width:"100%",
   boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
   margin:"40px 20px",

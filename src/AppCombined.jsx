@@ -693,7 +693,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         display: "flex", gap: 8, zIndex: 1010,
         background: "rgba(255,255,255,0.95)",
         padding: "8px 10px", borderRadius: 10,
-        border: "1px solid #e5e7eb",
+        border: "2px solid #d1d5db",
         boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
         fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
       }}>
@@ -733,7 +733,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={onCancelar} style={{
               background: "transparent", color: "#6b7280",
-              border: "1px solid #e5e7eb", borderRadius: 8,
+              border: "2px solid #d1d5db", borderRadius: 8,
               padding: "9px 16px", fontSize: 13, fontWeight: 500,
               cursor: "pointer", fontFamily: "inherit",
             }}>Cancelar</button>
@@ -1629,7 +1629,7 @@ function DialogosHost() {
                   style={{
                     background: "#fff",
                     color: "#6b7280",
-                    border: "1px solid #e5e7eb",
+                    border: "2px solid #d1d5db",
                     borderRadius: 8,
                     padding: "8px 18px",
                     fontSize: 13,
@@ -2640,7 +2640,7 @@ function Etapas({ data, save }) {
           placeholder="Buscar cliente ou referência…"
           style={{
             flex:1, maxWidth:240, padding:"6px 12px",
-            border:"1px solid #e5e7eb", borderRadius:6,
+            border:"2px solid #d1d5db", borderRadius:6,
             fontSize:12.5, color:"#111", background:"#fff",
             fontFamily:"inherit", outline:"none",
           }}
@@ -2748,7 +2748,7 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
   return (
     <div style={{
       background:"#fff",
-      border: atrasado ? "1px solid #fecaca" : "1px solid #e5e7eb",
+      border: atrasado ? "1px solid #fecaca" : "2px solid #d1d5db",
       borderRadius:8, padding:12,
       cursor:"pointer", transition:"all 0.15s",
       display:"flex", flexDirection:"column", gap:8,
@@ -3051,7 +3051,7 @@ function Obras({ data, save }) {
             return (
               <div key={obra.id} style={{
                 background: concluida ? "#fafafa" : "#fff",
-                border:"1px solid #e5e7eb", borderRadius:9,
+                border:"2px solid #d1d5db", borderRadius:9,
                 padding:"12px 16px",
                 display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
               }}>
@@ -3085,7 +3085,7 @@ function Obras({ data, save }) {
                   )}
                   {concluida && (
                     <button onClick={() => reabrirObra(obra)}
-                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"2px solid #d1d5db", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                       Reabrir
                     </button>
                   )}
@@ -4353,10 +4353,10 @@ if (typeof window !== "undefined" && typeof import.meta !== "undefined" && impor
 }
 
 const C = {
-  input:    { border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  input:    { border:"2px solid #d1d5db", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
   label:    { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
   btn:      { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec:   { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btnSec:   { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
@@ -4528,7 +4528,7 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
   const totalReceber  = lancsCli.filter(r=>r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const fmtV = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const secBtn = () => ({ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", borderBottom:"1px solid #f3f4f6", padding:"12px 0", cursor:"pointer", fontFamily:"inherit", color:"#374151", fontSize:13, fontWeight:600 });
-  const card = { border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff" };
+  const card = { border:"2px solid #d1d5db", borderRadius:12, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff" };
 
   return (
     <div>
@@ -4578,17 +4578,15 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
           <div>
             <div style={C.secTit}>Contatos</div>
             {cliente.contatos?.map(ct=>(
-              <div key={ct.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:"1px solid #f9fafb" }}>
-                {ct.whatsapp && ct.telefone && (
-                  <a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer" title="Abrir WhatsApp"
-                    style={{ display:"flex", alignItems:"center", justifyContent:"center", width:28, height:28, borderRadius:"50%", background:"#16a34a", color:"#fff", flexShrink:0, textDecoration:"none", fontSize:14 }}>
-                    ✆
-                  </a>
-                )}
-                <div style={{ minWidth:0 }}>
+              <div key={ct.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid #f9fafb" }}>
+                <div style={{ minWidth:0, flex:1 }}>
                   <div style={{fontSize:13,fontWeight:600,color:"#111"}}>{ct.nome} <span style={{fontWeight:400,color:"#9ca3af"}}>({ct.cargo})</span></div>
                   <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{ct.telefone}</div>
                 </div>
+                {ct.whatsapp && ct.telefone && (
+                  <a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer"
+                    style={{fontSize:12,color:"#fff",textDecoration:"none",background:"#16a34a",border:"1px solid #16a34a",borderRadius:6,padding:"4px 10px",flexShrink:0,fontWeight:600}}>WhatsApp</a>
+                )}
               </div>
             ))}
           </div>
@@ -4606,7 +4604,7 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
             {lancsCli.length===0?<p style={{color:"#9ca3af",fontSize:13,margin:0}}>Nenhum lançamento.</p>:(
               <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap:10 }}>
                 {[["Receita total",totalContabil,"#2563eb"],["Recebido",totalRecebido,"#16a34a"],["A receber",totalReceber,"#d97706"]].map(([l,v,cor])=>(
-                  <div key={l} style={{border:"1px solid #e5e7eb",borderRadius:10,padding:"14px"}}>
+                  <div key={l} style={{border:"2px solid #d1d5db",borderRadius:10,padding:"14px"}}>
                     <div style={{fontSize:11,color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{l}</div>
                     <div style={{fontSize:16,fontWeight:700,color:cor}}>{fmtV(v)}</div>
                   </div>
@@ -4857,13 +4855,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       <div
         onClick={() => openDetail(c)}
         style={{
-          background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+          background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
           padding:"10px 14px", marginBottom:6, cursor:"pointer",
           display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
           transition:"border-color 0.15s",
         }}
         onMouseEnter={e=>e.currentTarget.style.borderColor="#d1d5db"}
-        onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}>
+        onMouseLeave={e=>e.currentTarget.style.borderColor="#d1d5db"}>
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
           <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {c.nome}
@@ -4878,7 +4876,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               value={colunaDoCliente(c)}
               onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
               onClick={e => e.stopPropagation()}
-              style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
+              style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"2px solid #d1d5db", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
               {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
             </select>
           ) : (
@@ -5034,9 +5032,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             const col = COLUNAS.find(x=>x.key===colunaDoCliente(c)) || COLUNAS[0];
             const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
             return (
-              <div key={c.id} style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
+              <div key={c.id} style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor="#111"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="#d1d5db"}
                 onClick={()=>openDetail(c)}>
                 <div style={{ width:40, height:40, borderRadius:10, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -5045,8 +5043,8 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
                   <span style={C.tag(col.cor)}>{col.label}</span>
-                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px" }}>WA</a>}
-                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"2px solid #d1d5db", borderRadius:6, padding:"4px 10px" }}>WA</a>}
+                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"2px solid #d1d5db", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
                 </div>
               </div>
             );
@@ -5152,7 +5150,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <div style={{ display:"flex", gap:8 }}>
           {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
             <button key={v} onClick={()=>setForm({...form,tipo:v})}
-              style={{ border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+              style={{ border:"2px solid #d1d5db", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
           ))}
         </div>
       </div>
@@ -5234,7 +5232,7 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
   };
 
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px" }}>
+    <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Projetos</div>
@@ -5255,9 +5253,9 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
               <div
                 key={orc.id}
                 onClick={() => onAbrirOrcamento(cliente, orc, "editar")}
-                style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+                style={{ border: "2px solid #d1d5db", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "#d1d5db"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}>
+                onMouseLeave={e => e.currentTarget.style.borderColor="#d1d5db"}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
                   <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -5312,7 +5310,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "formContrato" && formContrato && obraSelecionada) {
     return (
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("contratosDaObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Contratado *</label><input style={C.input} value={formContrato.nomeContratado} onChange={e => setFormContrato({ ...formContrato, nomeContratado: e.target.value })} placeholder="Nome da empresa/pessoa" /></div>
@@ -5339,7 +5337,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "form" && formObra) {
     return (
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
@@ -5364,7 +5362,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     return (
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <div style={{ width: 40, height: 40, borderRadius: 10, background: "#2563eb15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>📋</div>
@@ -5383,7 +5381,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             {contratosDaObra.map(contrato => {
               const sts = statusContrato[contrato.status] || statusContrato.ativo;
               return (
-                <div key={contrato.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
+                <div key={contrato.id} style={{ border: "2px solid #d1d5db", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{contrato.nomeContratado}</div>
                     <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -5414,7 +5412,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "detalheObra" && obraSelecionada) {
     return (
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>🏗️</div>
@@ -5432,12 +5430,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111", textAlign: "center" }}>Contratos</div>
             <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
           </button>
-          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
+          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }} style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
             <div style={{ fontSize: 32 }}>📅</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
             <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
           </button>
-          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
+          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }} style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
             <div style={{ fontSize: 32 }}>📁</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
             <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
@@ -5468,7 +5466,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
               )}
             </div>
             {obraSelecionada.descricao && (
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e5e7eb" }}>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "2px solid #d1d5db" }}>
                 <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Descrição</div>
                 <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{obraSelecionada.descricao}</div>
               </div>
@@ -5485,7 +5483,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   // Lista de obras — view padrão
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+    <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🏗️</div>
         <div>
@@ -5506,9 +5504,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
               <div
                 key={obra.id}
                 onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }}
-                style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+                style={{ border: "2px solid #d1d5db", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "#d1d5db"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}>
+                onMouseLeave={e => e.currentTarget.style.borderColor="#d1d5db"}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
                   <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -6907,7 +6905,7 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
   return (
     <div style={{
       position:"sticky", top:0, zIndex:20, background:"#fff",
-      borderBottom:"1px solid #e5e7eb", padding:"10px 16px",
+      borderBottom:"2px solid #d1d5db", padding:"10px 16px",
       display:"flex", alignItems:"center", gap:10, overflowX:"auto",
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
@@ -6927,7 +6925,7 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
             style={{
               flexShrink:0,
               padding: ativo ? "5px 9px 4px" : "6px 10px 5px",
-              border: ativo ? "2px solid #111" : "1px solid #e5e7eb",
+              border: ativo ? "2px solid #111" : "2px solid #d1d5db",
               background: ativo ? "#fafbfc" : "#fff",
               borderRadius:8, cursor:"pointer", fontFamily:"inherit",
               display:"flex", flexDirection:"column", alignItems:"center", gap:3,
@@ -8231,7 +8229,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             - Em edição sem onSalvarProposta → "Gerar PDF" (chama handlePdf direto)
             Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
         <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-          <button onClick={onVoltar} style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
+          <button onClick={onVoltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
             ← Voltar
           </button>
           {(propostaInfo || lockEdicao) ? (
@@ -8449,7 +8447,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     <div style={{
                       display: "inline-block",
                       padding: "5px 14px",
-                      border: "1px solid #e5e7eb",
+                      border: "2px solid #d1d5db",
                       borderRadius: 8,
                       background: "#fafbfc",
                       fontSize: 13, fontWeight: 600,
@@ -8870,7 +8868,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 </p>
                 <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
                   <button onClick={() => setConfirmSalvar(false)}
-                    style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#374151" }}>
+                    style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#374151" }}>
                     Cancelar
                   </button>
                   <button data-tutorial-id="modal-confirmar-salvar" onClick={handleSalvarProposta}
@@ -9164,7 +9162,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     title="Remover bloco"
                     className="no-print"
                     style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"2px 6px", borderRadius:4,
-                      border:"1px solid #e5e7eb", background:"#fafafa", lineHeight:1.4,
+                      border:"2px solid #d1d5db", background:"#fafafa", lineHeight:1.4,
                       userSelect:"none" }}>✕ remover</span>
                 )}
               </div>
@@ -9865,7 +9863,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   };
   const card = {
     background: "#fff",
-    border: "1px solid #e5e7eb",
+    border: "2px solid #d1d5db",
     borderRadius: 14,
     padding: "22px 24px",
     marginBottom: 16,
@@ -9996,7 +9994,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
             position: static !important;
             top: auto !important;
             margin-bottom: 16px;
-            border: 1px solid #e5e7eb;
+            border: 2px solid #d1d5db;
             border-radius: 12px;
             padding: 10px;
           }
@@ -10290,7 +10288,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           .vk-tpl-fp-opt {
             display: inline-flex; align-items: center; gap: 8px;
             padding: 10px 12px; background: #fff;
-            border: 1px solid #e5e7eb; border-radius: 8px;
+            border: 2px solid #d1d5db; border-radius: 8px;
             cursor: pointer; text-align: left; flex: 1 1 0; min-width: 0;
             font-family: inherit; font-size: 12.5px; color: #111;
             transition: all 0.12s; user-select: none;
@@ -10336,7 +10334,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         <style>{`
           .vk-tpl-fp2-card {
             display: flex; gap: 0; padding: 0;
-            background: #fff; border: 1px solid #e5e7eb;
+            background: #fff; border: 2px solid #d1d5db;
             border-radius: 10px; margin-bottom: 12px; overflow: hidden;
             transition: all 0.12s;
           }
@@ -10659,7 +10657,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                     Defina o percentual de cada etapa. <strong style={{ color: "#111" }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
                   </div>
 
-                  <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
+                  <div style={{ border: "2px solid #d1d5db", borderRadius: 10, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
                     <div className="vk-tpl-fp2-etapa-header">
                       <span></span>
                       <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em" }}>Etapa</span>
@@ -10875,7 +10873,7 @@ function OrcamentoOnboarding({ data, save, onVoltar, onConcluido }) {
         </p>
         <button onClick={onVoltar} style={{
           background: "transparent", color: "#6b7280",
-          border: "1px solid #e5e7eb", borderRadius: 8,
+          border: "2px solid #d1d5db", borderRadius: 8,
           padding: "10px 20px", fontSize: 13, fontWeight: 500,
           cursor: "pointer", fontFamily: "inherit",
         }}>
@@ -11456,7 +11454,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
           placeholder="Buscar cliente ou referência…"
           style={{
             flex:1, maxWidth:260, padding:"6px 12px",
-            border:"1px solid #e5e7eb", borderRadius:6,
+            border:"2px solid #d1d5db", borderRadius:6,
             fontSize:12.5, color:"#111", background:"#fff",
             fontFamily:"inherit", outline:"none",
           }}
@@ -11523,7 +11521,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
               : "Nenhum orçamento corresponde aos filtros."}
           </div>
         ) : viz === "tabela" ? (
-          <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"visible" }}>
+          <div style={{ border:"2px solid #d1d5db", borderRadius:9, background:"#fff", overflow:"visible" }}>
             <OrcRowHeader
               showCliente={true}
               sort={sort} setSort={setSort}
@@ -11823,7 +11821,7 @@ function ProbRing({ prob, size = 32, onChange = null }) {
       {menuOpen && clickable && (
         <div style={{
           position: "absolute", left: 0, top: `calc(100% + 6px)`, zIndex: 60,
-          background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8,
+          background: "#fff", border: "2px solid #d1d5db", borderRadius: 8,
           boxShadow: "0 4px 16px rgba(0,0,0,0.1)", minWidth: 100, overflow: "hidden",
         }}>
           <div style={{ padding: "6px 10px 4px", fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -12078,7 +12076,7 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
             {menuOpen && (
               <div style={{
                 position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
-                background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+                background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
                 boxShadow:"0 4px 16px rgba(0,0,0,0.1)",
                 overflow:"hidden",
               }}>
@@ -12428,7 +12426,7 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
         {menuOpen && (
           <div style={{
             position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
-            background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+            background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
             boxShadow:"0 4px 16px rgba(0,0,0,0.1)", overflow:"hidden", minWidth:130,
           }}>
             <button
@@ -12710,7 +12708,7 @@ function SortDropdown({ sort, setSort }) {
       {open && (
         <div style={{
           position:"absolute", top:"calc(100% + 4px)", right:0, zIndex:50,
-          background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+          background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
           boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:220, overflow:"hidden", padding:"6px 0",
         }}>
           {opcoes.map(o => {
@@ -12838,7 +12836,7 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
           top:"calc(100% + 6px)",
           [align]: 0,
           zIndex:50,
-          background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+          background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
           boxShadow:"0 4px 16px rgba(0,0,0,0.1)",
           minWidth:220, maxWidth:280, overflow:"hidden",
           textTransform:"none", letterSpacing:"0", fontWeight:400,
@@ -13037,7 +13035,7 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
       gridTemplateColumns: gridCols,
       alignItems:"center", gap:12,
       padding:"9px 14px",
-      borderBottom:"1px solid #e5e7eb",
+      borderBottom:"2px solid #d1d5db",
       background:"#fafbfc",
     }}>
       {/* Primeira coluna: checkbox master (modo seleção) OU botão ⋯ (modo normal) */}
@@ -13070,7 +13068,7 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
         {menuAcoesOpen && !modoSelecao && (
           <div style={{
             position:"absolute", left:0, top:"calc(100% + 6px)", zIndex:60,
-            background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+            background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
             boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:180, overflow:"hidden",
             textTransform:"none", letterSpacing:0, fontWeight:400,
           }}>
@@ -13165,7 +13163,7 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
             autoFocus
             style={{
               width:"100%", padding:"9px 12px",
-              border:"1px solid #e5e7eb", borderRadius:7,
+              border:"2px solid #d1d5db", borderRadius:7,
               fontSize:13, color:"#111", fontFamily:"inherit",
               outline:"none", background:"#fff",
             }}
@@ -13901,7 +13899,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
   // ── Estilos ──
   const SECTION_TITLE = { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.8, marginBottom:10 };
   const ROW_LABEL     = { fontSize:11.5, color:"#6b7280", minWidth:60 };
-  const INPUT_STYLE   = { fontSize:12.5, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, fontFamily:"inherit", color:"#111", background:"#fff", outline:"none" };
+  const INPUT_STYLE   = { fontSize:12.5, padding:"6px 10px", border:"2px solid #d1d5db", borderRadius:6, fontFamily:"inherit", color:"#111", background:"#fff", outline:"none" };
 
   return (
     <div
@@ -14078,7 +14076,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
             </div>
 
             <div style={{
-              padding:"14px 16px", border:"1px solid #e5e7eb",
+              padding:"14px 16px", border:"2px solid #d1d5db",
               borderRadius:7, background:"#fff",
             }}>
               {/* Linha de controles: Desconto e Parcelas */}
@@ -14168,7 +14166,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
           </div>
 
           {/* Valor fechado */}
-          <div style={{ background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:8, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14 }}>
+          <div style={{ background:"#fafafa", border:"2px solid #d1d5db", borderRadius:8, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14 }}>
             <div>
               <div style={{ fontSize:12, color:"#111", fontWeight:600 }}>Valor fechado total</div>
               <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>
@@ -14179,11 +14177,11 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
             <NumBR valor={totalFechado} onChange={mudarTotalFechado} min={0} max={propTotal} decimais={2}
               onFocus={() => setEditandoTotal(true)}
               onBlur={() => setEditandoTotal(false)}
-              style={{ fontSize:15, fontWeight:600, padding:"6px 10px", border:"1px solid #e5e7eb", borderRadius:6, background:"#fff", width:140, textAlign:"right", fontFamily:"inherit", color:"#111", outline:"none" }} />
+              style={{ fontSize:15, fontWeight:600, padding:"6px 10px", border:"2px solid #d1d5db", borderRadius:6, background:"#fff", width:140, textAlign:"right", fontFamily:"inherit", color:"#111", outline:"none" }} />
           </div>
 
           {/* Resumo */}
-          <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:8, padding:"14px 16px" }}>
+          <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:8, padding:"14px 16px" }}>
             <div style={SECTION_TITLE}>Resumo</div>
             {inclArq && (
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, padding:"3px 0", color:"#374151" }}>
@@ -14236,7 +14234,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
         {/* Footer */}
         <div style={{ padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:8 }}>
           <button onClick={onClose}
-            style={{ padding:"8px 16px", background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, fontSize:12.5, cursor:"pointer", color:"#374151", fontFamily:"inherit" }}>
+            style={{ padding:"8px 16px", background:"#fff", border:"2px solid #d1d5db", borderRadius:7, fontSize:12.5, cursor:"pointer", color:"#374151", fontFamily:"inherit" }}>
             Cancelar
           </button>
           <button onClick={confirmar}
@@ -14487,7 +14485,7 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
 
       {/* ARQUITETURA */}
       {calculo.precoArq > 0 && (
-        <div style={{ paddingTop:14, borderTop:"1px solid #e5e7eb" }}>
+        <div style={{ paddingTop:14, borderTop:"2px solid #d1d5db" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Arquitetura</span>
@@ -14526,7 +14524,7 @@ function ResumoDetalhes({ calculo, fmtNum, C, temImposto, aliqImp }) {
 
       {/* ENGENHARIA */}
       {calculo.precoEng > 0 && (
-        <div style={{ paddingTop:14, marginTop:14, borderTop:"1px solid #e5e7eb" }}>
+        <div style={{ paddingTop:14, marginTop:14, borderTop:"2px solid #d1d5db" }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:12, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, fontWeight:600 }}>Engenharia</span>
@@ -14764,7 +14762,7 @@ function NumInput({ valor, onCommit, decimais = 2, min = 0, max = 100, width = 5
         onCommit(num);
       }}
       onKeyDown={e => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setLocal(String(valor).replace(".",",")); e.target.blur(); } }}
-      style={{ width, fontSize:12, padding:"3px 6px", border:"1px solid #e5e7eb", borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none", ...style }} />
+      style={{ width, fontSize:12, padding:"3px 6px", border:"2px solid #d1d5db", borderRadius:4, textAlign:"center", fontFamily:"inherit", outline:"none", ...style }} />
   );
 }
 
@@ -15182,7 +15180,7 @@ function NumStepper({ valor, onChange, min = 0, max = 100, step = 1, width = 56,
     <span style={{ display: 'inline-flex', alignItems: 'stretch', border: '1px solid #d1d5db', borderRadius: 5, overflow: 'hidden' }}>
       <button type="button"
         onClick={e => { e.stopPropagation(); commit(valor - step); }}
-        style={{ width: 22, background: '#fff', border: 'none', borderRight: '1px solid #e5e7eb', cursor: 'pointer', color: '#6b7280', fontSize: 13, fontFamily: 'inherit', padding: 0, lineHeight: 1 }}
+        style={{ width: 22, background: '#fff', border: 'none', borderRight: '2px solid #d1d5db', cursor: 'pointer', color: '#6b7280', fontSize: 13, fontFamily: 'inherit', padding: 0, lineHeight: 1 }}
         aria-label="Diminuir"
       >−</button>
       <input type="text" inputMode="decimal"
@@ -15195,7 +15193,7 @@ function NumStepper({ valor, onChange, min = 0, max = 100, step = 1, width = 56,
       />
       <button type="button"
         onClick={e => { e.stopPropagation(); commit(valor + step); }}
-        style={{ width: 22, background: '#fff', border: 'none', borderLeft: '1px solid #e5e7eb', cursor: 'pointer', color: '#6b7280', fontSize: 13, fontFamily: 'inherit', padding: 0, lineHeight: 1 }}
+        style={{ width: 22, background: '#fff', border: 'none', borderLeft: '2px solid #d1d5db', cursor: 'pointer', color: '#6b7280', fontSize: 13, fontFamily: 'inherit', padding: 0, lineHeight: 1 }}
         aria-label="Aumentar"
       >+</button>
     </span>
@@ -15900,7 +15898,7 @@ function EtapaFormaPagamento({
     perguntaTitulo: { fontSize: 15, fontWeight: 500, color: '#111', marginBottom: 4, lineHeight: 1.5 },
     perguntaSub: { fontSize: 12.5, color: '#9ca3af', marginBottom: 12, lineHeight: 1.5 },
     btnPrimary: { padding: '13px 14px', background: '#111', border: '1px solid #111', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#fff', fontWeight: 500 },
-    btnSecondary: { padding: '13px 18px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#6b7280', fontWeight: 500 },
+    btnSecondary: { padding: '13px 18px', background: '#fff', border: '2px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#6b7280', fontWeight: 500 },
     erroBox: { marginTop: 12, padding: '10px 12px', background: '#fef2f2', border: '0.5px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#991b1b' },
     fadeIn: { animation: 'vk-fp-fade-in 0.35s ease-out' },
   };
@@ -15931,7 +15929,7 @@ function EtapaFormaPagamento({
           .vk-fp-opt {
             display: flex; align-items: center; gap: 10px;
             padding: 12px 14px; background: #fff;
-            border: 1px solid #e5e7eb; border-radius: 8px;
+            border: 2px solid #d1d5db; border-radius: 8px;
             cursor: pointer; text-align: left;
             font-family: inherit; font-size: 13.5px; color: #111;
             width: 100%; transition: all 0.12s;
@@ -16225,7 +16223,7 @@ function EtapaFormaPagamento({
           Defina o percentual de cada etapa do projeto. <strong style={{ color: '#111' }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
         </div>
 
-        <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: '4px 0', background: '#fff', marginBottom: 16 }}>
+        <div style={{ border: '2px solid #d1d5db', borderRadius: 10, padding: '4px 0', background: '#fff', marginBottom: 16 }}>
           <div className="vk-fp-etapa-header">
             <span></span>
             <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Etapa</span>
@@ -16309,7 +16307,7 @@ function EtapaFormaPagamento({
             (porque o valor varia conforme qual etapa o cliente escolher). */}
         {mostraEtapaUnica && (
         <div className="vk-fp-card-completo" style={{
-          background: '#fff', border: '1px solid #e5e7eb',
+          background: '#fff', border: '2px solid #d1d5db',
           borderRadius: 10, overflow: 'hidden',
           display: 'flex',
           marginBottom: 12,
@@ -16364,7 +16362,7 @@ function EtapaFormaPagamento({
             Aparece quando há ≥2 etapas marcadas. Resumo à direita. */}
         {mostraEtapasCompletas && (
         <div className="vk-fp-card-completo" style={{
-          background: '#fff', border: '1px solid #e5e7eb',
+          background: '#fff', border: '2px solid #d1d5db',
           borderRadius: 10, overflow: 'hidden',
           display: 'flex',
         }}>
@@ -16421,7 +16419,7 @@ function EtapaFormaPagamento({
       <style>{SHARED_CSS + `
         .vk-fp-card {
           display: flex; gap: 0; padding: 0;
-          background: #fff; border: 1px solid #e5e7eb;
+          background: #fff; border: 2px solid #d1d5db;
           border-radius: 10px; margin-bottom: 12px; overflow: hidden;
           transition: all 0.12s;
         }
@@ -16773,7 +16771,7 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
     position: "absolute", top: "50%", transform: "translateY(-50%)",
     [lado]: 16, zIndex: 5,
     width: 44, height: 44, borderRadius: "50%",
-    background: "#fff", border: "1px solid #e5e7eb",
+    background: "#fff", border: "2px solid #d1d5db",
     boxShadow: "0 6px 16px rgba(0,0,0,0.12)",
     display: "flex", alignItems: "center", justifyContent: "center",
     cursor: "pointer", fontSize: 18, fontFamily: "inherit", color: "#111",
@@ -16824,7 +16822,7 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
 
         <div data-tutorial-id="modelo-preview-container" style={{
           background: "#fff",
-          border: "1px solid #e5e7eb", borderRadius: 12,
+          border: "2px solid #d1d5db", borderRadius: 12,
           height: "62vh", overflow: "auto",
           boxShadow: "0 18px 40px rgba(0,0,0,0.08)",
         }}>
@@ -16864,7 +16862,7 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
       }}>
         <button type="button" onClick={onVoltar} style={{
           background: "transparent", color: "#6b7280",
-          border: "1px solid #e5e7eb", borderRadius: 8,
+          border: "2px solid #d1d5db", borderRadius: 8,
           padding: "10px 16px", fontSize: 13, fontWeight: 500,
           cursor: "pointer", fontFamily: "inherit",
         }}>← Voltar</button>
@@ -17808,7 +17806,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
       /* Trilha horizontal compacta (modo concluído) — sem fundo, sutil */
       .vk-trilha-h { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; padding: 6px 0; margin-bottom: 18px; animation: flow2CardIn .4s cubic-bezier(0.32, 0.72, 0, 1); }
-      .vk-trilha-h-node { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; cursor: pointer; transition: background .12s, border-color .12s; position: relative; border: 1px solid #e5e7eb; background: #fafaf7; font-family: inherit; }
+      .vk-trilha-h-node { display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px; border-radius: 999px; cursor: pointer; transition: background .12s, border-color .12s; position: relative; border: 2px solid #d1d5db; background: #fafaf7; font-family: inherit; }
       .vk-trilha-h-node:hover { background: #fafaf7; border-color: #e5e7eb; }
       .vk-trilha-h-node.is-open { background: #fafaf7; border-color: #c8cdd6; }
       .vk-trilha-h-dot { width: 6px; height: 6px; border-radius: 50%; background: #111; flex-shrink: 0; }
@@ -18208,7 +18206,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#828a98" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
     resumoBox:  { background:"#fff", border:"1px solid #c8cdd6", borderRadius:10, padding:"16px 18px" },
-    resumoHdr:  { fontSize:11, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12, paddingBottom:10, borderBottom:"1px solid #e5e7eb" },
+    resumoHdr:  { fontSize:11, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12, paddingBottom:10, borderBottom:"2px solid #d1d5db" },
     resumoSec:  { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
     resumoVal:  { fontSize:19, fontWeight:700, color:"#111" },
     resumoM2:   { fontSize:13, color:"#828a98", marginTop:2 },
@@ -19135,7 +19133,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   border:"1px solid transparent",
                   transition:"background 0.15s, border-color 0.15s",
                 }}
-                onMouseEnter={e => { e.currentTarget.style.background="#f4f5f7"; e.currentTarget.style.borderColor="#e5e7eb"; }}
+                onMouseEnter={e => { e.currentTarget.style.background="#f4f5f7"; e.currentTarget.style.borderColor="#d1d5db"; }}
                 onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.borderColor="transparent"; }}
                 title="Clique para editar">
                 {referencia}
@@ -19149,7 +19147,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       <div data-vk-orc-toolbar style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
         padding:"12px 16px", marginBottom:16, maxWidth:1100,
-        background:"#fafaf7", border:"1px solid #e5e7eb", borderRadius:10,
+        background:"#fafaf7", border:"2px solid #d1d5db", borderRadius:10,
       }}>
         {[
           { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
@@ -19235,7 +19233,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         )}
 
         {tipoProjeto !== "Conj. Comercial" && (
-          <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"1px solid #e5e7eb" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, paddingLeft:12, marginLeft:4, borderLeft:"2px solid #d1d5db" }}>
             <span style={{ fontSize:14, color:"#828a98" }}>Repetição</span>
             <button style={{ width:22, height:22, borderRadius:5, border:"1px solid #d0d4db", background:"#fff", fontSize:14, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, color:"#374151" }}
               onClick={() => setQtdRep(n => Math.max(0, n - 1))}>−</button>
@@ -19551,7 +19549,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
           <div data-vk-orc-comodos-card style={{
             background:"#fff",
-            border:"1px solid #e5e7eb",
+            border:"2px solid #d1d5db",
             borderRadius:10,
             maxHeight: cardComodosRecolhido ? "none" : 560,
             overflowY: cardComodosRecolhido ? "visible" : "auto",
@@ -19634,7 +19632,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                       background: "#fff",
                       padding: "3px 5px",
                       borderRadius: 6,
-                      border: "1px solid #e5e7eb",
+                      border: "2px solid #d1d5db",
                       boxShadow: "0 2px 8px -2px rgba(0,0,0,0.08)",
                       zIndex: 100,
                       position: "relative",
@@ -19810,7 +19808,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                   {/* Header: retângulo cinza com bordas arredondadas */}
                   <div data-vk-grupo-header style={{
                     display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", rowGap:6,
-                    background:"#f4f5f7", border:"1px solid #e5e7eb", borderRadius:6,
+                    background:"#f4f5f7", border:"2px solid #d1d5db", borderRadius:6,
                     padding:"5px 10px",
                     marginBottom: recolhido ? 0 : 8,
                   }}>
@@ -20080,12 +20078,12 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                               cursor:"pointer",
                               padding:"4px 10px",
                               background:"#f4f5f7",
-                              border:"1px solid #e5e7eb",
+                              border:"2px solid #d1d5db",
                               borderRadius:6,
                               transition:"all 0.15s",
                             }}
                             onMouseEnter={e => { e.currentTarget.style.background="#fef2f2"; e.currentTarget.style.borderColor="#fecaca"; e.currentTarget.style.color="#dc2626"; }}
-                            onMouseLeave={e => { e.currentTarget.style.background="#f4f5f7"; e.currentTarget.style.borderColor="#e5e7eb"; e.currentTarget.style.color="#111"; }}>
+                            onMouseLeave={e => { e.currentTarget.style.background="#f4f5f7"; e.currentTarget.style.borderColor="#d1d5db"; e.currentTarget.style.color="#111"; }}>
                             <strong style={{ fontWeight:700 }}>{q}</strong>
                             <span>{nome}</span>
                             <span className="comodo-m2" style={{ fontSize:11, color:"#9ca3af", fontWeight:400 }}>· {fmtNum(m2Total)} m²</span>
@@ -20615,10 +20613,10 @@ function Escritorio({ data, save }) {
 
   const E = {
     wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header: { borderBottom:"1px solid #e5e7eb", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
+    header: { borderBottom:"2px solid #d1d5db", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
     titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
-    abas: { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
+    abas: { display:"flex", gap:0, borderBottom:"2px solid #d1d5db", padding:"0 32px" },
     aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body: { padding:"32px", maxWidth:760 },
     secao: { marginBottom:32 },
@@ -20635,7 +20633,7 @@ function Escritorio({ data, save }) {
     btnAdd: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
     btnSalvo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
     // Equipe
-    membroCard: { border:"1px solid #e5e7eb", borderRadius:10, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
+    membroCard: { border:"2px solid #d1d5db", borderRadius:10, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
     membroNome: { fontSize:14, fontWeight:600, color:"#111", marginBottom:2 },
     membroCargo: { fontSize:12, color:"#9ca3af" },
     membroInfo: { fontSize:12, color:"#6b7280", marginTop:6, display:"flex", gap:16 },
@@ -20686,7 +20684,7 @@ function Escritorio({ data, save }) {
           <div style={{
             width: 160,
             height: 100,
-            border: form.logo ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db",
+            border: form.logo ? "2px solid #d1d5db" : "1.5px dashed #d1d5db",
             borderRadius: 8,
             display: "flex",
             alignItems: "center",
@@ -21048,7 +21046,7 @@ function Escritorio({ data, save }) {
             </div>
             <div style={{ display:"flex", gap:6 }}>
               <button onClick={() => setNovoMembro(m)}
-                style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                 Editar
               </button>
               <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
@@ -21206,7 +21204,7 @@ function Escritorio({ data, save }) {
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
                       background:"#fafafa", color:"#374151", fontWeight:600,
-                      border:"1px solid #e5e7eb",
+                      border:"2px solid #d1d5db",
                       textTransform:"uppercase", letterSpacing:0.5,
                     }} title="Senha foi resetada — usuário precisa trocá-la no próximo login">
                       Trocar senha
@@ -21234,7 +21232,7 @@ function Escritorio({ data, save }) {
                     });
                     setConfirmSenha("");
                   }}
-                  style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                  style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                   Editar
                 </button>
                 {/* Reset de senha — só admin de empresa pode, não pra si mesmo,
@@ -21243,7 +21241,7 @@ function Escritorio({ data, save }) {
                   <button
                     onClick={() => setUsuarioParaResetar(u)}
                     title="Resetar senha do usuário"
-                    style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                     Resetar senha
                   </button>
                 )}
@@ -21597,7 +21595,7 @@ function Admin({ usuario, data, save, initialTab }) {
         .vk-adm-tabela-mobile { display: block !important; border: none !important; }
         .vk-adm-tabela-mobile thead { display: none !important; }
         .vk-adm-tabela-mobile tbody { display: flex !important; flex-direction: column !important; gap: 8px !important; }
-        .vk-adm-tabela-mobile tr { display: flex !important; flex-direction: column !important; padding: 12px 14px !important; border: 1px solid #e5e7eb !important; border-radius: 10px !important; background: #fff !important; }
+        .vk-adm-tabela-mobile tr { display: flex !important; flex-direction: column !important; padding: 12px 14px !important; border: 2px solid #d1d5db !important; border-radius: 10px !important; background: #fff !important; }
         .vk-adm-tabela-mobile td { display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 4px 0 !important; border: none !important; gap: 12px !important; }
         .vk-adm-tabela-mobile td::before {
           content: attr(data-label);
@@ -21697,29 +21695,29 @@ function Admin({ usuario, data, save, initialTab }) {
 
   const S = {
     wrap:    { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header:  { borderBottom:"1px solid #e5e7eb", padding:"24px 32px" },
+    header:  { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
     titulo:  { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
-    abas:    { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
+    abas:    { display:"flex", gap:0, borderBottom:"2px solid #d1d5db", padding:"0 32px" },
     aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body:    { padding:"32px" },
     bodyNarrow: { padding:"32px", maxWidth:760 },
     secao:   { marginBottom:32 },
     secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnSec:  { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
-    modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
-    modalLg: { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modal:   { background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modalLg: { background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
-    input:   { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
+    input:   { width:"100%", border:"2px solid #d1d5db", borderRadius:8, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
     tabela:  { width:"100%", borderCollapse:"collapse", fontSize:13 },
-    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1px solid #e5e7eb", background:"#fafbfc" },
+    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"2px solid #d1d5db", background:"#fafbfc" },
     td:      { padding:"12px", borderBottom:"1px solid #f3f4f6", verticalAlign:"middle" },
-    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#111", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:4, padding:"2px 8px" },
-    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
+    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#111", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px" },
+    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
     vazio:   { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"40px 0" },
   };
 
@@ -21863,7 +21861,7 @@ function Admin({ usuario, data, save, initialTab }) {
                   ? { ...S.badgeAtiva, background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0" }
                   : s.ultimo_status === "falha"
                   ? S.badgeInativa
-                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:4, padding:"2px 8px" };
+                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#f9fafb", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px" };
                 const statusLabel = s.ultimo_status === "sucesso" ? "OK"
                                   : s.ultimo_status === "falha" ? "Falha"
                                   : "Nunca coletado";
@@ -22173,7 +22171,7 @@ function PainelEmpresas({ S }) {
       )}
 
       {!loading && empresas.length > 0 && (
-        <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+        <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
           <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
@@ -22407,7 +22405,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
         ) : (!data.usuarios || data.usuarios.length === 0) ? (
           <div style={S.vazio}>Nenhum usuário cadastrado.</div>
         ) : (
-          <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+          <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
             <table style={S.tabela} className="vk-adm-tabela-mobile">
               <thead>
                 <tr>
@@ -22476,7 +22474,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       {!isMasterEmp && (
         <div style={{ ...S.secao, marginBottom:32 }}>
           <div style={S.secTit}>Ações administrativas</div>
-          <div style={{ border:"1px solid #e5e7eb", background:"#fafafa", borderRadius:10, padding:"16px" }}>
+          <div style={{ border:"2px solid #d1d5db", background:"#fafafa", borderRadius:10, padding:"16px" }}>
             <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom:12 }}>
               Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#111" }}>Não tem como reverter.</strong>
               <br/>
@@ -22554,7 +22552,7 @@ function DetalheCampo({ label, valor }) {
 // `carregando` mostra "…" cinza no lugar do valor (evita flash de "0").
 function MetricaCard({ label, valor, carregando }) {
   return (
-    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"14px 16px" }}>
+    <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:10, padding:"14px 16px" }}>
       <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
       <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#d1d5db" : "#111", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
         {carregando ? "…" : (valor ?? 0)}
@@ -22847,7 +22845,7 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
           {/* Nome em destaque, FORA do label uppercase (S.label tem textTransform).
               Renderiza com fonte mono pra deixar capitalização inequívoca. */}
           <div style={{
-            background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:6,
+            background:"#f9fafb", border:"2px solid #d1d5db", borderRadius:6,
             padding:"6px 10px", marginBottom:8,
             fontFamily:"'SF Mono',Menlo,Consolas,monospace",
             fontSize:13, color:"#111", fontWeight:600,
@@ -23009,7 +23007,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
             </button>
           </div>
         </div>
-        <div style={{ background:"#fafafa", border:"1px solid #e5e7eb", color:"#374151", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+        <div style={{ background:"#fafafa", border:"2px solid #d1d5db", color:"#374151", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
           Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -23093,7 +23091,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               style={{
                 flex:1, padding:"10px", borderRadius:8, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
-                border: ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                border: ativo ? "1px solid #111" : "2px solid #d1d5db",
                 background: ativo ? "#111" : "#fff",
                 color: ativo ? "#fff" : "#6b7280",
                 fontWeight: ativo ? 600 : 400,
@@ -23107,7 +23105,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               style={{
                 flex:1, padding:"10px", borderRadius:8, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
-                border: !ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                border: !ativo ? "1px solid #111" : "2px solid #d1d5db",
                 background: !ativo ? "#111" : "#fff",
                 color: !ativo ? "#fff" : "#6b7280",
                 fontWeight: !ativo ? 600 : 400,
@@ -23116,7 +23114,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
             </button>
           </div>
           {!ativo && usuario.ativo && (
-            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
+            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
               Usuário inativo não consegue mais fazer login. As sessões existentes serão encerradas no próximo refresh.
             </div>
           )}
@@ -23690,7 +23688,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
   const preview = fb.texto.length > 110 ? fb.texto.slice(0, 110) + "…" : fb.texto;
 
   return (
-    <div style={{ border:"1px solid #e5e7eb", borderRadius:10, background:"#fff" }}>
+    <div style={{ border:"2px solid #d1d5db", borderRadius:10, background:"#fff" }}>
       {/* ── Linha clicável (expande/recolhe) ── */}
       <div onClick={onToggle}
         style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
@@ -23738,7 +23736,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
                       padding:"6px 12px", borderRadius:6, fontSize:12,
                       fontFamily:"inherit",
                       cursor: (salvando || ativo) ? "default" : "pointer",
-                      border: ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                      border: ativo ? "1px solid #111" : "2px solid #d1d5db",
                       background: ativo ? "#111" : "#fff",
                       color: ativo ? "#fff" : "#374151",
                       fontWeight: ativo ? 600 : 400,
@@ -23878,7 +23876,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
       )}
 
       {!loading && usuarios.length > 0 && (
-        <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+        <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
           <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
@@ -24091,7 +24089,7 @@ function getEstilos(loading) {
     header: { textAlign: "center", marginBottom: 32 },
     titulo: { fontSize: 22, fontWeight: 700, color: "#111", letterSpacing: -0.5, margin: 0 },
     sub: { fontSize: 13, color: "#9ca3af", marginTop: 6 },
-    card: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "28px 24px" },
+    card: { background: "#fff", border: "2px solid #d1d5db", borderRadius: 12, padding: "28px 24px" },
     label: { fontSize: 13, color: "#6b7280", display: "block", marginBottom: 6 },
     input: {
       width: "100%",
@@ -25172,7 +25170,7 @@ function Mensagens({ usuario }) {
 
   const S = {
     wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", height:"100vh", display:"flex", flexDirection:"column", background:"#fff" },
-    header: { borderBottom:"1px solid #e5e7eb", padding:"20px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
+    header: { borderBottom:"2px solid #d1d5db", padding:"20px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
     titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
     filtros: { display:"flex", gap:4, padding:"12px 32px", borderBottom:"1px solid #f3f4f6" },
@@ -25188,7 +25186,7 @@ function Mensagens({ usuario }) {
       fontFamily: "inherit",
     }),
     body: { flex:1, display:"flex", overflow:"hidden" },
-    listaCol: { width:380, minWidth:380, borderRight:"1px solid #e5e7eb", overflowY:"auto", background:"#fff" },
+    listaCol: { width:380, minWidth:380, borderRight:"2px solid #d1d5db", overflowY:"auto", background:"#fff" },
     detalheCol: { flex:1, overflowY:"auto", background:"#fafbfc" },
     item: (selecionada, lida) => ({
       padding:"14px 18px",
@@ -25206,30 +25204,30 @@ function Mensagens({ usuario }) {
     pontoNaoLida: { display:"inline-block", width:8, height:8, background:"#3b82f6", borderRadius:"50%", marginRight:8, flexShrink:0 },
     vazio: { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"60px 20px" },
 
-    detHeader: { padding:"24px 32px", borderBottom:"1px solid #e5e7eb", background:"#fff" },
+    detHeader: { padding:"24px 32px", borderBottom:"2px solid #d1d5db", background:"#fff" },
     detAssunto: { fontSize:18, fontWeight:700, color:"#111", marginBottom:12 },
     detLinha: { fontSize:13, color:"#6b7280", marginBottom:4 },
     detLinhaForte: { fontSize:14, color:"#111", fontWeight:500 },
     detAcoes: { display:"flex", gap:8, marginTop:16 },
     detBody: { padding:"32px", background:"#fff", margin:"24px 32px", borderRadius:8, border:"1px solid #f3f4f6" },
     detHtml: { fontSize:14, color:"#111", lineHeight:1.6 },
-    btnAcao: { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
+    btnAcao: { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     btnAcaoPrimaria: { background:"#111", color:"#fff", border:"1px solid #111", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     btnAcaoDestrutiva: { background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     badge: { display:"inline-block", fontSize:11, fontWeight:600, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius:10, padding:"2px 8px", marginLeft:8 },
     // Modal de Responder
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
-    modal: { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, width:"100%", maxWidth:680, maxHeight:"85vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
+    modal: { background:"#fff", border:"2px solid #d1d5db", borderRadius:12, width:"100%", maxWidth:680, maxHeight:"85vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
     modalHeader: { padding:"20px 24px 16px", borderBottom:"1px solid #f3f4f6" },
     modalTitulo: { fontSize:16, fontWeight:700, color:"#111", margin:0 },
     modalBody: { padding:"20px 24px", flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:14 },
     modalLabel: { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4, display:"block" },
-    modalInput: { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
+    modalInput: { width:"100%", border:"2px solid #d1d5db", borderRadius:8, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
     modalReadonly: { fontSize:13, color:"#374151", padding:"10px 12px", background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:8 },
-    modalTextarea: { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", minHeight:200, resize:"vertical", lineHeight:1.5 },
+    modalTextarea: { width:"100%", border:"2px solid #d1d5db", borderRadius:8, padding:"12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", minHeight:200, resize:"vertical", lineHeight:1.5 },
     modalFooter: { padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:10 },
     btnEnviar: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnCancelar: { background:"#fff", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnCancelar: { background:"#fff", color:"#6b7280", border:"2px solid #d1d5db", borderRadius:8, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   };
 
   if (loading) {
@@ -26232,7 +26230,7 @@ function Opcao({ label, selecionada, onClick }) {
         display:"flex", alignItems:"center", gap:10,
         padding:"12px 14px",
         background: selecionada ? "#fafbfc" : "#fff",
-        border: selecionada ? "1.5px solid #111" : "1px solid #e5e7eb",
+        border: selecionada ? "1.5px solid #111" : "2px solid #d1d5db",
         borderRadius:8,
         cursor:"pointer",
         textAlign:"left",
@@ -26243,7 +26241,7 @@ function Opcao({ label, selecionada, onClick }) {
         transition:"all 0.12s",
       }}
       onMouseEnter={e => { if (!selecionada) e.currentTarget.style.borderColor="#9ca3af"; }}
-      onMouseLeave={e => { if (!selecionada) e.currentTarget.style.borderColor="#e5e7eb"; }}>
+      onMouseLeave={e => { if (!selecionada) e.currentTarget.style.borderColor="#d1d5db"; }}>
       <span style={{
         flexShrink:0,
         width:18, height:18, borderRadius:"50%",
@@ -26338,7 +26336,7 @@ function InputMoedaBR({ valor, setValor, onConfirmar }) {
         autoFocus
         style={{
           width:"100%", boxSizing:"border-box",
-          border:"1px solid #e5e7eb", borderRadius:8,
+          border:"2px solid #d1d5db", borderRadius:8,
           padding:"11px 14px 11px 38px",
           fontSize:14, fontFamily:"inherit", outline:"none",
           fontVariantNumeric:"tabular-nums",
@@ -26814,7 +26812,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 onClick={() => setEditando(aberto ? null : l.campo)}
                 style={{
                   width: "100%",
-                  border: aberto ? "1px solid #111" : "1px solid #e5e7eb",
+                  border: aberto ? "1px solid #111" : "2px solid #d1d5db",
                   borderRadius: 10,
                   padding: "10px 12px",
                   background: aberto ? "#f3f4f6" : "#fff",
@@ -26835,7 +26833,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 }}
                 onMouseLeave={e => {
                   if (!aberto) {
-                    e.currentTarget.style.borderColor = "#e5e7eb";
+                    e.currentTarget.style.borderColor="#d1d5db";
                     e.currentTarget.style.background = "#fff";
                   }
                 }}
@@ -26869,7 +26867,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                   position: "absolute",
                   top: 0, left: "calc(100% + 8px)",
                   background: "#fff",
-                  border: "1px solid #e5e7eb",
+                  border: "2px solid #d1d5db",
                   borderRadius: 10,
                   boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
                   padding: 6,
@@ -27038,7 +27036,7 @@ function FluxogramaCasa({ casaCalc }) {
         {/* ─── CARD CÔMODOS ──────────────────────────────────── */}
         <div style={{
           background: "#fff",
-          border: "1px solid #e5e7eb",
+          border: "2px solid #d1d5db",
           borderRadius: 14,
           padding: "22px 24px",
           opacity: showCardC ? 1 : 0,
@@ -27160,7 +27158,7 @@ function FluxogramaCasa({ casaCalc }) {
         {/* ─── CARD ÁREA TOTAL ───────────────────────────────── */}
         <div style={{
           background: "#fff",
-          border: "1px solid #e5e7eb",
+          border: "2px solid #d1d5db",
           borderRadius: 14,
           padding: "28px 24px",
           textAlign: "center",
@@ -27274,7 +27272,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
   return (
     <div style={{
       background:"#fff",
-      border:"1px solid #e5e7eb",
+      border:"2px solid #d1d5db",
       borderRadius:14,
       padding:"22px 24px",
       animation:"vk-fade-up 0.4s ease-out",
@@ -27661,7 +27659,7 @@ function BlocoCadastroEscritorio({
               onDrop={handleDrop}
               style={{
                 width: 160, height: 100,
-                border: arrastando ? "1.5px solid #111" : (logo ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db"),
+                border: arrastando ? "1.5px solid #111" : (logo ? "2px solid #d1d5db" : "1.5px dashed #d1d5db"),
                 borderRadius: 8,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: arrastando ? "#f3f4f6" : "#fafbfc",
@@ -27981,7 +27979,7 @@ const tela = {
   display:"flex", justifyContent:"center", alignItems:"flex-start",
 };
 const card = {
-  background:"#fff", border:"1px solid #e5e7eb", borderRadius:12,
+  background:"#fff", border:"2px solid #d1d5db", borderRadius:12,
   padding:"32px 32px 24px", maxWidth:420, width:"100%",
   boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
   margin:"40px 20px",
@@ -28188,7 +28186,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
   // consistência visual entre as abas de Configuração.
   const S = {
     wrap:     { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header:   { borderBottom:"1px solid #e5e7eb", padding:"24px 32px" },
+    header:   { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
     titulo:   { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:      { fontSize:13, color:"#9ca3af", marginTop:3 },
     body:     { padding:"32px", maxWidth:760 },
@@ -28204,7 +28202,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
     avisoSemPerm: { fontSize:13, color:"#92400e", lineHeight:1.6, background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, padding:"14px 16px" },
     // Box de destaque do preço base R$/m². Visualmente diferente das células
     // do grid pra dar peso ao número que importa no dia a dia.
-    boxPrecoBase: { background:"#fafbfc", border:"1px solid #e5e7eb", borderRadius:10, padding:"18px 20px", marginTop:4 },
+    boxPrecoBase: { background:"#fafbfc", border:"2px solid #d1d5db", borderRadius:10, padding:"18px 20px", marginTop:4 },
     boxLabel:     { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.6, fontWeight:600, marginBottom:6 },
     boxValor:     { fontSize:28, fontWeight:700, color:"#111", lineHeight:1, display:"flex", alignItems:"baseline", gap:6 },
     boxUnidade:   { fontSize:14, fontWeight:500, color:"#9ca3af" },
@@ -28285,7 +28283,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
           ) : (
             <>
               <div style={S.aviso}>
-                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_calibrado</code>) da empresa.
+                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"2px solid #d1d5db", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"2px solid #d1d5db", fontSize:12 }}>pct_calibrado</code>) da empresa.
                 Você cai direto na tela de onboarding pra refazer a calibragem — sem precisar fazer login novamente.
                 Clientes, projetos e orçamentos <strong>não</strong> são afetados.
               </div>
@@ -28484,9 +28482,9 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
       <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: isMobile ? 8 : 12, marginBottom:32 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
+            style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
             onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#111"; }}
-            onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#e5e7eb"; }}>
+            onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
               <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
               <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#111" }}>{m.label}</div>
@@ -28556,7 +28554,7 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
           onClick={it.onClick}
           style={{
             background:"#fff",
-            border: it.destaque ? "1px solid #f59e0b" : "1px solid #e5e7eb",
+            border: it.destaque ? "1px solid #f59e0b" : "2px solid #d1d5db",
             borderRadius:12, padding: isMobile ? "12px 12px" : "16px 18px",
             cursor: it.onClick ? "pointer" : "default",
             transition:"border-color 0.12s",
@@ -28587,7 +28585,7 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
 // recente sem sobrecarregar.
 function DashboardFeed({ feed, loading, isMobile }) {
   return (
-    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "12px 14px" : "16px 18px" }}>
+    <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding: isMobile ? "12px 14px" : "16px 18px" }}>
       <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
         Atividade recente
       </div>
@@ -28767,9 +28765,9 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
       <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: isMobile ? 10 : 12, width:"100%", maxWidth:680 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"inherit", position:"relative" }}
+            style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"inherit", position:"relative" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor="#e5e7eb"; }}>
+            onMouseLeave={e => { e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:4 }}>{m.label}</div>
             <div style={{ fontSize:12, color:"#9ca3af" }}>{m.desc}</div>
             {m.count > 0 && <div style={{ position:"absolute", top:12, right:12, background:"#f3f4f6", color:"#6b7280", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:10 }}>{m.count}</div>}
@@ -28804,7 +28802,7 @@ function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus 
         disabled={disabled}
         autoFocus={autoFocus}
         style={{
-          width:"100%", border:"1px solid #e5e7eb", borderRadius:8,
+          width:"100%", border:"2px solid #d1d5db", borderRadius:8,
           padding:"10px 40px 10px 12px", // padding direito maior pro botão
           fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box",
         }}
@@ -28892,7 +28890,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
     }}>
       <form onSubmit={handleSubmit}
         style={{
-          background:"#fff", border:"1px solid #e5e7eb", borderRadius:12,
+          background:"#fff", border:"2px solid #d1d5db", borderRadius:12,
           padding:"32px 32px 24px", maxWidth:420, width:"100%",
           boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
         }}>
@@ -29136,7 +29134,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
                   padding:"10px 12px", borderRadius:8, fontSize:13,
                   fontFamily:"inherit", textAlign:"center",
                   cursor: enviando ? "not-allowed" : "pointer",
-                  border: categoria === c.id ? "1.5px solid #111" : "1px solid #e5e7eb",
+                  border: categoria === c.id ? "1.5px solid #111" : "2px solid #d1d5db",
                   background: categoria === c.id ? "#fafbfc" : "#fff",
                   color:"#111",
                   fontWeight: categoria === c.id ? 600 : 400,
@@ -29158,7 +29156,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
             placeholder="Escreva o que quiser compartilhar..."
             rows={5}
             style={{
-              width:"100%", border:"1px solid #e5e7eb", borderRadius:8,
+              width:"100%", border:"2px solid #d1d5db", borderRadius:8,
               padding:"10px 12px", fontSize:13, fontFamily:"inherit",
               outline:"none", boxSizing:"border-box", resize:"vertical",
               minHeight:100,
@@ -29182,7 +29180,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
           <button onClick={onFechar} disabled={enviando}
             style={{
-              background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+              background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
               padding:"9px 14px", fontSize:13, color:"#6b7280", cursor: enviando ? "not-allowed" : "pointer",
               fontFamily:"inherit",
             }}>
@@ -29622,7 +29620,7 @@ export default function ModuloClientesFornecedores() {
   // Renderiza modal de conflito de sessão (compartilhado entre todos os returns)
   const conflitoModal = conflitoSessao && (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:100050, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-      <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
+      <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
         <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>
           {conflitoSessao === "logout" ? "Sessão encerrada" : "Sessão alterada em outra aba"}
         </div>
@@ -29771,7 +29769,7 @@ export default function ModuloClientesFornecedores() {
           <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
           <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
           <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
-          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
+          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"2px solid #d1d5db", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
       <DialogosHost />
@@ -30285,19 +30283,19 @@ export default function ModuloClientesFornecedores() {
       </div>
       {showBackup && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-          <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:14, padding:24, width:"100%", maxWidth:600, maxHeight:"85vh", display:"flex", flexDirection:"column", gap:16 }}>
+          <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:14, padding:24, width:"100%", maxWidth:600, maxHeight:"85vh", display:"flex", flexDirection:"column", gap:16 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div style={{ fontWeight:700, fontSize:15, color:"#111" }}>Backup dos dados</div>
               <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
             <div style={{ color:"#6b7280", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
             <textarea readOnly value={backupJson} onClick={e => e.target.select()}
-              style={{ flex:1, minHeight:320, background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:8, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
+              style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius:8, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button onClick={() => navigator.clipboard?.writeText(backupJson).catch(()=>{})}
                 style={{ background:"#111", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Copiar tudo</button>
               <button onClick={() => setShowBackup(false)}
-                style={{ background:"#fff", color:"#6b7280", border:"1px solid #e5e7eb", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>
+                style={{ background:"#fff", color:"#6b7280", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>
             </div>
           </div>
         </div>
@@ -30317,7 +30315,7 @@ export default function ModuloClientesFornecedores() {
             top: popoverProjetos.top,
             left: popoverProjetos.left,
             background:"#fff",
-            border:"1px solid #e5e7eb",
+            border:"2px solid #d1d5db",
             borderRadius:8,
             boxShadow:"0 4px 16px rgba(0,0,0,0.08)",
             padding:"6px",

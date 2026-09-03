@@ -403,7 +403,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   };
   const card = {
     background: "#fff",
-    border: "1px solid #e5e7eb",
+    border: "2px solid #d1d5db",
     borderRadius: 14,
     padding: "22px 24px",
     marginBottom: 16,
@@ -534,7 +534,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
             position: static !important;
             top: auto !important;
             margin-bottom: 16px;
-            border: 1px solid #e5e7eb;
+            border: 2px solid #d1d5db;
             border-radius: 12px;
             padding: 10px;
           }
@@ -828,7 +828,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           .vk-tpl-fp-opt {
             display: inline-flex; align-items: center; gap: 8px;
             padding: 10px 12px; background: #fff;
-            border: 1px solid #e5e7eb; border-radius: 8px;
+            border: 2px solid #d1d5db; border-radius: 8px;
             cursor: pointer; text-align: left; flex: 1 1 0; min-width: 0;
             font-family: inherit; font-size: 12.5px; color: #111;
             transition: all 0.12s; user-select: none;
@@ -874,7 +874,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         <style>{`
           .vk-tpl-fp2-card {
             display: flex; gap: 0; padding: 0;
-            background: #fff; border: 1px solid #e5e7eb;
+            background: #fff; border: 2px solid #d1d5db;
             border-radius: 10px; margin-bottom: 12px; overflow: hidden;
             transition: all 0.12s;
           }
@@ -1197,7 +1197,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                     Defina o percentual de cada etapa. <strong style={{ color: "#111" }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
                   </div>
 
-                  <div style={{ border: "1px solid #e5e7eb", borderRadius: 10, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
+                  <div style={{ border: "2px solid #d1d5db", borderRadius: 10, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
                     <div className="vk-tpl-fp2-etapa-header">
                       <span></span>
                       <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em" }}>Etapa</span>

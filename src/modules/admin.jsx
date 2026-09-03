@@ -40,7 +40,7 @@ function Admin({ usuario, data, save, initialTab }) {
         .vk-adm-tabela-mobile { display: block !important; border: none !important; }
         .vk-adm-tabela-mobile thead { display: none !important; }
         .vk-adm-tabela-mobile tbody { display: flex !important; flex-direction: column !important; gap: 8px !important; }
-        .vk-adm-tabela-mobile tr { display: flex !important; flex-direction: column !important; padding: 12px 14px !important; border: 1px solid #e5e7eb !important; border-radius: 10px !important; background: #fff !important; }
+        .vk-adm-tabela-mobile tr { display: flex !important; flex-direction: column !important; padding: 12px 14px !important; border: 2px solid #d1d5db !important; border-radius: 10px !important; background: #fff !important; }
         .vk-adm-tabela-mobile td { display: flex !important; justify-content: space-between !important; align-items: center !important; padding: 4px 0 !important; border: none !important; gap: 12px !important; }
         .vk-adm-tabela-mobile td::before {
           content: attr(data-label);
@@ -140,29 +140,29 @@ function Admin({ usuario, data, save, initialTab }) {
 
   const S = {
     wrap:    { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header:  { borderBottom:"1px solid #e5e7eb", padding:"24px 32px" },
+    header:  { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
     titulo:  { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
-    abas:    { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
+    abas:    { display:"flex", gap:0, borderBottom:"2px solid #d1d5db", padding:"0 32px" },
     aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body:    { padding:"32px" },
     bodyNarrow: { padding:"32px", maxWidth:760 },
     secao:   { marginBottom:32 },
     secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec:  { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnSec:  { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
-    modal:   { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
-    modalLg: { background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modal:   { background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modalLg: { background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
-    input:   { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
+    input:   { width:"100%", border:"2px solid #d1d5db", borderRadius:8, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
     tabela:  { width:"100%", borderCollapse:"collapse", fontSize:13 },
-    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1px solid #e5e7eb", background:"#fafbfc" },
+    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"2px solid #d1d5db", background:"#fafbfc" },
     td:      { padding:"12px", borderBottom:"1px solid #f3f4f6", verticalAlign:"middle" },
-    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#111", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:4, padding:"2px 8px" },
-    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
+    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#111", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px" },
+    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
     vazio:   { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"40px 0" },
   };
 
@@ -306,7 +306,7 @@ function Admin({ usuario, data, save, initialTab }) {
                   ? { ...S.badgeAtiva, background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0" }
                   : s.ultimo_status === "falha"
                   ? S.badgeInativa
-                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:4, padding:"2px 8px" };
+                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#f9fafb", border:"2px solid #d1d5db", borderRadius:4, padding:"2px 8px" };
                 const statusLabel = s.ultimo_status === "sucesso" ? "OK"
                                   : s.ultimo_status === "falha" ? "Falha"
                                   : "Nunca coletado";
@@ -616,7 +616,7 @@ function PainelEmpresas({ S }) {
       )}
 
       {!loading && empresas.length > 0 && (
-        <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+        <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
           <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
@@ -850,7 +850,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
         ) : (!data.usuarios || data.usuarios.length === 0) ? (
           <div style={S.vazio}>Nenhum usuário cadastrado.</div>
         ) : (
-          <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+          <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
             <table style={S.tabela} className="vk-adm-tabela-mobile">
               <thead>
                 <tr>
@@ -919,7 +919,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       {!isMasterEmp && (
         <div style={{ ...S.secao, marginBottom:32 }}>
           <div style={S.secTit}>Ações administrativas</div>
-          <div style={{ border:"1px solid #e5e7eb", background:"#fafafa", borderRadius:10, padding:"16px" }}>
+          <div style={{ border:"2px solid #d1d5db", background:"#fafafa", borderRadius:10, padding:"16px" }}>
             <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom:12 }}>
               Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#111" }}>Não tem como reverter.</strong>
               <br/>
@@ -997,7 +997,7 @@ function DetalheCampo({ label, valor }) {
 // `carregando` mostra "…" cinza no lugar do valor (evita flash de "0").
 function MetricaCard({ label, valor, carregando }) {
   return (
-    <div style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:10, padding:"14px 16px" }}>
+    <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:10, padding:"14px 16px" }}>
       <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
       <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#d1d5db" : "#111", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
         {carregando ? "…" : (valor ?? 0)}
@@ -1290,7 +1290,7 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
           {/* Nome em destaque, FORA do label uppercase (S.label tem textTransform).
               Renderiza com fonte mono pra deixar capitalização inequívoca. */}
           <div style={{
-            background:"#f9fafb", border:"1px solid #e5e7eb", borderRadius:6,
+            background:"#f9fafb", border:"2px solid #d1d5db", borderRadius:6,
             padding:"6px 10px", marginBottom:8,
             fontFamily:"'SF Mono',Menlo,Consolas,monospace",
             fontSize:13, color:"#111", fontWeight:600,
@@ -1452,7 +1452,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
             </button>
           </div>
         </div>
-        <div style={{ background:"#fafafa", border:"1px solid #e5e7eb", color:"#374151", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+        <div style={{ background:"#fafafa", border:"2px solid #d1d5db", color:"#374151", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
           Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -1536,7 +1536,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               style={{
                 flex:1, padding:"10px", borderRadius:8, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
-                border: ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                border: ativo ? "1px solid #111" : "2px solid #d1d5db",
                 background: ativo ? "#111" : "#fff",
                 color: ativo ? "#fff" : "#6b7280",
                 fontWeight: ativo ? 600 : 400,
@@ -1550,7 +1550,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               style={{
                 flex:1, padding:"10px", borderRadius:8, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
-                border: !ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                border: !ativo ? "1px solid #111" : "2px solid #d1d5db",
                 background: !ativo ? "#111" : "#fff",
                 color: !ativo ? "#fff" : "#6b7280",
                 fontWeight: !ativo ? 600 : 400,
@@ -1559,7 +1559,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
             </button>
           </div>
           {!ativo && usuario.ativo && (
-            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"1px solid #e5e7eb", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
+            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"2px solid #d1d5db", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
               Usuário inativo não consegue mais fazer login. As sessões existentes serão encerradas no próximo refresh.
             </div>
           )}
@@ -2133,7 +2133,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
   const preview = fb.texto.length > 110 ? fb.texto.slice(0, 110) + "…" : fb.texto;
 
   return (
-    <div style={{ border:"1px solid #e5e7eb", borderRadius:10, background:"#fff" }}>
+    <div style={{ border:"2px solid #d1d5db", borderRadius:10, background:"#fff" }}>
       {/* ── Linha clicável (expande/recolhe) ── */}
       <div onClick={onToggle}
         style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
@@ -2181,7 +2181,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
                       padding:"6px 12px", borderRadius:6, fontSize:12,
                       fontFamily:"inherit",
                       cursor: (salvando || ativo) ? "default" : "pointer",
-                      border: ativo ? "1px solid #111" : "1px solid #e5e7eb",
+                      border: ativo ? "1px solid #111" : "2px solid #d1d5db",
                       background: ativo ? "#111" : "#fff",
                       color: ativo ? "#fff" : "#374151",
                       fontWeight: ativo ? 600 : 400,
@@ -2321,7 +2321,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
       )}
 
       {!loading && usuarios.length > 0 && (
-        <div style={{ border:"1px solid #e5e7eb", borderRadius:10, overflow:"hidden" }}>
+        <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
           <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>

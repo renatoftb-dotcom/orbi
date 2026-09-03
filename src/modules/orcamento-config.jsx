@@ -177,7 +177,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
   // consistência visual entre as abas de Configuração.
   const S = {
     wrap:     { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header:   { borderBottom:"1px solid #e5e7eb", padding:"24px 32px" },
+    header:   { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
     titulo:   { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:      { fontSize:13, color:"#9ca3af", marginTop:3 },
     body:     { padding:"32px", maxWidth:760 },
@@ -193,7 +193,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
     avisoSemPerm: { fontSize:13, color:"#92400e", lineHeight:1.6, background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, padding:"14px 16px" },
     // Box de destaque do preço base R$/m². Visualmente diferente das células
     // do grid pra dar peso ao número que importa no dia a dia.
-    boxPrecoBase: { background:"#fafbfc", border:"1px solid #e5e7eb", borderRadius:10, padding:"18px 20px", marginTop:4 },
+    boxPrecoBase: { background:"#fafbfc", border:"2px solid #d1d5db", borderRadius:10, padding:"18px 20px", marginTop:4 },
     boxLabel:     { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.6, fontWeight:600, marginBottom:6 },
     boxValor:     { fontSize:28, fontWeight:700, color:"#111", lineHeight:1, display:"flex", alignItems:"baseline", gap:6 },
     boxUnidade:   { fontSize:14, fontWeight:500, color:"#9ca3af" },
@@ -274,7 +274,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
           ) : (
             <>
               <div style={S.aviso}>
-                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"1px solid #e5e7eb", fontSize:12 }}>pct_calibrado</code>) da empresa.
+                Apaga as respostas do onboarding e os percentuais (<code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"2px solid #d1d5db", fontSize:12 }}>pct_matriz_calculado</code> e <code style={{ background:"#fff", padding:"1px 5px", borderRadius:3, border:"2px solid #d1d5db", fontSize:12 }}>pct_calibrado</code>) da empresa.
                 Você cai direto na tela de onboarding pra refazer a calibragem — sem precisar fazer login novamente.
                 Clientes, projetos e orçamentos <strong>não</strong> são afetados.
               </div>

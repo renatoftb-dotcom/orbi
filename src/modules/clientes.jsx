@@ -21,10 +21,10 @@ if (typeof window !== "undefined" && typeof import.meta !== "undefined" && impor
 }
 
 const C = {
-  input:    { border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  input:    { border:"2px solid #d1d5db", borderRadius:8, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
   label:    { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
   btn:      { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec:   { background:"#fff", color:"#374151", border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btnSec:   { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
@@ -196,7 +196,7 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
   const totalReceber  = lancsCli.filter(r=>r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const fmtV = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   const secBtn = () => ({ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", borderBottom:"1px solid #f3f4f6", padding:"12px 0", cursor:"pointer", fontFamily:"inherit", color:"#374151", fontSize:13, fontWeight:600 });
-  const card = { border:"1px solid #e5e7eb", borderRadius:12, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff" };
+  const card = { border:"2px solid #d1d5db", borderRadius:12, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff" };
 
   return (
     <div>
@@ -246,17 +246,15 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
           <div>
             <div style={C.secTit}>Contatos</div>
             {cliente.contatos?.map(ct=>(
-              <div key={ct.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderBottom:"1px solid #f9fafb" }}>
-                {ct.whatsapp && ct.telefone && (
-                  <a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer" title="Abrir WhatsApp"
-                    style={{ display:"flex", alignItems:"center", justifyContent:"center", width:28, height:28, borderRadius:"50%", background:"#16a34a", color:"#fff", flexShrink:0, textDecoration:"none", fontSize:14 }}>
-                    ✆
-                  </a>
-                )}
-                <div style={{ minWidth:0 }}>
+              <div key={ct.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid #f9fafb" }}>
+                <div style={{ minWidth:0, flex:1 }}>
                   <div style={{fontSize:13,fontWeight:600,color:"#111"}}>{ct.nome} <span style={{fontWeight:400,color:"#9ca3af"}}>({ct.cargo})</span></div>
                   <div style={{fontSize:12,color:"#6b7280",marginTop:2}}>{ct.telefone}</div>
                 </div>
+                {ct.whatsapp && ct.telefone && (
+                  <a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer"
+                    style={{fontSize:12,color:"#fff",textDecoration:"none",background:"#16a34a",border:"1px solid #16a34a",borderRadius:6,padding:"4px 10px",flexShrink:0,fontWeight:600}}>WhatsApp</a>
+                )}
               </div>
             ))}
           </div>
@@ -274,7 +272,7 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
             {lancsCli.length===0?<p style={{color:"#9ca3af",fontSize:13,margin:0}}>Nenhum lançamento.</p>:(
               <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap:10 }}>
                 {[["Receita total",totalContabil,"#2563eb"],["Recebido",totalRecebido,"#16a34a"],["A receber",totalReceber,"#d97706"]].map(([l,v,cor])=>(
-                  <div key={l} style={{border:"1px solid #e5e7eb",borderRadius:10,padding:"14px"}}>
+                  <div key={l} style={{border:"2px solid #d1d5db",borderRadius:10,padding:"14px"}}>
                     <div style={{fontSize:11,color:"#9ca3af",fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{l}</div>
                     <div style={{fontSize:16,fontWeight:700,color:cor}}>{fmtV(v)}</div>
                   </div>
@@ -525,13 +523,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       <div
         onClick={() => openDetail(c)}
         style={{
-          background:"#fff", border:"1px solid #e5e7eb", borderRadius:8,
+          background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
           padding:"10px 14px", marginBottom:6, cursor:"pointer",
           display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
           transition:"border-color 0.15s",
         }}
         onMouseEnter={e=>e.currentTarget.style.borderColor="#d1d5db"}
-        onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}>
+        onMouseLeave={e=>e.currentTarget.style.borderColor="#d1d5db"}>
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
           <div style={{ fontSize:13, fontWeight:600, color:"#111", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {c.nome}
@@ -546,7 +544,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               value={colunaDoCliente(c)}
               onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
               onClick={e => e.stopPropagation()}
-              style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
+              style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"2px solid #d1d5db", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
               {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
             </select>
           ) : (
@@ -702,9 +700,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             const col = COLUNAS.find(x=>x.key===colunaDoCliente(c)) || COLUNAS[0];
             const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
             return (
-              <div key={c.id} style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
+              <div key={c.id} style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer" }}
                 onMouseEnter={e=>e.currentTarget.style.borderColor="#111"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="#e5e7eb"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="#d1d5db"}
                 onClick={()=>openDetail(c)}>
                 <div style={{ width:40, height:40, borderRadius:10, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -713,8 +711,8 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
                   <span style={C.tag(col.cor)}>{col.label}</span>
-                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px" }}>WA</a>}
-                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"1px solid #e5e7eb", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"2px solid #d1d5db", borderRadius:6, padding:"4px 10px" }}>WA</a>}
+                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"2px solid #d1d5db", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
                 </div>
               </div>
             );
@@ -820,7 +818,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <div style={{ display:"flex", gap:8 }}>
           {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
             <button key={v} onClick={()=>setForm({...form,tipo:v})}
-              style={{ border:"1px solid #e5e7eb", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+              style={{ border:"2px solid #d1d5db", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
           ))}
         </div>
       </div>
@@ -902,7 +900,7 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
   };
 
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px" }}>
+    <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Projetos</div>
@@ -923,9 +921,9 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
               <div
                 key={orc.id}
                 onClick={() => onAbrirOrcamento(cliente, orc, "editar")}
-                style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+                style={{ border: "2px solid #d1d5db", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "#d1d5db"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}>
+                onMouseLeave={e => e.currentTarget.style.borderColor="#d1d5db"}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
                   <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -980,7 +978,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "formContrato" && formContrato && obraSelecionada) {
     return (
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("contratosDaObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Contratado *</label><input style={C.input} value={formContrato.nomeContratado} onChange={e => setFormContrato({ ...formContrato, nomeContratado: e.target.value })} placeholder="Nome da empresa/pessoa" /></div>
@@ -1007,7 +1005,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "form" && formObra) {
     return (
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
@@ -1032,7 +1030,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     return (
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <div style={{ width: 40, height: 40, borderRadius: 10, background: "#2563eb15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>📋</div>
@@ -1051,7 +1049,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             {contratosDaObra.map(contrato => {
               const sts = statusContrato[contrato.status] || statusContrato.ativo;
               return (
-                <div key={contrato.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
+                <div key={contrato.id} style={{ border: "2px solid #d1d5db", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{contrato.nomeContratado}</div>
                     <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1082,7 +1080,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   if (view === "detalheObra" && obraSelecionada) {
     return (
-      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div style={{ width: 48, height: 48, borderRadius: 12, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>🏗️</div>
@@ -1100,12 +1098,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <div style={{ fontSize: 13, fontWeight: 600, color: "#111", textAlign: "center" }}>Contratos</div>
             <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
           </button>
-          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
+          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }} style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
             <div style={{ fontSize: 32 }}>📅</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
             <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
           </button>
-          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
+          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }} style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
             <div style={{ fontSize: 32 }}>📁</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
             <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
@@ -1136,7 +1134,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
               )}
             </div>
             {obraSelecionada.descricao && (
-              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e5e7eb" }}>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "2px solid #d1d5db" }}>
                 <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Descrição</div>
                 <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{obraSelecionada.descricao}</div>
               </div>
@@ -1153,7 +1151,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
 
   // Lista de obras — view padrão
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+    <div style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
         <div style={{ width: 40, height: 40, borderRadius: 10, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🏗️</div>
         <div>
@@ -1174,9 +1172,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
               <div
                 key={obra.id}
                 onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }}
-                style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+                style={{ border: "2px solid #d1d5db", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "#d1d5db"}
-                onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}>
+                onMouseLeave={e => e.currentTarget.style.borderColor="#d1d5db"}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
                   <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>

@@ -53,7 +53,7 @@ function getEstilos(loading) {
     header: { textAlign: "center", marginBottom: 32 },
     titulo: { fontSize: 22, fontWeight: 700, color: "#111", letterSpacing: -0.5, margin: 0 },
     sub: { fontSize: 13, color: "#9ca3af", marginTop: 6 },
-    card: { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: "28px 24px" },
+    card: { background: "#fff", border: "2px solid #d1d5db", borderRadius: 12, padding: "28px 24px" },
     label: { fontSize: 13, color: "#6b7280", display: "block", marginBottom: 6 },
     input: {
       width: "100%",

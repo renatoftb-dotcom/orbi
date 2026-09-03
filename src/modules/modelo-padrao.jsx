@@ -72,7 +72,7 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
   return (
     <div style={{
       position:"sticky", top:0, zIndex:20, background:"#fff",
-      borderBottom:"1px solid #e5e7eb", padding:"10px 16px",
+      borderBottom:"2px solid #d1d5db", padding:"10px 16px",
       display:"flex", alignItems:"center", gap:10, overflowX:"auto",
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
@@ -92,7 +92,7 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
             style={{
               flexShrink:0,
               padding: ativo ? "5px 9px 4px" : "6px 10px 5px",
-              border: ativo ? "2px solid #111" : "1px solid #e5e7eb",
+              border: ativo ? "2px solid #111" : "2px solid #d1d5db",
               background: ativo ? "#fafbfc" : "#fff",
               borderRadius:8, cursor:"pointer", fontFamily:"inherit",
               display:"flex", flexDirection:"column", alignItems:"center", gap:3,
@@ -1396,7 +1396,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             - Em edição sem onSalvarProposta → "Gerar PDF" (chama handlePdf direto)
             Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
         <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-          <button onClick={onVoltar} style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
+          <button onClick={onVoltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
             ← Voltar
           </button>
           {(propostaInfo || lockEdicao) ? (
@@ -1614,7 +1614,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     <div style={{
                       display: "inline-block",
                       padding: "5px 14px",
-                      border: "1px solid #e5e7eb",
+                      border: "2px solid #d1d5db",
                       borderRadius: 8,
                       background: "#fafbfc",
                       fontSize: 13, fontWeight: 600,
@@ -2035,7 +2035,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                 </p>
                 <div style={{ display:"flex", gap:8, marginTop:20, justifyContent:"flex-end" }}>
                   <button onClick={() => setConfirmSalvar(false)}
-                    style={{ background:"#fff", border:"1px solid #e5e7eb", borderRadius:7, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#374151" }}>
+                    style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#374151" }}>
                     Cancelar
                   </button>
                   <button data-tutorial-id="modal-confirmar-salvar" onClick={handleSalvarProposta}
@@ -2329,7 +2329,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     title="Remover bloco"
                     className="no-print"
                     style={{ fontSize:11, color:"#d1d5db", cursor:"pointer", padding:"2px 6px", borderRadius:4,
-                      border:"1px solid #e5e7eb", background:"#fafafa", lineHeight:1.4,
+                      border:"2px solid #d1d5db", background:"#fafafa", lineHeight:1.4,
                       userSelect:"none" }}>✕ remover</span>
                 )}
               </div>

@@ -369,10 +369,10 @@ function Escritorio({ data, save }) {
 
   const E = {
     wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
-    header: { borderBottom:"1px solid #e5e7eb", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
+    header: { borderBottom:"2px solid #d1d5db", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
     titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
-    abas: { display:"flex", gap:0, borderBottom:"1px solid #e5e7eb", padding:"0 32px" },
+    abas: { display:"flex", gap:0, borderBottom:"2px solid #d1d5db", padding:"0 32px" },
     aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #111" : "2px solid transparent", color: ativa ? "#111" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body: { padding:"32px", maxWidth:760 },
     secao: { marginBottom:32 },
@@ -389,7 +389,7 @@ function Escritorio({ data, save }) {
     btnAdd: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
     btnSalvo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
     // Equipe
-    membroCard: { border:"1px solid #e5e7eb", borderRadius:10, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
+    membroCard: { border:"2px solid #d1d5db", borderRadius:10, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
     membroNome: { fontSize:14, fontWeight:600, color:"#111", marginBottom:2 },
     membroCargo: { fontSize:12, color:"#9ca3af" },
     membroInfo: { fontSize:12, color:"#6b7280", marginTop:6, display:"flex", gap:16 },
@@ -440,7 +440,7 @@ function Escritorio({ data, save }) {
           <div style={{
             width: 160,
             height: 100,
-            border: form.logo ? "1px solid #e5e7eb" : "1.5px dashed #d1d5db",
+            border: form.logo ? "2px solid #d1d5db" : "1.5px dashed #d1d5db",
             borderRadius: 8,
             display: "flex",
             alignItems: "center",
@@ -802,7 +802,7 @@ function Escritorio({ data, save }) {
             </div>
             <div style={{ display:"flex", gap:6 }}>
               <button onClick={() => setNovoMembro(m)}
-                style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                 Editar
               </button>
               <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
@@ -960,7 +960,7 @@ function Escritorio({ data, save }) {
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
                       background:"#fafafa", color:"#374151", fontWeight:600,
-                      border:"1px solid #e5e7eb",
+                      border:"2px solid #d1d5db",
                       textTransform:"uppercase", letterSpacing:0.5,
                     }} title="Senha foi resetada — usuário precisa trocá-la no próximo login">
                       Trocar senha
@@ -988,7 +988,7 @@ function Escritorio({ data, save }) {
                     });
                     setConfirmSenha("");
                   }}
-                  style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                  style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                   Editar
                 </button>
                 {/* Reset de senha — só admin de empresa pode, não pra si mesmo,
@@ -997,7 +997,7 @@ function Escritorio({ data, save }) {
                   <button
                     onClick={() => setUsuarioParaResetar(u)}
                     title="Resetar senha do usuário"
-                    style={{ background:"none", border:"1px solid #e5e7eb", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    style={{ background:"none", border:"2px solid #d1d5db", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                     Resetar senha
                   </button>
                 )}

@@ -141,7 +141,7 @@ function Etapas({ data, save }) {
           placeholder="Buscar cliente ou referência…"
           style={{
             flex:1, maxWidth:240, padding:"6px 12px",
-            border:"1px solid #e5e7eb", borderRadius:6,
+            border:"2px solid #d1d5db", borderRadius:6,
             fontSize:12.5, color:"#111", background:"#fff",
             fontFamily:"inherit", outline:"none",
           }}
@@ -249,7 +249,7 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
   return (
     <div style={{
       background:"#fff",
-      border: atrasado ? "1px solid #fecaca" : "1px solid #e5e7eb",
+      border: atrasado ? "1px solid #fecaca" : "2px solid #d1d5db",
       borderRadius:8, padding:12,
       cursor:"pointer", transition:"all 0.15s",
       display:"flex", flexDirection:"column", gap:8,
@@ -552,7 +552,7 @@ function Obras({ data, save }) {
             return (
               <div key={obra.id} style={{
                 background: concluida ? "#fafafa" : "#fff",
-                border:"1px solid #e5e7eb", borderRadius:9,
+                border:"2px solid #d1d5db", borderRadius:9,
                 padding:"12px 16px",
                 display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
               }}>
@@ -586,7 +586,7 @@ function Obras({ data, save }) {
                   )}
                   {concluida && (
                     <button onClick={() => reabrirObra(obra)}
-                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"1px solid #e5e7eb", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"2px solid #d1d5db", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                       Reabrir
                     </button>
                   )}
