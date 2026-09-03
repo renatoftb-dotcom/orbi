@@ -5396,38 +5396,73 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
       {/* Aba Obras */}
       {aba === "obras" && (
         <>
-          {obras.length === 0 ? (
-            <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
-              Nenhuma obra cadastrada. {perm.podeEditar && <button onClick={novaObra} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeira obra</button>}
+          {view === "detalheObra" && obraSelecionada ? (
+            <div>
+              <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+                <div style={{ width: 48, height: 48, borderRadius: 12, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>🏗️</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>{obraSelecionada.nome}</div>
+                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{obraSelecionada.responsavel || "Sem responsável"}</div>
+                </div>
+                {perm.podeEditar && (
+                  <button onClick={() => editarObra(obraSelecionada)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                )}
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
+                <button onClick={() => { setAba("contratos"); setView("lista"); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, transition: "all 0.2s", fontFamily: "inherit" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "#f59e0b"; e.currentTarget.style.background = "#f59e0b08"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "#fff"; }}>
+                  <div style={{ fontSize: 32 }}>📋</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", textAlign: "center" }}>Contratos</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Gerenciar contratos desta obra</div>
+                </button>
+                <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
+                  <div style={{ fontSize: 32 }}>📅</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
+                  <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
+                </button>
+                <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
+                  <div style={{ fontSize: 32 }}>📁</div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
+                  <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
+                </button>
+              </div>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {obras.map(obra => {
-                const sts = statusObra[obra.status] || statusObra.planejamento;
-                return (
-                  <div key={obra.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
-                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", gap: 8 }}>
-                        <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
-                        {obra.responsavel && <span>{obra.responsavel}</span>}
-                        {obra.dataInicio && <span>{new Date(obra.dataInicio).toLocaleDateString("pt-BR")}</span>}
+            <>
+              {obras.length === 0 ? (
+                <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+                  Nenhuma obra cadastrada. {perm.podeEditar && <button onClick={novaObra} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeira obra</button>}
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {obras.map(obra => {
+                    const sts = statusObra[obra.status] || statusObra.planejamento;
+                    return (
+                      <div key={obra.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "all 0.15s" }} onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }} onMouseEnter={e => e.currentTarget.style.borderColor = "#111"} onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
+                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", gap: 8 }}>
+                            <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
+                            {obra.responsavel && <span>{obra.responsavel}</span>}
+                            {obra.dataInicio && <span>{new Date(obra.dataInicio).toLocaleDateString("pt-BR")}</span>}
+                          </div>
+                        </div>
+                        {perm.podeEditar && (
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button onClick={(e) => { e.stopPropagation(); editarObra(obra); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                            <button onClick={(e) => { e.stopPropagation(); deletarObra(obra.id); }} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    {perm.podeEditar && (
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <button onClick={() => editarObra(obra)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
-                        <button onClick={() => deletarObra(obra.id)} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+                    );
+                  })}
+                </div>
+              )}
 
-          {perm.podeEditar && obras.length > 0 && (
-            <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novaObra}>+ Adicionar obra</button>
+              {perm.podeEditar && obras.length > 0 && (
+                <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novaObra}>+ Adicionar obra</button>
+              )}
+            </>
           )}
         </>
       )}
