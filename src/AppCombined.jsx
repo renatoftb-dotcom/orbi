@@ -5152,7 +5152,7 @@ function ModalAdicionarServico({ cliente, onAtivar, onClose }) {
   const servicos = [
     { id: "projeto",            nome: "Projeto",                disponivel: true,  desc: "Anteprojeto, aprovação na prefeitura, executivo." },
     { id: "acompanhamentoObra", nome: "Acompanhamento de Obra", disponivel: false, desc: "Visitas técnicas, ART/RRT, apoio durante a obra." },
-    { id: "gestaoObra",         nome: "Gestão de Obra",         disponivel: false, desc: "Coordenação completa, contratação de equipes, cronograma." },
+    { id: "gestaoObra",         nome: "Gestão de Obra",         disponivel: true,  desc: "Coordenação completa, contratação de equipes, cronograma." },
     { id: "empreendimento",     nome: "Empreendimento",         disponivel: false, desc: "Viabilidade, incorporação, gestão de empreendimento." },
   ];
 
@@ -5251,6 +5251,228 @@ function ModalAdicionarServico({ cliente, onAtivar, onClose }) {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function GestaoObraPanel({ cliente, data, save, isMobile }) {
+  const perm = getPermissoes();
+  const [aba, setAba] = useState("obras");
+  const [view, setView] = useState("lista");
+  const [formObra, setFormObra] = useState(null);
+  const [formContrato, setFormContrato] = useState(null);
+  const [obraSelecionada, setObraSelecionada] = useState(null);
+
+  const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
+  const contratos = (data.contratos || []).filter(c => c.clienteId === cliente.id);
+  const statusObra = { planejamento: { label: "Planejamento", cor: "#f59e0b" }, execucao: { label: "Em execução", cor: "#3b82f6" }, concluida: { label: "Concluída", cor: "#10b981" } };
+  const statusContrato = { ativo: { label: "Ativo", cor: "#10b981" }, pendente: { label: "Pendente", cor: "#f59e0b" }, encerrado: { label: "Encerrado", cor: "#9ca3af" } };
+
+  function novaObra() {
+    setFormObra({ id: uid(), clienteId: cliente.id, nome: "", status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "", ativo: true });
+    setView("form");
+  }
+
+  function editarObra(obra) {
+    setFormObra({ ...obra });
+    setView("form");
+  }
+
+  function salvarObra() {
+    if (!formObra.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome da obra", tipo: "aviso" }); return; }
+    const ehNova = !obras.find(o => o.id === formObra.id);
+    const novasObras = ehNova ? [...obras, formObra] : obras.map(o => o.id === formObra.id ? formObra : o);
+    save({ ...data, obras: novasObras });
+    setView("lista");
+  }
+
+  async function deletarObra(obraId) {
+    const ok = await dialogo.confirmar({ titulo: "Remover obra?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
+    if (!ok) return;
+    save({ ...data, obras: obras.filter(o => o.id !== obraId) });
+  }
+
+  function novoContrato() {
+    setFormContrato({ id: uid(), clienteId: cliente.id, obraId: "", nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" });
+    setView("formContrato");
+  }
+
+  function editarContrato(contrato) {
+    setFormContrato({ ...contrato });
+    setView("formContrato");
+  }
+
+  function salvarContrato() {
+    if (!formContrato.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Informe o nome do contratado", tipo: "aviso" }); return; }
+    const ehNovo = !contratos.find(c => c.id === formContrato.id);
+    const novosContratos = ehNovo ? [...contratos, formContrato] : contratos.map(c => c.id === formContrato.id ? formContrato : c);
+    save({ ...data, contratos: novosContratos });
+    setView("lista");
+  }
+
+  async function deletarContrato(contratoId) {
+    const ok = await dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
+    if (!ok) return;
+    save({ ...data, contratos: contratos.filter(c => c.id !== contratoId) });
+  }
+
+  if (view === "formContrato" && formContrato) {
+    return (
+      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>Contratos</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div><label style={C.label}>Contratado *</label><input style={C.input} value={formContrato.nomeContratado} onChange={e => setFormContrato({ ...formContrato, nomeContratado: e.target.value })} placeholder="Nome da empresa/pessoa" /></div>
+          <div><label style={C.label}>Obra vinculada</label><select style={{ ...C.input, cursor: "pointer" }} value={formContrato.obraId} onChange={e => setFormContrato({ ...formContrato, obraId: e.target.value })}><option value="">Sem obra vinculada</option>{obras.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></div>
+          <div><label style={C.label}>Valor (R$)</label><input style={C.input} type="number" value={formContrato.valor} onChange={e => setFormContrato({ ...formContrato, valor: e.target.value })} step="0.01" /></div>
+          <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={formContrato.status} onChange={e => setFormContrato({ ...formContrato, status: e.target.value })}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+          <div><label style={C.label}>Data de assinatura</label><input style={C.input} type="date" value={formContrato.dataAssinatura} onChange={e => setFormContrato({ ...formContrato, dataAssinatura: e.target.value })} /></div>
+          <div><label style={C.label}>Data de vencimento</label><input style={C.input} type="date" value={formContrato.dataVencimento} onChange={e => setFormContrato({ ...formContrato, dataVencimento: e.target.value })} /></div>
+          <div style={{ gridColumn: "1 / -1" }}><label style={C.label}>Descrição do serviço</label><textarea style={{ ...C.input, resize: "vertical" }} value={formContrato.descricaoServico} onChange={e => setFormContrato({ ...formContrato, descricaoServico: e.target.value })} rows={2} /></div>
+        </div>
+        <div style={{ marginBottom: 12 }}><label style={C.label}>Observações</label><textarea style={{ ...C.input, resize: "vertical" }} value={formContrato.observacoes} onChange={e => setFormContrato({ ...formContrato, observacoes: e.target.value })} rows={2} /></div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button style={C.btnSec} onClick={() => setView("lista")}>Cancelar</button>
+          <button style={C.btn} onClick={salvarContrato}>Salvar contrato</button>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === "form" && formObra) {
+    return (
+      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
+          <span style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>Gestão de Obra</span>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div><label style={C.label}>Nome da obra *</label><input style={C.input} value={formObra.nome} onChange={e => setFormObra({ ...formObra, nome: e.target.value })} /></div>
+          <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={formObra.status} onChange={e => setFormObra({ ...formObra, status: e.target.value })}>{Object.entries(statusObra).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+          <div><label style={C.label}>Data de início</label><input style={C.input} type="date" value={formObra.dataInicio} onChange={e => setFormObra({ ...formObra, dataInicio: e.target.value })} /></div>
+          <div><label style={C.label}>Data de conclusão</label><input style={C.input} type="date" value={formObra.dataFim} onChange={e => setFormObra({ ...formObra, dataFim: e.target.value })} /></div>
+          <div style={isMobile ? { gridColumn: "1 / -1" } : {}}><label style={C.label}>Responsável</label><input style={C.input} value={formObra.responsavel} onChange={e => setFormObra({ ...formObra, responsavel: e.target.value })} placeholder="Nome do responsável" /></div>
+        </div>
+        <div style={{ marginBottom: 12 }}><label style={C.label}>Descrição</label><textarea style={{ ...C.input, resize: "vertical" }} value={formObra.descricao} onChange={e => setFormObra({ ...formObra, descricao: e.target.value })} rows={3} /></div>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+          <button style={C.btnSec} onClick={() => setView("lista")}>Cancelar</button>
+          <button style={C.btn} onClick={salvarObra}>Salvar obra</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
+        <span style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>Gestão de Obra</span>
+      </div>
+
+      {/* Abas */}
+      <div style={{ display: "flex", borderBottom: "1px solid #e5e7eb", marginBottom: 16, gap: 0 }}>
+        {[["obras", "Obras"], ["contratos", "Contratos"]].map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => { setAba(id); setView("lista"); }}
+            style={{
+              padding: "10px 16px",
+              fontSize: 13,
+              fontWeight: aba === id ? 600 : 400,
+              color: aba === id ? "#111" : "#6b7280",
+              background: "transparent",
+              border: "none",
+              borderBottom: aba === id ? "2px solid #f59e0b" : "2px solid transparent",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Aba Obras */}
+      {aba === "obras" && (
+        <>
+          {obras.length === 0 ? (
+            <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+              Nenhuma obra cadastrada. {perm.podeEditar && <button onClick={novaObra} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeira obra</button>}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {obras.map(obra => {
+                const sts = statusObra[obra.status] || statusObra.planejamento;
+                return (
+                  <div key={obra.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", gap: 8 }}>
+                        <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
+                        {obra.responsavel && <span>{obra.responsavel}</span>}
+                        {obra.dataInicio && <span>{new Date(obra.dataInicio).toLocaleDateString("pt-BR")}</span>}
+                      </div>
+                    </div>
+                    {perm.podeEditar && (
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => editarObra(obra)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                        <button onClick={() => deletarObra(obra.id)} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {perm.podeEditar && obras.length > 0 && (
+            <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novaObra}>+ Adicionar obra</button>
+          )}
+        </>
+      )}
+
+      {/* Aba Contratos */}
+      {aba === "contratos" && (
+        <>
+          {contratos.length === 0 ? (
+            <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+              Nenhum contrato cadastrado. {perm.podeEditar && <button onClick={novoContrato} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeiro contrato</button>}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {contratos.map(contrato => {
+                const sts = statusContrato[contrato.status] || statusContrato.ativo;
+                const obraVinculada = obras.find(o => o.id === contrato.obraId);
+                return (
+                  <div key={contrato.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{contrato.nomeContratado}</div>
+                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
+                        {contrato.valor && <span>R$ {parseFloat(contrato.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                        {obraVinculada && <span style={{ color: "#6b7280" }}>Obra: {obraVinculada.nome}</span>}
+                        {contrato.dataVencimento && <span>Vence: {new Date(contrato.dataVencimento).toLocaleDateString("pt-BR")}</span>}
+                      </div>
+                      {contrato.descricaoServico && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>{contrato.descricaoServico}</div>}
+                    </div>
+                    {perm.podeEditar && (
+                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                        <button onClick={() => editarContrato(contrato)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                        <button onClick={() => deletarContrato(contrato.id)} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {perm.podeEditar && contratos.length > 0 && (
+            <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novoContrato}>+ Adicionar contrato</button>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -5455,6 +5677,11 @@ function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
         <div style={{ border:"1px dashed #e5e7eb", borderRadius:12, padding:"32px", textAlign:"center", color:"#9ca3af", fontSize:13 }}>
           Nenhum serviço cadastrado. Clique em "+ Adicionar Serviço" para começar.
         </div>
+      )}
+
+      {/* ── Serviço Gestão de Obra ── */}
+      {cliente.servicos?.gestaoObra && (
+        <GestaoObraPanel cliente={cliente} data={data} save={save} isMobile={isMobile} />
       )}
 
       {/* ── Serviço Projeto ── */}
