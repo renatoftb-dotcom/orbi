@@ -134,7 +134,7 @@ function TplInputMoeda({ valor, onChange, style, ...rest }) {
         onBlur={handleBlur}
         style={{
           width: "100%",
-          border: "1px solid #d1d5db",
+          border: "1.5px solid rgba(38,36,33,0.16)",
           borderRadius: 14,
           padding: "11px 12px 11px 36px",
           fontSize: 14,
@@ -144,8 +144,8 @@ function TplInputMoeda({ valor, onChange, style, ...rest }) {
           boxSizing: "border-box",
           transition: "border-color 0.12s",
         }}
-        onFocus={e => { e.currentTarget.style.borderColor = "#111"; }}
-        onBlurCapture={e => { e.currentTarget.style.borderColor = "#d1d5db"; }}
+        onFocus={e => { e.currentTarget.style.borderColor = "#b5652f"; }}
+        onBlurCapture={e => { e.currentTarget.style.borderColor = "rgba(38,36,33,0.16)"; }}
         {...rest}
       />
     </div>
@@ -403,7 +403,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   };
   const card = {
     background: "#fff",
-    border: "2px solid #d1d5db",
+    border: "1.5px solid rgba(38,36,33,0.16)",
     borderRadius: 14,
     padding: "22px 24px",
     marginBottom: 16,
@@ -421,13 +421,13 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     fontSize: 12.5, color: "#374151", fontWeight: 500,
     marginBottom: 6, display: "block",
   };
-  const labelOptional = { color: "#d1d5db", fontWeight: 400 };
+  const labelOptional = { color: "#9ca3af", fontWeight: 400 };
   const textareaBase = {
     width: "100%",
-    border: "1px solid #d1d5db",
+    border: "1.5px solid rgba(38,36,33,0.16)",
     borderRadius: 14,
     padding: "12px 14px",
-    fontSize: 13.5, color: "#111",
+    fontSize: 13.5, color: "#262421",
     fontFamily: "inherit",
     resize: "vertical",
     outline: "none",
@@ -436,7 +436,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
     transition: "border-color 0.12s",
   };
   const btnPrimary = {
-    background: "#111", color: "#fff",
+    background: "#262421", color: "#fff",
     border: "none", borderRadius: 14,
     padding: "12px 22px",
     fontSize: 13, fontWeight: 600, cursor: "pointer",
@@ -445,7 +445,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   };
   const btnSecondary = {
     background: "#fff", color: "#374151",
-    border: "1px solid #d1d5db", borderRadius: 14,
+    border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 14,
     padding: "12px 18px",
     fontSize: 13, cursor: "pointer", fontFamily: "inherit",
     transition: "border-color 0.12s",
@@ -491,7 +491,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   return (
     <div style={wrapNovo}>
       <style>{`
-        .vk-tpl-textarea:focus { border-color: #111 !important; }
+        .vk-tpl-textarea:focus { border-color: #b5652f !important; }
         .vk-tpl-btn-primary:hover { background: #000 !important; }
         .vk-tpl-btn-secondary:hover { border-color: #9ca3af !important; }
         .vk-tpl-btn-ghost:hover { color: #6b7280 !important; }
@@ -512,21 +512,21 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         }
         .vk-tpl-sidebar-item:hover {
           background: #fafbfc;
-          color: #111;
+          color: #262421;
         }
         .vk-tpl-sidebar-item.is-active {
           background: #f3f4f6;
-          color: #111;
+          color: #262421;
           font-weight: 600;
         }
         .vk-tpl-sidebar-item.is-placeholder {
-          color: #d1d5db;
+          color: #9ca3af;
           cursor: not-allowed;
           font-style: italic;
         }
         .vk-tpl-sidebar-item.is-placeholder:hover {
           background: transparent;
-          color: #d1d5db;
+          color: #9ca3af;
         }
         @media (max-width: 720px) {
           .vk-tpl-grid { grid-template-columns: 1fr !important; gap: 0 !important; }
@@ -534,7 +534,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
             position: static !important;
             top: auto !important;
             margin-bottom: 16px;
-            border: 2px solid #d1d5db;
+            border: 1.5px solid rgba(38,36,33,0.16);
             border-radius: 12px;
             padding: 10px;
           }
@@ -571,7 +571,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8 }}>
           VICKE · Template de edição
         </div>
-        <div style={{ fontSize: 22, fontWeight: 300, color: "#111", letterSpacing: -0.4, lineHeight: 1.2 }}>
+        <div style={{ fontSize: 22, fontWeight: 300, color: "#262421", letterSpacing: -0.4, lineHeight: 1.2 }}>
           Ajustes finais antes de gerar o orçamento
         </div>
         <div style={{ fontSize: 13, color: "#6b7280", lineHeight: 1.55, marginTop: 10, maxWidth: 600 }}>
@@ -630,27 +630,27 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         <div style={cardTitle}>Resumo do orçamento</div>
         <div style={resumoRow}>
           <span style={{ color: "#6b7280" }}>Cliente</span>
-          <span style={{ color: "#111", fontWeight: 500 }}>{safeData.clienteNome || "—"}</span>
+          <span style={{ color: "#262421", fontWeight: 500 }}>{safeData.clienteNome || "—"}</span>
         </div>
         <div style={resumoRow}>
           <span style={{ color: "#6b7280" }}>Projeto</span>
-          <span style={{ color: "#111", fontWeight: 500 }}>{tipoTxt}</span>
+          <span style={{ color: "#262421", fontWeight: 500 }}>{tipoTxt}</span>
         </div>
         <div style={resumoRow}>
           <span style={{ color: "#6b7280" }}>Padrão</span>
-          <span style={{ color: "#111", fontWeight: 500 }}>{padraoTxt}</span>
+          <span style={{ color: "#262421", fontWeight: 500 }}>{padraoTxt}</span>
         </div>
         {safeData.calculo?.areaTotal ? (
           <div style={resumoRow}>
             <span style={{ color: "#6b7280" }}>Área total</span>
-            <span style={{ color: "#111", fontWeight: 500 }}>
+            <span style={{ color: "#262421", fontWeight: 500 }}>
               {Number(safeData.calculo.areaTotal).toLocaleString("pt-BR")} m²
             </span>
           </div>
         ) : null}
         <div style={resumoRow}>
           <span style={{ color: "#6b7280" }}>Responsável técnico</span>
-          <span style={{ color: "#111", fontWeight: 500 }}>{respLabel}</span>
+          <span style={{ color: "#262421", fontWeight: 500 }}>{respLabel}</span>
         </div>
         {safeData.totCI ? (
           <div style={{
@@ -659,8 +659,8 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
             borderTop: "1px solid #f3f4f6",
             fontSize: 14,
           }}>
-            <span style={{ color: "#111", fontWeight: 600 }}>Honorário total</span>
-            <span style={{ color: "#111", fontWeight: 700 }}>{fmtBRL(safeData.totCI)}</span>
+            <span style={{ color: "#262421", fontWeight: 600 }}>Honorário total</span>
+            <span style={{ color: "#262421", fontWeight: 700 }}>{fmtBRL(safeData.totCI)}</span>
           </div>
         ) : null}
       </div>
@@ -808,7 +808,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           display: "flex", justifyContent: "space-between", alignItems: "baseline",
         }}>
           <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 500 }}>Total</span>
-          <span style={{ fontSize: 18, color: "#111", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+          <span style={{ fontSize: 18, color: "#262421", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
             {fmtBRL((Number(valorArq) || 0) + (Number(valorEng) || 0))}
           </span>
         </div>
@@ -828,21 +828,22 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           .vk-tpl-fp-opt {
             display: inline-flex; align-items: center; gap: 8px;
             padding: 10px 12px; background: #fff;
-            border: 2px solid #d1d5db; border-radius: 8px;
+            border: 1.5px solid rgba(38,36,33,0.16); border-radius: 8px;
             cursor: pointer; text-align: left; flex: 1 1 0; min-width: 0;
-            font-family: inherit; font-size: 12.5px; color: #111;
+            font-family: inherit; font-size: 12.5px; color: #262421;
             transition: all 0.12s; user-select: none;
           }
           .vk-tpl-fp-opt:hover .vk-tpl-fp-check { border-color: #9ca3af; }
           .vk-tpl-fp-opt.selected {
-            background: #fafbfc; border-color: #111;
+            background: #fdf6f0; border-color: #b5652f;
+            box-shadow: 0 0 0 3px rgba(181,101,47,0.14);
             border-width: 1.5px; padding: 9px 11px; font-weight: 500;
           }
-          .vk-tpl-fp-opt.selected .vk-tpl-fp-check { background: #111; border-color: #111; }
+          .vk-tpl-fp-opt.selected .vk-tpl-fp-check { background: #b5652f; border-color: #b5652f; }
           .vk-tpl-fp-opt.selected .vk-tpl-fp-check-mark { display: block; }
           .vk-tpl-fp-check {
             flex-shrink: 0; width: 16px; height: 16px;
-            border-radius: 4px; border: 1.5px solid #d1d5db;
+            border-radius: 4px; border: 1.5px solid rgba(38,36,33,0.16);
             background: #fff; display: flex; align-items: center; justify-content: center;
           }
           .vk-tpl-fp-check-mark { display: none; color: #fff; font-size: 10px; font-weight: 700; line-height: 1; }
@@ -874,19 +875,20 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
         <style>{`
           .vk-tpl-fp2-card {
             display: flex; gap: 0; padding: 0;
-            background: #fff; border: 2px solid #d1d5db;
+            background: #fff; border: 1.5px solid rgba(38,36,33,0.16);
             border-radius: 10px; margin-bottom: 12px; overflow: hidden;
             transition: all 0.12s;
           }
           .vk-tpl-fp2-card.selected {
-            border-color: #111 !important; border-width: 1.5px !important;
-            background: #fafbfc !important;
+            border-color: #b5652f !important; border-width: 1.5px !important;
+            background: #fdf6f0 !important;
+            box-shadow: 0 0 0 3px rgba(181,101,47,0.14);
           }
-          .vk-tpl-fp2-card.selected .vk-tpl-fp2-radio { border: 6px solid #111 !important; }
+          .vk-tpl-fp2-card.selected .vk-tpl-fp2-radio { border: 6px solid #b5652f !important; }
           .vk-tpl-fp2-radio:hover { border-color: #9ca3af; }
           .vk-tpl-fp2-radio {
             flex-shrink: 0; width: 22px; height: 22px;
-            border-radius: 50%; border: 1.5px solid #d1d5db;
+            border-radius: 50%; border: 1.5px solid rgba(38,36,33,0.16);
             background: #fff; cursor: pointer; padding: 0;
             transition: all 0.12s; margin-top: 2px;
           }
@@ -906,10 +908,10 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
             font-size: 11px; font-weight: 600; color: #6b7280;
             text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;
           }
-          .vk-tpl-fp2-resumo-principal { font-size: 14px; font-weight: 600; color: #111; line-height: 1.3; }
+          .vk-tpl-fp2-resumo-principal { font-size: 14px; font-weight: 600; color: #262421; line-height: 1.3; }
           .vk-tpl-fp2-resumo-eco { font-size: 11px; color: #047857; }
           .vk-tpl-fp2-resumo-sub-label { font-size: 11.5px; color: #6b7280; margin-bottom: 2px; }
-          .vk-tpl-fp2-resumo-sub-valor { font-size: 13px; font-weight: 500; color: #111; line-height: 1.3; margin-bottom: 4px; }
+          .vk-tpl-fp2-resumo-sub-valor { font-size: 13px; font-weight: 500; color: #262421; line-height: 1.3; margin-bottom: 4px; }
           .vk-tpl-fp2-etapa-row {
             display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
             gap: 8px; padding: 8px 14px;
@@ -924,11 +926,11 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           .vk-tpl-fp2-checkbox {
             cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
             width: 18px; height: 18px;
-            border-radius: 4px; border: 1.5px solid #d1d5db;
+            border-radius: 4px; border: 1.5px solid rgba(38,36,33,0.16);
             background: #fff; transition: all 0.12s; user-select: none; margin: 0 auto;
           }
           .vk-tpl-fp2-etapa-row.incluida .vk-tpl-fp2-checkbox {
-            background: #111; border-color: #111;
+            background: #262421; border-color: #262421;
           }
           .vk-tpl-fp2-checkbox-inner { color: #fff; font-size: 11px; font-weight: 700; line-height: 1; }
           .vk-tpl-fp2-checkbox:hover { border-color: #6b7280; }
@@ -937,26 +939,26 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
           }
           .vk-tpl-fp2-etapa-nome {
             background: transparent; border: 0; font-size: 13px;
-            font-family: inherit; color: #111; padding: 2px 4px;
+            font-family: inherit; color: #262421; padding: 2px 4px;
             border-radius: 3px; width: 100%;
           }
           .vk-tpl-fp2-etapa-nome:hover { background: #f9fafb; }
-          .vk-tpl-fp2-etapa-nome:focus { background: #fff; outline: 1px solid #111; }
+          .vk-tpl-fp2-etapa-nome:focus { background: #fff; outline: 1px solid #b5652f; }
           .vk-tpl-fp2-etapa-valor { font-size: 12.5px; text-align: right; color: #374151; }
           .vk-tpl-fp2-etapa-rm {
             cursor: pointer; text-align: center;
-            color: #d1d5db; user-select: none; font-size: 14px;
+            color: #9ca3af; user-select: none; font-size: 14px;
           }
           .vk-tpl-fp2-etapa-rm:hover { color: #6b7280; }
           .vk-tpl-fp2-etapa-header {
             display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
             gap: 8px; padding: 10px 14px;
-            border-bottom: 1.5px solid #111; align-items: center;
+            border-bottom: 1.5px solid #262421; align-items: center;
           }
           .vk-tpl-fp2-etapa-total {
             display: grid; grid-template-columns: 28px 1fr 100px 110px 22px;
             gap: 8px; padding: 10px 14px;
-            border-top: 1.5px solid #111; align-items: center;
+            border-top: 1.5px solid #262421; align-items: center;
             background: #fafbfc;
           }
           @media (max-width: 720px) {
@@ -1035,7 +1037,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                   <div className="vk-tpl-fp2-linha-input">
                     <NumStepper valor={v} onChange={setter} min={0} max={100} step={1} width={28} />
                     <span style={{ fontSize: 12.5, color: "#6b7280" }}>%</span>
-                    <span style={{ color: "#d1d5db", fontSize: 11, margin: "0 4px" }}>+</span>
+                    <span style={{ color: "#9ca3af", fontSize: 11, margin: "0 4px" }}>+</span>
                     <span style={{ fontSize: 12.5, color: "#6b7280" }}>final</span>
                     <span style={{ fontSize: 13, fontWeight: 500, color: "#6b7280", padding: "4px 8px", background: "#f3f4f6", borderRadius: 5 }}>
                       {100 - v}%
@@ -1111,7 +1113,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                 <div style={{ flex: 1, padding: "18px 20px", display: "flex", alignItems: "flex-start", gap: 16 }}>
                   <button type="button" className="vk-tpl-fp2-radio" onClick={() => toggleContratacaoTpl(tipo)} />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 16, fontWeight: 500, color: "#111", marginBottom: 14 }}>{titulo}</div>
+                    <div style={{ fontSize: 16, fontWeight: 500, color: "#262421", marginBottom: 14 }}>{titulo}</div>
                     {formasParaCards.map(f => renderLinhaForma(tipo, f))}
                   </div>
                 </div>
@@ -1165,12 +1167,12 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
               {/* Cards de contratação — modo padrão */}
               {formasParaCards.length > 0 && (
                 <>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#111", marginBottom: 6 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#262421", marginBottom: 6 }}>
                     Como o cliente vai poder contratar?
                   </div>
                   {mostraPacote && (
                     <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10, lineHeight: 1.4 }}>
-                      Marque <strong style={{ color: "#111" }}>os dois</strong> pra cliente escolher entre Arq sozinha ou pacote completo. Marque <strong style={{ color: "#111" }}>só Pacote</strong> pra forçar contratação conjunta.
+                      Marque <strong style={{ color: "#262421" }}>os dois</strong> pra cliente escolher entre Arq sozinha ou pacote completo. Marque <strong style={{ color: "#262421" }}>só Pacote</strong> pra forçar contratação conjunta.
                     </div>
                   )}
                   {renderCard("arq", tituloApenas)}
@@ -1190,19 +1192,19 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
               {/* Tabela de etapas + 2 modalidades — modo etapa */}
               {ehPorEtapa && (
                 <>
-                  <div style={{ fontSize: 13, fontWeight: 500, color: "#111", marginBottom: 6, marginTop: formasParaCards.length > 0 ? 24 : 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: "#262421", marginBottom: 6, marginTop: formasParaCards.length > 0 ? 24 : 0 }}>
                     Pagamento por etapa
                   </div>
                   <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 12, lineHeight: 1.4 }}>
-                    Defina o percentual de cada etapa. <strong style={{ color: "#111" }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
+                    Defina o percentual de cada etapa. <strong style={{ color: "#262421" }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
                   </div>
 
-                  <div style={{ border: "2px solid #d1d5db", borderRadius: 14, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
+                  <div style={{ border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
                     <div className="vk-tpl-fp2-etapa-header">
                       <span></span>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em" }}>Etapa</span>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center" }}>%</span>
-                      <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "right" }}>Valor</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#262421", textTransform: "uppercase", letterSpacing: "0.06em" }}>Etapa</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#262421", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "center" }}>%</span>
+                      <span style={{ fontSize: 10, fontWeight: 600, color: "#262421", textTransform: "uppercase", letterSpacing: "0.06em", textAlign: "right" }}>Valor</span>
                       <span></span>
                     </div>
                     {etapasFiltradas.map(et => {
@@ -1222,7 +1224,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                             {et.eng && <div style={{ fontSize: 10.5, color: "#9ca3af", paddingLeft: 4 }}>Estrutural · Elétrico · Hidrossanitário</div>}
                           </span>
                           {et.eng ? (
-                            <span style={{ textAlign: "center", color: "#d1d5db" }}>—</span>
+                            <span style={{ textAlign: "center", color: "#9ca3af" }}>—</span>
                           ) : (
                             <span style={{ textAlign: "center", display: "flex", justifyContent: "center" }}>
                               <NumStepper valor={et.pct} onChange={n => atualizarEtapaPctTpl(et.id, n)} min={0} max={100} step={1} width={28} />
@@ -1238,16 +1240,16 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                     {incluiArqV && (
                       <div style={{ padding: "8px 14px" }}>
                         <button type="button" onClick={adicionarEtapaTpl}
-                          style={{ width: "100%", fontSize: 11.5, color: "#6b7280", background: "transparent", border: "1px dashed #d1d5db", borderRadius: 6, padding: 8, cursor: "pointer", fontFamily: "inherit" }}>
+                          style={{ width: "100%", fontSize: 11.5, color: "#6b7280", background: "transparent", border: "1px dashed rgba(38,36,33,0.2)", borderRadius: 6, padding: 8, cursor: "pointer", fontFamily: "inherit" }}>
                           + Adicionar etapa
                         </button>
                       </div>
                     )}
                     <div className="vk-tpl-fp2-etapa-total">
                       <span></span>
-                      <span style={{ fontWeight: 600, color: "#111", fontSize: 13 }}>Total</span>
-                      <span style={{ fontWeight: 600, color: "#111", fontSize: 13, textAlign: "center" }}>{pctTotal}%</span>
-                      <span style={{ fontWeight: 700, color: "#111", fontSize: 14, textAlign: "right" }}>{fmtBRLfp(Math.round(valorTotal * 100) / 100)}</span>
+                      <span style={{ fontWeight: 600, color: "#262421", fontSize: 13 }}>Total</span>
+                      <span style={{ fontWeight: 600, color: "#262421", fontSize: 13, textAlign: "center" }}>{pctTotal}%</span>
+                      <span style={{ fontWeight: 700, color: "#262421", fontSize: 14, textAlign: "right" }}>{fmtBRLfp(Math.round(valorTotal * 100) / 100)}</span>
                       <span></span>
                     </div>
                   </div>
@@ -1261,7 +1263,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                     <div className="vk-tpl-fp2-card" style={{ display: "flex", marginBottom: 12 }}>
                       <div style={{ flex: 1, padding: "14px 16px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>Contratação etapa a etapa</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>Contratação etapa a etapa</span>
                           <span style={{ fontSize: 11, color: "#9ca3af" }}>(quando há 1 etapa)</span>
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: temAntecipadoMod ? "1fr 1fr" : "1fr", gap: 16 }}>
@@ -1303,7 +1305,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                     <div className="vk-tpl-fp2-card" style={{ display: "flex" }}>
                       <div style={{ flex: 1, padding: "14px 16px" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>Etapas completas</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>Etapas completas</span>
                           <span style={{ fontSize: 11, color: "#9ca3af" }}>(quando há 2+ etapas)</span>
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: temAntecipadoMod ? "1fr 1fr" : "1fr", gap: 16 }}>
