@@ -348,7 +348,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           top: balaoTop, left: balaoLeft,
           maxWidth: TEXT_MAX_W, minWidth: 220,
           zIndex: 1003, pointerEvents: "none",
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
           textAlign: "left",
           background: "#fff", padding: "14px 18px",
           borderRadius: 14,
@@ -691,7 +691,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         padding: "8px 10px", borderRadius: 14,
         border: "2px solid #d1d5db",
         boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-        fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       }}>
         {pausado ? (
           <button style={_btnPrimary} onClick={() => setPausado(false)}>▶ Continuar</button>
@@ -717,7 +717,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           background: "#fff", borderRadius: 14,
           padding: "32px 36px", maxWidth: 440, width: "calc(100% - 48px)",
           zIndex: 1001, boxShadow: "0 24px 48px rgba(0,0,0,0.2)",
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🧪</div>
           <h2 style={{ fontSize: 20, fontWeight: 600, color: "#111", margin: "0 0 10px", letterSpacing: -0.3 }}>
@@ -771,7 +771,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           background: "#fff",
           zIndex: 1000, display: "flex", justifyContent: "center", alignItems: "flex-start",
           paddingTop: "20vh", paddingLeft: 24, paddingRight: 24,
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         }}>
           <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
             <h2 style={{
@@ -964,7 +964,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           background: "#fff", borderRadius: 14,
           padding: "14px 18px", maxWidth: 320, minWidth: 240,
           boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
           ...tooltipStyle,
         }}>
           {passo.titulo && (
@@ -1580,7 +1580,7 @@ function DialogosHost() {
             zIndex: 100000,
             display: "flex", alignItems: "center", justifyContent: "center",
             padding: 20,
-            fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+            fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
             animation: "vickeDialogFade 0.15s ease",
           }}
         >
@@ -1668,7 +1668,7 @@ function DialogosHost() {
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
           pointerEvents: "none",
         }}>
           {toasts.map(t => (
@@ -1848,7 +1848,7 @@ function VersionWatcher() {
         display: "flex",
         alignItems: "center",
         gap: 14,
-        fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         fontSize: 13,
         animation: "vickeToastSlide 0.28s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
         maxWidth: 360,

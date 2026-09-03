@@ -368,7 +368,7 @@ function Escritorio({ data, save }) {
   }
 
   const E = {
-    wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
+    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header: { borderBottom:"2px solid #d1d5db", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
     titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
@@ -945,7 +945,7 @@ function Escritorio({ data, save }) {
                   {ehVoce && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#eff6ff", color:"#2563eb", fontWeight:600,
+                      background:"#fdf6f0", color:"#b5652f", fontWeight:600,
                       textTransform:"uppercase", letterSpacing:0.5,
                     }}>Você</span>
                   )}

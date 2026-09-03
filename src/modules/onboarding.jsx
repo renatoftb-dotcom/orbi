@@ -1936,7 +1936,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   textAnchor="middle"
                   fontSize="12" fontWeight="600"
                   fill="#111"
-                  fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
+                  fontFamily="'Inter', system-ui, -apple-system, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.5s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.tipo === "sub" ? "−" : ""}{moeda(Math.abs(s.delta))}
                 </text>
@@ -1950,7 +1950,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   textAnchor="middle"
                   fontSize="11" fontWeight="500"
                   fill="#374151"
-                  fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
+                  fontFamily="'Inter', system-ui, -apple-system, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.55s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.label}
                 </text>
@@ -1960,7 +1960,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   textAnchor="middle"
                   fontSize="10"
                   fill="#9ca3af"
-                  fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
+                  fontFamily="'Inter', system-ui, -apple-system, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.6s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.sub}
                 </text>
@@ -2002,7 +2002,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                         textAnchor="start"
                         fontSize="10" fontWeight="500"
                         fill="#111"
-                        fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif">
+                        fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                         R$ {valorPorM2}/m²
                       </text>
                     </g>
@@ -2074,7 +2074,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                         fill="#111"
                         fontStyle="italic"
                         fontWeight="400"
-                        fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif">
+                        fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                         {texto}
                       </text>
                     </g>
@@ -2556,7 +2556,7 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
 const tela = {
   position:"fixed", inset:0,
   background:"#fafafa",
-  fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+  fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
   overflowY:"auto",
   display:"flex", justifyContent:"center", alignItems:"flex-start",
 };

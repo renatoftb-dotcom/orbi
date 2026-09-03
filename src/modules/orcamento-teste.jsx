@@ -526,7 +526,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       background:"#fff",
       minHeight:"100vh",
       padding:"28px 32px 60px",
-      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <div style={{ maxWidth:1100, width:"100%" }}>
       {/* Header */}
@@ -5000,7 +5000,7 @@ function EtapaFormaPagamento({
   // O container usa className 'vk-fp-container' (definido no <style>) para
   // permitir media query mobile sem useState/listener.
   const S = {
-    wrap: { background: '#fff', minHeight: '100vh', paddingBottom: 60, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", color: '#111' },
+    wrap: { background: '#fff', minHeight: '100vh', paddingBottom: 60, fontFamily: "'Inter', system-ui, -apple-system, sans-serif", color: '#111' },
     cabecalhoLabel: { fontSize: 11, fontWeight: 500, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
     cabecalhoTitulo: { fontSize: 24, fontWeight: 400, color: '#111', letterSpacing: -0.5, marginBottom: 6 },
     cabecalhoSub: { fontSize: 14, color: '#6b7280', lineHeight: 1.5 },
@@ -5890,7 +5890,7 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
     <div style={{
       background: "#fafaf7", minHeight: "100vh",
       padding: "32px 24px",
-      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       display: "flex", flexDirection: "column", alignItems: "center",
     }}>
       {/* Header */}

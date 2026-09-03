@@ -41,7 +41,7 @@ async function apiPost(path, body) {
 function getEstilos(loading) {
   return {
     wrap: {
-      fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       minHeight: "100vh",
       display: "flex",
       alignItems: "center",

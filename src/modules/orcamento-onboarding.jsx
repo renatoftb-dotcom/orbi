@@ -16,7 +16,7 @@ function OrcamentoOnboarding({ data, save, onVoltar, onConcluido }) {
     <div style={{
       background: "#fff", minHeight: "100vh",
       padding: "60px 24px",
-      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       display: "flex", justifyContent: "center", alignItems: "flex-start",
     }}>
       <div style={{ maxWidth: 560, width: "100%", textAlign: "center" }}>

@@ -74,7 +74,7 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
       position:"sticky", top:0, zIndex:20, background:"#fff",
       borderBottom:"2px solid #d1d5db", padding:"10px 16px",
       display:"flex", alignItems:"center", gap:10, overflowX:"auto",
-      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <span style={{
         fontSize:10, fontWeight:700, color:"#9ca3af",
@@ -697,7 +697,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const LT = "#828a98";
   const MD = "#000000";
   const LN = "#e5e7eb";
-  const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
+  const wrap  = { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
   const page  = { maxWidth:860, margin:"0 auto", padding:"32px 40px 80px" };
   const secH  = (mt=28) => ({ display:"flex", alignItems:"center", gap:12, margin:`${mt}px 0 14px` });
   const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:700, whiteSpace:"nowrap" };
@@ -1120,7 +1120,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     // Cor secundária (#412402, amber 900) é usada pra texto sobre o accent
     // e pra labels de seção sobre fundo branco — bom contraste em ambos.
     const D = {
-      wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
+      wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
       page: { maxWidth:860, margin:"0 auto", padding:0, background:"#fff" },
       // Header: 3 colunas IGUAIS (33.33% cada) com bordas externas arredondadas.
       // Esquerda (amarela) → "PROPOSTA DE PROJETO"

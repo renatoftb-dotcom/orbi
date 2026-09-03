@@ -362,7 +362,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // Proteção: se data ainda não carregou, renderiza loading
   if (!data || !Array.isArray(data.clientes)) {
     return (
-      <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <div style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Clientes</h2>
         <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
       </div>
@@ -575,7 +575,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       const colAtual = COLUNAS.find(x => x.key === abaKanban) || COLUNAS[0];
       const cardsAba = filtrados.filter(c => colunaDoCliente(c) === abaKanban);
       return (
-        <div style={{ fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+        <div style={{ fontFamily:"'Inter', system-ui, -apple-system, sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
           {/* Header mobile */}
           <div style={{ padding:"16px 16px 0", display:"flex", flexDirection:"column", gap:12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -624,7 +624,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
     // ── DESKTOP: kanban 4 colunas ────────────────────────────
     return (
-      <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+      <div style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
         {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div>
@@ -689,7 +689,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       return !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
     });
     return (
-      <div style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <div style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
           <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>

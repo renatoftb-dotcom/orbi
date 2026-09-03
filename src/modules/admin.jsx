@@ -139,7 +139,7 @@ function Admin({ usuario, data, save, initialTab }) {
   }, [aba]);
 
   const S = {
-    wrap:    { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
+    wrap:    { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header:  { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
     titulo:  { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
@@ -153,7 +153,7 @@ function Admin({ usuario, data, save, initialTab }) {
     btnSec:  { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
-    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" },
     modal:   { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     modalLg: { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
@@ -1160,7 +1160,7 @@ function GraficoMensal({ mensal }) {
               {m.orcamentos > 0 && (
                 <text x={xBar + barraW/2} y={yOrc - 8} textAnchor="middle"
                   fontSize="13" fill={labelCor} fontWeight={labelPeso}
-                  fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
+                  fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                   {m.orcamentos}
                 </text>
               )}
@@ -1168,7 +1168,7 @@ function GraficoMensal({ mensal }) {
               {/* Label do mês embaixo */}
               <text x={xGrupo + grupoW/2} y={H - 14} textAnchor="middle"
                 fontSize="12" fill={labelCor} fontWeight={labelPeso}
-                fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
+                fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                 {labelMes(m.mes)}
               </text>
             </g>

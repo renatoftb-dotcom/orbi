@@ -399,7 +399,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   const wrap = {
     maxWidth: 760, margin: "0 auto",
     padding: "32px 24px 60px",
-    fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
   };
   const card = {
     background: "#fff",
@@ -485,7 +485,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   const wrapNovo = {
     maxWidth: 1080, margin: "0 auto",
     padding: "32px 24px 60px",
-    fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
   };
 
   return (

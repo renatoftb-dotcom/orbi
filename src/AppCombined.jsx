@@ -352,7 +352,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           top: balaoTop, left: balaoLeft,
           maxWidth: TEXT_MAX_W, minWidth: 220,
           zIndex: 1003, pointerEvents: "none",
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
           textAlign: "left",
           background: "#fff", padding: "14px 18px",
           borderRadius: 14,
@@ -695,7 +695,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         padding: "8px 10px", borderRadius: 14,
         border: "2px solid #d1d5db",
         boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-        fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       }}>
         {pausado ? (
           <button style={_btnPrimary} onClick={() => setPausado(false)}>▶ Continuar</button>
@@ -721,7 +721,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           background: "#fff", borderRadius: 14,
           padding: "32px 36px", maxWidth: 440, width: "calc(100% - 48px)",
           zIndex: 1001, boxShadow: "0 24px 48px rgba(0,0,0,0.2)",
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🧪</div>
           <h2 style={{ fontSize: 20, fontWeight: 600, color: "#111", margin: "0 0 10px", letterSpacing: -0.3 }}>
@@ -775,7 +775,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           background: "#fff",
           zIndex: 1000, display: "flex", justifyContent: "center", alignItems: "flex-start",
           paddingTop: "20vh", paddingLeft: 24, paddingRight: 24,
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         }}>
           <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
             <h2 style={{
@@ -968,7 +968,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           background: "#fff", borderRadius: 14,
           padding: "14px 18px", maxWidth: 320, minWidth: 240,
           boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
           ...tooltipStyle,
         }}>
           {passo.titulo && (
@@ -1584,7 +1584,7 @@ function DialogosHost() {
             zIndex: 100000,
             display: "flex", alignItems: "center", justifyContent: "center",
             padding: 20,
-            fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+            fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
             animation: "vickeDialogFade 0.15s ease",
           }}
         >
@@ -1672,7 +1672,7 @@ function DialogosHost() {
           display: "flex",
           flexDirection: "column",
           gap: 8,
-          fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+          fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
           pointerEvents: "none",
         }}>
           {toasts.map(t => (
@@ -1852,7 +1852,7 @@ function VersionWatcher() {
         display: "flex",
         alignItems: "center",
         gap: 14,
-        fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         fontSize: 13,
         animation: "vickeToastSlide 0.28s cubic-bezier(0.2, 0.7, 0.3, 1.1)",
         maxWidth: 360,
@@ -3473,11 +3473,12 @@ const CATEGORIAS_PRESTADOR = [
   "Loja / Comércio", "Outro",
 ];
 
+// Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 const PS = {
-  input:  { border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-  label:  { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
-  btn:    { background:"#111", color:"#fff", border:"none", borderRadius:12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec: { background:"#fff", color:"#374151", border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  label:  { fontSize:12, color:"#78716c", fontWeight:500, display:"block", marginBottom:5 },
+  btn:    { background:"#262421", color:"#fff", border:"none", borderRadius:12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+  btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:    (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
 };
@@ -3539,10 +3540,10 @@ function PrestadoresServico({ data, save }) {
 
   // LISTA
   if (view === "list") return (
-    <div style={{ padding:"28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ padding:"28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
+          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
           <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>{prestadores.length} cadastrado{prestadores.length !== 1 ? "s" : ""}</div>
         </div>
         <button style={PS.btn} onClick={openNew}>+ Novo prestador</button>
@@ -3557,19 +3558,19 @@ function PrestadoresServico({ data, save }) {
       </div>
 
       {filtrados.length === 0 ? (
-        <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13, border:"1px dashed #d1d5db", borderRadius:16, background:"#fafafa" }}>
+        <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
           {prestadores.length === 0 ? "Nenhum prestador cadastrado." : "Nenhum resultado para essa busca."}{" "}
-          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#2563eb", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
+          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#b5652f", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
         </div>
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:14 }}>
           {filtrados.map(p => (
-            <div key={p.id} style={{ border:"1.5px solid #d1d5db", borderRadius:16, padding:"16px 18px", background:"#fff" }}>
+            <div key={p.id} style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:16, padding:"16px 18px", background:"#fff" }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"start", gap:8, marginBottom:8 }}>
-                <div style={{ fontSize:14, fontWeight:700, color:"#111" }}>{p.nome}</div>
+                <div style={{ fontSize:14, fontWeight:700, color:"#262421" }}>{p.nome}</div>
                 {p.ativo === false && <span style={PS.tag("#9ca3af")}>Inativo</span>}
               </div>
-              <span style={PS.tag("#2563eb")}>{p.categoria}</span>
+              <span style={PS.tag("#b5652f")}>{p.categoria}</span>
               <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
                 {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
                 {p.telefone && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.telefone}</div>}
@@ -3593,10 +3594,10 @@ function PrestadoresServico({ data, save }) {
 
   // FORMULÁRIO
   return (
-    <div style={{ padding:"28px 32px", maxWidth:560, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ padding:"28px 32px", maxWidth:560, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
         <button style={PS.btnGhost} onClick={()=>setView("list")}>← Voltar</button>
-        <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#262421" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
       </div>
       <form onSubmit={salvar}>
         <div style={{ marginBottom:14 }}>
@@ -3604,7 +3605,7 @@ function PrestadoresServico({ data, save }) {
           <div style={{ display:"flex", gap:8 }}>
             {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
               <button type="button" key={v} onClick={()=>setForm({...form,tipo:v})}
-                style={{ border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+                style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#262421":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
             ))}
           </div>
         </div>
@@ -4619,7 +4620,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // Proteção: se data ainda não carregou, renderiza loading
   if (!data || !Array.isArray(data.clientes)) {
     return (
-      <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <div style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Clientes</h2>
         <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
       </div>
@@ -4832,7 +4833,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       const colAtual = COLUNAS.find(x => x.key === abaKanban) || COLUNAS[0];
       const cardsAba = filtrados.filter(c => colunaDoCliente(c) === abaKanban);
       return (
-        <div style={{ fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+        <div style={{ fontFamily:"'Inter', system-ui, -apple-system, sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
           {/* Header mobile */}
           <div style={{ padding:"16px 16px 0", display:"flex", flexDirection:"column", gap:12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -4881,7 +4882,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
     // ── DESKTOP: kanban 4 colunas ────────────────────────────
     return (
-      <div style={{ padding:"24px 28px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+      <div style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
         {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div>
@@ -4946,7 +4947,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       return !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
     });
     return (
-      <div style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+      <div style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
           <div style={{ fontSize:18, fontWeight:700, color:"#111" }}>Clientes</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -6856,7 +6857,7 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
       position:"sticky", top:0, zIndex:20, background:"#fff",
       borderBottom:"2px solid #d1d5db", padding:"10px 16px",
       display:"flex", alignItems:"center", gap:10, overflowX:"auto",
-      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <span style={{
         fontSize:10, fontWeight:700, color:"#9ca3af",
@@ -7479,7 +7480,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
   const LT = "#828a98";
   const MD = "#000000";
   const LN = "#e5e7eb";
-  const wrap  = { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
+  const wrap  = { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:C, fontSize:13 };
   const page  = { maxWidth:860, margin:"0 auto", padding:"32px 40px 80px" };
   const secH  = (mt=28) => ({ display:"flex", alignItems:"center", gap:12, margin:`${mt}px 0 14px` });
   const secL  = { fontSize:10, textTransform:"uppercase", letterSpacing:"0.08em", color:LT, fontWeight:700, whiteSpace:"nowrap" };
@@ -7902,7 +7903,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
     // Cor secundária (#412402, amber 900) é usada pra texto sobre o accent
     // e pra labels de seção sobre fundo branco — bom contraste em ambos.
     const D = {
-      wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
+      wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111" },
       page: { maxWidth:860, margin:"0 auto", padding:0, background:"#fff" },
       // Header: 3 colunas IGUAIS (33.33% cada) com bordas externas arredondadas.
       // Esquerda (amarela) → "PROPOSTA DE PROJETO"
@@ -9808,7 +9809,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   const wrap = {
     maxWidth: 760, margin: "0 auto",
     padding: "32px 24px 60px",
-    fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
   };
   const card = {
     background: "#fff",
@@ -9894,7 +9895,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   const wrapNovo = {
     maxWidth: 1080, margin: "0 auto",
     padding: "32px 24px 60px",
-    fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+    fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
   };
 
   return (
@@ -10809,7 +10810,7 @@ function OrcamentoOnboarding({ data, save, onVoltar, onConcluido }) {
     <div style={{
       background: "#fff", minHeight: "100vh",
       padding: "60px 24px",
-      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       display: "flex", justifyContent: "center", alignItems: "flex-start",
     }}>
       <div style={{ maxWidth: 560, width: "100%", textAlign: "center" }}>
@@ -11366,7 +11367,7 @@ function TesteOrcamento({ data, save, onCadastrarCliente }) {
       background:"#fff",
       minHeight:"100vh",
       padding:"28px 32px 60px",
-      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <div style={{ maxWidth:1100, width:"100%" }}>
       {/* Header */}
@@ -15840,7 +15841,7 @@ function EtapaFormaPagamento({
   // O container usa className 'vk-fp-container' (definido no <style>) para
   // permitir media query mobile sem useState/listener.
   const S = {
-    wrap: { background: '#fff', minHeight: '100vh', paddingBottom: 60, fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif", color: '#111' },
+    wrap: { background: '#fff', minHeight: '100vh', paddingBottom: 60, fontFamily: "'Inter', system-ui, -apple-system, sans-serif", color: '#111' },
     cabecalhoLabel: { fontSize: 11, fontWeight: 500, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 },
     cabecalhoTitulo: { fontSize: 24, fontWeight: 400, color: '#111', letterSpacing: -0.5, marginBottom: 6 },
     cabecalhoSub: { fontSize: 14, color: '#6b7280', lineHeight: 1.5 },
@@ -16730,7 +16731,7 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
     <div style={{
       background: "#fafaf7", minHeight: "100vh",
       padding: "32px 24px",
-      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       display: "flex", flexDirection: "column", alignItems: "center",
     }}>
       {/* Header */}
@@ -20561,7 +20562,7 @@ function Escritorio({ data, save }) {
   }
 
   const E = {
-    wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
+    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header: { borderBottom:"2px solid #d1d5db", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
     titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
@@ -21138,7 +21139,7 @@ function Escritorio({ data, save }) {
                   {ehVoce && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#eff6ff", color:"#2563eb", fontWeight:600,
+                      background:"#fdf6f0", color:"#b5652f", fontWeight:600,
                       textTransform:"uppercase", letterSpacing:0.5,
                     }}>Você</span>
                   )}
@@ -21643,7 +21644,7 @@ function Admin({ usuario, data, save, initialTab }) {
   }, [aba]);
 
   const S = {
-    wrap:    { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
+    wrap:    { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header:  { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
     titulo:  { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
@@ -21657,7 +21658,7 @@ function Admin({ usuario, data, save, initialTab }) {
     btnSec:  { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
-    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
+    overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" },
     modal:   { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     modalLg: { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
@@ -22664,7 +22665,7 @@ function GraficoMensal({ mensal }) {
               {m.orcamentos > 0 && (
                 <text x={xBar + barraW/2} y={yOrc - 8} textAnchor="middle"
                   fontSize="13" fill={labelCor} fontWeight={labelPeso}
-                  fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
+                  fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                   {m.orcamentos}
                 </text>
               )}
@@ -22672,7 +22673,7 @@ function GraficoMensal({ mensal }) {
               {/* Label do mês embaixo */}
               <text x={xGrupo + grupoW/2} y={H - 14} textAnchor="middle"
                 fontSize="12" fill={labelCor} fontWeight={labelPeso}
-                fontFamily="'Helvetica Neue',Helvetica,Arial,sans-serif">
+                fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                 {labelMes(m.mes)}
               </text>
             </g>
@@ -24026,7 +24027,7 @@ async function apiPost(path, body) {
 function getEstilos(loading) {
   return {
     wrap: {
-      fontFamily: "'Helvetica Neue', Helvetica, Arial, sans-serif",
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       minHeight: "100vh",
       display: "flex",
       alignItems: "center",
@@ -25118,7 +25119,7 @@ function Mensagens({ usuario }) {
   }
 
   const S = {
-    wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", height:"100vh", display:"flex", flexDirection:"column", background:"#fff" },
+    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", height:"100vh", display:"flex", flexDirection:"column", background:"#fff" },
     header: { borderBottom:"2px solid #d1d5db", padding:"20px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
     titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
@@ -27303,7 +27304,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   textAnchor="middle"
                   fontSize="12" fontWeight="600"
                   fill="#111"
-                  fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
+                  fontFamily="'Inter', system-ui, -apple-system, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.5s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.tipo === "sub" ? "−" : ""}{moeda(Math.abs(s.delta))}
                 </text>
@@ -27317,7 +27318,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   textAnchor="middle"
                   fontSize="11" fontWeight="500"
                   fill="#374151"
-                  fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
+                  fontFamily="'Inter', system-ui, -apple-system, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.55s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.label}
                 </text>
@@ -27327,7 +27328,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                   textAnchor="middle"
                   fontSize="10"
                   fill="#9ca3af"
-                  fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif"
+                  fontFamily="'Inter', system-ui, -apple-system, sans-serif"
                   style={{ animation: visivel ? `vk-fade-up 0.4s ease-out 0.6s both` : "none", opacity: visivel ? undefined : 0 }}>
                   {s.sub}
                 </text>
@@ -27369,7 +27370,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                         textAnchor="start"
                         fontSize="10" fontWeight="500"
                         fill="#111"
-                        fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif">
+                        fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                         R$ {valorPorM2}/m²
                       </text>
                     </g>
@@ -27441,7 +27442,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
                         fill="#111"
                         fontStyle="italic"
                         fontWeight="400"
-                        fontFamily="'Helvetica Neue', Helvetica, Arial, sans-serif">
+                        fontFamily="'Inter', system-ui, -apple-system, sans-serif">
                         {texto}
                       </text>
                     </g>
@@ -27923,7 +27924,7 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
 const tela = {
   position:"fixed", inset:0,
   background:"#fafafa",
-  fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+  fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
   overflowY:"auto",
   display:"flex", justifyContent:"center", alignItems:"flex-start",
 };
@@ -28134,7 +28135,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
   // Estilos — mesma paleta minimalista do escritorio.jsx pra manter
   // consistência visual entre as abas de Configuração.
   const S = {
-    wrap:     { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
+    wrap:     { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header:   { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
     titulo:   { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:      { fontSize:13, color:"#9ca3af", marginTop:3 },
@@ -28408,7 +28409,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   ];
 
   return (
-    <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", maxWidth:1100, margin:"0 auto" }}>
+    <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", maxWidth:1100, margin:"0 auto" }}>
       <div style={{ marginBottom: isMobile ? 18 : 28 }}>
         <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
         <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
@@ -28843,7 +28844,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
       position:"fixed", inset:0,
       background:"#fafafa",
       display:"flex", alignItems:"center", justifyContent:"center",
-      padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      padding:20, fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <form onSubmit={handleSubmit}
         style={{
@@ -29033,7 +29034,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
         display:"flex", alignItems:"center", justifyContent:"center",
         zIndex:900, padding:20,
-        fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+        fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
       }}>
         <div style={{
           background:"#fff", borderRadius: 16, padding:"32px 28px",
@@ -29062,7 +29063,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
       position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
       display:"flex", alignItems:"center", justifyContent:"center",
       zIndex:900, padding:20,
-      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         background:"#fff", borderRadius: 16, padding:"24px 24px 20px",
@@ -29706,7 +29707,7 @@ export default function ModuloClientesFornecedores() {
 
   if (loading) return (
     <>
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ width:20, height:20, border:"2px solid #e5e7eb", borderTop:"2px solid #111", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 12px" }} />
         <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Carregando...</p>
@@ -29721,7 +29722,7 @@ export default function ModuloClientesFornecedores() {
   if (!data) {
     return (
       <>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
           <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
           <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
@@ -29790,7 +29791,7 @@ export default function ModuloClientesFornecedores() {
 
   return (
     <>
-    <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
+    <div style={{ display:"flex", height:"100vh", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* ── Backdrop mobile: fundo escurecido por trás do drawer.
@@ -29897,7 +29898,7 @@ export default function ModuloClientesFornecedores() {
                       borderRadius: 7, cursor: "pointer", fontSize: 13,
                       fontWeight: 500, color: "#92400e",
                       background: "#fffbeb", border: "1px dashed #f59e0b",
-                      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+                      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
                       width: "100%", textAlign: "left",
                       marginTop: 4,
                     }}>
@@ -30283,7 +30284,7 @@ export default function ModuloClientesFornecedores() {
             padding:"6px",
             minWidth:180,
             zIndex:1000,
-            fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+            fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
             display:"flex", flexDirection:"column", gap:1,
           }}>
           <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 10px 4px" }}>

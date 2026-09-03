@@ -176,7 +176,7 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
   // Estilos — mesma paleta minimalista do escritorio.jsx pra manter
   // consistência visual entre as abas de Configuração.
   const S = {
-    wrap:     { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
+    wrap:     { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111", maxWidth:1200, margin:"0 auto" },
     header:   { borderBottom:"2px solid #d1d5db", padding:"24px 32px" },
     titulo:   { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub:      { fontSize:13, color:"#9ca3af", marginTop:3 },

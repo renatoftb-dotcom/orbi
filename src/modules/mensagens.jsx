@@ -206,7 +206,7 @@ function Mensagens({ usuario }) {
   }
 
   const S = {
-    wrap: { fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", height:"100vh", display:"flex", flexDirection:"column", background:"#fff" },
+    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", height:"100vh", display:"flex", flexDirection:"column", background:"#fff" },
     header: { borderBottom:"2px solid #d1d5db", padding:"20px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
     titulo: { fontSize:18, fontWeight:700, color:"#111", margin:0 },
     sub: { fontSize:13, color:"#9ca3af", marginTop:3 },

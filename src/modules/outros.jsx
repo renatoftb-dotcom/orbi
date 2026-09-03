@@ -974,11 +974,12 @@ const CATEGORIAS_PRESTADOR = [
   "Loja / Comércio", "Outro",
 ];
 
+// Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 const PS = {
-  input:  { border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-  label:  { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
-  btn:    { background:"#111", color:"#fff", border:"none", borderRadius:12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec: { background:"#fff", color:"#374151", border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  label:  { fontSize:12, color:"#78716c", fontWeight:500, display:"block", marginBottom:5 },
+  btn:    { background:"#262421", color:"#fff", border:"none", borderRadius:12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+  btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:    (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
 };
@@ -1040,10 +1041,10 @@ function PrestadoresServico({ data, save }) {
 
   // LISTA
   if (view === "list") return (
-    <div style={{ padding:"28px 32px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ padding:"28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <h2 style={{ color:"#111", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
+          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
           <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>{prestadores.length} cadastrado{prestadores.length !== 1 ? "s" : ""}</div>
         </div>
         <button style={PS.btn} onClick={openNew}>+ Novo prestador</button>
@@ -1058,19 +1059,19 @@ function PrestadoresServico({ data, save }) {
       </div>
 
       {filtrados.length === 0 ? (
-        <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13, border:"1px dashed #d1d5db", borderRadius:16, background:"#fafafa" }}>
+        <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
           {prestadores.length === 0 ? "Nenhum prestador cadastrado." : "Nenhum resultado para essa busca."}{" "}
-          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#2563eb", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
+          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#b5652f", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
         </div>
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:14 }}>
           {filtrados.map(p => (
-            <div key={p.id} style={{ border:"1.5px solid #d1d5db", borderRadius:16, padding:"16px 18px", background:"#fff" }}>
+            <div key={p.id} style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:16, padding:"16px 18px", background:"#fff" }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"start", gap:8, marginBottom:8 }}>
-                <div style={{ fontSize:14, fontWeight:700, color:"#111" }}>{p.nome}</div>
+                <div style={{ fontSize:14, fontWeight:700, color:"#262421" }}>{p.nome}</div>
                 {p.ativo === false && <span style={PS.tag("#9ca3af")}>Inativo</span>}
               </div>
-              <span style={PS.tag("#2563eb")}>{p.categoria}</span>
+              <span style={PS.tag("#b5652f")}>{p.categoria}</span>
               <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
                 {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
                 {p.telefone && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.telefone}</div>}
@@ -1094,10 +1095,10 @@ function PrestadoresServico({ data, save }) {
 
   // FORMULÁRIO
   return (
-    <div style={{ padding:"28px 32px", maxWidth:560, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ padding:"28px 32px", maxWidth:560, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
         <button style={PS.btnGhost} onClick={()=>setView("list")}>← Voltar</button>
-        <div style={{ fontSize:17, fontWeight:700, color:"#111" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#262421" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
       </div>
       <form onSubmit={salvar}>
         <div style={{ marginBottom:14 }}>
@@ -1105,7 +1106,7 @@ function PrestadoresServico({ data, save }) {
           <div style={{ display:"flex", gap:8 }}>
             {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
               <button type="button" key={v} onClick={()=>setForm({...form,tipo:v})}
-                style={{ border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+                style={{ border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#262421":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
             ))}
           </div>
         </div>

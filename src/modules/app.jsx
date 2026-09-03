@@ -147,7 +147,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   ];
 
   return (
-    <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", maxWidth:1100, margin:"0 auto" }}>
+    <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", maxWidth:1100, margin:"0 auto" }}>
       <div style={{ marginBottom: isMobile ? 18 : 28 }}>
         <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#111", letterSpacing:-0.3 }}>Dashboard</div>
         <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
@@ -582,7 +582,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
       position:"fixed", inset:0,
       background:"#fafafa",
       display:"flex", alignItems:"center", justifyContent:"center",
-      padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      padding:20, fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <form onSubmit={handleSubmit}
         style={{
@@ -772,7 +772,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
         display:"flex", alignItems:"center", justifyContent:"center",
         zIndex:900, padding:20,
-        fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+        fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
       }}>
         <div style={{
           background:"#fff", borderRadius: 16, padding:"32px 28px",
@@ -801,7 +801,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
       position:"fixed", inset:0, background:"rgba(0,0,0,0.4)",
       display:"flex", alignItems:"center", justifyContent:"center",
       zIndex:900, padding:20,
-      fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+      fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
     }}>
       <div onClick={e => e.stopPropagation()} style={{
         background:"#fff", borderRadius: 16, padding:"24px 24px 20px",
@@ -1445,7 +1445,7 @@ export default function ModuloClientesFornecedores() {
 
   if (loading) return (
     <>
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ width:20, height:20, border:"2px solid #e5e7eb", borderTop:"2px solid #111", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 12px" }} />
         <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Carregando...</p>
@@ -1460,7 +1460,7 @@ export default function ModuloClientesFornecedores() {
   if (!data) {
     return (
       <>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", padding:20 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
           <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
           <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
@@ -1529,7 +1529,7 @@ export default function ModuloClientesFornecedores() {
 
   return (
     <>
-    <div style={{ display:"flex", height:"100vh", fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif", background:"#fff", overflow:"hidden" }}>
+    <div style={{ display:"flex", height:"100vh", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", overflow:"hidden" }}>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* ── Backdrop mobile: fundo escurecido por trás do drawer.
@@ -1636,7 +1636,7 @@ export default function ModuloClientesFornecedores() {
                       borderRadius: 7, cursor: "pointer", fontSize: 13,
                       fontWeight: 500, color: "#92400e",
                       background: "#fffbeb", border: "1px dashed #f59e0b",
-                      fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
+                      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
                       width: "100%", textAlign: "left",
                       marginTop: 4,
                     }}>
@@ -2022,7 +2022,7 @@ export default function ModuloClientesFornecedores() {
             padding:"6px",
             minWidth:180,
             zIndex:1000,
-            fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
+            fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
             display:"flex", flexDirection:"column", gap:1,
           }}>
           <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 10px 4px" }}>
