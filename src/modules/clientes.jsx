@@ -725,25 +725,23 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         {/* Navegação de abas com cards */}
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: isMobile ? 12 : 16, marginBottom:28 }}>
           {[
-            { id:"cadastro", icon:"📋", titulo:"Cadastro", desc:"Dados pessoais e endereço" },
-            { id:"projetos", icon:"📐", titulo:"Projetos", desc:"Projetos e orçamentos" },
-            { id:"obras", icon:"🏗️", titulo:"Obras", desc:"Gestão de obras" },
+            { id:"cadastro", titulo:"Cadastro" },
+            { id:"projetos", titulo:"Projetos" },
+            { id:"obras", titulo:"Obras" },
           ].map(aba => (
             <button
               key={aba.id}
               onClick={() => setAbaCliente(aba.id)}
               style={{
-                border: abaCliente === aba.id ? "3px solid #f59e0b" : "2px solid #e5e7eb",
+                border: abaCliente === aba.id ? "2px solid #2563eb" : "2px solid #e5e7eb",
                 borderRadius: 14,
-                padding: "20px 18px",
-                background: "#fff",
+                padding: "18px",
+                background: abaCliente === aba.id ? "#eff6ff" : "#fff",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 display: "flex",
-                flexDirection: "column",
                 alignItems: "center",
-                gap: 12,
-                textAlign: "center",
+                justifyContent: "center",
                 transition: "all 0.2s ease",
               }}
               onMouseEnter={e => {
@@ -758,28 +756,22 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                   e.currentTarget.style.boxShadow = "none";
                 }
               }}>
-              <div style={{ fontSize: 40 }}>{aba.icon}</div>
-              <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{aba.titulo}</div>
-              <div style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4 }}>{aba.desc}</div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: abaCliente === aba.id ? "#2563eb" : "#111" }}>{aba.titulo}</div>
             </button>
           ))}
         </div>
 
         {/* Conteúdo da aba selecionada */}
         {abaCliente === "cadastro" && (
-          <>
-            <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} isMobile={isMobile} />
-            <hr style={C.divider} />
-            <ServicosPanel cliente={cliente} data={data} save={save} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
-          </>
+          <ClienteExpandivel cliente={cliente} data={data} waLink={waLink} isMobile={isMobile} />
         )}
 
         {abaCliente === "projetos" && (
-          <div style={{ padding:"20px 0", color:"#9ca3af", textAlign:"center", fontSize:13 }}>Projetos — em desenvolvimento</div>
+          <ProjetosPanel cliente={cliente} data={data} onAbrirOrcamento={(c, orc, modo) => { setAbrindoOrcamento(true); onAbrirOrcamento(c, orc, modo); }} />
         )}
 
         {abaCliente === "obras" && (
-          <div style={{ padding:"20px 0", color:"#9ca3af", textAlign:"center", fontSize:13 }}>Obras — em desenvolvimento</div>
+          <GestaoObraPanel cliente={cliente} data={data} save={save} isMobile={isMobile} />
         )}
       </div>
     );
@@ -868,119 +860,53 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   );
 }
 
-// ── Modal "Adicionar Serviço" ────────────────────────────────────
-// Lista os 4 serviços disponíveis. Hoje só "Projeto" está implementado;
-// os outros 3 (Acompanhamento Obra, Gestão Obra, Empreendimento) são
-// listados normalmente mas, ao clicar, mostram aviso "em breve".
-//
-// Props:
-//   cliente:    cliente atual (pra ler servicos.* e marcar quais já estão ativos)
-//   onAtivar:   callback chamado com o nome do serviço a ativar
-//                 ("projeto" | "acompanhamentoObra" | "gestaoObra" | "empreendimento")
-//   onClose:    fecha o modal
-function ModalAdicionarServico({ cliente, onAtivar, onClose }) {
-  const servicos = [
-    { id: "projeto",            nome: "Projeto",                disponivel: true,  desc: "Anteprojeto, aprovação na prefeitura, executivo." },
-    { id: "acompanhamentoObra", nome: "Acompanhamento de Obra", disponivel: false, desc: "Visitas técnicas, ART/RRT, apoio durante a obra." },
-    { id: "gestaoObra",         nome: "Gestão de Obra",         disponivel: true,  desc: "Coordenação completa, contratação de equipes, cronograma." },
-    { id: "empreendimento",     nome: "Empreendimento",         disponivel: false, desc: "Viabilidade, incorporação, gestão de empreendimento." },
-  ];
-
-  function ativosDoCliente(id) {
-    return !!cliente?.servicos?.[id];
-  }
-
-  function handleClick(s) {
-    if (!s.disponivel) {
-      dialogo.alertar({
-        titulo: "Em breve",
-        mensagem: `O serviço "${s.nome}" ainda está em desenvolvimento e estará disponível em breve.`,
-        tipo: "aviso",
-      });
-      return;
-    }
-    if (ativosDoCliente(s.id)) {
-      dialogo.alertar({
-        titulo: "Já adicionado",
-        mensagem: `O serviço "${s.nome}" já está ativo neste cliente.`,
-        tipo: "aviso",
-      });
-      return;
-    }
-    onAtivar(s.id);
-    onClose();
-  }
+// ── Painel "Projetos" — lista orçamentos/projetos do cliente ─────
+function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
+  const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
+  const statusOrc = {
+    rascunho: { label: "Rascunho", cor: "#9ca3af" },
+    aberto:   { label: "Aberto",   cor: "#2563eb" },
+    ganho:    { label: "Ganho",    cor: "#10b981" },
+    perdido:  { label: "Perdido",  cor: "#dc2626" },
+  };
 
   return (
-    <div
-      onClick={onClose}
-      style={{
-        position:"fixed", inset:0,
-        background:"rgba(0,0,0,0.5)", zIndex:9999,
-        display:"flex", alignItems:"center", justifyContent:"center", padding:20,
-      }}>
-      <div onClick={e => e.stopPropagation()}
-        style={{
-          background:"#fff", borderRadius:12,
-          padding:"22px 22px 18px", maxWidth:460, width:"100%",
-          boxShadow:"0 8px 32px rgba(0,0,0,0.2)",
-          maxHeight:"80vh", display:"flex", flexDirection:"column",
-        }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:4 }}>
-          Adicionar Serviço
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Projetos</div>
+          <div style={{ fontSize: 12, color: "#6b7280" }}>{orcamentos.length} projeto{orcamentos.length !== 1 ? "s" : ""}</div>
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18 }}>
-          Escolha qual serviço deseja iniciar para este cliente.
-        </div>
+        <button style={C.btn} onClick={() => onAbrirOrcamento(cliente, null, "novo")}>+ Novo projeto</button>
+      </div>
 
-        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16 }}>
-          {servicos.map(s => {
-            const ativo = ativosDoCliente(s.id);
+      {orcamentos.length === 0 ? (
+        <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+          Nenhum projeto cadastrado.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {orcamentos.map(orc => {
+            const sts = statusOrc[orc.status] || statusOrc.rascunho;
             return (
-              <button
-                key={s.id}
-                onClick={() => handleClick(s)}
-                style={{
-                  textAlign:"left", padding:"12px 14px",
-                  border:"1px solid #e5e7eb", borderRadius:9, background:"#fff",
-                  cursor:"pointer", fontFamily:"inherit",
-                  display:"flex", justifyContent:"space-between", alignItems:"center", gap:10,
-                  opacity: s.disponivel ? 1 : 0.85,
-                }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>{s.nome}</span>
-                    {ativo && (
-                      <span style={{ fontSize:10, fontWeight:600, color:"#16a34a", background:"#f0fdf4", padding:"2px 6px", borderRadius:4, textTransform:"uppercase", letterSpacing:0.4 }}>
-                        Ativo
-                      </span>
-                    )}
-                    {!s.disponivel && (
-                      <span style={{ fontSize:10, fontWeight:600, color:"#6b7280", background:"#f3f4f6", padding:"2px 6px", borderRadius:4, textTransform:"uppercase", letterSpacing:0.4 }}>
-                        Em breve
-                      </span>
-                    )}
+              <div
+                key={orc.id}
+                onClick={() => onAbrirOrcamento(cliente, orc, "editar")}
+                style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "#d1d5db"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={C.tag(sts.cor)}>{sts.label}</span>
+                    {orc.padrao && <span>Padrão: {orc.padrao}</span>}
                   </div>
-                  <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:3, lineHeight:1.4 }}>{s.desc}</div>
                 </div>
-                <span style={{ color:"#9ca3af", fontSize:18, lineHeight:1 }}>›</span>
-              </button>
+              </div>
             );
           })}
         </div>
-
-        <div style={{ display:"flex", justifyContent:"flex-end" }}>
-          <button onClick={onClose}
-            style={{
-              background:"#fff", color:"#374151",
-              border:"1px solid #e5e7eb", borderRadius:8,
-              padding:"8px 16px", fontSize:13, fontWeight:500,
-              cursor:"pointer", fontFamily:"inherit",
-            }}>
-            Fechar
-          </button>
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -1244,144 +1170,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
         <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novaObra}>+ Adicionar obra</button>
       )}
     </div>
-  );
-}
-
-function ServicosPanel({ cliente, data, save, onAbrirOrcamento }) {
-  const perm = getPermissoes();
-  const [openService, setOpenService] = useState(null);
-
-  function handleAtivarServico(serviceId) {
-    const novos = (data.clientes || []).map(c => {
-      if (c.id !== cliente.id) return c;
-      return {
-        ...c,
-        servicos: {
-          ...c.servicos,
-          [serviceId]: true,
-        },
-      };
-    });
-    save({ ...data, clientes: novos });
-    setOpenService(null);
-  }
-
-  return (
-    <div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Serviços</div>
-
-      <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
-        <ServiceCard
-          icon="📐"
-          nome="Projeto"
-          desc="Viabilidade, anteprojeto, executivo"
-          ativo={cliente.servicos?.projeto}
-          disponivel
-          onClick={() => {
-            if (!cliente.servicos?.projeto) {
-              handleAtivarServico("projeto");
-            }
-            onAbrirOrcamento(cliente, null, "novo");
-          }}
-        />
-        <ServiceCard
-          icon="🔍"
-          nome="Acompanhamento"
-          desc="Visitas, ART/RRT, apoio na obra"
-          ativo={cliente.servicos?.acompanhamentoObra}
-          disponivel={false}
-          onClick={() => {
-            if (!cliente.servicos?.acompanhamentoObra) {
-              setOpenService("acompanhamentoObra");
-            }
-          }}
-        />
-        <ServiceCard
-          icon="🏗️"
-          nome="Gestão de Obra"
-          desc="Coordenação, cronograma, contratos"
-          ativo={cliente.servicos?.gestaoObra}
-          disponivel
-          onClick={() => {
-            if (!cliente.servicos?.gestaoObra) {
-              handleAtivarServico("gestaoObra");
-            }
-          }}
-        />
-        <ServiceCard
-          icon="🏢"
-          nome="Empreendimento"
-          desc="Incorporação, gestão"
-          ativo={cliente.servicos?.empreendimento}
-          disponivel={false}
-          onClick={() => {
-            if (!cliente.servicos?.empreendimento) {
-              setOpenService("empreendimento");
-            }
-          }}
-        />
-      </div>
-
-      {cliente.servicos?.projeto && (
-        <GestaoObraPanel cliente={cliente} data={data} save={save} isMobile={window.innerWidth < 768} />
-      )}
-
-      {openService && (
-        <ModalAdicionarServico
-          cliente={cliente}
-          onAtivar={handleAtivarServico}
-          onClose={() => setOpenService(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function ServiceCard({ icon, nome, desc, ativo, disponivel, onClick }) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        border: ativo ? "3px solid #f59e0b" : "2px solid #e5e7eb",
-        borderRadius: 14,
-        padding: "20px 18px",
-        background: ativo ? "#fff" : "#fff",
-        cursor: disponivel ? "pointer" : "not-allowed",
-        fontFamily: "inherit",
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        gap: 12,
-        textAlign: "center",
-        transition: "all 0.2s ease",
-        opacity: disponivel ? 1 : 0.65,
-      }}
-      onMouseEnter={e => {
-        if (disponivel && !ativo) {
-          e.currentTarget.style.borderColor = "#d1d5db";
-          e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
-        }
-      }}
-      onMouseLeave={e => {
-        if (!ativo) {
-          e.currentTarget.style.borderColor = "#e5e7eb";
-          e.currentTarget.style.boxShadow = "none";
-        }
-      }}>
-      <div style={{ fontSize: 40 }}>{icon}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{nome}</div>
-      <div style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4 }}>{desc}</div>
-      {ativo && (
-        <span style={{ fontSize: 10, fontWeight: 600, color: "#f59e0b", background: "#fef3c7", padding: "4px 10px", borderRadius: 5, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.4 }}>
-          Ativo
-        </span>
-      )}
-      {!disponivel && (
-        <span style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", background: "#f3f4f6", padding: "4px 10px", borderRadius: 5, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.4 }}>
-          Em breve
-        </span>
-      )}
-    </button>
   );
 }
 
