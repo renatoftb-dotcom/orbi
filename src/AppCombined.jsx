@@ -5612,38 +5612,42 @@ function ServiceCard({ icon, nome, desc, ativo, disponivel, onClick }) {
     <button
       onClick={onClick}
       style={{
-        border: ativo ? "2px solid #10b981" : "1px solid #e5e7eb",
-        borderRadius: 10,
-        padding: "12px 14px",
-        background: ativo ? "#f0fdf4" : "#fff",
+        border: ativo ? "3px solid #f59e0b" : "2px solid #e5e7eb",
+        borderRadius: 14,
+        padding: "20px 18px",
+        background: ativo ? "#fff" : "#fff",
         cursor: disponivel ? "pointer" : "not-allowed",
         fontFamily: "inherit",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
-        gap: 8,
+        gap: 12,
         textAlign: "center",
-        transition: "all 0.15s",
-        opacity: disponivel ? 1 : 0.6,
+        transition: "all 0.2s ease",
+        opacity: disponivel ? 1 : 0.65,
       }}
       onMouseEnter={e => {
-        if (disponivel) {
-          e.currentTarget.style.borderColor = ativo ? "#10b981" : "#111";
+        if (disponivel && !ativo) {
+          e.currentTarget.style.borderColor = "#d1d5db";
+          e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.08)";
         }
       }}
       onMouseLeave={e => {
-        e.currentTarget.style.borderColor = ativo ? "#10b981" : "#e5e7eb";
+        if (!ativo) {
+          e.currentTarget.style.borderColor = "#e5e7eb";
+          e.currentTarget.style.boxShadow = "none";
+        }
       }}>
-      <div style={{ fontSize: 24 }}>{icon}</div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: "#111" }}>{nome}</div>
-      <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.3 }}>{desc}</div>
+      <div style={{ fontSize: 40 }}>{icon}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>{nome}</div>
+      <div style={{ fontSize: 11, color: "#6b7280", lineHeight: 1.4 }}>{desc}</div>
       {ativo && (
-        <span style={{ fontSize: 9, fontWeight: 600, color: "#10b981", background: "#e8f7f0", padding: "2px 6px", borderRadius: 4, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.3 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: "#f59e0b", background: "#fef3c7", padding: "4px 10px", borderRadius: 5, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.4 }}>
           Ativo
         </span>
       )}
       {!disponivel && (
-        <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", background: "#f3f4f6", padding: "2px 6px", borderRadius: 4, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.3 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, color: "#9ca3af", background: "#f3f4f6", padding: "4px 10px", borderRadius: 5, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.4 }}>
           Em breve
         </span>
       )}
