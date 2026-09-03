@@ -389,7 +389,7 @@ function Escritorio({ data, save }) {
     btnAdd: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
     btnSalvo: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
     // Equipe
-    membroCard: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
+    membroCard: { border:"1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
     membroNome: { fontSize:14, fontWeight:600, color:"#262421", marginBottom:2 },
     membroCargo: { fontSize:12, color:"#9ca3af" },
     membroInfo: { fontSize:12, color:"#6b7280", marginTop:6, display:"flex", gap:16 },
