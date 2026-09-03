@@ -5257,7 +5257,6 @@ function ModalAdicionarServico({ cliente, onAtivar, onClose }) {
 
 function GestaoObraPanel({ cliente, data, save, isMobile }) {
   const perm = getPermissoes();
-  const [aba, setAba] = useState("obras");
   const [view, setView] = useState("lista");
   const [formObra, setFormObra] = useState(null);
   const [formContrato, setFormContrato] = useState(null);
@@ -5292,50 +5291,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
     save({ ...data, obras: obras.filter(o => o.id !== obraId) });
   }
 
-  function novoContrato() {
-    setFormContrato({ id: uid(), clienteId: cliente.id, obraId: "", nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" });
-    setView("formContrato");
-  }
-
-  function editarContrato(contrato) {
-    setFormContrato({ ...contrato });
-    setView("formContrato");
-  }
-
-  function salvarContrato() {
-    if (!formContrato.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Informe o nome do contratado", tipo: "aviso" }); return; }
-    const ehNovo = !contratos.find(c => c.id === formContrato.id);
-    const novosContratos = ehNovo ? [...contratos, formContrato] : contratos.map(c => c.id === formContrato.id ? formContrato : c);
-    save({ ...data, contratos: novosContratos });
-    setView("lista");
-  }
-
-  async function deletarContrato(contratoId) {
-    const ok = await dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
-    if (!ok) return;
-    save({ ...data, contratos: contratos.filter(c => c.id !== contratoId) });
-  }
-
-  if (view === "formContrato" && formContrato) {
+  if (view === "formContrato" && formContrato && obraSelecionada) {
     return (
       <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>Contratos</span>
-        </div>
+        <button onClick={() => setView("contratosDaObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Contratado *</label><input style={C.input} value={formContrato.nomeContratado} onChange={e => setFormContrato({ ...formContrato, nomeContratado: e.target.value })} placeholder="Nome da empresa/pessoa" /></div>
-          <div><label style={C.label}>Obra vinculada</label><select style={{ ...C.input, cursor: "pointer" }} value={formContrato.obraId} onChange={e => setFormContrato({ ...formContrato, obraId: e.target.value })}><option value="">Sem obra vinculada</option>{obras.map(o => <option key={o.id} value={o.id}>{o.nome}</option>)}</select></div>
-          <div><label style={C.label}>Valor (R$)</label><input style={C.input} type="number" value={formContrato.valor} onChange={e => setFormContrato({ ...formContrato, valor: e.target.value })} step="0.01" /></div>
           <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={formContrato.status} onChange={e => setFormContrato({ ...formContrato, status: e.target.value })}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+          <div><label style={C.label}>Valor (R$)</label><input style={C.input} type="number" value={formContrato.valor} onChange={e => setFormContrato({ ...formContrato, valor: e.target.value })} step="0.01" /></div>
           <div><label style={C.label}>Data de assinatura</label><input style={C.input} type="date" value={formContrato.dataAssinatura} onChange={e => setFormContrato({ ...formContrato, dataAssinatura: e.target.value })} /></div>
           <div><label style={C.label}>Data de vencimento</label><input style={C.input} type="date" value={formContrato.dataVencimento} onChange={e => setFormContrato({ ...formContrato, dataVencimento: e.target.value })} /></div>
           <div style={{ gridColumn: "1 / -1" }}><label style={C.label}>Descrição do serviço</label><textarea style={{ ...C.input, resize: "vertical" }} value={formContrato.descricaoServico} onChange={e => setFormContrato({ ...formContrato, descricaoServico: e.target.value })} rows={2} /></div>
         </div>
         <div style={{ marginBottom: 12 }}><label style={C.label}>Observações</label><textarea style={{ ...C.input, resize: "vertical" }} value={formContrato.observacoes} onChange={e => setFormContrato({ ...formContrato, observacoes: e.target.value })} rows={2} /></div>
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button style={C.btnSec} onClick={() => setView("lista")}>Cancelar</button>
-          <button style={C.btn} onClick={salvarContrato}>Salvar contrato</button>
+          <button style={C.btnSec} onClick={() => setView("contratosDaObra")}>Cancelar</button>
+          <button style={C.btn} onClick={() => {
+            if (!formContrato.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Informe o nome do contratado", tipo: "aviso" }); return; }
+            const ehNovo = !contratos.find(c => c.id === formContrato.id);
+            const novosContratos = ehNovo ? [...contratos, formContrato] : contratos.map(c => c.id === formContrato.id ? formContrato : c);
+            save({ ...data, contratos: novosContratos });
+            setView("contratosDaObra");
+          }}>Salvar contrato</button>
         </div>
       </div>
     );
@@ -5344,6 +5321,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
   if (view === "form" && formObra) {
     return (
       <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+        <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
           <span style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>Gestão de Obra</span>
@@ -5364,688 +5342,314 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
     );
   }
 
-  return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-        <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
-        <span style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>Gestão de Obra</span>
-      </div>
+  if (view === "contratosDaObra" && obraSelecionada) {
+    const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
+    return (
+      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+        <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+          <div style={{ width: 40, height: 40, borderRadius: 10, background: "#2563eb15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>📋</div>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Contratos</div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>{obraSelecionada.nome}</div>
+          </div>
+        </div>
 
-      {/* Abas */}
-      <div style={{ display: "flex", borderBottom: "1px solid #e5e7eb", marginBottom: 16, gap: 0 }}>
-        {[["obras", "Obras"], ["contratos", "Contratos"]].map(([id, label]) => (
-          <button
-            key={id}
-            onClick={() => { setAba(id); setView("lista"); }}
-            style={{
-              padding: "10px 16px",
-              fontSize: 13,
-              fontWeight: aba === id ? 600 : 400,
-              color: aba === id ? "#111" : "#6b7280",
-              background: "transparent",
-              border: "none",
-              borderBottom: aba === id ? "2px solid #f59e0b" : "2px solid transparent",
-              cursor: "pointer",
-              fontFamily: "inherit",
-            }}>
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {/* Aba Obras */}
-      {aba === "obras" && (
-        <>
-          {view === "detalheObra" && obraSelecionada ? (
-            <div>
-              <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
-              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>🏗️</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>{obraSelecionada.nome}</div>
-                  <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{obraSelecionada.responsavel || "Sem responsável"}</div>
-                </div>
-                {perm.podeEditar && (
-                  <button onClick={() => editarObra(obraSelecionada)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
-                )}
-              </div>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(140px, 1fr))", gap: 12, marginBottom: 20 }}>
-                <button onClick={() => { setAba("contratos"); setView("lista"); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, transition: "all 0.2s", fontFamily: "inherit" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "#f59e0b"; e.currentTarget.style.background = "#f59e0b08"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5e7eb"; e.currentTarget.style.background = "#fff"; }}>
-                  <div style={{ fontSize: 32 }}>📋</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111", textAlign: "center" }}>Contratos</div>
-                  <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Gerenciar contratos desta obra</div>
-                </button>
-                <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
-                  <div style={{ fontSize: 32 }}>📅</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
-                  <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
-                </button>
-                <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
-                  <div style={{ fontSize: 32 }}>📁</div>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
-                  <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {obras.length === 0 ? (
-                <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
-                  Nenhuma obra cadastrada. {perm.podeEditar && <button onClick={novaObra} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeira obra</button>}
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {obras.map(obra => {
-                    const sts = statusObra[obra.status] || statusObra.planejamento;
-                    return (
-                      <div key={obra.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "all 0.15s" }} onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }} onMouseEnter={e => e.currentTarget.style.borderColor = "#111"} onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
-                          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2, display: "flex", gap: 8 }}>
-                            <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
-                            {obra.responsavel && <span>{obra.responsavel}</span>}
-                            {obra.dataInicio && <span>{new Date(obra.dataInicio).toLocaleDateString("pt-BR")}</span>}
-                          </div>
-                        </div>
-                        {perm.podeEditar && (
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <button onClick={(e) => { e.stopPropagation(); editarObra(obra); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
-                            <button onClick={(e) => { e.stopPropagation(); deletarObra(obra.id); }} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {perm.podeEditar && obras.length > 0 && (
-                <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novaObra}>+ Adicionar obra</button>
-              )}
-            </>
-          )}
-        </>
-      )}
-
-      {/* Aba Contratos */}
-      {aba === "contratos" && (
-        <>
-          {contratos.length === 0 ? (
-            <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
-              Nenhum contrato cadastrado. {perm.podeEditar && <button onClick={novoContrato} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeiro contrato</button>}
-            </div>
-          ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {contratos.map(contrato => {
-                const sts = statusContrato[contrato.status] || statusContrato.ativo;
-                const obraVinculada = obras.find(o => o.id === contrato.obraId);
-                return (
-                  <div key={contrato.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{contrato.nomeContratado}</div>
-                      <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
-                        {contrato.valor && <span>R$ {parseFloat(contrato.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-                        {obraVinculada && <span style={{ color: "#6b7280" }}>Obra: {obraVinculada.nome}</span>}
-                        {contrato.dataVencimento && <span>Vence: {new Date(contrato.dataVencimento).toLocaleDateString("pt-BR")}</span>}
-                      </div>
-                      {contrato.descricaoServico && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>{contrato.descricaoServico}</div>}
+        {contratosDaObra.length === 0 ? (
+          <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+            Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setFormContrato({ id: uid(), clienteId: cliente.id, obraId: obraSelecionada.id, nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" }); setView("formContrato"); }} style={{ background: "transparent", border: "none", color: "#2563eb", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeiro contrato</button>}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+            {contratosDaObra.map(contrato => {
+              const sts = statusContrato[contrato.status] || statusContrato.ativo;
+              return (
+                <div key={contrato.id} style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{contrato.nomeContratado}</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
+                      {contrato.valor && <span>R$ {parseFloat(contrato.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+                      {contrato.dataVencimento && <span>Vence: {new Date(contrato.dataVencimento).toLocaleDateString("pt-BR")}</span>}
                     </div>
-                    {perm.podeEditar && (
-                      <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                        <button onClick={() => editarContrato(contrato)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
-                        <button onClick={() => deletarContrato(contrato.id)} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
-                      </div>
-                    )}
+                    {contrato.descricaoServico && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>{contrato.descricaoServico}</div>}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                  {perm.podeEditar && (
+                    <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                      <button onClick={() => setFormContrato(contrato)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                      <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) save({ ...data, contratos: contratos.filter(c => c.id !== contrato.id) }); }); }} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-          {perm.podeEditar && contratos.length > 0 && (
-            <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novoContrato}>+ Adicionar contrato</button>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function ServicosPanel({ cliente: clienteProp, data, save, onAbrirOrcamento }) {
-  const perm = getPermissoes();
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  useEffect(() => {
-    const handler = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handler);
-    return () => window.removeEventListener("resize", handler);
-  }, []);
-
-  const [openMenu, setOpenMenu] = useState(null);
-  const [propostaVisualizada, setPropostaVisualizada] = useState(null);
-  const [orcGanho, setOrcGanho] = useState(null);
-  // Modal "Adicionar Serviço": abre lista com Projeto + 3 placeholders ("em breve")
-  const [modalAddServico, setModalAddServico] = useState(false);
-  // Visualização (persistida em localStorage, compartilhada com a página Orçamentos)
-  const [viz, setViz] = useVisualizacaoOrcamentos();
-  // Ordenação (reseta a cada abertura) e filtros por coluna
-  const [sort, setSort] = useState({ col: "cliente", dir: "asc" });
-  const [filtrosCol, setFiltrosCol] = useState({ clientes: new Set(), tipos: new Set(), status: new Set() });
-  // Seleção em massa (tabela) + modal de confirmação + modo ativável
-  const [modoSelecao, setModoSelecao] = useState(false);
-  const [selecionados, setSelecionados] = useState(new Set());
-  const [confirmExcluirMassa, setConfirmExcluirMassa] = useState(false);
-  const menuRef = useRef(null);
-
-  useEffect(() => {
-    if (!openMenu) return;
-    const handler = e => {
-      if (menuRef.current && !menuRef.current.contains(e.target)) setOpenMenu(null);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [openMenu]);
-
-  const cliente = data.clientes.find(c => c.id === clienteProp.id) || clienteProp;
-
-  // Fonte única de verdade: data.orcamentosProjeto. Sem state local ou fetch paralelo —
-  // qualquer save() na aplicação re-renderiza este componente com os dados atualizados,
-  // mantendo sincronia com o módulo de Orçamentos do menu.
-  const orcamentos = (data.orcamentosProjeto || []).filter(o => o.clienteId === cliente.id);
-
-
-
-  // ── Subview: módulo orçamento-teste ─────────────────────────
-  // ── Card principal ───────────────────────────────────────────
-  // temProjeto: true se o cliente tem o serviço "Projeto" ativado OU se
-  // já tem orçamentos vinculados a ele. Isso garante que o bloco apareça
-  // mesmo se o orçamento foi criado por fora (ex: aba Projetos > Orçamentos)
-  // sem ter passado pelo modal "Adicionar Serviço" deste card.
-  const temProjeto = !!cliente.servicos?.projeto || orcamentos.length > 0;
-  const fmt = v => "R$ " + (v||0).toLocaleString("pt-BR", { minimumFractionDigits:2, maximumFractionDigits:2 });
-
-  const STATUS_ORC = {
-    rascunho:{ label:"Rascunho",cor:"#6b7280", bg:"#f9fafb" },
-    ganho:   { label:"Ganho",   cor:"#16a34a", bg:"#f0fdf4" },
-    perdido: { label:"Perdido", cor:"#dc2626", bg:"#fef2f2" },
-  };
-
-  async function setStatusOrc(orcId, novoStatus) {
-    const todos = data.orcamentosProjeto || [];
-    const orc = todos.find(o => o.id === orcId);
-    let novosLanc = data.receitasFinanceiro || [];
-    let novosProjetos = data.projetos || [];
-    const agora = new Date().toISOString();
-
-    // Se reverte ganho → perdido, remove lançamentos e projeto associado
-    if (orc?.status === "ganho" && novoStatus === "perdido") {
-      novosLanc = novosLanc.filter(r => r.orcId !== orcId);
-      novosProjetos = novosProjetos.filter(p => p.orcId !== orcId);
-    }
-
-    const novosOrc = todos.map(o => {
-      if (o.id !== orcId) return o;
-      const atualizado = { ...o, status: novoStatus };
-      // Registra data de conclusão quando sai de aberto/rascunho
-      if (novoStatus === "perdido" || novoStatus === "ganho") {
-        atualizado.concluidoEm = o.concluidoEm || agora;
-        if (novoStatus === "ganho") atualizado.ganhoEm = o.ganhoEm || agora;
-      }
-      // Reabrindo: limpa concluidoEm
-      if (novoStatus === "rascunho" || novoStatus === "aberto") {
-        delete atualizado.concluidoEm;
-      }
-      return atualizado;
-    });
-
-    await save({ ...data, orcamentosProjeto: novosOrc, receitasFinanceiro: novosLanc, projetos: novosProjetos });
-  }
-
-  // Confirma ganho do orçamento com os dados do ModalConfirmarGanho (escopo, valores, condição).
-  // Estratégia otimista: fecha modal imediato + toast, save() em background.
-  // Antes: setOrcGanho(null) só após await save() → modal travava esperando rede.
-  async function confirmarGanho(ganhoData) {
-    const orc = orcGanho;
-    if (!orc) return;
-    const todos = data.orcamentosProjeto || [];
-    const agora = new Date().toISOString();
-
-    // Cria projeto automaticamente (se ainda não existir)
-    const projetosAtuais = data.projetos || [];
-    const jaExiste = projetosAtuais.some(p => p.orcId === orc.id);
-    const novosProjetos = jaExiste ? projetosAtuais : [
-      ...projetosAtuais,
-      {
-        id: "PRJ-" + Date.now(),
-        orcId: orc.id,
-        clienteId: orc.clienteId,
-        tipo: orc.tipo,
-        subtipo: orc.subtipo,
-        padrao: orc.padrao,
-        tamanho: orc.tamanho,
-        referencia: orc.referencia || "",
-        areaTotal: orc.resultado?.areaTotal || 0,
-        colunaEtapa: "briefing",
-        criadoEm: agora,
-      },
-    ];
-
-    // Atualiza o orçamento: status ganho + fechamento
-    const novosOrc = todos.map(o =>
-      o.id === orc.id
-        ? {
-            ...o,
-            status: "ganho",
-            concluidoEm: o.concluidoEm || agora,
-            ganhoEm: o.ganhoEm || agora,
-            fechamento: {
-              ...ganhoData,
-              fechadoEm: agora,
-            },
-          }
-        : o
-    );
-
-    // Fecha modal e mostra toast IMEDIATAMENTE — não aguarda save()
-    setOrcGanho(null);
-    toast.sucesso("Orçamento marcado como ganho");
-
-    // Save em background; falha mostra toast de erro
-    save({ ...data, orcamentosProjeto: novosOrc, projetos: novosProjetos })
-      .catch(e => {
-        console.error("Erro ao salvar orçamento ganho:", e);
-        toast.erro("Erro ao salvar — tente novamente");
-      });
-  }
-
-  async function excluirOrcamento(orcId) {
-    const orc = (data.orcamentosProjeto||[]).find(x => x.id === orcId);
-    const ref = orc?.id || "orçamento";
-    const ok = await dialogo.confirmar({
-      titulo: `Excluir ${ref}?`,
-      mensagem: "Esta ação não pode ser desfeita.",
-      confirmar: "Excluir",
-      destrutivo: true,
-    });
-    if (!ok) return;
-    const novos = (data.orcamentosProjeto||[]).filter(x => x.id !== orcId);
-    save({ ...data, orcamentosProjeto: novos }).catch(console.error);
-  }
-
-  async function excluirOrcamentosEmMassa() {
-    const ids = selecionados;
-    const novos = (data.orcamentosProjeto||[]).filter(x => !ids.has(x.id));
-    setConfirmExcluirMassa(false);
-    try {
-      await save({ ...data, orcamentosProjeto: novos });
-      setSelecionados(new Set());
-    } catch (e) {
-      console.error("Erro ao excluir em massa:", e);
-    }
-  }
-
-  // Ativa um serviço no cliente: seta servicos[id]=true e persiste.
-  // Usado pelo ModalAdicionarServico. id ∈ {projeto, acompanhamentoObra, gestaoObra, empreendimento}
-  function ativarServico(id) {
-    const novosServicos = { ...(cliente.servicos || {}), [id]: true };
-    const novosClientes = data.clientes.map(c => c.id===cliente.id ? { ...c, servicos:novosServicos } : c);
-    save({ ...data, clientes: novosClientes });
-  }
-
-  return (
-    <div style={{ fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" }}>
-
-      {/* ── Header serviços ── */}
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
-        <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Serviços</div>
         {perm.podeEditar && (
-          <button
-            onClick={() => setModalAddServico(true)}
-            style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-            + Adicionar Serviço
-          </button>
+          <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={() => { setFormContrato({ id: uid(), clienteId: cliente.id, obraId: obraSelecionada.id, nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" }); setView("formContrato"); }}>+ Adicionar contrato</button>
         )}
       </div>
+    );
+  }
 
-      {/* ── Sem serviços (cliente novo, sem orçamentos e sem flags) ── */}
-      {!temProjeto && !cliente.servicos?.acompanhamentoObra && !cliente.servicos?.gestaoObra && !cliente.servicos?.empreendimento && (
-        <div style={{ border:"1px dashed #e5e7eb", borderRadius:12, padding:"32px", textAlign:"center", color:"#9ca3af", fontSize:13 }}>
-          Nenhum serviço cadastrado. Clique em "+ Adicionar Serviço" para começar.
-        </div>
-      )}
-
-      {/* ── Serviço Gestão de Obra ── */}
-      {cliente.servicos?.gestaoObra && (
-        <GestaoObraPanel cliente={cliente} data={data} save={save} isMobile={isMobile} />
-      )}
-
-      {/* ── Serviço Projeto ── */}
-      {temProjeto && (
-        <div style={{ border:"1px solid #e5e7eb", borderRadius:12, padding:"16px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom: 14 }}>
-            <div style={{ width:8, height:8, borderRadius:"50%", background:"#3b82f6" }} />
-            <span style={{ fontSize:14, fontWeight:600, color:"#111" }}>Projeto</span>
+  if (view === "detalheObra" && obraSelecionada) {
+    return (
+      <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+        <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
+          <div style={{ width: 48, height: 48, borderRadius: 12, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24, flexShrink: 0 }}>🏗️</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#111" }}>{obraSelecionada.nome}</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{obraSelecionada.responsavel || "Sem responsável"}</div>
           </div>
+          {perm.podeEditar && (
+            <button onClick={() => editarObra(obraSelecionada)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+          )}
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(150px, 1fr))", gap: 12, marginBottom: 20 }}>
+          <button onClick={() => setView("contratosDaObra")} style={{ border: "1px solid #2563eb", borderRadius: 12, padding: "16px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, transition: "all 0.2s", fontFamily: "inherit" }} onMouseEnter={e => { e.currentTarget.style.background = "#2563eb08"; }} onMouseLeave={e => { e.currentTarget.style.background = "#fff"; }}>
+            <div style={{ fontSize: 32 }}>📋</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#111", textAlign: "center" }}>Contratos</div>
+            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
+          </button>
+          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
+            <div style={{ fontSize: 32 }}>📅</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
+            <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
+          </button>
+          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }} style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 8, opacity: 0.6, fontFamily: "inherit" }}>
+            <div style={{ fontSize: 32 }}>📁</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
+            <div style={{ fontSize: 11, color: "#d1d5db", textAlign: "center" }}>Em breve</div>
+          </button>
+        </div>
 
-          {/* Caso especial: Projeto ativado mas ainda sem orçamentos */}
-          {orcamentos.length === 0 && (
-            <div style={{ padding:"20px", textAlign:"center", color:"#9ca3af", fontSize:12.5, border:"1px dashed #e5e7eb", borderRadius:9, background:"#fafafa" }}>
-              Nenhum orçamento ainda.
-              {perm.podeEditar && (
-                <>
-                  {" "}
-                  <button
-                    onClick={() => onAbrirOrcamento(cliente, null)}
-                    style={{ background:"transparent", border:"none", color:"#3b82f6", cursor:"pointer", padding:0, fontSize:12.5, fontFamily:"inherit", textDecoration:"underline" }}>
-                    Criar primeiro orçamento
-                  </button>
-                </>
+        {/* Info da obra */}
+        {(obraSelecionada.status || obraSelecionada.dataInicio || obraSelecionada.descricao) && (
+          <div style={{ background: "#f9fafb", border: "1px solid #f3f4f6", borderRadius: 12, padding: "14px 16px", marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 14 }}>
+              {obraSelecionada.status && (
+                <div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Status</div>
+                  <span style={C.tag(statusObra[obraSelecionada.status]?.cor || "#9ca3af")}>{statusObra[obraSelecionada.status]?.label || obraSelecionada.status}</span>
+                </div>
+              )}
+              {obraSelecionada.dataInicio && (
+                <div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de início</div>
+                  <div style={{ fontSize: 13, color: "#374151" }}>{new Date(obraSelecionada.dataInicio).toLocaleDateString("pt-BR")}</div>
+                </div>
+              )}
+              {obraSelecionada.dataFim && (
+                <div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de conclusão</div>
+                  <div style={{ fontSize: 13, color: "#374151" }}>{new Date(obraSelecionada.dataFim).toLocaleDateString("pt-BR")}</div>
+                </div>
               )}
             </div>
-          )}
+            {obraSelecionada.descricao && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid #e5e7eb" }}>
+                <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Descrição</div>
+                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{obraSelecionada.descricao}</div>
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Lista de orçamentos — tabela ou cards (mesma preferência da página Orçamentos) */}
-          {orcamentos.length > 0 && (() => {
-            // Helper comum: prepara fetchOrc e onAction pra ambos os modos
-            const mkFetchOrc = (o) => async (modo) => {
-              // Usa api.orcamentos.get() em vez de fetch direto — assim o handler
-              // global de 401 do api.js é acionado se o token expirar.
-              let orcCompleto = o;
-              try {
-                const completo = await api.orcamentos.get(o.id);
-                if (completo) orcCompleto = completo;
-              } catch {
-                // Em caso de erro, continua com o orçamento original (o da lista)
-              }
-              // Se clicou em "ver" e tem proposta enviada, abre o snapshot em vez do form.
-              if (modo === "ver" && orcCompleto.propostas && orcCompleto.propostas.length > 0) {
-                modo = "verProposta";
-              }
-              if (modo === "verProposta") {
-                const ultima = orcCompleto.propostas && orcCompleto.propostas.length > 0
-                  ? orcCompleto.propostas[orcCompleto.propostas.length - 1]
-                  : null;
-                if (ultima) {
-                  setPropostaVisualizada({
-                    ...ultima,
-                    clienteNome: cliente.nome || "Cliente",
-                    _orcOrigem: orcCompleto,
-                  });
-                  return;
-                }
-                modo = "ver";
-              }
-              onAbrirOrcamento(cliente, orcCompleto, modo);
-            };
-            const mkOnAction = async (acao, orc) => {
-              if (perm.isVisualizador) { dialogo.alertar({ titulo: "Sem permissão", mensagem: "Você não tem permissão para esta ação.", tipo: "aviso" }); return; }
-              if (acao === "ganho") {
-                if (orc.status === "ganho") return;
-                // Busca a versão completa pelo api.js (com handler de 401)
-                let orcCompleto = orc;
-                try {
-                  const completo = await api.orcamentos.get(orc.id);
-                  if (completo) orcCompleto = completo;
-                } catch {
-                  // Continua com o que tem
-                }
-                setOrcGanho(orcCompleto);
-              }
-              if (acao === "perdido") setStatusOrc(orc.id, orc.status === "perdido" ? "rascunho" : "perdido");
-              if (acao === "excluir") {
-                if (!perm.podeExcluir) { dialogo.alertar({ titulo: "Acesso restrito", mensagem: "Apenas administradores podem excluir.", tipo: "aviso" }); return; }
-                excluirOrcamento(orc.id);
-              }
-            };
+        {perm.podeEditar && (
+          <button style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12, width: "100%" }} onClick={() => { dialogo.confirmar({ titulo: "Remover obra?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) deletarObra(obraSelecionada.id); }); }}>Remover esta obra</button>
+        )}
+      </div>
+    );
+  }
 
-            // Handler de mudança de probabilidade (usado pelo ProbRing nos cards/tabela)
-            const mkChangeProb = async (orc, novaProb) => {
-              if (!perm.podeEditar) return;
-              if (![25, 50, 75].includes(novaProb)) return;
-              const todos = data.orcamentosProjeto || [];
-              const novos = todos.map(o => o.id === orc.id ? { ...o, probabilidade: novaProb } : o);
-              try {
-                await save({ ...data, orcamentosProjeto: novos });
-              } catch (e) {
-                console.error("Erro ao atualizar probabilidade:", e);
-              }
-            };
+  // Lista de obras — view padrão
+  return (
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, padding: "16px", marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 10, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🏗️</div>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Gestão de Obra</div>
+          <div style={{ fontSize: 12, color: "#6b7280" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
+        </div>
+      </div>
 
-            // Helpers pra ordenação
-            const valorTotal = (o) => {
-              const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
-              if (ult) {
-                if (ult.valorTotalExibido != null) return ult.valorTotalExibido;
-                const arq = ult.arqEdit != null ? ult.arqEdit : (ult.calculo?.precoArq || 0);
-                const eng = ult.engEdit != null ? ult.engEdit : (ult.calculo?.precoEng || 0);
-                return arq + eng;
-              }
-              return (o.resultado?.precoArq || 0) + (o.resultado?.precoEng || 0);
-            };
-            const diasParaVencer = (o) => {
-              if ((o.status || "rascunho") !== "aberto") return null;
-              const ult = o.propostas && o.propostas.length > 0 ? o.propostas[o.propostas.length - 1] : null;
-              const v = ult?.validadeEdit || ult?.validadeStr;
-              if (!v) return null;
-              const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-              if (!m) return null;
-              const validade = new Date(parseInt(m[3]), parseInt(m[2]) - 1, parseInt(m[1]));
-              const hoje = new Date(); hoje.setHours(0,0,0,0); validade.setHours(0,0,0,0);
-              return Math.round((validade - hoje) / 86400000);
-            };
-
-            // Aplica filtros de coluna (clientes não se aplica aqui — só 1 cliente)
-            const orcsFiltrados = orcamentos.filter(o => {
-              if (filtrosCol.tipos.size > 0 && !filtrosCol.tipos.has(o.tipo || "—")) return false;
-              if (filtrosCol.status.size > 0 && !filtrosCol.status.has(o.status || "rascunho")) return false;
-              return true;
-            });
-
-            // Ordena
-            const orcsOrdenados = [...orcsFiltrados].sort((a, b) => {
-              const dir = sort.dir === "asc" ? 1 : -1;
-              if (sort.col === "id") {
-                const num = (id) => { const m = String(id || "").match(/(\d+)/); return m ? parseInt(m[1]) : 0; };
-                return (num(a.id) - num(b.id)) * dir;
-              }
-              if (sort.col === "cliente") {
-                return (a.referencia || "").localeCompare(b.referencia || "", "pt-BR") * dir;
-              }
-              if (sort.col === "tipo") {
-                const aT = (a.tipo || "").toLowerCase(); const bT = (b.tipo || "").toLowerCase();
-                if (aT !== bT) return aT.localeCompare(bT, "pt-BR") * dir;
-                return ((a.resultado?.areaTotal || 0) - (b.resultado?.areaTotal || 0)) * dir;
-              }
-              if (sort.col === "criado") {
-                const aD = a.criadoEm ? new Date(a.criadoEm).getTime() : 0;
-                const bD = b.criadoEm ? new Date(b.criadoEm).getTime() : 0;
-                return (aD - bD) * dir;
-              }
-              if (sort.col === "venc") {
-                const aV = diasParaVencer(a); const bV = diasParaVencer(b);
-                if (aV == null && bV == null) return 0;
-                if (aV == null) return 1;
-                if (bV == null) return -1;
-                return (aV - bV) * dir;
-              }
-              if (sort.col === "status") {
-                const ordem = { aberto: 0, rascunho: 1, ganho: 2, perdido: 3 };
-                return ((ordem[a.status || "rascunho"] ?? 99) - (ordem[b.status || "rascunho"] ?? 99)) * dir;
-              }
-              if (sort.col === "total") return (valorTotal(a) - valorTotal(b)) * dir;
-              return 0;
-            });
-
+      {obras.length === 0 ? (
+        <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed #e5e7eb", borderRadius: 9, background: "#fafafa" }}>
+          Nenhuma obra cadastrada. {perm.podeEditar && <button onClick={novaObra} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeira obra</button>}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+          {obras.map(obra => {
+            const sts = statusObra[obra.status] || statusObra.planejamento;
             return (
-              <div>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8, gap:8, flexWrap:"wrap" }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                    <div style={{ fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
-                    {perm.podeEditar && (
-                      <button
-                        onClick={() => onAbrirOrcamento(cliente, null)}
-                        title="Novo orçamento"
-                        style={{
-                          background:"transparent", border:"1px solid #e5e7eb", borderRadius:"50%",
-                          width:20, height:20, padding:0, cursor:"pointer",
-                          display:"flex", alignItems:"center", justifyContent:"center",
-                          color:"#6b7280", fontSize:14, lineHeight:1, fontFamily:"inherit",
-                        }}>
-                        +
-                      </button>
-                    )}
+              <div
+                key={obra.id}
+                onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }}
+                style={{ border: "1px solid #e5e7eb", borderRadius: 8, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = "#d1d5db"}
+                onMouseLeave={e => e.currentTarget.style.borderColor = "#e5e7eb"}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
+                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={C.tag(sts.cor)}>{sts.label}</span>
+                    {obra.dataInicio && <span>Início: {new Date(obra.dataInicio).toLocaleDateString("pt-BR", { month: "short", day: "2-digit" }).replace(".", "")}</span>}
+                    {obra.responsavel && <span>Resp.: {obra.responsavel}</span>}
                   </div>
-                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                    {viz === "cards" && <SortDropdown sort={sort} setSort={setSort} />}
-                    <ToggleVisualizacao viz={viz} setViz={setViz} />
-                  </div>
+                  {obra.descricao && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{obra.descricao}</div>}
                 </div>
-
-                {/* Chips de filtros ativos */}
-                {(filtrosCol.tipos.size > 0 || filtrosCol.status.size > 0) && (
-                  <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:8 }}>
-                    {[...filtrosCol.tipos].map(v => (
-                      <FiltroChip key={"t-"+v} label={`Tipo: ${v}`} onRemove={() => {
-                        const n = new Set(filtrosCol.tipos); n.delete(v);
-                        setFiltrosCol({ ...filtrosCol, tipos: n });
-                      }} />
-                    ))}
-                    {[...filtrosCol.status].map(v => (
-                      <FiltroChip key={"s-"+v} label={`Status: ${({rascunho:"Rascunho",aberto:"Em aberto",ganho:"Ganho",perdido:"Perdido"}[v] || v)}`} onRemove={() => {
-                        const n = new Set(filtrosCol.status); n.delete(v);
-                        setFiltrosCol({ ...filtrosCol, status: n });
-                      }} />
-                    ))}
-                    <button
-                      onClick={() => setFiltrosCol({ clientes: new Set(), tipos: new Set(), status: new Set() })}
-                      style={{
-                        fontSize:11.5, color:"#6b7280", background:"transparent",
-                        border:"none", cursor:"pointer", padding:"3px 6px",
-                        textDecoration:"underline", fontFamily:"inherit",
-                      }}>
-                      Limpar filtros
-                    </button>
-                  </div>
-                )}
-
-                {/* Barra de ações em massa (aparece enquanto o modo seleção está ligado) */}
-                {viz === "tabela" && modoSelecao && (
-                  <BarraSelecao
-                    selecionados={selecionados}
-                    totalVisivel={orcsOrdenados.length}
-                    onSelecionarTodos={() => setSelecionados(new Set(orcsOrdenados.map(o => o.id)))}
-                    onLimpar={() => setSelecionados(new Set())}
-                    onExcluir={() => setConfirmExcluirMassa(true)}
-                    onSair={() => { setSelecionados(new Set()); setModoSelecao(false); }}
-                  />
-                )}
-
-                {orcsOrdenados.length === 0 ? (
-                  <div style={{
-                    padding:"24px", textAlign:"center", border:"1px dashed #e5e7eb",
-                    borderRadius:9, color:"#9ca3af", fontSize:12.5, background:"#fafafa",
-                  }}>
-                    Nenhum orçamento corresponde aos filtros.
-                  </div>
-                ) : viz === "tabela" ? (
-                  <div style={{ border:"1px solid #e5e7eb", borderRadius:9, background:"#fff", overflow:"visible" }}>
-                    <OrcRowHeader
-                      showCliente={false}
-                      sort={sort} setSort={setSort}
-                      filtrosCol={filtrosCol} setFiltrosCol={setFiltrosCol}
-                      orcamentos={orcamentos} clientes={[cliente]}
-                      modoSelecao={modoSelecao}
-                      onToggleModoSelecao={perm.podeExcluir ? (() => setModoSelecao(true)) : null}
-                      selecionados={selecionados}
-                      totalVisivel={orcsOrdenados.length}
-                      onToggleTodos={() => {
-                        if (selecionados.size >= orcsOrdenados.length) setSelecionados(new Set());
-                        else setSelecionados(new Set(orcsOrdenados.map(o => o.id)));
-                      }}
-                    />
-                    {orcsOrdenados.map(o => (
-                      <OrcRow
-                        key={o.id} orc={o} clientes={[cliente]}
-                        onAbrir={mkFetchOrc(o)}
-                        onAction={mkOnAction}
-                        showCliente={false}
-                        modoSelecao={modoSelecao}
-                        selecionado={selecionados.has(o.id)}
-                        onToggleSelecao={(id) => {
-                          const n = new Set(selecionados);
-                          if (n.has(id)) n.delete(id); else n.add(id);
-                          setSelecionados(n);
-                        }}
-                        onChangeProb={mkChangeProb}
-                        perm={perm}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {orcsOrdenados.map(o => (
-                      <OrcCard
-                        key={o.id} orc={o} clientes={[cliente]}
-                        onAbrir={mkFetchOrc(o)}
-                        onAction={(acao, orc) => mkOnAction(acao, orc)}
-                        onChangeProb={mkChangeProb}
-                        perm={perm}
-                      />
-                    ))}
+                {perm.podeEditar && (
+                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => editarObra(obra)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
                   </div>
                 )}
               </div>
             );
-          })()}
+          })}
         </div>
       )}
 
-      {/* Modal confirmar exclusão em massa */}
-      {confirmExcluirMassa && (
-        <ModalConfirmarExclusaoMassa
-          orcs={(data.orcamentosProjeto||[]).filter(o => selecionados.has(o.id))}
-          clientes={[cliente]}
-          onConfirmar={async () => { await excluirOrcamentosEmMassa(); setModoSelecao(false); }}
-          onCancelar={() => setConfirmExcluirMassa(false)}
-        />
+      {perm.podeEditar && (
+        <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novaObra}>+ Adicionar obra</button>
       )}
+    </div>
+  );
+}
 
-      {/* Visualizador de proposta enviada (snapshot de imagens do PDF) */}
-      {propostaVisualizada && (
-        <PropostaVisualizer
-          proposta={propostaVisualizada}
-          onFechar={() => setPropostaVisualizada(null)}
-          onEditar={() => {
-            const orc = propostaVisualizada._orcOrigem;
-            if (!orc) return;
-            setPropostaVisualizada(null);
-            onAbrirOrcamento(cliente, orc, "editar");
+function ServicosPanel({ cliente, data, save, onAbrirOrcamento }) {
+  const perm = getPermissoes();
+  const [openService, setOpenService] = useState(null);
+
+  function handleAtivarServico(serviceId) {
+    const novos = (data.clientes || []).map(c => {
+      if (c.id !== cliente.id) return c;
+      return {
+        ...c,
+        servicos: {
+          ...c.servicos,
+          [serviceId]: true,
+        },
+      };
+    });
+    save({ ...data, clientes: novos });
+    setOpenService(null);
+  }
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Serviços</div>
+
+      <div style={{ display: "grid", gridTemplateColumns: window.innerWidth < 768 ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+        <ServiceCard
+          icon="📐"
+          nome="Projeto"
+          desc="Viabilidade, anteprojeto, executivo"
+          ativo={cliente.servicos?.projeto}
+          disponivel
+          onClick={() => {
+            if (!cliente.servicos?.projeto) {
+              handleAtivarServico("projeto");
+            }
+            onAbrirOrcamento(cliente, null, "novo");
           }}
         />
-      )}
-
-      {/* Modal de confirmação de ganho */}
-      {orcGanho && (
-        <ModalConfirmarGanho
-          orc={orcGanho}
-          onClose={() => setOrcGanho(null)}
-          onConfirmar={confirmarGanho}
+        <ServiceCard
+          icon="🔍"
+          nome="Acompanhamento"
+          desc="Visitas, ART/RRT, apoio na obra"
+          ativo={cliente.servicos?.acompanhamentoObra}
+          disponivel={false}
+          onClick={() => {
+            if (!cliente.servicos?.acompanhamentoObra) {
+              setOpenService("acompanhamentoObra");
+            }
+          }}
         />
+        <ServiceCard
+          icon="🏗️"
+          nome="Gestão de Obra"
+          desc="Coordenação, cronograma, contratos"
+          ativo={cliente.servicos?.gestaoObra}
+          disponivel
+          onClick={() => {
+            if (!cliente.servicos?.gestaoObra) {
+              handleAtivarServico("gestaoObra");
+            }
+          }}
+        />
+        <ServiceCard
+          icon="🏢"
+          nome="Empreendimento"
+          desc="Incorporação, gestão"
+          ativo={cliente.servicos?.empreendimento}
+          disponivel={false}
+          onClick={() => {
+            if (!cliente.servicos?.empreendimento) {
+              setOpenService("empreendimento");
+            }
+          }}
+        />
+      </div>
+
+      {cliente.servicos?.projeto && (
+        <GestaoObraPanel cliente={cliente} data={data} save={save} isMobile={window.innerWidth < 768} />
       )}
 
-      {/* Modal Adicionar Serviço */}
-      {modalAddServico && (
+      {openService && (
         <ModalAdicionarServico
           cliente={cliente}
-          onAtivar={ativarServico}
-          onClose={() => setModalAddServico(false)}
+          onAtivar={handleAtivarServico}
+          onClose={() => setOpenService(null)}
         />
       )}
     </div>
   );
 }
 
-
+function ServiceCard({ icon, nome, desc, ativo, disponivel, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        border: ativo ? "2px solid #10b981" : "1px solid #e5e7eb",
+        borderRadius: 10,
+        padding: "12px 14px",
+        background: ativo ? "#f0fdf4" : "#fff",
+        cursor: disponivel ? "pointer" : "not-allowed",
+        fontFamily: "inherit",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 8,
+        textAlign: "center",
+        transition: "all 0.15s",
+        opacity: disponivel ? 1 : 0.6,
+      }}
+      onMouseEnter={e => {
+        if (disponivel) {
+          e.currentTarget.style.borderColor = ativo ? "#10b981" : "#111";
+        }
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.borderColor = ativo ? "#10b981" : "#e5e7eb";
+      }}>
+      <div style={{ fontSize: 24 }}>{icon}</div>
+      <div style={{ fontSize: 12, fontWeight: 600, color: "#111" }}>{nome}</div>
+      <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.3 }}>{desc}</div>
+      {ativo && (
+        <span style={{ fontSize: 9, fontWeight: 600, color: "#10b981", background: "#e8f7f0", padding: "2px 6px", borderRadius: 4, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.3 }}>
+          Ativo
+        </span>
+      )}
+      {!disponivel && (
+        <span style={{ fontSize: 9, fontWeight: 600, color: "#9ca3af", background: "#f3f4f6", padding: "2px 6px", borderRadius: 4, marginTop: 4, textTransform: "uppercase", letterSpacing: 0.3 }}>
+          Em breve
+        </span>
+      )}
+    </button>
+  );
+}
 
 
 
