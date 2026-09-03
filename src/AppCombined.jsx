@@ -3488,8 +3488,10 @@ function PrestadoresServico({ data, save }) {
   const [filtroCategoria, setFiltroCategoria] = useState("");
 
   const emptyPrestador = {
-    nome:"", categoria:CATEGORIAS_PRESTADOR[0], telefone:"", whatsapp:false,
-    email:"", observacoes:"", ativo:true,
+    nome:"", tipo:"PJ", categoria:CATEGORIAS_PRESTADOR[0], cnpjCpf:"",
+    cep:"", logradouro:"", numero:"", bairro:"", cidade:"", estado:"SP",
+    representanteNome:"", representanteCpf:"",
+    telefone:"", whatsapp:false, email:"", observacoes:"", ativo:true,
   };
   const [form, setForm] = useState(emptyPrestador);
 
@@ -3523,6 +3525,16 @@ function PrestadoresServico({ data, save }) {
     const num = (telefone||"").replace(/\D/g, "");
     const numero = num.startsWith("55") ? num : `55${num}`;
     return `https://wa.me/${numero}`;
+  }
+
+  async function buscarCEP(cep) {
+    const clean = cep.replace(/\D/g, "");
+    if (clean.length !== 8) return;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const d = await r.json();
+      if (!d.erro) setForm(f => ({ ...f, logradouro: d.logradouro, bairro: d.bairro, cidade: d.localidade, estado: d.uf }));
+    } catch {}
   }
 
   // LISTA
@@ -3559,8 +3571,10 @@ function PrestadoresServico({ data, save }) {
               </div>
               <span style={PS.tag("#2563eb")}>{p.categoria}</span>
               <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
+                {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
                 {p.telefone && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.telefone}</div>}
                 {p.email && <div style={{ fontSize:12.5, color:"#6b7280", overflow:"hidden", textOverflow:"ellipsis" }}>{p.email}</div>}
+                {(p.cidade || p.estado) && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.cidade}{p.cidade && p.estado ? " — " : ""}{p.estado}</div>}
               </div>
               <div style={{ display:"flex", gap:8, marginTop:14 }}>
                 {p.whatsapp && p.telefone && (
@@ -3586,14 +3600,85 @@ function PrestadoresServico({ data, save }) {
       </div>
       <form onSubmit={salvar}>
         <div style={{ marginBottom:14 }}>
-          <label style={PS.label}>Nome *</label>
-          <input style={PS.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} placeholder="Nome da pessoa ou empresa" autoFocus />
+          <label style={PS.label}>Tipo de pessoa</label>
+          <div style={{ display:"flex", gap:8 }}>
+            {[["PF","Pessoa física"],["PJ","Pessoa jurídica"]].map(([v,l])=>(
+              <button type="button" key={v} onClick={()=>setForm({...form,tipo:v})}
+                style={{ border:"1.5px solid #d1d5db", borderRadius:12, padding:"9px 18px", fontSize:13, fontWeight:form.tipo===v?600:400, background:form.tipo===v?"#111":"#fff", color:form.tipo===v?"#fff":"#6b7280", cursor:"pointer", fontFamily:"inherit" }}>{l}</button>
+            ))}
+          </div>
         </div>
         <div style={{ marginBottom:14 }}>
-          <label style={PS.label}>Categoria</label>
-          <select style={{ ...PS.input, cursor:"pointer" }} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
-            {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <label style={PS.label}>{form.tipo === "PJ" ? "Razão social" : "Nome completo"} *</label>
+          <input style={PS.input} value={form.nome} onChange={e=>setForm({...form,nome:e.target.value})} placeholder={form.tipo === "PJ" ? "Nome da empresa" : "Nome da pessoa"} autoFocus />
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+          <div>
+            <label style={PS.label}>Categoria</label>
+            <select style={{ ...PS.input, cursor:"pointer" }} value={form.categoria} onChange={e=>setForm({...form,categoria:e.target.value})}>
+              {CATEGORIAS_PRESTADOR.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={PS.label}>{form.tipo === "PJ" ? "CNPJ" : "CPF"}</label>
+            <input style={PS.input} value={form.cnpjCpf} onChange={e=>setForm({...form,cnpjCpf:e.target.value})} placeholder={form.tipo === "PJ" ? "00.000.000/0001-00" : "000.000.000-00"} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom:6, marginTop:20 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Endereço</div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+          <div>
+            <label style={PS.label}>CEP</label>
+            <input style={PS.input} value={form.cep} onChange={e=>{ setForm({...form,cep:e.target.value}); buscarCEP(e.target.value); }} placeholder="00000-000" />
+          </div>
+          <div>
+            <label style={PS.label}>Número</label>
+            <input style={PS.input} value={form.numero} onChange={e=>setForm({...form,numero:e.target.value})} />
+          </div>
+        </div>
+        <div style={{ marginBottom:12 }}>
+          <label style={PS.label}>Logradouro</label>
+          <input style={PS.input} value={form.logradouro} onChange={e=>setForm({...form,logradouro:e.target.value})} />
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:20 }}>
+          <div>
+            <label style={PS.label}>Bairro</label>
+            <input style={PS.input} value={form.bairro} onChange={e=>setForm({...form,bairro:e.target.value})} />
+          </div>
+          <div>
+            <label style={PS.label}>Cidade</label>
+            <input style={PS.input} value={form.cidade} onChange={e=>setForm({...form,cidade:e.target.value})} />
+          </div>
+          <div>
+            <label style={PS.label}>Estado</label>
+            <select style={{ ...PS.input, cursor:"pointer" }} value={form.estado} onChange={e=>setForm({...form,estado:e.target.value})}>
+              {ESTADOS_BR.map(e => <option key={e}>{e}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {form.tipo === "PJ" && (
+          <>
+            <div style={{ marginBottom:6 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Representante / sócio</div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
+              <div>
+                <label style={PS.label}>Nome</label>
+                <input style={PS.input} value={form.representanteNome} onChange={e=>setForm({...form,representanteNome:e.target.value})} />
+              </div>
+              <div>
+                <label style={PS.label}>CPF</label>
+                <input style={PS.input} value={form.representanteCpf} onChange={e=>setForm({...form,representanteCpf:e.target.value})} placeholder="000.000.000-00" />
+              </div>
+            </div>
+          </>
+        )}
+
+        <div style={{ marginBottom:6 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Contato</div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
           <div>
@@ -3605,7 +3690,7 @@ function PrestadoresServico({ data, save }) {
             <input style={PS.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} />
           </div>
         </div>
-        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151", marginBottom:14 }}>
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151", marginBottom:20 }}>
           <input type="checkbox" checked={form.whatsapp} onChange={e=>setForm({...form,whatsapp:e.target.checked})} /> Este telefone é WhatsApp
         </label>
         <div style={{ marginBottom:14 }}>
