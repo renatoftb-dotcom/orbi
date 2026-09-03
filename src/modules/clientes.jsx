@@ -1153,12 +1153,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
   // Lista de obras — view padrão
   return (
     <div style={{ border: "2px solid #d1d5db", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-        <div style={{ width: 40, height: 40, borderRadius: 14, background: "#f59e0b15", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>🏗️</div>
-        <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Gestão de Obra</div>
-          <div style={{ fontSize: 12, color: "#6b7280" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
-        </div>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111" }}>Gestão de Obra</div>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
       </div>
 
       {obras.length === 0 ? (
@@ -1167,32 +1164,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
-          {obras.map(obra => {
-            const sts = statusObra[obra.status] || statusObra.planejamento;
-            return (
-              <div
-                key={obra.id}
-                onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }}
-                style={{ border: "2px solid #d1d5db", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = "#d1d5db"}
-                onMouseLeave={e => e.currentTarget.style.borderColor="#d1d5db"}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span style={C.tag(sts.cor)}>{sts.label}</span>
-                    {obra.dataInicio && <span>Início: {new Date(obra.dataInicio).toLocaleDateString("pt-BR", { month: "short", day: "2-digit" }).replace(".", "")}</span>}
-                    {obra.responsavel && <span>Resp.: {obra.responsavel}</span>}
-                  </div>
-                  {obra.descricao && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{obra.descricao}</div>}
+          {obras.map(obra => (
+            <div
+              key={obra.id}
+              onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }}
+              style={{ border: "1.5px solid #d1d5db", borderRadius: 12, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s", backgroundColor: "#fff" }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = "#9ca3af"}
+              onMouseLeave={e => e.currentTarget.style.borderColor = "#d1d5db"}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#111" }}>{obra.nome}</div>
+              {perm.podeEditar && (
+                <div onClick={e => e.stopPropagation()}>
+                  <button onClick={() => editarObra(obra)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
                 </div>
-                {perm.podeEditar && (
-                  <div style={{ display: "flex", gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
-                    <button onClick={() => editarObra(obra)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+              )}
+            </div>
+          ))}
         </div>
       )}
 
