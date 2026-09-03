@@ -170,7 +170,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
       <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: isMobile ? 8 : 12, marginBottom:32 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
+            style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
             onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#111"; }}
             onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
@@ -243,7 +243,7 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
           style={{
             background:"#fff",
             border: it.destaque ? "1px solid #f59e0b" : "2px solid #d1d5db",
-            borderRadius:12, padding: isMobile ? "12px 12px" : "16px 18px",
+            borderRadius: 16, padding: isMobile ? "12px 12px" : "16px 18px",
             cursor: it.onClick ? "pointer" : "default",
             transition:"border-color 0.12s",
           }}
@@ -273,7 +273,7 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
 // recente sem sobrecarregar.
 function DashboardFeed({ feed, loading, isMobile }) {
   return (
-    <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding: isMobile ? "12px 14px" : "16px 18px" }}>
+    <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "12px 14px" : "16px 18px" }}>
       <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
         Atividade recente
       </div>
@@ -453,12 +453,12 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
       <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: isMobile ? 10 : 12, width:"100%", maxWidth:680 }}>
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
-            style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"inherit", position:"relative" }}
+            style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"inherit", position:"relative" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor="#111"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ fontSize:13, fontWeight:600, color:"#111", marginBottom:4 }}>{m.label}</div>
             <div style={{ fontSize:12, color:"#9ca3af" }}>{m.desc}</div>
-            {m.count > 0 && <div style={{ position:"absolute", top:12, right:12, background:"#f3f4f6", color:"#6b7280", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:10 }}>{m.count}</div>}
+            {m.count > 0 && <div style={{ position:"absolute", top:12, right:12, background:"#f3f4f6", color:"#6b7280", fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius: 14 }}>{m.count}</div>}
           </button>
         ))}
       </div>
@@ -490,7 +490,7 @@ function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus 
         disabled={disabled}
         autoFocus={autoFocus}
         style={{
-          width:"100%", border:"2px solid #d1d5db", borderRadius:8,
+          width:"100%", border:"2px solid #d1d5db", borderRadius: 12,
           padding:"10px 40px 10px 12px", // padding direito maior pro botão
           fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box",
         }}
@@ -578,7 +578,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
     }}>
       <form onSubmit={handleSubmit}
         style={{
-          background:"#fff", border:"2px solid #d1d5db", borderRadius:12,
+          background:"#fff", border:"2px solid #d1d5db", borderRadius: 16,
           padding:"32px 32px 24px", maxWidth:420, width:"100%",
           boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
         }}>
@@ -630,14 +630,14 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
         </div>
 
         {erro && (
-          <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
+          <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius: 12, padding:"8px 12px", marginBottom:14 }}>
             {erro}
           </div>
         )}
 
         <button type="submit" disabled={loading}
           style={{
-            background:"#111", color:"#fff", border:"none", borderRadius:8,
+            background:"#111", color:"#fff", border:"none", borderRadius: 12,
             padding:"11px 16px", fontSize:13.5, fontWeight:600, cursor: loading ? "not-allowed" : "pointer",
             fontFamily:"inherit", width:"100%", marginBottom:10,
             opacity: loading ? 0.6 : 1,
@@ -767,7 +767,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
       }}>
         <div style={{
-          background:"#fff", borderRadius:12, padding:"32px 28px",
+          background:"#fff", borderRadius: 16, padding:"32px 28px",
           maxWidth:380, textAlign:"center", boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
         }}>
           <div style={{ marginBottom:14, display:"flex", justifyContent:"center" }}>
@@ -796,7 +796,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
       fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif",
     }}>
       <div onClick={e => e.stopPropagation()} style={{
-        background:"#fff", borderRadius:12, padding:"24px 24px 20px",
+        background:"#fff", borderRadius: 16, padding:"24px 24px 20px",
         maxWidth:480, width:"100%", maxHeight:"90vh", overflowY:"auto",
         boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
       }}>
@@ -819,7 +819,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
                 onClick={() => setCategoria(c.id)}
                 disabled={enviando}
                 style={{
-                  padding:"10px 12px", borderRadius:8, fontSize:13,
+                  padding:"10px 12px", borderRadius: 12, fontSize:13,
                   fontFamily:"inherit", textAlign:"center",
                   cursor: enviando ? "not-allowed" : "pointer",
                   border: categoria === c.id ? "1.5px solid #111" : "2px solid #d1d5db",
@@ -844,7 +844,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
             placeholder="Escreva o que quiser compartilhar..."
             rows={5}
             style={{
-              width:"100%", border:"2px solid #d1d5db", borderRadius:8,
+              width:"100%", border:"2px solid #d1d5db", borderRadius: 12,
               padding:"10px 12px", fontSize:13, fontFamily:"inherit",
               outline:"none", boxSizing:"border-box", resize:"vertical",
               minHeight:100,
@@ -856,7 +856,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         </div>
 
         {erro && (
-          <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
+          <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius: 12, padding:"8px 12px", marginBottom:14 }}>
             {erro}
           </div>
         )}
@@ -868,7 +868,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
           <button onClick={onFechar} disabled={enviando}
             style={{
-              background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
+              background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
               padding:"9px 14px", fontSize:13, color:"#6b7280", cursor: enviando ? "not-allowed" : "pointer",
               fontFamily:"inherit",
             }}>
@@ -876,7 +876,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
           </button>
           <button onClick={enviar} disabled={enviando || !texto.trim()}
             style={{
-              background:"#111", color:"#fff", border:"none", borderRadius:8,
+              background:"#111", color:"#fff", border:"none", borderRadius: 12,
               padding:"9px 16px", fontSize:13, fontWeight:600,
               cursor: (enviando || !texto.trim()) ? "not-allowed" : "pointer",
               fontFamily:"inherit", opacity: (enviando || !texto.trim()) ? 0.5 : 1,
@@ -1308,7 +1308,7 @@ export default function ModuloClientesFornecedores() {
   // Renderiza modal de conflito de sessão (compartilhado entre todos os returns)
   const conflitoModal = conflitoSessao && (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:100050, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-      <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
+      <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
         <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>
           {conflitoSessao === "logout" ? "Sessão encerrada" : "Sessão alterada em outra aba"}
         </div>
@@ -1320,7 +1320,7 @@ export default function ModuloClientesFornecedores() {
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
           <button
             onClick={() => { setConflitoSessao(null); window.location.reload(); }}
-            style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
+            style={{ background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}
           >
             Atualizar agora
           </button>
@@ -1456,8 +1456,8 @@ export default function ModuloClientesFornecedores() {
         <div style={{ textAlign:"center", maxWidth:400 }}>
           <div style={{ fontSize:15, color:"#111", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
           <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
-          <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
-          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"2px solid #d1d5db", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
+          <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
+          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
       <DialogosHost />
@@ -1737,7 +1737,7 @@ export default function ModuloClientesFornecedores() {
                     {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#111" : "#6b7280"} />}
                     {!colapsadaEf && label}
                   </span>
-                  {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius:8 }}>{count}</span>}
+                  {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius: 12 }}>{count}</span>}
                 </button>
               );
             })}
@@ -1978,7 +1978,7 @@ export default function ModuloClientesFornecedores() {
             </div>
             <div style={{ color:"#6b7280", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
             <textarea readOnly value={backupJson} onClick={e => e.target.select()}
-              style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius:8, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
+              style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius: 12, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button onClick={() => navigator.clipboard?.writeText(backupJson).catch(()=>{})}
                 style={{ background:"#111", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Copiar tudo</button>
@@ -2004,7 +2004,7 @@ export default function ModuloClientesFornecedores() {
             left: popoverProjetos.left,
             background:"#fff",
             border:"2px solid #d1d5db",
-            borderRadius:8,
+            borderRadius: 12,
             boxShadow:"0 4px 16px rgba(0,0,0,0.08)",
             padding:"6px",
             minWidth:180,

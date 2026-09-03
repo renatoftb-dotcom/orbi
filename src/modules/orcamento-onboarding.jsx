@@ -29,7 +29,7 @@ function OrcamentoOnboarding({ data, save, onVoltar, onConcluido }) {
         </p>
         <button onClick={onVoltar} style={{
           background: "transparent", color: "#6b7280",
-          border: "2px solid #d1d5db", borderRadius: 8,
+          border: "2px solid #d1d5db", borderRadius: 12,
           padding: "10px 20px", fontSize: 13, fontWeight: 500,
           cursor: "pointer", fontFamily: "inherit",
         }}>

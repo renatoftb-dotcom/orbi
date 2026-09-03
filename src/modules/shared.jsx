@@ -289,7 +289,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           position: "fixed",
           top: spotT, left: spotL,
           width: spotW, height: spotH,
-          border: "3px solid #f59e0b", borderRadius: 12,
+          border: "3px solid #f59e0b", borderRadius: 16,
           zIndex: 1001, pointerEvents: "none",
         }} />
       )}
@@ -298,7 +298,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           position: "fixed",
           top: r.top - PAD_Y, left: r.left - PAD_X,
           width: r.width + PAD_X * 2, height: r.height + PAD_Y * 2,
-          border: "3px solid #f59e0b", borderRadius: 12,
+          border: "3px solid #f59e0b", borderRadius: 16,
           zIndex: 1001, pointerEvents: "none",
         }} />
       ))}
@@ -351,7 +351,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
           textAlign: "left",
           background: "#fff", padding: "14px 18px",
-          borderRadius: 10,
+          borderRadius: 14,
           boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
         }}>
           {titulo && (
@@ -688,7 +688,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
         position: "fixed", bottom: 16, right: 16,
         display: "flex", gap: 8, zIndex: 1010,
         background: "rgba(255,255,255,0.95)",
-        padding: "8px 10px", borderRadius: 10,
+        padding: "8px 10px", borderRadius: 14,
         border: "2px solid #d1d5db",
         boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
         fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
@@ -729,13 +729,13 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={onCancelar} style={{
               background: "transparent", color: "#6b7280",
-              border: "2px solid #d1d5db", borderRadius: 8,
+              border: "2px solid #d1d5db", borderRadius: 12,
               padding: "9px 16px", fontSize: 13, fontWeight: 500,
               cursor: "pointer", fontFamily: "inherit",
             }}>Cancelar</button>
             <button onClick={() => setEstagio("passo")} style={{
               background: "#111", color: "#fff",
-              border: "1px solid #111", borderRadius: 8,
+              border: "1px solid #111", borderRadius: 12,
               padding: "9px 18px", fontSize: 13, fontWeight: 500,
               cursor: "pointer", fontFamily: "inherit",
             }}>Começar →</button>
@@ -846,7 +846,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
             position: "fixed",
             top: rect.top - 6, left: rect.left - 6,
             width: rect.width + 12, height: rect.height + 12,
-            border: "3px solid #f59e0b", borderRadius: 10,
+            border: "3px solid #f59e0b", borderRadius: 14,
             zIndex: 1001, pointerEvents: "none",
             transition: "top 0.4s cubic-bezier(0.32, 0.72, 0, 1), left 0.4s cubic-bezier(0.32, 0.72, 0, 1), width 0.4s, height 0.4s",
           }} />
@@ -944,7 +944,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           top: rect.top - 6, left: rect.left - 6,
           width: rect.width + 12, height: rect.height + 12,
           border: "2.5px solid #f59e0b",
-          borderRadius: 10,
+          borderRadius: 14,
           zIndex: 1001, pointerEvents: "none",
         }} />
       )}
@@ -961,7 +961,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
       {rect && (
         <div className="vk-tut-tooltip" style={{
           position: "fixed", zIndex: 1003,
-          background: "#fff", borderRadius: 10,
+          background: "#fff", borderRadius: 14,
           padding: "14px 18px", maxWidth: 320, minWidth: 240,
           boxShadow: "0 12px 32px rgba(0,0,0,0.2)",
           fontFamily: "'Helvetica Neue',Helvetica,Arial,sans-serif",
@@ -1589,7 +1589,7 @@ function DialogosHost() {
             style={{
               background: "#fff",
               border: `1px solid ${modalTopo.tipo === "alert" ? (coresAlert[modalTopo.tipoAlert]?.borda || "#e5e7eb") : "#e5e7eb"}`,
-              borderRadius: 12,
+              borderRadius: 16,
               padding: "24px 28px",
               maxWidth: 440,
               width: "100%",
@@ -1626,7 +1626,7 @@ function DialogosHost() {
                     background: "#fff",
                     color: "#6b7280",
                     border: "2px solid #d1d5db",
-                    borderRadius: 8,
+                    borderRadius: 12,
                     padding: "8px 18px",
                     fontSize: 13,
                     cursor: "pointer",
@@ -1643,7 +1643,7 @@ function DialogosHost() {
                   background: modalTopo.destrutivo ? "#dc2626" : "#111",
                   color: "#fff",
                   border: "none",
-                  borderRadius: 8,
+                  borderRadius: 12,
                   padding: "8px 20px",
                   fontSize: 13,
                   fontWeight: 600,
@@ -1678,7 +1678,7 @@ function DialogosHost() {
                 background: "#fff",
                 border: `1px solid ${t.tipo === "sucesso" ? "#bbf7d0" : "#fecaca"}`,
                 borderLeft: `4px solid ${t.tipo === "sucesso" ? "#16a34a" : "#dc2626"}`,
-                borderRadius: 8,
+                borderRadius: 12,
                 padding: "10px 14px 10px 12px",
                 fontSize: 13,
                 color: t.tipo === "sucesso" ? "#15803d" : "#b91c1c",
@@ -1843,7 +1843,7 @@ function VersionWatcher() {
         background: "#111",
         color: "#fff",
         padding: "14px 18px",
-        borderRadius: 10,
+        borderRadius: 14,
         boxShadow: "0 8px 24px rgba(0,0,0,0.25)",
         display: "flex",
         alignItems: "center",

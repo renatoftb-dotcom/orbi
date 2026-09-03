@@ -740,7 +740,7 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
         {todasRespondidas && (cadastroInlineAtivo || (escritorioJaPreenchido && calibragemConfirmada)) && (
           <div style={{ marginTop:32, paddingTop:24, borderTop:"1px solid #f3f4f6" }}>
             {erroSalvar && (
-              <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 12px", marginBottom:14 }}>
+              <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius: 12, padding:"8px 12px", marginBottom:14 }}>
                 {erroSalvar}
               </div>
             )}
@@ -813,7 +813,7 @@ function Opcao({ label, selecionada, onClick }) {
         padding:"12px 14px",
         background: selecionada ? "#fafbfc" : "#fff",
         border: selecionada ? "1.5px solid #111" : "2px solid #d1d5db",
-        borderRadius:8,
+        borderRadius: 12,
         cursor:"pointer",
         textAlign:"left",
         fontFamily:"inherit",
@@ -918,7 +918,7 @@ function InputMoedaBR({ valor, setValor, onConfirmar }) {
         autoFocus
         style={{
           width:"100%", boxSizing:"border-box",
-          border:"2px solid #d1d5db", borderRadius:8,
+          border:"2px solid #d1d5db", borderRadius: 12,
           padding:"11px 14px 11px 38px",
           fontSize:14, fontFamily:"inherit", outline:"none",
           fontVariantNumeric:"tabular-nums",
@@ -986,7 +986,7 @@ function BlocoResultado({
 
   if (cubErro) {
     return (
-      <div style={{ marginTop:32, padding:"16px 18px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8 }}>
+      <div style={{ marginTop:32, padding:"16px 18px", background:"#fef2f2", border:"1px solid #fecaca", borderRadius: 12 }}>
         <div style={{ fontSize:13, color:"#991b1b", fontWeight:600, marginBottom:4 }}>Referência indisponível</div>
         <div style={{ fontSize:12.5, color:"#7f1d1d" }}>{cubErro}</div>
       </div>
@@ -1095,7 +1095,7 @@ function BlocoResultado({
                     marginTop:14, padding:"12px 14px",
                     background: analiseCalibragem.muitoAlto ? "#fffbeb" : "#fef2f2",
                     border: analiseCalibragem.muitoAlto ? "1px solid #fde68a" : "1px solid #fecaca",
-                    borderRadius:8, maxWidth:560,
+                    borderRadius: 12, maxWidth:560,
                   }}>
                     <div style={{ fontSize:12.5, fontWeight:600, color: analiseCalibragem.muitoAlto ? "#92400e" : "#991b1b", marginBottom:6 }}>
                       {analiseCalibragem.muitoAlto ? "Valor parece muito alto" : "Valor parece muito baixo"}
@@ -1132,7 +1132,7 @@ function BlocoResultado({
                       onClick={() => setPrecoRecalibradoOk(true)}
                       style={{
                         background: "#111", color: "#fff",
-                        border: "none", borderRadius: 8,
+                        border: "none", borderRadius: 12,
                         padding: "11px 20px",
                         fontSize: 13, fontWeight: 600,
                         cursor: "pointer", fontFamily: "inherit",
@@ -1253,7 +1253,7 @@ function EtapaTexto({ casaCalc, onProximo }) {
           disabled={!terminou}
           style={{
             background:"#111", color:"#fff",
-            border:"none", borderRadius:8,
+            border:"none", borderRadius: 12,
             padding:"12px 24px",
             fontSize:13, fontWeight:600,
             cursor: terminou ? "pointer" : "default",
@@ -1395,7 +1395,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 style={{
                   width: "100%",
                   border: aberto ? "1px solid #111" : "2px solid #d1d5db",
-                  borderRadius: 10,
+                  borderRadius: 14,
                   padding: "10px 12px",
                   background: aberto ? "#f3f4f6" : "#fff",
                   cursor: "pointer",
@@ -1450,7 +1450,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                   top: 0, left: "calc(100% + 8px)",
                   background: "#fff",
                   border: "2px solid #d1d5db",
-                  borderRadius: 10,
+                  borderRadius: 14,
                   boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
                   padding: 6,
                   zIndex: 100,
@@ -2181,7 +2181,7 @@ function BlocoCadastroEscritorio({
   // Estilo compartilhado dos inputs.
   const inputBase = {
     width: "100%", boxSizing: "border-box",
-    border: "1px solid #d1d5db", borderRadius: 8,
+    border: "1px solid #d1d5db", borderRadius: 12,
     padding: "10px 12px", fontSize: 13, color: "#111",
     outline: "none", background: "#fff", fontFamily: "inherit",
     transition: "border-color 0.12s",
@@ -2242,7 +2242,7 @@ function BlocoCadastroEscritorio({
               style={{
                 width: 160, height: 100,
                 border: arrastando ? "1.5px solid #111" : (logo ? "2px solid #d1d5db" : "1.5px dashed #d1d5db"),
-                borderRadius: 8,
+                borderRadius: 12,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: arrastando ? "#f3f4f6" : "#fafbfc",
                 overflow: "hidden", flexShrink: 0,
@@ -2525,7 +2525,7 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
         <div style={{
           background:"#fafbfc",
           border:"1px solid #f3f4f6",
-          borderRadius:10,
+          borderRadius: 14,
           padding:"20px 22px",
           textAlign:"left",
           marginBottom:32,
@@ -2561,13 +2561,13 @@ const tela = {
   display:"flex", justifyContent:"center", alignItems:"flex-start",
 };
 const card = {
-  background:"#fff", border:"2px solid #d1d5db", borderRadius:12,
+  background:"#fff", border:"2px solid #d1d5db", borderRadius: 16,
   padding:"32px 32px 24px", maxWidth:420, width:"100%",
   boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
   margin:"40px 20px",
 };
 const btnPrimario = {
-  background:"#111", color:"#fff", border:"none", borderRadius:8,
+  background:"#111", color:"#fff", border:"none", borderRadius: 12,
   padding:"11px 16px", fontSize:13.5, fontWeight:600, cursor:"pointer",
   fontFamily:"inherit",
 };

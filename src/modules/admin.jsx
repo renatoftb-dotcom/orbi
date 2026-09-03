@@ -149,15 +149,15 @@ function Admin({ usuario, data, save, initialTab }) {
     bodyNarrow: { padding:"32px", maxWidth:760 },
     secao:   { marginBottom:32 },
     secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
-    btn:     { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec:  { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius:8, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-    btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btn:     { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnSec:  { background:"#fff", color:"#374151", border:"2px solid #d1d5db", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnDestrutivo: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Helvetica Neue',Helvetica,Arial,sans-serif" },
-    modal:   { background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
-    modalLg: { background:"#fff", border:"2px solid #d1d5db", borderRadius:12, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modal:   { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
+    modalLg: { background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
-    input:   { width:"100%", border:"2px solid #d1d5db", borderRadius:8, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
+    input:   { width:"100%", border:"2px solid #d1d5db", borderRadius: 12, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
     tabela:  { width:"100%", borderCollapse:"collapse", fontSize:13 },
     th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"2px solid #d1d5db", background:"#fafbfc" },
     td:      { padding:"12px", borderBottom:"1px solid #f3f4f6", verticalAlign:"middle" },
@@ -189,12 +189,12 @@ function Admin({ usuario, data, save, initialTab }) {
             {manutLoading ? "Executando..." : "Executar manutenção agora"}
           </button>
           {manutErro && (
-            <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"8px 14px" }}>
+            <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius: 12, padding:"8px 14px" }}>
               ⚠ {manutErro}
             </div>
           )}
           {manutResult && (
-            <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, padding:"8px 14px" }}>
+            <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, padding:"8px 14px" }}>
               ✓ Executado em {new Date(manutResult.executadoEm).toLocaleString("pt-BR")}
               <br/>
               <span style={{ color:"#374151" }}>
@@ -258,12 +258,12 @@ function Admin({ usuario, data, save, initialTab }) {
 
       {/* Mensagens de status */}
       {cubMsg && (
-        <div style={{ fontSize:12.5, color:"#15803d", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, padding:"10px 14px", marginBottom:16 }}>
+        <div style={{ fontSize:12.5, color:"#15803d", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, padding:"10px 14px", marginBottom:16 }}>
           ✓ {cubMsg}
         </div>
       )}
       {cubErro && (
-        <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"10px 14px", marginBottom:16 }}>
+        <div style={{ fontSize:12.5, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius: 12, padding:"10px 14px", marginBottom:16 }}>
           ⚠ {cubErro}
         </div>
       )}
@@ -506,7 +506,7 @@ function ErroAcesso({ erro, S }) {
 
   if (eh403) {
     return (
-      <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius:10, padding:"18px 20px", marginBottom:16 }}>
+      <div style={{ background:"#fffbeb", border:"1px solid #fde68a", borderRadius: 14, padding:"18px 20px", marginBottom:16 }}>
         <div style={{ fontSize:14, fontWeight:700, color:"#92400e", marginBottom:8 }}>
           Acesso restrito a usuários master
         </div>
@@ -533,7 +533,7 @@ function ErroAcesso({ erro, S }) {
 
   // Outros erros — mensagem padrão
   return (
-    <div style={{ fontSize:13, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius:8, padding:"10px 14px", marginBottom:16 }}>
+    <div style={{ fontSize:13, color:"#991b1b", background:"#fef2f2", border:"1px solid #fecaca", borderRadius: 12, padding:"10px 14px", marginBottom:16 }}>
       {msg}
     </div>
   );
@@ -616,7 +616,7 @@ function PainelEmpresas({ S }) {
       )}
 
       {!loading && empresas.length > 0 && (
-        <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
+        <div style={{ border:"2px solid #d1d5db", borderRadius: 14, overflow:"hidden" }}>
           <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>
@@ -774,7 +774,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       {/* ── Seção: Dados ── */}
       <div style={{ ...S.secao, marginBottom:32 }}>
         <div style={S.secTit}>Dados</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:14, padding:"16px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius:10 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:14, padding:"16px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius: 14 }}>
           <DetalheCampo label="CNPJ / CPF" valor={data.cnpj_cpf || "—"} />
           <DetalheCampo label="Plano"       valor={data.plano || "gratuito"} />
           <DetalheCampo label="Criada em"   valor={fmtData(data.criado_em)} />
@@ -850,7 +850,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
         ) : (!data.usuarios || data.usuarios.length === 0) ? (
           <div style={S.vazio}>Nenhum usuário cadastrado.</div>
         ) : (
-          <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
+          <div style={{ border:"2px solid #d1d5db", borderRadius: 14, overflow:"hidden" }}>
             <table style={S.tabela} className="vk-adm-tabela-mobile">
               <thead>
                 <tr>
@@ -919,7 +919,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       {!isMasterEmp && (
         <div style={{ ...S.secao, marginBottom:32 }}>
           <div style={S.secTit}>Ações administrativas</div>
-          <div style={{ border:"2px solid #d1d5db", background:"#fafafa", borderRadius:10, padding:"16px" }}>
+          <div style={{ border:"2px solid #d1d5db", background:"#fafafa", borderRadius: 14, padding:"16px" }}>
             <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom:12 }}>
               Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#111" }}>Não tem como reverter.</strong>
               <br/>
@@ -997,7 +997,7 @@ function DetalheCampo({ label, valor }) {
 // `carregando` mostra "…" cinza no lugar do valor (evita flash de "0").
 function MetricaCard({ label, valor, carregando }) {
   return (
-    <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:10, padding:"14px 16px" }}>
+    <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 14, padding:"14px 16px" }}>
       <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
       <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#d1d5db" : "#111", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
         {carregando ? "…" : (valor ?? 0)}
@@ -1016,7 +1016,7 @@ function BarraStatus({ status }) {
   const total = (status.rascunhos || 0) + (status.abertos || 0) + (status.ganhos || 0) + (status.perdidos || 0);
   if (total === 0) {
     return (
-      <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius:8, background:"#fafafa" }}>
+      <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>
         Nenhum orçamento cadastrado ainda.
       </div>
     );
@@ -1068,7 +1068,7 @@ function BarraStatus({ status }) {
 // Valor numérico aparece em cima de cada barra com dados.
 function GraficoMensal({ mensal }) {
   if (!mensal || mensal.length === 0) {
-    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius:8, background:"#fafafa" }}>Sem histórico ainda.</div>;
+    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem histórico ainda.</div>;
   }
 
   const max = Math.max(...mensal.map(m => m.orcamentos), 1); // evita divisão por 0
@@ -1101,7 +1101,7 @@ function GraficoMensal({ mensal }) {
   const ultimoIdx = mensal.length - 1;
 
   return (
-    <div style={{ background:"#fff", border:"1px solid #f3f4f6", borderRadius:10, padding:"16px 14px 12px" }}>
+    <div style={{ background:"#fff", border:"1px solid #f3f4f6", borderRadius: 14, padding:"16px 14px 12px" }}>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
         {mensal.map((m, i) => {
           const xGrupo = padLeft + i * grupoW;
@@ -1198,14 +1198,14 @@ function GraficoMensal({ mensal }) {
 // se há subutilização (uma empresa com 5 usuários mas só 1 ativo, p.ex.).
 function TopUsuarios({ usuarios, fmtDataHora }) {
   if (!usuarios || usuarios.length === 0) {
-    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius:8, background:"#fafafa" }}>Sem usuários ativos.</div>;
+    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem usuários ativos.</div>;
   }
 
   // Calcula o máximo pra escalar a barra de progresso
   const maxAcoes = Math.max(...usuarios.map(u => u.acoes_30d || 0), 1);
 
   return (
-    <div style={{ border:"1px solid #f3f4f6", borderRadius:8, overflow:"hidden", background:"#fafafa" }}>
+    <div style={{ border:"1px solid #f3f4f6", borderRadius: 12, overflow:"hidden", background:"#fafafa" }}>
       {usuarios.map((u, i) => {
         const acoes = u.acoes_30d || 0;
         const pct = maxAcoes > 0 ? (acoes / maxAcoes) * 100 : 0;
@@ -1452,7 +1452,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
             </button>
           </div>
         </div>
-        <div style={{ background:"#fafafa", border:"2px solid #d1d5db", color:"#374151", borderRadius:8, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+        <div style={{ background:"#fafafa", border:"2px solid #d1d5db", color:"#374151", borderRadius: 12, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
           Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -1534,7 +1534,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               onClick={() => setAtivo(true)}
               disabled={salvando}
               style={{
-                flex:1, padding:"10px", borderRadius:8, fontSize:13,
+                flex:1, padding:"10px", borderRadius: 12, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
                 border: ativo ? "1px solid #111" : "2px solid #d1d5db",
                 background: ativo ? "#111" : "#fff",
@@ -1548,7 +1548,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
               onClick={() => setAtivo(false)}
               disabled={salvando}
               style={{
-                flex:1, padding:"10px", borderRadius:8, fontSize:13,
+                flex:1, padding:"10px", borderRadius: 12, fontSize:13,
                 fontFamily:"inherit", cursor: salvando ? "not-allowed" : "pointer",
                 border: !ativo ? "1px solid #111" : "2px solid #d1d5db",
                 background: !ativo ? "#111" : "#fff",
@@ -1848,7 +1848,7 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
           </div>
 
           {/* Stats (readonly) — mostra histórico */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, padding:"14px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius:8, marginTop:4 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, padding:"14px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius: 12, marginTop:4 }}>
             <div>
               <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Usuários</div>
               <div style={{ fontSize:18, fontWeight:700, color:"#111", marginTop:2 }}>
@@ -2133,7 +2133,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
   const preview = fb.texto.length > 110 ? fb.texto.slice(0, 110) + "…" : fb.texto;
 
   return (
-    <div style={{ border:"2px solid #d1d5db", borderRadius:10, background:"#fff" }}>
+    <div style={{ border:"2px solid #d1d5db", borderRadius: 14, background:"#fff" }}>
       {/* ── Linha clicável (expande/recolhe) ── */}
       <div onClick={onToggle}
         style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
@@ -2311,7 +2311,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
 
 
       {noLimite && (
-        <div style={{ fontSize:12.5, color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, padding:"10px 14px", marginBottom:16 }}>
+        <div style={{ fontSize:12.5, color:"#b45309", background:"#fffbeb", border:"1px solid #fde68a", borderRadius: 12, padding:"10px 14px", marginBottom:16 }}>
           Limite de {limite} usuários master atingido. Exclua um existente para criar outro.
         </div>
       )}
@@ -2321,7 +2321,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
       )}
 
       {!loading && usuarios.length > 0 && (
-        <div style={{ border:"2px solid #d1d5db", borderRadius:10, overflow:"hidden" }}>
+        <div style={{ border:"2px solid #d1d5db", borderRadius: 14, overflow:"hidden" }}>
           <table style={S.tabela} className="vk-adm-tabela-mobile">
             <thead>
               <tr>

@@ -381,15 +381,15 @@ function Escritorio({ data, save }) {
     grid3: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 },
     campo: { display:"flex", flexDirection:"column", gap:5 },
     label: { fontSize:12, color:"#6b7280", fontWeight:500 },
-    input: { border:"1px solid #d1d5db", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-    select: { border:"1px solid #d1d5db", borderRadius:8, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
+    input: { border:"1px solid #d1d5db", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+    select: { border:"1px solid #d1d5db", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#111", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
     divisor: { border:"none", borderTop:"1px solid #f3f4f6", margin:"24px 0" },
-    btn: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btn: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnSec: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius: 12, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnAdd: { background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
-    btnSalvo: { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
+    btnSalvo: { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
     // Equipe
-    membroCard: { border:"2px solid #d1d5db", borderRadius:10, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
+    membroCard: { border:"2px solid #d1d5db", borderRadius: 14, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
     membroNome: { fontSize:14, fontWeight:600, color:"#111", marginBottom:2 },
     membroCargo: { fontSize:12, color:"#9ca3af" },
     membroInfo: { fontSize:12, color:"#6b7280", marginTop:6, display:"flex", gap:16 },
@@ -441,7 +441,7 @@ function Escritorio({ data, save }) {
             width: 160,
             height: 100,
             border: form.logo ? "2px solid #d1d5db" : "1.5px dashed #d1d5db",
-            borderRadius: 8,
+            borderRadius: 12,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -765,7 +765,7 @@ function Escritorio({ data, save }) {
       {!perm.podeAlterarConfig && (
         <div style={{
           padding:"12px 14px", background:"#f9fafb", border:"1px solid #f3f4f6",
-          borderRadius:8, color:"#6b7280", fontSize:12.5, textAlign:"center", marginTop:24,
+          borderRadius: 12, color:"#6b7280", fontSize:12.5, textAlign:"center", marginTop:24,
         }}>
           Somente administradores podem alterar estes dados.
         </div>
@@ -886,7 +886,7 @@ function Escritorio({ data, save }) {
 
         {/* Legenda dos níveis */}
         <div style={{
-          background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:10,
+          background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 14,
           padding:"12px 14px", marginBottom:20, fontSize:12, lineHeight:1.7, color:"#6b7280",
         }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4 }}>
@@ -911,7 +911,7 @@ function Escritorio({ data, save }) {
 
         {erroUsuarios && !loadingUsuarios && (
           <div style={{
-            background:"#fef2f2", border:"1px solid #fecaca", borderRadius:10,
+            background:"#fef2f2", border:"1px solid #fecaca", borderRadius: 14,
             padding:"14px 16px", color:"#b91c1c", fontSize:13,
             display:"flex", justifyContent:"space-between", alignItems:"center",
           }}>
@@ -1257,7 +1257,7 @@ function Escritorio({ data, save }) {
             {manutLoading ? "Executando..." : "Executar manutenção agora"}
           </button>
           {manutResult && (
-            <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, padding:"8px 14px" }}>
+            <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, padding:"8px 14px" }}>
               ✓ Executado em {new Date(manutResult.executadoEm).toLocaleString("pt-BR")}
               <br/>
               <span style={{ color:"#374151" }}>

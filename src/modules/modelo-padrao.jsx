@@ -94,7 +94,7 @@ function TemplateBarProposta({ templateId, onChange, lockEdicao }) {
               padding: ativo ? "5px 9px 4px" : "6px 10px 5px",
               border: ativo ? "2px solid #111" : "2px solid #d1d5db",
               background: ativo ? "#fafbfc" : "#fff",
-              borderRadius:8, cursor:"pointer", fontFamily:"inherit",
+              borderRadius: 12, cursor:"pointer", fontFamily:"inherit",
               display:"flex", flexDirection:"column", alignItems:"center", gap:3,
               minWidth:78, transition:"all 0.15s",
             }}>
@@ -1132,7 +1132,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         display:"flex",
         alignItems:"stretch",
         background:ACCENT,
-        borderRadius:8,
+        borderRadius: 12,
         overflow:"hidden",
         minHeight:160,
       },
@@ -1214,12 +1214,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
       etapaFraseFim: { fontSize:11.5, color:"#000000", fontStyle:"italic", marginTop:6, lineHeight:1.5 },
       grupoCols: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:24, margin:"6px 0" },
       // Cards de valor: bordas mais arredondadas (8px) igual ao mockup
-      destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
-      destaqueVlrLight: { background:"#FAEEDA", padding:"18px 22px", borderRadius:8, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
+      destaqueVlr: { background:ACCENT, padding:"18px 22px", borderRadius: 12, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
+      destaqueVlrLight: { background:"#FAEEDA", padding:"18px 22px", borderRadius: 12, margin:"6px 0", display:"flex", justifyContent:"space-between", alignItems:"baseline", breakInside:"avoid", pageBreakInside:"avoid" },
       destaqueLbl: { fontSize:14, fontWeight:700, color:"#412402", textTransform:"uppercase", letterSpacing:"0.06em" },
       destaqueNum: { fontSize:30, fontWeight:800, color:"#412402" },
       // Card "Total sem impostos" sutil em cinza claro (igual mockup)
-      totalSubtle: { background:"#f9fafb", padding:"10px 22px", borderRadius:8, margin:"4px 0 14px", fontSize:12, color:"#6b7280" },
+      totalSubtle: { background:"#f9fafb", padding:"10px 22px", borderRadius: 12, margin:"4px 0 14px", fontSize:12, color:"#6b7280" },
       totalSubtleB: { color:"#111", fontWeight:600 },
       // Forma de pagamento estruturada
       pgtoBloco: { marginTop:14, marginBottom:8, breakInside:"avoid", pageBreakInside:"avoid" },
@@ -1383,7 +1383,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         {/* Banner verde de proposta salva — só em modo edição quando há propostaInfo.
             Aparece como notificação pequena, não interfere no header amarelo. */}
         {!lockEdicao && propostaInfo && (
-          <div className="no-print" style={{ maxWidth:860, margin:"16px auto 0", padding:"10px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8, fontSize:12.5, color:"#166534" }}>
+          <div className="no-print" style={{ maxWidth:860, margin:"16px auto 0", padding:"10px 14px", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, fontSize:12.5, color:"#166534" }}>
             ✓ Proposta {propostaInfo.versao || ""} salva
             {propostaInfo.enviadaEm && ` · ${new Date(propostaInfo.enviadaEm).toLocaleString("pt-BR", { dateStyle:"short", timeStyle:"short" })}`}
           </div>
@@ -1396,16 +1396,16 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
             - Em edição sem onSalvarProposta → "Gerar PDF" (chama handlePdf direto)
             Largura limitada a maxWidth:860 e centralizado (mesmo eixo do header). */}
         <div className="no-print" style={{ maxWidth:860, margin:"16px auto 12px", display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-          <button onClick={onVoltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
+          <button onClick={onVoltar} style={{ background:"none", border:"2px solid #d1d5db", borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:"#6b7280" }}>
             ← Voltar
           </button>
           {(propostaInfo || lockEdicao) ? (
-            <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:"#111", border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+            <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               Gerar PDF
             </button>
           ) : (
             <button data-tutorial-id="botao-gerar-pdf" onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
-              style={{ background:"#111", border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+              style={{ background:"#111", border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
@@ -1615,7 +1615,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                       display: "inline-block",
                       padding: "5px 14px",
                       border: "2px solid #d1d5db",
-                      borderRadius: 8,
+                      borderRadius: 12,
                       background: "#fafbfc",
                       fontSize: 13, fontWeight: 600,
                       color: "#111", marginBottom: 10,
@@ -1797,7 +1797,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         {/* Modal de confirmação salvar — não muda */}
         {confirmSalvar && (
           <div className="no-print" style={{ position:"fixed", top:0, left:0, right:0, bottom:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1000 }}>
-            <div style={{ background:"#fff", padding:"28px 32px", borderRadius:12, maxWidth:480, width:"90%", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ background:"#fff", padding:"28px 32px", borderRadius: 16, maxWidth:480, width:"90%", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
               <div style={{ fontSize:18, fontWeight:700, color:"#111", marginBottom:8 }}>Salvar e gerar proposta?</div>
               <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.55, marginBottom:20 }}>
                 A proposta será arquivada e o PDF baixado. Após salvar, esta versão fica imutável.
@@ -1805,12 +1805,12 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               </div>
               <div style={{ display:"flex", justifyContent:"flex-end", gap:10 }}>
                 <button onClick={() => setConfirmSalvar(false)}
-                  style={{ background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius:8, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
+                  style={{ background:"#fff", color:"#374151", border:"1px solid #d1d5db", borderRadius: 12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>
                   Cancelar
                 </button>
                 <button
                   onClick={async () => { setConfirmSalvar(false); await handleSalvarProposta(); }}
-                  style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                  style={{ background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
                   Salvar e gerar PDF
                 </button>
               </div>
@@ -1954,7 +1954,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         {/* Badge de "Visualização de proposta enviada" */}
         {lockEdicao && (
           <div className="no-print" style={{
-            background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8,
+            background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12,
             padding:"10px 14px", marginBottom:16,
             display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
             fontSize:12.5,
@@ -1977,7 +1977,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         {/* Aviso de proposta salva (após salvar) — não mostrar se já tem lockEdicao */}
         {!lockEdicao && propostaInfo && (
           <div style={{
-            background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius:8,
+            background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12,
             padding:"10px 14px", marginBottom:16,
             display:"flex", alignItems:"center", justifyContent:"space-between", gap:12,
             fontSize:12.5,
@@ -1995,16 +1995,16 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
         )}
 
         <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:36 }}>
-          <button onClick={onVoltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius:8, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
+          <button onClick={onVoltar} style={{ background:"none", border:`1px solid ${LN}`, borderRadius: 12, padding:"7px 14px", fontSize:13, cursor:"pointer", fontFamily:"inherit", color:MD }}>
             ← Voltar
           </button>
           {(propostaInfo || lockEdicao) ? (
-            <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+            <button data-tutorial-id="botao-gerar-pdf" onClick={handlePdf} style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               Gerar PDF
             </button>
           ) : (
             <button data-tutorial-id="botao-gerar-pdf" onClick={() => onSalvarProposta ? setConfirmSalvar(true) : handlePdf()}
-              style={{ background:C, border:"none", borderRadius:8, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
+              style={{ background:C, border:"none", borderRadius: 12, padding:"8px 22px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", color:"#fff" }}>
               {onSalvarProposta ? "Salvar e Gerar PDF" : "Gerar PDF"}
             </button>
           )}
@@ -2020,7 +2020,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               zIndex:200, padding:20,
             }}>
             <div style={{
-              background:"#fff", borderRadius:12, width:"100%", maxWidth:440,
+              background:"#fff", borderRadius: 16, width:"100%", maxWidth:440,
               boxShadow:"0 20px 40px rgba(0,0,0,0.15)", overflow:"hidden",
             }}>
               <div style={{ padding:"20px 24px 12px", borderBottom:"1px solid #f3f4f6" }}>
@@ -2220,7 +2220,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
               Passo 1 do Form (perto de "Repetição") — não são mais editáveis
               aqui. Snapshots antigos preservam o valor que tinham quando
               foram gerados (snap?.temImposto/aliqImp como fallback). */}
-          <div style={{ border:`0.5px solid ${LN}`, borderRadius:8, padding:"10px 14px", fontSize:12, color:LT, marginBottom:4,
+          <div style={{ border:`0.5px solid ${LN}`, borderRadius: 12, padding:"10px 14px", fontSize:12, color:LT, marginBottom:4,
               display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
             {temImposto ? (<>
               <span>Imposto ({aliqImp}%)</span>
@@ -2282,7 +2282,7 @@ function PropostaPreviewEditorial({ data, onVoltar, onSalvarProposta, propostaRe
                     display: "inline-block",
                     padding: "5px 14px",
                     border: `1px solid ${LN}`,
-                    borderRadius: 8,
+                    borderRadius: 12,
                     background: "#fafbfc",
                     fontSize: 13, fontWeight: 600,
                     color: C, marginBottom: 10,

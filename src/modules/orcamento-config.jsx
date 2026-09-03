@@ -187,13 +187,13 @@ function OrcamentoConfig({ usuario, data, setUsuario }) {
     valor:    { fontSize:14, color:"#111" },
     vazio:    { fontSize:14, color:"#d1d5db", fontStyle:"italic" },
     grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:18 },
-    btn:      { background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnDanger:{ background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius:8, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    aviso:    { fontSize:13, color:"#6b7280", lineHeight:1.6, background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius:8, padding:"14px 16px", marginBottom:16 },
-    avisoSemPerm: { fontSize:13, color:"#92400e", lineHeight:1.6, background:"#fffbeb", border:"1px solid #fde68a", borderRadius:8, padding:"14px 16px" },
+    btn:      { background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    btnDanger:{ background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+    aviso:    { fontSize:13, color:"#6b7280", lineHeight:1.6, background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius: 12, padding:"14px 16px", marginBottom:16 },
+    avisoSemPerm: { fontSize:13, color:"#92400e", lineHeight:1.6, background:"#fffbeb", border:"1px solid #fde68a", borderRadius: 12, padding:"14px 16px" },
     // Box de destaque do preço base R$/m². Visualmente diferente das células
     // do grid pra dar peso ao número que importa no dia a dia.
-    boxPrecoBase: { background:"#fafbfc", border:"2px solid #d1d5db", borderRadius:10, padding:"18px 20px", marginTop:4 },
+    boxPrecoBase: { background:"#fafbfc", border:"2px solid #d1d5db", borderRadius: 14, padding:"18px 20px", marginTop:4 },
     boxLabel:     { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.6, fontWeight:600, marginBottom:6 },
     boxValor:     { fontSize:28, fontWeight:700, color:"#111", lineHeight:1, display:"flex", alignItems:"baseline", gap:6 },
     boxUnidade:   { fontSize:14, fontWeight:500, color:"#9ca3af" },

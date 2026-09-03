@@ -135,7 +135,7 @@ function TplInputMoeda({ valor, onChange, style, ...rest }) {
         style={{
           width: "100%",
           border: "1px solid #d1d5db",
-          borderRadius: 10,
+          borderRadius: 14,
           padding: "11px 12px 11px 36px",
           fontSize: 14,
           fontFamily: "inherit",
@@ -425,7 +425,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   const textareaBase = {
     width: "100%",
     border: "1px solid #d1d5db",
-    borderRadius: 10,
+    borderRadius: 14,
     padding: "12px 14px",
     fontSize: 13.5, color: "#111",
     fontFamily: "inherit",
@@ -437,7 +437,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   };
   const btnPrimary = {
     background: "#111", color: "#fff",
-    border: "none", borderRadius: 10,
+    border: "none", borderRadius: 14,
     padding: "12px 22px",
     fontSize: 13, fontWeight: 600, cursor: "pointer",
     fontFamily: "inherit",
@@ -445,7 +445,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
   };
   const btnSecondary = {
     background: "#fff", color: "#374151",
-    border: "1px solid #d1d5db", borderRadius: 10,
+    border: "1px solid #d1d5db", borderRadius: 14,
     padding: "12px 18px",
     fontSize: 13, cursor: "pointer", fontFamily: "inherit",
     transition: "border-color 0.12s",
@@ -1197,7 +1197,7 @@ function TemplateEdicao({ data, escritorio, onVoltar, onProsseguir, onPular }) {
                     Defina o percentual de cada etapa. <strong style={{ color: "#111" }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
                   </div>
 
-                  <div style={{ border: "2px solid #d1d5db", borderRadius: 10, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
+                  <div style={{ border: "2px solid #d1d5db", borderRadius: 14, padding: "4px 0", background: "#fff", marginBottom: 16 }}>
                     <div className="vk-tpl-fp2-etapa-header">
                       <span></span>
                       <span style={{ fontSize: 10, fontWeight: 600, color: "#111", textTransform: "uppercase", letterSpacing: "0.06em" }}>Etapa</span>

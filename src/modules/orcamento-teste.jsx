@@ -930,7 +930,7 @@ function ProbRing({ prob, size = 32, onChange = null }) {
       {menuOpen && clickable && (
         <div style={{
           position: "absolute", left: 0, top: `calc(100% + 6px)`, zIndex: 60,
-          background: "#fff", border: "2px solid #d1d5db", borderRadius: 8,
+          background: "#fff", border: "2px solid #d1d5db", borderRadius: 12,
           boxShadow: "0 4px 16px rgba(0,0,0,0.1)", minWidth: 100, overflow: "hidden",
         }}>
           <div style={{ padding: "6px 10px 4px", fontSize: 10, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5 }}>
@@ -1044,7 +1044,7 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
     <div
       onClick={() => onAbrir("ver")}
       style={{
-        background:"#fafbfc", border:"1px solid #eef0f3", borderRadius:10,
+        background:"#fafbfc", border:"1px solid #eef0f3", borderRadius: 14,
         padding:"13px 14px",
         transition:"all 0.12s", cursor:"pointer",
         display:"flex", flexDirection:"column", gap:9,
@@ -1104,7 +1104,7 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
           {venc.aplicavel && (
             <span style={{
               display:"inline-flex", alignItems:"center", gap:4,
-              padding:"2px 7px", borderRadius:10,
+              padding:"2px 7px", borderRadius: 14,
               fontSize:10.5, fontWeight: venc.bold ? 600 : 500,
               background: venc.cor === "#b91c1c" ? "#fef2f2" : "#f3f4f6",
               color: venc.cor,
@@ -1185,7 +1185,7 @@ function OrcCard({ orc, clientes, onAbrir, onAction, onChangeProb, perm }) {
             {menuOpen && (
               <div style={{
                 position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
-                background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
+                background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
                 boxShadow:"0 4px 16px rgba(0,0,0,0.1)",
                 overflow:"hidden",
               }}>
@@ -1294,7 +1294,7 @@ function ToggleVisualizacao({ viz, setViz }) {
     <div style={{
       display:"inline-flex",
       background:"#f4f5f7",
-      borderRadius:8,
+      borderRadius: 12,
       padding:3,
       gap:2,
     }}>
@@ -1477,7 +1477,7 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
               <span style={{
                 display:"inline-flex", alignItems:"center", justifyContent:"center",
                 fontSize:10.5, fontWeight:600,
-                padding:"1px 7px", borderRadius:10,
+                padding:"1px 7px", borderRadius: 14,
                 background: pc.bg, color: pc.text,
                 fontVariantNumeric:"tabular-nums",
                 cursor: clickable ? "pointer" : "default",
@@ -1535,7 +1535,7 @@ function OrcRow({ orc, clientes, onAbrir, onAction, showCliente = true,
         {menuOpen && (
           <div style={{
             position:"absolute", right:0, top:"calc(100% + 4px)", zIndex:999,
-            background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
+            background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
             boxShadow:"0 4px 16px rgba(0,0,0,0.1)", overflow:"hidden", minWidth:130,
           }}>
             <button
@@ -1690,7 +1690,7 @@ function ModalConfirmarExclusaoMassa({ orcs, clientes, onConfirmar, onCancelar }
       }}>
       <div onClick={e => e.stopPropagation()}
         style={{
-          background:"#fff", borderRadius:12,
+          background:"#fff", borderRadius: 16,
           padding:"24px 24px 20px", maxWidth:460, width:"100%",
           boxShadow:"0 8px 32px rgba(0,0,0,0.2)",
           maxHeight:"80vh", display:"flex", flexDirection:"column",
@@ -1702,7 +1702,7 @@ function ModalConfirmarExclusaoMassa({ orcs, clientes, onConfirmar, onCancelar }
           Esta ação não pode ser desfeita. Os seguintes orçamentos serão excluídos permanentemente:
         </div>
         <div style={{
-          border:"0.5px solid #e5e7eb", borderRadius:8,
+          border:"0.5px solid #e5e7eb", borderRadius: 12,
           background:"#fafbfc", overflow:"auto", flex:1,
           marginBottom:20,
         }}>
@@ -1737,7 +1737,7 @@ function ModalConfirmarExclusaoMassa({ orcs, clientes, onConfirmar, onCancelar }
           <button onClick={onCancelar}
             style={{
               background:"#fff", color:"#374151",
-              border:"1px solid #d1d5db", borderRadius:8,
+              border:"1px solid #d1d5db", borderRadius: 12,
               padding:"9px 18px", fontSize:13, fontWeight:500,
               cursor:"pointer", fontFamily:"inherit",
             }}>
@@ -1746,7 +1746,7 @@ function ModalConfirmarExclusaoMassa({ orcs, clientes, onConfirmar, onCancelar }
           <button onClick={onConfirmar}
             style={{
               background:"#dc2626", color:"#fff",
-              border:"none", borderRadius:8,
+              border:"none", borderRadius: 12,
               padding:"9px 20px", fontSize:13, fontWeight:600,
               cursor:"pointer", fontFamily:"inherit",
             }}>
@@ -1765,7 +1765,7 @@ function FiltroChip({ label, onRemove }) {
       display:"inline-flex", alignItems:"center", gap:6,
       fontSize:11.5, padding:"4px 4px 4px 10px",
       background:"#eff6ff", color:"#2563eb",
-      border:"0.5px solid #bfdbfe", borderRadius:12, fontWeight:500,
+      border:"0.5px solid #bfdbfe", borderRadius: 16, fontWeight:500,
     }}>
       {label}
       <button onClick={onRemove}
@@ -1817,7 +1817,7 @@ function SortDropdown({ sort, setSort }) {
       {open && (
         <div style={{
           position:"absolute", top:"calc(100% + 4px)", right:0, zIndex:50,
-          background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
+          background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
           boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:220, overflow:"hidden", padding:"6px 0",
         }}>
           {opcoes.map(o => {
@@ -1935,7 +1935,7 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
         {filtroAtivoCount > 0 && (
           <span style={{
             fontSize:9, background:"#2563eb", color:"#fff",
-            padding:"0 5px", borderRadius:8, fontWeight:700, marginLeft:2,
+            padding:"0 5px", borderRadius: 12, fontWeight:700, marginLeft:2,
           }}>{filtroAtivoCount}</span>
         )}
       </button>
@@ -1945,7 +1945,7 @@ function ColunaMenu({ col, label, sort, setSort, filtrosCol, setFiltrosCol,
           top:"calc(100% + 6px)",
           [align]: 0,
           zIndex:50,
-          background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
+          background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
           boxShadow:"0 4px 16px rgba(0,0,0,0.1)",
           minWidth:220, maxWidth:280, overflow:"hidden",
           textTransform:"none", letterSpacing:"0", fontWeight:400,
@@ -2177,7 +2177,7 @@ function OrcRowHeader({ showCliente = true, sort, setSort, filtrosCol, setFiltro
         {menuAcoesOpen && !modoSelecao && (
           <div style={{
             position:"absolute", left:0, top:"calc(100% + 6px)", zIndex:60,
-            background:"#fff", border:"2px solid #d1d5db", borderRadius:8,
+            background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
             boxShadow:"0 4px 16px rgba(0,0,0,0.1)", minWidth:180, overflow:"hidden",
             textTransform:"none", letterSpacing:0, fontWeight:400,
           }}>
@@ -2254,7 +2254,7 @@ function ModalNovoOrcamento({ clientes, busca, setBusca, onSelecionar, onFechar,
         zIndex:100, padding:20,
       }}>
       <div style={{
-        background:"#fff", borderRadius:12, width:"100%", maxWidth:480, maxHeight:"90vh",
+        background:"#fff", borderRadius: 16, width:"100%", maxWidth:480, maxHeight:"90vh",
         display:"flex", flexDirection:"column", boxShadow:"0 20px 40px rgba(0,0,0,0.15)", overflow:"hidden",
       }}>
         <div style={{ padding:"20px 24px 12px", borderBottom:"1px solid #f3f4f6", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -3025,7 +3025,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
           opacity: 1;
         }
       `}</style>
-      <div style={{ background:"#fff", borderRadius:12, width:"100%", maxWidth:540, maxHeight:"calc(100vh - 60px)", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
+      <div style={{ background:"#fff", borderRadius: 16, width:"100%", maxWidth:540, maxHeight:"calc(100vh - 60px)", overflowY:"auto", boxShadow:"0 10px 40px rgba(0,0,0,0.2)" }}>
 
         {/* Head */}
         <div style={{ padding:"20px 24px 14px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
@@ -3275,7 +3275,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
           </div>
 
           {/* Valor fechado */}
-          <div style={{ background:"#fafafa", border:"2px solid #d1d5db", borderRadius:8, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14 }}>
+          <div style={{ background:"#fafafa", border:"2px solid #d1d5db", borderRadius: 12, padding:"12px 14px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, marginBottom:14 }}>
             <div>
               <div style={{ fontSize:12, color:"#111", fontWeight:600 }}>Valor fechado total</div>
               <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>
@@ -3290,7 +3290,7 @@ function ModalConfirmarGanho({ orc, onClose, onConfirmar }) {
           </div>
 
           {/* Resumo */}
-          <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:8, padding:"14px 16px" }}>
+          <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 12, padding:"14px 16px" }}>
             <div style={SECTION_TITLE}>Resumo</div>
             {inclArq && (
               <div style={{ display:"flex", justifyContent:"space-between", fontSize:12.5, padding:"3px 0", color:"#374151" }}>
@@ -3380,7 +3380,7 @@ function AreaDetalhe({ calculo, fmtNum }) {
     </div>
   );
   return (
-    <div style={{ background:"#f4f5f7", border:"1px solid #dde0e5", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" }}>
+    <div style={{ background:"#f4f5f7", border:"1px solid #dde0e5", borderRadius: 12, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" }}>
       <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
         <span style={{ fontSize:13, color:"#828a98" }}>Área útil</span>
         <span style={{ fontSize:14, color:"#374151" }}>{fmt2(calculo.areaBruta)} m²</span>
@@ -4090,7 +4090,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
           ))
         ) : (
           <div style={{
-            background:"#fff", borderRadius:10, padding:"40px 32px",
+            background:"#fff", borderRadius: 14, padding:"40px 32px",
             maxWidth:520, textAlign:"center",
             border: proposta.expirouEm ? "1px solid #fecaca" : "none",
           }}>
@@ -4104,7 +4104,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
                   As imagens desta proposta foram removidas automaticamente após 30 dias sem fechamento pra liberar espaço. Os dados numéricos e textos foram preservados no histórico.
                 </div>
                 <div style={{
-                  background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius:8,
+                  background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 12,
                   padding:"14px 18px", textAlign:"left", fontSize:12.5, color:"#374151",
                 }}>
                   <div style={{ display:"flex", justifyContent:"space-between", padding:"3px 0" }}>
@@ -4158,7 +4158,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
           }}>
           <div onClick={e => e.stopPropagation()}
             style={{
-              background:"#fff", borderRadius:12,
+              background:"#fff", borderRadius: 16,
               padding:"26px 28px 20px", maxWidth:440, width:"100%",
               boxShadow:"0 8px 32px rgba(0,0,0,0.3)",
             }}>
@@ -4171,7 +4171,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
             <div style={{
               display:"flex", alignItems:"flex-start", gap:8,
               background:"#eff6ff", border:"1px solid #bfdbfe",
-              borderRadius:8, padding:"9px 12px", marginBottom:18,
+              borderRadius: 12, padding:"9px 12px", marginBottom:18,
               fontSize:12, color:"#1e3a8a", lineHeight:1.45,
             }}>
               <span style={{ fontSize:14, lineHeight:1 }}>ℹ</span>
@@ -4184,7 +4184,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
                 onClick={() => setConfirmEditar(false)}
                 style={{
                   background:"#fff", color:"#374151",
-                  border:"1px solid #d1d5db", borderRadius:8,
+                  border:"1px solid #d1d5db", borderRadius: 12,
                   padding:"9px 18px", fontSize:13, fontWeight:500,
                   cursor:"pointer", fontFamily:"inherit",
                 }}>
@@ -4197,7 +4197,7 @@ function PropostaVisualizer({ proposta, onFechar, onEditar }) {
                 }}
                 style={{
                   background:"#111", color:"#fff",
-                  border:"none", borderRadius:8,
+                  border:"none", borderRadius: 12,
                   padding:"9px 20px", fontSize:13, fontWeight:600,
                   cursor:"pointer", fontFamily:"inherit",
                 }}>
@@ -4456,7 +4456,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
 
     return (
       <div style={isRec ? {
-        padding: '18px 16px', border: `1.5px solid ${VERDE}`, borderRadius: 8,
+        padding: '18px 16px', border: `1.5px solid ${VERDE}`, borderRadius: 12,
         margin: '4px 0', position: 'relative',
       } : {
         padding: '18px 16px',
@@ -4498,7 +4498,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
     const renderGrupoMobile = (tipoCard, titulo, isRec = false) => (
       <div style={isRec ? {
         marginBottom: 18, padding: '14px 16px',
-        border: `1.5px solid ${VERDE}`, borderRadius: 8,
+        border: `1.5px solid ${VERDE}`, borderRadius: 12,
         position: 'relative',
       } : {
         marginBottom: 18, paddingBottom: 14,
@@ -4669,7 +4669,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
         )}
 
         {/* Tabela de etapas */}
-        <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ border: '0.5px solid #e5e7eb', borderRadius: 12, overflow: 'hidden', marginBottom: 16 }}>
           <div className="vk-bfp-etapas-grid" style={{
             display: 'grid', gridTemplateColumns: '1fr 60px 110px',
             gap: 12, padding: '10px 14px', background: '#fafbfc',
@@ -4778,7 +4778,7 @@ function BlocoFormaPagamentoView({ formaPagamento, valorArq, valorEng, incluiArq
     return (
       <div style={{
         border: (isRecomendado && !temAntecipado) ? `1.5px solid ${VERDE}` : '0.5px solid #e5e7eb',
-        borderRadius: 8, padding: '14px 16px',
+        borderRadius: 12, padding: '14px 16px',
         position: 'relative',
       }}>
         {isRecomendado && !temAntecipado && (
@@ -5006,8 +5006,8 @@ function EtapaFormaPagamento({
     cabecalhoSub: { fontSize: 14, color: '#6b7280', lineHeight: 1.5 },
     perguntaTitulo: { fontSize: 15, fontWeight: 500, color: '#111', marginBottom: 4, lineHeight: 1.5 },
     perguntaSub: { fontSize: 12.5, color: '#9ca3af', marginBottom: 12, lineHeight: 1.5 },
-    btnPrimary: { padding: '13px 14px', background: '#111', border: '1px solid #111', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#fff', fontWeight: 500 },
-    btnSecondary: { padding: '13px 18px', background: '#fff', border: '2px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#6b7280', fontWeight: 500 },
+    btnPrimary: { padding: '13px 14px', background: '#111', border: '1px solid #111', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#fff', fontWeight: 500 },
+    btnSecondary: { padding: '13px 18px', background: '#fff', border: '2px solid #d1d5db', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, color: '#6b7280', fontWeight: 500 },
     erroBox: { marginTop: 12, padding: '10px 12px', background: '#fef2f2', border: '0.5px solid #fecaca', borderRadius: 6, fontSize: 12, color: '#991b1b' },
     fadeIn: { animation: 'vk-fp-fade-in 0.35s ease-out' },
   };
@@ -5332,7 +5332,7 @@ function EtapaFormaPagamento({
           Defina o percentual de cada etapa do projeto. <strong style={{ color: '#111' }}>Todas aparecem por padrão.</strong> Desmarque pra excluir alguma da proposta.
         </div>
 
-        <div style={{ border: '2px solid #d1d5db', borderRadius: 10, padding: '4px 0', background: '#fff', marginBottom: 16 }}>
+        <div style={{ border: '2px solid #d1d5db', borderRadius: 14, padding: '4px 0', background: '#fff', marginBottom: 16 }}>
           <div className="vk-fp-etapa-header">
             <span></span>
             <span style={{ fontSize: 10, fontWeight: 600, color: '#111', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Etapa</span>
@@ -5417,7 +5417,7 @@ function EtapaFormaPagamento({
         {mostraEtapaUnica && (
         <div className="vk-fp-card-completo" style={{
           background: '#fff', border: '2px solid #d1d5db',
-          borderRadius: 10, overflow: 'hidden',
+          borderRadius: 14, overflow: 'hidden',
           display: 'flex',
           marginBottom: 12,
         }}>
@@ -5472,7 +5472,7 @@ function EtapaFormaPagamento({
         {mostraEtapasCompletas && (
         <div className="vk-fp-card-completo" style={{
           background: '#fff', border: '2px solid #d1d5db',
-          borderRadius: 10, overflow: 'hidden',
+          borderRadius: 14, overflow: 'hidden',
           display: 'flex',
         }}>
           {/* Lado esquerdo: configuração */}
@@ -5931,7 +5931,7 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
 
         <div data-tutorial-id="modelo-preview-container" style={{
           background: "#fff",
-          border: "2px solid #d1d5db", borderRadius: 12,
+          border: "2px solid #d1d5db", borderRadius: 16,
           height: "62vh", overflow: "auto",
           boxShadow: "0 18px 40px rgba(0,0,0,0.08)",
         }}>
@@ -5971,7 +5971,7 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
       }}>
         <button type="button" onClick={onVoltar} style={{
           background: "transparent", color: "#6b7280",
-          border: "2px solid #d1d5db", borderRadius: 8,
+          border: "2px solid #d1d5db", borderRadius: 12,
           padding: "10px 16px", fontSize: 13, fontWeight: 500,
           cursor: "pointer", fontFamily: "inherit",
         }}>← Voltar</button>
@@ -5995,7 +5995,7 @@ function EscolhaModeloOrcamento({ data, escritorio, onVoltar, onSelecionar }) {
           onClick={() => onSelecionar(tplAtual.id)}
           style={{
             background: "#111", color: "#fff",
-            border: "1px solid #111", borderRadius: 8,
+            border: "1px solid #111", borderRadius: 12,
             padding: "10px 20px", fontSize: 13, fontWeight: 600,
             cursor: "pointer", fontFamily: "inherit",
           }}>Usar este modelo →</button>
@@ -7301,10 +7301,10 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
 
   const C = {
     wrap:       { fontFamily:"inherit", color:"#111", background:"#fff", padding:"24px 28px", position:"relative", margin:0 },
-    fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#6b7280" },
+    fieldBox:   { background:"#f5f5f5", border:"1px solid #333", borderRadius: 14, padding:"12px 16px", fontSize:14, color:"#6b7280" },
     fieldLabel: { fontSize:10, color:"#828a98", textTransform:"uppercase", letterSpacing:1, marginBottom:6, display:"block" },
-    input:      { width:"100%", border:"1px solid #333", borderRadius:10, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
-    btnDefinir: { width:"100%", maxWidth:380, background:"#111", border:"1px solid #111", borderRadius:10, padding:"13px 0", fontSize:14, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
+    input:      { width:"100%", border:"1px solid #333", borderRadius: 14, padding:"12px 16px", fontSize:14, color:"#111", outline:"none", background:"#fff", boxSizing:"border-box", fontFamily:"inherit" },
+    btnDefinir: { width:"100%", maxWidth:380, background:"#111", border:"1px solid #111", borderRadius: 14, padding:"13px 0", fontSize:14, fontWeight:700, color:"#fff", cursor:"pointer", fontFamily:"inherit", textAlign:"center", display:"block", margin:"0 auto" },
     aviso:      { fontSize:12, color:"#ef4444", textAlign:"center", marginTop:8 },
     comodoGrupoHdr: { fontSize:10, color:"#555e6b", textTransform:"uppercase", letterSpacing:1, marginBottom:8, marginTop:20, background:"#f0f1f4", border:"1px solid #b8bec8", borderRadius:6, padding:"6px 10px", display:"inline-block" },
     comodoRow:  (ativo) => ({ display:"flex", alignItems:"center", gap:4, padding:"3px 0", borderBottom:"1px solid #c8cdd6", opacity: ativo ? 1 : 0.55 }),
@@ -7314,13 +7314,13 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
     qtdBtn:     { width:26, height:26, borderRadius:6, border:"1px solid #888", background:"#fff", color:"#374151", fontSize:16, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1 },
     qtdNum:     (q) => ({ width:24, textAlign:"center", fontSize:14, fontWeight: q > 0 ? 700 : 400, color: q > 0 ? "#111" : "#828a98" }),
     qtdM2Tot:   { fontSize:12, color:"#6b7280", width:72, textAlign:"right", whiteSpace:"nowrap" },
-    resumoBox:  { background:"#fff", border:"1px solid #c8cdd6", borderRadius:10, padding:"16px 18px" },
+    resumoBox:  { background:"#fff", border:"1px solid #c8cdd6", borderRadius: 14, padding:"16px 18px" },
     resumoHdr:  { fontSize:11, color:"#555e6b", textTransform:"uppercase", letterSpacing:1.2, textAlign:"center", marginBottom:12, paddingBottom:10, borderBottom:"2px solid #d1d5db" },
     resumoSec:  { fontSize:11, color:"#6b7280", textTransform:"uppercase", letterSpacing:1, marginBottom:6, marginTop:14 },
     resumoVal:  { fontSize:19, fontWeight:700, color:"#111" },
     resumoM2:   { fontSize:13, color:"#828a98", marginTop:2 },
     resumoLinha:{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:4 },
-    resumoArea: { background:"#f0f1f4", border:"1px solid #c0c5cf", borderRadius:8, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" },
+    resumoArea: { background:"#f0f1f4", border:"1px solid #c0c5cf", borderRadius: 12, padding:"10px 14px", marginBottom:10, fontSize:13, color:"#374151" },
   };
 
 
@@ -8256,7 +8256,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
       <div data-vk-orc-toolbar style={{
         display:"flex", gap:16, flexWrap:"wrap", alignItems:"center",
         padding:"12px 16px", marginBottom:16, maxWidth:1100,
-        background:"#fafaf7", border:"2px solid #d1d5db", borderRadius:10,
+        background:"#fafaf7", border:"2px solid #d1d5db", borderRadius: 14,
       }}>
         {[
           { key:"incluiArq",        val:incluiArq,        set:setIncluiArq,        label:"Arquitetura"  },
@@ -8266,7 +8266,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           <label key={key} data-tutorial-id={`toggle-${key}`} onClick={() => set(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
             <span style={{
               position:"relative", display:"inline-block",
-              width:36, height:20, borderRadius:10, flexShrink:0,
+              width:36, height:20, borderRadius: 14, flexShrink:0,
               background: val ? "#111" : "#d1d5db",
               transition:"background 0.2s",
               cursor:"pointer",
@@ -8289,7 +8289,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
         <label onClick={() => setTemImposto(v => !v)} style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", userSelect:"none" }}>
           <span style={{
             position:"relative", display:"inline-block",
-            width:36, height:20, borderRadius:10, flexShrink:0,
+            width:36, height:20, borderRadius: 14, flexShrink:0,
             background: temImposto ? "#111" : "#d1d5db",
             transition:"background 0.2s",
             cursor:"pointer",
@@ -8659,7 +8659,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           <div data-vk-orc-comodos-card style={{
             background:"#fff",
             border:"2px solid #d1d5db",
-            borderRadius:10,
+            borderRadius: 14,
             maxHeight: cardComodosRecolhido ? "none" : 560,
             overflowY: cardComodosRecolhido ? "visible" : "auto",
             padding:"4px 12px",
@@ -8996,7 +8996,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                               </button>
                               {open && (
                                 <div style={{ position:"absolute", top:"100%", left:0, zIndex:9999,
-                                  background:"#fff", border:"1px solid #b0b7c3", borderRadius:8,
+                                  background:"#fff", border:"1px solid #b0b7c3", borderRadius: 12,
                                   boxShadow:"0 4px 20px rgba(0,0,0,0.12)", minWidth:110, overflow:"hidden", marginTop:4 }}>
                                   {opcoes[key].map(op => {
                                     const selecionado = val === op;
@@ -9248,7 +9248,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
                 </div>
                 <button
                   data-tutorial-id="botao-definir-pagamento"
-                  style={{ width:"100%", marginTop:10, background:"#111", color:"#fff", border:"1px solid #111", borderRadius:8, padding:"11px 16px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
+                  style={{ width:"100%", marginTop:10, background:"#111", color:"#fff", border:"1px solid #111", borderRadius: 12, padding:"11px 16px", fontSize:14, fontWeight:600, cursor:"pointer", fontFamily:"inherit", letterSpacing:0.2, transition:"background 0.15s, border-color 0.15s" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#000"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="#111"; }}
                   onClick={gerarProposta}>
@@ -9304,7 +9304,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
           onClick={() => { setShowSaveDialog(false); pendingNavRef.current = null; }}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background:"#fff", borderRadius:12, padding:"28px 28px 20px", maxWidth:420, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.2)" }}>
+            style={{ background:"#fff", borderRadius: 16, padding:"28px 28px 20px", maxWidth:420, width:"90%", boxShadow:"0 8px 32px rgba(0,0,0,0.2)" }}>
             <div style={{ fontSize:16, fontWeight:700, color:"#111", marginBottom:8 }}>Salvar este orçamento?</div>
             <div style={{ fontSize:13, color:"#6b7280", marginBottom:12, lineHeight:1.5 }}>
               Você iniciou um orçamento mas ainda não finalizou. Deseja salvá-lo como rascunho para continuar depois?
@@ -9312,7 +9312,7 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             <div style={{
               display:"flex", alignItems:"flex-start", gap:8,
               background:"#fffbeb", border:"1px solid #fde68a",
-              borderRadius:8, padding:"9px 12px", marginBottom:20,
+              borderRadius: 12, padding:"9px 12px", marginBottom:20,
               fontSize:12, color:"#92400e", lineHeight:1.45,
             }}>
               <span style={{ fontSize:14, lineHeight:1 }}>⏱</span>
@@ -9323,17 +9323,17 @@ function FormOrcamentoProjetoTeste({ onSalvar, orcBase, clienteNome, clienteWA, 
             <div style={{ display:"flex", gap:8, justifyContent:"flex-end", flexWrap:"wrap" }}>
               <button
                 onClick={() => { setShowSaveDialog(false); pendingNavRef.current = null; }}
-                style={{ background:"#fff", color:"#6b7280", border:"1px solid #d1d5db", borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+                style={{ background:"#fff", color:"#6b7280", border:"1px solid #d1d5db", borderRadius: 12, padding:"9px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
                 Cancelar
               </button>
               <button
                 onClick={descartarEVoltar}
-                style={{ background:"#fff", color:"#b91c1c", border:"1px solid #fecaca", borderRadius:8, padding:"9px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
+                style={{ background:"#fff", color:"#b91c1c", border:"1px solid #fecaca", borderRadius: 12, padding:"9px 16px", fontSize:13, fontWeight:500, cursor:"pointer", fontFamily:"inherit" }}>
                 Descartar
               </button>
               <button
                 onClick={salvarRascunhoEVoltar}
-                style={{ background:"#111", color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                style={{ background:"#111", color:"#fff", border:"none", borderRadius: 12, padding:"9px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
                 Salvar rascunho
               </button>
             </div>
