@@ -1188,40 +1188,44 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
     );
   }
 
-  // Lista de obras — view padrão
+  // Lista de obras — view padrão. Sem quadro/container externo: só os
+  // cards discretos das obras + um botão redondo de adicionar.
   return (
-    <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
-      <div style={{ marginBottom: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Gestão de Obra</div>
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 12, color: "#6b7280" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
+        {perm.podeEditar && (
+          <button onClick={novaObra} title="Adicionar obra"
+            style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: "#262421", color: "#fff", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.background = "#b5652f"}
+            onMouseLeave={e => e.currentTarget.style.background = "#262421"}>
+            +
+          </button>
+        )}
       </div>
 
       {obras.length === 0 ? (
         <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
-          Nenhuma obra cadastrada. {perm.podeEditar && <button onClick={novaObra} style={{ background: "transparent", border: "none", color: "#f59e0b", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Cadastrar primeira obra</button>}
+          Nenhuma obra cadastrada.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
           {obras.map(obra => (
             <div
               key={obra.id}
               onClick={() => { setObraSelecionada(obra); setView("detalheObra"); }}
-              style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px 14px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s", backgroundColor: "#fff" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = "#b5652f"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(181,101,47,0.12)"; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow = "none"; }}>
+              style={{ padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", borderRadius: 9, transition: "background 0.15s", backgroundColor: "transparent" }}
+              onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#fafafa"; }}
+              onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{obra.nome}</div>
               {perm.podeEditar && (
                 <div onClick={e => e.stopPropagation()}>
-                  <button onClick={() => editarObra(obra)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                  <button onClick={() => editarObra(obra)} style={{ ...C.btnGhost, fontSize: 12 }}>Editar</button>
                 </div>
               )}
             </div>
           ))}
         </div>
-      )}
-
-      {perm.podeEditar && (
-        <button style={{ ...C.btn, width: "100%", marginTop: 12 }} onClick={novaObra}>+ Adicionar obra</button>
       )}
     </div>
   );
