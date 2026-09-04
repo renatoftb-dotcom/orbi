@@ -4995,7 +4995,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===colunaDoCliente(cliente))||COLUNAS[0];
 
-    const VKD = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#1e3a5f", cobreClaro:"#eef3f8", inkSoft:"#78716c" };
+    const VKD = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#1e3a5f", cobreClaro:"#f3f4f6", inkSoft:"#78716c" };
     return (
       <div style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}</style>
