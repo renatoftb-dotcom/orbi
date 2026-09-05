@@ -14,6 +14,10 @@ const ORDER = [
   "shared.jsx",
   "api.js",
   "outros.jsx",
+  // obra-financeiro.jsx vem ANTES de clientes.jsx: clientes.jsx
+  // (GestaoObraPanel) consome a taxonomia (PLANO_CONTAS, ETAPAS_OBRA,
+  // GRUPOS_MATERIAL) e, nas próximas entregas, calcularPLObra().
+  "obra-financeiro.jsx",
   "clientes.jsx",
   "resultado-pdf.jsx",
   // shared-textos.jsx vem antes de quem o consome (modelo-padrao.jsx,
