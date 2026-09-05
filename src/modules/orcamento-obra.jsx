@@ -1716,6 +1716,20 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
   const ehTerrea = projetoDraft.tipologia !== "Sobrado";
 
+  // Mantém terreo.m2Parede20 sincronizado com "total − 15cm − 25cm" sempre
+  // que a tipologia é Térrea — inclusive na primeira renderização, pra um
+  // projeto salvo antes desta mudança já abrir com o valor certo.
+  useEffect(() => {
+    if (!ehTerrea) return;
+    const total = numOrZero(projetoDraft.arquitetura?.m2ParedesTotal);
+    const p15 = numOrZero(projetoDraft.terreo?.m2Parede15);
+    const p25 = numOrZero(projetoDraft.terreo?.m2Parede25);
+    const p20 = Math.max(0, total - p15 - p25);
+    if (numOrZero(projetoDraft.terreo?.m2Parede20) !== p20) {
+      setProjetoDraft((p) => setEmCaminho(p, "terreo.m2Parede20", p20));
+    }
+  }, [ehTerrea, projetoDraft.arquitetura?.m2ParedesTotal, projetoDraft.terreo?.m2Parede15, projetoDraft.terreo?.m2Parede25, projetoDraft.terreo?.m2Parede20]);
+
   // Térrea: um único campo de área construída, espelhado em arquitetura e
   // terreo (na prática são a mesma área quando não há Pav. 1).
   function setAreaConstruidaTerrea(v) {
@@ -1723,7 +1737,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   }
 
   // M² de parede total sempre derivado de interna+externa — nunca digitado
-  // direto, pra não ficar dessincronizado.
+  // direto, pra não ficar dessincronizado. Pra Térrea, o efeito acima cuida
+  // de recalcular o 20cm automático sempre que o total mudar.
   function setParedeInterna(v) {
     setProjetoDraft((p) => {
       const externa = numOrZero(lerCaminho(p, "arquitetura.m2ParedesExternas"));
@@ -1737,8 +1752,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     });
   }
 
-  // Pav. Térreo — modo simples assume tudo em 20cm (zera 15/25cm); o botão
-  // "Expandir" libera o detalhamento por espessura.
+  // Pav. Térreo (só Sobrado) — modo simples assume tudo em 20cm (zera
+  // 15/25cm); o botão "Expandir" libera o detalhamento por espessura.
   function setParedeTerreoSimples(v) {
     setProjetoDraft((p) => setEmCaminho(setEmCaminho(setEmCaminho(p, "terreo.m2Parede20", v), "terreo.m2Parede15", 0), "terreo.m2Parede25", 0));
   }
@@ -1828,26 +1843,16 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           {ehTerrea && (
             <>
               <CampoNum label="Perímetro de paredes" valor={get("terreo.perimetroParedes")} onChange={(v) => set("terreo.perimetroParedes", v)} />
-              {!paredeTerreoExpandida ? (
-                <CampoNum label="M² de parede p/ estrutura (considera tudo 20cm)" valor={get("terreo.m2Parede20")} onChange={setParedeTerreoSimples} />
-              ) : (
-                <>
-                  <CampoNum label="M² parede 15cm" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
-                  <CampoNum label="M² parede 20cm" valor={get("terreo.m2Parede20")} onChange={(v) => set("terreo.m2Parede20", v)} />
-                  <CampoNum label="M² parede 25cm" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
-                </>
-              )}
+              <CampoNum label="M² parede 15cm (se houver)" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
+              <CampoNum label="M² parede 25cm (se houver)" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
+              <div>
+                <label style={C.label}>M² parede 20cm (automático)</label>
+                <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("terreo.m2Parede20"))} disabled readOnly />
+              </div>
               <CampoNum label="Vãos de portas e janelas" valor={get("terreo.vaoPortasJanelas")} onChange={(v) => set("terreo.vaoPortasJanelas", v)} />
             </>
           )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
-          {ehTerrea && (
-            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" style={{ ...C.btnGhost, fontSize: 11 }} onClick={() => setParedeTerreoExpandida((v) => !v)}>
-                {paredeTerreoExpandida ? "Simplificar (tudo 20cm)" : "Expandir espessuras de parede (15/20/25cm)"}
-              </button>
-            </div>
-          )}
         </BlocoColapsavel>
 
         {!ehTerrea && (

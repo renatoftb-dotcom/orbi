@@ -4255,6 +4255,1188 @@ var S = {
 
 
 // ════════════════════════════════════════════════════════════
+// insumos-seed.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// INSUMOS — SEMENTE DO CATÁLOGO
+// ═══════════════════════════════════════════════════════════════
+// 111 insumos (94 materiais + 17 prestadores) com código estável, preço de
+// referência, unidade, grupo e aliases.
+//
+// Origem dos preços (docs/referencia-orcamento/PRECOS-REFERENCIA-VICKE.xlsx):
+//   - compra            → última compra com menos de 12 meses, usada como está
+//   - compra_corrigida  → última compra com 12+ meses, corrigida pelo INCC
+//   - cotacao           → linha marcada COTAÇÃO na base do escritório
+//   - mercado           → sem equivalente na base; referência de mercado SP 2026
+//
+// Base: BASE DE DADOS GERAL.xlsm — 9.764 lançamentos, out/2022 a ago/2026.
+// Data de referência do cálculo: 05/09/2026.
+//
+// ARQUIVO GERADO. Para alterar preço, use a tela de Insumos (o valor vira
+// precoManual e nunca mais é sobrescrito). Não edite este arquivo à mão.
+// ═══════════════════════════════════════════════════════════════
+
+var INSUMOS_SEED = [
+  { codigo:"ACO-001", nome:"Aço - Barras de CA50 10.0mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:39.22, precoFonte:"compra", precoData:"2026-07-30", precoNCompras:49, precoFatorInccAplicado:1, aliases:["Aço - Barras de CA50 10.0mm 12mts"] },
+  { codigo:"ACO-002", nome:"Aço - Barras de CA50 12.5mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:76.51, precoFonte:"compra_corrigida", precoData:"2024-10-11", precoNCompras:12, precoFatorInccAplicado:1.1375, aliases:["Aço - Barras de CA50 12.5mm 12mts"] },
+  { codigo:"ACO-003", nome:"Aço - Barras de CA50 16mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:119.84, precoFonte:"compra_corrigida", precoData:"2024-01-09", precoNCompras:1, precoFatorInccAplicado:1.1911, aliases:["Aço - Barras de CA50 16mm 12mts"] },
+  { codigo:"ACO-004", nome:"Aço - Barras de CA50 4.2mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:12.52, precoFonte:"compra_corrigida", precoData:"2025-02-26", precoNCompras:2, precoFatorInccAplicado:1.1147, aliases:["Aço - Barras de CA50 4.2mm 12mts"] },
+  { codigo:"ACO-005", nome:"Aço - Barras de CA50 5.0mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:15.63, precoFonte:"compra_corrigida", precoData:"2023-03-08", precoNCompras:4, precoFatorInccAplicado:1.2242, aliases:["Aço - Barras de CA50 5.0mm 12mts"] },
+  { codigo:"ACO-006", nome:"Aço - Barras de CA50 6.3mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:20.04, precoFonte:"compra_corrigida", precoData:"2023-12-04", precoNCompras:14, precoFatorInccAplicado:1.1944, aliases:["Aço - Barras de CA50 6.3mm 12mts"] },
+  { codigo:"ACO-007", nome:"Aço - Barras de CA50 8.0mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:26.31, precoFonte:"compra", precoData:"2026-07-30", precoNCompras:50, precoFatorInccAplicado:1, aliases:["Aço - Barras de CA50 8.0mm 12mts"] },
+  { codigo:"ACO-008", nome:"Aço - Barras de CA60 4.2mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:12.85, precoFonte:"compra_corrigida", precoData:"2023-10-26", precoNCompras:6, precoFatorInccAplicado:1.2009, aliases:["Aço - Barras de CA60 4.2mm 12mts"] },
+  { codigo:"ACO-009", nome:"Aço - Barras de CA60 5.0mm 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:11.82, precoFonte:"compra", precoData:"2026-07-30", precoNCompras:23, precoFatorInccAplicado:1, aliases:["Aço - Barras de CA60 5.0mm 12mts"] },
+  { codigo:"ACO-010", nome:"Aço - Malha Pop EQ061 3.4mm 15x15", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:38.86, precoFonte:"compra_corrigida", precoData:"2025-08-08", precoNCompras:23, precoFatorInccAplicado:1.0822, aliases:["Aço - Malha Pop EQ061 3.4mm 15x15"] },
+  { codigo:"ACO-011", nome:"Aço - Malha pop EQ092 4.2mm 15x15", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:87.72, precoFonte:"compra_corrigida", precoData:"2025-05-06", precoNCompras:16, precoFatorInccAplicado:1.0983, aliases:["Aço - Malha pop EQ092 4.2mm 15x15"] },
+  { codigo:"ACO-012", nome:"Aço - Treliça H8 Barras 12mts", grupo:"Aço", unidade:"Unidades", tipo:"material", precoReferencia:35.82, precoFonte:"compra", precoData:"2025-10-08", precoNCompras:8, precoFatorInccAplicado:1, aliases:["Aço - Treliça H8 Barras 12mts"] },
+  { codigo:"AGR-001", nome:"Areia Fina", grupo:"Areia e pedra", unidade:"m3", tipo:"material", precoReferencia:130.0, precoFonte:"compra", precoData:"2026-08-23", precoNCompras:115, precoFatorInccAplicado:1, aliases:["Areia Fina"] },
+  { codigo:"AGR-002", nome:"Areia Grossa", grupo:"Areia e pedra", unidade:"m3", tipo:"material", precoReferencia:220.0, precoFonte:"compra", precoData:"2026-08-23", precoNCompras:97, precoFatorInccAplicado:1, aliases:["Areia Grossa"] },
+  { codigo:"AGR-003", nome:"Pedra", grupo:"Areia e pedra", unidade:"m3", tipo:"material", precoReferencia:135.0, precoFonte:"compra", precoData:"2026-08-23", precoNCompras:58, precoFatorInccAplicado:1, aliases:["Pedra"] },
+  { codigo:"ARG-001", nome:"Argamassa AC 3 GF - 20kg", grupo:"Argamassas", unidade:"Unidades", tipo:"material", precoReferencia:31.52, precoFonte:"compra", precoData:"2026-01-19", precoNCompras:29, precoFatorInccAplicado:1, aliases:["Argamassa AC 3 GF - 20kg"] },
+  { codigo:"ARG-002", nome:"Rejunte - 5kg", grupo:"Argamassas", unidade:"Unidades", tipo:"material", precoReferencia:36.68, precoFonte:"compra", precoData:"2025-09-22", precoNCompras:1, precoFatorInccAplicado:1, aliases:["Rejunte - 5kg"] },
+  { codigo:"CAL-001", nome:"Telhado - Calha", grupo:"Calhas e rufos", unidade:"m2", tipo:"material", precoReferencia:50.0, precoFonte:"compra", precoData:"2026-01-22", precoNCompras:40, precoFatorInccAplicado:1, aliases:["Telhado - Calha"] },
+  { codigo:"CAL-002", nome:"Telhado - Pingadeira", grupo:"Calhas e rufos", unidade:"Mts", tipo:"material", precoReferencia:28.0, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Telhado - Pingadeira"], observacao:"Referência de mercado 2026 (rufo pingadeira galvanizado)" },
+  { codigo:"CAL-003", nome:"Telhado - Rufo", grupo:"Calhas e rufos", unidade:"Mts", tipo:"material", precoReferencia:32.0, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Telhado - Rufo"], observacao:"Referência de mercado 2026 (rufo galvanizado, Leroy/Telhanorte)" },
+  { codigo:"CIM-001", nome:"Sacos de cimento 50kg", grupo:"Cimento", unidade:"Unidades", tipo:"material", precoReferencia:38.0, precoFonte:"compra", precoData:"2026-08-23", precoNCompras:253, precoFatorInccAplicado:1, aliases:["Sacos de cimento 50kg"] },
+  { codigo:"CON-001", nome:"Concreto - Bomba", grupo:"Concreto", unidade:"Unidades", tipo:"material", precoReferencia:1977.02, precoFonte:"compra_corrigida", precoData:"2025-05-22", precoNCompras:25, precoFatorInccAplicado:1.0983, aliases:["Concreto - Bomba"] },
+  { codigo:"CON-002", nome:"Concreto - FCK20", grupo:"Concreto", unidade:"m3", tipo:"material", precoReferencia:472.29, precoFonte:"compra_corrigida", precoData:"2025-05-22", precoNCompras:11, precoFatorInccAplicado:1.0983, aliases:["Concreto - FCK20"] },
+  { codigo:"CON-003", nome:"Concreto - FCK25", grupo:"Concreto", unidade:"m3", tipo:"material", precoReferencia:488.76, precoFonte:"compra_corrigida", precoData:"2025-05-22", precoNCompras:31, precoFatorInccAplicado:1.0983, aliases:["Concreto - FCK25"] },
+  { codigo:"CON-004", nome:"Concreto - FCK30", grupo:"Concreto", unidade:"m3", tipo:"material", precoReferencia:505.24, precoFonte:"compra_corrigida", precoData:"2025-05-22", precoNCompras:4, precoFatorInccAplicado:1.0983, aliases:["Concreto - FCK30"] },
+  { codigo:"CXA-001", nome:"Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:215.0, precoFonte:"cotacao", precoData:null, precoNCompras:1, precoFatorInccAplicado:1, aliases:["Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm"], observacao:"Linha marcada COTAÇÃO na base" },
+  { codigo:"CXA-002", nome:"Madeira Caixaria - Sarrafos de 05cm x 3mts", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:11.42, precoFonte:"compra_corrigida", precoData:"2025-07-03", precoNCompras:26, precoFatorInccAplicado:1.0876, aliases:["Madeira Caixaria - Sarrafos de 05cm x 3mts"] },
+  { codigo:"CXA-003", nome:"Madeira Caixaria - Tábuas de 10cm x 3mts", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:11.88, precoFonte:"compra", precoData:"2026-08-11", precoNCompras:21, precoFatorInccAplicado:1, aliases:["Madeira Caixaria - Tábuas de 10cm x 3mts"] },
+  { codigo:"CXA-004", nome:"Madeira Caixaria - Tábuas de 20cm x 3mts", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:19.38, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:12, precoFatorInccAplicado:1.0769, aliases:["Madeira Caixaria - Tábuas de 20cm x 3mts"] },
+  { codigo:"CXA-005", nome:"Madeira Caixaria - Tábuas de 25cm x 3mts", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:24.23, precoFonte:"compra_corrigida", precoData:"2024-03-22", precoNCompras:6, precoFatorInccAplicado:1.179, aliases:["Madeira Caixaria - Tábuas de 25cm x 3mts"] },
+  { codigo:"CXA-006", nome:"Madeira Caixaria - Tábuas de 30cm x 3mts", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:37.7, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:44, precoFatorInccAplicado:1.0769, aliases:["Madeira Caixaria - Tábuas de 30cm x 3mts"] },
+  { codigo:"ELE-001", nome:"Elétrica - Poste Padrão - Trifásica C3", grupo:"Elétrica e iluminação", unidade:"Unidades", tipo:"material", precoReferencia:1790.37, precoFonte:"compra_corrigida", precoData:"2023-12-01", precoNCompras:4, precoFatorInccAplicado:1.1944, aliases:["Elétrica - Poste Padrão - Trifásica C3"] },
+  { codigo:"FER-001", nome:"Disco Ferro", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:2.54, precoFonte:"compra_corrigida", precoData:"2025-07-11", precoNCompras:36, precoFatorInccAplicado:1.0876, aliases:["Disco Ferro"] },
+  { codigo:"FER-002", nome:"Disco Porcelanato", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:101.06, precoFonte:"compra", precoData:"2025-12-23", precoNCompras:44, precoFatorInccAplicado:1, aliases:["Disco Porcelanato"] },
+  { codigo:"FER-003", nome:"Disco Serra Circular", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:86.15, precoFonte:"compra_corrigida", precoData:"2025-09-16", precoNCompras:48, precoFatorInccAplicado:1.0769, aliases:["Disco Serra Circular"] },
+  { codigo:"FER-004", nome:"Ferramentas - Carrinho Pedreiro", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:197.46, precoFonte:"compra_corrigida", precoData:"2024-09-19", precoNCompras:6, precoFatorInccAplicado:1.1434, aliases:["Ferramentas - Carrinho Pedreiro"] },
+  { codigo:"FER-005", nome:"Ferramentas - Cavadeira", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:79.31, precoFonte:"compra_corrigida", precoData:"2024-06-10", precoNCompras:3, precoFatorInccAplicado:1.161, aliases:["Ferramentas - Cavadeira"] },
+  { codigo:"FER-006", nome:"Ferramentas - Engate Rápido Mangueira Jardim", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:3.6, precoFonte:"compra", precoData:"2025-12-16", precoNCompras:4, precoFatorInccAplicado:1, aliases:["Ferramentas - Engate Rápido Mangueira Jardim"] },
+  { codigo:"FER-007", nome:"Ferramentas - Furadeira Dewalt 1/2 DWD502-BR 710W", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:447.81, precoFonte:"compra", precoData:"2026-08-11", precoNCompras:6, precoFatorInccAplicado:1, aliases:["Ferramentas - Furadeira Dewalt 1/2 DWD502-BR 710W"] },
+  { codigo:"FER-008", nome:"Ferramentas - Lapis", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:1.89, precoFonte:"compra", precoData:"2025-12-16", precoNCompras:18, precoFatorInccAplicado:1, aliases:["Ferramentas - Lapis"] },
+  { codigo:"FER-009", nome:"Ferramentas - Linha de pedreiro", grupo:"Ferramentas", unidade:"Mts", tipo:"material", precoReferencia:0.11, precoFonte:"compra_corrigida", precoData:"2025-07-11", precoNCompras:15, precoFatorInccAplicado:1.0876, aliases:["Ferramentas - Linha de pedreiro"] },
+  { codigo:"FER-010", nome:"Ferramentas - Luva Mucambo", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:4.36, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:15, precoFatorInccAplicado:1.0769, aliases:["Ferramentas - Luva Mucambo"] },
+  { codigo:"FER-011", nome:"Ferramentas - Mangueira de Jardim", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:4.23, precoFonte:"compra", precoData:"2025-12-16", precoNCompras:5, precoFatorInccAplicado:1, aliases:["Ferramentas - Mangueira de Jardim"] },
+  { codigo:"FER-012", nome:"Ferramentas - Mangueira de Nível", grupo:"Ferramentas", unidade:"Mts", tipo:"material", precoReferencia:1.95, precoFonte:"compra_corrigida", precoData:"2023-10-24", precoNCompras:1, precoFatorInccAplicado:1.2009, aliases:["Ferramentas - Mangueira de Nível"] },
+  { codigo:"FER-013", nome:"Ferramentas - Pá de bico com cabo", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:50.85, precoFonte:"compra", precoData:"2026-08-11", precoNCompras:9, precoFatorInccAplicado:1, aliases:["Ferramentas - Pá de bico com cabo"] },
+  { codigo:"FER-014", nome:"Ferramentas - Serra Circular Dewalt DWE560-B2", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:462.74, precoFonte:"compra", precoData:"2026-08-11", precoNCompras:10, precoFatorInccAplicado:1, aliases:["Ferramentas - Serra Circular Dewalt DWE560-B2"] },
+  { codigo:"FER-015", nome:"Ferramentas - Torquesa Ferragem", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:58.74, precoFonte:"compra_corrigida", precoData:"2023-11-09", precoNCompras:1, precoFatorInccAplicado:1.1977, aliases:["Ferramentas - Torquesa Ferragem"] },
+  { codigo:"FIX-001", nome:"Aço - Arame Recozido", grupo:"Fixação", unidade:"Kg", tipo:"material", precoReferencia:14.0, precoFonte:"compra", precoData:"2026-08-23", precoNCompras:76, precoFatorInccAplicado:1, aliases:["Aço - Arame Recozido"] },
+  { codigo:"FIX-002", nome:"Aço - Pregos 17x21", grupo:"Fixação", unidade:"Unidades", tipo:"material", precoReferencia:29.6, precoFonte:"compra", precoData:"2026-08-11", precoNCompras:23, precoFatorInccAplicado:1, aliases:["Aço - Pregos 17x21"] },
+  { codigo:"FIX-003", nome:"Aço - Pregos 18x27", grupo:"Fixação", unidade:"Kg", tipo:"material", precoReferencia:16.0, precoFonte:"compra", precoData:"2026-08-23", precoNCompras:54, precoFatorInccAplicado:1, aliases:["Aço - Pregos 18x27"] },
+  { codigo:"FIX-004", nome:"Aço - Pregos 20x42", grupo:"Fixação", unidade:"Unidades", tipo:"material", precoReferencia:15.59, precoFonte:"compra_corrigida", precoData:"2025-06-10", precoNCompras:9, precoFatorInccAplicado:1.0929, aliases:["Aço - Pregos 20x42"] },
+  { codigo:"HID-001", nome:"Metal - Hidráulica - Torneira Jardim", grupo:"Hidráulica", unidade:"Unidades", tipo:"material", precoReferencia:69.95, precoFonte:"compra", precoData:"2025-09-22", precoNCompras:23, precoFatorInccAplicado:1, aliases:["Metal - Hidráulica - Torneira Jardim"] },
+  { codigo:"HID-002", nome:"Água", grupo:"Hidráulica", unidade:"m3", tipo:"material", precoReferencia:100.0, precoFonte:"cotacao", precoData:null, precoNCompras:1, precoFatorInccAplicado:1, aliases:["Água"], observacao:"Linha marcada COTAÇÃO na base" },
+  { codigo:"IMP-001", nome:"Impermeabilizantes - Bianco 18KG", grupo:"Impermeabilizantes", unidade:"Unidades", tipo:"material", precoReferencia:340.65, precoFonte:"compra", precoData:"2025-11-12", precoNCompras:28, precoFatorInccAplicado:1, aliases:["Impermeabilizantes - Bianco 18KG"] },
+  { codigo:"IMP-002", nome:"Impermeabilizantes - Tela Poliester 50mts", grupo:"Impermeabilizantes", unidade:"Unidades", tipo:"material", precoReferencia:53.46, precoFonte:"compra_corrigida", precoData:"2025-08-08", precoNCompras:3, precoFatorInccAplicado:1.0822, aliases:["Impermeabilizantes - Tela Poliester 50mts"] },
+  { codigo:"IMP-003", nome:"Impermeabilizantes - Vedalit 18L", grupo:"Impermeabilizantes", unidade:"Unidades", tipo:"material", precoReferencia:195.57, precoFonte:"compra_corrigida", precoData:"2025-03-20", precoNCompras:28, precoFatorInccAplicado:1.1092, aliases:["Impermeabilizantes - Vedalit 18L"] },
+  { codigo:"IMP-004", nome:"Impermeabilizantes - Vedatop 18KG", grupo:"Impermeabilizantes", unidade:"Unidades", tipo:"material", precoReferencia:47.9, precoFonte:"compra", precoData:"2025-10-14", precoNCompras:36, precoFatorInccAplicado:1, aliases:["Impermeabilizantes - Vedatop 18KG"] },
+  { codigo:"IMP-005", nome:"Impermeabilizantes - Vedatop Flexível 18KG", grupo:"Impermeabilizantes", unidade:"Unidades", tipo:"material", precoReferencia:224.67, precoFonte:"compra_corrigida", precoData:"2023-05-03", precoNCompras:1, precoFatorInccAplicado:1.2175, aliases:["Impermeabilizantes - Vedatop Flexível 18KG"] },
+  { codigo:"IMP-006", nome:"Manta dupla face", grupo:"Impermeabilizantes", unidade:"m2", tipo:"material", precoReferencia:18.55, precoFonte:"compra_corrigida", precoData:"2023-12-12", precoNCompras:5, precoFatorInccAplicado:1.1944, aliases:["Manta dupla face", "Telhado - Manta Térmica face dupla"], observacao:"Mesmo produto, nome da base" },
+  { codigo:"LAJ-001", nome:"Laje Pré Moldada Protendida Forro", grupo:"Lajes", unidade:"m2", tipo:"material", precoReferencia:86.0, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Laje Pré Moldada Protendida Forro"], observacao:"Referência de mercado 2026; base só tem a versão Piso (R$92, mar/23)" },
+  { codigo:"LAJ-002", nome:"Laje Pré Moldada Protendida Piso", grupo:"Lajes", unidade:"m2", tipo:"material", precoReferencia:92.0, precoFonte:"cotacao", precoData:null, precoNCompras:1, precoFatorInccAplicado:1, aliases:["Laje Pré Moldada Protendida Piso"], observacao:"Linha marcada COTAÇÃO na base" },
+  { codigo:"LAJ-003", nome:"Laje Pré Moldada Treliça Forro", grupo:"Lajes", unidade:"m2", tipo:"material", precoReferencia:73.95, precoFonte:"compra_corrigida", precoData:"2025-04-14", precoNCompras:9, precoFatorInccAplicado:1.1038, aliases:["Laje Pré Moldada Treliça Forro"] },
+  { codigo:"LAJ-004", nome:"Laje Pré Moldada Treliça Piso", grupo:"Lajes", unidade:"m2", tipo:"material", precoReferencia:74.98, precoFonte:"compra_corrigida", precoData:"2023-07-12", precoNCompras:1, precoFatorInccAplicado:1.2108, aliases:["Laje Pré Moldada Treliça Piso"] },
+  { codigo:"LOC-001", nome:"Locação Ferramentas -  Compactador", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:200.0, precoFonte:"compra", precoData:"2026-08-23", precoNCompras:14, precoFatorInccAplicado:1, aliases:["Locação Ferramentas -  Compactador"] },
+  { codigo:"LOC-002", nome:"Locação Ferramentas - Escoras", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:12.08, precoFonte:"compra_corrigida", precoData:"2025-07-17", precoNCompras:96, precoFatorInccAplicado:1.0876, aliases:["Locação Ferramentas - Escoras"] },
+  { codigo:"LOC-003", nome:"Maquinário - Perfuração", grupo:"Locação de equipamentos", unidade:"Mts", tipo:"material", precoReferencia:12.2, precoFonte:"compra_corrigida", precoData:"2025-03-20", precoNCompras:6, precoFatorInccAplicado:1.1092, aliases:["Maquinário - Perfuração"] },
+  { codigo:"MAD-001", nome:"Telhado - Estrutura - Eucalipto S/ Tratar - Caibros 5x5", grupo:"Madeira de estrutura", unidade:"Mts", tipo:"material", precoReferencia:11.61, precoFonte:"compra_corrigida", precoData:"2024-06-05", precoNCompras:9, precoFatorInccAplicado:1.161, aliases:["Telhado - Estrutura - Eucalipto S/ Tratar - Caibros 5x5"] },
+  { codigo:"MAD-002", nome:"Telhado - Estrutura - Eucalipto S/ Tratar - Ripas 2,5x5", grupo:"Madeira de estrutura", unidade:"Mts", tipo:"material", precoReferencia:2.32, precoFonte:"compra_corrigida", precoData:"2023-09-21", precoNCompras:2, precoFatorInccAplicado:1.2042, aliases:["Telhado - Estrutura - Eucalipto S/ Tratar - Ripas 2,5x5", "Telhado - Estrutura - Eucalipto S/ Tratar - Ripas 2,5x5 "] },
+  { codigo:"MAD-003", nome:"Telhado - Estrutura - Eucalipto S/ Tratar - Vigas 5x15", grupo:"Madeira de estrutura", unidade:"Mts", tipo:"material", precoReferencia:18.92, precoFonte:"compra_corrigida", precoData:"2023-11-30", precoNCompras:5, precoFatorInccAplicado:1.1977, aliases:["Telhado - Estrutura - Eucalipto S/ Tratar - Vigas 5x15"] },
+  { codigo:"MAD-004", nome:"Telhado - Estrutura - Eucalipto S/ Tratar - Vigas 5x20", grupo:"Madeira de estrutura", unidade:"Mts", tipo:"material", precoReferencia:21.87, precoFonte:"compra_corrigida", precoData:"2023-01-03", precoNCompras:1, precoFatorInccAplicado:1.2309, aliases:["Telhado - Estrutura - Eucalipto S/ Tratar - Vigas 5x20"] },
+  { codigo:"REV-001", nome:"Revestimento", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:153.77, precoFonte:"compra_corrigida", precoData:"2025-05-22", precoNCompras:1, precoFatorInccAplicado:1.0983, aliases:["Revestimento", "Revestimento Piscina"], observacao:"Item vem do módulo de piscina" },
+  { codigo:"TIJ-001", nome:"Cerâmicas - Tijolo - Bloco  6 Furos", grupo:"Tijolos e canaletas", unidade:"Unidades", tipo:"material", precoReferencia:0.85, precoFonte:"compra", precoData:"2025-10-08", precoNCompras:33, precoFatorInccAplicado:1, aliases:["Cerâmicas - Tijolo - Bloco  6 Furos"] },
+  { codigo:"TIJ-002", nome:"Cerâmicas - Tijolo - Bloco 8 Furos", grupo:"Tijolos e canaletas", unidade:"Unidades", tipo:"material", precoReferencia:0.87, precoFonte:"compra_corrigida", precoData:"2025-07-11", precoNCompras:15, precoFatorInccAplicado:1.0876, aliases:["Cerâmicas - Tijolo - Bloco 8 Furos"] },
+  { codigo:"TIJ-003", nome:"Cerâmicas - Tijolo - Tijolinho Maciço", grupo:"Tijolos e canaletas", unidade:"Unidades", tipo:"material", precoReferencia:0.54, precoFonte:"compra", precoData:"2025-12-16", precoNCompras:11, precoFatorInccAplicado:1, aliases:["Cerâmicas - Tijolo - Tijolinho Maciço"] },
+  { codigo:"TIN-001", nome:"Tintas - Fundo Preparador 18L", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:353.28, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:6, precoFatorInccAplicado:1.0769, aliases:["Tintas - Fundo Preparador 18L"] },
+  { codigo:"TIN-002", nome:"Tintas - Massa Corrida 25KG", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:96.81, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:20, precoFatorInccAplicado:1.0769, aliases:["Tintas - Massa Corrida 25KG", "Tintas - Massa corrida 25KG"] },
+  { codigo:"TIN-003", nome:"Tintas - Selador 18L", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:197.38, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:12, precoFatorInccAplicado:1.0769, aliases:["Tintas - Selador 18L"] },
+  { codigo:"TIN-004", nome:"Tintas - Tintas 18L", grupo:"Tintas", unidade:"Unidades", tipo:"material", precoReferencia:753.64, precoFonte:"compra_corrigida", precoData:"2025-09-03", precoNCompras:39, precoFatorInccAplicado:1.0769, aliases:["Tintas - Tintas 18L", "Tintas - Tinta Acrílica Premium Toque de seda"], observacao:"Linha que o escritório mais compra (39 compras)" },
+  { codigo:"TLH-001", nome:"Cumeeira Telha Americana Concreto", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:5.29, precoFonte:"compra_corrigida", precoData:"2023-01-20", precoNCompras:1, precoFatorInccAplicado:1.2309, aliases:["Cumeeira Telha Americana Concreto", "Telhado - Cumeeiras Porcelanato Esmaltada"], observacao:"Proxy" },
+  { codigo:"TLH-002", nome:"Cumeeira Telha Barro Americana", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:5.29, precoFonte:"compra_corrigida", precoData:"2023-01-20", precoNCompras:1, precoFatorInccAplicado:1.2309, aliases:["Cumeeira Telha Barro Americana", "Telhado - Cumeeiras Porcelanato Esmaltada"], observacao:"Proxy" },
+  { codigo:"TLH-003", nome:"Cumeeira Telha Barro Portuguesa", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:2.58, precoFonte:"compra_corrigida", precoData:"2023-01-18", precoNCompras:2, precoFatorInccAplicado:1.2309, aliases:["Cumeeira Telha Barro Portuguesa", "Telhado - Cumeeira Portuguesa Natural"] },
+  { codigo:"TLH-004", nome:"Cumeeira Telha Fibrocimento 6mm", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:62.52, precoFonte:"compra_corrigida", precoData:"2024-06-10", precoNCompras:3, precoFatorInccAplicado:1.161, aliases:["Cumeeira Telha Fibrocimento 6mm"] },
+  { codigo:"TLH-005", nome:"Cumeeira Telha Fibrocimento 8mm", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:51.6, precoFonte:"compra_corrigida", precoData:"2022-12-12", precoNCompras:1, precoFatorInccAplicado:1.2402, aliases:["Cumeeira Telha Fibrocimento 8mm"] },
+  { codigo:"TLH-006", nome:"Cumeeira Telha Metálica Simples", grupo:"Telhas", unidade:"Mts", tipo:"material", precoReferencia:38.0, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Cumeeira Telha Metálica Simples"], observacao:"Referência de mercado 2026 — qtd em metros" },
+  { codigo:"TLH-007", nome:"Cumeeira Telha Metálica Termoacústica", grupo:"Telhas", unidade:"Mts", tipo:"material", precoReferencia:45.0, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Cumeeira Telha Metálica Termoacústica"], observacao:"Referência de mercado 2026 — no motor a qtd sai em metros (área da cumeeira = 1)" },
+  { codigo:"TLH-008", nome:"Cumeeira Telha Plana Concreto", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:5.29, precoFonte:"compra_corrigida", precoData:"2023-01-20", precoNCompras:1, precoFatorInccAplicado:1.2309, aliases:["Cumeeira Telha Plana Concreto", "Telhado - Cumeeiras Porcelanato Esmaltada"], observacao:"Proxy" },
+  { codigo:"TLH-009", nome:"Telha Americana Concreto", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:3.2, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Telha Americana Concreto"], observacao:"Referência de mercado 2026 (telha de concreto tipo americana, por peça)" },
+  { codigo:"TLH-010", nome:"Telha Barro Americana", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:3.11, precoFonte:"compra_corrigida", precoData:"2023-12-04", precoNCompras:2, precoFatorInccAplicado:1.1944, aliases:["Telha Barro Americana", "Telhado - Telha Americana Porcelanato Esmaltada"], observacao:"Proxy: única americana comprada" },
+  { codigo:"TLH-011", nome:"Telha Barro Portuguesa", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:2.39, precoFonte:"compra_corrigida", precoData:"2025-07-03", precoNCompras:3, precoFatorInccAplicado:1.0876, aliases:["Telha Barro Portuguesa", "Telhado - Telha Portuguesa Natural"], observacao:"Compra real, preço por peça" },
+  { codigo:"TLH-012", nome:"Telha Fibrocimento 6mm", grupo:"Telhas", unidade:"m2", tipo:"material", precoReferencia:30.66, precoFonte:"compra_corrigida", precoData:"2023-12-18", precoNCompras:1, precoFatorInccAplicado:1.1944, aliases:["Telha Fibrocimento 6mm", "Telhado - Telha Fibrocimento 6mm - Ondulada 2,44x1,10"], observacao:"Chapa 2,44x1,10 = 2,684 m² → convertido para R$/m²" },
+  { codigo:"TLH-013", nome:"Telha Fibrocimento 8mm", grupo:"Telhas", unidade:"m2", tipo:"material", precoReferencia:35.36, precoFonte:"compra_corrigida", precoData:"2022-12-12", precoNCompras:1, precoFatorInccAplicado:1.2402, aliases:["Telha Fibrocimento 8mm", "Telhado - Telha Fibrocimento 8mm - Ondulada 2,44x1,10"], observacao:"Chapa 2,44x1,10 = 2,684 m² → convertido para R$/m²" },
+  { codigo:"TLH-014", nome:"Telha Metálica Simples", grupo:"Telhas", unidade:"m2", tipo:"material", precoReferencia:62.0, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Telha Metálica Simples"], observacao:"Referência de mercado 2026 (telha simples ~0,5mm)" },
+  { codigo:"TLH-015", nome:"Telha Metálica Termoacústica", grupo:"Telhas", unidade:"m2", tipo:"material", precoReferencia:83.82, precoFonte:"compra", precoData:"2025-09-23", precoNCompras:2, precoFatorInccAplicado:1, aliases:["Telha Metálica Termoacústica", "Telhado - Metálica Termoacústica"], observacao:"Compra real (a família 'Telha X' de mar/23 é tabela antiga)" },
+  { codigo:"TLH-016", nome:"Telha Plana Concreto", grupo:"Telhas", unidade:"Unidades", tipo:"material", precoReferencia:5.5, precoFonte:"compra_corrigida", precoData:"2023-10-23", precoNCompras:2, precoFatorInccAplicado:1.2009, aliases:["Telha Plana Concreto", "Telhado - Telha Plana Class Grafite"], observacao:"Compra real, preço por peça" },
+  { codigo:"PRE-001", nome:"Pedreiros Casa", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:1000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Pedreiros Casa"] },
+  { codigo:"PRE-002", nome:"Pintor", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:115, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Pintor"] },
+  { codigo:"PRE-003", nome:"Eletricista", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:38, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Eletricista"] },
+  { codigo:"PRE-004", nome:"Encanador", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:60, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Encanador"] },
+  { codigo:"PRE-005", nome:"Carpinteiro", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:25, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Carpinteiro"] },
+  { codigo:"PRE-006", nome:"Impermeabilizador", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:25, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Impermeabilizador"] },
+  { codigo:"PRE-007", nome:"Marceneiro Portas Internas", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:150, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Marceneiro Portas Internas"] },
+  { codigo:"PRE-008", nome:"Serralheiro", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaConstruida", precoReferencia:null, precoFonte:null, precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Serralheiro"], observacao:"Sem taxa no VBA e sem cotação — definir" },
+  { codigo:"PRE-009", nome:"Pedreiros Pavim. Externa", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaPavimentacao", precoReferencia:59, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Pedreiros Pavim. Externa"] },
+  { codigo:"PRE-010", nome:"Pedreiros Muro Divisa", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"m2MuroDivisa", precoReferencia:59, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Pedreiros Muro Divisa"] },
+  { codigo:"PRE-011", nome:"Pedreiros Muro Arrimo", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"m2MuroArrimo", precoReferencia:250, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Pedreiros Muro Arrimo"] },
+  { codigo:"PRE-012", nome:"Pedreiros Piscina", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"areaPiscina", precoReferencia:880, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Pedreiros Piscina"] },
+  { codigo:"PRE-013", nome:"Instalador AR", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"fixo", precoReferencia:1000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalador AR"] },
+  { codigo:"PRE-014", nome:"Instalador Aquecedores", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"fixo", precoReferencia:2000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalador Aquecedores"] },
+  { codigo:"PRE-015", nome:"Instalador Equip. Piscina", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"fixo", precoReferencia:5000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalador Equip. Piscina"] },
+  { codigo:"PRE-016", nome:"Terraplanagem", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"fixo", precoReferencia:8000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Terraplanagem"] },
+  { codigo:"PRE-017", nome:"Gestão Obra", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"regressivo", precoReferencia:null, precoFonte:null, precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gestão Obra"], observacao:"Taxa regressiva por área construída — ver taxaGestaoObra()" },
+];
+
+
+// ════════════════════════════════════════════════════════════
+// insumos.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// INSUMOS — catálogo central, chave única e gestão de preço
+// ═══════════════════════════════════════════════════════════════
+// Spec: docs/SPEC-INSUMOS.md (absorve docs/PRECOS-REFERENCIA.md).
+//
+// É a peça que liga estimativa e realizado:
+//
+//   ESTIMATIVA (orcamento-obra.jsx)  ──lê preço──►  INSUMOS  ◄──atualiza preço──  COMPRAS (lançamentos)
+//                                                      │
+//                                       chave: insumo.codigo (imutável)
+//
+// Reaproveita a tabela `materiais` (data.materiais, JSONB). `id` continua sendo
+// a chave de banco; `codigo` é a chave de negócio — estável, legível, NUNCA
+// alterada nem reciclada depois de gravada.
+//
+// Este módulo NÃO altera orcamento-obra.jsx nem o importador de NF de
+// outros.jsx — essa fiação é a entrega seguinte (§11 passos 3 e 7 da spec).
+// Aqui ficam o catálogo, o resolvedor e a tela de gestão.
+// ═══════════════════════════════════════════════════════════════
+
+// ── Prefixo de código por grupo. Grupo novo = prefixo novo aqui. ──
+var INSUMO_GRUPOS = [
+  { prefixo: "ACO", nome: "Aço" },
+  { prefixo: "AGR", nome: "Areia e pedra" },
+  { prefixo: "ARG", nome: "Argamassas" },
+  { prefixo: "CAL", nome: "Calhas e rufos" },
+  { prefixo: "CIM", nome: "Cimento" },
+  { prefixo: "CON", nome: "Concreto" },
+  { prefixo: "CXA", nome: "Madeira de caixaria" },
+  { prefixo: "ELE", nome: "Elétrica e iluminação" },
+  { prefixo: "FER", nome: "Ferramentas" },
+  { prefixo: "FIX", nome: "Fixação" },
+  { prefixo: "HID", nome: "Hidráulica" },
+  { prefixo: "IMP", nome: "Impermeabilizantes" },
+  { prefixo: "LAJ", nome: "Lajes" },
+  { prefixo: "LOC", nome: "Locação de equipamentos" },
+  { prefixo: "MAD", nome: "Madeira de estrutura" },
+  { prefixo: "PRE", nome: "Prestadores de serviços" },
+  { prefixo: "REV", nome: "Pisos e revestimentos" },
+  { prefixo: "TIJ", nome: "Tijolos e canaletas" },
+  { prefixo: "TIN", nome: "Tintas" },
+  { prefixo: "TLH", nome: "Telhas" },
+  { prefixo: "OUT", nome: "Outros" },
+];
+
+var INSUMO_UNIDADES = [
+  "Unidades", "m2", "m3", "Mts", "Kg", "Baldes 18L",
+  "Barras 12mts", "Barras 3mts", "Rolos", "Dias",
+];
+
+// INCC acumulado anual (FGV). 2026 = janeiro a agosto.
+// Atualizar uma vez por ano; não vale automatizar coleta.
+var INCC_ANUAL = { 2022: 0.0941, 2023: 0.0334, 2024: 0.0633, 2025: 0.0609, 2026: 0.0559 };
+var INCC_MESES_ANO_CORRENTE = 8; // meses já fechados de 2026 dentro de INCC_ANUAL[2026]
+
+// Fora dessa faixa a compra não vira preço sozinha (guarda contra digitação).
+var INSUMO_FATOR_SUSPEITO = 3;
+
+// ═══════════════════════════════════════════════════════════════
+// NORMALIZAÇÃO E RESOLUÇÃO
+// ═══════════════════════════════════════════════════════════════
+
+// Sem acento, minúsculo, pontuação virando espaço, espaços colapsados.
+function normalizarTexto(s) {
+  return String(s == null ? "" : s)
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// Levenshtein simples sobre strings já normalizadas.
+function distanciaTexto(a, b) {
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  var linha = [];
+  for (var j = 0; j <= b.length; j++) linha[j] = j;
+  for (var i = 1; i <= a.length; i++) {
+    var ant = linha[0];
+    linha[0] = i;
+    for (var k = 1; k <= b.length; k++) {
+      var tmp = linha[k];
+      linha[k] = Math.min(
+        linha[k] + 1,
+        linha[k - 1] + 1,
+        ant + (a[i - 1] === b[k - 1] ? 0 : 1)
+      );
+      ant = tmp;
+    }
+  }
+  return linha[b.length];
+}
+
+// 0..1 — combina similaridade de string com sobreposição de palavras, porque
+// "Areia Fina" x "Areia Fina Ensacada" tem distância pequena mas sentido
+// diferente, e a sobreposição de tokens ajuda a separar.
+function similaridadeTexto(a, b) {
+  if (!a || !b) return 0;
+  var maxLen = Math.max(a.length, b.length);
+  var porDistancia = 1 - distanciaTexto(a, b) / maxLen;
+  var ta = a.split(" ").filter(Boolean);
+  var tb = b.split(" ").filter(Boolean);
+  var comuns = ta.filter(t => tb.indexOf(t) >= 0).length;
+  var porToken = comuns / Math.max(ta.length, tb.length);
+  return porDistancia * 0.5 + porToken * 0.5;
+}
+
+/**
+ * Resolve um termo (nome vindo de nota fiscal, do motor de orçamento, do que
+ * for) para um insumo do catálogo.
+ *
+ * Cascata determinística. NUNCA vincula por similaridade — abaixo de
+ * "normalizado" devolve candidatos e quem decide é uma pessoa.
+ *
+ * @returns {{ insumo, confianca:"codigo"|"alias"|"normalizado"|"sugestao"|"nenhum", candidatos:Array }}
+ */
+function resolverInsumo(termo, insumos, opts) {
+  var lista = insumos || [];
+  var codigo = opts && opts.codigo;
+
+  if (codigo) {
+    var porCodigo = lista.find(x => x.codigo === codigo);
+    if (porCodigo) return { insumo: porCodigo, confianca: "codigo", candidatos: [] };
+  }
+
+  var n = normalizarTexto(termo);
+  if (!n) return { insumo: null, confianca: "nenhum", candidatos: [] };
+
+  for (var i = 0; i < lista.length; i++) {
+    var ins = lista[i];
+    var aliases = ins.aliases || [];
+    for (var j = 0; j < aliases.length; j++) {
+      if (normalizarTexto(aliases[j]) === n) {
+        return { insumo: ins, confianca: "alias", candidatos: [] };
+      }
+    }
+  }
+
+  var porNome = lista.find(x => normalizarTexto(x.nome) === n);
+  if (porNome) return { insumo: porNome, confianca: "normalizado", candidatos: [] };
+
+  var ranking = lista
+    .map(x => ({ insumo: x, score: similaridadeTexto(n, normalizarTexto(x.nome)) }))
+    .filter(r => r.score >= 0.45)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 5);
+
+  return {
+    insumo: null,
+    confianca: ranking.length ? "sugestao" : "nenhum",
+    candidatos: ranking,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CÓDIGO
+// ═══════════════════════════════════════════════════════════════
+
+function prefixoDoGrupo(grupo) {
+  var g = INSUMO_GRUPOS.find(x => normalizarTexto(x.nome) === normalizarTexto(grupo));
+  return g ? g.prefixo : "OUT";
+}
+
+// Sequencial a partir do MAIOR já usado no prefixo — inclui inativos, porque
+// código de insumo inativado nunca é reciclado.
+function proximoCodigoInsumo(grupo, insumos) {
+  var pre = prefixoDoGrupo(grupo);
+  var maior = 0;
+  (insumos || []).forEach(i => {
+    if (!i.codigo) return;
+    var m = /^([A-Z]{3})-(\d{3,})$/.exec(i.codigo);
+    if (m && m[1] === pre) maior = Math.max(maior, parseInt(m[2], 10));
+  });
+  var n = String(maior + 1);
+  while (n.length < 3) n = "0" + n;
+  return pre + "-" + n;
+}
+
+// Grupo inferido do nome, usado só na migração de materiais legados.
+function grupoInferido(nome) {
+  var n = normalizarTexto(nome);
+  var regras = [
+    [/^aco (barras|trelica|malha)/, "Aço"],
+    [/^aco (prego|arame)|parafuso/, "Fixação"],
+    [/^areia|^pedra$|pedrisco/, "Areia e pedra"],
+    [/cimento/, "Cimento"],
+    [/^argamassa|^rejunte/, "Argamassas"],
+    [/tijolo|bloco|canaleta/, "Tijolos e canaletas"],
+    [/^concreto/, "Concreto"],
+    [/^cumeeira|^telha |^telhado telha|^telhado metalica/, "Telhas"],
+    [/^telhado estrutura|caibro|ripa|viga 5x/, "Madeira de estrutura"],
+    [/^telhado (calha|rufo|pingadeira)|^calha/, "Calhas e rufos"],
+    [/madeira caixaria|madeirite|sarrafo|tabua/, "Madeira de caixaria"],
+    [/impermeabiliz|^manta|vedalit|vedatop/, "Impermeabilizantes"],
+    [/^tintas|tinta |selador|massa corrida/, "Tintas"],
+    [/^laje/, "Lajes"],
+    [/^locacao|^maquinario|andaime|escora/, "Locação de equipamentos"],
+    [/^ferramentas|^disco/, "Ferramentas"],
+    [/^eletrica|cabo |disjuntor|luminaria/, "Elétrica e iluminação"],
+    [/^metal hidraulica|^pvc|^agua$|torneira|registro/, "Hidráulica"],
+    [/^revestimento|^pisos e revestimentos|porcelanato/, "Pisos e revestimentos"],
+    [/^prestadores|pedreiro|pintor|eletricista|encanador|serralheiro/, "Prestadores de serviços"],
+  ];
+  for (var i = 0; i < regras.length; i++) if (regras[i][0].test(n)) return regras[i][1];
+  return "Outros";
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PREÇO
+// ═══════════════════════════════════════════════════════════════
+
+function mesesEntre(dataIso, ate) {
+  if (!dataIso) return Infinity;
+  var d = new Date(dataIso + (String(dataIso).length === 10 ? "T00:00:00" : ""));
+  if (isNaN(d.getTime())) return Infinity;
+  var fim = ate ? new Date(ate) : new Date();
+  return (fim.getFullYear() - d.getFullYear()) * 12 + (fim.getMonth() - d.getMonth());
+}
+
+// Índice INCC sintético mês a mês, montado do acumulado anual.
+function indiceIncc(ano, mes) {
+  var base = 100;
+  var anos = Object.keys(INCC_ANUAL).map(Number).sort((a, b) => a - b);
+  for (var i = 0; i < anos.length; i++) {
+    var a = anos[i];
+    var mesesDoAno = (i === anos.length - 1) ? INCC_MESES_ANO_CORRENTE : 12;
+    var taxaMes = Math.pow(1 + INCC_ANUAL[a], 1 / mesesDoAno) - 1;
+    for (var m = 1; m <= 12; m++) {
+      if (a === ano && m === mes) return base;
+      if (m <= mesesDoAno) base *= (1 + taxaMes);
+    }
+  }
+  return base;
+}
+
+function fatorIncc(dataIso, ate) {
+  if (!dataIso) return 1;
+  var d = new Date(dataIso + (String(dataIso).length === 10 ? "T00:00:00" : ""));
+  if (isNaN(d.getTime())) return 1;
+  var fim = ate ? new Date(ate) : new Date();
+  var de = indiceIncc(Math.max(d.getFullYear(), 2022), d.getMonth() + 1);
+  var para = indiceIncc(fim.getFullYear(), fim.getMonth() + 1);
+  if (!de || !para) return 1;
+  return Math.round((para / de) * 10000) / 10000;
+}
+
+/**
+ * Preço efetivo de um insumo, com envelhecimento aplicado.
+ * Ponto ÚNICO de resolução de preço — nada mais no app pode ter preço fixo.
+ */
+function precoInsumo(insumo, ate) {
+  if (!insumo) return { preco: null, confianca: "sem_preco", meses: null, corrigido: false };
+  if (insumo.precoManual != null) {
+    return { preco: insumo.precoManual, confianca: "manual", meses: null, corrigido: false };
+  }
+  if (insumo.precoReferencia == null) {
+    return { preco: null, confianca: "sem_preco", meses: null, corrigido: false };
+  }
+  var meses = mesesEntre(insumo.precoData, ate);
+  var corrigido = meses >= 12 && isFinite(meses);
+  var fator = corrigido ? fatorIncc(insumo.precoData, ate) : 1;
+  var preco = Math.round(insumo.precoReferencia * fator * 100) / 100;
+
+  var confianca;
+  if (!isFinite(meses)) confianca = "baixa";
+  else if (meses < 6 && (insumo.precoNCompras || 0) >= 3) confianca = "alta";
+  else if (meses < 12) confianca = "media";
+  else if (meses < 24) confianca = "baixa";
+  else confianca = "obsoleta";
+
+  return { preco: preco, confianca: confianca, meses: meses, corrigido: corrigido, fator: fator };
+}
+
+/**
+ * Atualiza o preço de referência a partir de um lançamento de compra.
+ * Pura: recebe insumo + lançamento, devolve insumo novo (ou o mesmo).
+ */
+function atualizarPrecoReferencia(insumo, lancamento) {
+  if (!insumo || !lancamento) return insumo;
+  if (insumo.precoManual != null) return insumo;
+  if (lancamento.tipo && lancamento.tipo !== "custo") return insumo;
+
+  var qtd = Number(lancamento.quantidade);
+  var total = Number(lancamento.total != null ? lancamento.total : lancamento.valor);
+  if (!(qtd > 0) || !(total > 0)) return insumo;
+
+  var unitario = Math.round((total / qtd) * 100) / 100;
+  var data = lancamento.dataPagamento || lancamento.data || null;
+
+  var ref = insumo.precoReferencia;
+  if (ref > 0) {
+    var razao = unitario / ref;
+    if (razao > INSUMO_FATOR_SUSPEITO || razao < 1 / INSUMO_FATOR_SUSPEITO) {
+      return Object.assign({}, insumo, {
+        precoPendente: { valor: unitario, data: data, lancamentoId: lancamento.id || null },
+      });
+    }
+  }
+
+  // Nota retroativa não rebaixa preço mais novo.
+  if (insumo.precoData && data && data < insumo.precoData) return insumo;
+
+  return Object.assign({}, insumo, {
+    precoReferencia: unitario,
+    ultimoPreco: unitario, // campo legado — o importador de NF ainda lê
+    precoFonte: "compra",
+    precoData: data,
+    precoNCompras: (insumo.precoNCompras || 0) + 1,
+    precoFatorInccAplicado: 1,
+    precoPendente: null,
+    precoAtualizadoEm: new Date().toISOString(),
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MIGRAÇÃO E SEMEADURA — ambas idempotentes
+// ═══════════════════════════════════════════════════════════════
+
+// Material legado (sem codigo) ganha código, aliases e preço de referência.
+function migrarMateriaisParaInsumos(materiais) {
+  var lista = (materiais || []).slice();
+  var alterados = 0;
+  for (var i = 0; i < lista.length; i++) {
+    var m = lista[i];
+    if (m.codigo) continue;
+    var grupo = m.grupo || grupoInferido(m.nome);
+    var novo = Object.assign({}, m, {
+      codigo: proximoCodigoInsumo(grupo, lista),
+      grupo: grupo,
+      tipo: m.tipo || "material",
+      ativo: m.ativo !== false,
+      aliases: (m.aliases && m.aliases.length) ? m.aliases : [m.nome],
+      precoReferencia: m.precoReferencia != null ? m.precoReferencia
+                     : (m.ultimoPreco != null ? m.ultimoPreco : null),
+      precoFonte: m.precoFonte || (m.ultimoPreco != null ? "compra" : null),
+      precoData: m.precoData || null,
+      precoNCompras: m.precoNCompras || 0,
+      precoFatorInccAplicado: m.precoFatorInccAplicado || 1,
+      precoManual: m.precoManual != null ? m.precoManual : null,
+      precoPendente: m.precoPendente || null,
+    });
+    lista[i] = novo;
+    alterados++;
+  }
+  return { materiais: lista, alterados: alterados };
+}
+
+// União de nomes sem repetir o mesmo termo normalizado (a base tem grafias que
+// só diferem em caixa ou espaço final).
+function unirAliases() {
+  var vistos = {}, out = [];
+  for (var i = 0; i < arguments.length; i++) {
+    (arguments[i] || []).forEach(function (a) {
+      var k = normalizarTexto(a);
+      if (!k || vistos[k]) return;
+      vistos[k] = 1; out.push(String(a).trim());
+    });
+  }
+  return out;
+}
+
+// Aplica INSUMOS_SEED sobre o catálogo. Nunca sobrescreve precoManual nem um
+// preço cuja data seja mais recente que a da semente.
+function semearInsumos(materiais, seed) {
+  var lista = (materiais || []).slice();
+  var criados = 0, atualizados = 0, ignorados = 0;
+
+  (seed || INSUMOS_SEED).forEach(function (s) {
+    var idx = lista.findIndex(x => x.codigo === s.codigo);
+    if (idx < 0) {
+      var r = resolverInsumo(s.nome, lista);
+      if (r.insumo && (r.confianca === "alias" || r.confianca === "normalizado")) {
+        idx = lista.indexOf(r.insumo);
+      }
+    }
+
+    if (idx < 0) {
+      lista.push(Object.assign({
+        id: uid(),
+        ativo: true,
+        precoManual: null,
+        precoPendente: null,
+        fornecedorPreferido: null,
+        precoAtualizadoEm: new Date().toISOString(),
+      }, s, { aliases: unirAliases(s.aliases) }));
+      criados++;
+      return;
+    }
+
+    var atual = lista[idx];
+    var patch = {};
+    if (!atual.codigo) patch.codigo = s.codigo;
+    if (!atual.grupo) patch.grupo = s.grupo;
+    if (!atual.unidade) patch.unidade = s.unidade;
+    if (!atual.tipo) patch.tipo = s.tipo;
+    if (s.baseCalculo && !atual.baseCalculo) patch.baseCalculo = s.baseCalculo;
+    if (s.observacao && !atual.observacao) patch.observacao = s.observacao;
+
+    var uniao = unirAliases(atual.aliases && atual.aliases.length ? atual.aliases : [atual.nome], s.aliases);
+    if (JSON.stringify(uniao) !== JSON.stringify(atual.aliases || [])) patch.aliases = uniao;
+
+    // preço: só se o insumo não tem preço, ou o da semente é mais novo
+    var podePreco = atual.precoManual == null
+      && (atual.precoReferencia == null
+          || (s.precoData && (!atual.precoData || s.precoData > atual.precoData)));
+    if (podePreco && s.precoReferencia != null) {
+      patch.precoReferencia = s.precoReferencia;
+      patch.ultimoPreco = s.precoReferencia;
+      patch.precoFonte = s.precoFonte;
+      patch.precoData = s.precoData;
+      patch.precoNCompras = s.precoNCompras || 0;
+      patch.precoFatorInccAplicado = s.precoFatorInccAplicado || 1;
+      patch.precoAtualizadoEm = new Date().toISOString();
+    }
+
+    if (Object.keys(patch).length) {
+      lista[idx] = Object.assign({}, atual, patch);
+      atualizados++;
+    } else {
+      ignorados++;
+    }
+  });
+
+  return { materiais: lista, criados: criados, atualizados: atualizados, ignorados: ignorados };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// UI
+// ═══════════════════════════════════════════════════════════════
+
+var INS = {
+  fundo: "#fafafb", grafite: "#1a1a1a", cobre: "#b5652f", azul: "#1e3a5f",
+  inkSoft: "#78716c", borda: "1.5px solid rgba(38,36,33,0.16)",
+};
+var INS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+
+var INS_S = {
+  input: { border: INS.borda, borderRadius: 12, padding: "9px 12px", fontSize: 13, color: "#262421", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" },
+  label: { fontSize: 12, color: "#6b7280", fontWeight: 500, display: "block", marginBottom: 5 },
+  btn: { background: "#262421", color: "#fff", border: "none", borderRadius: 12, padding: "9px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
+  btnSec: { background: "#fff", color: "#374151", border: INS.borda, borderRadius: 12, padding: "9px 16px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" },
+  btnGhost: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontFamily: "inherit", fontSize: 13 },
+  card: { border: INS.borda, borderRadius: 16, background: "#fff", padding: 16 },
+};
+
+var CONF_INSUMO = {
+  alta:      { label: "Atual",     cor: "#10b981" },
+  media:     { label: "Recente",   cor: "#84cc16" },
+  baixa:     { label: "Antigo",    cor: "#f59e0b" },
+  obsoleta:  { label: "Obsoleto",  cor: "#dc2626" },
+  manual:    { label: "Manual",    cor: "#1e3a5f" },
+  sem_preco: { label: "Sem preço", cor: "#9ca3af" },
+};
+
+function fmtBRLIns(v) {
+  if (v == null) return "—";
+  return Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+}
+function fmtDataIns(d) {
+  if (!d) return "—";
+  var dt = new Date(String(d).length === 10 ? d + "T00:00:00" : d);
+  return isNaN(dt.getTime()) ? "—" : dt.toLocaleDateString("pt-BR");
+}
+
+function PontoConfianca({ conf, tamanho }) {
+  var c = CONF_INSUMO[conf] || CONF_INSUMO.sem_preco;
+  var t = tamanho || 8;
+  return <span title={c.label} style={{ display: "inline-block", width: t, height: t, borderRadius: "50%", background: c.cor, flexShrink: 0 }} />;
+}
+
+// ── Formulário ───────────────────────────────────────────────
+function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
+  var ehNovo = !insumo.codigo;
+  var [f, setF] = React.useState(function () {
+    return Object.assign({
+      nome: "", grupo: "Outros", unidade: "Unidades", tipo: "material",
+      precoManual: null, observacao: "", ativo: true, aliases: [],
+    }, insumo);
+  });
+  var [novoAlias, setNovoAlias] = React.useState("");
+
+  function set(k, v) { setF(function (p) { var o = Object.assign({}, p); o[k] = v; return o; }); }
+
+  function addAlias() {
+    var t = novoAlias.trim();
+    if (!t) return;
+    var jaTem = (f.aliases || []).some(a => normalizarTexto(a) === normalizarTexto(t));
+    if (jaTem) { setNovoAlias(""); return; }
+    set("aliases", (f.aliases || []).concat([t]));
+    setNovoAlias("");
+  }
+
+  function salvar() {
+    if (!f.nome || !f.nome.trim()) {
+      dialogo.alertar({ titulo: "Informe o nome do insumo", tipo: "aviso" });
+      return;
+    }
+    var out = Object.assign({}, f, { nome: f.nome.trim() });
+    if (!out.aliases || !out.aliases.length) out.aliases = [out.nome];
+    if (!out.codigo) {
+      out.id = out.id || uid();
+      out.codigo = proximoCodigoInsumo(out.grupo, insumos);
+      out.precoFonte = out.precoManual != null ? "manual" : null;
+      out.precoNCompras = 0;
+      out.precoFatorInccAplicado = 1;
+    }
+    if (out.precoManual === "" ) out.precoManual = null;
+    if (out.precoManual != null) out.precoManual = Number(out.precoManual);
+    out.precoAtualizadoEm = new Date().toISOString();
+    onSalvar(out);
+  }
+
+  return (
+    <div style={INS_S.card}>
+      <button onClick={onCancelar} style={Object.assign({}, INS_S.btnGhost, { marginBottom: 16, fontSize: 12 })}>← Voltar</button>
+      <div style={{ fontSize: 16, fontWeight: 700, color: INS.grafite, marginBottom: 4 }}>
+        {ehNovo ? "Novo insumo" : f.nome}
+      </div>
+      {!ehNovo && (
+        <div style={{ fontSize: 12, color: INS.inkSoft, marginBottom: 18 }}>
+          Código <strong style={{ fontFamily: "ui-monospace, monospace" }}>{f.codigo}</strong> — não muda depois de criado
+        </div>
+      )}
+      {ehNovo && (
+        <div style={{ fontSize: 12, color: INS.inkSoft, marginBottom: 18 }}>
+          O código é gerado a partir do grupo e não muda depois de criado.
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
+        <div style={isMobile ? {} : { gridColumn: "1 / -1" }}>
+          <label style={INS_S.label}>Nome *</label>
+          <input style={INS_S.input} value={f.nome} onChange={e => set("nome", e.target.value)} />
+        </div>
+        <div>
+          <label style={INS_S.label}>Grupo</label>
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.grupo} onChange={e => set("grupo", e.target.value)}>
+            {INSUMO_GRUPOS.map(g => <option key={g.prefixo} value={g.nome}>{g.nome} ({g.prefixo})</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={INS_S.label}>Unidade</label>
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.unidade} onChange={e => set("unidade", e.target.value)}>
+            {INSUMO_UNIDADES.map(u => <option key={u} value={u}>{u}</option>)}
+          </select>
+        </div>
+        <div>
+          <label style={INS_S.label}>Tipo</label>
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={f.tipo} onChange={e => set("tipo", e.target.value)}>
+            <option value="material">Material</option>
+            <option value="prestador">Prestador de serviço</option>
+          </select>
+        </div>
+        <div>
+          <label style={INS_S.label}>Preço manual (R$)</label>
+          <input style={INS_S.input} type="number" step="0.01" placeholder="deixe vazio para usar o automático"
+            value={f.precoManual == null ? "" : f.precoManual}
+            onChange={e => set("precoManual", e.target.value === "" ? null : e.target.value)} />
+          <div style={{ fontSize: 11, color: INS.inkSoft, marginTop: 4 }}>
+            Preenchido, congela o preço: nenhuma compra o sobrescreve.
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={INS_S.label}>Como este insumo também é chamado</label>
+        <div style={{ fontSize: 11, color: INS.inkSoft, marginBottom: 8 }}>
+          Cada nome aqui faz o vínculo automático funcionar quando a nota do fornecedor vem escrita diferente.
+        </div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {(f.aliases || []).map((a, i) => (
+            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#f2f2f4", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
+              {a}
+              <button onClick={() => set("aliases", f.aliases.filter((_, j) => j !== i))}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+            </span>
+          ))}
+          {!(f.aliases || []).length && <span style={{ fontSize: 12, color: "#9ca3af" }}>Nenhum ainda — o nome principal é usado.</span>}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input style={INS_S.input} value={novoAlias} placeholder="Ex.: CIMENTO CP II 50KG"
+            onChange={e => setNovoAlias(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addAlias(); } }} />
+          <button style={INS_S.btnSec} onClick={addAlias}>Adicionar</button>
+        </div>
+      </div>
+
+      <div style={{ marginBottom: 14 }}>
+        <label style={INS_S.label}>Observação</label>
+        <textarea style={Object.assign({}, INS_S.input, { resize: "vertical" })} rows={2}
+          value={f.observacao || ""} onChange={e => set("observacao", e.target.value)} />
+      </div>
+
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", marginBottom: 18, cursor: "pointer" }}>
+        <input type="checkbox" checked={f.ativo !== false} onChange={e => set("ativo", e.target.checked)} />
+        Ativo
+      </label>
+
+      <div style={{ display: "flex", gap: 10 }}>
+        <button style={INS_S.btn} onClick={salvar}>Salvar</button>
+        <button style={INS_S.btnSec} onClick={onCancelar}>Cancelar</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Detalhe ──────────────────────────────────────────────────
+function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, onDescartarPendente, isMobile }) {
+  var p = precoInsumo(insumo);
+  var conf = CONF_INSUMO[p.confianca] || CONF_INSUMO.sem_preco;
+
+  var compras = (data.lancamentos || [])
+    .filter(l => l.insumoCodigo === insumo.codigo)
+    .map(l => ({
+      data: l.dataPagamento || l.data,
+      qtd: Number(l.quantidade) || 0,
+      total: Number(l.total != null ? l.total : l.valor) || 0,
+      fornecedorId: l.fornecedorId,
+    }))
+    .filter(c => c.qtd > 0 && c.total > 0 && c.data)
+    .map(c => Object.assign(c, { unitario: c.total / c.qtd }))
+    .sort((a, b) => String(a.data).localeCompare(String(b.data)));
+
+  var usoEstimativas = (data.obras || []).filter(o =>
+    o.orcamento && (o.orcamento.itens || []).some(i => i.insumoCodigo === insumo.codigo)
+  ).length;
+
+  return (
+    <div>
+      <button onClick={onVoltar} style={Object.assign({}, INS_S.btnGhost, { marginBottom: 16, fontSize: 12 })}>← Voltar</button>
+
+      <div style={Object.assign({}, INS_S.card, { marginBottom: 16 })}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 11, color: INS.inkSoft, fontFamily: "ui-monospace, monospace", letterSpacing: 0.5 }}>{insumo.codigo}</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: INS.grafite, marginTop: 2 }}>{insumo.nome}</div>
+            <div style={{ fontSize: 12, color: INS.inkSoft, marginTop: 4 }}>
+              {insumo.grupo} · {insumo.unidade} · {insumo.tipo === "prestador" ? "Prestador" : "Material"}
+              {insumo.ativo === false && <span style={{ color: "#dc2626", fontWeight: 600 }}> · inativo</span>}
+            </div>
+          </div>
+          <button style={INS_S.btnSec} onClick={onEditar}>Editar</button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginTop: 20 }}>
+          <div>
+            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Preço</div>
+            <div style={{ fontSize: 19, fontWeight: 700, color: INS.grafite, display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
+              <PontoConfianca conf={p.confianca} tamanho={9} />{fmtBRLIns(p.preco)}
+            </div>
+            <div style={{ fontSize: 11, color: conf.cor, fontWeight: 600 }}>{conf.label}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Origem</div>
+            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>
+              {insumo.precoManual != null ? "Definido à mão"
+                : insumo.precoFonte === "compra" ? "Última compra"
+                : insumo.precoFonte === "compra_corrigida" ? "Compra corrigida"
+                : insumo.precoFonte === "cotacao" ? "Cotação interna"
+                : insumo.precoFonte === "mercado" ? "Referência de mercado"
+                : "—"}
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Data base</div>
+            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{fmtDataIns(insumo.precoData)}</div>
+            {p.corrigido && <div style={{ fontSize: 11, color: INS.inkSoft }}>corrigido ×{p.fator}</div>}
+          </div>
+          <div>
+            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Compras</div>
+            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{insumo.precoNCompras || 0}</div>
+          </div>
+        </div>
+
+        {insumo.observacao && (
+          <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid rgba(38,36,33,0.08)", fontSize: 12.5, color: "#4b5563", lineHeight: 1.5 }}>
+            {insumo.observacao}
+          </div>
+        )}
+      </div>
+
+      {insumo.precoPendente && (
+        <div style={{ border: "1.5px solid #f59e0b", background: "#fffbeb", borderRadius: 16, padding: 16, marginBottom: 16 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#92400e", marginBottom: 4 }}>Compra fora da faixa esperada</div>
+          <div style={{ fontSize: 12.5, color: "#78350f", marginBottom: 12 }}>
+            Uma compra de {fmtDataIns(insumo.precoPendente.data)} registrou {fmtBRLIns(insumo.precoPendente.valor)},
+            muito distante do preço atual de {fmtBRLIns(p.preco)}. O preço não foi alterado.
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button style={INS_S.btn} onClick={onAceitarPendente}>Aceitar como novo preço</button>
+            <button style={INS_S.btnSec} onClick={onDescartarPendente}>Descartar</button>
+          </div>
+        </div>
+      )}
+
+      <div style={Object.assign({}, INS_S.card, { marginBottom: 16 })}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: INS.grafite, marginBottom: 12 }}>
+          Histórico de compras {compras.length ? `(${compras.length})` : ""}
+        </div>
+        {!compras.length ? (
+          <div style={{ fontSize: 12.5, color: "#9ca3af" }}>
+            Nenhuma compra vinculada a este insumo ainda. O histórico se forma conforme as notas são lançadas nas obras.
+          </div>
+        ) : (
+          <div>
+            <GraficoPrecoInsumo compras={compras} />
+            <div style={{ overflowX: "auto", marginTop: 14 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+                <thead>
+                  <tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                    <th style={{ padding: "6px 8px" }}>Data</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>Qtd</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
+                    <th style={{ padding: "6px 8px", textAlign: "right" }}>Unitário</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {compras.slice().reverse().map((c, i) => (
+                    <tr key={i} style={{ borderTop: "1px solid #f3f4f6" }}>
+                      <td style={{ padding: "7px 8px" }}>{fmtDataIns(c.data)}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{c.qtd}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{fmtBRLIns(c.total)}</td>
+                      <td style={{ padding: "7px 8px", textAlign: "right", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{fmtBRLIns(c.unitario)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={INS_S.card}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: INS.grafite, marginBottom: 10 }}>Onde é usado</div>
+        <div style={{ fontSize: 12.5, color: "#4b5563" }}>
+          {usoEstimativas} orçamento{usoEstimativas === 1 ? "" : "s"} de obra · {compras.length} lançamento{compras.length === 1 ? "" : "s"} de compra
+        </div>
+        {(insumo.aliases || []).length > 1 && (
+          <div style={{ marginTop: 12, fontSize: 12, color: INS.inkSoft }}>
+            Também reconhecido como: {(insumo.aliases || []).slice(1).join(" · ")}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Gráfico de linha em SVG puro — sem biblioteca.
+function GraficoPrecoInsumo({ compras }) {
+  if (!compras || compras.length < 2) return null;
+  var W = 640, H = 130, PAD = 10;
+  var vals = compras.map(c => c.unitario);
+  var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+  if (max === min) { max = max * 1.1 || 1; min = min * 0.9; }
+  var pts = compras.map(function (c, i) {
+    var x = PAD + (i / (compras.length - 1)) * (W - PAD * 2);
+    var y = H - PAD - ((c.unitario - min) / (max - min)) * (H - PAD * 2);
+    return { x: x, y: y, c: c };
+  });
+  var d = pts.map((p, i) => (i ? "L" : "M") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
+  var area = d + " L" + pts[pts.length - 1].x.toFixed(1) + " " + (H - PAD) + " L" + pts[0].x.toFixed(1) + " " + (H - PAD) + " Z";
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <svg viewBox={"0 0 " + W + " " + H} width="100%" height={H} style={{ display: "block", minWidth: 320 }} role="img"
+        aria-label={"Evolução do preço unitário: de " + fmtBRLIns(compras[0].unitario) + " a " + fmtBRLIns(compras[compras.length - 1].unitario)}>
+        <path d={area} fill="rgba(30,58,95,0.07)" />
+        <path d={d} fill="none" stroke={INS.azul} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((p, i) => (
+          <circle key={i} cx={p.x} cy={p.y} r="2.6" fill="#fff" stroke={INS.azul} strokeWidth="1.6">
+            <title>{fmtDataIns(p.c.data) + " — " + fmtBRLIns(p.c.unitario)}</title>
+          </circle>
+        ))}
+      </svg>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+        <span>{fmtDataIns(compras[0].data)} · {fmtBRLIns(min)}</span>
+        <span>{fmtDataIns(compras[compras.length - 1].data)} · {fmtBRLIns(max)}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Módulo ───────────────────────────────────────────────────
+function Insumos({ data, save }) {
+  var perm = getPermissoes();
+  var [view, setView] = React.useState("lista");
+  var [sel, setSel] = React.useState(null);
+  var [busca, setBusca] = React.useState("");
+  var [filtroGrupo, setFiltroGrupo] = React.useState("");
+  var [filtroConf, setFiltroConf] = React.useState("");
+  var [semeando, setSemeando] = React.useState(false);
+
+  var [isMobile, setIsMobile] = React.useState(typeof window !== "undefined" && window.innerWidth < 768);
+  React.useEffect(function () {
+    function onResize() { setIsMobile(window.innerWidth < 768); }
+    window.addEventListener("resize", onResize);
+    return function () { window.removeEventListener("resize", onResize); };
+  }, []);
+
+  var insumos = React.useMemo(function () { return data.materiais || []; }, [data.materiais]);
+  var pendentesMigracao = insumos.filter(i => !i.codigo).length;
+  var faltamDaSemente = React.useMemo(function () {
+    var codigos = {};
+    insumos.forEach(i => { if (i.codigo) codigos[i.codigo] = 1; });
+    return INSUMOS_SEED.filter(s => !codigos[s.codigo]).length;
+  }, [insumos]);
+
+  var enriquecidos = React.useMemo(function () {
+    return insumos.map(function (i) {
+      var p = precoInsumo(i);
+      return { i: i, p: p };
+    });
+  }, [insumos]);
+
+  var ORDEM_CONF = { sem_preco: 0, obsoleta: 1, baixa: 2, media: 3, manual: 4, alta: 5 };
+  var filtrados = React.useMemo(function () {
+    var n = normalizarTexto(busca);
+    return enriquecidos
+      .filter(function (x) {
+        if (filtroGrupo && x.i.grupo !== filtroGrupo) return false;
+        if (filtroConf && x.p.confianca !== filtroConf) return false;
+        if (!n) return true;
+        if (normalizarTexto(x.i.codigo).indexOf(n) >= 0) return true;
+        if (normalizarTexto(x.i.nome).indexOf(n) >= 0) return true;
+        return (x.i.aliases || []).some(a => normalizarTexto(a).indexOf(n) >= 0);
+      })
+      .sort(function (a, b) {
+        var d = (ORDEM_CONF[a.p.confianca] || 0) - (ORDEM_CONF[b.p.confianca] || 0);
+        if (d !== 0) return d;
+        return String(a.i.nome).localeCompare(String(b.i.nome), "pt-BR");
+      });
+  }, [enriquecidos, busca, filtroGrupo, filtroConf]);
+
+  var resumo = React.useMemo(function () {
+    var r = { total: enriquecidos.length, alta: 0, media: 0, baixa: 0, obsoleta: 0, sem_preco: 0, manual: 0, pendentes: 0 };
+    enriquecidos.forEach(function (x) {
+      if (r[x.p.confianca] != null) r[x.p.confianca]++;
+      if (x.i.precoPendente) r.pendentes++;
+    });
+    return r;
+  }, [enriquecidos]);
+
+  function salvarInsumo(novo) {
+    var lista = insumos.slice();
+    var idx = lista.findIndex(x => x.id === novo.id || (novo.codigo && x.codigo === novo.codigo));
+    if (idx >= 0) lista[idx] = novo; else lista.push(novo);
+    save(Object.assign({}, data, { materiais: lista }));
+    setSel(novo);
+    setView("detalhe");
+  }
+
+  function rodarSemeadura() {
+    setSemeando(true);
+    try {
+      var mig = migrarMateriaisParaInsumos(insumos);
+      var sem = semearInsumos(mig.materiais, INSUMOS_SEED);
+      save(Object.assign({}, data, { materiais: sem.materiais }));
+      dialogo.alertar({
+        titulo: "Catálogo atualizado",
+        mensagem: sem.criados + " insumo(s) criado(s), " + sem.atualizados + " atualizado(s), "
+          + sem.ignorados + " já estavam em dia" + (mig.alterados ? ". " + mig.alterados + " material antigo ganhou código." : "."),
+        tipo: "sucesso",
+      });
+    } catch (e) {
+      dialogo.alertar({ titulo: "Não foi possível semear", mensagem: e.message, tipo: "erro" });
+    }
+    setSemeando(false);
+  }
+
+  function aplicarPendente(insumo, aceitar) {
+    var lista = insumos.map(function (x) {
+      if (x.codigo !== insumo.codigo) return x;
+      if (!aceitar) return Object.assign({}, x, { precoPendente: null });
+      return Object.assign({}, x, {
+        precoReferencia: insumo.precoPendente.valor,
+        ultimoPreco: insumo.precoPendente.valor,
+        precoFonte: "compra",
+        precoData: insumo.precoPendente.data,
+        precoNCompras: (x.precoNCompras || 0) + 1,
+        precoFatorInccAplicado: 1,
+        precoPendente: null,
+        precoAtualizadoEm: new Date().toISOString(),
+      });
+    });
+    save(Object.assign({}, data, { materiais: lista }));
+    setSel(lista.find(x => x.codigo === insumo.codigo));
+  }
+
+  // ── formulário ──
+  if (view === "form" && sel) {
+    return (
+      <div style={{ padding: isMobile ? 16 : "28px 32px", background: INS.fundo, minHeight: "100%", fontFamily: INS_FONT }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <InsumoForm insumo={sel} insumos={insumos} isMobile={isMobile}
+            onSalvar={salvarInsumo}
+            onCancelar={() => { setView(sel.codigo ? "detalhe" : "lista"); }} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── detalhe ──
+  if (view === "detalhe" && sel) {
+    var atual = insumos.find(x => x.codigo === sel.codigo) || sel;
+    return (
+      <div style={{ padding: isMobile ? 16 : "28px 32px", background: INS.fundo, minHeight: "100%", fontFamily: INS_FONT }}>
+        <div style={{ maxWidth: 900, margin: "0 auto" }}>
+          <InsumoDetalhe insumo={atual} data={data} isMobile={isMobile}
+            onEditar={() => { if (!perm.podeEditar) return; setSel(atual); setView("form"); }}
+            onVoltar={() => { setView("lista"); setSel(null); }}
+            onAceitarPendente={() => aplicarPendente(atual, true)}
+            onDescartarPendente={() => aplicarPendente(atual, false)} />
+        </div>
+      </div>
+    );
+  }
+
+  // ── lista ──
+  return (
+    <div style={{ padding: isMobile ? 16 : "28px 32px", background: INS.fundo, minHeight: "100%", fontFamily: INS_FONT }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontSize: 22, fontWeight: 700, color: INS.grafite, letterSpacing: "-0.01em" }}>Insumos</div>
+            <div style={{ fontSize: 12.5, color: INS.inkSoft, marginTop: 2 }}>
+              Catálogo de materiais e serviços. É daqui que a estimativa lê preço e é aqui que as compras o atualizam.
+            </div>
+          </div>
+          {perm.podeEditar && (
+            <button style={INS_S.btn} onClick={() => { setSel({}); setView("form"); }}>+ Novo insumo</button>
+          )}
+        </div>
+
+        {(faltamDaSemente > 0 || pendentesMigracao > 0) && perm.podeAlterarConfig && (
+          <div style={{ border: "1.5px solid #1e3a5f", background: "#f5f8fc", borderRadius: 16, padding: 16, margin: "18px 0" }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: INS.azul, marginBottom: 4 }}>
+              {insumos.length === 0 ? "Catálogo vazio" : "Catálogo incompleto"}
+            </div>
+            <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12 }}>
+              {faltamDaSemente > 0 && <>Faltam <strong>{faltamDaSemente}</strong> insumos do catálogo padrão (94 materiais e 17 prestadores, com preço de referência). </>}
+              {pendentesMigracao > 0 && <><strong>{pendentesMigracao}</strong> material antigo ainda não tem código. </>}
+              A operação é segura de repetir: nunca sobrescreve preço definido à mão nem preço mais recente que o da semente.
+            </div>
+            <button style={INS_S.btn} disabled={semeando} onClick={rodarSemeadura}>
+              {semeando ? "Aplicando…" : "Carregar catálogo padrão"}
+            </button>
+          </div>
+        )}
+
+        {resumo.total > 0 && (
+          <div style={{ display: "flex", gap: 18, flexWrap: "wrap", margin: "18px 0", fontSize: 12.5, color: "#4b5563" }}>
+            <span><strong style={{ color: INS.grafite }}>{resumo.total}</strong> insumos</span>
+            <span><PontoConfianca conf="alta" /> {resumo.alta} atual</span>
+            <span><PontoConfianca conf="media" /> {resumo.media} recente</span>
+            <span><PontoConfianca conf="baixa" /> {resumo.baixa} antigo</span>
+            <span><PontoConfianca conf="obsoleta" /> {resumo.obsoleta} obsoleto</span>
+            {resumo.sem_preco > 0 && <span><PontoConfianca conf="sem_preco" /> {resumo.sem_preco} sem preço</span>}
+            {resumo.pendentes > 0 && <span style={{ color: "#b45309", fontWeight: 600 }}>{resumo.pendentes} aguardando confirmação</span>}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 10, marginBottom: 16 }}>
+          <input style={INS_S.input} placeholder="Buscar por nome, código ou apelido…" value={busca} onChange={e => setBusca(e.target.value)} />
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroGrupo} onChange={e => setFiltroGrupo(e.target.value)}>
+            <option value="">Todos os grupos</option>
+            {INSUMO_GRUPOS.map(g => <option key={g.prefixo} value={g.nome}>{g.nome}</option>)}
+          </select>
+          <select style={Object.assign({}, INS_S.input, { cursor: "pointer" })} value={filtroConf} onChange={e => setFiltroConf(e.target.value)}>
+            <option value="">Qualquer preço</option>
+            <option value="alta">Atual</option>
+            <option value="media">Recente</option>
+            <option value="baixa">Antigo</option>
+            <option value="obsoleta">Obsoleto</option>
+            <option value="sem_preco">Sem preço</option>
+            <option value="manual">Definido à mão</option>
+          </select>
+        </div>
+
+        {filtrados.length === 0 ? (
+          <div style={{ padding: 28, textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 16, background: "#fff" }}>
+            {insumos.length === 0 ? "Nenhum insumo cadastrado ainda." : "Nenhum insumo com esses filtros."}
+          </div>
+        ) : (
+          <div style={{ background: "#fff", border: INS.borda, borderRadius: 16, overflow: "hidden" }}>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: isMobile ? 0 : 720 }}>
+                <thead>
+                  <tr style={{ background: "#f7f7f8", color: "#6b7280", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, textAlign: "left" }}>
+                    <th style={{ padding: "10px 12px", fontWeight: 600 }}>Código</th>
+                    <th style={{ padding: "10px 12px", fontWeight: 600 }}>Insumo</th>
+                    {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Grupo</th>}
+                    {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Un.</th>}
+                    <th style={{ padding: "10px 12px", fontWeight: 600, textAlign: "right" }}>Preço</th>
+                    {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Base</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtrados.map(function (x) {
+                    return (
+                      <tr key={x.i.id || x.i.codigo}
+                        onClick={() => { setSel(x.i); setView("detalhe"); }}
+                        style={{ borderTop: "1px solid #f3f4f6", cursor: "pointer", opacity: x.i.ativo === false ? 0.5 : 1 }}
+                        onMouseEnter={e => { e.currentTarget.style.background = "#fafafa"; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}>
+                        <td style={{ padding: "10px 12px", fontFamily: "ui-monospace, monospace", fontSize: 11.5, color: INS.inkSoft, whiteSpace: "nowrap" }}>{x.i.codigo || "—"}</td>
+                        <td style={{ padding: "10px 12px", color: INS.grafite, fontWeight: 500 }}>
+                          {x.i.nome}
+                          {x.i.precoPendente && <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309", fontWeight: 600 }}>· confirmar</span>}
+                        </td>
+                        {!isMobile && <td style={{ padding: "10px 12px", color: "#6b7280" }}>{x.i.grupo}</td>}
+                        {!isMobile && <td style={{ padding: "10px 12px", color: "#6b7280" }}>{x.i.unidade}</td>}
+                        <td style={{ padding: "10px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: INS.grafite, whiteSpace: "nowrap" }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, justifyContent: "flex-end" }}>
+                            <PontoConfianca conf={x.p.confianca} />
+                            {fmtBRLIns(x.p.preco)}
+                          </span>
+                        </td>
+                        {!isMobile && (
+                          <td style={{ padding: "10px 12px", color: "#9ca3af", fontSize: 11.5, whiteSpace: "nowrap" }}>
+                            {fmtDataIns(x.i.precoData)}{x.p.corrigido ? " ×" + x.p.fator : ""}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 14, lineHeight: 1.6 }}>
+          O preço com 12 meses ou mais é corrigido pelo INCC automaticamente. Definir um preço à mão congela o valor:
+          nenhuma compra passa por cima dele.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+// ════════════════════════════════════════════════════════════
 // obra-financeiro.jsx
 // ════════════════════════════════════════════════════════════
 
@@ -6138,6 +7320,20 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
   const ehTerrea = projetoDraft.tipologia !== "Sobrado";
 
+  // Mantém terreo.m2Parede20 sincronizado com "total − 15cm − 25cm" sempre
+  // que a tipologia é Térrea — inclusive na primeira renderização, pra um
+  // projeto salvo antes desta mudança já abrir com o valor certo.
+  useEffect(() => {
+    if (!ehTerrea) return;
+    const total = numOrZero(projetoDraft.arquitetura?.m2ParedesTotal);
+    const p15 = numOrZero(projetoDraft.terreo?.m2Parede15);
+    const p25 = numOrZero(projetoDraft.terreo?.m2Parede25);
+    const p20 = Math.max(0, total - p15 - p25);
+    if (numOrZero(projetoDraft.terreo?.m2Parede20) !== p20) {
+      setProjetoDraft((p) => setEmCaminho(p, "terreo.m2Parede20", p20));
+    }
+  }, [ehTerrea, projetoDraft.arquitetura?.m2ParedesTotal, projetoDraft.terreo?.m2Parede15, projetoDraft.terreo?.m2Parede25, projetoDraft.terreo?.m2Parede20]);
+
   // Térrea: um único campo de área construída, espelhado em arquitetura e
   // terreo (na prática são a mesma área quando não há Pav. 1).
   function setAreaConstruidaTerrea(v) {
@@ -6145,7 +7341,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   }
 
   // M² de parede total sempre derivado de interna+externa — nunca digitado
-  // direto, pra não ficar dessincronizado.
+  // direto, pra não ficar dessincronizado. Pra Térrea, o efeito acima cuida
+  // de recalcular o 20cm automático sempre que o total mudar.
   function setParedeInterna(v) {
     setProjetoDraft((p) => {
       const externa = numOrZero(lerCaminho(p, "arquitetura.m2ParedesExternas"));
@@ -6159,8 +7356,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     });
   }
 
-  // Pav. Térreo — modo simples assume tudo em 20cm (zera 15/25cm); o botão
-  // "Expandir" libera o detalhamento por espessura.
+  // Pav. Térreo (só Sobrado) — modo simples assume tudo em 20cm (zera
+  // 15/25cm); o botão "Expandir" libera o detalhamento por espessura.
   function setParedeTerreoSimples(v) {
     setProjetoDraft((p) => setEmCaminho(setEmCaminho(setEmCaminho(p, "terreo.m2Parede20", v), "terreo.m2Parede15", 0), "terreo.m2Parede25", 0));
   }
@@ -6250,26 +7447,16 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           {ehTerrea && (
             <>
               <CampoNum label="Perímetro de paredes" valor={get("terreo.perimetroParedes")} onChange={(v) => set("terreo.perimetroParedes", v)} />
-              {!paredeTerreoExpandida ? (
-                <CampoNum label="M² de parede p/ estrutura (considera tudo 20cm)" valor={get("terreo.m2Parede20")} onChange={setParedeTerreoSimples} />
-              ) : (
-                <>
-                  <CampoNum label="M² parede 15cm" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
-                  <CampoNum label="M² parede 20cm" valor={get("terreo.m2Parede20")} onChange={(v) => set("terreo.m2Parede20", v)} />
-                  <CampoNum label="M² parede 25cm" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
-                </>
-              )}
+              <CampoNum label="M² parede 15cm (se houver)" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
+              <CampoNum label="M² parede 25cm (se houver)" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
+              <div>
+                <label style={C.label}>M² parede 20cm (automático)</label>
+                <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("terreo.m2Parede20"))} disabled readOnly />
+              </div>
               <CampoNum label="Vãos de portas e janelas" valor={get("terreo.vaoPortasJanelas")} onChange={(v) => set("terreo.vaoPortasJanelas", v)} />
             </>
           )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
-          {ehTerrea && (
-            <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
-              <button type="button" style={{ ...C.btnGhost, fontSize: 11 }} onClick={() => setParedeTerreoExpandida((v) => !v)}>
-                {paredeTerreoExpandida ? "Simplificar (tudo 20cm)" : "Expandir espessuras de parede (15/20/25cm)"}
-              </button>
-            </div>
-          )}
         </BlocoColapsavel>
 
         {!ehTerrea && (
@@ -30833,6 +32020,9 @@ function IconeMaster({ nome, tamanho = 18, cor = "currentColor" }) {
     case "prestadores":
       // Maleta (briefcase) — prestadores de serviço / fornecedores
       return (<svg {...props}><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>);
+    case "insumos":
+      // Caixa/pacote — catálogo de insumos
+      return (<svg {...props}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>);
     case "escritorio":
       // Engrenagem / settings outline (mesmo ícone que manutenção mas menor uso)
       return (<svg {...props}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
@@ -32247,6 +33437,7 @@ export default function ModuloClientesFornecedores() {
     ]},
     { k:"obras",       icon:"obras",      label:"Obras" },
     { k:"fornecedores", icon:"prestadores", label:"Prestadores de Serviços" },
+    { k:"insumos",     icon:"insumos",    label:"Insumos", count: data?.materiais?.length },
     // Módulos Financeiro e Notas Fiscais continuam removidos do menu
     // (decisão Sprint 3): serão refeitos do zero. Mantenho os componentes/rotas
     // por enquanto pra não quebrar dados antigos, só ocultos do menu.
@@ -32715,6 +33906,7 @@ export default function ModuloClientesFornecedores() {
           {aba === "obras"                  && <Obras key={obrasKey} data={data} save={save} />}
           {aba === "financeiro"             && <Financeiro key={financeiroKey} data={data} save={save} />}
           {aba === "fornecedores"           && <PrestadoresServico key={fornecedoresKey} data={data} save={save} />}
+          {aba === "insumos"                && <Insumos data={data} save={save} />}
           {aba === "nf"                     && <ImportarNF data={data} save={save} />}
           {aba === "escritorio"             && <Escritorio key={escritorioKey} data={data} save={save} />}
           {aba === "orcamento"              && <OrcamentoConfig usuario={usuario} data={data} setUsuario={setUsuario} />}
