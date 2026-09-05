@@ -569,7 +569,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       if (!busca) return true;
       const b = busca.toLowerCase();
       return c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
-    });
+    }).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
     // ── MOBILE: abas por coluna ──────────────────────────────
     if (isMobile) {
@@ -688,7 +688,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const filtrados = data.clientes.filter(c => {
       const b = busca.toLowerCase();
       return !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
-    });
+    }).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     return (
       <div style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
