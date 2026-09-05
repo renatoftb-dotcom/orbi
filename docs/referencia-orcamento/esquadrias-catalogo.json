@@ -1,771 +1,1456 @@
 {
- "linhas": {
-  "GOLD": {
-   "JANELA CORRER 2 FOLHAS": [
+  "familias": [
     {
-     "perfil": "GUARNIÇÃO LARGURA SUPERIOR E  INFERIOR",
-     "codigo": "RM039",
-     "kgPorMetro": 0.205,
-     "regra": "2 LARGURAS"
+      "id": "JANELA_CORRER",
+      "nome": "Janela de correr",
+      "folhas": [
+        2,
+        3,
+        4
+      ]
     },
     {
-     "perfil": "GUARNIÇÃO LATERIAIS",
-     "codigo": "RM005",
-     "kgPorMetro": 0.202,
-     "regra": "2 ALTURAS"
+      "id": "PORTA_CORRER",
+      "nome": "Porta de correr",
+      "folhas": [
+        2,
+        3,
+        4
+      ]
     },
     {
-     "perfil": "TRILHO SUPERIOR",
-     "codigo": "GN003",
-     "kgPorMetro": 1.176,
-     "regra": "1 LARGURA"
+      "id": "PORTA_GIRO",
+      "nome": "Porta de giro",
+      "folhas": [
+        1,
+        2
+      ]
     },
     {
-     "perfil": "TRILHO INFERIOR",
-     "codigo": "GN001",
-     "kgPorMetro": 1.555,
-     "regra": "1 LARGURA"
+      "id": "MAXIM_AR",
+      "nome": "Janela maxim-ar",
+      "folhas": [
+        1,
+        2
+      ]
     },
     {
-     "perfil": "MARCO LATERAL",
-     "codigo": "GN004",
-     "kgPorMetro": 0.677,
-     "regra": "2 ALTURA"
+      "id": "QUADRO_FIXO",
+      "nome": "Quadro fixo (vidro fixo)",
+      "folhas": [
+        1
+      ]
     },
     {
-     "perfil": "MONTANTE LATERAL FOLHA",
-     "codigo": "GN008",
-     "kgPorMetro": 0.955,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA",
-     "codigo": "GN006",
-     "kgPorMetro": 0.697,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "MÃO AMIGA EXTERNO",
-     "codigo": "GN010",
-     "kgPorMetro": 0.802,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "BAGUETE TRAVESSA",
-     "codigo": "GN013",
-     "kgPorMetro": 0.186,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "BAGUETE LATERAIS",
-     "codigo": "GN009",
-     "kgPorMetro": 0.18,
-     "regra": "2 ALTURAS POR FOLHA"
-    },
-    {
-     "perfil": "BATEDEIRA LATERAL",
-     "codigo": "GN005",
-     "kgPorMetro": 0.111,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "CONTRA MARCO",
-     "codigo": "CM060",
-     "kgPorMetro": 0.276,
-     "regra": "2 ALTURAS + 2 LARGURAS"
+      "id": "JANELA_PERSIANA",
+      "nome": "Janela com persiana integrada",
+      "folhas": [
+        2
+      ]
     }
-   ],
-   "JANELA CORRER 3 FOLHAS": [
+  ],
+  "linhas": [
     {
-     "perfil": "GUARNIÇÃO LARGURA SUPERIOR E  INFERIOR",
-     "codigo": "RM039",
-     "kgPorMetro": 0.205,
-     "regra": "2 LARGURAS"
+      "id": "GOLD",
+      "nome": "Gold",
+      "disponivel": true
     },
     {
-     "perfil": "GUARNIÇÃO LATERIAIS",
-     "codigo": "RM005",
-     "kgPorMetro": 0.202,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRILHO SUPERIOR",
-     "codigo": "GN023",
-     "kgPorMetro": 1.76,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "TRILHO INFERIOR",
-     "codigo": "GN021",
-     "kgPorMetro": 2.317,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "MARCO LATERAL",
-     "codigo": "GN025",
-     "kgPorMetro": 1.057,
-     "regra": "2 ALTURA"
-    },
-    {
-     "perfil": "MONTANTE LATERAL FOLHA",
-     "codigo": "GN008",
-     "kgPorMetro": 0.955,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA",
-     "codigo": "GN006",
-     "kgPorMetro": 0.697,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "MÃO AMIGA EXTERNO",
-     "codigo": "GN010",
-     "kgPorMetro": 0.802,
-     "regra": "4 ALTURAS"
-    },
-    {
-     "perfil": "BAGUETE TRAVESSA",
-     "codigo": "GN013",
-     "kgPorMetro": 0.186,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "BAGUETE LATERAIS",
-     "codigo": "GN009",
-     "kgPorMetro": 0.18,
-     "regra": "2 ALTURAS POR FOLHA"
-    },
-    {
-     "perfil": "BATEDEIRA LATERAL",
-     "codigo": "GN005",
-     "kgPorMetro": 0.111,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "CONTRA MARCO",
-     "codigo": "CM060",
-     "kgPorMetro": 0.276,
-     "regra": "2 ALTURAS + 2 LARGURAS"
+      "id": "SUPREMA",
+      "nome": "Suprema",
+      "disponivel": true,
+      "aproximada": true,
+      "aviso": "pesos do catálogo Go Perfil; função de cada perfil mapeada por analogia com a Gold — resultado aproximado. Só janela e porta de correr de 2 folhas têm lista."
     }
-   ],
-   "JANELA CORRER 4 FOLHAS": [
-    {
-     "perfil": "GUARNIÇÃO LARGURA SUPERIOR E  INFERIOR",
-     "codigo": "RM039",
-     "kgPorMetro": 0.205,
-     "regra": "2 LARGURAS"
+  ],
+  "vidro": {
+    "PADRAO": {
+      "descL": 0,
+      "descH": 0.14,
+      "porFolha": false
     },
-    {
-     "perfil": "GUARNIÇÃO LATERIAIS",
-     "codigo": "RM005",
-     "kgPorMetro": 0.202,
-     "regra": "2 ALTURAS"
+    "PORTA_GIRO": {
+      "descLPorFolhas": {
+        "1": 0.205,
+        "2": 0.3735
+      },
+      "descH": 0.2863,
+      "porFolha": false
     },
-    {
-     "perfil": "TRILHO SUPERIOR",
-     "codigo": "GN024",
-     "kgPorMetro": 2.494,
-     "regra": "1 LARGURA"
+    "MAXIM_AR": {
+      "descL": 0.1269,
+      "descH": 0.1526,
+      "porFolha": true,
+      "montante": 0.032
     },
-    {
-     "perfil": "TRILHO INFERIOR",
-     "codigo": "GN022",
-     "kgPorMetro": 3.12,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "MARCO LATERAL",
-     "codigo": "GN026",
-     "kgPorMetro": 1.445,
-     "regra": "2 ALTURA"
-    },
-    {
-     "perfil": "MONTANTE LATERAL FOLHA",
-     "codigo": "GN008",
-     "kgPorMetro": 0.955,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA",
-     "codigo": "GN006",
-     "kgPorMetro": 0.697,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "MÃO AMIGA",
-     "codigo": "GN010",
-     "kgPorMetro": 0.802,
-     "regra": "6 ALTURAS"
-    },
-    {
-     "perfil": "BAGUETE TRAVESSA",
-     "codigo": "GN013",
-     "kgPorMetro": 0.186,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "BAGUETE LATERAIS",
-     "codigo": "GN009",
-     "kgPorMetro": 0.18,
-     "regra": "2 ALTURAS POR FOLHA"
-    },
-    {
-     "perfil": "BATEDEIRA LATERAL",
-     "codigo": "GN005",
-     "kgPorMetro": 0.111,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "CONTRA MARCO",
-     "codigo": "CM060",
-     "kgPorMetro": 0.276,
-     "regra": "2 ALTURAS + 2 LARGURAS"
+    "QUADRO_FIXO": {
+      "descL": 0.1179,
+      "descH": 0.1179,
+      "porFolha": false
     }
-   ],
-   "PORTA CORRER 2 FOLHAS": [
-    {
-     "perfil": "GUARNIÇÃO LARGURA SUPERIOR E  INFERIOR",
-     "codigo": "RM039",
-     "kgPorMetro": 0.205,
-     "regra": "2 LARGURAS"
+  },
+  "acessorios": {
+    "JANELA_CORRER": [
+      {
+        "codigo": "KITGN06",
+        "descricao": "Kit roldana + guia da folha",
+        "porFolha": 1
+      },
+      {
+        "codigo": "FEC1106",
+        "descricao": "Fecho concha",
+        "porFolha": 1
+      },
+      {
+        "codigo": "CAL966",
+        "descricao": "Calço de vidro",
+        "porFolha": 4
+      },
+      {
+        "codigo": "NYL545",
+        "descricao": "Kit nylons de canto da folha",
+        "porFolha": 1
+      },
+      {
+        "codigo": "CON536",
+        "descricao": "Conexão de canto do marco",
+        "porEsquadria": 4
+      },
+      {
+        "codigo": "TRA044",
+        "descricao": "Trava antiretirada da folha",
+        "porFolha": 1
+      },
+      {
+        "codigo": "GUA006",
+        "descricao": "Guarnição de vidro (borracha)",
+        "metros": "perimetroVidro"
+      },
+      {
+        "codigo": "GUA526",
+        "descricao": "Escova de vedação da folha",
+        "metros": "perimetroFolha"
+      },
+      {
+        "codigo": "CHU838",
+        "descricao": "Chumbador do contramarco",
+        "porMetro": 0.5,
+        "metros": "perimetro"
+      },
+      {
+        "codigo": "PAR428",
+        "descricao": "Parafuso de fixação",
+        "porMetro": 0.3,
+        "metros": "perimetro"
+      }
+    ],
+    "PORTA_CORRER": [
+      {
+        "codigo": "KITGN05",
+        "descricao": "Kit roldana de porta + guia",
+        "porFolha": 1
+      },
+      {
+        "codigo": "FEC1208",
+        "descricao": "Fecho de porta com chave",
+        "porEsquadria": 1
+      },
+      {
+        "codigo": "FEC1106",
+        "descricao": "Fecho concha (folhas secundárias)",
+        "porFolha": 1,
+        "porEsquadria": -1
+      },
+      {
+        "codigo": "CAL966",
+        "descricao": "Calço de vidro",
+        "porFolha": 4
+      },
+      {
+        "codigo": "NYL042",
+        "descricao": "Guia superior da folha",
+        "porFolha": 2
+      },
+      {
+        "codigo": "CON536",
+        "descricao": "Conexão de canto do marco",
+        "porEsquadria": 4
+      },
+      {
+        "codigo": "GUA006",
+        "descricao": "Guarnição de vidro (borracha)",
+        "metros": "perimetroVidro"
+      },
+      {
+        "codigo": "GUA526",
+        "descricao": "Escova de vedação da folha",
+        "metros": "perimetroFolha"
+      },
+      {
+        "codigo": "CHU838",
+        "descricao": "Chumbador do contramarco",
+        "porMetro": 0.5,
+        "metros": "perimetro"
+      },
+      {
+        "codigo": "PAR428",
+        "descricao": "Parafuso de fixação",
+        "porMetro": 0.3,
+        "metros": "perimetro"
+      }
+    ],
+    "PORTA_GIRO": [
+      {
+        "codigo": "DOB",
+        "descricao": "Dobradiça de porta de giro",
+        "porFolha": 3
+      },
+      {
+        "codigo": "FECH",
+        "descricao": "Fechadura com maçaneta (jogo)",
+        "porEsquadria": 1
+      },
+      {
+        "codigo": "KITGN16",
+        "descricao": "Kit batente central (2 folhas)",
+        "porEsquadria": 1,
+        "apenasFolhas": 2
+      },
+      {
+        "codigo": "CON547",
+        "descricao": "Conexão de canto do marco",
+        "porEsquadria": 4
+      },
+      {
+        "codigo": "CON548",
+        "descricao": "Conexão de canto da folha",
+        "porFolha": 4
+      },
+      {
+        "codigo": "NYL482",
+        "descricao": "Nylon de canto",
+        "porFolha": 4
+      },
+      {
+        "codigo": "CAL966",
+        "descricao": "Calço de vidro",
+        "porFolha": 8
+      },
+      {
+        "codigo": "GUA410",
+        "descricao": "Guarnição de vidro (borracha)",
+        "metros": "perimetroVidro"
+      },
+      {
+        "codigo": "GUA392",
+        "descricao": "Escova inferior da folha",
+        "metros": "larguraFolhas"
+      },
+      {
+        "codigo": "CHU840",
+        "descricao": "Chumbador do contramarco",
+        "porMetro": 0.5,
+        "metros": "perimetro"
+      },
+      {
+        "codigo": "PAR428",
+        "descricao": "Parafuso de fixação",
+        "porMetro": 0.3,
+        "metros": "perimetro"
+      }
+    ],
+    "MAXIM_AR": [
+      {
+        "codigo": "BRA832",
+        "descricao": "Par de braços maxim-ar",
+        "porFolha": 1
+      },
+      {
+        "codigo": "FEC1212",
+        "descricao": "Fecho maxim-ar",
+        "porFolha": 1
+      },
+      {
+        "codigo": "CON547",
+        "descricao": "Conexão de canto do marco",
+        "porEsquadria": 4
+      },
+      {
+        "codigo": "NYL482",
+        "descricao": "Nylon de canto da folha",
+        "porFolha": 4
+      },
+      {
+        "codigo": "CAL966",
+        "descricao": "Calço de vidro",
+        "porFolha": 4
+      },
+      {
+        "codigo": "GUA410",
+        "descricao": "Guarnição de vidro (borracha)",
+        "metros": "perimetroVidro"
+      },
+      {
+        "codigo": "GUA172",
+        "descricao": "Escova de vedação do marco",
+        "metros": "perimetro"
+      },
+      {
+        "codigo": "CHU838",
+        "descricao": "Chumbador do contramarco",
+        "porMetro": 0.5,
+        "metros": "perimetro"
+      },
+      {
+        "codigo": "PAR694",
+        "descricao": "Parafuso de fixação",
+        "porMetro": 0.3,
+        "metros": "perimetro"
+      }
+    ],
+    "QUADRO_FIXO": [
+      {
+        "codigo": "CON547",
+        "descricao": "Conexão de canto do marco",
+        "porEsquadria": 4
+      },
+      {
+        "codigo": "CAL966",
+        "descricao": "Calço de vidro",
+        "porEsquadria": 4
+      },
+      {
+        "codigo": "GUA410",
+        "descricao": "Guarnição de vidro (borracha)",
+        "metros": "perimetroVidro"
+      },
+      {
+        "codigo": "CHU838",
+        "descricao": "Chumbador do contramarco",
+        "porMetro": 0.5,
+        "metros": "perimetro"
+      },
+      {
+        "codigo": "PAR428",
+        "descricao": "Parafuso de fixação",
+        "porMetro": 0.3,
+        "metros": "perimetro"
+      }
+    ],
+    "JANELA_PERSIANA": [
+      {
+        "codigo": "KITGN06",
+        "descricao": "Kit roldana + guia da folha",
+        "porFolha": 1
+      },
+      {
+        "codigo": "FEC1106",
+        "descricao": "Fecho concha",
+        "porFolha": 1
+      },
+      {
+        "codigo": "CAL966",
+        "descricao": "Calço de vidro",
+        "porFolha": 4
+      },
+      {
+        "codigo": "NYL743",
+        "descricao": "Kit eixo/rolo da persiana",
+        "porEsquadria": 1
+      },
+      {
+        "codigo": "CON536",
+        "descricao": "Conexão de canto do marco",
+        "porEsquadria": 4
+      },
+      {
+        "codigo": "GUA006",
+        "descricao": "Guarnição de vidro (borracha)",
+        "metros": "perimetroVidro"
+      },
+      {
+        "codigo": "GUA526",
+        "descricao": "Escova de vedação da folha",
+        "metros": "perimetroFolha"
+      },
+      {
+        "codigo": "CHU838",
+        "descricao": "Chumbador do contramarco",
+        "porMetro": 0.5,
+        "metros": "perimetro"
+      },
+      {
+        "codigo": "PAR428",
+        "descricao": "Parafuso de fixação",
+        "porMetro": 0.3,
+        "metros": "perimetro"
+      }
+    ]
+  },
+  "catalogo": {
+    "GOLD": {
+      "JANELA_CORRER|2": [
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN003",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 1.176,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN001",
+          "perfil": "Trilho inferior",
+          "kgPorMetro": 1.555,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN004",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 0.677,
+          "regra": "2 ALTURA"
+        },
+        {
+          "codigo": "GN008",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 0.955,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN006",
+          "perfil": "Travessa folha",
+          "kgPorMetro": 0.697,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN010",
+          "perfil": "Mão amiga externo",
+          "kgPorMetro": 0.802,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete travessa",
+          "kgPorMetro": 0.186,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete laterais",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN005",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "CM060",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.276,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        }
+      ],
+      "JANELA_CORRER|3": [
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN023",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 1.76,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN021",
+          "perfil": "Trilho inferior",
+          "kgPorMetro": 2.317,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN025",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 1.057,
+          "regra": "2 ALTURA"
+        },
+        {
+          "codigo": "GN008",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 0.955,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN006",
+          "perfil": "Travessa folha",
+          "kgPorMetro": 0.697,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN010",
+          "perfil": "Mão amiga externo",
+          "kgPorMetro": 0.802,
+          "regra": "4 ALTURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete travessa",
+          "kgPorMetro": 0.186,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete laterais",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN005",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "CM060",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.276,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        }
+      ],
+      "JANELA_CORRER|4": [
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN024",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 2.494,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN022",
+          "perfil": "Trilho inferior",
+          "kgPorMetro": 3.12,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN026",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 1.445,
+          "regra": "2 ALTURA"
+        },
+        {
+          "codigo": "GN008",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 0.955,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN006",
+          "perfil": "Travessa folha",
+          "kgPorMetro": 0.697,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN010",
+          "perfil": "Mão amiga",
+          "kgPorMetro": 0.802,
+          "regra": "6 ALTURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete travessa",
+          "kgPorMetro": 0.186,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete laterais",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN005",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "CM060",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.276,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        }
+      ],
+      "PORTA_CORRER|2": [
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN003",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 1.176,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN001",
+          "perfil": "Trilho inferior",
+          "kgPorMetro": 1.555,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN004",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 0.677,
+          "regra": "2 ALTURA"
+        },
+        {
+          "codigo": "GN012",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 1.148,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN007",
+          "perfil": "Travessa folha superior",
+          "kgPorMetro": 0.787,
+          "regra": "1 LARGURAS"
+        },
+        {
+          "codigo": "GN014",
+          "perfil": "Travessa folha inferior",
+          "kgPorMetro": 1.159,
+          "regra": "1 LARGURAS"
+        },
+        {
+          "codigo": "GN011",
+          "perfil": "Mão amiga externo",
+          "kgPorMetro": 1.064,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete travessa",
+          "kgPorMetro": 0.186,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete laterais",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN005",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "RM038",
+          "perfil": "Soleira piso",
+          "kgPorMetro": 0.232,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "CM174",
+          "perfil": "Contra marco superior e laterais",
+          "kgPorMetro": 0.409,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        },
+        {
+          "codigo": "CM223",
+          "perfil": "Contra marco inferior",
+          "kgPorMetro": 0.59,
+          "regra": "1 LARGURA"
+        }
+      ],
+      "PORTA_CORRER|3": [
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN023",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 1.76,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN021",
+          "perfil": "Trilho inferior",
+          "kgPorMetro": 2.317,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN025",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 1.057,
+          "regra": "2 ALTURA"
+        },
+        {
+          "codigo": "GN012",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 1.148,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN007",
+          "perfil": "Travessa folha superior",
+          "kgPorMetro": 0.787,
+          "regra": "1 LARGURAS"
+        },
+        {
+          "codigo": "GN014",
+          "perfil": "Travessa folha inferior",
+          "kgPorMetro": 1.159,
+          "regra": "1 LARGURAS"
+        },
+        {
+          "codigo": "GN011",
+          "perfil": "Mão amiga externo",
+          "kgPorMetro": 1.064,
+          "regra": "4 ALTURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete travessa",
+          "kgPorMetro": 0.186,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete laterais",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN005",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "RM038",
+          "perfil": "Soleira piso",
+          "kgPorMetro": 0.232,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "CM174",
+          "perfil": "Contra marco superior e laterais",
+          "kgPorMetro": 0.409,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        },
+        {
+          "codigo": "CM223",
+          "perfil": "Contra marco inferior",
+          "kgPorMetro": 0.59,
+          "regra": "1 LARGURA"
+        }
+      ],
+      "PORTA_CORRER|4": [
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN024",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 2.494,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN022",
+          "perfil": "Trilho inferior",
+          "kgPorMetro": 3.12,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN026",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 1.445,
+          "regra": "2 ALTURA"
+        },
+        {
+          "codigo": "GN012",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 1.148,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN007",
+          "perfil": "Travessa folha superior",
+          "kgPorMetro": 0.787,
+          "regra": "1 LARGURAS"
+        },
+        {
+          "codigo": "GN014",
+          "perfil": "Travessa folha inferior",
+          "kgPorMetro": 1.159,
+          "regra": "1 LARGURAS"
+        },
+        {
+          "codigo": "GN011",
+          "perfil": "Mão amiga externo",
+          "kgPorMetro": 1.064,
+          "regra": "6 ALTURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete travessa",
+          "kgPorMetro": 0.186,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete laterais",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN005",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "RM038",
+          "perfil": "Soleira piso",
+          "kgPorMetro": 0.232,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "CM174",
+          "perfil": "Contra marco superior e laterais",
+          "kgPorMetro": 0.409,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        },
+        {
+          "codigo": "CM223",
+          "perfil": "Contra marco inferior",
+          "kgPorMetro": 0.59,
+          "regra": "1 LARGURA"
+        }
+      ],
+      "JANELA_PERSIANA|2": [
+        {
+          "codigo": "MN015",
+          "perfil": "Exterior rolo persiana",
+          "kgPorMetro": 0.881,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "DS238",
+          "perfil": "Interior rolo persiana",
+          "kgPorMetro": 0.48,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN038",
+          "perfil": "Fundo caixa rolo persiana",
+          "kgPorMetro": 0.704,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN032",
+          "perfil": "Topo caixa rolo persiana",
+          "kgPorMetro": 1.047,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GUA483",
+          "perfil": "Mata térmica interna da caixa",
+          "kgPorMetro": null,
+          "regra": "3 LARGURAS"
+        },
+        {
+          "codigo": "GN039",
+          "perfil": "Tampa frontal caixa rolo persiana",
+          "kgPorMetro": 0.971,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "VZC122",
+          "perfil": "Palheta cega",
+          "kgPorMetro": null,
+          "regra": "PALHETA_CEGA"
+        },
+        {
+          "codigo": "VZP04",
+          "perfil": "Palheta ventilada",
+          "kgPorMetro": null,
+          "regra": "PALHETA_VENTILADA"
+        },
+        {
+          "codigo": "MN055",
+          "perfil": "Palheta final",
+          "kgPorMetro": 0.371,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN033",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 2.03,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN001",
+          "perfil": "Trilho inferior",
+          "kgPorMetro": 1.555,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN035",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 0.906,
+          "regra": "2 ALTURA"
+        },
+        {
+          "codigo": "GN008",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 0.955,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN006",
+          "perfil": "Travessa folha",
+          "kgPorMetro": 0.697,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN010",
+          "perfil": "Mão amiga externo",
+          "kgPorMetro": 0.802,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete travessa",
+          "kgPorMetro": 0.186,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete laterais",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN005",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN037",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.191,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "MH006",
+          "perfil": "Guia lateral persiana",
+          "kgPorMetro": 0.697,
+          "regra": "2 ALTURAS MENOS 14 CM"
+        },
+        {
+          "codigo": "CM060",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.276,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        }
+      ],
+      "PORTA_GIRO|1": [
+        {
+          "codigo": "CM200",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.198,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        },
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição superior",
+          "kgPorMetro": 0.205,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN020",
+          "perfil": "Marco",
+          "kgPorMetro": 0.843,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        },
+        {
+          "codigo": "GN052",
+          "perfil": "Montante da folha",
+          "kgPorMetro": 1.201,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN052",
+          "perfil": "Travessa superior da folha",
+          "kgPorMetro": 1.201,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN061",
+          "perfil": "Travessa intermediária",
+          "kgPorMetro": 0.787,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN063",
+          "perfil": "Travessa intermediária (complemento)",
+          "kgPorMetro": 0.555,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN014",
+          "perfil": "Travessa inferior da folha",
+          "kgPorMetro": 1.159,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN055",
+          "perfil": "Pingadeira inferior",
+          "kgPorMetro": 0.181,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete travessas",
+          "kgPorMetro": 0.18,
+          "regra": "4 LARGURAS"
+        }
+      ],
+      "PORTA_GIRO|2": [
+        {
+          "codigo": "CM200",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.198,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        },
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição superior",
+          "kgPorMetro": 0.205,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN020",
+          "perfil": "Marco",
+          "kgPorMetro": 0.843,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        },
+        {
+          "codigo": "GN052",
+          "perfil": "Montante da folha",
+          "kgPorMetro": 1.201,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN052",
+          "perfil": "Travessa superior da folha",
+          "kgPorMetro": 1.201,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN061",
+          "perfil": "Travessa intermediária",
+          "kgPorMetro": 0.787,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN063",
+          "perfil": "Travessa intermediária (complemento)",
+          "kgPorMetro": 0.555,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN014",
+          "perfil": "Travessa inferior da folha",
+          "kgPorMetro": 1.159,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN055",
+          "perfil": "Pingadeira inferior",
+          "kgPorMetro": 0.181,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "GN053",
+          "perfil": "Batente central",
+          "kgPorMetro": 0.789,
+          "regra": "1 ALTURA"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete",
+          "kgPorMetro": 0.18,
+          "regra": "2 ALTURAS POR FOLHA"
+        },
+        {
+          "codigo": "GN009",
+          "perfil": "Baguete travessas",
+          "kgPorMetro": 0.18,
+          "regra": "4 LARGURAS"
+        }
+      ],
+      "MAXIM_AR|1": [
+        {
+          "codigo": "CM200",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.198,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN020",
+          "perfil": "Marco",
+          "kgPorMetro": 0.843,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "GN018",
+          "perfil": "Adaptador maxim-ar do marco",
+          "kgPorMetro": 0.711,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "GN019",
+          "perfil": "Folha maxim-ar",
+          "kgPorMetro": 0.263,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete",
+          "kgPorMetro": 0.186,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        }
+      ],
+      "MAXIM_AR|2": [
+        {
+          "codigo": "CM200",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.198,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN020",
+          "perfil": "Marco",
+          "kgPorMetro": 0.843,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "GN070",
+          "perfil": "Montante entre folhas",
+          "kgPorMetro": 0.422,
+          "regra": "1 ALTURA"
+        },
+        {
+          "codigo": "GN018",
+          "perfil": "Adaptador maxim-ar do marco",
+          "kgPorMetro": 0.711,
+          "regra": "2 ALTURAS POR FOLHA + 2 LARGURAS"
+        },
+        {
+          "codigo": "GN019",
+          "perfil": "Folha maxim-ar",
+          "kgPorMetro": 0.263,
+          "regra": "2 ALTURAS POR FOLHA + 2 LARGURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete",
+          "kgPorMetro": 0.186,
+          "regra": "2 ALTURAS POR FOLHA + 2 LARGURAS"
+        }
+      ],
+      "QUADRO_FIXO|1": [
+        {
+          "codigo": "CM200",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.198,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "RM039",
+          "perfil": "Guarnição largura superior e inferior",
+          "kgPorMetro": 0.205,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "RM005",
+          "perfil": "Guarnição laterais",
+          "kgPorMetro": 0.202,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "GN020",
+          "perfil": "Marco",
+          "kgPorMetro": 0.843,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "GN074",
+          "perfil": "Adaptador de vidro fixo",
+          "kgPorMetro": 0.389,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "GN013",
+          "perfil": "Baguete",
+          "kgPorMetro": 0.186,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        }
+      ]
     },
-    {
-     "perfil": "GUARNIÇÃO LATERIAIS",
-     "codigo": "RM005",
-     "kgPorMetro": 0.202,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRILHO SUPERIOR",
-     "codigo": "GN003",
-     "kgPorMetro": 1.176,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "TRILHO INFERIOR",
-     "codigo": "GN001",
-     "kgPorMetro": 1.555,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "MARCO LATERAL",
-     "codigo": "GN004",
-     "kgPorMetro": 0.677,
-     "regra": "2 ALTURA"
-    },
-    {
-     "perfil": "MONTANTE LATERAL FOLHA",
-     "codigo": "GN012",
-     "kgPorMetro": 1.148,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA SUPERIOR",
-     "codigo": "GN007",
-     "kgPorMetro": 0.787,
-     "regra": "1 LARGURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA INFERIOR",
-     "codigo": "GN014",
-     "kgPorMetro": 1.159,
-     "regra": "1 LARGURAS"
-    },
-    {
-     "perfil": "MÃO AMIGA EXTERNO",
-     "codigo": "GN011",
-     "kgPorMetro": 1.064,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "BAGUETE TRAVESSA",
-     "codigo": "GN013",
-     "kgPorMetro": 0.186,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "BAGUETE LATERAIS",
-     "codigo": "GN009",
-     "kgPorMetro": 0.18,
-     "regra": "2 ALTURAS POR FOLHA"
-    },
-    {
-     "perfil": "BATEDEIRA LATERAL",
-     "codigo": "GN005",
-     "kgPorMetro": 0.111,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "SOLEIRA PISO",
-     "codigo": "RM038",
-     "kgPorMetro": 0.232,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "CONTRA MARCO SUPERIOR E LATERAIS",
-     "codigo": "CM174",
-     "kgPorMetro": 0.409,
-     "regra": "1 LARGURA E 2 ALTURAS"
-    },
-    {
-     "perfil": "CONTRA MARCO INFERIOR",
-     "codigo": "CM223",
-     "kgPorMetro": 0.59,
-     "regra": "1 LARGURA"
+    "SUPREMA": {
+      "JANELA_CORRER|2": [
+        {
+          "codigo": "SU-291",
+          "perfil": "Guarnição (4 lados)",
+          "kgPorMetro": 0.263,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        },
+        {
+          "codigo": "SU-001",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 0.738,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "SU-002",
+          "perfil": "Trilho inferior",
+          "kgPorMetro": 0.696,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "SU-003",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 0.52,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "SU-039",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 0.52,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "SU-041",
+          "perfil": "Montante de fecho (mão amiga)",
+          "kgPorMetro": 0.507,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "SU-040",
+          "perfil": "Travessa folha",
+          "kgPorMetro": 0.48,
+          "regra": "2 LARGURAS"
+        },
+        {
+          "codigo": "SU-053",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.469,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "SU-102",
+          "perfil": "Baguete",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS POR FOLHA + 2 LARGURAS"
+        },
+        {
+          "codigo": "CM060",
+          "perfil": "Contra marco",
+          "kgPorMetro": 0.276,
+          "regra": "2 ALTURAS + 2 LARGURAS"
+        }
+      ],
+      "PORTA_CORRER|2": [
+        {
+          "codigo": "SU-291",
+          "perfil": "Guarnição (3 lados)",
+          "kgPorMetro": 0.263,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        },
+        {
+          "codigo": "SU-001",
+          "perfil": "Trilho superior",
+          "kgPorMetro": 0.738,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "SU-228",
+          "perfil": "Trilho inferior de porta",
+          "kgPorMetro": 0.688,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "SU-003",
+          "perfil": "Marco lateral",
+          "kgPorMetro": 0.52,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "SU-044",
+          "perfil": "Montante lateral folha",
+          "kgPorMetro": 0.97,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "SU-225",
+          "perfil": "Montante de fecho (mão amiga)",
+          "kgPorMetro": 1.003,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "SU-047",
+          "perfil": "Travessa folha superior",
+          "kgPorMetro": 1.041,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "SU-049",
+          "perfil": "Travessa folha inferior",
+          "kgPorMetro": 1.042,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "SU-053",
+          "perfil": "Batedeira lateral",
+          "kgPorMetro": 0.469,
+          "regra": "2 ALTURAS"
+        },
+        {
+          "codigo": "SU-227",
+          "perfil": "Soleira piso",
+          "kgPorMetro": 0.55,
+          "regra": "1 LARGURA"
+        },
+        {
+          "codigo": "SU-102",
+          "perfil": "Baguete",
+          "kgPorMetro": 0.111,
+          "regra": "2 ALTURAS POR FOLHA + 2 LARGURAS"
+        },
+        {
+          "codigo": "CM174",
+          "perfil": "Contra marco superior e laterais",
+          "kgPorMetro": 0.409,
+          "regra": "1 LARGURA E 2 ALTURAS"
+        }
+      ]
     }
-   ],
-   "PORTA CORRER 3 FOLHAS": [
-    {
-     "perfil": "GUARNIÇÃO LARGURA SUPERIOR E  INFERIOR",
-     "codigo": "RM039",
-     "kgPorMetro": 0.205,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "GUARNIÇÃO LATERIAIS",
-     "codigo": "RM005",
-     "kgPorMetro": 0.202,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRILHO SUPERIOR",
-     "codigo": "GN023",
-     "kgPorMetro": 1.76,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "TRILHO INFERIOR",
-     "codigo": "GN021",
-     "kgPorMetro": 2.317,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "MARCO LATERAL",
-     "codigo": "GN025",
-     "kgPorMetro": 1.057,
-     "regra": "2 ALTURA"
-    },
-    {
-     "perfil": "MONTANTE LATERAL FOLHA",
-     "codigo": "GN012",
-     "kgPorMetro": 1.148,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA SUPERIOR",
-     "codigo": "GN007",
-     "kgPorMetro": 0.787,
-     "regra": "1 LARGURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA INFERIOR",
-     "codigo": "GN014",
-     "kgPorMetro": 1.159,
-     "regra": "1 LARGURAS"
-    },
-    {
-     "perfil": "MÃO AMIGA EXTERNO",
-     "codigo": "GN011",
-     "kgPorMetro": 1.064,
-     "regra": "4 ALTURAS"
-    },
-    {
-     "perfil": "BAGUETE TRAVESSA",
-     "codigo": "GN013",
-     "kgPorMetro": 0.186,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "BAGUETE LATERAIS",
-     "codigo": "GN009",
-     "kgPorMetro": 0.18,
-     "regra": "2 ALTURAS POR FOLHA"
-    },
-    {
-     "perfil": "BATEDEIRA LATERAL",
-     "codigo": "GN005",
-     "kgPorMetro": 0.111,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "SOLEIRA PISO",
-     "codigo": "RM038",
-     "kgPorMetro": 0.232,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "CONTRA MARCO SUPERIOR E LATERAIS",
-     "codigo": "CM174",
-     "kgPorMetro": 0.409,
-     "regra": "1 LARGURA E 2 ALTURAS"
-    },
-    {
-     "perfil": "CONTRA MARCO INFERIOR",
-     "codigo": "CM223",
-     "kgPorMetro": 0.59,
-     "regra": "1 LARGURA"
-    }
-   ],
-   "PORTA CORRER 4 FOLHAS": [
-    {
-     "perfil": "GUARNIÇÃO LARGURA SUPERIOR E  INFERIOR",
-     "codigo": "RM039",
-     "kgPorMetro": 0.205,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "GUARNIÇÃO LATERIAIS",
-     "codigo": "RM005",
-     "kgPorMetro": 0.202,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRILHO SUPERIOR",
-     "codigo": "GN024",
-     "kgPorMetro": 2.494,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "TRILHO INFERIOR",
-     "codigo": "GN022",
-     "kgPorMetro": 3.12,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "MARCO LATERAL",
-     "codigo": "GN026",
-     "kgPorMetro": 1.445,
-     "regra": "2 ALTURA"
-    },
-    {
-     "perfil": "MONTANTE LATERAL FOLHA",
-     "codigo": "GN012",
-     "kgPorMetro": 1.148,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA SUPERIOR",
-     "codigo": "GN007",
-     "kgPorMetro": 0.787,
-     "regra": "1 LARGURAS"
-    },
-    {
-     "perfil": "TRAVESSA FOLHA INFERIOR",
-     "codigo": "GN014",
-     "kgPorMetro": 1.159,
-     "regra": "1 LARGURAS"
-    },
-    {
-     "perfil": "MÃO AMIGA EXTERNO",
-     "codigo": "GN011",
-     "kgPorMetro": 1.064,
-     "regra": "6 ALTURAS"
-    },
-    {
-     "perfil": "BAGUETE TRAVESSA",
-     "codigo": "GN013",
-     "kgPorMetro": 0.186,
-     "regra": "2 LARGURAS"
-    },
-    {
-     "perfil": "BAGUETE LATERAIS",
-     "codigo": "GN009",
-     "kgPorMetro": 0.18,
-     "regra": "2 ALTURAS POR FOLHA"
-    },
-    {
-     "perfil": "BATEDEIRA LATERAL",
-     "codigo": "GN005",
-     "kgPorMetro": 0.111,
-     "regra": "2 ALTURAS"
-    },
-    {
-     "perfil": "SOLEIRA PISO",
-     "codigo": "RM038",
-     "kgPorMetro": 0.232,
-     "regra": "1 LARGURA"
-    },
-    {
-     "perfil": "CONTRA MARCO SUPERIOR E LATERAIS",
-     "codigo": "CM174",
-     "kgPorMetro": 0.409,
-     "regra": "1 LARGURA E 2 ALTURAS"
-    },
-    {
-     "perfil": "CONTRA MARCO INFERIOR",
-     "codigo": "CM223",
-     "kgPorMetro": 0.59,
-     "regra": "1 LARGURA"
-    }
-   ],
-   "JANELA 2 FOLHAS PERSIANA INTEGRADA": [
-    {
-     "perfil": "EXTERIOR ROLO PERSIANA",
-     "codigo": "MN015",
-     "kgPorMetro": 0.881,
-     "regra": "1 LARGURA",
-     "obs": null
-    },
-    {
-     "perfil": "INTERIOR ROLO PERSIANA",
-     "codigo": "DS238",
-     "kgPorMetro": 0.48,
-     "regra": "1 LARGURA",
-     "obs": null
-    },
-    {
-     "perfil": "FUNDO CAIXA ROLO PERSIANA",
-     "codigo": "GN038",
-     "kgPorMetro": 0.704,
-     "regra": "1 LARGURA",
-     "obs": null
-    },
-    {
-     "perfil": "TOPO CAIXA ROLO PERSIANA",
-     "codigo": "GN032",
-     "kgPorMetro": 1.047,
-     "regra": "1 LARGURA",
-     "obs": null
-    },
-    {
-     "perfil": "MATA TERMINCA INTERNO CAIXA",
-     "codigo": "GUA483",
-     "kgPorMetro": null,
-     "regra": "3 LARGURAS",
-     "obs": "Espuma, vende em rolo"
-    },
-    {
-     "perfil": "TAMPA FRONTAL CAIXA ROLO PERSIANA",
-     "codigo": "GN039",
-     "kgPorMetro": 0.971,
-     "regra": "1 LARGURA",
-     "obs": null
-    },
-    {
-     "perfil": "GUARNIÇÃO LARGURA SUPERIOR E  INFERIOR",
-     "codigo": "RM039",
-     "kgPorMetro": 0.205,
-     "regra": "2 LARGURAS",
-     "obs": null
-    },
-    {
-     "perfil": "GUARNIÇÃO LATERIAIS",
-     "codigo": "RM005",
-     "kgPorMetro": 0.202,
-     "regra": "2 ALTURAS",
-     "obs": null
-    },
-    {
-     "perfil": "PALHETA CEGA",
-     "codigo": "VZC122",
-     "kgPorMetro": null,
-     "regra": "Altura (-) 14cm dividido por 0,04 = quantidade de palhertas X 20% X LARGURA = total metragem, tem que dividir por 6(tamanho da barra)",
-     "obs": null
-    },
-    {
-     "perfil": "PLAHETA VENTILADA",
-     "codigo": "VZP04",
-     "kgPorMetro": null,
-     "regra": "Altura (-) 14cm dividido por 0,04 X LARGURA = total metragem, tem que dividir por 6(tamanho da barra) menos número de palhetas cega",
-     "obs": null
-    },
-    {
-     "perfil": "PALHETA FINAL",
-     "codigo": "MN055",
-     "kgPorMetro": 0.371,
-     "regra": "1 LARGURA",
-     "obs": null
-    },
-    {
-     "perfil": "TRILHO SUPERIOR",
-     "codigo": "GN033",
-     "kgPorMetro": 2.03,
-     "regra": "1 LARGURA",
-     "obs": null
-    },
-    {
-     "perfil": "TRILHO INFERIOR",
-     "codigo": "GN001",
-     "kgPorMetro": 1.555,
-     "regra": "1 LARGURA",
-     "obs": null
-    },
-    {
-     "perfil": "MARCO LATERAL",
-     "codigo": "GN035",
-     "kgPorMetro": 0.906,
-     "regra": "2 ALTURA",
-     "obs": null
-    },
-    {
-     "perfil": "MONTANTE LATERAL FOLHA",
-     "codigo": "GN008",
-     "kgPorMetro": 0.955,
-     "regra": "2 ALTURAS",
-     "obs": null
-    },
-    {
-     "perfil": "TRAVESSA FOLHA",
-     "codigo": "GN006",
-     "kgPorMetro": 0.697,
-     "regra": "2 LARGURAS",
-     "obs": null
-    },
-    {
-     "perfil": "MÃO AMIGA EXTERNO",
-     "codigo": "GN010",
-     "kgPorMetro": 0.802,
-     "regra": "2 ALTURAS",
-     "obs": null
-    },
-    {
-     "perfil": "BAGUETE TRAVESSA",
-     "codigo": "GN013",
-     "kgPorMetro": 0.186,
-     "regra": "2 LARGURAS",
-     "obs": null
-    },
-    {
-     "perfil": "BAGUETE LATERAIS",
-     "codigo": "GN009",
-     "kgPorMetro": 0.18,
-     "regra": "2 ALTURAS POR FOLHA",
-     "obs": null
-    },
-    {
-     "perfil": "BATEDEIRA LATERAL",
-     "codigo": "GN005",
-     "kgPorMetro": 0.111,
-     "regra": "2 ALTURAS",
-     "obs": null
-    },
-    {
-     "perfil": "BATEDEIRA LATERAL",
-     "codigo": "GN037",
-     "kgPorMetro": 0.191,
-     "regra": "2 ALTURAS",
-     "obs": null
-    },
-    {
-     "perfil": "GUIA LATERAL PERSIANA",
-     "codigo": "MH006",
-     "kgPorMetro": 0.697,
-     "regra": "2 ALTURAS MENOS 14 CM",
-     "obs": null
-    },
-    {
-     "perfil": "CONTRA MARCO",
-     "codigo": "CM060",
-     "kgPorMetro": 0.276,
-     "regra": "2 ALTURAS + 2 LARGURAS",
-     "obs": null
-    }
-   ]
   }
- },
- "trilhosPorQuantidade": {
-  "superior": [
-   {
-    "nTrilhos": 1,
-    "codigo": "TSI349",
-    "kgPorMetro": 0.813
-   },
-   {
-    "nTrilhos": 2,
-    "codigo": "TMG044",
-    "kgPorMetro": 1.244
-   },
-   {
-    "nTrilhos": 3,
-    "codigo": "TMG062",
-    "kgPorMetro": 1.766
-   },
-   {
-    "nTrilhos": 4,
-    "codigo": "TMG070",
-    "kgPorMetro": 2.273
-   },
-   {
-    "nTrilhos": 5,
-    "codigo": "PR32601",
-    "kgPorMetro": 4.609
-   },
-   {
-    "nTrilhos": 6,
-    "codigo": "PR32607",
-    "kgPorMetro": 5.530799999999999
-   }
-  ],
-  "inferior": [
-   {
-    "nTrilhos": 1,
-    "codigo": "TSI349",
-    "kgPorMetro": 0.813
-   },
-   {
-    "nTrilhos": 2,
-    "codigo": "TMG047",
-    "kgPorMetro": 1.133
-   },
-   {
-    "nTrilhos": 3,
-    "codigo": "TMG066",
-    "kgPorMetro": 1.522
-   },
-   {
-    "nTrilhos": 4,
-    "codigo": "TMG071",
-    "kgPorMetro": 2.21
-   },
-   {
-    "nTrilhos": 5,
-    "codigo": "PR32602",
-    "kgPorMetro": 3.986
-   },
-   {
-    "nTrilhos": 6,
-    "codigo": "PR32606",
-    "kgPorMetro": 4.7832
-   }
-  ],
-  "marcoLateral": [
-   {
-    "nTrilhos": 1,
-    "codigo": null,
-    "kgPorMetro": null
-   },
-   {
-    "nTrilhos": 2,
-    "codigo": "TMG003",
-    "kgPorMetro": 0.757
-   },
-   {
-    "nTrilhos": 3,
-    "codigo": "TMG158",
-    "kgPorMetro": 1.068
-   },
-   {
-    "nTrilhos": 4,
-    "codigo": null,
-    "kgPorMetro": null
-   },
-   {
-    "nTrilhos": 5,
-    "codigo": "PR32603",
-    "kgPorMetro": 2.705
-   },
-   {
-    "nTrilhos": 6,
-    "codigo": null,
-    "kgPorMetro": null
-   }
-  ]
- },
- "precos": {
-  "aluminioKg": 39.8,
-  "vidro8mmM2": 166.63
- },
- "descontoAlturaUtil": 0.14,
- "fonte": "ESQUADRIAS (esquadria.xlsx) + S_ESQUADRIAS.bas"
 }

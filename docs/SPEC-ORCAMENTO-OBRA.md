@@ -522,8 +522,18 @@ Faça commit ao fim de cada passo. Não empilhe a transcrição inteira num comm
   **Esquadrias foi implementado a partir da aba ESQUADRIAS**, que descreve o
   modelo completo: lista de perfis por tipo (código, kg/m, regra de metragem)
   e vidro 8mm por área útil. Catálogo em
-  `docs/referencia-orcamento/esquadrias-catalogo.json`; só a linha GOLD tem
-  lista de perfis — SUPREMA entra quando a lista existir, no mesmo formato.
+  `docs/referencia-orcamento/esquadrias-catalogo.json`. A aba cobre janela e
+  porta de correr (2/3/4 folhas) e persiana integrada, linha GOLD. **Porta de
+  giro (1/2 folhas), maxim-ar (1/2 folhas) e quadro fixo** foram derivados dos
+  desenhos de montagem do catálogo Alcoa nova Gold (p.223-232): perfil por
+  função (marco GN020, folha GN052/GN019, adaptadores GN018/GN074, baguetes
+  GN009/GN013...), kg/m das páginas de perfis (p.39-69), vidro pelas cotas de
+  corte de cada tipo, e uma lista de acessórios por família
+  (`ESQUADRIAS_ACESSORIOS`: roldanas, fechos, dobradiças, braços, borrachas,
+  conexões, chumbadores, parafusos — contados por esquadria, por folha ou por
+  metro de perímetro). A linha SUPREMA usa os pesos do catálogo Go Perfil 2025
+  com a função dos perfis mapeada por analogia com a Gold (só correr 2 folhas
+  tem lista) — o motor emite um aviso `esquadria_linha_aproximada`.
 - Não implementar `D_ESGOTO_PLUVIAL_TERREO`: 15 linhas, corpo vazio, chamada
   comentada no original.
 - Não reproduzir a aba `GERAL`: está morta, só a célula da tipologia é lida.

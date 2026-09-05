@@ -6912,19 +6912,28 @@ function piscina(cp, out) {
 //   CP_PRESTADORES_*                            → prestadores.<camelCase>
 // ═══════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════
-// ESQUADRIAS — catálogo de perfis por tipo (linha GOLD)
+// ESQUADRIAS — catálogo de perfis por tipo (linhas GOLD e SUPREMA)
 // ═══════════════════════════════════════════════════════════════
-// Fonte: aba ESQUADRIAS da planilha de origem (esquadria.xlsx) e os preços
-// de S_ESQUADRIAS.bas. O VBA original declarava o módulo mas nunca terminou
-// o cálculo — esta é a implementação do modelo que a aba descreve:
+// Fontes:
+//   • aba ESQUADRIAS da planilha de origem (esquadria.xlsx) — janela e porta
+//     de correr 2/3/4 folhas e persiana integrada, linha Gold;
+//   • catálogo Alcoa "nova Gold" (desenhos de montagem p.186-233, perfis
+//     p.39-69) — porta de giro, maxim-ar e quadro fixo, e a lista de
+//     acessórios de cada tipo;
+//   • catálogo Go Perfil 2025 — pesos (kg/m) dos perfis Suprema.
+//   • preços de referência: S_ESQUADRIAS.bas (R$/kg e R$/m² de vidro).
 //
 //   para cada perfil do tipo:  metros = regra(largura, altura, folhas)
 //                              kg     = metros × kgPorMetro × quantidade
-//   vidro 8mm (m²)           = largura × (altura − 0,14) × quantidade
+//   vidro 8mm (m²)           = (L − descL) × (H − descH) × quantidade
+//                              (correr: desconta só 14 cm na altura, como a aba;
+//                               giro/maxim-ar/fixo: descontos de corte do catálogo)
+//   acessórios               = porEsquadria + porFolha × folhas (ou metros
+//                              de perímetro, para borrachas e escovas)
 //
-// Chave: "FAMILIA|FOLHAS". A linha SUPREMA usa perfis mais leves, mas a lista
-// de perfis por tipo dela não está em nenhuma planilha recebida — entra aqui
-// como ESQUADRIAS_CATALOGO.SUPREMA quando a lista existir, no mesmo formato.
+// Chave: "FAMILIA|FOLHAS". A linha SUPREMA usa os pesos reais do Go Perfil,
+// mas a função de cada perfil (marco, montante, travessa...) foi mapeada por
+// analogia com a Gold — o resultado é uma aproximação e a UI avisa isso.
 // ARQUIVO GERADO a partir de docs/referencia-orcamento/esquadrias-catalogo.json.
 
 const ESQUADRIAS_PRECOS_VBA = { aluminioKg: 39.80, vidro8mmM2: 166.63 }; // referência do S_ESQUADRIAS.bas
@@ -6932,14 +6941,104 @@ const ESQUADRIAS_DESCONTO_ALTURA = 0.14; // "desconta 14 cm para altura útil, f
 const ESQUADRIAS_BARRA_MTS = 6;          // palhetas vendem em barra de 6 m
 
 const ESQUADRIAS_FAMILIAS = [
-  { id: "JANELA_CORRER",  nome: "Janela de correr",               folhas: [2, 3, 4] },
-  { id: "PORTA_CORRER",   nome: "Porta de correr",                folhas: [2, 3, 4] },
-  { id: "JANELA_PERSIANA", nome: "Janela com persiana integrada", folhas: [2] },
+  { id: "JANELA_CORRER",   nome: "Janela de correr",               folhas: [2, 3, 4] },
+  { id: "PORTA_CORRER",    nome: "Porta de correr",                folhas: [2, 3, 4] },
+  { id: "PORTA_GIRO",      nome: "Porta de giro",                  folhas: [1, 2] },
+  { id: "MAXIM_AR",        nome: "Janela maxim-ar",                folhas: [1, 2] },
+  { id: "QUADRO_FIXO",     nome: "Quadro fixo (vidro fixo)",       folhas: [1] },
+  { id: "JANELA_PERSIANA", nome: "Janela com persiana integrada",  folhas: [2] },
 ];
 const ESQUADRIAS_LINHAS = [
   { id: "GOLD",    nome: "Gold",    disponivel: true },
-  { id: "SUPREMA", nome: "Suprema", disponivel: false, aviso: "lista de perfis ainda não cadastrada" },
+  { id: "SUPREMA", nome: "Suprema", disponivel: true, aproximada: true,
+    aviso: "pesos do catálogo Go Perfil; função de cada perfil mapeada por analogia com a Gold — resultado aproximado. Só janela e porta de correr de 2 folhas têm lista." },
 ];
+
+// Desconto de vidro por família (m). Correr segue a aba (só altura −14 cm);
+// os demais vêm das cotas de corte dos desenhos de montagem Gold.
+//   giro:     vidro L−205 (1F) / (L−373,5)/2 por folha (2F); H−286,3
+//   maxim-ar: vidro A−126,9 por folha (A = largura da folha), montante GN070 32 mm; H−152,6
+//   fixo:     vidro B−117,9 nos dois sentidos
+const ESQUADRIAS_VIDRO = {
+  PADRAO:      { descL: 0,     descH: ESQUADRIAS_DESCONTO_ALTURA, porFolha: false },
+  PORTA_GIRO:  { descLPorFolhas: { 1: 0.205, 2: 0.3735 }, descH: 0.2863, porFolha: false },
+  MAXIM_AR:    { descL: 0.1269, descH: 0.1526, porFolha: true, montante: 0.032 },
+  QUADRO_FIXO: { descL: 0.1179, descH: 0.1179, porFolha: false },
+};
+
+// Acessórios por tipo (códigos Alcoa dos desenhos de montagem). Unidade
+// "Unidades" conta por esquadria e por folha; "Mts" usa o perímetro.
+//   perimetro:      2L + 2H (marco)
+//   perimetroFolha: perímetro de cada folha × folhas
+//   perimetroVidro: perímetro de cada vidro × folhas
+const ESQUADRIAS_ACESSORIOS = {
+  JANELA_CORRER: [
+    { codigo: "KITGN06", descricao: "Kit roldana + guia da folha",      porFolha: 1 },
+    { codigo: "FEC1106", descricao: "Fecho concha",                      porFolha: 1 },
+    { codigo: "CAL966",  descricao: "Calço de vidro",                    porFolha: 4 },
+    { codigo: "NYL545",  descricao: "Kit nylons de canto da folha",      porFolha: 1 },
+    { codigo: "CON536",  descricao: "Conexão de canto do marco",         porEsquadria: 4 },
+    { codigo: "TRA044",  descricao: "Trava antiretirada da folha",       porFolha: 1 },
+    { codigo: "GUA006",  descricao: "Guarnição de vidro (borracha)",     metros: "perimetroVidro" },
+    { codigo: "GUA526",  descricao: "Escova de vedação da folha",        metros: "perimetroFolha" },
+    { codigo: "CHU838",  descricao: "Chumbador do contramarco",          porMetro: 0.5, metros: "perimetro" },
+    { codigo: "PAR428",  descricao: "Parafuso de fixação",               porMetro: 0.3, metros: "perimetro" },
+  ],
+  PORTA_CORRER: [
+    { codigo: "KITGN05", descricao: "Kit roldana de porta + guia",       porFolha: 1 },
+    { codigo: "FEC1208", descricao: "Fecho de porta com chave",          porEsquadria: 1 },
+    { codigo: "FEC1106", descricao: "Fecho concha (folhas secundárias)", porFolha: 1, porEsquadria: -1 },
+    { codigo: "CAL966",  descricao: "Calço de vidro",                    porFolha: 4 },
+    { codigo: "NYL042",  descricao: "Guia superior da folha",            porFolha: 2 },
+    { codigo: "CON536",  descricao: "Conexão de canto do marco",         porEsquadria: 4 },
+    { codigo: "GUA006",  descricao: "Guarnição de vidro (borracha)",     metros: "perimetroVidro" },
+    { codigo: "GUA526",  descricao: "Escova de vedação da folha",        metros: "perimetroFolha" },
+    { codigo: "CHU838",  descricao: "Chumbador do contramarco",          porMetro: 0.5, metros: "perimetro" },
+    { codigo: "PAR428",  descricao: "Parafuso de fixação",               porMetro: 0.3, metros: "perimetro" },
+  ],
+  PORTA_GIRO: [
+    { codigo: "DOB",     descricao: "Dobradiça de porta de giro",        porFolha: 3 },
+    { codigo: "FECH",    descricao: "Fechadura com maçaneta (jogo)",     porEsquadria: 1 },
+    { codigo: "KITGN16", descricao: "Kit batente central (2 folhas)",    porEsquadria: 1, apenasFolhas: 2 },
+    { codigo: "CON547",  descricao: "Conexão de canto do marco",         porEsquadria: 4 },
+    { codigo: "CON548",  descricao: "Conexão de canto da folha",         porFolha: 4 },
+    { codigo: "NYL482",  descricao: "Nylon de canto",                    porFolha: 4 },
+    { codigo: "CAL966",  descricao: "Calço de vidro",                    porFolha: 8 },
+    { codigo: "GUA410",  descricao: "Guarnição de vidro (borracha)",     metros: "perimetroVidro" },
+    { codigo: "GUA392",  descricao: "Escova inferior da folha",          metros: "larguraFolhas" },
+    { codigo: "CHU840",  descricao: "Chumbador do contramarco",          porMetro: 0.5, metros: "perimetro" },
+    { codigo: "PAR428",  descricao: "Parafuso de fixação",               porMetro: 0.3, metros: "perimetro" },
+  ],
+  MAXIM_AR: [
+    { codigo: "BRA832",  descricao: "Par de braços maxim-ar",            porFolha: 1 },
+    { codigo: "FEC1212", descricao: "Fecho maxim-ar",                    porFolha: 1 },
+    { codigo: "CON547",  descricao: "Conexão de canto do marco",         porEsquadria: 4 },
+    { codigo: "NYL482",  descricao: "Nylon de canto da folha",           porFolha: 4 },
+    { codigo: "CAL966",  descricao: "Calço de vidro",                    porFolha: 4 },
+    { codigo: "GUA410",  descricao: "Guarnição de vidro (borracha)",     metros: "perimetroVidro" },
+    { codigo: "GUA172",  descricao: "Escova de vedação do marco",        metros: "perimetro" },
+    { codigo: "CHU838",  descricao: "Chumbador do contramarco",          porMetro: 0.5, metros: "perimetro" },
+    { codigo: "PAR694",  descricao: "Parafuso de fixação",               porMetro: 0.3, metros: "perimetro" },
+  ],
+  QUADRO_FIXO: [
+    { codigo: "CON547",  descricao: "Conexão de canto do marco",         porEsquadria: 4 },
+    { codigo: "CAL966",  descricao: "Calço de vidro",                    porEsquadria: 4 },
+    { codigo: "GUA410",  descricao: "Guarnição de vidro (borracha)",     metros: "perimetroVidro" },
+    { codigo: "CHU838",  descricao: "Chumbador do contramarco",          porMetro: 0.5, metros: "perimetro" },
+    { codigo: "PAR428",  descricao: "Parafuso de fixação",               porMetro: 0.3, metros: "perimetro" },
+  ],
+  JANELA_PERSIANA: [
+    { codigo: "KITGN06", descricao: "Kit roldana + guia da folha",      porFolha: 1 },
+    { codigo: "FEC1106", descricao: "Fecho concha",                      porFolha: 1 },
+    { codigo: "CAL966",  descricao: "Calço de vidro",                    porFolha: 4 },
+    { codigo: "NYL743",  descricao: "Kit eixo/rolo da persiana",         porEsquadria: 1 },
+    { codigo: "CON536",  descricao: "Conexão de canto do marco",         porEsquadria: 4 },
+    { codigo: "GUA006",  descricao: "Guarnição de vidro (borracha)",     metros: "perimetroVidro" },
+    { codigo: "GUA526",  descricao: "Escova de vedação da folha",        metros: "perimetroFolha" },
+    { codigo: "CHU838",  descricao: "Chumbador do contramarco",          porMetro: 0.5, metros: "perimetro" },
+    { codigo: "PAR428",  descricao: "Parafuso de fixação",               porMetro: 0.3, metros: "perimetro" },
+  ],
+};
 
 const ESQUADRIAS_CATALOGO = {
 GOLD: {
@@ -7061,8 +7160,102 @@ GOLD: {
     { codigo: "MH006", perfil: "Guia lateral persiana", kgPorMetro: 0.697, regra: "2 ALTURAS MENOS 14 CM" },
     { codigo: "CM060", perfil: "Contra marco", kgPorMetro: 0.276, regra: "2 ALTURAS + 2 LARGURAS" },
   ],
+  // ── Porta de giro (catálogo Gold p.225-227) ──
+  // marco GN020 em 3 lados; folha GN052 (montantes + travessa superior),
+  // travessa intermediária GN061+GN063, travessa inferior GN014, pingadeira
+  // GN055; batente central GN053 só em 2 folhas; baguete GN009 em cada vidro.
+  "PORTA_GIRO|1": [
+    { codigo: "CM200", perfil: "Contra marco", kgPorMetro: 0.198, regra: "1 LARGURA E 2 ALTURAS" },
+    { codigo: "RM039", perfil: "Guarnição superior", kgPorMetro: 0.205, regra: "1 LARGURA" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN020", perfil: "Marco", kgPorMetro: 0.843, regra: "1 LARGURA E 2 ALTURAS" },
+    { codigo: "GN052", perfil: "Montante da folha", kgPorMetro: 1.201, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN052", perfil: "Travessa superior da folha", kgPorMetro: 1.201, regra: "1 LARGURA" },
+    { codigo: "GN061", perfil: "Travessa intermediária", kgPorMetro: 0.787, regra: "1 LARGURA" },
+    { codigo: "GN063", perfil: "Travessa intermediária (complemento)", kgPorMetro: 0.555, regra: "1 LARGURA" },
+    { codigo: "GN014", perfil: "Travessa inferior da folha", kgPorMetro: 1.159, regra: "1 LARGURA" },
+    { codigo: "GN055", perfil: "Pingadeira inferior", kgPorMetro: 0.181, regra: "1 LARGURA" },
+    { codigo: "GN009", perfil: "Baguete", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN009", perfil: "Baguete travessas", kgPorMetro: 0.18, regra: "4 LARGURAS" },
+  ],
+  "PORTA_GIRO|2": [
+    { codigo: "CM200", perfil: "Contra marco", kgPorMetro: 0.198, regra: "1 LARGURA E 2 ALTURAS" },
+    { codigo: "RM039", perfil: "Guarnição superior", kgPorMetro: 0.205, regra: "1 LARGURA" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN020", perfil: "Marco", kgPorMetro: 0.843, regra: "1 LARGURA E 2 ALTURAS" },
+    { codigo: "GN052", perfil: "Montante da folha", kgPorMetro: 1.201, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN052", perfil: "Travessa superior da folha", kgPorMetro: 1.201, regra: "1 LARGURA" },
+    { codigo: "GN061", perfil: "Travessa intermediária", kgPorMetro: 0.787, regra: "1 LARGURA" },
+    { codigo: "GN063", perfil: "Travessa intermediária (complemento)", kgPorMetro: 0.555, regra: "1 LARGURA" },
+    { codigo: "GN014", perfil: "Travessa inferior da folha", kgPorMetro: 1.159, regra: "1 LARGURA" },
+    { codigo: "GN055", perfil: "Pingadeira inferior", kgPorMetro: 0.181, regra: "1 LARGURA" },
+    { codigo: "GN053", perfil: "Batente central", kgPorMetro: 0.789, regra: "1 ALTURA" },
+    { codigo: "GN009", perfil: "Baguete", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN009", perfil: "Baguete travessas", kgPorMetro: 0.18, regra: "4 LARGURAS" },
+  ],
+  // ── Maxim-ar (catálogo Gold p.223-224) ──
+  // marco GN020 nos 4 lados + adaptador GN018; folha GN019; montante GN070
+  // entre folhas; baguete GN013 no vidro.
+  "MAXIM_AR|1": [
+    { codigo: "CM200", perfil: "Contra marco", kgPorMetro: 0.198, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN020", perfil: "Marco", kgPorMetro: 0.843, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "GN018", perfil: "Adaptador maxim-ar do marco", kgPorMetro: 0.711, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "GN019", perfil: "Folha maxim-ar", kgPorMetro: 0.263, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "GN013", perfil: "Baguete", kgPorMetro: 0.186, regra: "2 ALTURAS + 2 LARGURAS" },
+  ],
+  "MAXIM_AR|2": [
+    { codigo: "CM200", perfil: "Contra marco", kgPorMetro: 0.198, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN020", perfil: "Marco", kgPorMetro: 0.843, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "GN070", perfil: "Montante entre folhas", kgPorMetro: 0.422, regra: "1 ALTURA" },
+    { codigo: "GN018", perfil: "Adaptador maxim-ar do marco", kgPorMetro: 0.711, regra: "2 ALTURAS POR FOLHA + 2 LARGURAS" },
+    { codigo: "GN019", perfil: "Folha maxim-ar", kgPorMetro: 0.263, regra: "2 ALTURAS POR FOLHA + 2 LARGURAS" },
+    { codigo: "GN013", perfil: "Baguete", kgPorMetro: 0.186, regra: "2 ALTURAS POR FOLHA + 2 LARGURAS" },
+  ],
+  // ── Quadro fixo (bandeira/peitoril fixo, catálogo Gold p.223 e p.232) ──
+  // marco GN020 + adaptador de fixo GN074 + baguete GN013, nos 4 lados.
+  "QUADRO_FIXO|1": [
+    { codigo: "CM200", perfil: "Contra marco", kgPorMetro: 0.198, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN020", perfil: "Marco", kgPorMetro: 0.843, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "GN074", perfil: "Adaptador de vidro fixo", kgPorMetro: 0.389, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "GN013", perfil: "Baguete", kgPorMetro: 0.186, regra: "2 ALTURAS + 2 LARGURAS" },
+  ],
 },
-SUPREMA: {},
+// Suprema: pesos do Go Perfil 2025 (p.27-44). Função dos perfis por
+// analogia com a Gold — ver aviso em ESQUADRIAS_LINHAS.
+SUPREMA: {
+  "JANELA_CORRER|2": [
+    { codigo: "SU-291", perfil: "Guarnição (4 lados)", kgPorMetro: 0.263, regra: "2 ALTURAS + 2 LARGURAS" },
+    { codigo: "SU-001", perfil: "Trilho superior", kgPorMetro: 0.738, regra: "1 LARGURA" },
+    { codigo: "SU-002", perfil: "Trilho inferior", kgPorMetro: 0.696, regra: "1 LARGURA" },
+    { codigo: "SU-003", perfil: "Marco lateral", kgPorMetro: 0.52, regra: "2 ALTURAS" },
+    { codigo: "SU-039", perfil: "Montante lateral folha", kgPorMetro: 0.52, regra: "2 ALTURAS" },
+    { codigo: "SU-041", perfil: "Montante de fecho (mão amiga)", kgPorMetro: 0.507, regra: "2 ALTURAS" },
+    { codigo: "SU-040", perfil: "Travessa folha", kgPorMetro: 0.48, regra: "2 LARGURAS" },
+    { codigo: "SU-053", perfil: "Batedeira lateral", kgPorMetro: 0.469, regra: "2 ALTURAS" },
+    { codigo: "SU-102", perfil: "Baguete", kgPorMetro: 0.111, regra: "2 ALTURAS POR FOLHA + 2 LARGURAS" },
+    { codigo: "CM060", perfil: "Contra marco", kgPorMetro: 0.276, regra: "2 ALTURAS + 2 LARGURAS" },
+  ],
+  "PORTA_CORRER|2": [
+    { codigo: "SU-291", perfil: "Guarnição (3 lados)", kgPorMetro: 0.263, regra: "1 LARGURA E 2 ALTURAS" },
+    { codigo: "SU-001", perfil: "Trilho superior", kgPorMetro: 0.738, regra: "1 LARGURA" },
+    { codigo: "SU-228", perfil: "Trilho inferior de porta", kgPorMetro: 0.688, regra: "1 LARGURA" },
+    { codigo: "SU-003", perfil: "Marco lateral", kgPorMetro: 0.52, regra: "2 ALTURAS" },
+    { codigo: "SU-044", perfil: "Montante lateral folha", kgPorMetro: 0.97, regra: "2 ALTURAS" },
+    { codigo: "SU-225", perfil: "Montante de fecho (mão amiga)", kgPorMetro: 1.003, regra: "2 ALTURAS" },
+    { codigo: "SU-047", perfil: "Travessa folha superior", kgPorMetro: 1.041, regra: "1 LARGURA" },
+    { codigo: "SU-049", perfil: "Travessa folha inferior", kgPorMetro: 1.042, regra: "1 LARGURA" },
+    { codigo: "SU-053", perfil: "Batedeira lateral", kgPorMetro: 0.469, regra: "2 ALTURAS" },
+    { codigo: "SU-227", perfil: "Soleira piso", kgPorMetro: 0.55, regra: "1 LARGURA" },
+    { codigo: "SU-102", perfil: "Baguete", kgPorMetro: 0.111, regra: "2 ALTURAS POR FOLHA + 2 LARGURAS" },
+    { codigo: "CM174", perfil: "Contra marco superior e laterais", kgPorMetro: 0.409, regra: "1 LARGURA E 2 ALTURAS" },
+  ],
+},
 };
 
 // ── Regras de metragem ───────────────────────────────────────
@@ -7077,9 +7270,53 @@ function metrosPorRegra(regra, L, H, folhas) {
   if (r === "2 ALTURAS + 2 LARGURAS") return 2 * H + 2 * L;
   if (r === "1 LARGURA E 2 ALTURAS") return L + 2 * H;
   if (r === "2 ALTURAS POR FOLHA") return 2 * H * folhas;
+  if (r === "2 ALTURAS POR FOLHA + 2 LARGURAS") return 2 * H * folhas + 2 * L;
   let m = /^(\d+)\s+(LARGURA|ALTURA)S?$/.exec(r);
   if (m) return Number(m[1]) * (m[2] === "LARGURA" ? L : H);
   return 0;
+}
+
+// Área e perímetros de vidro de uma esquadria, pela regra da família.
+function vidroEsquadria(familia, L, H, folhas) {
+  const v = ESQUADRIAS_VIDRO[familia] || ESQUADRIAS_VIDRO.PADRAO;
+  const n = Math.max(1, folhas || 1);
+  const hV = Math.max(0, H - v.descH);
+  if (v.porFolha) {
+    // cada folha tem seu vidro: largura da folha menos o desconto
+    const lFolha = (L - (v.montante || 0) * (n - 1)) / n;
+    const lV = Math.max(0, lFolha - v.descL);
+    return { area: lV * hV * n, perimetro: 2 * (lV + hV) * n };
+  }
+  const descL = v.descLPorFolhas ? (v.descLPorFolhas[n] != null ? v.descLPorFolhas[n] : v.descLPorFolhas[1]) : v.descL;
+  const lV = Math.max(0, L - descL);
+  // correr/giro: um pano de vidro por folha, somando a largura total
+  return { area: lV * hV, perimetro: 2 * (lV / n + hV) * n };
+}
+
+// Acessórios de uma esquadria → [{codigo, descricao, unidade, qtd}] (por peça).
+function acessoriosEsquadria(familia, L, H, folhas) {
+  const lista = ESQUADRIAS_ACESSORIOS[familia] || [];
+  const n = Math.max(1, folhas || 1);
+  const vidro = vidroEsquadria(familia, L, H, n);
+  const medidas = {
+    perimetro: 2 * L + 2 * H,
+    perimetroFolha: 2 * (L / n + H) * n,
+    perimetroVidro: vidro.perimetro,
+    larguraFolhas: L,
+  };
+  const saida = [];
+  for (const a of lista) {
+    if (a.apenasFolhas != null && a.apenasFolhas !== n) continue;
+    if (a.metros) {
+      const m = medidas[a.metros] || 0;
+      if (a.porMetro) saida.push({ codigo: a.codigo, descricao: a.descricao, unidade: "Unidades", qtd: Math.ceil(m / a.porMetro) });
+      else saida.push({ codigo: a.codigo, descricao: a.descricao, unidade: "Mts", qtd: Math.round(m * 100) / 100 });
+      continue;
+    }
+    const qtd = (a.porEsquadria || 0) + (a.porFolha || 0) * n;
+    if (qtd > 0) saida.push({ codigo: a.codigo, descricao: a.descricao, unidade: "Unidades", qtd });
+  }
+  return saida;
 }
 
 // Palhetas da persiana integrada — regra literal da aba:
@@ -7106,6 +7343,10 @@ function calcularEsquadria(e, avisos) {
   }
   const L = numOrZero(e.largura), H = numOrZero(e.altura), q = numOrZero(e.qtd);
   if (!(L > 0) || !(H > 0) || !(q > 0)) return saida;
+  const linhaDef = ESQUADRIAS_LINHAS.find((l) => l.id === e.linha);
+  if (linhaDef && linhaDef.aproximada && avisos && !avisos.some((a) => a.tipo === "esquadria_linha_aproximada" && a.linha === e.linha)) {
+    avisos.push({ tipo: "esquadria_linha_aproximada", linha: e.linha, mensagem: `Linha ${linhaDef.nome}: ${linhaDef.aviso}` });
+  }
 
   for (const p of perfis) {
     if (p.regra === "PALHETA_CEGA" || p.regra === "PALHETA_VENTILADA") {
@@ -7124,9 +7365,14 @@ function calcularEsquadria(e, avisos) {
       saida.push({ item: `${p.perfil} - ${p.codigo}`, unidade: "Mts", qtd: Math.ceil(metros * q), subEtapa: rotulo });
     }
   }
-  // vidro: largura × altura útil, por peça
-  const vidro = L * Math.max(0, H - ESQUADRIAS_DESCONTO_ALTURA) * q;
+  // vidro: pela regra de desconto da família, por peça
+  const vidro = vidroEsquadria(e.familia, L, H, e.folhas).area * q;
   if (vidro > 0) saida.push({ item: "Vidro 8mm", unidade: "m2", qtd: Math.round(vidro * 100) / 100, subEtapa: rotulo });
+  // acessórios: contagem por esquadria/folha ou metros de perímetro
+  for (const a of acessoriosEsquadria(e.familia, L, H, e.folhas)) {
+    const qtd = a.unidade === "Mts" ? Math.ceil(a.qtd * q) : a.qtd * q;
+    saida.push({ item: `Acessório esquadria - ${a.codigo} - ${a.descricao}`, unidade: a.unidade, qtd, subEtapa: rotulo });
+  }
   return saida;
 }
 
@@ -7921,6 +8167,12 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                   {linhaSel && !linhaSel.disponivel && (
                     <div style={{ fontSize: 11, color: "#b45309", marginTop: 6 }}>Linha {linhaSel.nome}: {linhaSel.aviso} — esta esquadria não entra no orçamento até a lista existir.</div>
                   )}
+                  {linhaSel && linhaSel.disponivel && linhaSel.aproximada && (
+                    <div style={{ fontSize: 11, color: "#b45309", marginTop: 6 }}>Linha {linhaSel.nome}: {linhaSel.aviso}</div>
+                  )}
+                  {linhaSel && !ESQUADRIAS_CATALOGO[linhaSel.id][`${e.familia}|${e.folhas}`] && (
+                    <div style={{ fontSize: 11, color: "#b45309", marginTop: 6 }}>Sem lista de perfis para {fam.nome} {e.folhas} folha{Number(e.folhas) !== 1 ? "s" : ""} na linha {linhaSel.nome} — não entra no orçamento.</div>
+                  )}
                 </div>
               );
             })}
@@ -7928,7 +8180,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addEsquadria}>＋ Adicionar esquadria</button>
             )}
             <div style={{ fontSize: 11, color: "#9ca3af" }}>
-              Calcula o alumínio por perfil (código e kg) e o vidro 8mm (largura × altura útil, descontando 14 cm), segundo a lista de perfis da linha.
+              Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold.
             </div>
           </div>
         </BlocoColapsavel>
