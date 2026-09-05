@@ -1,0 +1,1637 @@
+[
+ {
+  "modulo": "B_INSTALACOES_OBRA_PROJETOS",
+  "var": "CALC_TABUA_10",
+  "expr": "WorksheetFunction.Ceiling(CP_GABARITO_EDIF / 3 * 1.2, 1)"
+ },
+ {
+  "modulo": "B_INSTALACOES_OBRA_PROJETOS",
+  "var": "CALC_SARRAFO_5",
+  "expr": "WorksheetFunction.Ceiling((CP_GABARITO_EDIF * 1.2 / 1.3 * 0.6 / 3) + 20, 1)"
+ },
+ {
+  "modulo": "B_INSTALACOES_OBRA_PROJETOS",
+  "var": "CALC_PREGO_18X27",
+  "expr": "WorksheetFunction.Ceiling(0.05 * CALC_TABUA_10 / 2, 1)"
+ },
+ {
+  "modulo": "B_INSTALACOES_OBRA_PROJETOS",
+  "var": "CALC_PREGO_17X21",
+  "expr": "CALC_PREGO_18X27"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_TABUAS_30_FUNDACAO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_PERIMETRO_PAREDES_TERREO_EDIF * 2 / 3) + CP_PERIMETRO_PAREDES_TERREO_EDIF * 2 / 3 * 0.45 / 3) * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_SARRAFO_5_FUNDACACAO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_PERIMETRO_PAREDES_TERREO_EDIF * 2 / 0.7 * 0.45) + (CP_PERIMETRO_PAREDES_TERREO_EDIF / 0.75 * 0.3)) / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_PERFURACAO_ESTACAS_EDIF",
+  "expr": "CP_QTD_ESTACAS_EDIF * CP_PROF_ESTACAS_EDIF * 1.15"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CA60_4MM_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA60_4MM_EST_EDIF + CP_CA60_4MM_SAP_EDIF + CP_CA60_4MM_ARR_EDIF + CP_CA60_4MM_BALD_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CA50_5MM_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_5MM_EST_EDIF + CP_CA50_5MM_SAP_EDIF + CP_CA50_5MM_ARR_EDIF + CP_CA50_5MM_BALD_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CA50_6MM_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_6MM_EST_EDIF + CP_CA50_6MM_SAP_EDIF + CP_CA50_6MM_ARR_EDIF + CP_CA50_6MM_BALD_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CA50_8MM_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_8MM_EST_EDIF + CP_CA50_8MM_SAP_EDIF + CP_CA50_8MM_ARR_EDIF + CP_CA50_8MM_BALD_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CA50_10MM_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_10MM_EST_EDIF + CP_CA50_10MM_SAP_EDIF + CP_CA50_10MM_ARR_EDIF + CP_CA50_10MM_BALD_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CA50_12MM_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_12MM_EST_EDIF + CP_CA50_12MM_SAP_EDIF + CP_CA50_12MM_ARR_EDIF + CP_CA50_12MM_BALD_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CA50_16MM_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_16MM_EST_EDIF + CP_CA50_16MM_SAP_EDIF + CP_CA50_16MM_ARR_EDIF + CP_CA50_16MM_BALD_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CA60_5MM_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA60_5MM_EST_EDIF + CP_CA60_5MM_SAP_EDIF + CP_CA60_5MM_ARR_EDIF + CP_CA60_5MM_BALD_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_CONCR_FUND_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CONCR_EST_EDIF + CP_CONCR_SAP_EDIF + CP_CONCR_ARR_EDIF + CP_CONCR_BALD_EDIF) * 1.1, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_PESO_FERRO_FUND",
+  "expr": "((CALC_CA60_4MM_FUND_EDIF * PESO_CA60_4MM) + (CALC_CA50_5MM_FUND_EDIF * PESO_CA50_5MM) + (CALC_CA50_6MM_FUND_EDIF * PESO_CA50_6MM) + (CALC_CA50_8MM_FUND_EDIF * PESO_CA50_8MM)  + (CALC_CA50_10MM_FUND_EDIF * PESO_CA50_10MM) + (CALC_CA50_12MM_FUND_EDIF * PESO_CA50_12MM)  + (CALC_CA50_16MM_FUND_EDIF * PESO_CA50_16MM) + (CALC_CA60_5MM_FUND_EDIF * PESO_CA60_5MM))"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_DISCO_FERRO_FUND",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_FUND * 0.01, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_ARAME_FUND",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_FUND * 0.06, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_PREGO_18X27_FUND",
+  "expr": "WorksheetFunction.Ceiling(0.55 * CALC_ARAME_FUND, 1)"
+ },
+ {
+  "modulo": "C_FUNDACAO",
+  "var": "CALC_VEDATOP_FUND",
+  "expr": "WorksheetFunction.Ceiling((((CP_PERIMETRO_PAREDES_TERREO_EDIF * 2 * 0.3) + (CP_PERIMETRO_PAREDES_TERREO_EDIF * 0.15)) * 3 * 1.1) / 18, 1)"
+ },
+ {
+  "modulo": "E_CONTRAPISO_INTERNO_TERREO",
+  "var": "CALC_AREIA_GROSSA_CONTRAP_INT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_M2_TERREO_EDIF * 0.6 * 0.1 * 1.1, 1)"
+ },
+ {
+  "modulo": "E_CONTRAPISO_INTERNO_TERREO",
+  "var": "CALC_PEDRA_CONTRAP_INT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_M2_TERREO_EDIF * 0.1 * 1.1, 1)"
+ },
+ {
+  "modulo": "E_CONTRAPISO_INTERNO_TERREO",
+  "var": "CALC_CIMENTO_CONTRAP_INT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CALC_PEDRA_CONTRAP_INT_TERREO * 6 * 1.1, 1)"
+ },
+ {
+  "modulo": "E_CONTRAPISO_INTERNO_TERREO",
+  "var": "CALC_MALHA_POP_CONTRAP_INT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_M2_TERREO_EDIF / (2.9 * 1.9 * 1.1), 1)"
+ },
+ {
+  "modulo": "E_CONTRAPISO_INTERNO_TERREO",
+  "var": "CALC_CIMENTO_MASSIAM_INT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_M2_TERREO_EDIF * 0.05 * 0.25 * 1200 / 50 * 1.1, 1)"
+ },
+ {
+  "modulo": "E_CONTRAPISO_INTERNO_TERREO",
+  "var": "CALC_AREIA_GROSSA_MASSIAM_INT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_M2_TERREO_EDIF * 0.05 * 0.75 * 1.1, 1)"
+ },
+ {
+  "modulo": "E_CONTRAPISO_INTERNO_TERREO",
+  "var": "CALC_BIANCO_MASSIAM_INT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_M2_TERREO_EDIF / 60 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_TIJOLOS_6F_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_M2_PAREDES_20_TERREO_EDIF * 40 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_TIJOLOS_8F_TERREO",
+  "expr": "WorksheetFunction.Ceiling(((CP_M2_PAREDES_25_TERREO_EDIF * 40) + (CP_M2_PAREDES_15_TERREO_EDIF * 20)) * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_AREIA_FINA_ASSENT_TERREO",
+  "expr": "WorksheetFunction.Ceiling((CALC_TIJOLOS_6F_TERREO * 0.001638 * 1.1) + (CALC_TIJOLOS_8F_TERREO * 0.002223 * 1.1), 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_VEDALIT_FINA_ASSENT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREIA_FINA_ASSENT_TERREO / 25 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CIMENTO_FINA_ASSENT_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREIA_FINA_ASSENT_TERREO * 2 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CONTRAVERGA_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_VAO_PORTAS_JANELAS_TERREO_EDIF * 2 / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_TABUAS_15_COLUN_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_15_TERREO_EDIF * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_TABUAS_20_COLUN_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_20_TERREO_EDIF * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_TABUAS_30_COLUN_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_30_TERREO_EDIF * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_SARRAFO_5_COLUN_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_COLUNAS_15_TERREO_EDIF * 2.8 * 2 / 0.5 * 0.2)  + (CP_COLUNAS_20_TERREO_EDIF * 2.8 * 2 / 0.5 * 0.25) + (CP_COLUNAS_30_TERREO_EDIF * 2.8 * 2 / 0.5 * 0.35)) * 1.1 / 3, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_MADERITES_COLUN_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_FORMA_COLUNA_MAIOR_25CM / 2.42 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_AREIA_GROSSA_COLUNAS_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_CONCR_COLUNA_TERREO_EDIF * 0.6 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_PEDRA_COLUNAS_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CP_CONCR_COLUNA_TERREO_EDIF * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CIMENTO_COLUNAS_TERREO",
+  "expr": "WorksheetFunction.Ceiling(CALC_PEDRA_COLUNAS_TERREO * 6 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CA60_4MM_COLUNA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA60_4MM_COLUNA_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CA50_5MM_COLUNA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_5MM_COLUNA_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CA50_6MM_COLUNA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_6MM_COLUNA_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CA50_8MM_COLUNA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_8MM_COLUNA_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CA50_10MM_COLUNA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_10MM_COLUNA_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CA50_12MM_COLUNA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_12MM_COLUNA_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CA50_16MM_COLUNA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_16MM_COLUNA_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_CA60_5MM_COLUNA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA60_5MM_COLUNA_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_PESO_FERRO_COLUNAS_TERREO_EDIF",
+  "expr": "((CALC_CA60_4MM_COLUNA_TERREO_EDIF * PESO_CA60_4MM) + (CALC_CA50_5MM_COLUNA_TERREO_EDIF * PESO_CA50_5MM) + (CALC_CA50_6MM_COLUNA_TERREO_EDIF * PESO_CA50_6MM)  + (CALC_CA50_8MM_COLUNA_TERREO_EDIF * PESO_CA50_8MM) + (CALC_CA50_10MM_COLUNA_TERREO_EDIF * PESO_CA50_10MM)  + (CALC_CA50_12MM_COLUNA_TERREO_EDIF * PESO_CA50_12MM) + (CALC_CA50_16MM_COLUNA_TERREO_EDIF * PESO_CA50_16MM)  + (CALC_CA60_5MM_COLUNA_TERREO_EDIF * PESO_CA60_5MM))"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_ARAME_COLUNAS_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_COLUNAS_TERREO_EDIF * 0.06 * 1.1, 1)"
+ },
+ {
+  "modulo": "F_PAREDES_TERREO",
+  "var": "CALC_PREGO_18X27_COLUN_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_ARAME_COLUNAS_TERREO_EDIF * 0.55, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_TÁBUAS_10_VIGAS_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((((CP_PERIMETRO_LOJE_TERREO_EDIF) * 2 / 3)  + (CP_PERIMETRO_LOJE_TERREO_EDIF) * 2 / 3 * 0.45 / 3)) * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_TÁBUAS_30_VIGAS_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((((CP_PERIMETRO_PAREDES_TERREO_EDIF) * 2 / 3)  + (CP_PERIMETRO_PAREDES_TERREO_EDIF) * 2 / 3 * 0.45 / 3)) * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_SARRAFO_5_VIGA_RESPALDO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_PERIMETRO_PAREDES_TERREO_EDIF * 2 / 0.7 * 0.45)  + (CP_PERIMETRO_PAREDES_TERREO_EDIF / 0.75 * 0.3)) / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_CA60_4MM_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA60_4MM_VIGA_RESPALDO_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_CA50_5MM_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_5MM_VIGA_RESPALDO_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_CA50_6MM_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_6MM_VIGA_RESPALDO_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_CA50_8MM_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_8MM_VIGA_RESPALDO_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_CA50_10MM_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_10MM_VIGA_RESPALDO_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_CA50_12MM_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_12MM_VIGA_RESPALDO_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_CA50_16MM_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_16MM_VIGA_RESPALDO_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_CA60_5MM_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA60_5MM_VIGA_RESPALDO_TERREO_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_PESO_FERRO_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "((CALC_CA60_4MM_VIGA_RESPALDO_TERREO_EDIF * PESO_CA60_4MM) + (CALC_CA50_5MM_VIGA_RESPALDO_TERREO_EDIF * PESO_CA50_5MM) + (CALC_CA50_6MM_VIGA_RESPALDO_TERREO_EDIF * PESO_CA50_6MM) + (CALC_CA50_8MM_VIGA_RESPALDO_TERREO_EDIF * PESO_CA50_8MM)  + (CALC_CA50_10MM_VIGA_RESPALDO_TERREO_EDIF * PESO_CA50_10MM) + (CALC_CA50_12MM_VIGA_RESPALDO_TERREO_EDIF * PESO_CA50_12MM)  + (CALC_CA50_16MM_VIGA_RESPALDO_TERREO_EDIF * PESO_CA50_16MM) + (CALC_CA60_5MM_VIGA_RESPALDO_TERREO_EDIF * PESO_CA60_5MM))"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_ARAME_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_VIGA_RESPALDO_TERREO_EDIF * 0.06 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_PREGO_18X27_VIGA_RESPALDO_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_ARAME_VIGA_RESPALDO_TERREO_EDIF * 0.55, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_VOLUME_CONCRETO_LOJE_VIGA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_AREA_LOJE_TERREO_EDIF * 0.1) + (CP_CONCR_VIGA_RESPALDO_TERREO_EDIF)) * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_MALHA_POP_LOJE_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_AREA_LOJE_TERREO_EDIF / (2.9 * 1.9)) * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_TIPO_LOJE_TERREO_EDIF",
+  "expr": "WorksheetFunction.Concat(CP_TIPOLOGIA_EDIF, CP_TIPO_LOJE_TERREO_EDIF)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_NOME_MODELO_LOJE_TERREO_EDIF",
+  "expr": "\"Laje Pré Moldada Protendida Forro\""
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_NOME_MODELO_LOJE_TERREO_EDIF",
+  "expr": "\"Laje Pré Moldada Protendida Piso\""
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_NOME_MODELO_LOJE_TERREO_EDIF",
+  "expr": "\"Laje Pré Moldada Treliça Forro\""
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_NOME_MODELO_LOJE_TERREO_EDIF",
+  "expr": "\"Laje Pré Moldada Treliça Piso\""
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_QTD_LOJE_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_TERREO_EDIF * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_QTD_ESCORAS_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_TERREO_EDIF * 0.6 * QTD_MESES_ESCORAS_TERREO * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_LOJE_MACICA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_MACICA_TERREO_EDIF * 0.15 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_MADERITE_LOJE_MACICA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_MACICA_TERREO_EDIF / 2.42 * 1.1, 1)"
+ },
+ {
+  "modulo": "G_VIGA_RESPALDO_LAJE_TERREO",
+  "var": "CALC_ESCORAS_LOJE_MACICA_TERREO_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_MACICA_TERREO_EDIF * QTD_MESES_ESCORAS_TERREO * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_TIJOLOS_6F_PAV_1",
+  "expr": "WorksheetFunction.Ceiling(CP_M2_PAREDES_20_PAV_1_EDIF * 40 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_TIJOLOS_8F_PAV_1",
+  "expr": "WorksheetFunction.Ceiling(((CP_M2_PAREDES_25_PAV_1_EDIF * 40) + (CP_M2_PAREDES_15_PAV_1_EDIF * 20)) * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_AREIA_FINA_ASSENT_PAV_1",
+  "expr": "WorksheetFunction.Ceiling((CALC_TIJOLOS_6F_PAV_1 * 0.001638 * 1.1) + (CALC_TIJOLOS_8F_PAV_1 * 0.002223 * 1.1), 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_VEDALIT_FINA_ASSENT_PAV_1",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREIA_FINA_ASSENT_PAV_1 / 25 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CIMENTO_FINA_ASSENT_PAV_1",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREIA_FINA_ASSENT_PAV_1 * 2 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CONTRAVERGA_PAV_1",
+  "expr": "WorksheetFunction.Ceiling(CP_VAO_PORTAS_JANELAS_PAV_1_EDIF * 2 / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_TABUAS_15_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_15_PAV_1_EDIF * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_TABUAS_20_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_20_PAV_1_EDIF * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_TABUAS_30_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_25_PAV_1_EDIF * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_SARRAFO_5_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_COLUNAS_15_PAV_1_EDIF * 2.8 * 2 / 0.5 * 0.2)  + (CP_COLUNAS_20_PAV_1_EDIF * 2.8 * 2 / 0.5 * 0.25) + (CP_COLUNAS_30_PAV_1_EDIF * 2.8 * 2 / 0.5 * 0.35)) * 1.1 / 3, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_MADERITES_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_FORMA_COLUNA_PAV_1_MAIOR_25CM / 2.42 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_AREIA_GROSSA_COLUNAS_PAV_1",
+  "expr": "WorksheetFunction.Ceiling(CP_CONCR_COLUN_PAV_1_EDIF * 0.6 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_PEDRA_COLUNAS_PAV_1",
+  "expr": "WorksheetFunction.Ceiling(CP_CONCR_COLUN_PAV_1_EDIF * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CIMENTO_COLUNAS_PAV_1",
+  "expr": "WorksheetFunction.Ceiling(CALC_PEDRA_COLUNAS_PAV_1 * 6 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CA50_5MM_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_5MM_COLUN_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CA50_6MM_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_6MM_COLUN_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CA50_8MM_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_8MM_COLUN_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CA50_10MM_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_10MM_COLUN_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CA50_12MM_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_12MM_COLUN_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CA50_16MM_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_16MM_COLUN_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_CA60_5MM_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA60_5MM_COLUN_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_PESO_FERRO_COLUNAS_PAV_1_EDIF",
+  "expr": "((CALC_CA60_4MM_COLUN_PAV_1_EDIF * PESO_CA60_4MM) + (CALC_CA50_5MM_COLUN_PAV_1_EDIF * PESO_CA50_5MM) + (CALC_CA50_6MM_COLUN_PAV_1_EDIF * PESO_CA50_6MM) + (CALC_CA50_8MM_COLUN_PAV_1_EDIF * PESO_CA50_8MM)  + (CALC_CA50_10MM_COLUN_PAV_1_EDIF * PESO_CA50_10MM) + (CALC_CA50_12MM_COLUN_PAV_1_EDIF * PESO_CA50_12MM)  + (CALC_CA50_16MM_COLUN_PAV_1_EDIF * PESO_CA50_16MM) + (CALC_CA60_5MM_COLUN_PAV_1_EDIF * PESO_CA60_5MM))"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_ARAME_COLUNAS_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_COLUNAS_PAV_1_EDIF * 0.06 * 1.1, 1)"
+ },
+ {
+  "modulo": "H_PAREDES_PAV_1",
+  "var": "CALC_PREGO_18X27_COLUN_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_ARAME_COLUNAS_PAV_1_EDIF * 0.55, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_TÁBUAS_10_VIGAS_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((((CP_PERIMETRO_LOJE_PAV_1_EDIF) * 2 / 3)  + (CP_PERIMETRO_LOJE_PAV_1_EDIF) * 2 / 3 * 0.45 / 3)) * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_TÁBUAS_30_VIGAS_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((((CP_PERIMETRO_PAREDES_PAV_1_EDIF) * 2 / 3)  + (CP_PERIMETRO_PAREDES_PAV_1_EDIF) * 2 / 3 * 0.45 / 3)) * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_SARRAFO_5_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_PERIMETRO_PAREDES_PAV_1_EDIF * 2 / 0.7 * 0.45)  + (CP_PERIMETRO_PAREDES_PAV_1_EDIF / 0.75 * 0.3)) / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_CA50_5MM_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_5MM_VIGA_RESPALDO_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_CA50_6MM_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_6MM_VIGA_RESPALDO_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_CA50_8MM_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_8MM_VIGA_RESPALDO_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_CA50_10MM_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_10MM_VIGA_RESPALDO_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_CA50_12MM_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_12MM_VIGA_RESPALDO_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_CA50_16MM_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA50_16MM_VIGA_RESPALDO_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_CA60_5MM_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_CA60_5MM_VIGA_RESPALDO_PAV_1_EDIF / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_PESO_FERRO_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "((CALC_CA50_5MM_VIGA_RESPALDO_PAV_1_EDIF * PESO_CA50_5MM) + (CALC_CA50_6MM_VIGA_RESPALDO_PAV_1_EDIF * PESO_CA50_6MM) + (CALC_CA50_8MM_VIGA_RESPALDO_PAV_1_EDIF * PESO_CA50_8MM)  + (CALC_CA50_10MM_VIGA_RESPALDO_PAV_1_EDIF * PESO_CA50_10MM) + (CALC_CA50_12MM_VIGA_RESPALDO_PAV_1_EDIF * PESO_CA50_12MM)  + (CALC_CA50_16MM_VIGA_RESPALDO_PAV_1_EDIF * PESO_CA50_16MM) + (CALC_CA60_5MM_VIGA_RESPALDO_PAV_1_EDIF * PESO_CA60_5MM))"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_ARAME_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_VIGA_RESPALDO_PAV_1_EDIF * 0.06 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_PREGO_18X27_VIGA_RESPALDO_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_ARAME_VIGA_RESPALDO_PAV_1_EDIF * 0.55, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_VOLUME_CONCRETO_LOJE_VIGA_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_AREA_LOJE_PAV_1_EDIF * 0.1) + (CP_VOLUME_CONCRETO_VIGA_RESPALDO_PAV_1_EDIF)) * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_MALHA_POP_LOJE_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_AREA_LOJE_PAV_1_EDIF / (2.9 * 1.9)) * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_TIPO_LOJE_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Concat(CP_TIPOLOGIA_EDIF, CP_TIPO_LOJE_PAV_1_EDIF)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_NOME_MODELO_LOJE_PAV_1_EDIF",
+  "expr": "\"Laje Pré Moldada Protendida Forro\""
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_NOME_MODELO_LOJE_PAV_1_EDIF",
+  "expr": "\"Laje Pré Moldada Protendida Piso\""
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_NOME_MODELO_LOJE_PAV_1_EDIF",
+  "expr": "\"Laje Pré Moldada Treliça Forro\""
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_NOME_MODELO_LOJE_PAV_1_EDIF",
+  "expr": "\"Laje Pré Moldada Treliça Piso\""
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_QTD_LOJE_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_PAV_1_EDIF * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_QTD_ESCORAS_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_PAV_1_EDIF * 0.6 * 1.5 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_LOJE_MACICA_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_MACICA_PAV_1_EDIF * 0.15 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_MADERITE_LOJE_MACICA_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_MACICA_PAV_1_EDIF / 2.42 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_ESCORAS_LOJE_MACICA_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_MACICA_PAV_1_EDIF * 1.5 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_CIMENTO_MASSIAM_INT_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_TERREO_EDIF * 0.05 * 0.25 * 1200 / 50 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_AREIA_GROSSA_MASSIAM_INT_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_TERREO_EDIF * 0.05 * 0.75 * 1.1, 1)"
+ },
+ {
+  "modulo": "I_VIGA_RESPALDO_LAJE_PAV_1",
+  "var": "CALC_BIANCO_MASSIAM_INT_PAV_1_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_LOJE_TERREO_EDIF / 60 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_CA50_5MM_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_5MM_VIGA_COBERTURA_EDIF + CP_CA50_5MM_COLUNA_COBERTURA_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_CA50_6MM_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_6MM_VIGA_COBERTURA_EDIF + CP_CA50_6MM_COLUNA_COBERTURA_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_CA50_8MM_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_8MM_VIGA_COBERTURA_EDIF + CP_CA50_8MM_COLUNA_COBERTURA_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_CA50_10MM_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_10MM_VIGA_COBERTURA_EDIF + CP_CA50_10MM_COLUNA_COBERTURA_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_CA50_12MM_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_12MM_VIGA_COBERTURA_EDIF + CP_CA50_12MM_COLUNA_COBERTURA_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_CA50_16MM_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_16MM_VIGA_COBERTURA_EDIF + CP_CA50_16MM_COLUNA_COBERTURA_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_CA60_5MM_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling((CP_CA60_5MM_VIGA_COBERTURA_EDIF + CP_CA60_5MM_COLUNA_COBERTURA_EDIF) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_PESO_FERRO_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "((CALC_CA50_5MM_VIGA_COLUNA_COBERTURA_EDIF * PESO_CA50_5MM) + (CALC_CA50_6MM_VIGA_COLUNA_COBERTURA_EDIF * PESO_CA50_6MM) + (CALC_CA50_8MM_VIGA_COLUNA_COBERTURA_EDIF * PESO_CA50_8MM)  + (CALC_CA50_10MM_VIGA_COLUNA_COBERTURA_EDIF * PESO_CA50_10MM) + (CALC_CA50_12MM_VIGA_COLUNA_COBERTURA_EDIF * PESO_CA50_12MM)  + (CALC_CA50_16MM_VIGA_COLUNA_COBERTURA_EDIF * PESO_CA50_16MM) + (CALC_CA60_5MM_VIGA_COLUNA_COBERTURA_EDIF * PESO_CA60_5MM))"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_ARAME_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_VIGA_COLUNA_COBERTURA_EDIF * 0.06 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_PREGO_18X27_VIGA_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_ARAME_VIGA_COLUNA_COBERTURA_EDIF * 0.55, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_VOLUME_CONCRETO_VIGA_COLUNA_RESPALDO_COBERTURA_EDIF",
+  "expr": "CP_VOLUME_CONCRETO_COLUNA_RESPALDO_COBERTURA_EDIF + CP_VOLUME_CONCRETO_VIGA_RESPALDO_COBERTURA_EDIF"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_AREIA_GROSSA_COLUNAS_VIGAS_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_VOLUME_CONCRETO_VIGA_COLUNA_RESPALDO_COBERTURA_EDIF * 0.6 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_PEDRA_COLUNAS_VIGAS_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_VOLUME_CONCRETO_VIGA_COLUNA_RESPALDO_COBERTURA_EDIF * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_CIMENTO_COLUNAS_VIGAS_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CALC_PEDRA_COLUNAS_VIGAS_COBERTURA_EDIF * 6 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_TÁBUAS_20_COLUNAS_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_15_COBERTURA_EDIF * 0.6 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_TÁBUAS_25_COLUNAS_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_20_COBERTURA_EDIF * 0.6 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_TÁBUAS_30_COLUNAS_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_COLUNAS_25_COBERTURA_EDIF * 0.6 * 2) + (CP_PERIMETRO_LOJE_PAV_1_EDIF * 2)) / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_MADERITES_COLUNA_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_FORMA_COLUNA_COBERTURA_MAIOR_25CM / 2.42 * 1.1, 1)"
+ },
+ {
+  "modulo": "J_SUPRA_COBERTURA",
+  "var": "CALC_SARRAFO_5_COLUN_COBERTURA_EDIF",
+  "expr": "WorksheetFunction.Ceiling(((CP_COLUNAS_15_COBERTURA_EDIF * 0.6 * 2 / 0.5 * 0.2)  + (CP_COLUNAS_20_COBERTURA_EDIF * 0.6 * 2 / 0.5 * 0.25) + (CP_COLUNAS_25_COBERTURA_EDIF * 0.6 * 2 / 0.5 * 0.35)  + (CP_PERIMETRO_LOJE_PAV_1_EDIF * 2 / 0.7 * 0.45) + (CP_PERIMETRO_LOJE_PAV_1_EDIF / 0.75 * 0.3)) * 1.1 / 3, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_VIGAS",
+  "expr": "WorksheetFunction.Ceiling(((((LARGURA_COBERTURA / ESP_Tercas_Viga_5x15) + 1) * COMPRIMENTO_COBERTURA) * 1.1), 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_CAIBROS",
+  "expr": "WorksheetFunction.Ceiling((CAIB_VAR_1 * CAIB_VAR_2) * 1.1, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_ESPIGAO",
+  "expr": "WorksheetFunction.Ceiling(((((ESPIG_VAR_1 ^ 2) + (ESPIG_VAR_2 ^ 2)) ^ (1 / 2)) * ESPIG_VAR_3) * 1.1, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_BERCO",
+  "expr": "WorksheetFunction.Ceiling((ESP_BERCOS * LARGURA_COBERTURA * 0.5) * 1.1, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_MAO_FRANCESA",
+  "expr": "WorksheetFunction.Ceiling((ESP_MAO_FRANCESA * LARGURA_COBERTURA * 0.45) * 1.1, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_PERIMETRO_1",
+  "expr": "(LARGURA_COBERTURA + COMPRIMENTO_COBERTURA) * 2 * 1.1"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_PERIMETRO_2",
+  "expr": "CalcularMedida"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_TELHAS",
+  "expr": "WorksheetFunction.Ceiling((AREA_INCLINADA_1 / AREA_TELHA) * 1.1, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_CUMEEIRA",
+  "expr": "WorksheetFunction.Ceiling((MTS_CUMEEIRA / (AREA_CUMEEIRA - 0.05)) * 1.1, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_PREGO_1",
+  "expr": "WorksheetFunction.Ceiling(AREA_INCLINADA_1 * 0.016 * 1.1, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_PREGO_2",
+  "expr": "WorksheetFunction.Ceiling(AREA_INCLINADA_1 * 0.021 * 1.1, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_MANTA",
+  "expr": "WorksheetFunction.Ceiling(AREA_INCLINADA_1 * 1.2, 1)"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_PERIMETRO_TOTAL_1",
+  "expr": "CALC_PERIMETRO_TOTAL_1 + CALC_PERIMETRO_1"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_PERIMETRO_TOTAL_2",
+  "expr": "CALC_PERIMETRO_TOTAL_2 + CALC_PERIMETRO_2"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_VIGAS_TOTAL",
+  "expr": "CALC_VIGAS_TOTAL + CALC_VIGAS + CALC_ESPIGAO + CALC_MAO_FRANCESA"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_CAIBROS_TOTAL",
+  "expr": "CALC_CAIBROS_TOTAL + CALC_CAIBROS"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_RIPAS_TOTAL",
+  "expr": "CALC_RIPAS_TOTAL + CALC_RIPAS"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_BERCO_TOTAL",
+  "expr": "CALC_BERCO_TOTAL + CALC_BERCO + CALC_APOIOS"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_MAO_FRANCESA_TOTAL",
+  "expr": "CALC_MAO_FRANCESA_TOTAL + CALC_MAO_FRANCESA"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_PREGO_2_TOTAL",
+  "expr": "CALC_PREGO_2_TOTAL + CALC_PREGO_2"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_MANTA_TOTAL",
+  "expr": "CALC_MANTA_TOTAL + CALC_MANTA"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_PREGO_1_TOTAL",
+  "expr": "CALC_PREGO_1_TOTAL + CALC_PREGO_1"
+ },
+ {
+  "modulo": "K_COBERTURA",
+  "var": "CALC_AREA_COBERTURA_TOTAL",
+  "expr": "CALC_AREA_COBERTURA_TOTAL + AREA_INCLINADA_1"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_VOLUME_CHAPISCO",
+  "expr": "CP_M2_PAREDES_EDIF * 1.1 * 2 * 0.005"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_CIMENTO_CHAPISCO",
+  "expr": "(CALC_VOLUME_CHAPISCO * 0.2 * 1200 / 50) * 1.1"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_AREIA_GROSSA_CHAPISCO",
+  "expr": "WorksheetFunction.Ceiling((CALC_VOLUME_CHAPISCO * 0.8) * 1.1, 1)"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_AGUA_CHAPISCO",
+  "expr": "(CALC_VOLUME_CHAPISCO * 0.36) * 1.1"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_VOLUME_REBOCO",
+  "expr": "CP_M2_PAREDES_EDIF * 1.1 * 2 * 0.025"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_CIMENTO_REBOCO",
+  "expr": "(CALC_VOLUME_REBOCO * 0.125 * 1200 / 50) * 1.1"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_AREIA_FINA_REBOCO",
+  "expr": "WorksheetFunction.Ceiling((CALC_VOLUME_REBOCO * 0.875) * 1.1, 1)"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_AGUA_REBOCO",
+  "expr": "(CALC_VOLUME_REBOCO * 0.36) * 1.1"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_CIMENTO_TOTAL",
+  "expr": "WorksheetFunction.Ceiling(CALC_CIMENTO_CHAPISCO + CALC_CIMENTO_REBOCO, 1)"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_AGUA_TOTAL",
+  "expr": "CALC_AGUA_CHAPISCO + CALC_AGUA_REBOCO"
+ },
+ {
+  "modulo": "L_CHAPISCO_REBOCO",
+  "var": "CALC_VEDALIT",
+  "expr": "WorksheetFunction.Ceiling((0.3 * CALC_CIMENTO_TOTAL / 18) * 1.1, 1)"
+ },
+ {
+  "modulo": "M_PINTURA",
+  "var": "CALC_SELADOR",
+  "expr": "WorksheetFunction.Ceiling((0.2 * PAREDE_TOTAL) / 10 * 1.1, 1)"
+ },
+ {
+  "modulo": "M_PINTURA",
+  "var": "CALC_MASSA_CORRIDA",
+  "expr": "WorksheetFunction.Ceiling((((PAREDE_INTERNA / 3) * 2.5) / 15) * 1.1, 1)"
+ },
+ {
+  "modulo": "M_PINTURA",
+  "var": "CALC_FUNDO_PREPARADOR",
+  "expr": "WorksheetFunction.Ceiling((0.2 * PAREDE_TOTAL) / 8 * 1.1, 1)"
+ },
+ {
+  "modulo": "M_PINTURA",
+  "var": "CALC_TINTAS",
+  "expr": "WorksheetFunction.Ceiling(0.15 * PAREDE_TOTAL / 9 * 1.1, 1)"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_AREIA_GROSSA",
+  "expr": "WorksheetFunction.Ceiling(CP_PAVIMENTACAO_EXTERNA * 0.6 * 0.1 * 1.1, 1)"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_PEDRA",
+  "expr": "CP_PAVIMENTACAO_EXTERNA * 0.1 * 1.1"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_CIMENTO",
+  "expr": "WorksheetFunction.Ceiling(CALC_PEDRA * 6 * 1.1, 1)"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_MALHA_POP",
+  "expr": "WorksheetFunction.Ceiling((CP_PAVIMENTACAO_EXTERNA / (2.9 * 1.9)) * 1.1, 1)"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_TABUA_20",
+  "expr": "WorksheetFunction.Ceiling(CP_PERIMETRO_PAV_EXTERNA / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_SARRAFO_5",
+  "expr": "WorksheetFunction.Ceiling(CP_PERIMETRO_PAV_EXTERNA / 0.7 * 0.3 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_CIMENTO_MASSIAM_CP_EXTERNO",
+  "expr": "WorksheetFunction.Ceiling(CP_PAVIMENTACAO_EXTERNA * 0.05 * 0.25 * 1200 / 50 * 1.1, 1)"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_AREIA_GROSSA_MASSIAM_CP_EXTERNO",
+  "expr": "WorksheetFunction.Ceiling(CP_PAVIMENTACAO_EXTERNA * 0.05 * 0.75 * 1.1, 1)"
+ },
+ {
+  "modulo": "N_CONTRAPISOS_EXTERNOS",
+  "var": "CALC_BIANCO_MASSIAM_CP_EXTERNO",
+  "expr": "WorksheetFunction.Ceiling(CP_PAVIMENTACAO_EXTERNA / 60 * 1.1, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_NUM_BROCAS_COLUNAS",
+  "expr": "WorksheetFunction.Ceiling(CP_COMPRIMENTO_MURO_DIVISA / 2.5, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_PERFURACAO",
+  "expr": "CALC_NUM_BROCAS_COLUNAS * PROF_BROCAS * 1.15"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_VOL_BROCAS",
+  "expr": "(CALC_NUM_BROCAS_COLUNAS * 3.14 * (DIAM_BROCAS ^ 2) * PROF_BROCAS) * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_VOL_COLUNAS",
+  "expr": "CP_ALTURA_MURO_DIVISA * CALC_NUM_BROCAS_COLUNAS * 0.2 * 0.25 * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_VOL_VIGAS",
+  "expr": "CP_COMPRIMENTO_MURO_DIVISA * 2 * 0.3 * 0.2 * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_CONCRETO",
+  "expr": "CALC_VOL_BROCAS + CALC_VOL_COLUNAS + CALC_VOL_VIGAS"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_TABUAS_30",
+  "expr": "WorksheetFunction.Ceiling(((CP_COMPRIMENTO_MURO_DIVISA * 2 / 3) + CP_COMPRIMENTO_MURO_DIVISA * 2 / 3 * 0.45 / 3) * 2 * 1.1, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_SARRAFO_5",
+  "expr": "WorksheetFunction.Ceiling(((CP_COMPRIMENTO_MURO_DIVISA * 2 / 0.7 * 0.45) + (CP_COMPRIMENTO_MURO_DIVISA / 0.75 * 0.3)) / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_FERRO_5",
+  "expr": "WorksheetFunction.Ceiling(((PROF_BROCAS / 0.15 * DIAM_BROCAS * 2 * 1.1 * CALC_NUM_BROCAS_COLUNAS) + (CP_ALTURA_MURO_DIVISA / 0.15 * 0.9 * 1.1 * CALC_NUM_BROCAS_COLUNAS) + (CP_COMPRIMENTO_MURO_DIVISA / 0.15 * 1 * 1.1)) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_FERRO_8",
+  "expr": "WorksheetFunction.Ceiling(((CALC_NUM_BROCAS_COLUNAS * PROF_BROCAS * 3 * 1.1) + (CP_ALTURA_MURO_DIVISA * 4 * CALC_NUM_BROCAS_COLUNAS * 1.1) + (CP_COMPRIMENTO_MURO_DIVISA * 2 * 4 * 1.1)) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_ARAME",
+  "expr": "WorksheetFunction.Ceiling(0.06 * ((CALC_FERRO_5 * 1.1 * PESO_CA50_5MM) + (CALC_FERRO_8 * 1.1 * PESO_CA50_8MM)), 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_PREGO",
+  "expr": "WorksheetFunction.Ceiling(0.55 * CALC_ARAME, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_AREA_MURO",
+  "expr": "CP_COMPRIMENTO_MURO_DIVISA * CP_ALTURA_MURO_DIVISA * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_VOL_CHAPISCO",
+  "expr": "CALC_AREA_MURO * 1.1 * 2 * 0.005"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_VOL_REBOCO",
+  "expr": "CALC_AREA_MURO * 1.1 * 2 * 0.025"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_TIJOLOS",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREA_MURO * 46.458 * 1.1, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_AREIA_FINA_ASSENT",
+  "expr": "CALC_TIJOLOS * 0.002223 * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_AREIA_FINA_REBOCO",
+  "expr": "CALC_VOL_REBOCO * 0.875 * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_AREIA_FINA_TOTAL",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREIA_FINA_ASSENT + CALC_AREIA_FINA_REBOCO, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_AREIA_GROSSA_CHAPISCO",
+  "expr": "CALC_VOL_CHAPISCO * 0.8 * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_AGUA",
+  "expr": "((CALC_VOL_CHAPISCO * 0.36) + (CALC_VOL_REBOCO * 0.36)) * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_VEDALIT",
+  "expr": "WorksheetFunction.Ceiling((CALC_AREIA_FINA_TOTAL / 25) * 1.1, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_CIMENTO_CHAPISCO",
+  "expr": "(0.2 * CALC_VOL_CHAPISCO * 1200 / 50) * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_CIMENTO_REBOCO",
+  "expr": "(0.125 * CALC_VOL_REBOCO * 1200 / 50) * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_CIMENTO_ASSENTAMENTO",
+  "expr": "CALC_AREIA_FINA_ASSENT * 2 * 1.1"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_CIMENTO_TOTAL",
+  "expr": "WorksheetFunction.Ceiling(CALC_CIMENTO_CHAPISCO + CALC_CIMENTO_REBOCO + CALC_CIMENTO_ASSENTAMENTO, 1)"
+ },
+ {
+  "modulo": "O_MURO_DIVISA",
+  "var": "CALC_VEDATOP",
+  "expr": "WorksheetFunction.Ceiling(((0.3 * CP_COMPRIMENTO_MURO_DIVISA) * 3 / 10) * 1.1 + ((CP_COMPRIMENTO_MURO_DIVISA) * 3 / 18) * 1.1, 1)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_EQUIPE_PEDREIROS_EDIF",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_EQUIPE_PEDREIROS_EDIF\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_ELETRICISTA",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_ELETRICISTA\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_ENCANADOR",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_ENCANADOR\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_PINTOR_EDIF",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_PINTOR_EDIF\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_CARPINTEIRO",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_CARPINTEIRO\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_IMPERMEABILIZADOR",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_IMPERMEABILIZADOR\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_INSTALADOR_AR",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_INSTALADOR_AR\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_MARCENEIRO_PORTAS",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_MARCENEIRO_PORTAS\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_INSTALADOR_AQUECEDORES",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_INSTALADOR_AQUECEDORES\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_SERRALHEIRO",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_SERRALHEIRO\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_TERRAPLANAGEM",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_TERRAPLANAGEM\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_PAVIMENTAÇÃO_EXTERNA",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_PAVIMENTAÇÃO_EXTERNA\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_MURO_DIVISA",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_MURO_DIVISA\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_MURO_ARRIMO",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_MURO_ARRIMO\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_PEDREIROS_PISCINA",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_PEDREIROS_PISCINA\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_INSTALADOR_EQUIP_PISCINA",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_INSTALADOR_EQUIP_PISCINA\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "P_PRESTADORES",
+  "var": "CALC_PRESTADORES_GESTAO_OBRA",
+  "expr": "WorksheetFunction.VLookup(\"CP_PRESTADORES_GESTAO_OBRA\", Columns(\"J:K\"), 2, False)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_TIJOLOS_8F_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_ALTURA_ARRIMO * CP_COMPRIMENTO_ARRIMO * 40) * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_AREIA_FINA_ASSENT_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CALC_TIJOLOS_8F_ARRIMO * 0.002223 * 1.1), 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_VEDALIT_FINA_ASSENT_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREIA_FINA_ASSENT_ARRIMO / 25 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CIMENTO_FINA_ASSENT_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREIA_FINA_ASSENT_ARRIMO * 2 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_TABUAS_15_COLUN_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_15_ARRIMO * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_TABUAS_20_COLUN_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_20_ARRIMO * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_TABUAS_30_COLUN_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_30_ARRIMO * 2.8 * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_SARRAFO_5_COLUN_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(((CP_COLUNAS_15_ARRIMO * 2.8 * 2 / 0.5 * 0.2)  + (CP_COLUNAS_20_ARRIMO * 2.8 * 2 / 0.5 * 0.25) + (CP_COLUNAS_30_ARRIMO * 2.8 * 2 / 0.5 * 0.35)) * 1.1 / 3, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_MADERITES_COLUN_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_FORMA_COLUNA_ARRIMO_MAIOR_25CM / 2.42 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_TABUAS_30_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(((CP_COMPRIMENTO_ARRIMO * 2 / 3) + CP_COMPRIMENTO_ARRIMO * 2 / 3 * 0.45 / 3) * CP_NUMERO_VIGAS_ARRIMO * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_SARRAFO_5_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(((CP_COMPRIMENTO_ARRIMO * 2 / 0.7 * 0.45) + (CP_COMPRIMENTO_ARRIMO / 0.75 * 0.3)) / 3 * CP_NUMERO_VIGAS_ARRIMO * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_PERFURACAO_ESTACAS_ARRIMO",
+  "expr": "CP_QTD_ESTACAS_ARRIMO * CP_PROF_ESTACAS_ARRIMO * 1.15"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CA60_4MM_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CA60_4MM_ESTACAS_ARRIMO + CP_CA60_4MM_SAPATAS_ARRIMO + CP_CA60_4MM_ARRANQUES_ARRIMO + CP_CA60_4MM_BALDRAME_ARRIMO + CP_CA60_4MM_GIGANTE_ARRIMO + CP_CA60_4MM_COLUNAS_ARRIMO + CP_CA60_4MM_VIGAS_ARRIMO) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CA50_5MM_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_5MM_ESTACAS_ARRIMO + CP_CA50_5MM_SAPATAS_ARRIMO + CP_CA50_5MM_ARRANQUES_ARRIMO + CP_CA50_5MM_BALDRAME_ARRIMO + CP_CA50_5MM_GIGANTE_ARRIMO + CP_CA50_5MM_COLUNAS_ARRIMO + CP_CA50_5MM_VIGAS_ARRIMO) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CA50_6MM_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_6MM_ESTACAS_ARRIMO + CP_CA50_6MM_SAPATAS_ARRIMO + CP_CA50_6MM_ARRANQUES_ARRIMO + CP_CA50_6MM_BALDRAME_ARRIMO + CP_CA50_6MM_GIGANTE_ARRIMO + CP_CA50_6MM_COLUNAS_ARRIMO + CP_CA50_6MM_VIGAS_ARRIMO) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CA50_8MM_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_8MM_ESTACAS_ARRIMO + CP_CA50_8MM_SAPATAS_ARRIMO + CP_CA50_8MM_ARRANQUES_ARRIMO + CP_CA50_8MM_BALDRAME_ARRIMO + CP_CA50_8MM_GIGANTE_ARRIMO + CP_CA50_8MM_COLUNAS_ARRIMO + CP_CA50_8MM_VIGAS_ARRIMO) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CA50_10MM_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_10MM_ESTACAS_ARRIMO + CP_CA50_10MM_SAPATAS_ARRIMO + CP_CA50_10MM_ARRANQUES_ARRIMO + CP_CA50_10MM_BALDRAME_ARRIMO + CP_CA50_10MM_GIGANTE_ARRIMO + CP_CA50_10MM_COLUNAS_ARRIMO + CP_CA50_10MM_VIGAS_ARRIMO) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CA50_12MM_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_12MM_ESTACAS_ARRIMO + CP_CA50_12MM_SAPATAS_ARRIMO + CP_CA50_12MM_ARRANQUES_ARRIMO + CP_CA50_12MM_BALDRAME_ARRIMO + CP_CA50_12MM_GIGANTE_ARRIMO + CP_CA50_12MM_COLUNAS_ARRIMO + CP_CA50_12MM_VIGAS_ARRIMO) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CA50_16MM_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_16MM_ESTACAS_ARRIMO + CP_CA50_16MM_SAPATAS_ARRIMO + CP_CA50_16MM_ARRANQUES_ARRIMO + CP_CA50_16MM_BALDRAME_ARRIMO + CP_CA50_16MM_GIGANTE_ARRIMO + CP_CA50_16MM_COLUNAS_ARRIMO + CP_CA50_16MM_VIGAS_ARRIMO) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CA60_5MM_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CA60_5MM_ESTACAS_ARRIMO + CP_CA60_5MM_SAPATAS_ARRIMO + CP_CA60_5MM_ARRANQUES_ARRIMO + CP_CA60_5MM_BALDRAME_ARRIMO + CP_CA60_5MM_GIGANTE_ARRIMO + CP_CA60_5MM_COLUNAS_ARRIMO + CP_CA60_5MM_VIGAS_ARRIMO) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_CONCR_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling((CP_CONCR_ESTACAS_ARRIMO + CP_CONCR_SAPATAS_ARRIMO + CP_CONCR_ARRANQUES_ARRIMO + CP_CONCR_BALDRAME_ARRIMO + CP_CONCR_GIGANTE_ARRIMO + CP_CONCR_COLUNAS_ARRIMO + CP_CONCR_VIGAS_ARRIMO) * 1.1, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_PESO_FERRO_ARRIMO",
+  "expr": "((CALC_CA60_4MM_ARRIMO * PESO_CA60_4MM) + (CALC_CA50_5MM_ARRIMO * PESO_CA50_5MM) + (CALC_CA50_6MM_ARRIMO * PESO_CA50_6MM) + (CALC_CA50_8MM_ARRIMO * PESO_CA50_8MM)  + (CALC_CA50_10MM_ARRIMO * PESO_CA50_10MM) + (CALC_CA50_12MM_ARRIMO * PESO_CA50_12MM)  + (CALC_CA50_16MM_ARRIMO * PESO_CA50_16MM) + (CALC_CA60_5MM_ARRIMO * PESO_CA60_5MM))"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_DISCO_FERRO_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_ARRIMO * 0.01, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_ARAME_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_ARRIMO * 0.06, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_PREGO_18X27_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(0.55 * CALC_ARAME_ARRIMO, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_VEDATOP_ARRIMO",
+  "expr": "WorksheetFunction.Ceiling(((CP_ALTURA_ARRIMO * CP_COMPRIMENTO_ARRIMO) * 3 * 1.1) / 18, 1)"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_TABUAS_30_ARRIMO_TOTAL",
+  "expr": "CALC_TABUAS_30_ARRIMO + CALC_TABUAS_30_COLUN_ARRIMO"
+ },
+ {
+  "modulo": "Q_MURO_ARRIMO",
+  "var": "CALC_SARRAFO_5_ARRIMO_TOTAL",
+  "expr": "CALC_SARRAFO_5_ARRIMO + CALC_SARRAFO_5_COLUN_ARRIMO"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_TABUA_10_MARCACAO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_GABARITO_OBRA_PISCINA / 3 * 1.2, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_SARRAFO_5_MARCACAO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_GABARITO_OBRA_PISCINA * 1.2 / 1.3 * 0.6 / 3) + 20, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_PREGO_18X27_MARCACAO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(0.05 * CALC_TABUA_10_MARCACAO_PISCINA / 2, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_PREGO_17X21_MARCACAO_PISCINA",
+  "expr": "CALC_PREGO_18X27_MARCACAO_PISCINA"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_PERFURACAO_ESTACAS_PISCINA",
+  "expr": "CP_QTD_ESTACAS_PISCINA * CP_PROFUNDIDADE_ESTACAS_PISCINA * 1.15"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AREIA_GROSSA_CONTRAP_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_CONSTRUIDA_PISCINA * 0.6 * 0.1 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_PEDRA_CONTRAP_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_CONSTRUIDA_PISCINA * 0.1 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CIMENTO_CONTRAP_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_PEDRA_CONTRAP_PISCINA * 6 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_MALHA_POP_CONTRAP_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_CONSTRUIDA_PISCINA / (2.9 * 1.9 * 1.1), 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_TIJOLINHO_MACICO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_PAREDES_M2_TOTAL_PISCINA * 84.2 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AREIA_FINA_ASSENT_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_TIJOLINHO_MACICO_PISCINA * 0.0291 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CIMENTO_FINA_ASSENT_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_AREIA_FINA_ASSENT_PISCINA * 2 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_TABUAS_15_COLUN_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_15_PISCINA * CP_PROFUNDIDADE_PISCINA * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_TABUAS_20_COLUN_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_20_PISCINA * CP_PROFUNDIDADE_PISCINA * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_TABUAS_30_COLUN_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_COLUNAS_25_PISCINA * CP_PROFUNDIDADE_PISCINA * 2 / 3 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_TABUAS_30_VIGAS_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(((CP_PERIMETRO_PAREDES_PISCINA * 2 / 3) + CP_PERIMETRO_PAREDES_PISCINA * 2 / 3 * 0.45 / 3)  * QTD_NUMERO_VIGAS_PISCINA * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_TABUAS_30_PISCINA_TOTAL",
+  "expr": "CALC_TABUAS_30_COLUN_PISCINA + CALC_TABUAS_30_VIGAS_PISCINA"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_SARRAFO_5_COLUN_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(((CP_COLUNAS_15_PISCINA * CP_PROFUNDIDADE_PISCINA * 2 / 0.5 * 0.2)  + (CP_COLUNAS_20_PISCINA * CP_PROFUNDIDADE_PISCINA * 2 / 0.5 * 0.25)  + (CP_COLUNAS_25_PISCINA * CP_PROFUNDIDADE_PISCINA * 2 / 0.5 * 0.35)) * 1.1 / 3, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_SARRAFO_5_VIGAS_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(((CP_PERIMETRO_PAREDES_PISCINA * 2 / 0.7 * 0.45) + (CP_PERIMETRO_PAREDES_PISCINA / 0.75 * 0.3)) / 3  * QTD_NUMERO_VIGAS_PISCINA * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_SARRAFO_5_PISCINA_TOTAL",
+  "expr": "CALC_SARRAFO_5_COLUN_PISCINA + CALC_SARRAFO_5_VIGAS_PISCINA + CALC_SARRAFO_5_MARCACAO_PISCINA"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_MADERITES_COLUN_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_FORMA_COLUNA_MAIOR_25CM_PISCINA / 2.42 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CA60_4MM_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CA60_4MM_ESTACAS_PISCINA + CP_CA60_4MM_SAPATAS_PISCINA +  CP_CA60_4MM_ARRANQUES_PISCINA + CP_CA60_4MM_BALDRAME_PISCINA + CP_CA60_4MM_CONTRAPISO_PISCINA +  CP_CA60_4MM_COLUNAS_PISCINA + CP_CA60_4MM_VIGAS_PISCINA) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CA50_5MM_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_5MM_ESTACAS_PISCINA + CP_CA50_5MM_SAPATAS_PISCINA  + CP_CA50_5MM_ARRANQUES_PISCINA + CP_CA50_5MM_BALDRAME_PISCINA + CP_CA50_5MM_CONTRAPISO_PISCINA  + CP_CA50_5MM_COLUNAS_PISCINA + CP_CA50_5MM_VIGAS_PISCINA) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CA50_6MM_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_6MM_ESTACAS_PISCINA + CP_CA50_6MM_SAPATAS_PISCINA  + CP_CA50_6MM_ARRANQUES_PISCINA + CP_CA50_6MM_BALDRAME_PISCINA + CP_CA50_6MM_CONTRAPISO_PISCINA  + CP_CA50_6MM_COLUNAS_PISCINA + CP_CA50_6MM_VIGAS_PISCINA) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CA50_8MM_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_8MM_ESTACAS_PISCINA + CP_CA50_8MM_SAPATAS_PISCINA  + CP_CA50_8MM_ARRANQUES_PISCINA + CP_CA50_8MM_BALDRAME_PISCINA + CP_CA50_8MM_CONTRAPISO_PISCINA  + CP_CA50_8MM_COLUNAS_PISCINA + CP_CA50_8MM_VIGAS_PISCINA) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CA50_10MM_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_10MM_ESTACAS_PISCINA + CP_CA50_10MM_SAPATAS_PISCINA  + CP_CA50_10MM_ARRANQUES_PISCINA + CP_CA50_10MM_BALDRAME_PISCINA + CP_CA50_10MM_CONTRAPISO_PISCINA  + CP_CA50_10MM_COLUNAS_PISCINA + CP_CA50_10MM_VIGAS_PISCINA) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CA50_12MM_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_12MM_ESTACAS_PISCINA + CP_CA50_12MM_SAPATAS_PISCINA  + CP_CA50_12MM_ARRANQUES_PISCINA + CP_CA50_12MM_BALDRAME_PISCINA + CP_CA50_12MM_CONTRAPISO_PISCINA  + CP_CA50_12MM_COLUNAS_PISCINA + CP_CA50_12MM_VIGAS_PISCINA) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CA50_16MM_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CA50_16MM_ESTACAS_PISCINA + CP_CA50_16MM_SAPATAS_PISCINA  + CP_CA50_16MM_ARRANQUES_PISCINA + CP_CA50_16MM_BALDRAME_PISCINA + CP_CA50_16MM_CONTRAPISO_PISCINA  + CP_CA50_16MM_COLUNAS_PISCINA + CP_CA50_16MM_VIGAS_PISCINA) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CA60_5MM_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CA60_5MM_ESTACAS_PISCINA + CP_CA60_5MM_SAPATAS_PISCINA  + CP_CA60_5MM_ARRANQUES_PISCINA + CP_CA60_5MM_BALDRAME_PISCINA + CP_CA60_5MM_CONTRAPISO_PISCINA  + CP_CA60_5MM_COLUNAS_PISCINA + CP_CA60_5MM_VIGAS_PISCINA) / 12 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CONCR_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_CONCR_ESTACAS_PISCINA + CP_CONCR_SAPATAS_PISCINA + CP_CONCR_ARRANQUES_PISCINA  + CP_CONCR_BALDRAME_PISCINA + CP_CONCR_CONTRAPISO_PISCINA + CP_CONCR_COLUNAS_PISCINA + CP_CONCR_VIGAS_PISCINA) * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_PESO_FERRO_PISCINA",
+  "expr": "((CALC_CA60_4MM_PISCINA * PESO_CA60_4MM) + (CALC_CA50_5MM_PISCINA * PESO_CA50_5MM)  + (CALC_CA50_6MM_PISCINA * PESO_CA50_6MM) + (CALC_CA50_8MM_PISCINA * PESO_CA50_8MM)  + (CALC_CA50_10MM_PISCINA * PESO_CA50_10MM) + (CALC_CA50_12MM_PISCINA * PESO_CA50_12MM)  + (CALC_CA50_16MM_PISCINA * PESO_CA50_16MM) + (CALC_CA60_5MM_PISCINA * PESO_CA60_5MM))"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_DISCO_FERRO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_PISCINA * 0.01, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_ARAME_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_PESO_FERRO_PISCINA * 0.06, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_PREGO_18X27_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((0.55 * CALC_ARAME_PISCINA) + CALC_PREGO_18X27_MARCACAO_PISCINA, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_VEDATOP_BALDRAMES_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((((CP_PERIMETRO_PAREDES_PISCINA * 2 * 0.3) + (CP_PERIMETRO_PAREDES_PISCINA * 0.15)) * 3 * 1.1) / 18, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_VEDATOP_PAREDES_CONTRAPISO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(((CP_PAREDES_M2_TOTAL_PISCINA + CP_AREA_CONSTRUIDA_PISCINA) * 3 * 1.1) / 18, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_VEDATOP_PAREDES_EXTERNA_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(((CP_PAREDES_M2_TOTAL_PISCINA) * 3 * 1.1) / 18, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_VEDATOP_TOTAL_PISCINA",
+  "expr": "CALC_VEDATOP_BALDRAMES_PISCINA + CALC_VEDATOP_PAREDES_CONTRAPISO_PISCINA"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_TELA_POLIESTER_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CP_PAREDES_M2_TOTAL_PISCINA + CP_AREA_CONSTRUIDA_PISCINA) * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_VOLUME_CHAPISCO_PISCINA",
+  "expr": "CP_PAREDES_M2_TOTAL_PISCINA * 1.1 * 2 * 0.005"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CIMENTO_CHAPISCO_PISCINA",
+  "expr": "(CALC_VOLUME_CHAPISCO_PISCINA * 0.2 * 1200 / 50) * 1.1"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AREIA_GROSSA_CHAPISCO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CALC_VOLUME_CHAPISCO_PISCINA * 0.8) * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AGUA_CHAPISCO_PISCINA",
+  "expr": "(CALC_VOLUME_CHAPISCO_PISCINA * 0.36) * 1.1"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_VOLUME_REBOCO_PISCINA",
+  "expr": "CP_PAREDES_M2_TOTAL_PISCINA * 1.1 * 2 * 0.025"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CIMENTO_REBOCO_PISCINA",
+  "expr": "(CALC_VOLUME_REBOCO_PISCINA * 0.125 * 1200 / 50) * 1.1"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AREIA_FINA_REBOCO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((CALC_VOLUME_REBOCO_PISCINA * 0.875) * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AGUA_REBOCO_PISCINA",
+  "expr": "(CALC_VOLUME_REBOCO_PISCINA * 0.36) * 1.1"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CIMENTO_MASSIAMENTO_PISO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_CONSTRUIDA_PISCINA * 0.05 * 0.25 * 1200 / 50 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AREIA_GROSSA_MASSIAMENTO_PISO",
+  "expr": "WorksheetFunction.Ceiling(CP_AREA_CONSTRUIDA_PISCINA * 0.05 * 0.75 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_CIMENTO_TOTAL_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_CIMENTO_CONTRAP_PISCINA + CALC_CIMENTO_FINA_ASSENT_PISCINA + CALC_CIMENTO_CHAPISCO_PISCINA + CALC_CIMENTO_REBOCO_PISCINA, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AGUA_TOTAL_PISCINA",
+  "expr": "CALC_AGUA_CHAPISCO_PISCINA + CALC_AGUA_REBOCO_PISCINA"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_VEDALIT_PISCINA",
+  "expr": "WorksheetFunction.Ceiling((0.3 * CALC_CIMENTO_TOTAL_PISCINA / 18) * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AREIA_GROSSA_TOTAL_PISCINA",
+  "expr": "CALC_AREIA_GROSSA_CONTRAP_PISCINA + CALC_AREIA_GROSSA_CHAPISCO_PISCINA + CALC_AREIA_GROSSA_MASSIAMENTO_PISO"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_AREIA_FINA_TOTAL_PISCINA",
+  "expr": "CALC_AREIA_FINA_ASSENT_PISCINA + CALC_AREIA_FINA_REBOCO_PISCINA"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_REVESTIMENTO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CP_PAREDES_M2_TOTAL_PISCINA + CP_AREA_CONSTRUIDA_PISCINA * 1.2, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_REJUNTES_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_REVESTIMENTO_PISCINA * 0.095 / 5 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_ARGAMASSAS_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_REVESTIMENTO_PISCINA * 7.5 / 20 * 1.1, 1)"
+ },
+ {
+  "modulo": "R_PISCINA",
+  "var": "CALC_DISCO_PORCELANATO_PISCINA",
+  "expr": "WorksheetFunction.Ceiling(CALC_REVESTIMENTO_PISCINA * 0.005 * 1.1, 1)"
+ }
+]

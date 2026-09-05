@@ -5416,11 +5416,52 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
   const [formObra, setFormObra] = useState(null);
   const [formContrato, setFormContrato] = useState(null);
   const [obraSelecionada, setObraSelecionada] = useState(null);
+  // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
+  const [formItemPL, setFormItemPL] = useState(null);
+  const [visaoPL, setVisaoPL] = useState("conta"); // "conta" | "prestador"
 
   const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
   const contratos = (data.contratos || []).filter(c => c.clienteId === cliente.id);
+  const prestadores = data.fornecedores || [];
   const statusObra = { planejamento: { label: "Planejamento", cor: "#f59e0b" }, execucao: { label: "Em execução", cor: "#3b82f6" }, concluida: { label: "Concluída", cor: "#10b981" } };
   const statusContrato = { ativo: { label: "Ativo", cor: "#10b981" }, pendente: { label: "Pendente", cor: "#f59e0b" }, encerrado: { label: "Encerrado", cor: "#9ca3af" } };
+
+  // ── Planejamento (P&L estimado) ──────────────────────────────
+  // Item: { id, contaId, prestadorId (opcional), valor (number), observacao }
+  // Guardado em obra.estimativaPL — array simples, sem regime/mês (isso é
+  // o P&L REALIZADO, spec separada). Aqui é só "quanto eu acho que vai custar".
+  function novoItemPL() {
+    setFormItemPL({ id: uid(), contaId: PLANO_CONTAS[0].id, prestadorId: "", valor: "", observacao: "" });
+  }
+
+  function editarItemPL(item) {
+    setFormItemPL({ ...item, valor: String(item.valor) });
+  }
+
+  function salvarItemPL() {
+    if (!formItemPL.contaId) { dialogo.alertar({ titulo: "Selecione a conta", tipo: "aviso" }); return; }
+    const valorNum = parseFloat(String(formItemPL.valor).replace(",", "."));
+    if (!valorNum || valorNum <= 0) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
+    const itemFinal = { ...formItemPL, valor: valorNum };
+    const itensAtuais = obraSelecionada.estimativaPL || [];
+    const ehNovo = !itensAtuais.find(i => i.id === itemFinal.id);
+    const novosItens = ehNovo ? [...itensAtuais, itemFinal] : itensAtuais.map(i => i.id === itemFinal.id ? itemFinal : i);
+    const obraAtualizada = { ...obraSelecionada, estimativaPL: novosItens };
+    const novasObras = obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o);
+    save({ ...data, obras: novasObras });
+    setObraSelecionada(obraAtualizada);
+    setFormItemPL(null);
+  }
+
+  async function removerItemPL(itemId) {
+    const ok = await dialogo.confirmar({ titulo: "Remover item da estimativa?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
+    if (!ok) return;
+    const novosItens = (obraSelecionada.estimativaPL || []).filter(i => i.id !== itemId);
+    const obraAtualizada = { ...obraSelecionada, estimativaPL: novosItens };
+    const novasObras = obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o);
+    save({ ...data, obras: novasObras });
+    setObraSelecionada(obraAtualizada);
+  }
 
   function novaObra() {
     setFormObra({ id: uid(), clienteId: cliente.id, nome: "", status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "", ativo: true });
@@ -5497,6 +5538,168 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
     );
   }
 
+  if (view === "planejamento" && obraSelecionada) {
+    const itensPL = obraSelecionada.estimativaPL || [];
+    const totalPL = itensPL.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+    const fmtBRL = v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // ── Formulário de item (novo/editar) ──────────────────────
+    if (formItemPL) {
+      return (
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+          <button onClick={() => setFormItemPL(null)} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", marginBottom: 16 }}>{itensPL.find(i => i.id === formItemPL.id) ? "Editar item" : "Novo item da estimativa"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={C.label}>Conta *</label>
+              <select style={{ ...C.input, cursor: "pointer" }} value={formItemPL.contaId} onChange={e => setFormItemPL({ ...formItemPL, contaId: e.target.value })}>
+                {GRUPOS_PL.filter(g => g.id !== "excluidas").map(g => (
+                  <optgroup key={g.id} label={g.titulo}>
+                    {contasDoGrupo(g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label style={C.label}>Prestador de serviço (opcional)</label>
+              <select style={{ ...C.input, cursor: "pointer" }} value={formItemPL.prestadorId || ""} onChange={e => setFormItemPL({ ...formItemPL, prestadorId: e.target.value })}>
+                <option value="">— Nenhum —</option>
+                {prestadores.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={C.label}>Valor estimado (R$) *</label>
+              <input style={C.input} type="number" step="0.01" value={formItemPL.valor} onChange={e => setFormItemPL({ ...formItemPL, valor: e.target.value })} placeholder="0,00" />
+            </div>
+          </div>
+          <div style={{ marginBottom: 16 }}>
+            <label style={C.label}>Observações</label>
+            <textarea style={{ ...C.input, resize: "vertical" }} value={formItemPL.observacao || ""} onChange={e => setFormItemPL({ ...formItemPL, observacao: e.target.value })} rows={2} />
+          </div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <button style={C.btnSec} onClick={() => setFormItemPL(null)}>Cancelar</button>
+            <button style={C.btn} onClick={salvarItemPL}>Salvar item</button>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Agrupamento "por conta" ────────────────────────────────
+    const gruposComItens = GRUPOS_PL.map(g => {
+      const contasComItens = contasDoGrupo(g.id).map(conta => {
+        const itensDaConta = itensPL.filter(i => i.contaId === conta.id);
+        const totalConta = itensDaConta.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+        return { conta, itens: itensDaConta, total: totalConta };
+      }).filter(c => c.itens.length > 0);
+      const totalGrupo = contasComItens.reduce((s, c) => s + c.total, 0);
+      return { grupo: g, contas: contasComItens, total: totalGrupo };
+    }).filter(g => g.contas.length > 0);
+
+    // ── Agrupamento "por prestador" ────────────────────────────
+    const porPrestadorMap = {};
+    itensPL.forEach(i => {
+      const chave = i.prestadorId || "__sem_prestador__";
+      if (!porPrestadorMap[chave]) porPrestadorMap[chave] = { itens: [], total: 0 };
+      porPrestadorMap[chave].itens.push(i);
+      porPrestadorMap[chave].total += Number(i.valor) || 0;
+    });
+    const porPrestador = Object.entries(porPrestadorMap).map(([chave, v]) => ({
+      nome: chave === "__sem_prestador__" ? "Sem prestador definido" : (prestadores.find(p => p.id === chave)?.nome || "Prestador removido"),
+      itens: v.itens,
+      total: v.total,
+    })).sort((a, b) => b.total - a.total);
+
+    return (
+      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+        <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Planejamento</div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>P&L estimado · {obraSelecionada.nome}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5 }}>Total estimado</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: "#262421" }}>{fmtBRL(totalPL)}</div>
+          </div>
+        </div>
+
+        {/* Toggle de visão */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          {[["conta", "Por conta"], ["prestador", "Por prestador"]].map(([v, l]) => (
+            <button key={v} onClick={() => setVisaoPL(v)}
+              style={{ border: visaoPL === v ? "1px solid #b5652f" : "1px solid rgba(38,36,33,0.16)", background: visaoPL === v ? "#fdf6f0" : "#fff", color: visaoPL === v ? "#b5652f" : "#6b7280", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 600 : 400, cursor: "pointer", fontFamily: "inherit" }}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {itensPL.length === 0 ? (
+          <div style={{ padding: "24px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
+            Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
+          </div>
+        ) : visaoPL === "conta" ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
+            {gruposComItens.map(({ grupo, contas: contasG, total }) => (
+              <div key={grupo.id}>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1.5px solid rgba(38,36,33,0.14)", marginBottom: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#262421", textTransform: "uppercase", letterSpacing: 0.5 }}>{grupo.titulo}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#262421" }}>{fmtBRL(total)}</div>
+                </div>
+                {contasG.map(({ conta, itens: itensDaConta, total: totalConta }) => (
+                  <div key={conta.id} style={{ marginBottom: 6 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
+                      <div style={{ fontSize: 13, color: "#374151" }}>{conta.nome}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{fmtBRL(totalConta)}</div>
+                    </div>
+                    {itensDaConta.map(item => (
+                      <div key={item.id} onClick={() => perm.podeEditar && editarItemPL(item)}
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", marginLeft: 8, borderRadius: 8, cursor: perm.podeEditar ? "pointer" : "default", transition: "background 0.15s" }}
+                        onMouseEnter={e => { if (perm.podeEditar) e.currentTarget.style.backgroundColor = "#fafafa"; }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}>
+                        <div style={{ fontSize: 12, color: "#6b7280" }}>
+                          {item.prestadorId ? (prestadores.find(p => p.id === item.prestadorId)?.nome || "Prestador removido") : "—"}
+                          {item.observacao ? ` · ${item.observacao}` : ""}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          <div style={{ fontSize: 12, color: "#6b7280" }}>{fmtBRL(Number(item.valor) || 0)}</div>
+                          {perm.podeEditar && (
+                            <button onClick={e => { e.stopPropagation(); removerItemPL(item.id); }} style={{ background: "none", border: "none", color: "#a32e12", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Remover</button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+            {porPrestador.map(p => {
+              const pct = totalPL > 0 ? (p.total / totalPL) * 100 : 0;
+              return (
+                <div key={p.nome} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: "12px 14px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{p.nome}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#262421" }}>{fmtBRL(p.total)}</div>
+                  </div>
+                  <div style={{ height: 6, background: "#f3f4f6", borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
+                    <div style={{ height: "100%", width: `${pct}%`, background: "#b5652f", borderRadius: 4 }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "#9ca3af" }}>{pct.toFixed(1)}% do total · {p.itens.length} {p.itens.length !== 1 ? "itens" : "item"}</div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {perm.podeEditar && itensPL.length > 0 && (
+          <button style={{ ...C.btn, width: "100%" }} onClick={novoItemPL}>+ Adicionar item</button>
+        )}
+      </div>
+    );
+  }
+
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     return (
@@ -5561,10 +5764,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <button onClick={() => editarObra(obraSelecionada)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
           )}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
-          <button onClick={() => setView("contratosDaObra")}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 16, marginBottom: 20 }}>
+          <button onClick={() => setView("planejamento")}
             style={{ border: "1px solid #b5652f", borderRadius: 16, padding: "20px", background: "#fdf6f0", boxShadow: "0 0 0 3px rgba(181,101,47,0.14)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#b5652f", textAlign: "center" }}>Contratos</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#b5652f", textAlign: "center" }}>Planejamento</div>
+            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>P&L estimado da obra</div>
+          </button>
+          <button onClick={() => setView("contratosDaObra")}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Contratos</div>
             <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }}
