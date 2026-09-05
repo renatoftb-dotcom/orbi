@@ -1307,6 +1307,237 @@ function piscina(cp, out) {
 //   CALC_AREA_COBERTURA_TOTAL                   → escrito de volta em cp pelo próprio cobertura() (var pública no VBA)
 //   CP_PRESTADORES_*                            → prestadores.<camelCase>
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// ESQUADRIAS — catálogo de perfis por tipo (linha GOLD)
+// ═══════════════════════════════════════════════════════════════
+// Fonte: aba ESQUADRIAS da planilha de origem (esquadria.xlsx) e os preços
+// de S_ESQUADRIAS.bas. O VBA original declarava o módulo mas nunca terminou
+// o cálculo — esta é a implementação do modelo que a aba descreve:
+//
+//   para cada perfil do tipo:  metros = regra(largura, altura, folhas)
+//                              kg     = metros × kgPorMetro × quantidade
+//   vidro 8mm (m²)           = largura × (altura − 0,14) × quantidade
+//
+// Chave: "FAMILIA|FOLHAS". A linha SUPREMA usa perfis mais leves, mas a lista
+// de perfis por tipo dela não está em nenhuma planilha recebida — entra aqui
+// como ESQUADRIAS_CATALOGO.SUPREMA quando a lista existir, no mesmo formato.
+// ARQUIVO GERADO a partir de docs/referencia-orcamento/esquadrias-catalogo.json.
+
+const ESQUADRIAS_PRECOS_VBA = { aluminioKg: 39.80, vidro8mmM2: 166.63 }; // referência do S_ESQUADRIAS.bas
+const ESQUADRIAS_DESCONTO_ALTURA = 0.14; // "desconta 14 cm para altura útil, folhas, vidros, persiana"
+const ESQUADRIAS_BARRA_MTS = 6;          // palhetas vendem em barra de 6 m
+
+const ESQUADRIAS_FAMILIAS = [
+  { id: "JANELA_CORRER",  nome: "Janela de correr",               folhas: [2, 3, 4] },
+  { id: "PORTA_CORRER",   nome: "Porta de correr",                folhas: [2, 3, 4] },
+  { id: "JANELA_PERSIANA", nome: "Janela com persiana integrada", folhas: [2] },
+];
+const ESQUADRIAS_LINHAS = [
+  { id: "GOLD",    nome: "Gold",    disponivel: true },
+  { id: "SUPREMA", nome: "Suprema", disponivel: false, aviso: "lista de perfis ainda não cadastrada" },
+];
+
+const ESQUADRIAS_CATALOGO = {
+GOLD: {
+  "JANELA_CORRER|2": [
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN003", perfil: "Trilho superior", kgPorMetro: 1.176, regra: "1 LARGURA" },
+    { codigo: "GN001", perfil: "Trilho inferior", kgPorMetro: 1.555, regra: "1 LARGURA" },
+    { codigo: "GN004", perfil: "Marco lateral", kgPorMetro: 0.677, regra: "2 ALTURA" },
+    { codigo: "GN008", perfil: "Montante lateral folha", kgPorMetro: 0.955, regra: "2 ALTURAS" },
+    { codigo: "GN006", perfil: "Travessa folha", kgPorMetro: 0.697, regra: "2 LARGURAS" },
+    { codigo: "GN010", perfil: "Mão amiga externo", kgPorMetro: 0.802, regra: "2 ALTURAS" },
+    { codigo: "GN013", perfil: "Baguete travessa", kgPorMetro: 0.186, regra: "2 LARGURAS" },
+    { codigo: "GN009", perfil: "Baguete laterais", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN005", perfil: "Batedeira lateral", kgPorMetro: 0.111, regra: "2 ALTURAS" },
+    { codigo: "CM060", perfil: "Contra marco", kgPorMetro: 0.276, regra: "2 ALTURAS + 2 LARGURAS" },
+  ],
+  "JANELA_CORRER|3": [
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN023", perfil: "Trilho superior", kgPorMetro: 1.76, regra: "1 LARGURA" },
+    { codigo: "GN021", perfil: "Trilho inferior", kgPorMetro: 2.317, regra: "1 LARGURA" },
+    { codigo: "GN025", perfil: "Marco lateral", kgPorMetro: 1.057, regra: "2 ALTURA" },
+    { codigo: "GN008", perfil: "Montante lateral folha", kgPorMetro: 0.955, regra: "2 ALTURAS" },
+    { codigo: "GN006", perfil: "Travessa folha", kgPorMetro: 0.697, regra: "2 LARGURAS" },
+    { codigo: "GN010", perfil: "Mão amiga externo", kgPorMetro: 0.802, regra: "4 ALTURAS" },
+    { codigo: "GN013", perfil: "Baguete travessa", kgPorMetro: 0.186, regra: "2 LARGURAS" },
+    { codigo: "GN009", perfil: "Baguete laterais", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN005", perfil: "Batedeira lateral", kgPorMetro: 0.111, regra: "2 ALTURAS" },
+    { codigo: "CM060", perfil: "Contra marco", kgPorMetro: 0.276, regra: "2 ALTURAS + 2 LARGURAS" },
+  ],
+  "JANELA_CORRER|4": [
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN024", perfil: "Trilho superior", kgPorMetro: 2.494, regra: "1 LARGURA" },
+    { codigo: "GN022", perfil: "Trilho inferior", kgPorMetro: 3.12, regra: "1 LARGURA" },
+    { codigo: "GN026", perfil: "Marco lateral", kgPorMetro: 1.445, regra: "2 ALTURA" },
+    { codigo: "GN008", perfil: "Montante lateral folha", kgPorMetro: 0.955, regra: "2 ALTURAS" },
+    { codigo: "GN006", perfil: "Travessa folha", kgPorMetro: 0.697, regra: "2 LARGURAS" },
+    { codigo: "GN010", perfil: "Mão amiga", kgPorMetro: 0.802, regra: "6 ALTURAS" },
+    { codigo: "GN013", perfil: "Baguete travessa", kgPorMetro: 0.186, regra: "2 LARGURAS" },
+    { codigo: "GN009", perfil: "Baguete laterais", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN005", perfil: "Batedeira lateral", kgPorMetro: 0.111, regra: "2 ALTURAS" },
+    { codigo: "CM060", perfil: "Contra marco", kgPorMetro: 0.276, regra: "2 ALTURAS + 2 LARGURAS" },
+  ],
+  "PORTA_CORRER|2": [
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN003", perfil: "Trilho superior", kgPorMetro: 1.176, regra: "1 LARGURA" },
+    { codigo: "GN001", perfil: "Trilho inferior", kgPorMetro: 1.555, regra: "1 LARGURA" },
+    { codigo: "GN004", perfil: "Marco lateral", kgPorMetro: 0.677, regra: "2 ALTURA" },
+    { codigo: "GN012", perfil: "Montante lateral folha", kgPorMetro: 1.148, regra: "2 ALTURAS" },
+    { codigo: "GN007", perfil: "Travessa folha superior", kgPorMetro: 0.787, regra: "1 LARGURAS" },
+    { codigo: "GN014", perfil: "Travessa folha inferior", kgPorMetro: 1.159, regra: "1 LARGURAS" },
+    { codigo: "GN011", perfil: "Mão amiga externo", kgPorMetro: 1.064, regra: "2 ALTURAS" },
+    { codigo: "GN013", perfil: "Baguete travessa", kgPorMetro: 0.186, regra: "2 LARGURAS" },
+    { codigo: "GN009", perfil: "Baguete laterais", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN005", perfil: "Batedeira lateral", kgPorMetro: 0.111, regra: "2 ALTURAS" },
+    { codigo: "RM038", perfil: "Soleira piso", kgPorMetro: 0.232, regra: "1 LARGURA" },
+    { codigo: "CM174", perfil: "Contra marco superior e laterais", kgPorMetro: 0.409, regra: "1 LARGURA E 2 ALTURAS" },
+    { codigo: "CM223", perfil: "Contra marco inferior", kgPorMetro: 0.59, regra: "1 LARGURA" },
+  ],
+  "PORTA_CORRER|3": [
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN023", perfil: "Trilho superior", kgPorMetro: 1.76, regra: "1 LARGURA" },
+    { codigo: "GN021", perfil: "Trilho inferior", kgPorMetro: 2.317, regra: "1 LARGURA" },
+    { codigo: "GN025", perfil: "Marco lateral", kgPorMetro: 1.057, regra: "2 ALTURA" },
+    { codigo: "GN012", perfil: "Montante lateral folha", kgPorMetro: 1.148, regra: "2 ALTURAS" },
+    { codigo: "GN007", perfil: "Travessa folha superior", kgPorMetro: 0.787, regra: "1 LARGURAS" },
+    { codigo: "GN014", perfil: "Travessa folha inferior", kgPorMetro: 1.159, regra: "1 LARGURAS" },
+    { codigo: "GN011", perfil: "Mão amiga externo", kgPorMetro: 1.064, regra: "4 ALTURAS" },
+    { codigo: "GN013", perfil: "Baguete travessa", kgPorMetro: 0.186, regra: "2 LARGURAS" },
+    { codigo: "GN009", perfil: "Baguete laterais", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN005", perfil: "Batedeira lateral", kgPorMetro: 0.111, regra: "2 ALTURAS" },
+    { codigo: "RM038", perfil: "Soleira piso", kgPorMetro: 0.232, regra: "1 LARGURA" },
+    { codigo: "CM174", perfil: "Contra marco superior e laterais", kgPorMetro: 0.409, regra: "1 LARGURA E 2 ALTURAS" },
+    { codigo: "CM223", perfil: "Contra marco inferior", kgPorMetro: 0.59, regra: "1 LARGURA" },
+  ],
+  "PORTA_CORRER|4": [
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "GN024", perfil: "Trilho superior", kgPorMetro: 2.494, regra: "1 LARGURA" },
+    { codigo: "GN022", perfil: "Trilho inferior", kgPorMetro: 3.12, regra: "1 LARGURA" },
+    { codigo: "GN026", perfil: "Marco lateral", kgPorMetro: 1.445, regra: "2 ALTURA" },
+    { codigo: "GN012", perfil: "Montante lateral folha", kgPorMetro: 1.148, regra: "2 ALTURAS" },
+    { codigo: "GN007", perfil: "Travessa folha superior", kgPorMetro: 0.787, regra: "1 LARGURAS" },
+    { codigo: "GN014", perfil: "Travessa folha inferior", kgPorMetro: 1.159, regra: "1 LARGURAS" },
+    { codigo: "GN011", perfil: "Mão amiga externo", kgPorMetro: 1.064, regra: "6 ALTURAS" },
+    { codigo: "GN013", perfil: "Baguete travessa", kgPorMetro: 0.186, regra: "2 LARGURAS" },
+    { codigo: "GN009", perfil: "Baguete laterais", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN005", perfil: "Batedeira lateral", kgPorMetro: 0.111, regra: "2 ALTURAS" },
+    { codigo: "RM038", perfil: "Soleira piso", kgPorMetro: 0.232, regra: "1 LARGURA" },
+    { codigo: "CM174", perfil: "Contra marco superior e laterais", kgPorMetro: 0.409, regra: "1 LARGURA E 2 ALTURAS" },
+    { codigo: "CM223", perfil: "Contra marco inferior", kgPorMetro: 0.59, regra: "1 LARGURA" },
+  ],
+  "JANELA_PERSIANA|2": [
+    { codigo: "MN015", perfil: "Exterior rolo persiana", kgPorMetro: 0.881, regra: "1 LARGURA" },
+    { codigo: "DS238", perfil: "Interior rolo persiana", kgPorMetro: 0.48, regra: "1 LARGURA" },
+    { codigo: "GN038", perfil: "Fundo caixa rolo persiana", kgPorMetro: 0.704, regra: "1 LARGURA" },
+    { codigo: "GN032", perfil: "Topo caixa rolo persiana", kgPorMetro: 1.047, regra: "1 LARGURA" },
+    { codigo: "GUA483", perfil: "Mata térmica interna da caixa", kgPorMetro: null, regra: "3 LARGURAS" },
+    { codigo: "GN039", perfil: "Tampa frontal caixa rolo persiana", kgPorMetro: 0.971, regra: "1 LARGURA" },
+    { codigo: "RM039", perfil: "Guarnição largura superior e inferior", kgPorMetro: 0.205, regra: "2 LARGURAS" },
+    { codigo: "RM005", perfil: "Guarnição laterais", kgPorMetro: 0.202, regra: "2 ALTURAS" },
+    { codigo: "VZC122", perfil: "Palheta cega", kgPorMetro: null, regra: "PALHETA_CEGA" },
+    { codigo: "VZP04", perfil: "Palheta ventilada", kgPorMetro: null, regra: "PALHETA_VENTILADA" },
+    { codigo: "MN055", perfil: "Palheta final", kgPorMetro: 0.371, regra: "1 LARGURA" },
+    { codigo: "GN033", perfil: "Trilho superior", kgPorMetro: 2.03, regra: "1 LARGURA" },
+    { codigo: "GN001", perfil: "Trilho inferior", kgPorMetro: 1.555, regra: "1 LARGURA" },
+    { codigo: "GN035", perfil: "Marco lateral", kgPorMetro: 0.906, regra: "2 ALTURA" },
+    { codigo: "GN008", perfil: "Montante lateral folha", kgPorMetro: 0.955, regra: "2 ALTURAS" },
+    { codigo: "GN006", perfil: "Travessa folha", kgPorMetro: 0.697, regra: "2 LARGURAS" },
+    { codigo: "GN010", perfil: "Mão amiga externo", kgPorMetro: 0.802, regra: "2 ALTURAS" },
+    { codigo: "GN013", perfil: "Baguete travessa", kgPorMetro: 0.186, regra: "2 LARGURAS" },
+    { codigo: "GN009", perfil: "Baguete laterais", kgPorMetro: 0.18, regra: "2 ALTURAS POR FOLHA" },
+    { codigo: "GN005", perfil: "Batedeira lateral", kgPorMetro: 0.111, regra: "2 ALTURAS" },
+    { codigo: "GN037", perfil: "Batedeira lateral", kgPorMetro: 0.191, regra: "2 ALTURAS" },
+    { codigo: "MH006", perfil: "Guia lateral persiana", kgPorMetro: 0.697, regra: "2 ALTURAS MENOS 14 CM" },
+    { codigo: "CM060", perfil: "Contra marco", kgPorMetro: 0.276, regra: "2 ALTURAS + 2 LARGURAS" },
+  ],
+},
+SUPREMA: {},
+};
+
+// ── Regras de metragem ───────────────────────────────────────
+// A aba escreve a regra em texto ("2 ALTURAS POR FOLHA", "1 LARGURA E 2
+// ALTURAS"...). Aqui cada padrão vira uma função (largura, altura, folhas)
+// → metros lineares. Regra desconhecida → 0 e um aviso, nunca um chute.
+function metrosPorRegra(regra, L, H, folhas) {
+  const r = String(regra || "").trim().toUpperCase();
+  const Hu = Math.max(0, H - ESQUADRIAS_DESCONTO_ALTURA);
+  if (r === "PALHETA_CEGA" || r === "PALHETA_VENTILADA") return null; // tratadas à parte
+  if (r === "2 ALTURAS MENOS 14 CM") return 2 * Hu;
+  if (r === "2 ALTURAS + 2 LARGURAS") return 2 * H + 2 * L;
+  if (r === "1 LARGURA E 2 ALTURAS") return L + 2 * H;
+  if (r === "2 ALTURAS POR FOLHA") return 2 * H * folhas;
+  let m = /^(\d+)\s+(LARGURA|ALTURA)S?$/.exec(r);
+  if (m) return Number(m[1]) * (m[2] === "LARGURA" ? L : H);
+  return 0;
+}
+
+// Palhetas da persiana integrada — regra literal da aba:
+//   cega:       (H − 0,14) / 0,04 = nº de palhetas; × 20% × L = metros; ÷ 6 = barras
+//   ventilada:  nº de palhetas × L = metros; ÷ 6 = barras; menos as barras de cega
+function barrasPalhetas(L, H) {
+  const n = Math.max(0, (H - ESQUADRIAS_DESCONTO_ALTURA) / 0.04);
+  const cega = (n * 0.2 * L) / ESQUADRIAS_BARRA_MTS;
+  const ventilada = Math.max(0, (n * L) / ESQUADRIAS_BARRA_MTS - cega);
+  return { cega, ventilada };
+}
+
+// Uma esquadria → lista de {item, unidade, qtd, subEtapa}. Pura.
+function calcularEsquadria(e, avisos) {
+  const linha = ESQUADRIAS_CATALOGO[e.linha] || {};
+  const chave = `${e.familia}|${e.folhas}`;
+  const perfis = linha[chave];
+  const familia = ESQUADRIAS_FAMILIAS.find((f) => f.id === e.familia);
+  const rotulo = `${familia ? familia.nome : e.familia} ${e.folhas} folhas · ${e.linha}`;
+  const saida = [];
+  if (!perfis) {
+    if (avisos) avisos.push({ tipo: "esquadria_sem_catalogo", mensagem: `Sem lista de perfis para ${rotulo}`, esquadria: e });
+    return saida;
+  }
+  const L = numOrZero(e.largura), H = numOrZero(e.altura), q = numOrZero(e.qtd);
+  if (!(L > 0) || !(H > 0) || !(q > 0)) return saida;
+
+  for (const p of perfis) {
+    if (p.regra === "PALHETA_CEGA" || p.regra === "PALHETA_VENTILADA") {
+      const b = barrasPalhetas(L, H);
+      const barras = (p.regra === "PALHETA_CEGA" ? b.cega : b.ventilada) * q;
+      saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, unidade: "Barras 6mts", qtd: Math.ceil(barras), subEtapa: rotulo });
+      continue;
+    }
+    const metros = metrosPorRegra(p.regra, L, H, e.folhas);
+    if (metros === 0 && avisos) avisos.push({ tipo: "esquadria_regra", mensagem: `Regra "${p.regra}" não reconhecida em ${p.codigo}`, esquadria: e });
+    if (!(metros > 0)) continue;
+    if (p.kgPorMetro != null) {
+      saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, unidade: "Kg", qtd: Math.round(metros * p.kgPorMetro * q * 100) / 100, subEtapa: rotulo });
+    } else {
+      // sem peso na aba (ex.: GUA483 mata térmica, vende em rolo) → metros lineares
+      saida.push({ item: `${p.perfil} - ${p.codigo}`, unidade: "Mts", qtd: Math.ceil(metros * q), subEtapa: rotulo });
+    }
+  }
+  // vidro: largura × altura útil, por peça
+  const vidro = L * Math.max(0, H - ESQUADRIAS_DESCONTO_ALTURA) * q;
+  if (vidro > 0) saida.push({ item: "Vidro 8mm", unidade: "m2", qtd: Math.round(vidro * 100) / 100, subEtapa: rotulo });
+  return saida;
+}
+
+// Módulo do motor — mesmo padrão dos demais: lê cp, emite em out.
+// Sem fator de perda: esquadria é fabricada sob medida, não consumida em obra.
+function esquadrias(cp, out) {
+  const lista = Array.isArray(cp.esquadrias) ? cp.esquadrias : [];
+  const avisos = cp._avisos || (cp._avisos = []);
+  for (const e of lista) {
+    for (const l of calcularEsquadria(e, avisos)) {
+      emitir(out, { ordem: ORD.esquadrias, item: l.item, tipo: "Acabamento", etapa: "Esquadrias", subEtapa: l.subEtapa, unidade: l.unidade, qtd: l.qtd });
+    }
+  }
+}
+
 function normalizarProjeto(projeto) {
   const p = projeto || {};
   const arq = p.arquitetura || {};
@@ -1335,6 +1566,7 @@ function normalizarProjeto(projeto) {
   const colunasPiscina = piscinaIn.colunas || {};
   const prestadoresIn = p.prestadores || {};
   const coberturasIn = Array.isArray(p.cobertura) ? p.cobertura : [];
+  const esquadriasIn = Array.isArray(p.esquadrias) ? p.esquadrias : [];
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
 
@@ -1528,6 +1760,16 @@ function normalizarProjeto(projeto) {
     // rodar, fica 0 — igual ao VBA antes do loop.
     areaCoberturaTotal: 0,
 
+    // cp.esquadrias — lista de esquadrias, usado por esquadrias()
+    esquadrias: esquadriasIn.slice(0, 40).map((e) => ({
+      familia: (e && e.familia) || "JANELA_CORRER",
+      linha: (e && e.linha) || "GOLD",
+      folhas: numOrZero(e && e.folhas) || 2,
+      qtd: numOrZero(e && e.qtd),
+      largura: numOrZero(e && e.largura),
+      altura: numOrZero(e && e.altura),
+    })),
+
     prestadores: {
       equipePedreiros: numOrZero(prestadoresIn.equipePedreiros),
       eletricista: numOrZero(prestadoresIn.eletricista),
@@ -1597,9 +1839,12 @@ function gerarOrcamentoObra(projeto, data) {
   muroDivisa(cp, out);
   muroArrimo(cp, out);
   piscina(cp, out);
+  esquadrias(cp, out);
   prestadores(cp, out);
 
-  return precificarETotalizar(out, data);
+  const resultado = precificarETotalizar(out, data);
+  resultado.avisos = (cp._avisos || []).concat(resultado.avisos || []);
+  return resultado;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1647,6 +1892,7 @@ function projetoVazio() {
     arrimo: {},
     piscina: {},
     cobertura: [],
+    esquadrias: [],
     prestadores: {},
   };
 }
@@ -1895,6 +2141,28 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     set("cobertura", coberturas.filter((_, i) => i !== idx));
   }
 
+  const esquadriasLista = projetoDraft.esquadrias || [];
+  function addEsquadria() {
+    if (esquadriasLista.length >= 40) return;
+    set("esquadrias", [...esquadriasLista, { familia: "JANELA_CORRER", linha: "GOLD", folhas: 2, qtd: 1, largura: "", altura: "" }]);
+  }
+  function updateEsquadria(idx, campo, valor) {
+    const novas = esquadriasLista.map((e, i) => {
+      if (i !== idx) return e;
+      const n = { ...e, [campo]: valor };
+      // família com menos folhas disponíveis (persiana só tem 2) → ajusta
+      if (campo === "familia") {
+        const fam = ESQUADRIAS_FAMILIAS.find((f) => f.id === valor);
+        if (fam && !fam.folhas.includes(Number(n.folhas))) n.folhas = fam.folhas[0];
+      }
+      return n;
+    });
+    set("esquadrias", novas);
+  }
+  function removeEsquadria(idx) {
+    set("esquadrias", esquadriasLista.filter((_, i) => i !== idx));
+  }
+
   const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 };
 
   // ── Vazio ──────────────────────────────────────────────────
@@ -2025,6 +2293,39 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             {coberturas.length < 16 && (
               <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addTelhado}>＋ Adicionar telhado</button>
             )}
+          </div>
+        </BlocoColapsavel>
+
+        <BlocoColapsavel titulo="Esquadrias" subtitulo={`${esquadriasLista.length} esquadria${esquadriasLista.length !== 1 ? "s" : ""} · alumínio por perfil + vidro`} aberto={!!blocosAbertos.esquadrias} onToggle={() => toggleBloco("esquadrias")}>
+          <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 12 }}>
+            {esquadriasLista.map((e, idx) => {
+              const fam = ESQUADRIAS_FAMILIAS.find((f) => f.id === e.familia) || ESQUADRIAS_FAMILIAS[0];
+              const linhaSel = ESQUADRIAS_LINHAS.find((l) => l.id === e.linha);
+              return (
+                <div key={idx} style={{ padding: 10, background: "#fafafa", borderRadius: 8 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr 1fr 1fr auto", gap: 8, alignItems: "end" }}>
+                    <CampoSelect label="Tipo" valor={e.familia} onChange={(v) => updateEsquadria(idx, "familia", v)}
+                      opcoes={ESQUADRIAS_FAMILIAS.map((f) => ({ value: f.id, label: f.nome }))} />
+                    <CampoSelect label="Linha" valor={e.linha} onChange={(v) => updateEsquadria(idx, "linha", v)}
+                      opcoes={ESQUADRIAS_LINHAS.map((l) => ({ value: l.id, label: l.disponivel ? l.nome : `${l.nome} (em breve)` }))} />
+                    <CampoSelect label="Folhas" valor={e.folhas} onChange={(v) => updateEsquadria(idx, "folhas", Number(v))} opcoes={fam.folhas} />
+                    <CampoNum label="Quantidade" valor={e.qtd} onChange={(v) => updateEsquadria(idx, "qtd", v)} />
+                    <CampoNum label="Largura (m)" valor={e.largura} onChange={(v) => updateEsquadria(idx, "largura", v)} />
+                    <CampoNum label="Altura (m)" valor={e.altura} onChange={(v) => updateEsquadria(idx, "altura", v)} />
+                    <button type="button" onClick={() => removeEsquadria(idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>Remover</button>
+                  </div>
+                  {linhaSel && !linhaSel.disponivel && (
+                    <div style={{ fontSize: 11, color: "#b45309", marginTop: 6 }}>Linha {linhaSel.nome}: {linhaSel.aviso} — esta esquadria não entra no orçamento até a lista existir.</div>
+                  )}
+                </div>
+              );
+            })}
+            {esquadriasLista.length < 40 && (
+              <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addEsquadria}>＋ Adicionar esquadria</button>
+            )}
+            <div style={{ fontSize: 11, color: "#9ca3af" }}>
+              Calcula o alumínio por perfil (código e kg) e o vidro 8mm (largura × altura útil, descontando 14 cm), segundo a lista de perfis da linha.
+            </div>
           </div>
         </BlocoColapsavel>
 

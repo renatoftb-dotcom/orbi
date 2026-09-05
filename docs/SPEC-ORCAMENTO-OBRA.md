@@ -518,9 +518,12 @@ Faça commit ao fim de cada passo. Não empilhe a transcrição inteira num comm
 - Não editar `AppCombined.jsx`.
 - **Não ajustar, arredondar ou "melhorar" nenhum coeficiente do VBA.**
 - Não remover o fator `1.1` de perda.
-- Não implementar `S_ESQUADRIAS`: ele existe na planilha (e tem 1.983 linhas de
-  formulário), mas não é chamado pelo `GERAR_ORCAMENTO` e não emite nenhuma
-  linha na `RESUMO`. Está desligado no original — deixe desligado aqui.
+- `S_ESQUADRIAS` no VBA está inacabado (declara pesos, abre o laço e para).
+  **Esquadrias foi implementado a partir da aba ESQUADRIAS**, que descreve o
+  modelo completo: lista de perfis por tipo (código, kg/m, regra de metragem)
+  e vidro 8mm por área útil. Catálogo em
+  `docs/referencia-orcamento/esquadrias-catalogo.json`; só a linha GOLD tem
+  lista de perfis — SUPREMA entra quando a lista existir, no mesmo formato.
 - Não implementar `D_ESGOTO_PLUVIAL_TERREO`: 15 linhas, corpo vazio, chamada
   comentada no original.
 - Não reproduzir a aba `GERAL`: está morta, só a célula da tipologia é lida.

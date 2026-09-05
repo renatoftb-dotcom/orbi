@@ -30,6 +30,7 @@ const modulo = new Function(`
     taxaGestaoObra, emitir, precoDoInsumo,
     paredesTerreo, pintura, prestadores,
     normalizarProjeto, gerarOrcamentoObra, precificarETotalizar,
+    calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO,
   };
 `)();
 
@@ -147,6 +148,75 @@ console.log(`  (pintura emitiu ${outPintura.length} linhas com os inputs de refe
 
 console.log(`\n--- prestadores() — resumo ---`);
 console.log(`  (prestadores emitiu ${outPrestadores.length} linhas com os inputs de referência)`);
+
+console.log("\n--- esquadrias() — catálogo GOLD ---");
+const { calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO, gerarOrcamentoObra } = modulo;
+
+teste("regras de metragem da aba viram metros", () => {
+  assert.strictEqual(metrosPorRegra("2 LARGURAS", 1.5, 1.2, 2), 3);
+  assert.strictEqual(metrosPorRegra("2 ALTURA", 1.5, 1.2, 2), 2.4);
+  assert.strictEqual(metrosPorRegra("1 LARGURAS", 1.5, 1.2, 2), 1.5);
+  assert.ok(Math.abs(metrosPorRegra("6 ALTURAS", 1.5, 1.2, 4) - 7.2) < 1e-9);
+  assert.ok(Math.abs(metrosPorRegra("2 ALTURAS POR FOLHA", 1.5, 1.2, 3) - 7.2) < 1e-9);
+  assert.strictEqual(metrosPorRegra("2 ALTURAS + 2 LARGURAS", 1.5, 1.2, 2), 5.4);
+  assert.strictEqual(metrosPorRegra("1 LARGURA E 2 ALTURAS", 1.5, 1.2, 2), 3.9);
+  assert.ok(Math.abs(metrosPorRegra("2 ALTURAS MENOS 14 CM", 1.5, 1.2, 2) - 2.12) < 1e-9);
+  assert.strictEqual(metrosPorRegra("REGRA INVENTADA", 1.5, 1.2, 2), 0);
+});
+
+teste("catálogo GOLD tem os 7 tipos da aba", () => {
+  const chaves = Object.keys(ESQUADRIAS_CATALOGO.GOLD).sort();
+  assert.deepStrictEqual(chaves, ["JANELA_CORRER|2", "JANELA_CORRER|3", "JANELA_CORRER|4", "JANELA_PERSIANA|2", "PORTA_CORRER|2", "PORTA_CORRER|3", "PORTA_CORRER|4"]);
+});
+
+teste("janela correr 2 folhas GOLD 1,50×1,20 → ~16,3 kg de alumínio e 1,59 m² de vidro", () => {
+  const linhas = calcularEsquadria({ familia: "JANELA_CORRER", linha: "GOLD", folhas: 2, qtd: 1, largura: 1.5, altura: 1.2 }, []);
+  const kg = linhas.filter((l) => l.unidade === "Kg").reduce((a, l) => a + l.qtd, 0);
+  assert.ok(kg > 16.2 && kg < 16.4, `kg fora da faixa: ${kg}`);
+  const vidro = linhas.find((l) => l.item === "Vidro 8mm");
+  assert.strictEqual(vidro.qtd, 1.59);
+  // RM039: 2 larguras × 0,205 kg/m
+  const rm039 = linhas.find((l) => l.item.includes("RM039"));
+  assert.strictEqual(rm039.qtd, 0.62);
+});
+
+teste("quantidade multiplica tudo", () => {
+  const um = calcularEsquadria({ familia: "PORTA_CORRER", linha: "GOLD", folhas: 2, qtd: 1, largura: 2, altura: 2.1 }, []);
+  const tres = calcularEsquadria({ familia: "PORTA_CORRER", linha: "GOLD", folhas: 2, qtd: 3, largura: 2, altura: 2.1 }, []);
+  const kg1 = um.filter((l) => l.unidade === "Kg").reduce((a, l) => a + l.qtd, 0);
+  const kg3 = tres.filter((l) => l.unidade === "Kg").reduce((a, l) => a + l.qtd, 0);
+  assert.ok(Math.abs(kg3 - kg1 * 3) < 0.05, `${kg3} vs ${kg1 * 3}`);
+});
+
+teste("palhetas da persiana seguem a regra literal da aba", () => {
+  // H=1,40 → (1,40−0,14)/0,04 = 31,5 palhetas; L=2 → cega = 31,5×0,2×2/6 = 2,1 barras
+  const b = barrasPalhetas(2, 1.4);
+  assert.ok(Math.abs(b.cega - 2.1) < 1e-9);
+  assert.ok(Math.abs(b.ventilada - (31.5 * 2 / 6 - 2.1)) < 1e-9);
+});
+
+teste("linha sem catálogo (SUPREMA) não emite e avisa", () => {
+  const avisos = [];
+  const linhas = calcularEsquadria({ familia: "JANELA_CORRER", linha: "SUPREMA", folhas: 2, qtd: 1, largura: 1.5, altura: 1.2 }, avisos);
+  assert.strictEqual(linhas.length, 0);
+  assert.strictEqual(avisos.length, 1);
+  assert.ok(avisos[0].mensagem.includes("SUPREMA"));
+});
+
+teste("esquadria sem medida não emite nada", () => {
+  assert.strictEqual(calcularEsquadria({ familia: "JANELA_CORRER", linha: "GOLD", folhas: 2, qtd: 1, largura: 0, altura: 1.2 }, []).length, 0);
+});
+
+teste("gerarOrcamentoObra emite etapa Esquadrias na ordem 17 e repassa avisos", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [
+    { familia: "JANELA_CORRER", linha: "GOLD", folhas: 2, qtd: 1, largura: 1.5, altura: 1.2 },
+    { familia: "JANELA_CORRER", linha: "SUPREMA", folhas: 2, qtd: 1, largura: 1.5, altura: 1.2 },
+  ] }, { materiais: [] });
+  const esq = r.itens.filter((i) => i.etapa === "Esquadrias");
+  assert.strictEqual(esq.length, 13);
+  assert.ok(esq.every((i) => i.ordem === 17 && i.tipo === "Acabamento"));
+  assert.strictEqual(r.avisos.length, 1);
+});
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);
