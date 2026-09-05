@@ -1329,6 +1329,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
     );
   }
 
+  if (view === "orcamentoObra" && obraSelecionada) {
+    return (
+      <OrcamentoObraView
+        obra={obraSelecionada}
+        obras={obras}
+        data={data}
+        save={save}
+        onObraAtualizada={setObraSelecionada}
+        isMobile={isMobile}
+        onVoltar={() => setView("detalheObra")}
+      />
+    );
+  }
+
   if (view === "detalheObra" && obraSelecionada) {
     return (
       <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -1342,10 +1356,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <button onClick={() => editarObra(obraSelecionada)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
           )}
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)", gap: 16, marginBottom: 20 }}>
-          <button onClick={() => setView("planejamento")}
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
+          <button onClick={() => setView("orcamentoObra")}
             style={{ border: "1px solid #b5652f", borderRadius: 16, padding: "20px", background: "#fdf6f0", boxShadow: "0 0 0 3px rgba(181,101,47,0.14)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#b5652f", textAlign: "center" }}>Planejamento</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#b5652f", textAlign: "center" }}>Orçamento</div>
+            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Quantitativos da obra</div>
+          </button>
+          <button onClick={() => setView("planejamento")}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Planejamento</div>
             <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>P&L estimado da obra</div>
           </button>
           <button onClick={() => setView("contratosDaObra")}

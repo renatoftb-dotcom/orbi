@@ -13,7 +13,15 @@ import { dirname, join } from "path";
 import assert from "assert";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const src = readFileSync(join(__dirname, "src", "modules", "orcamento-obra.jsx"), "utf-8");
+const srcCompleto = readFileSync(join(__dirname, "src", "modules", "orcamento-obra.jsx"), "utf-8");
+
+// O arquivo tem JSX na parte de UI (§7), que este harness em Node puro (sem
+// Babel) não consegue avaliar via `new Function`. O motor de cálculo é 100%
+// JS puro e termina antes do marcador abaixo — cortamos ali.
+const marcador = "// UI (§7)";
+const idx = srcCompleto.indexOf(marcador);
+if (idx === -1) throw new Error(`Marcador "${marcador}" não encontrado em orcamento-obra.jsx`);
+const src = srcCompleto.slice(0, idx);
 
 const modulo = new Function(`
   ${src}
