@@ -7312,6 +7312,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const [blocosAbertos, setBlocosAbertos] = useState({ geral: true });
   const [etapasColapsadas, setEtapasColapsadas] = useState({});
   const [paredeTerreoExpandida, setParedeTerreoExpandida] = useState(false);
+  const [espessuraTerreaAberta, setEspessuraTerreaAberta] = useState(false);
 
   function toggleBloco(k) { setBlocosAbertos((b) => ({ ...b, [k]: !b[k] })); }
   function toggleEtapa(k) { setEtapasColapsadas((b) => ({ ...b, [k]: !b[k] })); }
@@ -7447,12 +7448,21 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           {ehTerrea && (
             <>
               <CampoNum label="Perímetro de paredes" valor={get("terreo.perimetroParedes")} onChange={(v) => set("terreo.perimetroParedes", v)} />
-              <CampoNum label="M² parede 15cm (se houver)" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
-              <CampoNum label="M² parede 25cm (se houver)" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
-              <div>
-                <label style={C.label}>M² parede 20cm (automático)</label>
-                <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("terreo.m2Parede20"))} disabled readOnly />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <button type="button" style={{ ...C.btnGhost, fontSize: 11 }} onClick={() => setEspessuraTerreaAberta((v) => !v)}>
+                  {espessuraTerreaAberta ? "Ocultar espessuras de parede" : "Especificar espessuras de parede (15/20/25cm)"}
+                </button>
               </div>
+              {espessuraTerreaAberta && (
+                <>
+                  <CampoNum label="M² parede 15cm" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
+                  <CampoNum label="M² parede 25cm" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
+                  <div>
+                    <label style={C.label}>M² parede 20cm (automático)</label>
+                    <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("terreo.m2Parede20"))} disabled readOnly />
+                  </div>
+                </>
+              )}
               <CampoNum label="Vãos de portas e janelas" valor={get("terreo.vaoPortasJanelas")} onChange={(v) => set("terreo.vaoPortasJanelas", v)} />
             </>
           )}
