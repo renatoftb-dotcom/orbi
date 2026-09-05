@@ -7285,6 +7285,99 @@ function CampoSelect({ label, valor, onChange, opcoes }) {
   );
 }
 
+// Bitolas na ordem do PESOS_FERRO. Rótulo curto pro cabeçalho da grade;
+// o nome comercial completo está em LABEL_BARRA.
+const BITOLAS_FERRO = [
+  { k: "CA60_4MM", label: "CA60 4.2" },
+  { k: "CA50_5MM", label: "CA50 5.0" },
+  { k: "CA50_6MM", label: "CA50 6.3" },
+  { k: "CA50_8MM", label: "CA50 8.0" },
+  { k: "CA50_10MM", label: "CA50 10" },
+  { k: "CA50_12MM", label: "CA50 12.5" },
+  { k: "CA50_16MM", label: "CA50 16" },
+  { k: "CA60_5MM", label: "CA60 5.0" },
+];
+
+// Grade de armadura: uma linha por elemento estrutural, uma coluna por
+// bitola (metros lineares), mais a coluna de concreto (m³). Substitui
+// dezenas de campos soltos pela mesma matriz que a planilha de origem usa
+// na aba GERAL (PREENCHIMENTO × ESTACAS/SAPATAS/ARRANQUES/BALDRAMES).
+function GradeFerro({ elementos, pathFerro, pathConcreto, get, set, comConcreto = true }) {
+  return (
+    <div style={{ gridColumn: "1 / -1" }}>
+      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+        Metros lineares de cada bitola{comConcreto ? ", e m³ de concreto" : ""} por elemento. Campo vazio = 0.
+      </div>
+      <div style={{ overflowX: "auto", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 11.5, minWidth: 640 }}>
+          <thead>
+            <tr style={{ background: "#f7f7f8" }}>
+              <th style={{ position: "sticky", left: 0, background: "#f7f7f8", padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>Elemento</th>
+              {BITOLAS_FERRO.map((b) => (
+                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>{b.label}</th>
+              ))}
+              {comConcreto && <th style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>Concreto m³</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {elementos.map((el) => (
+              <tr key={el.key} style={{ borderTop: "1px solid #f3f4f6" }}>
+                <td style={{ position: "sticky", left: 0, background: "#fff", padding: "5px 10px", color: "#262421", fontWeight: 500, whiteSpace: "nowrap" }}>{el.label}</td>
+                {BITOLAS_FERRO.map((b) => (
+                  <td key={b.k} style={{ padding: 3 }}>
+                    <input type="number" step="0.01" style={{ ...C.input, width: 72, padding: "5px 6px", fontSize: 11.5, borderRadius: 7 }}
+                      value={get(`${pathFerro}.${el.key}.${b.k}`) ?? ""}
+                      onChange={(e) => set(`${pathFerro}.${el.key}.${b.k}`, e.target.value === "" ? "" : Number(e.target.value))} />
+                  </td>
+                ))}
+                {comConcreto && (
+                  <td style={{ padding: 3 }}>
+                    <input type="number" step="0.01" style={{ ...C.input, width: 72, padding: "5px 6px", fontSize: 11.5, borderRadius: 7, background: "#fcfcfd" }}
+                      value={get(`${pathConcreto}.${el.key}`) ?? ""}
+                      onChange={(e) => set(`${pathConcreto}.${el.key}`, e.target.value === "" ? "" : Number(e.target.value))} />
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Linha única de armadura (um só elemento, sem coluna de concreto) — para
+// viga de respaldo e colunas, onde o concreto tem campo próprio.
+function LinhaFerro({ rotulo, pathFerro, get, set }) {
+  return (
+    <div style={{ gridColumn: "1 / -1" }}>
+      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>{rotulo} — metros lineares por bitola</div>
+      <div style={{ overflowX: "auto", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10 }}>
+        <table style={{ borderCollapse: "collapse", fontSize: 11.5, minWidth: 560 }}>
+          <thead>
+            <tr style={{ background: "#f7f7f8" }}>
+              {BITOLAS_FERRO.map((b) => (
+                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>{b.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              {BITOLAS_FERRO.map((b) => (
+                <td key={b.k} style={{ padding: 3 }}>
+                  <input type="number" step="0.01" style={{ ...C.input, width: 72, padding: "5px 6px", fontSize: 11.5, borderRadius: 7 }}
+                    value={get(`${pathFerro}.${b.k}`) ?? ""}
+                    onChange={(e) => set(`${pathFerro}.${b.k}`, e.target.value === "" ? "" : Number(e.target.value))} />
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function BlocoColapsavel({ titulo, subtitulo, aberto, onToggle, children }) {
   return (
     <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}>
@@ -7550,22 +7643,82 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="Altura (m)" valor={get("externa.muroDivisa.altura")} onChange={(v) => set("externa.muroDivisa.altura", v)} />
         </BlocoColapsavel>
 
-        <BlocoColapsavel titulo="Engenharia — Fundação" subtitulo="simplificado" aberto={!!blocosAbertos.fundacao} onToggle={() => toggleBloco("fundacao")}>
-          <CampoNum label="Qtd. de estacas" valor={get("engenharia.fundacao.qtdEstacas")} onChange={(v) => set("engenharia.fundacao.qtdEstacas", v)} />
+        <BlocoColapsavel titulo="Engenharia — Fundação" subtitulo="brocas, sapatas, arranques e baldrames" aberto={!!blocosAbertos.fundacao} onToggle={() => toggleBloco("fundacao")}>
+          <CampoNum label="Qtd. de estacas (brocas)" valor={get("engenharia.fundacao.qtdEstacas")} onChange={(v) => set("engenharia.fundacao.qtdEstacas", v)} />
           <CampoNum label="Profundidade (m)" valor={get("engenharia.fundacao.profEstacas")} onChange={(v) => set("engenharia.fundacao.profEstacas", v)} />
           <CampoSelect label="Resistência do concreto" valor={get("engenharia.fundacao.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("engenharia.fundacao.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
+          <GradeFerro get={get} set={set}
+            pathFerro="engenharia.fundacao.ferro" pathConcreto="engenharia.fundacao.concreto"
+            elementos={[
+              { key: "estacas", label: "Brocas / estacas" },
+              { key: "sapatas", label: "Sapatas" },
+              { key: "arranques", label: "Arranques" },
+              { key: "baldrames", label: "Baldrames" },
+            ]} />
         </BlocoColapsavel>
 
-        <BlocoColapsavel titulo="Muro de arrimo" subtitulo="opcional · simplificado" aberto={!!blocosAbertos.arrimo} onToggle={() => toggleBloco("arrimo")}>
+        <BlocoColapsavel titulo="Engenharia — Pilares e vigas" subtitulo={ehTerrea ? "térreo e cobertura" : "térreo, pav. 1 e cobertura"} aberto={!!blocosAbertos.estrutura} onToggle={() => toggleBloco("estrutura")}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6 }}>Pav. Térreo</div>
+          <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.colunasTerreo.15")} onChange={(v) => set("engenharia.colunasTerreo.15", v)} />
+          <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.colunasTerreo.20")} onChange={(v) => set("engenharia.colunasTerreo.20", v)} />
+          <CampoNum label="Qtd. pilares 30cm" valor={get("engenharia.colunasTerreo.30")} onChange={(v) => set("engenharia.colunasTerreo.30", v)} />
+          <CampoNum label="Área de forma pilares > 25cm (m²)" valor={get("engenharia.colunasTerreo.areaFormaMaior25cm")} onChange={(v) => set("engenharia.colunasTerreo.areaFormaMaior25cm", v)} />
+          <CampoNum label="Concreto pilares (m³)" valor={get("engenharia.colunasTerreo.concreto")} onChange={(v) => set("engenharia.colunasTerreo.concreto", v)} />
+          <LinhaFerro rotulo="Armadura dos pilares do térreo" pathFerro="engenharia.colunasTerreo.ferro" get={get} set={set} />
+          <CampoNum label="Concreto viga de respaldo (m³)" valor={get("terreo.concretoVigaRespaldo")} onChange={(v) => set("terreo.concretoVigaRespaldo", v)} />
+          <LinhaFerro rotulo="Armadura da viga de respaldo do térreo" pathFerro="terreo.vigaRespaldo" get={get} set={set} />
+
+          {!ehTerrea && (
+            <>
+              <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Pav. 1</div>
+              <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.colunasPav1.15")} onChange={(v) => set("engenharia.colunasPav1.15", v)} />
+              <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.colunasPav1.20")} onChange={(v) => set("engenharia.colunasPav1.20", v)} />
+              <CampoNum label="Qtd. pilares 25cm" valor={get("engenharia.colunasPav1.25")} onChange={(v) => set("engenharia.colunasPav1.25", v)} />
+              <CampoNum label="Qtd. pilares 30cm" valor={get("engenharia.colunasPav1.30")} onChange={(v) => set("engenharia.colunasPav1.30", v)} />
+              <CampoNum label="Área de forma pilares > 25cm (m²)" valor={get("engenharia.colunasPav1.areaFormaMaior25cm")} onChange={(v) => set("engenharia.colunasPav1.areaFormaMaior25cm", v)} />
+              <CampoNum label="Concreto pilares (m³)" valor={get("engenharia.colunasPav1.concreto")} onChange={(v) => set("engenharia.colunasPav1.concreto", v)} />
+              <LinhaFerro rotulo="Armadura dos pilares do pav. 1" pathFerro="engenharia.colunasPav1.ferro" get={get} set={set} />
+              <CampoNum label="Concreto viga de respaldo (m³)" valor={get("pav1.concretoVigaRespaldo")} onChange={(v) => set("pav1.concretoVigaRespaldo", v)} />
+              <LinhaFerro rotulo="Armadura da viga de respaldo do pav. 1" pathFerro="pav1.vigaRespaldo" get={get} set={set} />
+            </>
+          )}
+
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Cobertura</div>
+          <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.coberturaEstrutura.colunas.15")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.15", v)} />
+          <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.coberturaEstrutura.colunas.20")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.20", v)} />
+          <CampoNum label="Qtd. pilares 25cm" valor={get("engenharia.coberturaEstrutura.colunas.25")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.25", v)} />
+          <CampoNum label="Área de forma pilares > 25cm (m²)" valor={get("engenharia.coberturaEstrutura.areaFormaMaior25cm")} onChange={(v) => set("engenharia.coberturaEstrutura.areaFormaMaior25cm", v)} />
+          <CampoNum label="Concreto pilares (m³)" valor={get("engenharia.coberturaEstrutura.volumeConcreto.coluna")} onChange={(v) => set("engenharia.coberturaEstrutura.volumeConcreto.coluna", v)} />
+          <CampoNum label="Concreto vigas (m³)" valor={get("engenharia.coberturaEstrutura.volumeConcreto.viga")} onChange={(v) => set("engenharia.coberturaEstrutura.volumeConcreto.viga", v)} />
+          <LinhaFerro rotulo="Armadura dos pilares da cobertura" pathFerro="engenharia.coberturaEstrutura.ferro.coluna" get={get} set={set} />
+          <LinhaFerro rotulo="Armadura das vigas da cobertura" pathFerro="engenharia.coberturaEstrutura.ferro.viga" get={get} set={set} />
+        </BlocoColapsavel>
+
+        <BlocoColapsavel titulo="Muro de arrimo" subtitulo="opcional" aberto={!!blocosAbertos.arrimo} onToggle={() => toggleBloco("arrimo")}>
           <CampoNum label="Comprimento (m)" valor={get("arrimo.comprimento")} onChange={(v) => set("arrimo.comprimento", v)} />
           <CampoNum label="Altura (m)" valor={get("arrimo.altura")} onChange={(v) => set("arrimo.altura", v)} />
           <CampoNum label="Nº de vigas" valor={get("arrimo.numeroVigas")} onChange={(v) => set("arrimo.numeroVigas", v)} />
           <CampoNum label="Qtd. de estacas" valor={get("arrimo.qtdEstacas")} onChange={(v) => set("arrimo.qtdEstacas", v)} />
           <CampoNum label="Profundidade estacas (m)" valor={get("arrimo.profEstacas")} onChange={(v) => set("arrimo.profEstacas", v)} />
           <CampoSelect label="Resistência do concreto" valor={get("arrimo.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("arrimo.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
+          <CampoNum label="Qtd. pilares 15cm" valor={get("arrimo.colunas.15")} onChange={(v) => set("arrimo.colunas.15", v)} />
+          <CampoNum label="Qtd. pilares 20cm" valor={get("arrimo.colunas.20")} onChange={(v) => set("arrimo.colunas.20", v)} />
+          <CampoNum label="Qtd. pilares 30cm" valor={get("arrimo.colunas.30")} onChange={(v) => set("arrimo.colunas.30", v)} />
+          <CampoNum label="Área de forma pilares > 25cm (m²)" valor={get("arrimo.areaFormaColunaMaior25cm")} onChange={(v) => set("arrimo.areaFormaColunaMaior25cm", v)} />
+          <GradeFerro get={get} set={set}
+            pathFerro="arrimo.ferro" pathConcreto="arrimo.concreto"
+            elementos={[
+              { key: "estacas", label: "Brocas / estacas" },
+              { key: "sapatas", label: "Sapatas" },
+              { key: "arranques", label: "Arranques" },
+              { key: "baldrame", label: "Baldrame" },
+              { key: "gigante", label: "Gigantes" },
+              { key: "colunas", label: "Pilares" },
+              { key: "vigas", label: "Vigas" },
+            ]} />
         </BlocoColapsavel>
 
-        <BlocoColapsavel titulo="Piscina" subtitulo="opcional · simplificado" aberto={!!blocosAbertos.piscina} onToggle={() => toggleBloco("piscina")}>
+        <BlocoColapsavel titulo="Piscina" subtitulo="opcional" aberto={!!blocosAbertos.piscina} onToggle={() => toggleBloco("piscina")}>
           <CampoNum label="Área construída (m²)" valor={get("piscina.areaConstruida")} onChange={(v) => set("piscina.areaConstruida", v)} />
           <CampoNum label="Profundidade (m)" valor={get("piscina.profundidade")} onChange={(v) => set("piscina.profundidade", v)} />
           <CampoNum label="Paredes — m² total" valor={get("piscina.paredesM2Total")} onChange={(v) => set("piscina.paredesM2Total", v)} />
@@ -7574,6 +7727,21 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="Profundidade estacas (m)" valor={get("piscina.profundidadeEstacas")} onChange={(v) => set("piscina.profundidadeEstacas", v)} />
           <CampoNum label="Gabarito da obra" valor={get("piscina.gabaritoObra")} onChange={(v) => set("piscina.gabaritoObra", v)} />
           <CampoSelect label="Resistência do concreto" valor={get("piscina.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("piscina.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
+          <CampoNum label="Qtd. pilares 15cm" valor={get("piscina.colunas.15")} onChange={(v) => set("piscina.colunas.15", v)} />
+          <CampoNum label="Qtd. pilares 20cm" valor={get("piscina.colunas.20")} onChange={(v) => set("piscina.colunas.20", v)} />
+          <CampoNum label="Qtd. pilares 25cm" valor={get("piscina.colunas.25")} onChange={(v) => set("piscina.colunas.25", v)} />
+          <CampoNum label="Área de forma pilares > 25cm (m²)" valor={get("piscina.areaFormaColunaMaior25cm")} onChange={(v) => set("piscina.areaFormaColunaMaior25cm", v)} />
+          <GradeFerro get={get} set={set}
+            pathFerro="piscina.ferro" pathConcreto="piscina.concreto"
+            elementos={[
+              { key: "estacas", label: "Brocas / estacas" },
+              { key: "sapatas", label: "Sapatas" },
+              { key: "arranques", label: "Arranques" },
+              { key: "baldrame", label: "Baldrame" },
+              { key: "contrapiso", label: "Contrapiso" },
+              { key: "colunas", label: "Pilares" },
+              { key: "vigas", label: "Vigas" },
+            ]} />
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Prestadores" subtitulo="valores sugeridos, editáveis" aberto={!!blocosAbertos.prestadores} onToggle={() => toggleBloco("prestadores")}>
