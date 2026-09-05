@@ -14,6 +14,12 @@ const ORDER = [
   "shared.jsx",
   "api.js",
   "outros.jsx",
+  // insumos-seed.jsx + insumos.jsx vêm antes de obra-financeiro.jsx e de
+  // orcamento-obra.jsx: o catálogo de insumos é a fonte de preço da
+  // estimativa (precoInsumo) e a chave (insumo.codigo) que liga estimado e
+  // realizado. A semente é um arquivo gerado — ver docs/SPEC-INSUMOS.md.
+  "insumos-seed.jsx",
+  "insumos.jsx",
   // obra-financeiro.jsx vem ANTES de clientes.jsx: clientes.jsx
   // (GestaoObraPanel) consome a taxonomia (PLANO_CONTAS, ETAPAS_OBRA,
   // GRUPOS_MATERIAL) e, nas próximas entregas, calcularPLObra().
