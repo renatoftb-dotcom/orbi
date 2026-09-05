@@ -735,10 +735,10 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===colunaDoCliente(cliente))||COLUNAS[0];
 
-    const VKD = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#1e3a5f", cobreClaro:"#fafafa", inkSoft:"#78716c" };
+    const VKD = { fundo:"#f5f3f0", grafite:"#1a1a1a", cobre:"#1e3a5f", cobreClaro:"#fafafa", inkSoft:"#8a8a8a" };
+    const SYS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
     return (
-      <div style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
-        <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}</style>
+      <div style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:SYS_FONT }}>
         <div style={{ maxWidth:900, margin:"0 auto" }}>
           {/* Header */}
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, flexWrap:"wrap" }}>
@@ -747,8 +747,8 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
           {/* Cliente Info — só o nome */}
           <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:28 }}>
-            <div style={{ width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius:14, background:VKD.cobreClaro, color:VKD.cobre, display:"flex", alignItems:"center", justifyContent:"center", fontSize: isMobile ? 16 : 20, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
-            <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize: isMobile ? 19 : 23, fontWeight:800, color:VKD.grafite, overflow:"hidden", textOverflow:"ellipsis" }}>{cliente.nome}</div>
+            <div style={{ width: isMobile ? 48 : 56, height: isMobile ? 48 : 56, borderRadius:14, background:VKD.cobreClaro, color:VKD.cobre, display:"flex", alignItems:"center", justifyContent:"center", fontSize: isMobile ? 16 : 20, fontWeight:600, flexShrink:0, fontFamily:SYS_FONT }}>{iniciais}</div>
+            <div style={{ fontFamily:SYS_FONT, fontSize: isMobile ? 19 : 23, fontWeight:700, color:VKD.grafite, overflow:"hidden", textOverflow:"ellipsis", letterSpacing:"-0.01em" }}>{cliente.nome}</div>
           </div>
 
           {/* Navegação de abas com cards */}
@@ -768,7 +768,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                   background: abaCliente === aba.id ? VKD.cobreClaro : "#fff",
                   boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(30,58,95,0.16)" : "none",
                   cursor: "pointer",
-                  fontFamily: "'Inter', system-ui, sans-serif",
+                  fontFamily: SYS_FONT,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
