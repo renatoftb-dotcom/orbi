@@ -4998,7 +4998,14 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const VKD = { fundo:"#f5f3f0", grafite:"#1a1a1a", cobre:"#1e3a5f", cobreClaro:"#fafafa", inkSoft:"#8a8a8a" };
     const SYS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
     return (
-      <div style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:SYS_FONT }}>
+      <div className="vk-client-detail" style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:SYS_FONT }}>
+        <style>{`
+          .vk-client-detail input:focus, .vk-client-detail select:focus, .vk-client-detail textarea:focus {
+            border-color:#2680eb !important;
+            box-shadow:0 0 0 3px rgba(38,128,235,0.18);
+            outline:none;
+          }
+        `}</style>
         <div style={{ maxWidth:900, margin:"0 auto" }}>
           {/* Header */}
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:24, flexWrap:"wrap" }}>
@@ -5103,7 +5110,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     <div style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:VK.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        .vk-fc-input:focus { border-color:${VK.cobre} !important; box-shadow:0 0 0 3px rgba(181,101,47,0.14); }
+        .vk-fc-input:focus { border-color:#2680eb !important; box-shadow:0 0 0 3px rgba(38,128,235,0.18); outline:none; }
         .vk-fc-tipo.ativo { border-color:${VK.cobre} !important; background:${VK.cobreClaro} !important; box-shadow:0 0 0 3px rgba(181,101,47,0.16); }
         .vk-fc-check { accent-color:${VK.cobre}; }
       `}</style>
