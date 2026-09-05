@@ -742,8 +742,8 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <style>{`
           .vk-client-detail input:focus, .vk-client-detail select:focus, .vk-client-detail textarea:focus,
           .vk-client-detail button:focus-visible {
-            border-color:#2680eb !important;
-            box-shadow:0 0 0 3px rgba(38,128,235,0.18);
+            border-color:#2a78d6 !important;
+            box-shadow:0 0 0 3px rgba(42,120,214,0.18);
             outline:none;
           }
         `}</style>
@@ -851,7 +851,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     <div style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:VK.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        .vk-fc-input:focus { border-color:#2680eb !important; box-shadow:0 0 0 3px rgba(38,128,235,0.18); outline:none; }
+        .vk-fc-input:focus { border-color:#2a78d6 !important; box-shadow:0 0 0 3px rgba(42,120,214,0.18); outline:none; }
         .vk-fc-tipo.ativo { border-color:${VK.cobre} !important; background:${VK.cobreClaro} !important; box-shadow:0 0 0 3px rgba(181,101,47,0.16); }
         .vk-fc-check { accent-color:${VK.cobre}; }
       `}</style>
