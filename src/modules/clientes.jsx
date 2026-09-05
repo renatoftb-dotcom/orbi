@@ -735,12 +735,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===colunaDoCliente(cliente))||COLUNAS[0];
 
-    const VKD = { fundo:"#f7f7f8", grafite:"#1a1a1a", cobre:"#1e3a5f", cobreClaro:"#fafafa", inkSoft:"#8a8a8a" };
+    const VKD = { fundo:"#fafafb", grafite:"#1a1a1a", cobre:"#1e3a5f", cobreClaro:"#fafafa", inkSoft:"#8a8a8a" };
     const SYS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
     return (
       <div className="vk-client-detail" style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:SYS_FONT }}>
         <style>{`
-          .vk-client-detail input:focus, .vk-client-detail select:focus, .vk-client-detail textarea:focus {
+          .vk-client-detail input:focus, .vk-client-detail select:focus, .vk-client-detail textarea:focus,
+          .vk-client-detail button:focus-visible {
             border-color:#2680eb !important;
             box-shadow:0 0 0 3px rgba(38,128,235,0.18);
             outline:none;
