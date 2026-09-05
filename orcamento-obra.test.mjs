@@ -291,10 +291,28 @@ teste("gerarOrcamentoObra emite etapa Esquadrias na ordem 17 e repassa avisos", 
     { familia: "MAXIM_AR", linha: "SUPREMA", folhas: 1, qtd: 1, largura: 1.5, altura: 1.2 },
   ] }, { materiais: [] });
   const esq = r.itens.filter((i) => i.etapa === "Esquadrias");
-  // 12 perfis + vidro + 10 acessórios da janela de correr Gold; maxim-ar Suprema sem lista → nada
-  assert.strictEqual(esq.length, 12 + 1 + ESQUADRIAS_ACESSORIOS.JANELA_CORRER.length);
-  assert.ok(esq.every((i) => i.ordem === 17 && i.tipo === "Acabamento"));
+  // uma linha por esquadria; maxim-ar Suprema sem lista → nada
+  assert.strictEqual(esq.length, 1);
+  assert.ok(esq.every((i) => i.ordem === 17 && i.tipo === "Acabamento" && i.unidade === "Unidades"));
+  assert.strictEqual(esq[0].item, "Janela de correr 2 folhas · Gold · 1,50 × 1,20 m");
+  // composição guardada no item: 12 perfis + vidro + acessórios
+  assert.strictEqual(esq[0].composicao.length, 12 + 1 + ESQUADRIAS_ACESSORIOS.JANELA_CORRER.length);
   assert.strictEqual(r.avisos.length, 1);
+});
+
+teste("preço fechado da esquadria = alumínio × R$ 39,80/kg + vidro × R$ 166,63/m² + acessórios, e a quantidade multiplica", () => {
+  const um = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [
+    { familia: "PORTA_GIRO", linha: "GOLD", folhas: 2, qtd: 1, largura: 1.6, altura: 2.1 },
+  ] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
+  const esperado = um.composicao.reduce((a, c) => a + c.qtd * (c.unidade === "Kg" ? 39.8 : c.item === "Vidro 8mm" ? 166.63 : 1), 0);
+  assert.ok(Math.abs(um.preco - esperado) < 0.01, `${um.preco} vs ${esperado}`);
+  assert.ok(um.preco > 1400 && um.preco < 1600, `preço fora da faixa: ${um.preco}`);
+  const tres = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [
+    { familia: "PORTA_GIRO", linha: "GOLD", folhas: 2, qtd: 3, largura: 1.6, altura: 2.1 },
+  ] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
+  assert.strictEqual(tres.qtd, 3);
+  assert.strictEqual(tres.preco, um.preco);
+  assert.ok(Math.abs(tres.total - um.preco * 3) < 0.01);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

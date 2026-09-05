@@ -68,9 +68,11 @@ function precoDoInsumo(nomeItem, data) {
 }
 
 // ── Helper de emissão, usado por todo módulo de cálculo (§4) ──
-function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco }) {
+function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao }) {
   if (!qtd || qtd === 0) return; // regra do VBA: só emite se qtd ≠ 0
-  out.push({ ordem, item, tipo, etapa, subEtapa, unidade, qtd: Number(qtd), preco: preco ?? null });
+  const linha = { ordem, item, tipo, etapa, subEtapa, unidade, qtd: Number(qtd), preco: preco ?? null };
+  if (composicao) linha.composicao = composicao; // item composto (esquadria): o que forma o preço unitário
+  out.push(linha);
 }
 
 // Campo ausente vira 0, nunca NaN/undefined (regra 5 da §4 — equivalente ao
@@ -1748,17 +1750,17 @@ function calcularEsquadria(e, avisos) {
     if (p.regra === "PALHETA_CEGA" || p.regra === "PALHETA_VENTILADA") {
       const b = barrasPalhetas(L, H);
       const barras = (p.regra === "PALHETA_CEGA" ? b.cega : b.ventilada) * q;
-      saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, unidade: "Barras 6mts", qtd: Math.ceil(barras), subEtapa: rotulo });
+      saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, codigo: p.codigo, unidade: "Barras 6mts", qtd: Math.ceil(barras), subEtapa: rotulo });
       continue;
     }
     const metros = metrosPorRegra(p.regra, L, H, e.folhas);
     if (metros === 0 && avisos) avisos.push({ tipo: "esquadria_regra", mensagem: `Regra "${p.regra}" não reconhecida em ${p.codigo}`, esquadria: e });
     if (!(metros > 0)) continue;
     if (p.kgPorMetro != null) {
-      saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, unidade: "Kg", qtd: Math.round(metros * p.kgPorMetro * q * 100) / 100, subEtapa: rotulo });
+      saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, codigo: p.codigo, unidade: "Kg", qtd: Math.round(metros * p.kgPorMetro * q * 100) / 100, subEtapa: rotulo });
     } else {
       // sem peso na aba (ex.: GUA483 mata térmica, vende em rolo) → metros lineares
-      saida.push({ item: `${p.perfil} - ${p.codigo}`, unidade: "Mts", qtd: Math.ceil(metros * q), subEtapa: rotulo });
+      saida.push({ item: `${p.perfil} - ${p.codigo}`, codigo: p.codigo, unidade: "Mts", qtd: Math.ceil(metros * q), subEtapa: rotulo });
     }
   }
   // vidro: pela regra de desconto da família, por peça
@@ -1767,20 +1769,62 @@ function calcularEsquadria(e, avisos) {
   // acessórios: contagem por esquadria/folha ou metros de perímetro
   for (const a of acessoriosEsquadria(e.familia, L, H, e.folhas)) {
     const qtd = a.unidade === "Mts" ? Math.ceil(a.qtd * q) : a.qtd * q;
-    saida.push({ item: `Acessório esquadria - ${a.codigo} - ${a.descricao}`, unidade: a.unidade, qtd, subEtapa: rotulo });
+    saida.push({ item: `Acessório esquadria - ${a.codigo} - ${a.descricao}`, codigo: a.codigo, unidade: a.unidade, qtd, subEtapa: rotulo });
   }
   return saida;
 }
 
+// Preço de um componente da esquadria (perfil, vidro ou acessório):
+//   1. catálogo de insumos (insumos.jsx vem antes no bundle) — procura pelo
+//      nome do item e pelo código Alcoa (cadastre o código como alias);
+//   2. alumínio e vidro sem cadastro: referência do S_ESQUADRIAS.bas;
+//   3. o resto (acessórios): mesmo caminho de preço do orçamento inteiro.
+function precoComponenteEsquadria(comp, data) {
+  if (typeof resolverInsumo === "function" && typeof precoInsumo === "function" && data && Array.isArray(data.materiais) && data.materiais.length) {
+    const termos = comp.codigo ? [comp.codigo, comp.item] : [comp.item];
+    for (const t of termos) {
+      const r = resolverInsumo(t, data.materiais);
+      if (r && r.insumo) {
+        const p = precoInsumo(r.insumo);
+        if (p && p.preco != null) return { preco: p.preco, fonte: "insumo" };
+      }
+    }
+  }
+  if (comp.unidade === "Kg") return { preco: ESQUADRIAS_PRECOS_VBA.aluminioKg, fonte: "referencia" };
+  if (comp.item === "Vidro 8mm") return { preco: ESQUADRIAS_PRECOS_VBA.vidro8mmM2, fonte: "referencia" };
+  return { preco: precoDoInsumo(comp.item, data), fonte: "padrao" };
+}
+
+function rotuloEsquadria(e) {
+  const familia = ESQUADRIAS_FAMILIAS.find((f) => f.id === e.familia);
+  const linha = ESQUADRIAS_LINHAS.find((l) => l.id === e.linha);
+  const n = Number(e.folhas) || 1;
+  const fmt = (v) => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${familia ? familia.nome : e.familia} ${n} folha${n !== 1 ? "s" : ""} · ${linha ? linha.nome : e.linha} · ${fmt(e.largura)} × ${fmt(e.altura)} m`;
+}
+
 // Módulo do motor — mesmo padrão dos demais: lê cp, emite em out.
 // Sem fator de perda: esquadria é fabricada sob medida, não consumida em obra.
-function esquadrias(cp, out) {
+// Emite UMA linha por esquadria, com o preço unitário fechado (alumínio +
+// vidro + acessórios); a composição fica em `composicao`, fora da tabela.
+function esquadrias(cp, out, data) {
   const lista = Array.isArray(cp.esquadrias) ? cp.esquadrias : [];
   const avisos = cp._avisos || (cp._avisos = []);
   for (const e of lista) {
-    for (const l of calcularEsquadria(e, avisos)) {
-      emitir(out, { ordem: ORD.esquadrias, item: l.item, tipo: "Acabamento", etapa: "Esquadrias", subEtapa: l.subEtapa, unidade: l.unidade, qtd: l.qtd });
-    }
+    const componentes = calcularEsquadria({ ...e, qtd: 1 }, avisos);
+    if (!componentes.length) continue;
+    let precoUnitario = 0;
+    const composicao = componentes.map((c) => {
+      const { preco, fonte } = precoComponenteEsquadria(c, data);
+      precoUnitario += c.qtd * preco;
+      return { item: c.item, codigo: c.codigo, unidade: c.unidade, qtd: c.qtd, preco, fonte, total: Math.round(c.qtd * preco * 100) / 100 };
+    });
+    const linha = ESQUADRIAS_LINHAS.find((l) => l.id === e.linha);
+    emitir(out, {
+      ordem: ORD.esquadrias, item: rotuloEsquadria(e), tipo: "Acabamento", etapa: "Esquadrias",
+      subEtapa: linha ? `Linha ${linha.nome}` : e.linha, unidade: "Unidades", qtd: numOrZero(e.qtd),
+      preco: Math.round(precoUnitario * 100) / 100, composicao,
+    });
   }
 }
 
@@ -2085,7 +2129,7 @@ function gerarOrcamentoObra(projeto, data) {
   muroDivisa(cp, out);
   muroArrimo(cp, out);
   piscina(cp, out);
-  esquadrias(cp, out);
+  esquadrias(cp, out, data);
   prestadores(cp, out);
 
   const resultado = precificarETotalizar(out, data);
@@ -2576,7 +2620,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addEsquadria}>＋ Adicionar esquadria</button>
             )}
             <div style={{ fontSize: 11, color: "#9ca3af" }}>
-              Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold.
+              Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. No orçamento aparece uma linha por esquadria com o preço fechado; a composição fica guardada no item. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold. Para usar seus preços, cadastre o alumínio, o vidro e os acessórios em Insumos com o código Alcoa como alias.
             </div>
           </div>
         </BlocoColapsavel>
