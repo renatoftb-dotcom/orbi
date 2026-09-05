@@ -6039,6 +6039,7 @@ function gerarOrcamentoObra(projeto, data) {
 // ═══════════════════════════════════════════════════════════════
 
 const TIPOS_TELHA_UI = Object.keys(AREA_TELHA);
+const OPCOES_FCK = ["Concreto - FCK20", "Concreto - FCK25", "Concreto - FCK30", "Concreto - FCK35"];
 
 function setEmCaminho(obj, caminho, valor) {
   const partes = caminho.split(".");
@@ -6128,11 +6129,41 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const [projetoDraft, setProjetoDraft] = useState(() => obra.projeto || projetoVazio());
   const [blocosAbertos, setBlocosAbertos] = useState({ geral: true });
   const [etapasColapsadas, setEtapasColapsadas] = useState({});
+  const [paredeTerreoExpandida, setParedeTerreoExpandida] = useState(false);
 
   function toggleBloco(k) { setBlocosAbertos((b) => ({ ...b, [k]: !b[k] })); }
   function toggleEtapa(k) { setEtapasColapsadas((b) => ({ ...b, [k]: !b[k] })); }
   function set(caminho, valor) { setProjetoDraft((p) => setEmCaminho(p, caminho, valor)); }
   function get(caminho) { return lerCaminho(projetoDraft, caminho); }
+
+  const ehTerrea = projetoDraft.tipologia !== "Sobrado";
+
+  // Térrea: um único campo de área construída, espelhado em arquitetura e
+  // terreo (na prática são a mesma área quando não há Pav. 1).
+  function setAreaConstruidaTerrea(v) {
+    setProjetoDraft((p) => setEmCaminho(setEmCaminho(p, "arquitetura.areaConstruida", v), "terreo.area", v));
+  }
+
+  // M² de parede total sempre derivado de interna+externa — nunca digitado
+  // direto, pra não ficar dessincronizado.
+  function setParedeInterna(v) {
+    setProjetoDraft((p) => {
+      const externa = numOrZero(lerCaminho(p, "arquitetura.m2ParedesExternas"));
+      return setEmCaminho(setEmCaminho(p, "arquitetura.m2ParedesInternas", v), "arquitetura.m2ParedesTotal", numOrZero(v) + externa);
+    });
+  }
+  function setParedeExterna(v) {
+    setProjetoDraft((p) => {
+      const interna = numOrZero(lerCaminho(p, "arquitetura.m2ParedesInternas"));
+      return setEmCaminho(setEmCaminho(p, "arquitetura.m2ParedesExternas", v), "arquitetura.m2ParedesTotal", interna + numOrZero(v));
+    });
+  }
+
+  // Pav. Térreo — modo simples assume tudo em 20cm (zera 15/25cm); o botão
+  // "Expandir" libera o detalhamento por espessura.
+  function setParedeTerreoSimples(v) {
+    setProjetoDraft((p) => setEmCaminho(setEmCaminho(setEmCaminho(p, "terreo.m2Parede20", v), "terreo.m2Parede15", 0), "terreo.m2Parede25", 0));
+  }
 
   function recalcular() {
     const resultado = gerarOrcamentoObra(projetoDraft, data);
@@ -6205,29 +6236,49 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         <BlocoColapsavel titulo="Geral" aberto={!!blocosAbertos.geral} onToggle={() => toggleBloco("geral")}>
           <CampoSelect label="Tipologia" valor={projetoDraft.tipologia} onChange={(v) => set("tipologia", v)}
             opcoes={[{ value: "Sobrado", label: "Sobrado" }, { value: "Térrea", label: "Térrea" }]} />
-          <CampoNum label="Área construída (m²)" valor={get("arquitetura.areaConstruida")} onChange={(v) => set("arquitetura.areaConstruida", v)} />
-          <CampoNum label="M² de parede total" valor={get("arquitetura.m2ParedesTotal")} onChange={(v) => set("arquitetura.m2ParedesTotal", v)} />
-          <CampoNum label="M² de parede interna" valor={get("arquitetura.m2ParedesInternas")} onChange={(v) => set("arquitetura.m2ParedesInternas", v)} />
-          <CampoNum label="M² de parede externa" valor={get("arquitetura.m2ParedesExternas")} onChange={(v) => set("arquitetura.m2ParedesExternas", v)} />
+          {ehTerrea ? (
+            <CampoNum label="Área construída (m²)" valor={get("arquitetura.areaConstruida")} onChange={setAreaConstruidaTerrea} />
+          ) : (
+            <CampoNum label="Área construída (m²)" valor={get("arquitetura.areaConstruida")} onChange={(v) => set("arquitetura.areaConstruida", v)} />
+          )}
+          <CampoNum label="M² de parede interna" valor={get("arquitetura.m2ParedesInternas")} onChange={setParedeInterna} />
+          <CampoNum label="M² de parede externa" valor={get("arquitetura.m2ParedesExternas")} onChange={setParedeExterna} />
+          <div>
+            <label style={C.label}>M² de parede total</label>
+            <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("arquitetura.m2ParedesTotal"))} disabled readOnly />
+          </div>
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Pav. Térreo" aberto={!!blocosAbertos.terreo} onToggle={() => toggleBloco("terreo")}>
-          <CampoNum label="Área (m²)" valor={get("terreo.area")} onChange={(v) => set("terreo.area", v)} />
+          {!ehTerrea && (
+            <CampoNum label="Área (m²)" valor={get("terreo.area")} onChange={(v) => set("terreo.area", v)} />
+          )}
           <CampoNum label="Perímetro de paredes" valor={get("terreo.perimetroParedes")} onChange={(v) => set("terreo.perimetroParedes", v)} />
-          <CampoNum label="M² parede 15cm" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
-          <CampoNum label="M² parede 20cm" valor={get("terreo.m2Parede20")} onChange={(v) => set("terreo.m2Parede20", v)} />
-          <CampoNum label="M² parede 25cm" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
+          {!paredeTerreoExpandida ? (
+            <CampoNum label="M² de parede (considera tudo 20cm)" valor={get("terreo.m2Parede20")} onChange={setParedeTerreoSimples} />
+          ) : (
+            <>
+              <CampoNum label="M² parede 15cm" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
+              <CampoNum label="M² parede 20cm" valor={get("terreo.m2Parede20")} onChange={(v) => set("terreo.m2Parede20", v)} />
+              <CampoNum label="M² parede 25cm" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
+            </>
+          )}
           <CampoNum label="Vãos de portas e janelas" valor={get("terreo.vaoPortasJanelas")} onChange={(v) => set("terreo.vaoPortasJanelas", v)} />
+          <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+            <button type="button" style={{ ...C.btnGhost, fontSize: 11 }} onClick={() => setParedeTerreoExpandida((v) => !v)}>
+              {paredeTerreoExpandida ? "Simplificar (tudo 20cm)" : "Expandir espessuras de parede (15/20/25cm)"}
+            </button>
+          </div>
         </BlocoColapsavel>
 
-        <BlocoColapsavel titulo="Laje Térreo" aberto={!!blocosAbertos.lajeTerreo} onToggle={() => toggleBloco("lajeTerreo")}>
+        <BlocoColapsavel titulo={ehTerrea ? "Laje (forro)" : "Laje Térreo"} aberto={!!blocosAbertos.lajeTerreo} onToggle={() => toggleBloco("lajeTerreo")}>
           <CampoNum label="Área (m²)" valor={get("terreo.areaLoje")} onChange={(v) => set("terreo.areaLoje", v)} />
           <CampoNum label="Perímetro" valor={get("terreo.perimetroLoje")} onChange={(v) => set("terreo.perimetroLoje", v)} />
           <CampoNum label="Área maciça (m²)" valor={get("terreo.areaLojeMacica")} onChange={(v) => set("terreo.areaLojeMacica", v)} />
           <CampoSelect label="Tipo" valor={get("terreo.tipoLoje")} onChange={(v) => set("terreo.tipoLoje", v)}
             opcoes={[{ value: "", label: "—" }, { value: "Treliça", label: "Treliça" }, { value: "Protendida", label: "Protendida" }]} />
-          <CampoTexto label="Resistência do concreto" valor={get("terreo.resistenciaConcretoLoje")} onChange={(v) => set("terreo.resistenciaConcretoLoje", v)} placeholder="ex.: Concreto - FCK25" />
+          <CampoSelect label="Resistência do concreto" valor={get("terreo.resistenciaConcretoLoje") || "Concreto - FCK25"} onChange={(v) => set("terreo.resistenciaConcretoLoje", v)} opcoes={OPCOES_FCK} />
         </BlocoColapsavel>
 
         {projetoDraft.tipologia === "Sobrado" && (
@@ -6246,7 +6297,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               <CampoNum label="Área maciça (m²)" valor={get("pav1.areaLojeMacica")} onChange={(v) => set("pav1.areaLojeMacica", v)} />
               <CampoSelect label="Tipo" valor={get("pav1.tipoLoje")} onChange={(v) => set("pav1.tipoLoje", v)}
                 opcoes={[{ value: "", label: "—" }, { value: "Treliça", label: "Treliça" }, { value: "Protendida", label: "Protendida" }]} />
-              <CampoTexto label="Resistência do concreto" valor={get("pav1.resistenciaConcretoLoje")} onChange={(v) => set("pav1.resistenciaConcretoLoje", v)} placeholder="ex.: Concreto - FCK25" />
+              <CampoSelect label="Resistência do concreto" valor={get("pav1.resistenciaConcretoLoje") || "Concreto - FCK25"} onChange={(v) => set("pav1.resistenciaConcretoLoje", v)} opcoes={OPCOES_FCK} />
             </BlocoColapsavel>
           </>
         )}
@@ -6283,7 +6334,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         <BlocoColapsavel titulo="Engenharia — Fundação" subtitulo="simplificado" aberto={!!blocosAbertos.fundacao} onToggle={() => toggleBloco("fundacao")}>
           <CampoNum label="Qtd. de estacas" valor={get("engenharia.fundacao.qtdEstacas")} onChange={(v) => set("engenharia.fundacao.qtdEstacas", v)} />
           <CampoNum label="Profundidade (m)" valor={get("engenharia.fundacao.profEstacas")} onChange={(v) => set("engenharia.fundacao.profEstacas", v)} />
-          <CampoTexto label="Resistência do concreto" valor={get("engenharia.fundacao.resistenciaConcreto")} onChange={(v) => set("engenharia.fundacao.resistenciaConcreto", v)} placeholder="ex.: Concreto - FCK25" />
+          <CampoSelect label="Resistência do concreto" valor={get("engenharia.fundacao.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("engenharia.fundacao.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Muro de arrimo" subtitulo="opcional · simplificado" aberto={!!blocosAbertos.arrimo} onToggle={() => toggleBloco("arrimo")}>
@@ -6292,7 +6343,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="Nº de vigas" valor={get("arrimo.numeroVigas")} onChange={(v) => set("arrimo.numeroVigas", v)} />
           <CampoNum label="Qtd. de estacas" valor={get("arrimo.qtdEstacas")} onChange={(v) => set("arrimo.qtdEstacas", v)} />
           <CampoNum label="Profundidade estacas (m)" valor={get("arrimo.profEstacas")} onChange={(v) => set("arrimo.profEstacas", v)} />
-          <CampoTexto label="Resistência do concreto" valor={get("arrimo.resistenciaConcreto")} onChange={(v) => set("arrimo.resistenciaConcreto", v)} placeholder="ex.: Concreto - FCK25" />
+          <CampoSelect label="Resistência do concreto" valor={get("arrimo.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("arrimo.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Piscina" subtitulo="opcional · simplificado" aberto={!!blocosAbertos.piscina} onToggle={() => toggleBloco("piscina")}>
@@ -6303,7 +6354,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="Qtd. de estacas" valor={get("piscina.qtdEstacas")} onChange={(v) => set("piscina.qtdEstacas", v)} />
           <CampoNum label="Profundidade estacas (m)" valor={get("piscina.profundidadeEstacas")} onChange={(v) => set("piscina.profundidadeEstacas", v)} />
           <CampoNum label="Gabarito da obra" valor={get("piscina.gabaritoObra")} onChange={(v) => set("piscina.gabaritoObra", v)} />
-          <CampoTexto label="Resistência do concreto" valor={get("piscina.resistenciaConcreto")} onChange={(v) => set("piscina.resistenciaConcreto", v)} placeholder="ex.: Concreto - FCK25" />
+          <CampoSelect label="Resistência do concreto" valor={get("piscina.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("piscina.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Prestadores" subtitulo="valores sugeridos, editáveis" aberto={!!blocosAbertos.prestadores} onToggle={() => toggleBloco("prestadores")}>
