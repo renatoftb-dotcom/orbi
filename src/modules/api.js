@@ -234,6 +234,13 @@ const api = {
       log:       (limit = 50) => get(`/admin/cub/log?limit=${limit}`),
       status:    ()           => get("/admin/cub/status"),
     },
+
+    // SINAPI — produtividade (HH), preço da hora e insumos, coletados no backend
+    sinapi: {
+      parametros: ()        => get("/api/sinapi/parametros"),
+      atualizar:  (forcar)  => post("/admin/sinapi/atualizar", { forcar: !!forcar }),
+      status:     ()        => get("/admin/sinapi/status"),
+    },
   },
 
   // ── ONBOARDING (Sprint 3 — modelo pricing baseado em CUB) ──
@@ -324,6 +331,8 @@ async function loadAllData(estado = null) {
     api.orcamentos.list(),
     api.receitas.list(),
     api.escritorio.get(),
+    // Parâmetros SINAPI (globais; null enquanto o backend não coletou)
+    api.admin.sinapi.parametros().catch(() => null),
   ];
 
   // Promises do CUB (só se estado disponível).
@@ -356,6 +365,7 @@ async function loadAllData(estado = null) {
     orcamentosProjeto,
     receitasFinanceiro,
     escritorio,
+    sinapi,
     r1Baixo, r1Normal, r1Alto,
     csl8Normal, csl8Alto,
     pp4Baixo, pp4Normal,
@@ -402,6 +412,7 @@ async function loadAllData(estado = null) {
     // escritorio já vem com { ...dados, logo } do backend
     escritorio: escritorio || {},
     cub,
+    sinapi: sinapi || null,
   };
 }
 

@@ -279,5 +279,24 @@ teste("compara com o prestador do orçamento pelo nome do insumo", () => {
   assert.strictEqual(r.maoDeObra.porPrestador.find((p) => p.chave === "gesseiro").orcado, null);
 });
 
+console.log("\n--- parâmetros SINAPI do backend (data.sinapi) ---");
+teste("backend vence a semente; escritório vence o backend; referência acompanha", () => {
+  const d = { materiais: [], escritorio: {}, sinapi: { referencia: "ago/2026", coletadoEm: "2026-09-20", precoHora: { pedreiro: { codigo: "88309", desonerado: 36.2, onerado: 38.3 } }, produtividade: { ALVENARIA: { horas: { pedreiro: 1.7, servente: 0.8 } } } } };
+  const r = M.gerarCronogramaObra(projetoSobrado, null, d, cfg);
+  assert.strictEqual(r.maoDeObra.precoHora.pedreiro.preco, 36.2);
+  assert.strictEqual(r.maoDeObra.precoHora.servente.preco, 30.48);
+  const alv = r.produtividade.etapas.find((e) => e.id === "PAREDES_TERREO");
+  perto(alv.hh.pedreiro, 452.05 * 1.7 + (alv.hh.pedreiro - 452.05 * 1.7), 1e-6);
+  assert.ok(alv.hh.pedreiro > 452.05 * 1.7 - 1);
+  const d2 = { ...d, escritorio: { cronograma: { precoHora: { pedreiro: 50 }, servicos: { ALVENARIA: { horas: { pedreiro: 1.2 } } } } } };
+  const r2 = M.gerarCronogramaObra(projetoSobrado, null, d2, cfg);
+  assert.strictEqual(r2.maoDeObra.precoHora.pedreiro.preco, 50);
+  const alv2 = r2.produtividade.etapas.find((e) => e.id === "PAREDES_TERREO");
+  assert.ok(alv2.hh.pedreiro < alv.hh.pedreiro);
+  const sv = M.servicosCronogramaAtivos(d);
+  assert.strictEqual(sv.ALVENARIA.horas.servente, 0.8);
+  assert.strictEqual(sv.REBOCO_INT.horas.pedreiro, 0.472);
+});
+
 console.log(`\n${passou} passaram, ${falhou} falharam`);
 if (falhou) process.exit(1);

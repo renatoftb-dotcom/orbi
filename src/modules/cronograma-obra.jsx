@@ -32,13 +32,27 @@ function etapasCronogramaAtivas(data) {
     return Number.isFinite(d) && d > 0 ? { ...e, duracaoBase: d, editado: true } : e;
   });
 }
+// Parâmetros SINAPI coletados pelo backend (data.sinapi, iguais para todas
+// as empresas) vencem a semente; o escritório vence os dois.
+function sinapiBackend(data) {
+  const s = data && data.sinapi;
+  return s && typeof s === "object" ? s : null;
+}
+function referenciaSinapi(data) {
+  const s = sinapiBackend(data);
+  if (s && s.referencia) return `SINAPI SP ${s.referencia}`;
+  return typeof PRECO_HORA_REFERENCIA !== "undefined" ? PRECO_HORA_REFERENCIA : "SINAPI SP";
+}
 function servicosCronogramaAtivos(data) {
   const seed = typeof PRODUTIVIDADE_SEED !== "undefined" ? PRODUTIVIDADE_SEED : {};
   const ov = cronogramaCfg(data).servicos || {};
+  const be = (sinapiBackend(data) || {}).produtividade || {};
   const out = {};
   for (const id of Object.keys(seed)) {
+    let s = seed[id];
+    if (be[id] && be[id].horas && typeof be[id].horas === "object") s = { ...s, horas: { ...be[id].horas }, fonteAtualizada: true };
     const o = ov[id];
-    out[id] = o && o.horas ? { ...seed[id], horas: { ...seed[id].horas, ...o.horas }, editado: true } : seed[id];
+    out[id] = o && o.horas ? { ...s, horas: { ...s.horas, ...o.horas }, editado: true } : s;
   }
   return out;
 }
@@ -59,7 +73,10 @@ function extraSobradoMeses(data) {
 // Preço da hora por ofício: valor do escritório (data.escritorio.cronograma
 // .precoHora[oficio]) vence; senão SINAPI no regime pedido (desonerado padrão).
 function precosHoraAtivos(data, regime) {
-  const seed = typeof PRECO_HORA_SEED !== "undefined" ? PRECO_HORA_SEED : {};
+  const seedBase = typeof PRECO_HORA_SEED !== "undefined" ? PRECO_HORA_SEED : {};
+  const be = (sinapiBackend(data) || {}).precoHora || {};
+  const seed = { ...seedBase };
+  for (const id of Object.keys(be)) if (be[id] && be[id].desonerado > 0) seed[id] = { ...(seedBase[id] || {}), ...be[id] };
   const ov = cronogramaCfg(data).precoHora || {};
   const reg = regime === "onerado" ? "onerado" : "desonerado";
   const out = {};
@@ -872,7 +889,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                   </table>
                 </div>
                 <details style={{ marginTop: 8, fontSize: 12 }}>
-                  <summary style={{ cursor: "pointer", color: "#374151" }}>Preço da hora por ofício ({typeof PRECO_HORA_REFERENCIA !== "undefined" ? PRECO_HORA_REFERENCIA : "SINAPI"})</summary>
+                  <summary style={{ cursor: "pointer", color: "#374151" }}>Preço da hora por ofício ({referenciaSinapi(data)})</summary>
                   <div style={{ marginTop: 6, color: "#374151" }}>
                     {oficios.map((o) => { const ph = mo.precoHora[o.id]; const po = mo.porOficio[o.id]; return ph ? <span key={o.id} style={{ display: "inline-block", marginRight: 14, marginBottom: 4 }}>{o.nome.split(" /")[0]} <b>{formatoBRL(ph.preco)}/h</b>{po ? <span style={{ color: "#9ca3af" }}> · {po.hh.toLocaleString("pt-BR")} h · {formatoBRL(po.custoRef)}</span> : null}{ph.fonte === "escritório" ? <span style={{ color: "#b45309" }}> (escritório)</span> : null}</span> : null; })}
                   </div>
@@ -1096,9 +1113,22 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
     delete sv[id];
     gravarCronogramaCfg(data, save, { ...cfg, servicos: sv });
   }
-  const precoSeed = typeof PRECO_HORA_SEED !== "undefined" ? PRECO_HORA_SEED : {};
+  const precoSeed = { ...(typeof PRECO_HORA_SEED !== "undefined" ? PRECO_HORA_SEED : {}), ...((sinapiBackend(data) || {}).precoHora || {}) };
   const regime = cfg.regimeHora === "onerado" ? "onerado" : "desonerado";
   const precoAtivo = precosHoraAtivos(data, regime);
+  const be = sinapiBackend(data);
+  const perm = typeof getPermissoes === "function" ? getPermissoes() : {};
+  const [atualizando, setAtualizando] = useState(false);
+  async function atualizarAgora(forcar) {
+    if (typeof api === "undefined" || !api.admin || !api.admin.sinapi) return;
+    setAtualizando(true);
+    try {
+      await api.admin.sinapi.atualizar(!!forcar);
+      if (typeof dialogo !== "undefined") dialogo.alertar({ titulo: "Coleta iniciada", mensagem: "O VICKE está lendo a base SINAPI. Em 1–2 minutos recarregue a página para ver a referência nova.", tipo: "info" });
+    } catch (e) {
+      if (typeof dialogo !== "undefined") dialogo.alertar({ titulo: "Não foi possível iniciar", mensagem: e && e.message ? e.message : String(e), tipo: "erro" });
+    } finally { setAtualizando(false); }
+  }
   function setPrecoHora(of, v) {
     const ph = { ...(cfg.precoHora || {}) };
     const n = Number(String(v).replace(",", "."));
@@ -1111,9 +1141,19 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
       <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 10 }}>
         Horas por unidade de serviço, por ofício — composições analíticas do SINAPI (base SP). É a produtividade de referência; a eficiência da equipe (na obra) ajusta para a realidade do canteiro. Zere as horas de um serviço que sua obra não tem (ex.: forro de gesso) ou troque pelo seu número.
       </div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12, color: "#374151", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
+        <span>
+          <b>{referenciaSinapi(data)}</b>
+          {be && be.coletadoEm ? ` · atualizada automaticamente pelo VICKE em ${be.coletadoEm.split("-").reverse().join("/")}` : " · valores da semente (o VICKE atualiza sozinho quando a Caixa publica a base nova)"}
+          {be && be.pendentes > 0 ? <span style={{ color: "#b45309" }}> · {be.pendentes} item(ns) aguardando conferência</span> : null}
+        </span>
+        {perm.isMaster && (
+          <button style={INS_S.btnSec} disabled={atualizando} onClick={() => atualizarAgora(false)}>{atualizando ? "Iniciando…" : "Buscar base nova agora"}</button>
+        )}
+      </div>
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, marginBottom: 12, overflowX: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
-          <div style={{ fontWeight: 600, fontSize: 12.5 }}>Preço da hora por ofício ({typeof PRECO_HORA_REFERENCIA !== "undefined" ? PRECO_HORA_REFERENCIA : "SINAPI"})</div>
+          <div style={{ fontWeight: 600, fontSize: 12.5 }}>Preço da hora por ofício ({referenciaSinapi(data)})</div>
           <label style={{ fontSize: 12, color: "#374151" }}>Regime padrão:{" "}
             <select value={regime} disabled={!podeEditar} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, regimeHora: e.target.value })} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontFamily: "inherit", fontSize: 12 }}>
               <option value="desonerado">desonerado</option><option value="onerado">onerado</option>

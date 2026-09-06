@@ -14,6 +14,7 @@
 //
 // Uso:
 //   node scripts/atualizar-sinapi.mjs listar            → JSON com o que coletar
+//     (é também o jobs/sinapi-config.json do backend: códigos, receitas e base)
 //   node scripts/atualizar-sinapi.mjs aplicar coleta.json [--forcar] [--simular]
 //
 // `coleta.json` (produzido pela rotina agendada do Claude via leitura das
@@ -100,11 +101,18 @@ function listar() {
     for (const r of s.receita) composicoes.add(String(r.c));
   }
   const { itens } = insumosComSinapi();
+  const baselineProd = {};
+  for (const [id, s] of Object.entries(PRODUTIVIDADE_SEED)) baselineProd[id] = { horas: s.horas };
+  const baselineIns = {};
+  for (const i of itens) baselineIns[i.sinapi] = { vicke: i.codigo, preco: i.preco };
   const out = {
+    geradoEm: new Date().toISOString().slice(0, 10),
     referenciaAtual: PRECO_HORA_REFERENCIA,
+    // base de partida do backend (jobs/sinapi-coletor.js) na primeira coleta
+    baseline: { referencia: PRECO_HORA_REFERENCIA.replace(/^SINAPI SP /, ""), precoHora: PRECO_HORA_SEED, produtividade: baselineProd, insumos: baselineIns },
     instrucao: "Para cada URL em `paginas`, ler a página e devolver, em coleta.json: nome, unidade, preço SP desonerado e onerado (total da composição) e, em `maoDeObra`, cada profissional com o coeficiente em horas. Insumos: nome, unidade e preço desonerado.",
     composicoes: [...composicoes].sort().map((c) => ({ codigo: c, url: `${BASE_URL}/composicao/${c}`, horista: horistas[c] || null })),
-    insumos: itens.map((i) => ({ codigo: i.sinapi, url: `${BASE_URL}/insumo/${i.sinapi}`, vicke: i.codigo, nome: i.nome })),
+    insumos: itens.map((i) => ({ codigo: i.sinapi, url: `${BASE_URL}/insumo/${i.sinapi}`, vicke: i.codigo, nome: i.nome, preco: i.preco })),
     receitas, servicosManuais: manuais,
   };
   process.stdout.write(JSON.stringify(out, null, 2) + "\n");
