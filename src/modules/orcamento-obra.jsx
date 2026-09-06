@@ -1948,7 +1948,7 @@ const FORMATO_PADRAO = { pisoInterno: { MCMV: "45x45", Baixo: "45x45", Médio: "
   pisoExterno: { MCMV: "45x45", Baixo: "45x45", Médio: "60x60", Alto: "60x60", Altíssimo: "90x90" },
   revestimentoInterno: { MCMV: "30x60", Baixo: "30x60", Médio: "30x60", Alto: "45x90", Altíssimo: "60x120" },
   revestimentoExterno: { MCMV: "30x60", Baixo: "30x60", Médio: "30x60", Alto: "45x90", Altíssimo: "60x120" } };
-const RODAPE_TIPOS = [{ value: "poliestireno", label: "Poliestireno 15 cm (barra 2,40 m)" }, { value: "mesmoPiso", label: "Recorte do próprio piso (10 cm)" }, { value: "nenhum", label: "Sem rodapé" }];
+const RODAPE_ALTURA_M = 0.10; // rodapé = recorte do próprio piso interno, 10 cm, somado ao m² do piso
 const SOLEIRA_PADRAO = "Soleiras Preto São Gabriel";
 const SOLEIRA_LARGURA_M = 0.15;
 // Bancadas de granito/mármore: cada bancada vira m² de pedra pronta — tampo
@@ -2171,8 +2171,11 @@ function pisosRevestimentos(cp, out, data) {
   let m2Porcelanato = 0, m2PisoInterno = 0;
   const totais = { AC3: 0, AC2: 0, rejunteKg: 0, clips: 0, cruzetas: 0 };
 
+  // Rodapé é recorte do próprio piso interno: m × 0,10 somados ao m² do piso
+  const rodapeM = numOrZero(ps.rodapeM);
+  const rodapeM2 = rodapeM * RODAPE_ALTURA_M;
   for (const sup of SUPERFICIES_PISOS) {
-    const area = numOrZero(ps[sup.id] && ps[sup.id].m2);
+    const area = numOrZero(ps[sup.id] && ps[sup.id].m2) + (sup.id === "pisoInterno" ? rodapeM2 : 0);
     if (!(area > 0)) continue;
     const formatoId = (ps[sup.id] && ps[sup.id].formato) || FORMATO_PADRAO[sup.id][padrao] || "60x60";
     const c = consumoRevestimento(formatoId, sup.externo, numOrZero(ps[sup.id] && ps[sup.id].juntaMm));
@@ -2186,18 +2189,6 @@ function pisosRevestimentos(cp, out, data) {
     if (sup.id === "pisoInterno") m2PisoInterno += area;
   }
 
-  // Rodapé
-  const rodapeM = numOrZero(ps.rodapeM);
-  const rodapeTipo = ps.rodapeTipo || "poliestireno";
-  if (rodapeM > 0 && rodapeTipo === "poliestireno") {
-    emitir(out, { ...base, subEtapa: "Rodapé", item: "RODAPE POLIESTIRENO 15CM", unidade: "Barras 2,40m", qtd: Math.ceil(rodapeM / 2.4 * PERDA) });
-  } else if (rodapeM > 0 && rodapeTipo === "mesmoPiso") {
-    const produto = String((ps.pisoInterno && ps.pisoInterno.produto) || "").trim() || PISOS_GENERICOS.pisoInterno[padrao];
-    const m2 = rodapeM * 0.10;
-    emitir(out, { ...base, subEtapa: "Rodapé", item: produto, unidade: "m2", qtd: ceil2(m2 * PERDA) });
-    totais.AC3 += m2 * ARGAMASSA_KG_M2.AC3;
-    m2Porcelanato += m2;
-  }
 
   // Soleiras e peitoris (m lineares × largura)
   const soleirasM = numOrZero(ps.soleirasM);
@@ -2209,20 +2200,23 @@ function pisosRevestimentos(cp, out, data) {
 
   // Bancadas — uma linha por bancada (tampo + saia + fundo + sapatas em m² de pedra),
   // com a medição guardada em `composicao`; sem lista, vale o m² digitado à moda antiga.
+  // Bancadas — totalizadas por pedra (uma linha por produto), com cada
+  // bancada e suas partes guardadas em `composicao`.
   const bancadas = Array.isArray(ps.bancadas) ? ps.bancadas : [];
-  let algumaBancada = false;
+  const porPedra = {};
   for (const b of bancadas) {
     const m = medirBancada(b);
     if (!(numOrZero(b.comprimento) > 0) || !(m.total > 0)) continue; // sem comprimento não é bancada
-    algumaBancada = true;
     const produto = String(b.produto || "").trim() || BANCADA_PRODUTO_PADRAO;
-    emitir(out, { ...base, subEtapa: `Bancada${b.nome ? " — " + b.nome : ""}`, item: produto, unidade: "m2", qtd: m.total,
-      composicao: [
-        { parte: "Tampo", m2: m.tampo }, { parte: "Saia", m2: m.saia }, { parte: "Fundo (rodabanca)", m2: m.fundo }, { parte: "Sapatas", m2: m.sapatas },
-      ].filter((c) => c.m2 > 0) });
+    const acc = porPedra[produto] || (porPedra[produto] = { m2: 0, composicao: [] });
+    acc.m2 += m.total;
+    acc.composicao.push({ bancada: b.nome || "Bancada", m2: m.total, tampo: m.tampo, saia: m.saia, fundo: m.fundo, sapatas: m.sapatas });
+  }
+  for (const [produto, acc] of Object.entries(porPedra)) {
+    emitir(out, { ...base, subEtapa: "Bancadas", item: produto, unidade: "m2", qtd: Math.round(acc.m2 * 100) / 100, composicao: acc.composicao });
   }
   const bancadasM2 = numOrZero(ps.bancadasM2);
-  if (!algumaBancada && bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || BANCADA_PRODUTO_PADRAO, unidade: "m2", qtd: ceil2(bancadasM2) });
+  if (!Object.keys(porPedra).length && bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || BANCADA_PRODUTO_PADRAO, unidade: "m2", qtd: ceil2(bancadasM2) });
 
   // Deck
   const deckM2 = numOrZero(ps.deckM2);
@@ -2713,7 +2707,7 @@ function normalizarProjeto(projeto) {
       pisoExterno: normalizarSuperficie(pisosIn.pisoExterno),
       revestimentoInterno: normalizarSuperficie(pisosIn.revestimentoInterno, estimativaComodos.revestimentoInterno || numOrZero(externa.revestimentoInterno)),
       revestimentoExterno: normalizarSuperficie(pisosIn.revestimentoExterno),
-      rodapeM: numOrZero(pisosIn.rodapeM) || autos.rodapeM, rodapeTipo: pisosIn.rodapeTipo || "poliestireno",
+      rodapeM: numOrZero(pisosIn.rodapeM) || autos.rodapeM,
       soleirasM: numOrZero(pisosIn.soleirasM) || autos.soleirasM, soleirasProduto: pisosIn.soleirasProduto || "",
       bancadasM2: numOrZero(pisosIn.bancadasM2), bancadasProduto: pisosIn.bancadasProduto || "",
       // lista digitada; em branco, as bancadas automáticas dos cômodos
@@ -3559,8 +3553,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           ))}
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div><label style={C.label}>Rodapé (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.rodapeM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).rodapeM} (perímetro)`} onChange={(e) => set("pisos.rodapeM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
-            <CampoSelect label="Tipo de rodapé" valor={get("pisos.rodapeTipo") || "poliestireno"} onChange={(v) => set("pisos.rodapeTipo", v)} opcoes={RODAPE_TIPOS} />
-            <div />
+            <div style={{ fontSize: 11, color: "#9ca3af", paddingBottom: 8, gridColumn: isMobile ? "auto" : "2 / -1" }}>recorte do próprio piso interno, {RODAPE_ALTURA_M * 100} cm de altura — os m² entram somados ao piso</div>
           </div>
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div><label style={C.label}>Soleiras e peitoris (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.soleirasM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).soleirasM} (esquadrias)`} onChange={(e) => set("pisos.soleirasM", e.target.value === "" ? "" : Number(e.target.value))} /></div>

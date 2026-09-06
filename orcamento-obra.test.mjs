@@ -497,29 +497,29 @@ teste("módulo: genérico pelo padrão, produto do projeto vence, consumíveis s
   const r = gerarOrcamentoObra(proj, { materiais: [] });
   const it = r.itens.filter((i) => i.etapa === "Pisos e revestimentos");
   const achar = (nome) => it.find((i) => i.item === nome);
-  assert.strictEqual(achar("Piso - Porcelanato padrão Alto").qtd, 110);              // 100 × 1,1
+  assert.strictEqual(achar("Piso - Porcelanato padrão Alto").qtd, 115.28);           // (100 + rodapé 48 × 0,10) × 1,1
   assert.strictEqual(achar("Pisos e revestimentos - REVESTIMENTO BRANCO 10X20").qtd, 55);
   assert.ok(!achar("Revestimento - Porcelanato parede padrão Alto"));
-  // AC3: piso 100 m² (90x90 → porcelanato) 7,5 + soleiras 1,5 m² × 7,5 = 761,25 kg → /20 × 1,1 = 41,9 → 42
-  assert.strictEqual(achar("Argamassa AC 3 GF - 20kg").qtd, 42);
+  // AC3: piso 104,8 m² (90x90 → porcelanato) 7,5 + soleiras 1,5 m² × 7,5 = 797,25 kg → /20 × 1,1 = 43,8 → 44
+  assert.strictEqual(achar("Argamassa AC 3 GF - 20kg").qtd, 44);
   // AC2: azulejo 50 × 4,5 = 225 kg → 12,4 → 13
   assert.strictEqual(achar("Argamassa AC 2 - 20kg").qtd, 13);
-  assert.strictEqual(achar("RODAPE POLIESTIRENO 15CM").qtd, 22);                     // 48/2,4 × 1,1 = 22
+  assert.ok(!achar("RODAPE POLIESTIRENO 15CM"));                                      // rodapé é recorte do piso
   assert.strictEqual(achar("Soleiras Preto São Gabriel").qtd, 1.65);                 // 10 × 0,15 × 1,1
   assert.ok(achar("Rejunte - 5kg").qtd >= 6);
   assert.ok(achar("Pisos e revestimentos - Espaçador").qtd > 0 && achar("Pisos e revestimentos - Cunha Niveladora").qtd > 0);
   assert.ok(achar("Pisos e revestimentos - Espaçador Cruzeta").qtd > 0);
-  assert.strictEqual(achar("Salva Piso 1,00m x 25mts").qtd, 5);                      // 100/25 × 1,1 = 4,4 → 5
+  assert.strictEqual(achar("Salva Piso 1,00m x 25mts").qtd, 5);                      // 104,8/25 × 1,1 = 4,6 → 5
   assert.ok(achar("Disco Porcelanato").qtd >= 1);
   // revestimento interno desconta da pintura (mesmo campo de antes)
   assert.strictEqual(normalizarProjeto(proj).revestimentoInterno, 50);
 });
-teste("padrão Baixo usa cerâmica; rodapé do próprio piso vira m² do produto; sem m² nada é emitido", () => {
-  const r = gerarOrcamentoObra({ tipologia: "Térrea", padrao: "Baixo", arquitetura: { areaConstruida: 60 }, pisos: { pisoInterno: { m2: 50, produto: "" }, rodapeM: 30, rodapeTipo: "mesmoPiso" } }, { materiais: [] });
+teste("padrão Baixo usa cerâmica; rodapé soma no m² do piso; sem m² nada é emitido", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", padrao: "Baixo", arquitetura: { areaConstruida: 60 }, pisos: { pisoInterno: { m2: 50, produto: "" }, rodapeM: 30 } }, { materiais: [] });
   const it = r.itens.filter((i) => i.etapa === "Pisos e revestimentos");
   const ceram = it.filter((i) => i.item === "Piso - Cerâmica padrão Baixo");
-  assert.strictEqual(ceram.length, 2); // piso + rodapé
-  assert.strictEqual(ceram[1].qtd, 3.3); // 30 × 0,10 × 1,1
+  assert.strictEqual(ceram.length, 1);
+  assert.strictEqual(ceram[0].qtd, 58.3); // (50 + 30 × 0,10) × 1,1
   assert.ok(!it.some((i) => i.item === "RODAPE POLIESTIRENO 15CM"));
   // área construída preenche o piso interno sozinha; sem área nem cômodos, nada
   const auto = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 } }, { materiais: [] });
@@ -536,12 +536,15 @@ teste("bancada: tampo + saia + fundo + sapatas em m² de pedra; uma linha por ba
     { nome: "Banheiro", comprimento: 1.2, profundidade: 0.5, saiaCm: 5, fundoCm: 10, sapatas: 0, sapataCm: 10, produto: "Soleiras Preto São Gabriel" },
     { nome: "vazia", comprimento: 0, profundidade: 0.6, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10 },
   ] } }, { materiais: [] });
-  const b = r.itens.filter((i) => i.etapa === "Pisos e revestimentos" && /^Bancada/.test(i.subEtapa));
-  assert.strictEqual(b.length, 2);
-  assert.strictEqual(b[0].item, "Granito - Bancadas"); assert.strictEqual(b[0].qtd, 2.37); assert.strictEqual(b[0].subEtapa, "Bancada — Cozinha");
-  assert.ok(b[0].composicao.some((c) => c.parte === "Sapatas" && c.m2 === 0.12));
+  const b = r.itens.filter((i) => i.etapa === "Pisos e revestimentos" && i.subEtapa === "Bancadas");
+  assert.strictEqual(b.length, 2); // uma linha por pedra
+  assert.strictEqual(b[0].item, "Granito - Bancadas"); assert.strictEqual(b[0].qtd, 2.37);
+  assert.strictEqual(b[0].composicao[0].bancada, "Cozinha"); assert.strictEqual(b[0].composicao[0].sapatas, 0.12);
   assert.strictEqual(b[1].item, "Soleiras Preto São Gabriel"); assert.strictEqual(b[1].qtd, 0.78); // 0,6 + 0,06 + 0,12
-  assert.ok(!r.itens.some((i) => i.subEtapa === "Bancadas")); // campo antigo (9 m²) não vale com lista
+  // duas bancadas na mesma pedra somam numa linha só
+  const r2 = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 100 }, pisos: { bancadas: [{ nome: "A", comprimento: 2, profundidade: 0.6, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10 }, { nome: "B", comprimento: 1, profundidade: 0.5, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10 }] } }, { materiais: [] });
+  const g = r2.itens.filter((i) => i.subEtapa === "Bancadas");
+  assert.strictEqual(g.length, 1); assert.strictEqual(g[0].composicao.length, 2); assert.strictEqual(g[0].qtd, 1.62 + 0.75);
 });
 
 teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, soleiras e bancadas", () => {
@@ -566,7 +569,7 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   assert.strictEqual(mig.wc, 3); assert.strictEqual(mig.salaTV, 1); assert.ok(!("banheiroSuite" in mig));
   assert.strictEqual(cp.pisos.bancadas.length, 1); assert.strictEqual(cp.pisos.bancadas[0].comprimento, 2);
   const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 } }, { materiais: [] });
-  assert.ok(r.itens.some((i) => i.subEtapa === "Bancada — Cozinha" && i.qtd > 1));
+  assert.ok(r.itens.some((i) => i.subEtapa === "Bancadas" && i.item === "Granito - Bancadas" && i.qtd > 1));
   assert.ok(r.itens.some((i) => i.subEtapa === "Revestimento interno"));
   const g = modulo.estimarPelosComodos({ tamanhoComodos: "Grande", ambientes: { cozinha: 1 } });
   assert.strictEqual(g.pisoInterno, 24); // 6×4
