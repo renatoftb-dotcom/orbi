@@ -39,7 +39,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS,
   };
 `)();
 
@@ -616,6 +616,19 @@ teste("vãos automáticos: portas internas 0,80 (1 verga) + esquadrias (janela 2
   assert.strictEqual(normalizarProjeto({ ...proj, externa: { pavimentacao: 45.5 } }).pisos.pisoExterno.m2, 45.5);
   assert.strictEqual(normalizarProjeto({ ...proj, externa: { pavimentacao: 45.5 }, pisos: { pisoExterno: { m2: 30 } } }).pisos.pisoExterno.m2, 30);
   assert.strictEqual(au.pisoExterno, 0);
+});
+
+teste("padrão da obra: tela e motor usam a mesma regra; genérico do padrão Médio nunca é porcelanato Alto", () => {
+  assert.strictEqual(modulo.padraoObra({}), "Médio");
+  assert.strictEqual(modulo.padraoObra({ instalacoes: { padrao: "Alto" } }), "Alto");
+  assert.strictEqual(modulo.padraoObra({ padrao: "Médio", instalacoes: { padrao: "Alto" } }), "Médio");
+  assert.strictEqual(normalizarProjeto({ padrao: "Médio", instalacoes: { padrao: "Alto" } }).padrao, "Médio");
+  for (const sup of Object.keys(modulo.PISOS_GENERICOS)) assert.ok(!/Alto|Altíssimo/.test(modulo.PISOS_GENERICOS[sup]["Médio"]), sup);
+  const cp = normalizarProjeto({ padrao: "Médio", arquitetura: { areaConstruida: 100 }, pisos: { revestimentoExterno: { m2: 40 } } });
+  const out = []; modulo.pisosRevestimentos(cp, out);
+  assert.ok(out.some((l) => l.item === "Piso - Porcelanato padrão Médio"));
+  assert.ok(out.some((l) => l.item === "Revestimento - Porcelanato parede padrão Médio"));
+  assert.ok(!out.some((l) => /padrão Alt/.test(l.item)));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

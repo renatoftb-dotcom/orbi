@@ -68,6 +68,14 @@ const ORD = {
 const TIPOS_OBRA = [{ value: "nova", label: "Construção nova" }, { value: "reforma", label: "Reforma" }];
 const PADROES_OBRA = ["MCMV", "Baixo", "Médio", "Alto", "Altíssimo"];
 function padraoInstalacoes(padrao) { return padrao === "Alto" || padrao === "Altíssimo" ? "Alto" : "Médio"; }
+// Padrão em vigor no projeto. Projeto antigo sem o campo: herda do padrão das
+// instalações (Alto → Alto), senão Médio. Motor e tela usam a mesma regra,
+// para o que aparece no select ser exatamente o que o cálculo usa.
+function padraoObra(projeto) {
+  const p = projeto || {};
+  if (PADROES_OBRA.includes(p.padrao)) return p.padrao;
+  return p.instalacoes && p.instalacoes.padrao === "Alto" ? "Alto" : "Médio";
+}
 
 // ── Preço — placeholder nesta entrega (§3.4) ──
 // Preço de um item do orçamento: resolve no catálogo de Insumos (insumos.jsx,
@@ -1941,7 +1949,7 @@ const PISOS_GENERICOS = {
   pisoInterno:         { MCMV: "Piso - Cerâmica padrão Baixo", Baixo: "Piso - Cerâmica padrão Baixo", Médio: "Piso - Porcelanato padrão Médio", Alto: "Piso - Porcelanato padrão Alto", Altíssimo: "Piso - Porcelanato padrão Altíssimo" },
   pisoExterno:         { MCMV: "Piso - Externo cerâmico padrão Baixo", Baixo: "Piso - Externo cerâmico padrão Baixo", Médio: "Piso - Externo antiderrapante padrão Médio", Alto: "Piso - Externo antiderrapante padrão Alto", Altíssimo: "Piso - Externo antiderrapante padrão Altíssimo" },
   revestimentoInterno: { MCMV: "Revestimento - Azulejo padrão Baixo", Baixo: "Revestimento - Azulejo padrão Baixo", Médio: "Revestimento - Azulejo padrão Médio", Alto: "Revestimento - Porcelanato parede padrão Alto", Altíssimo: "Revestimento - Porcelanato parede padrão Altíssimo" },
-  revestimentoExterno: { MCMV: "Piso - Externo cerâmico padrão Baixo", Baixo: "Piso - Externo cerâmico padrão Baixo", Médio: "Revestimento - Porcelanato parede padrão Alto", Alto: "Revestimento - Porcelanato parede padrão Alto", Altíssimo: "Revestimento - Porcelanato parede padrão Altíssimo" },
+  revestimentoExterno: { MCMV: "Piso - Externo cerâmico padrão Baixo", Baixo: "Piso - Externo cerâmico padrão Baixo", Médio: "Revestimento - Porcelanato parede padrão Médio", Alto: "Revestimento - Porcelanato parede padrão Alto", Altíssimo: "Revestimento - Porcelanato parede padrão Altíssimo" },
 };
 // Formato padrão quando não informado (peça cresce com o padrão)
 const FORMATO_PADRAO = { pisoInterno: { MCMV: "45x45", Baixo: "45x45", Médio: "60x60", Alto: "90x90", Altíssimo: "120x120" },
@@ -2482,7 +2490,7 @@ function normalizarProjeto(projeto) {
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
   const tipoObra = p.tipoObra === "reforma" ? "reforma" : "nova";
-  const padrao = PADROES_OBRA.includes(p.padrao) ? p.padrao : (instalacoesIn.padrao === "Alto" ? "Alto" : "Médio");
+  const padrao = padraoObra(p);
   // Projeto antigo (sem o campo): tem piscina se já havia área digitada.
   const temPiscina = p.temPiscina == null ? numOrZero(piscinaIn.areaConstruida) > 0 : !!p.temPiscina;
   const piscinaAtiva = temPiscina ? piscinaIn : {};
@@ -3426,7 +3434,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoSelect label="Tipo de obra" valor={projetoDraft.tipoObra || "nova"} onChange={(v) => set("tipoObra", v)} opcoes={TIPOS_OBRA} />
           <CampoSelect label="Tipologia" valor={projetoDraft.tipologia} onChange={(v) => set("tipologia", v)}
             opcoes={[{ value: "Sobrado", label: "Sobrado" }, { value: "Térrea", label: "Térrea" }]} />
-          <CampoSelect label="Padrão" valor={projetoDraft.padrao || "Médio"} onChange={(v) => set("padrao", v)} opcoes={PADROES_OBRA} />
+          <CampoSelect label="Padrão" valor={padraoObra(projetoDraft)} onChange={(v) => set("padrao", v)} opcoes={PADROES_OBRA} />
           <CampoSelect label="Tamanho dos cômodos" valor={projetoDraft.tamanhoComodos || "Médio"} onChange={(v) => set("tamanhoComodos", v)} opcoes={TAMANHOS_COMODOS} />
           <CampoSelect label="Piscina" valor={temPiscina ? "sim" : "nao"} onChange={(v) => set("temPiscina", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
           {ehTerrea ? (
@@ -3587,7 +3595,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleiras|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
           </datalist>
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
-            Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({projetoDraft.padrao || "Médio"}); sem formato, o tamanho típico do padrão. Peças com {Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras); a partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
+            Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({padraoObra(projetoDraft)}); sem formato, o tamanho típico do padrão. Peças com {Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras); a partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
           </div>
           {(() => { const au = autosPisos(projetoDraft); return (
             <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
@@ -3607,10 +3615,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                 <CampoNum label={`${sup.nome} (m²)`} valor={get(`pisos.${sup.id}.m2`)} onChange={(v) => set(`pisos.${sup.id}.m2`, v)} />
               )}
               <CampoSelect label="Formato da peça" valor={get(`pisos.${sup.id}.formato`) || ""} onChange={(v) => set(`pisos.${sup.id}.formato`, v)}
-                opcoes={[{ value: "", label: `automático (${FORMATO_PADRAO[sup.id][projetoDraft.padrao || "Médio"] || "60x60"})` }, ...FORMATOS_PECA.map((f) => ({ value: f.id, label: f.nome }))]} />
+                opcoes={[{ value: "", label: `automático (${FORMATO_PADRAO[sup.id][padraoObra(projetoDraft)] || "60x60"})` }, ...FORMATOS_PECA.map((f) => ({ value: f.id, label: f.nome }))]} />
               <div>
                 <label style={C.label}>Produto (Insumos)</label>
-                <input style={C.input} list="vk-insumos-pisos" value={get(`pisos.${sup.id}.produto`) ?? ""} placeholder={PISOS_GENERICOS[sup.id][projetoDraft.padrao || "Médio"]} onChange={(e) => set(`pisos.${sup.id}.produto`, e.target.value)} />
+                <input style={C.input} list="vk-insumos-pisos" value={get(`pisos.${sup.id}.produto`) ?? ""} placeholder={PISOS_GENERICOS[sup.id][padraoObra(projetoDraft)]} onChange={(e) => set(`pisos.${sup.id}.produto`, e.target.value)} />
               </div>
             </div>
           ))}
@@ -3670,7 +3678,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
         </BlocoColapsavel>
 
-        <BlocoColapsavel titulo="Instalações" subtitulo={`estimativa por kits a partir dos cômodos do bloco Geral · padrão ${padraoInstalacoes(projetoDraft.padrao)}`} aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
+        <BlocoColapsavel titulo="Instalações" subtitulo={`estimativa por kits a partir dos cômodos do bloco Geral · padrão ${padraoInstalacoes(padraoObra(projetoDraft))}`} aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
             Sem projeto de engenharia, hidráulica, esgoto, elétrica, louças e portas são estimados por conjuntos de pontos por cômodo (prática do SINAPI), com os kits de Insumos → Composições e os cômodos informados no bloco Geral. Padrão Alto e Altíssimo usam os kits de acabamento superior.
           </div>
