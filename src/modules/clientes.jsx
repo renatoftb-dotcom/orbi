@@ -988,12 +988,14 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
   );
 }
 
-function GestaoObraPanel({ cliente, data, save, isMobile }) {
+// `obraInicial` + `onSairDaObra`: abre direto no detalhe de uma obra (menu
+// lateral Obras) e o "Voltar" do detalhe devolve para quem chamou.
+function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra }) {
   const perm = getPermissoes();
-  const [view, setView] = useState("lista");
+  const [view, setView] = useState(obraInicial ? "detalheObra" : "lista");
   const [formObra, setFormObra] = useState(null);
   const [formContrato, setFormContrato] = useState(null);
-  const [obraSelecionada, setObraSelecionada] = useState(null);
+  const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
   const [visaoPL, setVisaoPL] = useState("conta"); // "conta" | "prestador"
@@ -1361,7 +1363,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
   if (view === "detalheObra" && obraSelecionada) {
     return (
       <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
-        <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+        <button onClick={() => { if (onSairDaObra) { onSairDaObra(); return; } setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#262421" }}>{obraSelecionada.nome}</div>

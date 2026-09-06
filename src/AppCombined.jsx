@@ -2949,6 +2949,8 @@ function Obras({ data, save }) {
   const obras = data.obras || [];
   const clientes = data.clientes || [];
   const [filtro, setFiltro] = useState("andamento"); // "andamento" | "concluidas" | "todas"
+  const [obraAbertaId, setObraAbertaId] = useState(null);
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   function nomeCliente(clienteId) {
     return clientes.find(c => c.id === clienteId)?.nome || "—";
@@ -3013,6 +3015,22 @@ function Obras({ data, save }) {
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });
 
+  // Obra aberta: mesma tela da obra que existe dentro do cliente
+  // (GestaoObraPanel → detalhe: orçamento, planejamento, contratos, cronograma).
+  const obraAberta = obraAbertaId ? obras.find(o => o.id === obraAbertaId) : null;
+  const clienteDaObra = obraAberta ? clientes.find(c => c.id === obraAberta.clienteId) : null;
+  if (obraAberta && clienteDaObra && typeof GestaoObraPanel === "function") {
+    return (
+      <PageContainer>
+        <div style={{ marginBottom: 16 }}>
+          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
+          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>
+        </div>
+        <GestaoObraPanel key={obraAberta.id} cliente={clienteDaObra} data={data} save={save} isMobile={isMobile} obraInicial={obraAberta} onSairDaObra={() => setObraAbertaId(null)} />
+      </PageContainer>
+    );
+  }
+
   return (
     <PageContainer>
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:4 }}>
@@ -3054,40 +3072,28 @@ function Obras({ data, save }) {
         <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:960 }}>
           {obrasFiltradas.map(obra => {
             const concluida = obra.status === "concluida";
-            const tipo = obra.tipo || "Residencial";
-            const tag = TIPO_TAGS[tipo] || TIPO_TAGS["Residencial"];
-            const dataIni = obra.iniciadaEm ? fmtDataBR(obra.iniciadaEm) : "";
-            const dataFim = obra.concluidaEm ? fmtDataBR(obra.concluidaEm) : "";
+            const podeAbrir = clientes.some(c => c.id === obra.clienteId);
 
             return (
-              <div key={obra.id} style={{
-                background: concluida ? "#fafafa" : "#fff",
-                border:"1px solid rgba(38,36,33,0.14)", borderRadius:9,
-                padding:"12px 16px",
-                display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
-              }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4, flexWrap:"wrap" }}>
-                    <span style={{
-                      fontSize:9.5, fontWeight:600, textTransform:"uppercase", letterSpacing:0.6,
-                      padding:"2px 7px", borderRadius:4, background:tag.bg, color:tag.color,
-                    }}>{tag.label}</span>
-                    <div style={{ fontSize:14, fontWeight:600, color:"#262421" }}>{nomeCliente(obra.clienteId)}</div>
-                    {concluida && (
-                      <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, padding:"2px 7px", borderRadius:4, background:"#f0fdf4", color:"#16a34a" }}>
-                        Concluída
-                      </span>
-                    )}
-                  </div>
-                  <div style={{ fontSize:12, color:"#6b7280" }}>
-                    {obra.referencia && <span>{obra.referencia} · </span>}
-                    {obra.areaTotal > 0 && <span>{obra.areaTotal}m² · </span>}
-                    <span style={{ color:"#9ca3af" }}>{obra.id}</span>
-                    {dataIni && <span style={{ color:"#9ca3af" }}> · iniciada em {dataIni}</span>}
-                    {dataFim && <span style={{ color:"#9ca3af" }}> · concluída em {dataFim}</span>}
-                  </div>
+              <div key={obra.id} role={podeAbrir ? "button" : undefined} tabIndex={podeAbrir ? 0 : undefined}
+                onClick={() => podeAbrir && setObraAbertaId(obra.id)}
+                onKeyDown={(e) => { if (podeAbrir && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setObraAbertaId(obra.id); } }}
+                style={{
+                  background: concluida ? "#fafafa" : "#fff",
+                  border:"1px solid rgba(38,36,33,0.14)", borderRadius:9,
+                  padding:"12px 16px", cursor: podeAbrir ? "pointer" : "default",
+                  display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
+                }}>
+                <div style={{ minWidth:0, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                  <div style={{ fontSize:14, fontWeight:600, color:"#262421" }}>{nomeCliente(obra.clienteId)}</div>
+                  <div style={{ fontSize:13, color:"#6b7280" }}>{obra.nome || obra.referencia || "Obra"}</div>
+                  {concluida && (
+                    <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, padding:"2px 7px", borderRadius:4, background:"#f0fdf4", color:"#16a34a" }}>
+                      Concluída
+                    </span>
+                  )}
                 </div>
-                <div style={{ display:"flex", gap:6 }}>
+                <div style={{ display:"flex", gap:6 }} onClick={(e) => e.stopPropagation()}>
                   {!concluida && (
                     <button onClick={() => concluirObra(obra)}
                       style={{ fontSize:11.5, color:"#16a34a", background:"#fff", border:"1px solid #bbf7d0", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit", fontWeight:500 }}>
@@ -12827,12 +12833,14 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
   );
 }
 
-function GestaoObraPanel({ cliente, data, save, isMobile }) {
+// `obraInicial` + `onSairDaObra`: abre direto no detalhe de uma obra (menu
+// lateral Obras) e o "Voltar" do detalhe devolve para quem chamou.
+function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra }) {
   const perm = getPermissoes();
-  const [view, setView] = useState("lista");
+  const [view, setView] = useState(obraInicial ? "detalheObra" : "lista");
   const [formObra, setFormObra] = useState(null);
   const [formContrato, setFormContrato] = useState(null);
-  const [obraSelecionada, setObraSelecionada] = useState(null);
+  const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
   const [visaoPL, setVisaoPL] = useState("conta"); // "conta" | "prestador"
@@ -13200,7 +13208,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
   if (view === "detalheObra" && obraSelecionada) {
     return (
       <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
-        <button onClick={() => { setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+        <button onClick={() => { if (onSairDaObra) { onSairDaObra(); return; } setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 700, color: "#262421" }}>{obraSelecionada.nome}</div>
