@@ -7370,6 +7370,16 @@ const ORD = {
   itensProjeto: 18, // hidráulica, esgoto, elétrica, louças, aquecimento — lidos do projeto de engenharia
 };
 
+// ── Classificação geral da obra (bloco "Geral" do formulário) ──
+// tipoObra e padrao ficam no projeto e valem para todos os módulos: o padrão
+// escolhe os kits "_ALTO" das instalações (Alto e Altíssimo) e, adiante,
+// vai calibrar acabamentos; reforma ainda não altera o cálculo (registrado
+// para as próximas entregas). temPiscina desliga o bloco e os prestadores
+// da piscina quando a obra não tem uma.
+const TIPOS_OBRA = [{ value: "nova", label: "Construção nova" }, { value: "reforma", label: "Reforma" }];
+const PADROES_OBRA = ["MCMV", "Baixo", "Médio", "Alto", "Altíssimo"];
+function padraoInstalacoes(padrao) { return padrao === "Alto" || padrao === "Altíssimo" ? "Alto" : "Médio"; }
+
 // ── Preço — placeholder nesta entrega (§3.4) ──
 // Preço de um item do orçamento: resolve no catálogo de Insumos (insumos.jsx,
 // que vem antes no bundle) pelo nome emitido — nome, alias ou código — e
@@ -7613,8 +7623,11 @@ function prestadores(cp, out, data) {
   })();
   emitir(out, { ...base, item: "Gestão Obra", unidade: "m2", qtd: cp.areaConstruida, preco: valorGestao / cp.areaConstruida });
 
-  const valorInstaladorEquipPiscina = valorPrestador("instaladorEquipPiscina", cp, data);
-  emitir(out, { ...base, item: "Instalador Equip. Piscina", unidade: "Unidades", qtd: 1, preco: valorInstaladorEquipPiscina });
+  // [VBA] emitia sempre; aqui só quando a obra tem piscina (campo "Piscina" do bloco Geral).
+  if (cp.temPiscina !== false) {
+    const valorInstaladorEquipPiscina = valorPrestador("instaladorEquipPiscina", cp, data);
+    emitir(out, { ...base, item: "Instalador Equip. Piscina", unidade: "Unidades", qtd: 1, preco: valorInstaladorEquipPiscina });
+  }
 
   const valorPedreirosPiscina = valorPrestador("pedreirosPiscina", cp, data);
   emitir(out, { ...base, item: "Pedreiros Piscina", unidade: "m2", qtd: cp.areaConstruidaPiscina, preco: valorPedreirosPiscina / cp.areaConstruidaPiscina });
@@ -9411,9 +9424,20 @@ function normalizarProjeto(projeto) {
   const instalacoesIn = p.instalacoes || {};
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
+  const tipoObra = p.tipoObra === "reforma" ? "reforma" : "nova";
+  const padrao = PADROES_OBRA.includes(p.padrao) ? p.padrao : (instalacoesIn.padrao === "Alto" ? "Alto" : "Médio");
+  // Projeto antigo (sem o campo): tem piscina se já havia área digitada.
+  const temPiscina = p.temPiscina == null ? numOrZero(piscinaIn.areaConstruida) > 0 : !!p.temPiscina;
+  const piscinaAtiva = temPiscina ? piscinaIn : {};
+  const ferroPiscinaAtiva = temPiscina ? ferroPiscina : {};
+  const concretoPiscinaAtiva = temPiscina ? concretoPiscina : {};
+  const colunasPiscinaAtiva = temPiscina ? colunasPiscina : {};
 
   return {
     tipologia,
+    tipoObra,
+    padrao,
+    temPiscina,
 
     areaConstruida: numOrZero(arq.areaConstruida),
     m2ParedesTotal: numOrZero(arq.m2ParedesTotal),
@@ -9551,39 +9575,39 @@ function normalizarProjeto(projeto) {
       },
     },
 
-    areaConstruidaPiscina: numOrZero(piscinaIn.areaConstruida),
+    areaConstruidaPiscina: numOrZero(piscinaAtiva.areaConstruida),
 
     // cp.piscina — usado por piscina()
     piscina: {
-      areaConstruida: numOrZero(piscinaIn.areaConstruida),
-      profundidade: numOrZero(piscinaIn.profundidade),
-      paredesM2Total: numOrZero(piscinaIn.paredesM2Total),
-      perimetroParedes: numOrZero(piscinaIn.perimetroParedes),
-      qtdEstacas: numOrZero(piscinaIn.qtdEstacas),
-      profundidadeEstacas: numOrZero(piscinaIn.profundidadeEstacas),
-      gabaritoObra: numOrZero(piscinaIn.gabaritoObra),
-      colunas15: numOrZero(colunasPiscina["15"]),
-      colunas20: numOrZero(colunasPiscina["20"]),
-      colunas25: numOrZero(colunasPiscina["25"]),
-      areaFormaColunaMaior25cm: numOrZero(piscinaIn.areaFormaColunaMaior25cm),
-      resistenciaConcreto: piscinaIn.resistenciaConcreto || "",
+      areaConstruida: numOrZero(piscinaAtiva.areaConstruida),
+      profundidade: numOrZero(piscinaAtiva.profundidade),
+      paredesM2Total: numOrZero(piscinaAtiva.paredesM2Total),
+      perimetroParedes: numOrZero(piscinaAtiva.perimetroParedes),
+      qtdEstacas: numOrZero(piscinaAtiva.qtdEstacas),
+      profundidadeEstacas: numOrZero(piscinaAtiva.profundidadeEstacas),
+      gabaritoObra: numOrZero(piscinaAtiva.gabaritoObra),
+      colunas15: numOrZero(colunasPiscinaAtiva["15"]),
+      colunas20: numOrZero(colunasPiscinaAtiva["20"]),
+      colunas25: numOrZero(colunasPiscinaAtiva["25"]),
+      areaFormaColunaMaior25cm: numOrZero(piscinaAtiva.areaFormaColunaMaior25cm),
+      resistenciaConcreto: piscinaAtiva.resistenciaConcreto || "",
       ferro: {
-        estacas: normalizarFerro(ferroPiscina.estacas),
-        sapatas: normalizarFerro(ferroPiscina.sapatas),
-        arranques: normalizarFerro(ferroPiscina.arranques),
-        baldrame: normalizarFerro(ferroPiscina.baldrame),
-        contrapiso: normalizarFerro(ferroPiscina.contrapiso),
-        colunas: normalizarFerro(ferroPiscina.colunas),
-        vigas: normalizarFerro(ferroPiscina.vigas),
+        estacas: normalizarFerro(ferroPiscinaAtiva.estacas),
+        sapatas: normalizarFerro(ferroPiscinaAtiva.sapatas),
+        arranques: normalizarFerro(ferroPiscinaAtiva.arranques),
+        baldrame: normalizarFerro(ferroPiscinaAtiva.baldrame),
+        contrapiso: normalizarFerro(ferroPiscinaAtiva.contrapiso),
+        colunas: normalizarFerro(ferroPiscinaAtiva.colunas),
+        vigas: normalizarFerro(ferroPiscinaAtiva.vigas),
       },
       concreto: {
-        estacas: numOrZero(concretoPiscina.estacas),
-        sapatas: numOrZero(concretoPiscina.sapatas),
-        arranques: numOrZero(concretoPiscina.arranques),
-        baldrame: numOrZero(concretoPiscina.baldrame),
-        contrapiso: numOrZero(concretoPiscina.contrapiso),
-        colunas: numOrZero(concretoPiscina.colunas),
-        vigas: numOrZero(concretoPiscina.vigas),
+        estacas: numOrZero(concretoPiscinaAtiva.estacas),
+        sapatas: numOrZero(concretoPiscinaAtiva.sapatas),
+        arranques: numOrZero(concretoPiscinaAtiva.arranques),
+        baldrame: numOrZero(concretoPiscinaAtiva.baldrame),
+        contrapiso: numOrZero(concretoPiscinaAtiva.contrapiso),
+        colunas: numOrZero(concretoPiscinaAtiva.colunas),
+        vigas: numOrZero(concretoPiscinaAtiva.vigas),
       },
     },
 
@@ -9616,7 +9640,7 @@ function normalizarProjeto(projeto) {
     // cp.ambientes / cp.instalacoes — estimativa por kits (instalacoesPorAmbiente)
     ambientes: Object.keys(ambientesIn).reduce((acc, k) => { acc[k] = numOrZero(ambientesIn[k]); return acc; }, {}),
     instalacoes: {
-      padrao: instalacoesIn.padrao === "Alto" ? "Alto" : "Médio",
+      padrao: padraoInstalacoes(padrao), // derivado do padrão da obra (Alto/Altíssimo → kits _ALTO)
       aquecimento: instalacoesIn.aquecimento || "nenhum",
       pressurizador: !!instalacoesIn.pressurizador,
       doProjeto: DISCIPLINAS_INSTALACOES.reduce((acc, d) => { acc[d] = !!(instalacoesIn.doProjeto && instalacoesIn.doProjeto[d]); return acc; }, {}),
@@ -9723,7 +9747,9 @@ function gerarOrcamentoObra(projeto, data) {
   contrapisosExternos(cp, out);
   muroDivisa(cp, out);
   muroArrimo(cp, out);
-  piscina(cp, out);
+  // Piscina só quando marcada no bloco Geral (o .bas rodava sempre e deixava
+  // linhas fixas — compactador, sarrafos — em obra sem piscina).
+  if (cp.temPiscina) piscina(cp, out);
   esquadrias(cp, out, data);
   instalacoesPorAmbiente(cp, out, data);
   itensProjeto(cp, out, data);
@@ -9796,6 +9822,9 @@ function lerCaminho(obj, caminho) {
 function projetoVazio() {
   return {
     tipologia: "Sobrado",
+    tipoObra: "nova",
+    padrao: "Médio",
+    temPiscina: false,
     arquitetura: {},
     terreo: {},
     pav1: {},
@@ -9999,6 +10028,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   function get(caminho) { return lerCaminho(projetoDraft, caminho); }
 
   const ehTerrea = projetoDraft.tipologia !== "Sobrado";
+  const temPiscina = projetoDraft.temPiscina == null ? numOrZero(projetoDraft.piscina && projetoDraft.piscina.areaConstruida) > 0 : !!projetoDraft.temPiscina;
 
   // Mantém terreo.m2Parede20 sincronizado com "total − 15cm − 25cm" sempre
   // que a tipologia é Térrea — inclusive na primeira renderização, pra um
@@ -10175,8 +10205,11 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 16 }}>Campo vazio = 0. Um bloco sem nenhum dado não entra no orçamento.</div>
 
         <BlocoColapsavel titulo="Geral" aberto={!!blocosAbertos.geral} onToggle={() => toggleBloco("geral")}>
+          <CampoSelect label="Tipo de obra" valor={projetoDraft.tipoObra || "nova"} onChange={(v) => set("tipoObra", v)} opcoes={TIPOS_OBRA} />
           <CampoSelect label="Tipologia" valor={projetoDraft.tipologia} onChange={(v) => set("tipologia", v)}
             opcoes={[{ value: "Sobrado", label: "Sobrado" }, { value: "Térrea", label: "Térrea" }]} />
+          <CampoSelect label="Padrão" valor={projetoDraft.padrao || "Médio"} onChange={(v) => set("padrao", v)} opcoes={PADROES_OBRA} />
+          <CampoSelect label="Piscina" valor={temPiscina ? "sim" : "nao"} onChange={(v) => set("temPiscina", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
           {ehTerrea ? (
             <CampoNum label="Área construída (m²)" valor={get("arquitetura.areaConstruida")} onChange={setAreaConstruidaTerrea} />
           ) : (
@@ -10210,6 +10243,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             </>
           )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 600, color: "#374151", marginTop: 6 }}>Cômodos <span style={{ fontWeight: 400, color: "#9ca3af" }}>— áreas molhadas puxam hidráulica, esgoto, louças e portas; todos puxam elétrica</span></div>
+          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => a.molhado).map((a) => (
+            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} inteiro />
+          ))}
+          <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#9ca3af", marginTop: -4 }}>Cômodos secos:</div>
+          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => !a.molhado).map((a) => (
+            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} inteiro />
+          ))}
         </BlocoColapsavel>
 
         {!ehTerrea && (
@@ -10321,18 +10362,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
         </BlocoColapsavel>
 
-        <BlocoColapsavel titulo="Ambientes e instalações" subtitulo="estimativa por kits: hidráulica, esgoto, elétrica, louças, aquecimento, portas" aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
+        <BlocoColapsavel titulo="Instalações" subtitulo={`estimativa por kits a partir dos cômodos do bloco Geral · padrão ${padraoInstalacoes(projetoDraft.padrao)}`} aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
-            Sem projeto de engenharia, as instalações são estimadas por conjuntos de pontos por ambiente (prática do SINAPI), com os kits de Insumos → Composições. Informe quantos ambientes de cada tipo a casa tem.
+            Sem projeto de engenharia, hidráulica, esgoto, elétrica, louças e portas são estimados por conjuntos de pontos por cômodo (prática do SINAPI), com os kits de Insumos → Composições e os cômodos informados no bloco Geral. Padrão Alto e Altíssimo usam os kits de acabamento superior.
           </div>
-          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => a.molhado).map((a) => (
-            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} inteiro />
-          ))}
-          <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#9ca3af", marginTop: -4 }}>Cômodos secos (só elétrica e portas):</div>
-          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => !a.molhado).map((a) => (
-            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} inteiro />
-          ))}
-          <CampoSelect label="Padrão de acabamento" valor={get("instalacoes.padrao") || "Médio"} onChange={(v) => set("instalacoes.padrao", v)} opcoes={["Médio", "Alto"]} />
           <CampoSelect label="Aquecimento de água" valor={get("instalacoes.aquecimento") || "nenhum"} onChange={(v) => set("instalacoes.aquecimento", v)}
             opcoes={(typeof SISTEMAS_AQUECIMENTO !== "undefined" ? SISTEMAS_AQUECIMENTO : []).map((x) => ({ value: x.id, label: x.nome }))} />
           <CampoSelect label="Pressurizador" valor={get("instalacoes.pressurizador") ? "sim" : "nao"} onChange={(v) => set("instalacoes.pressurizador", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
@@ -10496,7 +10529,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             ]} />
         </BlocoColapsavel>
 
-        <BlocoColapsavel titulo="Piscina" subtitulo="opcional" aberto={!!blocosAbertos.piscina} onToggle={() => toggleBloco("piscina")}>
+        {temPiscina && (
+        <BlocoColapsavel titulo="Piscina" subtitulo="marcada no bloco Geral" aberto={!!blocosAbertos.piscina} onToggle={() => toggleBloco("piscina")}>
           <CampoNum label="Área construída (m²)" valor={get("piscina.areaConstruida")} onChange={(v) => set("piscina.areaConstruida", v)} />
           <CampoNum label="Profundidade (m)" valor={get("piscina.profundidade")} onChange={(v) => set("piscina.profundidade", v)} />
           <CampoNum label="Paredes — m² total" valor={get("piscina.paredesM2Total")} onChange={(v) => set("piscina.paredesM2Total", v)} />
@@ -10521,9 +10555,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               { key: "vigas", label: "Vigas" },
             ]} />
         </BlocoColapsavel>
+        )}
 
         <BlocoColapsavel titulo="Prestadores" subtitulo="valores sugeridos, editáveis" aberto={!!blocosAbertos.prestadores} onToggle={() => toggleBloco("prestadores")}>
-          {Object.keys(TAXAS_PRESTADORES).map((chave) => (
+          {Object.keys(TAXAS_PRESTADORES).filter((chave) => temPiscina || (chave !== "pedreirosPiscina" && chave !== "instaladorEquipPiscina")).map((chave) => (
             <CampoNum key={chave} label={chave} valor={get(`prestadores.${chave}`)} onChange={(v) => set(`prestadores.${chave}`, v)} />
           ))}
           <CampoNum label="gestaoObra" valor={get("prestadores.gestaoObra")} onChange={(v) => set("prestadores.gestaoObra", v)} />

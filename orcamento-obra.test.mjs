@@ -452,5 +452,30 @@ teste("inclinação do telhado: 0,35 e 35 (digitado como %) dão o mesmo resulta
   assert.strictEqual(b.coberturas[0].inclinacao, 0.35);
 });
 
+
+console.log("\n--- bloco Geral: tipo de obra, padrão e piscina ---");
+teste("padrão Altíssimo/Alto → kits Alto; MCMV/Baixo/Médio → Médio; reforma registrada", () => {
+  assert.strictEqual(normalizarProjeto({ padrao: "Altíssimo" }).instalacoes.padrao, "Alto");
+  assert.strictEqual(normalizarProjeto({ padrao: "Alto" }).instalacoes.padrao, "Alto");
+  assert.strictEqual(normalizarProjeto({ padrao: "MCMV" }).instalacoes.padrao, "Médio");
+  assert.strictEqual(normalizarProjeto({ padrao: "Baixo" }).padrao, "Baixo");
+  assert.strictEqual(normalizarProjeto({ tipoObra: "reforma" }).tipoObra, "reforma");
+  assert.strictEqual(normalizarProjeto({}).tipoObra, "nova");
+  // projeto antigo: instalacoes.padrao Alto vira padrão Alto
+  assert.strictEqual(normalizarProjeto({ instalacoes: { padrao: "Alto" } }).padrao, "Alto");
+});
+teste("sem piscina: dados da piscina são ignorados e os prestadores da piscina não entram", () => {
+  const base = { ...projetoReferencia, piscina: { areaConstruida: 32, profundidade: 1.4, paredesM2Total: 40, concreto: { contrapiso: 5 } } };
+  const com = gerarOrcamentoObra({ ...base, temPiscina: true }, { materiais: [] });
+  const sem = gerarOrcamentoObra({ ...base, temPiscina: false }, { materiais: [] });
+  assert.ok(com.itens.some((i) => i.item === "Pedreiros Piscina"));
+  assert.ok(com.itens.some((i) => i.item === "Instalador Equip. Piscina"));
+  assert.ok(com.itens.some((i) => i.etapa === "Piscina"));
+  assert.ok(!sem.itens.some((i) => i.item === "Pedreiros Piscina" || i.item === "Instalador Equip. Piscina" || i.etapa === "Piscina"));
+  // projeto antigo sem o campo: tem piscina se havia área digitada
+  assert.strictEqual(normalizarProjeto(base).temPiscina, true);
+  assert.strictEqual(normalizarProjeto(projetoReferencia).temPiscina, false);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);
