@@ -2485,6 +2485,17 @@ async function saveAllData(newData, oldData = {}) {
   lancsNovos.forEach(l => tasks.push(api.lancamentos.save(l)));
   lancsRemovidos.forEach(l => tasks.push(api.lancamentos.delete(l.id)));
 
+  // Materiais / Insumos — faltava aqui: o catálogo semeado ou editado em
+  // Insumos ficava só em memória e sumia no reload.
+  const matsNovos = (newData.materiais || []).filter(
+    m => !oldData.materiais?.find(a => a.id === m.id && JSON.stringify(a) === JSON.stringify(m))
+  );
+  const matsRemovidos = (oldData.materiais || []).filter(
+    a => !newData.materiais?.find(m => m.id === a.id)
+  );
+  matsNovos.forEach(m => tasks.push(api.materiais.save(m)));
+  matsRemovidos.forEach(m => tasks.push(api.materiais.delete(m.id)));
+
   // Escritório (inclui logo agregado no mesmo objeto)
   if (newData.escritorio && JSON.stringify(newData.escritorio) !== JSON.stringify(oldData.escritorio)) {
     tasks.push(api.escritorio.save(newData.escritorio));
