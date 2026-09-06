@@ -151,7 +151,7 @@ console.log(`\n--- prestadores() — resumo ---`);
 console.log(`  (prestadores emitiu ${outPrestadores.length} linhas com os inputs de referência)`);
 
 console.log("\n--- esquadrias() — catálogo GOLD ---");
-const { calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO, gerarOrcamentoObra,
+const { calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO, gerarOrcamentoObra, precoDoInsumo,
         vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS } = modulo;
 const kgDe = (linhas) => linhas.filter((l) => l.unidade === "Kg").reduce((a, l) => a + l.qtd, 0);
 
@@ -297,14 +297,18 @@ teste("gerarOrcamentoObra emite etapa Esquadrias na ordem 17 e repassa avisos", 
   assert.strictEqual(esq[0].item, "Janela de correr 2 folhas · Gold · 1,50 × 1,20 m");
   // composição guardada no item: 12 perfis + vidro + acessórios
   assert.strictEqual(esq[0].composicao.length, 12 + 1 + ESQUADRIAS_ACESSORIOS.JANELA_CORRER.length);
-  assert.strictEqual(r.avisos.length, 1);
+  assert.ok(r.avisos.some((a) => a.tipo === "esquadria_sem_catalogo"), "aviso do tipo sem lista");
+  assert.ok(r.avisos.some((a) => a.tipo === "esquadria_componente_sem_preco"), "sem catálogo de insumos → acessórios sem preço");
 });
 
 teste("preço fechado da esquadria = alumínio × R$ 39,80/kg + vidro × R$ 166,63/m² + acessórios, e a quantidade multiplica", () => {
   const um = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [
     { familia: "PORTA_GIRO", linha: "GOLD", folhas: 2, qtd: 1, largura: 1.6, altura: 2.1 },
   ] }, { materiais: [] }).itens.find((i) => i.etapa === "Esquadrias");
-  const esperado = um.composicao.reduce((a, c) => a + c.qtd * (c.unidade === "Kg" ? 39.8 : c.item === "Vidro 8mm" ? 166.63 : 1), 0);
+  // sem catálogo de insumos: alumínio e vidro pela referência do VBA, acessórios a R$ 0 (marcados sem_preco)
+  const esperado = um.composicao.reduce((a, c) => a + c.qtd * (c.unidade === "Kg" ? 39.8 : c.item === "Vidro 8mm" ? 166.63 : 0), 0);
+  assert.ok(um.composicao.some((c) => c.fonte === "sem_preco"));
+  assert.strictEqual(um.confianca, "parcial");
   assert.ok(Math.abs(um.preco - esperado) < 0.01, `${um.preco} vs ${esperado}`);
   assert.ok(um.preco > 1400 && um.preco < 1600, `preço fora da faixa: ${um.preco}`);
   const tres = gerarOrcamentoObra({ tipologia: "Térrea", esquadrias: [
@@ -313,6 +317,25 @@ teste("preço fechado da esquadria = alumínio × R$ 39,80/kg + vidro × R$ 166,
   assert.strictEqual(tres.qtd, 3);
   assert.strictEqual(tres.preco, um.preco);
   assert.ok(Math.abs(tres.total - um.preco * 3) < 0.01);
+});
+
+console.log("\n--- precificação pelo catálogo de Insumos ---");
+teste("sem catálogo, todo item entra com preço 0, semPreco e aviso; qualidade resume", () => {
+  const r = gerarOrcamentoObra(projetoReferencia, { materiais: [] });
+  assert.ok(r.itens.length > 20);
+  const materiais = r.itens.filter((i) => i.tipo !== "Prestadores de serviços" && i.etapa !== "Esquadrias");
+  assert.ok(materiais.every((i) => i.preco === 0 && i.semPreco === true && i.total === 0));
+  assert.strictEqual(r.qualidade.semPreco.length, materiais.length);
+  assert.ok(r.avisos.some((a) => a.tipo === "sem_preco"));
+  // prestadores continuam com a taxa do VBA
+  const ped = r.itens.find((i) => i.item === "Pedreiros Casa");
+  assert.strictEqual(ped.preco, 1000);
+  assert.strictEqual(ped.confianca, "modulo");
+});
+
+teste("precoDoInsumo devolve null sem catálogo (nunca R$ 1)", () => {
+  const r = precoDoInsumo("Cimento CP II 50kg", { materiais: [] });
+  assert.strictEqual(r.preco, null);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -121,6 +121,15 @@ function precoDoInsumo(nomeItem, data) {
 }
 ```
 
+**Implementado** em `insumos.jsx` (`precoInsumo`) e ligado ao orçamento em
+`orcamento-obra.jsx` (`precoDoInsumo` → `precificarETotalizar`). Detalhe que
+importa: a semente `compra_corrigida` guarda `precoReferencia` **já corrigido**
+e o fator usado em `precoFatorInccAplicado`; `precoInsumo` divide o fator de
+hoje por esse valor, corrigindo só o que falta — nunca duas vezes. Item sem
+insumo no catálogo entra com R$ 0, `semPreco: true`, e aparece em "Preços que
+merecem atenção"; prestadores lêem a taxa do insumo `tipo: "prestador"` e caem
+na taxa do VBA só quando não há cadastro.
+
 `INCC_ANUAL` fica numa constante versionada, com um comentário dizendo até que
 mês de 2026 o número vale. Atualizar uma vez por ano é aceitável; automatizar a
 coleta não vale o esforço agora.

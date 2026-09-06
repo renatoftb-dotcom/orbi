@@ -51,7 +51,7 @@ const {
 const HOJE = "2026-09-05T12:00:00Z";
 
 // ── semente ──────────────────────────────────────────────────
-t("semente tem 111 insumos", () => eq(INSUMOS_SEED.length, 111));
+t("semente tem 114 insumos", () => eq(INSUMOS_SEED.length, 114));
 
 t("todo código da semente é único", () => {
   const s = new Set(INSUMOS_SEED.map(x => x.codigo));
@@ -63,8 +63,8 @@ t("todo insumo da semente tem preço, exceto os 2 prestadores em aberto", () => 
   eq(semPreco.map(x => x.nome).sort(), ["Gestão Obra", "Serralheiro"]);
 });
 
-t("semente tem 94 materiais e 17 prestadores", () => {
-  eq(INSUMOS_SEED.filter(x => x.tipo === "material").length, 94);
+t("semente tem 97 materiais e 17 prestadores", () => {
+  eq(INSUMOS_SEED.filter(x => x.tipo === "material").length, 97);
   eq(INSUMOS_SEED.filter(x => x.tipo === "prestador").length, 17);
 });
 
@@ -228,10 +228,10 @@ t("migração é idempotente", () => {
 });
 
 // ── semeadura ────────────────────────────────────────────────
-t("semeadura em base vazia cria os 111", () => {
+t("semeadura em base vazia cria os 114", () => {
   const r = semearInsumos([], INSUMOS_SEED);
-  eq(r.criados, 111);
-  eq(r.materiais.length, 111);
+  eq(r.criados, 114);
+  eq(r.materiais.length, 114);
 });
 
 t("semeadura é idempotente — segunda vez não cria nem altera", () => {
@@ -239,7 +239,7 @@ t("semeadura é idempotente — segunda vez não cria nem altera", () => {
   const b = semearInsumos(a.materiais, INSUMOS_SEED);
   eq(b.criados, 0);
   eq(b.atualizados, 0);
-  eq(b.materiais.length, 111);
+  eq(b.materiais.length, 114);
 });
 
 t("semeadura não sobrescreve preço definido à mão", () => {
@@ -267,7 +267,7 @@ t("semeadura casa material legado por nome e não duplica", () => {
   const r = semearInsumos(legado, INSUMOS_SEED);
   const cimentos = r.materiais.filter(x => normalizarTexto(x.nome) === "sacos de cimento 50kg");
   eq(cimentos.length, 1);
-  eq(r.materiais.length, 111);
+  eq(r.materiais.length, 114);
 });
 
 t("todo insumo semeado resolve por si mesmo", () => {
@@ -280,6 +280,13 @@ t("todo insumo semeado resolve por si mesmo", () => {
 });
 
 // ── resultado ────────────────────────────────────────────────
+t("semente compra_corrigida (já com fator) não é corrigida duas vezes", () => {
+  // raw 67,26 × 1,1375 = 76,51 (semente); hoje o fator desde 2024-10-11 ainda é 1,1375 → fica 76,51
+  const r = precoInsumo({ precoReferencia: 76.51, precoData: "2024-10-11", precoNCompras: 12, precoFatorInccAplicado: 1.1375 }, HOJE);
+  assert(r.corrigido, "deveria marcar corrigido");
+  assert(r.preco > 76 && r.preco < 78, "corrigiu duas vezes: " + r.preco);
+});
+
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));
 if (falhas.length) {
   console.log("\nFALHAS:\n  - " + falhas.join("\n  - ") + "\n");

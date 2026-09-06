@@ -40,6 +40,7 @@ var INSUMO_GRUPOS = [
   { prefixo: "TIJ", nome: "Tijolos e canaletas" },
   { prefixo: "TIN", nome: "Tintas" },
   { prefixo: "TLH", nome: "Telhas" },
+  { prefixo: "ESQ", nome: "Esquadrias" },
   { prefixo: "OUT", nome: "Outros" },
 ];
 
@@ -257,7 +258,12 @@ function precoInsumo(insumo, ate) {
   }
   var meses = mesesEntre(insumo.precoData, ate);
   var corrigido = meses >= 12 && isFinite(meses);
-  var fator = corrigido ? fatorIncc(insumo.precoData, ate) : 1;
+  // precoReferencia pode já vir corrigido (semente: "compra_corrigida" guarda
+  // o valor corrigido e o fator usado). Corrige só o que falta desde então,
+  // nunca duas vezes.
+  var jaAplicado = Number(insumo.precoFatorInccAplicado || 1) || 1;
+  var fator = corrigido ? fatorIncc(insumo.precoData, ate) / jaAplicado : 1;
+  if (corrigido && fator < 1) fator = 1;
   var preco = Math.round(insumo.precoReferencia * fator * 100) / 100;
 
   var confianca;

@@ -58,20 +58,28 @@ const ORD = {
 };
 
 // ── Preço — placeholder nesta entrega (§3.4) ──
-const PRECO_PADRAO = 1;
-
-// Ponto único de resolução de preço. Hoje devolve 1 para tudo. Depois:
-// busca em data.materiais por nome → ultimoPreco; se não achar, média das
-// últimas compras em data.lancamentos; se não achar, 1.
-function precoDoInsumo(nomeItem, data) {
-  return PRECO_PADRAO;
+// Preço de um item do orçamento: resolve no catálogo de Insumos (insumos.jsx,
+// que vem antes no bundle) pelo nome emitido — nome, alias ou código — e
+// devolve o preço já envelhecido pelo INCC via precoInsumo(). Sem catálogo
+// ou sem cadastro → preco null (o item entra com total 0 e é listado em
+// "preços que merecem atenção"), nunca um chute.
+function precoDoInsumo(nomeItem, data, opts) {
+  const lista = data && Array.isArray(data.materiais) ? data.materiais : [];
+  if (typeof resolverInsumo !== "function" || typeof precoInsumo !== "function" || !lista.length) {
+    return { preco: null, confianca: "sem_catalogo", codigo: null };
+  }
+  const r = resolverInsumo(nomeItem, lista, opts && opts.codigo ? { codigo: opts.codigo } : undefined);
+  if (!r || !r.insumo) return { preco: null, confianca: "sem_insumo", codigo: null, candidatos: r ? r.candidatos : [] };
+  const p = precoInsumo(r.insumo);
+  return { preco: p.preco, confianca: p.confianca, codigo: r.insumo.codigo, meses: p.meses, corrigido: p.corrigido, insumo: r.insumo };
 }
 
 // ── Helper de emissão, usado por todo módulo de cálculo (§4) ──
-function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao }) {
+function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao, confianca }) {
   if (!qtd || qtd === 0) return; // regra do VBA: só emite se qtd ≠ 0
   const linha = { ordem, item, tipo, etapa, subEtapa, unidade, qtd: Number(qtd), preco: preco ?? null };
   if (composicao) linha.composicao = composicao; // item composto (esquadria): o que forma o preço unitário
+  if (confianca) linha.confianca = confianca;
   out.push(linha);
 }
 
@@ -172,16 +180,39 @@ function taxaGestaoObra(areaConstruida) {
 
 // Valor "sugerido" (default) de um prestador com taxa padrão — o que o
 // PRESTADORES.frm calcula quando o campo do usuário está vazio/zerado.
-function valorPadraoPrestador(chave, cp) {
+// Nome do insumo (tipo "prestador") que guarda a taxa de cada chave.
+const INSUMO_PRESTADOR = {
+  equipePedreiros: "Pedreiros Casa", pintor: "Pintor", eletricista: "Eletricista", encanador: "Encanador",
+  pavimentacaoExterna: "Pedreiros Pavim. Externa", muroDivisa: "Pedreiros Muro Divisa", muroArrimo: "Pedreiros Muro Arrimo",
+  pedreirosPiscina: "Pedreiros Piscina", terraplanagem: "Terraplanagem", instaladorAquecedores: "Instalador Aquecedores",
+  instaladorEquipPiscina: "Instalador Equip. Piscina", carpinteiro: "Carpinteiro", impermeabilizador: "Impermeabilizador",
+  marceneiroPortas: "Marceneiro Portas Internas", serralheiro: "Serralheiro",
+};
+
+// Taxa de um prestador: o catálogo de Insumos vence (é onde o escritório
+// gerencia preço); sem cadastro ou sem preço, vale a taxa do VBA.
+function taxaPrestador(chave, data) {
+  const nome = INSUMO_PRESTADOR[chave];
+  if (nome) {
+    const r = precoDoInsumo(nome, data);
+    if (r.preco != null && r.preco > 0) return { valor: r.preco, fonte: "insumo", confianca: r.confianca };
+  }
   const t = TAXAS_PRESTADORES[chave];
-  if (!t) return 0;
-  switch (t.base) {
-    case "areaConstruida": return cp.areaConstruida * t.valor;
-    case "areaPavimentacao": return cp.pavimentacaoExterna * t.valor;
-    case "m2MuroDivisa": return cp.comprimentoMuroDivisa * cp.alturaMuroDivisa * t.valor;
-    case "m2MuroArrimo": return cp.comprimentoArrimo * cp.alturaArrimo * t.valor;
-    case "areaPiscina": return cp.areaConstruidaPiscina * t.valor;
-    case "fixo": return t.valor;
+  return t ? { valor: t.valor, fonte: "vba", confianca: "modulo" } : null;
+}
+
+function valorPadraoPrestador(chave, cp, data) {
+  const t = TAXAS_PRESTADORES[chave];
+  const taxa = taxaPrestador(chave, data);
+  if (!taxa || !(taxa.valor > 0)) return 0;
+  const base = t ? t.base : "areaConstruida";
+  switch (base) {
+    case "areaConstruida": return cp.areaConstruida * taxa.valor;
+    case "areaPavimentacao": return cp.pavimentacaoExterna * taxa.valor;
+    case "m2MuroDivisa": return cp.comprimentoMuroDivisa * cp.alturaMuroDivisa * taxa.valor;
+    case "m2MuroArrimo": return cp.comprimentoArrimo * cp.alturaArrimo * taxa.valor;
+    case "areaPiscina": return cp.areaConstruidaPiscina * taxa.valor;
+    case "fixo": return taxa.valor;
     default: return 0;
   }
 }
@@ -189,9 +220,24 @@ function valorPadraoPrestador(chave, cp) {
 // Valor final de um prestador com taxa padrão: override do usuário
 // (projeto.prestadores.<chave>) se não-zero, senão o valor sugerido —
 // exatamente o `If ... = 0 Or ... = "" Then <default>` do PRESTADORES.frm.
-function valorPrestador(chave, cp) {
+// Prestadores que o VBA emitia "só com valor" (qtd = valor, sem preço):
+// impermeabilizador, marceneiro, serralheiro. Agora: valor digitado → 1 verba
+// com esse preço; sem valor digitado → taxa do catálogo × área construída.
+function emitirPrestadorVerba(out, base, item, chave, cp, data) {
+  const digitado = numOrZero(cp.prestadores && cp.prestadores[chave]);
+  if (digitado !== 0) {
+    emitir(out, { ...base, item, unidade: "Verba", qtd: 1, preco: digitado });
+    return;
+  }
+  const taxa = taxaPrestador(chave, data);
+  if (taxa && taxa.valor > 0 && cp.areaConstruida > 0) {
+    emitir(out, { ...base, item, unidade: "m2", qtd: cp.areaConstruida, preco: taxa.valor, confianca: taxa.confianca });
+  }
+}
+
+function valorPrestador(chave, cp, data) {
   const override = numOrZero(cp.prestadores && cp.prestadores[chave]);
-  return override !== 0 ? override : valorPadraoPrestador(chave, cp);
+  return override !== 0 ? override : valorPadraoPrestador(chave, cp, data);
 }
 
 // P_PRESTADORES.bas: lê os CALC_PRESTADORES_* (já resolvidos pelo
@@ -203,7 +249,7 @@ function valorPrestador(chave, cp) {
 //   equip. piscina): qtd = 1, preco = valor.
 // - itens sem taxa padrão (impermeabilizador, marceneiro, serralheiro):
 //   só têm um valor digitado, sem qtd/preco separados — qtd = valor.
-function prestadores(cp, out) {
+function prestadores(cp, out, data) {
   const base = {
     ordem: ORD.prestadores,
     tipo: "Prestadores de serviços",
@@ -211,27 +257,26 @@ function prestadores(cp, out) {
     subEtapa: "Prestadores de serviços",
   };
 
-  const valorPedreiros = valorPrestador("equipePedreiros", cp);
+  const valorPedreiros = valorPrestador("equipePedreiros", cp, data);
   emitir(out, { ...base, item: "Pedreiros Casa", unidade: "m2", qtd: cp.areaConstruida, preco: valorPedreiros / cp.areaConstruida });
 
-  const valorEletricista = valorPrestador("eletricista", cp);
+  const valorEletricista = valorPrestador("eletricista", cp, data);
   emitir(out, { ...base, item: "Eletricista", unidade: "m2", qtd: cp.areaConstruida, preco: valorEletricista / cp.areaConstruida });
 
-  const valorEncanador = valorPrestador("encanador", cp);
+  const valorEncanador = valorPrestador("encanador", cp, data);
   emitir(out, { ...base, item: "Encanador", unidade: "m2", qtd: cp.areaConstruida, preco: valorEncanador / cp.areaConstruida });
 
-  const valorPintor = valorPrestador("pintor", cp);
+  const valorPintor = valorPrestador("pintor", cp, data);
   emitir(out, { ...base, item: "Pintor", unidade: "m2", qtd: cp.areaConstruida, preco: valorPintor / cp.areaConstruida });
 
   // Carpinteiro: base é a área TOTAL de cobertura (CALC_AREA_COBERTURA_TOTAL
   // no .bas), não a área construída — ainda 0 aqui porque cobertura() é um
   // módulo futuro (passo 4 da spec, §10). Sem taxa padrão no .frm.
-  const valorCarpinteiro = numOrZero(cp.prestadores && cp.prestadores.carpinteiro);
-  emitir(out, { ...base, item: "Carpinteiro", unidade: "m2", qtd: cp.areaCoberturaTotal, preco: valorCarpinteiro / cp.areaCoberturaTotal });
+  const valorCarpinteiro = numOrZero(cp.prestadores && cp.prestadores.carpinteiro) || valorPadraoPrestador("carpinteiro", cp, data);
+  if (cp.areaCoberturaTotal > 0) emitir(out, { ...base, item: "Carpinteiro", unidade: "m2", qtd: cp.areaCoberturaTotal, preco: valorCarpinteiro / cp.areaCoberturaTotal });
 
   // Sem taxa padrão no .frm — só o valor digitado.
-  const valorImpermeabilizador = numOrZero(cp.prestadores && cp.prestadores.impermeabilizador);
-  emitir(out, { ...base, item: "Impermeabilizador", unidade: "Unidades", qtd: valorImpermeabilizador });
+  emitirPrestadorVerba(out, base, "Impermeabilizador", "impermeabilizador", cp, data);
 
   // [BUG VBA — divergência com a spec §4.4, reportada e preservada]
   // P_PRESTADORES.bas testa `If CCALC_PRESTADORES_INSTALADOR_AR <> 0` — note
@@ -246,8 +291,7 @@ function prestadores(cp, out) {
   // (nenhuma chamada a emitir() aqui, de propósito)
 
   // Sem taxa padrão no .frm — só o valor digitado.
-  const valorMarceneiro = numOrZero(cp.prestadores && cp.prestadores.marceneiroPortas);
-  emitir(out, { ...base, item: "Marceneiro Portas Internas", unidade: "Unidades", qtd: valorMarceneiro });
+  emitirPrestadorVerba(out, base, "Marceneiro Portas Internas", "marceneiroPortas", cp, data);
 
   const valorGestao = (() => {
     const override = numOrZero(cp.prestadores && cp.prestadores.gestaoObra);
@@ -255,32 +299,31 @@ function prestadores(cp, out) {
   })();
   emitir(out, { ...base, item: "Gestão Obra", unidade: "m2", qtd: cp.areaConstruida, preco: valorGestao / cp.areaConstruida });
 
-  const valorInstaladorEquipPiscina = valorPrestador("instaladorEquipPiscina", cp);
+  const valorInstaladorEquipPiscina = valorPrestador("instaladorEquipPiscina", cp, data);
   emitir(out, { ...base, item: "Instalador Equip. Piscina", unidade: "Unidades", qtd: 1, preco: valorInstaladorEquipPiscina });
 
-  const valorPedreirosPiscina = valorPrestador("pedreirosPiscina", cp);
+  const valorPedreirosPiscina = valorPrestador("pedreirosPiscina", cp, data);
   emitir(out, { ...base, item: "Pedreiros Piscina", unidade: "m2", qtd: cp.areaConstruidaPiscina, preco: valorPedreirosPiscina / cp.areaConstruidaPiscina });
 
-  const valorMuroArrimo = valorPrestador("muroArrimo", cp);
+  const valorMuroArrimo = valorPrestador("muroArrimo", cp, data);
   const baseMuroArrimo = cp.alturaArrimo * cp.comprimentoArrimo;
   emitir(out, { ...base, item: "Pedreiros Muro Arrimo", unidade: "m2", qtd: baseMuroArrimo, preco: valorMuroArrimo / baseMuroArrimo });
 
-  const valorMuroDivisa = valorPrestador("muroDivisa", cp);
+  const valorMuroDivisa = valorPrestador("muroDivisa", cp, data);
   const baseMuroDivisa = cp.comprimentoMuroDivisa * cp.alturaMuroDivisa;
   emitir(out, { ...base, item: "Pedreiros Muro Divisa", unidade: "m2", qtd: baseMuroDivisa, preco: valorMuroDivisa / baseMuroDivisa });
 
-  const valorPavimentacaoExterna = valorPrestador("pavimentacaoExterna", cp);
+  const valorPavimentacaoExterna = valorPrestador("pavimentacaoExterna", cp, data);
   emitir(out, { ...base, item: "Pedreiros Pavim. Externa", unidade: "m2", qtd: cp.pavimentacaoExterna, preco: valorPavimentacaoExterna / cp.pavimentacaoExterna });
 
-  const valorTerraplanagem = valorPrestador("terraplanagem", cp);
+  const valorTerraplanagem = valorPrestador("terraplanagem", cp, data);
   emitir(out, { ...base, item: "Terraplanagem", unidade: "Unidades", qtd: 1, preco: valorTerraplanagem });
 
-  const valorInstaladorAquecedores = valorPrestador("instaladorAquecedores", cp);
+  const valorInstaladorAquecedores = valorPrestador("instaladorAquecedores", cp, data);
   emitir(out, { ...base, item: "Instalador Aquecedores", unidade: "Unidades", qtd: 1, preco: valorInstaladorAquecedores });
 
   // Sem taxa padrão no .frm — só o valor digitado.
-  const valorSerralheiro = numOrZero(cp.prestadores && cp.prestadores.serralheiro);
-  emitir(out, { ...base, item: "Serralheiro", unidade: "Unidades", qtd: valorSerralheiro });
+  emitirPrestadorVerba(out, base, "Serralheiro", "serralheiro", cp, data);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1792,7 +1835,8 @@ function precoComponenteEsquadria(comp, data) {
   }
   if (comp.unidade === "Kg") return { preco: ESQUADRIAS_PRECOS_VBA.aluminioKg, fonte: "referencia" };
   if (comp.item === "Vidro 8mm") return { preco: ESQUADRIAS_PRECOS_VBA.vidro8mmM2, fonte: "referencia" };
-  return { preco: precoDoInsumo(comp.item, data), fonte: "padrao" };
+  const r = precoDoInsumo(comp.item, data);
+  return r.preco != null ? { preco: r.preco, fonte: "insumo" } : { preco: 0, fonte: "sem_preco" };
 }
 
 function rotuloEsquadria(e) {
@@ -1820,10 +1864,14 @@ function esquadrias(cp, out, data) {
       return { item: c.item, codigo: c.codigo, unidade: c.unidade, qtd: c.qtd, preco, fonte, total: Math.round(c.qtd * preco * 100) / 100 };
     });
     const linha = ESQUADRIAS_LINHAS.find((l) => l.id === e.linha);
+    const semPreco = composicao.filter((c) => c.fonte === "sem_preco");
+    if (semPreco.length && !avisos.some((a) => a.tipo === "esquadria_componente_sem_preco")) {
+      avisos.push({ tipo: "esquadria_componente_sem_preco", mensagem: `Componentes de esquadria sem preço em Insumos (${[...new Set(semPreco.map((c) => c.codigo || c.item))].slice(0, 6).join(", ")}${semPreco.length > 6 ? "…" : ""}) — entram com R$ 0 no preço fechado` });
+    }
     emitir(out, {
       ordem: ORD.esquadrias, item: rotuloEsquadria(e), tipo: "Acabamento", etapa: "Esquadrias",
       subEtapa: linha ? `Linha ${linha.nome}` : e.linha, unidade: "Unidades", qtd: numOrZero(e.qtd),
-      preco: Math.round(precoUnitario * 100) / 100, composicao,
+      preco: Math.round(precoUnitario * 100) / 100, composicao, confianca: semPreco.length ? "parcial" : "modulo",
     });
   }
 }
@@ -2086,8 +2134,13 @@ function normalizarProjeto(projeto) {
 // preço embutido, ou seja, tudo exceto prestadores) e agrega totais por tipo.
 function precificarETotalizar(out, data) {
   const itens = out.map((linha) => {
-    const preco = linha.preco != null ? linha.preco : precoDoInsumo(linha.item, data);
-    return { ...linha, preco, total: linha.qtd * preco };
+    if (linha.preco != null) {
+      // preço já resolvido pelo módulo (prestadores, esquadrias compostas)
+      return { ...linha, total: Math.round(linha.qtd * linha.preco * 100) / 100, confianca: linha.confianca || "modulo" };
+    }
+    const r = precoDoInsumo(linha.item, data);
+    const preco = r.preco != null ? r.preco : 0;
+    return { ...linha, preco, total: Math.round(linha.qtd * preco * 100) / 100, confianca: r.confianca, insumoCodigo: r.codigo, semPreco: r.preco == null };
   });
 
   const somaPorTipo = (tipo) => itens.filter((i) => i.tipo === tipo).reduce((acc, i) => acc + i.total, 0);
@@ -2099,7 +2152,26 @@ function precificarETotalizar(out, data) {
     geral: itens.reduce((acc, i) => acc + i.total, 0),
   };
 
-  return { itens, totais, avisos: [] };
+  const qualidade = qualidadeDosPrecos(itens);
+  const avisos = [];
+  if (qualidade.semPreco.length) {
+    avisos.push({ tipo: "sem_preco", mensagem: `${qualidade.semPreco.length} item(ns) sem preço no catálogo de Insumos — entram com R$ 0`, itens: qualidade.semPreco });
+  }
+  return { itens, totais, qualidade, avisos };
+}
+
+// Resumo da qualidade dos preços de um orçamento (§4 da SPEC-INSUMOS):
+// quantos itens têm preço, de que confiança, e quais merecem atenção.
+function qualidadeDosPrecos(itens) {
+  const q = { total: 0, comPreco: 0, alta: 0, media: 0, baixa: 0, obsoleta: 0, manual: 0, modulo: 0, semPreco: [], atencao: [] };
+  for (const i of itens) {
+    q.total++;
+    if (i.semPreco) { q.semPreco.push(i.item); continue; }
+    q.comPreco++;
+    if (i.confianca in q && typeof q[i.confianca] === "number") q[i.confianca]++;
+    if (i.confianca === "obsoleta" || i.confianca === "baixa") q.atencao.push({ item: i.item, confianca: i.confianca, preco: i.preco, insumoCodigo: i.insumoCodigo });
+  }
+  return q;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2130,11 +2202,36 @@ function gerarOrcamentoObra(projeto, data) {
   muroArrimo(cp, out);
   piscina(cp, out);
   esquadrias(cp, out, data);
-  prestadores(cp, out);
+  prestadores(cp, out, data);
 
   const resultado = precificarETotalizar(out, data);
   resultado.avisos = (cp._avisos || []).concat(resultado.avisos || []);
   return resultado;
+}
+
+// Cor e legenda da confiança do preço de um item (tabela do resultado).
+function corConfianca(confianca, semPreco) {
+  if (semPreco) return "#dc2626";
+  switch (confianca) {
+    case "alta": case "manual": case "modulo": return "#16a34a";
+    case "media": return "#ca8a04";
+    case "baixa": case "parcial": return "#ea580c";
+    case "obsoleta": return "#dc2626";
+    default: return "#9ca3af";
+  }
+}
+function rotuloConfianca(i) {
+  if (i.semPreco) return "Sem preço no catálogo de Insumos";
+  switch (i.confianca) {
+    case "alta": return "Preço atual (compra recente, histórico consistente)";
+    case "media": return "Preço de compra com menos de 12 meses";
+    case "baixa": return "Preço antigo, corrigido pelo INCC — vale cotar";
+    case "obsoleta": return "Preço com mais de 24 meses, corrigido pelo INCC — cotar";
+    case "manual": return "Preço manual definido em Insumos";
+    case "parcial": return "Esquadria com componentes sem preço em Insumos";
+    case "modulo": return "Preço calculado pelo módulo";
+    default: return "";
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2395,6 +2492,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
       versao: (obra.orcamento?.versao || 0) + 1,
       itens: resultado.itens,
       totais: resultado.totais,
+      qualidade: resultado.qualidade,
+      avisos: resultado.avisos,
     };
     const obraAtualizada = { ...obra, projeto: projetoDraft, orcamento };
     const novasObras = obras.map((o) => (o.id === obra.id ? obraAtualizada : o));
@@ -2789,9 +2888,42 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         ))}
       </div>
 
-      <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#92400e", marginBottom: 16 }}>
-        Preços ainda não cadastrados: todo insumo está a R$ 1,00. As quantidades são reais; os valores, não.
-      </div>
+      {orc.qualidade ? (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#374151" }}>
+            <b>{orc.qualidade.comPreco} de {orc.qualidade.total} itens precificados</b>
+            {" · "}{orc.qualidade.alta + orc.qualidade.media} com preço atual
+            {" · "}{orc.qualidade.baixa + orc.qualidade.obsoleta} corrigidos pelo INCC ou antigos
+            {orc.qualidade.manual ? ` · ${orc.qualidade.manual} manual` : ""}
+            {orc.qualidade.semPreco.length ? ` · ${orc.qualidade.semPreco.length} sem preço (R$ 0)` : ""}
+            <span style={{ color: "#9ca3af" }}> — gerado em {new Date(orc.geradoEm).toLocaleDateString("pt-BR")}; recalcule para usar preços novos.</span>
+          </div>
+          {(orc.qualidade.semPreco.length > 0 || orc.qualidade.atencao.length > 0 || (orc.avisos || []).some((a) => a.tipo && a.tipo.startsWith("esquadria"))) && (
+            <details style={{ marginTop: 8, fontSize: 12, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "8px 14px" }}>
+              <summary style={{ cursor: "pointer", fontWeight: 600 }}>Preços que merecem atenção ({orc.qualidade.semPreco.length + orc.qualidade.atencao.length})</summary>
+              {orc.qualidade.semPreco.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontWeight: 600 }}>Sem preço no catálogo de Insumos — entram com R$ 0:</div>
+                  <div>{orc.qualidade.semPreco.join(" · ")}</div>
+                </div>
+              )}
+              {orc.qualidade.atencao.length > 0 && (
+                <div style={{ marginTop: 6 }}>
+                  <div style={{ fontWeight: 600 }}>Preço antigo (corrigido pelo INCC) — vale cotar:</div>
+                  <div>{orc.qualidade.atencao.map((a) => `${a.item} (${formatoBRL(a.preco)}, ${a.confianca})`).join(" · ")}</div>
+                </div>
+              )}
+              {(orc.avisos || []).filter((a) => a.tipo && a.tipo.startsWith("esquadria")).map((a, i) => (
+                <div key={i} style={{ marginTop: 6 }}>{a.mensagem}</div>
+              ))}
+            </details>
+          )}
+        </div>
+      ) : (
+        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#92400e", marginBottom: 16 }}>
+          Orçamento gerado antes do catálogo de preços. Recalcule para precificar com o módulo de Insumos.
+        </div>
+      )}
 
       <div style={{ overflowX: "auto", marginBottom: 16 }}>
         {itensPorEtapa.map((grupo) => {
@@ -2821,7 +2953,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                         <td style={{ padding: "6px 14px", color: "#262421" }}>{i.item}</td>
                         <td style={{ padding: "6px 14px", color: "#6b7280" }}>{i.unidade}</td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#374151" }}>{Number(i.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
-                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#374151" }}>{formatoBRL(i.preco)}</td>
+                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }} title={rotuloConfianca(i)}>
+                          <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 4, marginRight: 6, background: corConfianca(i.confianca, i.semPreco) }} />
+                          {formatoBRL(i.preco)}
+                        </td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#262421", fontWeight: 600 }}>{formatoBRL(i.total)}</td>
                       </tr>
                     ))}

@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // INSUMOS — SEMENTE DO CATÁLOGO
 // ═══════════════════════════════════════════════════════════════
-// 111 insumos (94 materiais + 17 prestadores) com código estável, preço de
+// 114 insumos (97 materiais + 17 prestadores) com código estável, preço de
 // referência, unidade, grupo e aliases.
 //
 // Origem dos preços (docs/referencia-orcamento/PRECOS-REFERENCIA-VICKE.xlsx):
@@ -129,4 +129,11 @@ var INSUMOS_SEED = [
   { codigo:"PRE-015", nome:"Instalador Equip. Piscina", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"fixo", precoReferencia:5000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalador Equip. Piscina"] },
   { codigo:"PRE-016", nome:"Terraplanagem", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"fixo", precoReferencia:8000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Terraplanagem"] },
   { codigo:"PRE-017", nome:"Gestão Obra", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"regressivo", precoReferencia:null, precoFonte:null, precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gestão Obra"], observacao:"Taxa regressiva por área construída — ver taxaGestaoObra()" },
+  // Esquadrias — referência de S_ESQUADRIAS.bas (alumínio R$/kg, vidro R$/m²).
+  // Os códigos Alcoa entram como alias: o orçamento acha o preço do kg pelo
+  // código do perfil. Acessórios (roldanas, fechos, dobradiças...) não têm
+  // preço de referência — cadastre em Insumos com o código Alcoa como alias.
+  { codigo:"ESQ-001", nome:"Alumínio linha Gold - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["CM060", "CM174", "CM200", "CM223", "DS238", "GN001", "GN003", "GN004", "GN005", "GN006", "GN007", "GN008", "GN009", "GN010", "GN011", "GN012", "GN013", "GN014", "GN018", "GN019", "GN020", "GN021", "GN022", "GN023", "GN024", "GN025", "GN026", "GN032", "GN033", "GN035", "GN037", "GN038", "GN039", "GN052", "GN053", "GN055", "GN061", "GN063", "GN070", "GN074", "GUA483", "MH006", "MN015", "MN055", "RM005", "RM038", "RM039", "VZC122", "VZP04"], observacao:"Preço por kg de perfil Alcoa Gold — referência da planilha (S_ESQUADRIAS.bas)" },
+  { codigo:"ESQ-002", nome:"Alumínio linha Suprema - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["SU-001", "SU-002", "SU-003", "SU-039", "SU-040", "SU-041", "SU-044", "SU-047", "SU-049", "SU-053", "SU-102", "SU-225", "SU-227", "SU-228", "SU-291"], observacao:"Preço por kg de perfil Alcoa Suprema — mesma referência da Gold até haver compra" },
+  { codigo:"ESQ-003", nome:"Vidro 8mm", grupo:"Esquadrias", unidade:"m2", tipo:"material", precoReferencia:166.63, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Vidro 8mm", "Vidro incolor 8mm", "Vidro temperado 8mm"], observacao:"Referência da planilha (S_ESQUADRIAS.bas)" },
 ];
