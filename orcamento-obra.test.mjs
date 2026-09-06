@@ -32,6 +32,7 @@ const modulo = new Function(`
     normalizarProjeto, gerarOrcamentoObra, precificarETotalizar,
     calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO,
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
+    interpretarListaColada, ETAPAS_PROJETO,
   };
 `)();
 
@@ -336,6 +337,35 @@ teste("sem catálogo, todo item entra com preço 0, semPreco e aviso; qualidade 
 teste("precoDoInsumo devolve null sem catálogo (nunca R$ 1)", () => {
   const r = precoDoInsumo("Cimento CP II 50kg", { materiais: [] });
   assert.strictEqual(r.preco, null);
+});
+
+console.log("\n--- itens do projeto de engenharia ---");
+const { interpretarListaColada, ETAPAS_PROJETO } = modulo;
+teste("colar lista: 'nome ; qtd ; unidade', 'nome<TAB>qtd', '12 x nome' e linha sem número", () => {
+  const l = interpretarListaColada("PVC - Esgoto - Tubo 100mm ; 12\nElétrica - Cabo Flex Cobre 2.5mm\t300\tMts\n8 x PVC - Esgoto - Joelho 90° 100mm\nCaixa d'água 1000L\n\n");
+  assert.strictEqual(l.length, 4);
+  assert.deepStrictEqual(l[0], { nome: "PVC - Esgoto - Tubo 100mm", qtd: 12, unidade: "" });
+  assert.deepStrictEqual(l[1], { nome: "Elétrica - Cabo Flex Cobre 2.5mm", qtd: 300, unidade: "Mts" });
+  assert.deepStrictEqual(l[2], { nome: "PVC - Esgoto - Joelho 90° 100mm", qtd: 8, unidade: "" });
+  assert.deepStrictEqual(l[3], { nome: "Caixa d'água 1000L", qtd: 1, unidade: "" });
+});
+
+teste("itens do projeto entram na etapa escolhida; sem catálogo ficam sem preço e avisados", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", itensProjeto: [
+    { etapa: "ESGOTO", nome: "PVC - Esgoto - Tubo 100mm", qtd: 12 },
+    { etapa: "LOUCAS", nome: "Louça - Bacia com caixa acoplada", qtd: 3, unidade: "Unidades" },
+    { etapa: "ESGOTO", nome: "sem quantidade", qtd: 0 },
+  ] }, { materiais: [] });
+  const esg = r.itens.filter((i) => i.etapa === "Esgoto e pluvial");
+  assert.strictEqual(esg.length, 1);
+  assert.strictEqual(esg[0].qtd, 12);
+  assert.strictEqual(esg[0].tipo, "Bruto");
+  assert.strictEqual(esg[0].ordem, ETAPAS_PROJETO.find((e) => e.id === "ESGOTO").ordem);
+  assert.ok(esg[0].semPreco);
+  const lou = r.itens.find((i) => i.etapa === "Louças e metais");
+  assert.strictEqual(lou.tipo, "Acabamento");
+  assert.strictEqual(lou.unidade, "Unidades");
+  assert.ok(r.qualidade.semPreco.includes("PVC - Esgoto - Tubo 100mm"));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

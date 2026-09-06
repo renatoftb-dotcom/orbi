@@ -114,8 +114,8 @@ t("termo sem parentesco devolve nenhum", () => {
 });
 
 // ── código ───────────────────────────────────────────────────
-t("próximo código continua o sequencial do grupo", () => {
-  eq(proximoCodigoInsumo("Areia e pedra", catalogo), "AGR-003");
+t("próximo código continua o sequencial do grupo, pulando os códigos reservados pela semente", () => {
+  eq(proximoCodigoInsumo("Areia e pedra", catalogo), "AGR-004"); // semente tem AGR-001..003
   eq(proximoCodigoInsumo("Cimento", catalogo), "CIM-002");
 });
 
@@ -128,6 +128,36 @@ t("código de insumo inativado nunca é reciclado", () => {
 
 t("grupo desconhecido cai em OUT", () => {
   eq(proximoCodigoInsumo("Grupo Que Não Existe", []), "OUT-001");
+});
+
+t("migração + semeadura sobre o cadastro legado do escritório não cruza códigos", () => {
+  const legado = [
+    { id: "m1", nome: "PVC - Esgoto - Tubo 100mm", unidade: "Unidades", categoria: "Tubulação PVC", ultimoPreco: 68.9 },
+    { id: "m2", nome: "Elétrica - Cabo Flex Cobre 2.5mm", unidade: "Mts", categoria: "Elétrica e Iluminação", ultimoPreco: 2.35 },
+    { id: "m3", nome: "Prestadores de Serviços - Eletricista", unidade: "m2", categoria: "Prestadores de Serviços", ultimoPreco: 42 },
+    { id: "m4", nome: "Sacos de cimento 50kg", unidade: "Unidades", ultimoPreco: 37 },
+  ];
+  const mig = migrarMateriaisParaInsumos(legado);
+  const r = semearInsumos(mig.materiais, INSUMOS_SEED);
+  const tubo = r.materiais.find((x) => x.nome === "PVC - Esgoto - Tubo 100mm");
+  const cabo = r.materiais.find((x) => x.nome === "Elétrica - Cabo Flex Cobre 2.5mm");
+  assert(tubo.codigo !== "HID-001", "tubo não pode ficar com o código da torneira");
+  assert(cabo.codigo !== "ELE-001", "cabo não pode ficar com o código do poste");
+  eq(tubo.precoReferencia, 68.9);
+  eq(cabo.precoReferencia, 2.35);
+  const poste = r.materiais.find((x) => x.codigo === "ELE-001");
+  eq(poste.nome, "Elétrica - Poste Padrão - Trifásica C3");
+  // eletricista do cadastro casa com PRE-003 pelo alias, e não vira Pedreiros Casa
+  const ele = r.materiais.find((x) => x.nome === "Prestadores de Serviços - Eletricista");
+  eq(ele.codigo, "PRE-003");
+  eq(r.materiais.find((x) => x.codigo === "PRE-001").nome, "Pedreiros Casa");
+  // cimento legado herda CIM-001 e ganha o preço mais novo da semente
+  const cim = r.materiais.find((x) => x.codigo === "CIM-001");
+  eq(cim.nome, "Sacos de cimento 50kg");
+  eq(cim.precoReferencia, 38);
+  // nenhum código duplicado
+  const cods = r.materiais.map((x) => x.codigo);
+  eq(new Set(cods).size, cods.length);
 });
 
 // ── INCC e preço ─────────────────────────────────────────────

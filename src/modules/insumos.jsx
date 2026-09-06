@@ -163,14 +163,19 @@ function prefixoDoGrupo(grupo) {
 
 // Sequencial a partir do MAIOR já usado no prefixo — inclui inativos, porque
 // código de insumo inativado nunca é reciclado.
+// Os códigos da semente (INSUMOS_SEED) são reservados: um material legado
+// nunca recebe um código que a semente vai reivindicar depois — senão a
+// semeadura casaria por código com o item errado.
 function proximoCodigoInsumo(grupo, insumos) {
   var pre = prefixoDoGrupo(grupo);
   var maior = 0;
-  (insumos || []).forEach(i => {
-    if (!i.codigo) return;
+  var considerar = function (i) {
+    if (!i || !i.codigo) return;
     var m = /^([A-Z]{3})-(\d{3,})$/.exec(i.codigo);
     if (m && m[1] === pre) maior = Math.max(maior, parseInt(m[2], 10));
-  });
+  };
+  (insumos || []).forEach(considerar);
+  if (typeof INSUMOS_SEED !== "undefined") INSUMOS_SEED.forEach(considerar);
   var n = String(maior + 1);
   while (n.length < 3) n = "0" + n;
   return pre + "-" + n;
@@ -329,8 +334,17 @@ function migrarMateriaisParaInsumos(materiais) {
     var m = lista[i];
     if (m.codigo) continue;
     var grupo = m.grupo || grupoInferido(m.nome);
+    // Se o nome já é um insumo da semente, herda o código dela (o preço e o
+    // grupo entram depois, na semeadura). Senão, próximo código livre.
+    var daSemente = null;
+    if (typeof INSUMOS_SEED !== "undefined") {
+      var rs = resolverInsumo(m.nome, INSUMOS_SEED);
+      if (rs.insumo && (rs.confianca === "alias" || rs.confianca === "normalizado")
+          && !lista.some(function (x) { return x.codigo === rs.insumo.codigo; })) daSemente = rs.insumo;
+    }
+    if (daSemente) grupo = daSemente.grupo || grupo;
     var novo = Object.assign({}, m, {
-      codigo: proximoCodigoInsumo(grupo, lista),
+      codigo: daSemente ? daSemente.codigo : proximoCodigoInsumo(grupo, lista),
       grupo: grupo,
       tipo: m.tipo || "material",
       ativo: m.ativo !== false,
@@ -370,8 +384,23 @@ function semearInsumos(materiais, seed) {
   var lista = (materiais || []).slice();
   var criados = 0, atualizados = 0, ignorados = 0;
 
+  var nomesDaSemente = function (s) {
+    return [s.nome].concat(s.aliases || []).map(normalizarTexto);
+  };
   (seed || INSUMOS_SEED).forEach(function (s) {
     var idx = lista.findIndex(x => x.codigo === s.codigo);
+    if (idx >= 0) {
+      // Código igual mas nome incompatível = colisão (material legado que
+      // recebeu esse código antes da reserva). Recodifica o legado e segue.
+      var x = lista[idx];
+      var nomesX = [x.nome].concat(x.aliases || []).map(normalizarTexto);
+      var ns = nomesDaSemente(s);
+      var compativel = nomesX.some(function (n) { return ns.indexOf(n) >= 0; });
+      if (!compativel) {
+        lista[idx] = Object.assign({}, x, { codigo: proximoCodigoInsumo(x.grupo || grupoInferido(x.nome), lista) });
+        idx = -1;
+      }
+    }
     if (idx < 0) {
       var r = resolverInsumo(s.nome, lista);
       if (r.insumo && (r.confianca === "alias" || r.confianca === "normalizado")) {

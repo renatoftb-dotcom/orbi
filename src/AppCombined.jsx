@@ -4568,14 +4568,19 @@ function prefixoDoGrupo(grupo) {
 
 // Sequencial a partir do MAIOR já usado no prefixo — inclui inativos, porque
 // código de insumo inativado nunca é reciclado.
+// Os códigos da semente (INSUMOS_SEED) são reservados: um material legado
+// nunca recebe um código que a semente vai reivindicar depois — senão a
+// semeadura casaria por código com o item errado.
 function proximoCodigoInsumo(grupo, insumos) {
   var pre = prefixoDoGrupo(grupo);
   var maior = 0;
-  (insumos || []).forEach(i => {
-    if (!i.codigo) return;
+  var considerar = function (i) {
+    if (!i || !i.codigo) return;
     var m = /^([A-Z]{3})-(\d{3,})$/.exec(i.codigo);
     if (m && m[1] === pre) maior = Math.max(maior, parseInt(m[2], 10));
-  });
+  };
+  (insumos || []).forEach(considerar);
+  if (typeof INSUMOS_SEED !== "undefined") INSUMOS_SEED.forEach(considerar);
   var n = String(maior + 1);
   while (n.length < 3) n = "0" + n;
   return pre + "-" + n;
@@ -4734,8 +4739,17 @@ function migrarMateriaisParaInsumos(materiais) {
     var m = lista[i];
     if (m.codigo) continue;
     var grupo = m.grupo || grupoInferido(m.nome);
+    // Se o nome já é um insumo da semente, herda o código dela (o preço e o
+    // grupo entram depois, na semeadura). Senão, próximo código livre.
+    var daSemente = null;
+    if (typeof INSUMOS_SEED !== "undefined") {
+      var rs = resolverInsumo(m.nome, INSUMOS_SEED);
+      if (rs.insumo && (rs.confianca === "alias" || rs.confianca === "normalizado")
+          && !lista.some(function (x) { return x.codigo === rs.insumo.codigo; })) daSemente = rs.insumo;
+    }
+    if (daSemente) grupo = daSemente.grupo || grupo;
     var novo = Object.assign({}, m, {
-      codigo: proximoCodigoInsumo(grupo, lista),
+      codigo: daSemente ? daSemente.codigo : proximoCodigoInsumo(grupo, lista),
       grupo: grupo,
       tipo: m.tipo || "material",
       ativo: m.ativo !== false,
@@ -4775,8 +4789,23 @@ function semearInsumos(materiais, seed) {
   var lista = (materiais || []).slice();
   var criados = 0, atualizados = 0, ignorados = 0;
 
+  var nomesDaSemente = function (s) {
+    return [s.nome].concat(s.aliases || []).map(normalizarTexto);
+  };
   (seed || INSUMOS_SEED).forEach(function (s) {
     var idx = lista.findIndex(x => x.codigo === s.codigo);
+    if (idx >= 0) {
+      // Código igual mas nome incompatível = colisão (material legado que
+      // recebeu esse código antes da reserva). Recodifica o legado e segue.
+      var x = lista[idx];
+      var nomesX = [x.nome].concat(x.aliases || []).map(normalizarTexto);
+      var ns = nomesDaSemente(s);
+      var compativel = nomesX.some(function (n) { return ns.indexOf(n) >= 0; });
+      if (!compativel) {
+        lista[idx] = Object.assign({}, x, { codigo: proximoCodigoInsumo(x.grupo || grupoInferido(x.nome), lista) });
+        idx = -1;
+      }
+    }
     if (idx < 0) {
       var r = resolverInsumo(s.nome, lista);
       if (r.insumo && (r.confianca === "alias" || r.confianca === "normalizado")) {
@@ -5672,6 +5701,7 @@ const ORD = {
   muroArrimo: 15,
   piscina: 16,
   esquadrias: 17,
+  itensProjeto: 18, // hidráulica, esgoto, elétrica, louças, aquecimento — lidos do projeto de engenharia
 };
 
 // ── Preço — placeholder nesta entrega (§3.4) ──
@@ -5692,11 +5722,12 @@ function precoDoInsumo(nomeItem, data, opts) {
 }
 
 // ── Helper de emissão, usado por todo módulo de cálculo (§4) ──
-function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao, confianca }) {
+function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao, confianca, insumoCodigo }) {
   if (!qtd || qtd === 0) return; // regra do VBA: só emite se qtd ≠ 0
   const linha = { ordem, item, tipo, etapa, subEtapa, unidade, qtd: Number(qtd), preco: preco ?? null };
   if (composicao) linha.composicao = composicao; // item composto (esquadria): o que forma o preço unitário
   if (confianca) linha.confianca = confianca;
+  if (insumoCodigo) linha.insumoCodigo = insumoCodigo;
   out.push(linha);
 }
 
@@ -7493,6 +7524,79 @@ function esquadrias(cp, out, data) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ITENS DO PROJETO — hidráulica, esgoto, elétrica, louças e metais,
+// aquecimento, pressurização. A planilha de origem nunca quantificou esses
+// grupos (só a mão de obra): o escritório lê o projeto de engenharia e
+// insere a lista à mão. Cada linha é um insumo do catálogo + quantidade;
+// o preço vem do módulo de Insumos como qualquer outro item.
+// ═══════════════════════════════════════════════════════════════
+const ETAPAS_PROJETO = [
+  { id: "HIDRAULICA",  nome: "Hidráulica (água fria e quente)", tipo: "Bruto",      ordem: 18 },
+  { id: "ESGOTO",      nome: "Esgoto e pluvial",                tipo: "Bruto",      ordem: 19 },
+  { id: "ELETRICA",    nome: "Elétrica e iluminação",           tipo: "Bruto",      ordem: 20 },
+  { id: "LOUCAS",      nome: "Louças e metais",                 tipo: "Acabamento", ordem: 21 },
+  { id: "AQUECIMENTO", nome: "Aquecimento e pressurização",     tipo: "Acabamento", ordem: 22 },
+  { id: "OUTROS",      nome: "Outros itens do projeto",         tipo: "Acabamento", ordem: 23 },
+];
+const ITENS_PROJETO_MAX = 600;
+
+// Resolve uma linha digitada contra o catálogo: código gravado > nome.
+// Devolve o insumo (ou null) sem chutar — "sugestão" nunca vira vínculo.
+function resolverItemProjeto(item, data) {
+  const lista = data && Array.isArray(data.materiais) ? data.materiais : [];
+  if (typeof resolverInsumo !== "function" || !lista.length) return null;
+  if (item.insumoCodigo) {
+    const r = resolverInsumo(item.nome, lista, { codigo: item.insumoCodigo });
+    if (r && r.insumo && r.confianca === "codigo") return r.insumo;
+  }
+  const r = resolverInsumo(item.nome, lista);
+  return r && r.insumo ? r.insumo : null;
+}
+
+// Interpreta texto colado: uma linha por item, "nome ; qtd [; unidade]" —
+// aceita ; , tab ou dois espaços como separador; "12 x nome" também.
+function interpretarListaColada(texto) {
+  const out = [];
+  for (const bruta of String(texto || "").split(/\r?\n/)) {
+    const linha = bruta.trim();
+    if (!linha) continue;
+    let nome = linha, qtd = 1, unidade = "";
+    let m = /^(\d+(?:[.,]\d+)?)\s*(?:x|un|und|pç|pc|pcs)?\s*[-–:]?\s*(.+)$/i.exec(linha);
+    const partes = linha.split(/\s*(?:;|\t|,(?=\s*\d)|\s{2,})\s*/).filter(Boolean);
+    if (partes.length >= 2 && /^\d+(?:[.,]\d+)?$/.test(partes[1].trim())) {
+      nome = partes[0].trim(); qtd = Number(partes[1].replace(",", ".")); unidade = (partes[2] || "").trim();
+    } else if (partes.length >= 2 && /^\d+(?:[.,]\d+)?$/.test(partes[partes.length - 1].trim())) {
+      qtd = Number(partes[partes.length - 1].replace(",", ".")); nome = partes.slice(0, -1).join(" ").trim();
+    } else if (m && m[2] && !/^\d/.test(m[2])) {
+      qtd = Number(m[1].replace(",", ".")); nome = m[2].trim();
+    }
+    if (nome) out.push({ nome, qtd: Number.isFinite(qtd) && qtd > 0 ? qtd : 1, unidade });
+  }
+  return out;
+}
+
+function itensProjeto(cp, out, data) {
+  const lista = Array.isArray(cp.itensProjeto) ? cp.itensProjeto : [];
+  for (const it of lista) {
+    if (!(it.qtd > 0) || !it.nome) continue;
+    const etapa = ETAPAS_PROJETO.find((e) => e.id === it.etapa) || ETAPAS_PROJETO[ETAPAS_PROJETO.length - 1];
+    const insumo = resolverItemProjeto(it, data);
+    const nome = insumo ? insumo.nome : it.nome;
+    const unidade = it.unidade || (insumo && insumo.unidade) || "Unidades";
+    let preco = null, confianca;
+    if (insumo && typeof precoInsumo === "function") {
+      const p = precoInsumo(insumo);
+      if (p && p.preco != null) { preco = p.preco; confianca = p.confianca; }
+    }
+    emitir(out, {
+      ordem: etapa.ordem, item: nome, tipo: etapa.tipo, etapa: etapa.nome, subEtapa: "Projeto de engenharia",
+      unidade, qtd: it.qtd, preco, confianca,
+      insumoCodigo: insumo ? insumo.codigo : null,
+    });
+  }
+}
+
 function normalizarProjeto(projeto) {
   const p = projeto || {};
   const arq = p.arquitetura || {};
@@ -7522,6 +7626,7 @@ function normalizarProjeto(projeto) {
   const prestadoresIn = p.prestadores || {};
   const coberturasIn = Array.isArray(p.cobertura) ? p.cobertura : [];
   const esquadriasIn = Array.isArray(p.esquadrias) ? p.esquadrias : [];
+  const itensProjetoIn = Array.isArray(p.itensProjeto) ? p.itensProjeto : [];
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
 
@@ -7725,6 +7830,15 @@ function normalizarProjeto(projeto) {
       altura: numOrZero(e && e.altura),
     })),
 
+    // cp.itensProjeto — lista digitada do projeto de engenharia
+    itensProjeto: itensProjetoIn.slice(0, ITENS_PROJETO_MAX).map((it) => ({
+      etapa: (it && it.etapa) || "OUTROS",
+      nome: String((it && it.nome) || "").trim(),
+      insumoCodigo: (it && it.insumoCodigo) || null,
+      unidade: (it && it.unidade) || "",
+      qtd: numOrZero(it && it.qtd),
+    })),
+
     prestadores: {
       equipePedreiros: numOrZero(prestadoresIn.equipePedreiros),
       eletricista: numOrZero(prestadoresIn.eletricista),
@@ -7819,6 +7933,7 @@ function gerarOrcamentoObra(projeto, data) {
   muroArrimo(cp, out);
   piscina(cp, out);
   esquadrias(cp, out, data);
+  itensProjeto(cp, out, data);
   prestadores(cp, out, data);
 
   const resultado = precificarETotalizar(out, data);
@@ -7897,6 +8012,7 @@ function projetoVazio() {
     piscina: {},
     cobertura: [],
     esquadrias: [],
+    itensProjeto: [],
     prestadores: {},
   };
 }
@@ -8169,6 +8285,46 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     set("esquadrias", esquadriasLista.filter((_, i) => i !== idx));
   }
 
+  // ── Itens do projeto de engenharia ──
+  const itensProjetoLista = projetoDraft.itensProjeto || [];
+  const [colarTexto, setColarTexto] = useState("");
+  const [colarEtapa, setColarEtapa] = useState("HIDRAULICA");
+  const [colarAberto, setColarAberto] = useState(false);
+  const catalogoInsumos = data.materiais || [];
+  function vincularItem(it) {
+    const ins = resolverItemProjeto(it, data);
+    return ins ? { ...it, nome: ins.nome, insumoCodigo: ins.codigo, unidade: it.unidade || ins.unidade || "" } : { ...it, insumoCodigo: null };
+  }
+  function addItemProjeto(etapa) {
+    if (itensProjetoLista.length >= ITENS_PROJETO_MAX) return;
+    set("itensProjeto", [...itensProjetoLista, { etapa: etapa || "HIDRAULICA", nome: "", insumoCodigo: null, unidade: "", qtd: 1 }]);
+  }
+  function updateItemProjeto(idx, campo, valor) {
+    set("itensProjeto", itensProjetoLista.map((it, i) => {
+      if (i !== idx) return it;
+      const n = { ...it, [campo]: valor };
+      return campo === "nome" ? vincularItem({ ...n, insumoCodigo: null, unidade: "" }) : n;
+    }));
+  }
+  function removeItemProjeto(idx) {
+    set("itensProjeto", itensProjetoLista.filter((_, i) => i !== idx));
+  }
+  function colarItensProjeto() {
+    const novos = interpretarListaColada(colarTexto)
+      .map((l) => vincularItem({ etapa: colarEtapa, nome: l.nome, insumoCodigo: null, unidade: l.unidade, qtd: l.qtd }));
+    if (!novos.length) return;
+    set("itensProjeto", [...itensProjetoLista, ...novos].slice(0, ITENS_PROJETO_MAX));
+    setColarTexto(""); setColarAberto(false);
+  }
+  function statusItemProjeto(it) {
+    if (!it.nome) return null;
+    const ins = it.insumoCodigo ? catalogoInsumos.find((m) => m.codigo === it.insumoCodigo) : null;
+    if (!ins) return { cor: "#b45309", texto: "não encontrado em Insumos — entra sem preço (R$ 0)" };
+    const p = typeof precoInsumo === "function" ? precoInsumo(ins) : null;
+    if (!p || p.preco == null) return { cor: "#b45309", texto: `${ins.codigo} · sem preço cadastrado` };
+    return { cor: "#15803d", texto: `${ins.codigo} · ${formatoBRL(p.preco)}/${ins.unidade || "un"}` };
+  }
+
   const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 };
 
   // ── Vazio ──────────────────────────────────────────────────
@@ -8338,6 +8494,62 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             <div style={{ fontSize: 11, color: "#9ca3af" }}>
               Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. No orçamento aparece uma linha por esquadria com o preço fechado; a composição fica guardada no item. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold. Para usar seus preços, cadastre o alumínio, o vidro e os acessórios em Insumos com o código Alcoa como alias.
             </div>
+          </div>
+        </BlocoColapsavel>
+
+        <BlocoColapsavel titulo="Itens do projeto de engenharia" subtitulo={`${itensProjetoLista.length} ite${itensProjetoLista.length !== 1 ? "ns" : "m"} · hidráulica, esgoto, elétrica, louças e metais, aquecimento`} aberto={!!blocosAbertos.itensProjeto} onToggle={() => toggleBloco("itensProjeto")}>
+          <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>
+              A planilha nunca quantificou esses grupos — eles vêm do projeto de engenharia. Digite (ou cole) a lista do projeto; cada item é procurado no catálogo de Insumos pelo nome e precificado como os demais.
+            </div>
+            <datalist id="vk-insumos-lista">
+              {catalogoInsumos.map((m) => <option key={m.id || m.codigo || m.nome} value={m.nome} />)}
+            </datalist>
+            {ETAPAS_PROJETO.map((et) => {
+              const doGrupo = itensProjetoLista.map((it, idx) => ({ it, idx })).filter((x) => x.it.etapa === et.id);
+              if (!doGrupo.length) return null;
+              return (
+                <div key={et.id} style={{ padding: 10, background: "#fafafa", borderRadius: 8 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#262421", marginBottom: 6 }}>{et.nome} <span style={{ color: "#9ca3af", fontWeight: 400 }}>· {doGrupo.length}</span></div>
+                  {doGrupo.map(({ it, idx }) => {
+                    const st = statusItemProjeto(it);
+                    return (
+                      <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "3fr 1fr 1fr 1.4fr auto", gap: 8, alignItems: "end", marginBottom: 6 }}>
+                        <div>
+                          <label style={C.label}>Insumo</label>
+                          <input style={C.input} list="vk-insumos-lista" value={it.nome ?? ""} placeholder="nome do material (como em Insumos)"
+                            onChange={(e) => updateItemProjeto(idx, "nome", e.target.value)} />
+                          {st && <div style={{ fontSize: 10.5, color: st.cor, marginTop: 2 }}>{st.texto}</div>}
+                        </div>
+                        <CampoNum label="Quantidade" valor={it.qtd} onChange={(v) => updateItemProjeto(idx, "qtd", v)} />
+                        <CampoTexto label="Unidade" valor={it.unidade} placeholder="auto" onChange={(v) => updateItemProjeto(idx, "unidade", v)} />
+                        <CampoSelect label="Etapa" valor={it.etapa} onChange={(v) => updateItemProjeto(idx, "etapa", v)} opcoes={ETAPAS_PROJETO.map((e) => ({ value: e.id, label: e.nome }))} />
+                        <button type="button" onClick={() => removeItemProjeto(idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>Remover</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {itensProjetoLista.length < ITENS_PROJETO_MAX && (
+                <button type="button" style={C.btnSec} onClick={() => addItemProjeto(colarEtapa)}>＋ Adicionar item</button>
+              )}
+              <button type="button" style={C.btnSec} onClick={() => setColarAberto(!colarAberto)}>{colarAberto ? "Fechar" : "Colar lista do projeto"}</button>
+            </div>
+            {colarAberto && (
+              <div style={{ padding: 10, border: "1px dashed rgba(38,36,33,0.2)", borderRadius: 8, display: "flex", flexDirection: "column", gap: 8 }}>
+                <CampoSelect label="Etapa dos itens colados" valor={colarEtapa} onChange={setColarEtapa} opcoes={ETAPAS_PROJETO.map((e) => ({ value: e.id, label: e.nome }))} />
+                <div>
+                  <label style={C.label}>Uma linha por item: nome ; quantidade ; unidade (a unidade é opcional)</label>
+                  <textarea style={{ ...C.input, height: 140, fontFamily: "inherit", resize: "vertical" }} value={colarTexto} onChange={(e) => setColarTexto(e.target.value)}
+                    placeholder={"PVC - Esgoto - Tubo 100mm ; 12\nPVC - Esgoto - Joelho 90° 100mm ; 8\nElétrica - Cabo Flex Cobre 2.5mm ; 300 ; Mts"} />
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" style={C.btnSec} onClick={colarItensProjeto}>Adicionar {interpretarListaColada(colarTexto).length} item(ns)</button>
+                </div>
+              </div>
+            )}
           </div>
         </BlocoColapsavel>
 

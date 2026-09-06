@@ -535,7 +535,13 @@ Faça commit ao fim de cada passo. Não empilhe a transcrição inteira num comm
   com a função dos perfis mapeada por analogia com a Gold (só correr 2 folhas
   tem lista) — o motor emite um aviso `esquadria_linha_aproximada`.
 - Não implementar `D_ESGOTO_PLUVIAL_TERREO`: 15 linhas, corpo vazio, chamada
-  comentada no original.
+  comentada no original. **Hidráulica, esgoto, elétrica, louças e metais,
+  aquecimento e pressurização nunca foram quantificados pela planilha** (só a
+  mão de obra). No VICKE esses grupos entram pelo bloco "Itens do projeto de
+  engenharia" (`projeto.itensProjeto`, motor `itensProjeto()`, etapas em
+  `ETAPAS_PROJETO`, ordens 18–23): o escritório lê o projeto e digita ou cola
+  a lista (nome ; quantidade ; unidade); cada linha é resolvida no catálogo
+  de Insumos pelo nome/alias e precificada como qualquer outro item.
 - Não reproduzir a aba `GERAL`: está morta, só a célula da tipologia é lida.
 - Não criar tabela nem coluna no Postgres — tudo vai no `dados` JSONB de `obras`.
 - Não chamar `api.*` direto; usar `save(...)`.
