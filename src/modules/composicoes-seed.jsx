@@ -42,8 +42,8 @@ var COMPOSICOES_DISCIPLINAS = [
 // _ALTO é escolhido automaticamente quando o padrão é Alto e o kit existe);
 // `pontos` elétricos por unidade; `portas` por unidade.
 // Mesmos cômodos (e nomes) do orçamento de projetos (COMODOS em shared.jsx),
-// agrupados como lá; `grupo` ordena a lista. WC = banheiro (conte aqui os
-// banheiros das suítes também); Suíte e Suíte Master são o quarto. Jardim
+// agrupados como lá; `grupo` ordena a lista. Banheiros: WC Suíte Master, WC
+// Suítes e WC (social); Suíte e Suíte Master são o quarto. Jardim
 // não tem medidas no projeto — só puxa a torneira externa. Piscina fica no
 // bloco próprio do orçamento.
 var AMBIENTES_TIPOS = [
@@ -104,6 +104,12 @@ var AMBIENTES_TIPOS = [
   { id: "closet", nome: "Closet", grupo: "Dormitórios", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
     pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "wcSuiteMaster", nome: "WC Suíte Master", grupo: "Dormitórios", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "wcSuite", nome: "WC Suítes", grupo: "Dormitórios", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
   { id: "wc", nome: "WC", grupo: "Dormitórios", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
     pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },

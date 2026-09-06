@@ -5325,8 +5325,8 @@ var COMPOSICOES_DISCIPLINAS = [
 // _ALTO é escolhido automaticamente quando o padrão é Alto e o kit existe);
 // `pontos` elétricos por unidade; `portas` por unidade.
 // Mesmos cômodos (e nomes) do orçamento de projetos (COMODOS em shared.jsx),
-// agrupados como lá; `grupo` ordena a lista. WC = banheiro (conte aqui os
-// banheiros das suítes também); Suíte e Suíte Master são o quarto. Jardim
+// agrupados como lá; `grupo` ordena a lista. Banheiros: WC Suíte Master, WC
+// Suítes e WC (social); Suíte e Suíte Master são o quarto. Jardim
 // não tem medidas no projeto — só puxa a torneira externa. Piscina fica no
 // bloco próprio do orçamento.
 var AMBIENTES_TIPOS = [
@@ -5387,6 +5387,12 @@ var AMBIENTES_TIPOS = [
   { id: "closet", nome: "Closet", grupo: "Dormitórios", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
     pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "wcSuiteMaster", nome: "WC Suíte Master", grupo: "Dormitórios", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "wcSuite", nome: "WC Suítes", grupo: "Dormitórios", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
   { id: "wc", nome: "WC", grupo: "Dormitórios", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
     pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
@@ -9399,6 +9405,8 @@ const COMODO_OBRA_PROJETO = {
   jardim:        { revestir: "nenhuma", semMedidas: true },
   dormitorio:    { revestir: "nenhuma", rodape: true },
   closet:        { revestir: "nenhuma", rodape: true },
+  wcSuiteMaster: { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.5 }, medidas: "WC", tamanhoMais: 1 }, // um tamanho acima do WC
+  wcSuite:       { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.5 }, medidas: "WC" },
   wc:            { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.5 } },
   suite:         { revestir: "nenhuma", rodape: true },
   closetSuite:   { revestir: "nenhuma", rodape: true },
@@ -9422,8 +9430,10 @@ const NOME_AMBIENTE = (id) => { const t = (typeof AMBIENTES_TIPOS !== "undefined
 function comodoPadrao(id, tamanho) {
   const regra = COMODO_OBRA_PROJETO[id] || { revestir: "nenhuma" };
   const comodos = typeof COMODOS !== "undefined" ? COMODOS : {};
-  const cfg = regra.semMedidas ? null : comodos[NOME_AMBIENTE(id)];
-  const [L, W] = (cfg && cfg.medidas && cfg.medidas[tamanho]) || [0, 0];
+  const cfg = regra.semMedidas ? null : comodos[regra.medidas || NOME_AMBIENTE(id)];
+  // tamanhoMais: um degrau acima na escala Grande > Médio > Pequeno > Compacta
+  const idx = Math.max(0, TAMANHOS_COMODOS.indexOf(tamanho) - (regra.tamanhoMais || 0));
+  const [L, W] = (cfg && cfg.medidas && cfg.medidas[TAMANHOS_COMODOS[idx]]) || [0, 0];
   return { L, W, peDireito: PE_DIREITO_PADRAO, revestir: regra.revestir, temBancada: !!regra.bancada, bancadaFracao: regra.bancada ? regra.bancada.fracao : 0.5, bancadaProfundidade: regra.bancada ? regra.bancada.profundidade : 0.6, rodape: !!regra.rodape };
 }
 // Configuração efetiva: padrão do tamanho + edições do usuário
@@ -10451,74 +10461,105 @@ function formatoBRL(n) {
   return (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-// Lista de cômodos do bloco Geral: nome clicável (abre a edição do cômodo),
-// contagem inteira num campo estreito e, ao lado, o que aquele cômodo puxa
-// (m² de piso, revestimento e bancada) pelas medidas do tamanho escolhido.
+// Lista de cômodos do bloco Geral: só os cômodos que a obra tem (quantidade
+// > 0), com botão para adicionar. Molhados primeiro, em tabela compacta com
+// as colunas Revest. (m² de parede) e Granito (m² de bancada) calculadas
+// pelas medidas do tamanho escolhido; o nome é um botão que abre a edição
+// (medidas, revestimento, bancada). Secos só têm a contagem.
 function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobile }) {
   const tipos = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
   const grupos = typeof AMBIENTES_GRUPOS !== "undefined" ? AMBIENTES_GRUPOS : [...new Set(tipos.map((a) => a.grupo || ""))];
-  const ordem = grupos.flatMap((g) => tipos.filter((a) => (a.grupo || "") === g));
+  const ordenados = grupos.flatMap((g) => tipos.filter((a) => (a.grupo || "") === g));
+  const qtd = (id) => Math.max(0, Math.round(numOrZero(get(`ambientes.${id}`))));
+  const presentes = ordenados.filter((a) => qtd(a.id) > 0);
+  const ausentes = ordenados.filter((a) => qtd(a.id) === 0);
+  const molhados = presentes.filter((a) => a.molhado), secos = presentes.filter((a) => !a.molhado);
   const fmt = (x) => Number(x).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
-  const inputQtd = { width: 52, padding: "5px 6px", border: "1.5px solid #1f2a37", borderRadius: 8, fontSize: 13, fontFamily: "inherit", textAlign: "center", background: "#fff" };
+  const inputQtd = { width: 48, padding: "4px 4px", border: "1.5px solid #1f2a37", borderRadius: 7, fontSize: 13, fontFamily: "inherit", textAlign: "center", background: "#fff" };
+  const colunasMolhado = isMobile ? "1fr 52px 60px 60px 20px" : "170px 52px 72px 72px 20px";
+  const colunasSeco = isMobile ? "1fr 52px 20px" : "170px 52px 20px";
+  const cabecalho = { fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, textAlign: "center" };
+  function setQtd(id, v) { set(`ambientes.${id}`, v === "" ? "" : Math.max(0, Math.round(Number(v)))); }
   function setCfg(id, campo, valor) { set(`comodosCfg.${id}.${campo}`, valor); }
-  function restaurar(id) {
-    const cfgs = { ...(projeto.comodosCfg || {}) };
-    delete cfgs[id];
-    set("comodosCfg", cfgs);
-  }
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: 720 }}>
-      {ordem.map((a, idx) => {
-        const n = Math.max(0, Math.round(numOrZero(get(`ambientes.${a.id}`))));
-        const cfg = comodoConfig(projeto, a.id);
-        const c = calcularComodo(cfg);
-        const aberto = comodoAberto === a.id;
-        const novoGrupo = idx === 0 || (ordem[idx - 1].grupo || "") !== (a.grupo || "");
-        return (
-          <div key={a.id}>
-            {novoGrupo && <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5, margin: idx === 0 ? "0 0 4px" : "10px 0 4px" }}>{a.grupo}</div>}
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 60px" : "190px 60px 1fr", gap: 10, alignItems: "center", padding: "4px 0" }}>
-              <button type="button" onClick={() => setComodoAberto(aberto ? null : a.id)}
-                style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 14, color: aberto ? "#b5652f" : "#1f2a37", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
-                title="Clique para editar medidas, revestimento e bancada">
-                {a.nome}{cfg.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6, textDecoration: "none" }}>editado</span>}
-              </button>
-              <input type="number" min="0" step="1" style={inputQtd} value={get(`ambientes.${a.id}`) ?? ""}
-                onChange={(e) => set(`ambientes.${a.id}`, e.target.value === "" ? "" : Math.max(0, Math.round(Number(e.target.value))))} />
-              <div style={{ fontSize: 12, color: "#6b7280", gridColumn: isMobile ? "1 / -1" : "auto" }}>
-                {n > 0 && c.area > 0 ? (
-                  <>
-                    {c.revestimento > 0 && <b style={{ color: "#374151" }}>{fmt(n * c.revestimento)} m² de revestimento</b>}
-                    {c.bancada && <>{c.revestimento > 0 ? " · " : ""}<b style={{ color: "#374151" }}>{fmt(n * c.bancadaM2)} m² de bancada</b> ({n > 1 ? `${n} × ` : ""}{fmt(c.bancada.comprimento)} m)</>}
-                    <span style={{ color: "#9ca3af" }}>{c.revestimento > 0 || c.bancada ? " · " : ""}{cfg.L} × {cfg.W} m</span>
-                  </>
-                ) : n > 0 && !(COMODO_OBRA_PROJETO[a.id] || {}).semMedidas ? <span style={{ color: "#9ca3af" }}>sem medidas — clique no nome e informe</span> : null}
-              </div>
+  function restaurar(id) { const cfgs = { ...(projeto.comodosCfg || {}) }; delete cfgs[id]; set("comodosCfg", cfgs); }
+  const [adicionando, setAdicionando] = useState(false);
+
+  // função (não componente): componente definido dentro do render remontaria o input a cada tecla
+  function linha(a) {
+    const n = qtd(a.id);
+    const cfg = comodoConfig(projeto, a.id);
+    const c = calcularComodo(cfg);
+    const aberto = comodoAberto === a.id;
+    return (
+      <div>
+        <div style={{ display: "grid", gridTemplateColumns: a.molhado ? colunasMolhado : colunasSeco, gap: 8, alignItems: "center", padding: "3px 0" }}>
+          {a.molhado ? (
+            <button type="button" onClick={() => setComodoAberto(aberto ? null : a.id)} title="Editar medidas, revestimento e bancada"
+              style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 13, padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${aberto ? "#b5652f" : "rgba(38,36,33,0.18)"}`, background: aberto ? "#fdf6f0" : "#fff", color: "#1f2a37", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {a.nome}{cfg.editado ? " *" : ""}
+            </button>
+          ) : (
+            <div style={{ fontSize: 13, color: "#1f2a37", padding: "5px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.nome}</div>
+          )}
+          <input type="number" min="0" step="1" style={inputQtd} value={get(`ambientes.${a.id}`) ?? ""} onChange={(e) => setQtd(a.id, e.target.value)} />
+          {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.revestimento > 0 ? fmt(n * c.revestimento) : "—"}</div>}
+          {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.bancada ? fmt(n * c.bancadaM2) : "—"}</div>}
+          <button type="button" onClick={() => { setQtd(a.id, 0); if (aberto) setComodoAberto(null); }} title="Tirar da obra" style={{ ...C.btnGhost, fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
+        </div>
+        {aberto && a.molhado && (
+          <div style={{ margin: "4px 0 8px", padding: 10, background: "#fafafa", border: "1px solid #eee", borderRadius: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 8 }}>
+              <CampoNum label="Comprimento (m)" valor={cfg.L} onChange={(v) => setCfg(a.id, "L", v)} />
+              <CampoNum label="Largura (m)" valor={cfg.W} onChange={(v) => setCfg(a.id, "W", v)} />
+              <CampoNum label="Pé-direito (m)" valor={cfg.peDireito} onChange={(v) => setCfg(a.id, "peDireito", v)} />
+              <CampoSelect label="Revestimento nas paredes" valor={cfg.revestir} onChange={(v) => setCfg(a.id, "revestir", v)} opcoes={REVESTIR_OPCOES} />
+              <CampoSelect label="Bancada" valor={cfg.temBancada ? "sim" : "nao"} onChange={(v) => setCfg(a.id, "temBancada", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
+              {cfg.temBancada && (
+                <>
+                  <CampoPercentual label="Bancada: % da parede mais comprida" valor={cfg.bancadaFracao} onChange={(v) => setCfg(a.id, "bancadaFracao", v)} />
+                  <CampoNum label="Profundidade da bancada (m)" valor={cfg.bancadaProfundidade} onChange={(v) => setCfg(a.id, "bancadaProfundidade", v)} />
+                </>
+              )}
             </div>
-            {aberto && (
-              <div style={{ margin: "4px 0 10px", padding: 12, background: "#fafafa", border: "1px solid #eee", borderRadius: 10 }}>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 10 }}>
-                  <CampoNum label="Comprimento da parede (m)" valor={cfg.L} onChange={(v) => setCfg(a.id, "L", v)} />
-                  <CampoNum label="Largura da parede (m)" valor={cfg.W} onChange={(v) => setCfg(a.id, "W", v)} />
-                  <CampoNum label="Pé-direito (m)" valor={cfg.peDireito} onChange={(v) => setCfg(a.id, "peDireito", v)} />
-                  <CampoSelect label="Revestimento nas paredes" valor={cfg.revestir} onChange={(v) => setCfg(a.id, "revestir", v)} opcoes={REVESTIR_OPCOES} />
-                  <CampoSelect label="Bancada" valor={cfg.temBancada ? "sim" : "nao"} onChange={(v) => setCfg(a.id, "temBancada", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
-                  {cfg.temBancada && (
-                    <>
-                      <CampoPercentual label="Bancada: % da parede mais comprida" valor={cfg.bancadaFracao} onChange={(v) => setCfg(a.id, "bancadaFracao", v)} />
-                      <CampoNum label="Profundidade da bancada (m)" valor={cfg.bancadaProfundidade} onChange={(v) => setCfg(a.id, "bancadaProfundidade", v)} />
-                    </>
-                  )}
-                </div>
-                <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 8, fontSize: 12, color: "#6b7280", flexWrap: "wrap" }}>
-                  <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancada ? ` · bancada ${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m = ${fmt(c.bancadaM2)} m² de pedra (com saia, fundo e sapatas)` : ""}</span>
-                  {cfg.editado && <button type="button" style={{ ...C.btnGhost, fontSize: 12 }} onClick={() => restaurar(a.id)}>Voltar ao padrão ({cfg.tamanho})</button>}
-                </div>
-              </div>
-            )}
+            <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6, fontSize: 11.5, color: "#6b7280", flexWrap: "wrap" }}>
+              <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancada ? ` · bancada ${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m = ${fmt(c.bancadaM2)} m² de pedra (tampo, saia, fundo e sapatas)` : ""}</span>
+              {cfg.editado && <button type="button" style={{ ...C.btnGhost, fontSize: 11.5 }} onClick={() => restaurar(a.id)}>Voltar ao padrão ({cfg.tamanho})</button>}
+            </div>
           </div>
-        );
-      })}
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: 460 }}>
+      {molhados.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: colunasMolhado, gap: 8, alignItems: "end", padding: "0 0 2px" }}>
+          <div style={{ ...cabecalho, textAlign: "left" }}>Áreas molhadas</div><div style={cabecalho}>Qtd</div><div style={cabecalho}>Revest. m²</div><div style={cabecalho}>Granito m²</div><div />
+        </div>
+      )}
+      {molhados.map((a) => <div key={a.id}>{linha(a)}</div>)}
+      {secos.length > 0 && (
+        <div style={{ display: "grid", gridTemplateColumns: colunasSeco, gap: 8, alignItems: "end", padding: "8px 0 2px" }}>
+          <div style={{ ...cabecalho, textAlign: "left" }}>Demais cômodos</div><div style={cabecalho}>Qtd</div><div />
+        </div>
+      )}
+      {secos.map((a) => <div key={a.id}>{linha(a)}</div>)}
+      <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+        {adicionando ? (
+          <select autoFocus style={{ ...C.input, width: "auto", minWidth: 220 }} defaultValue="" onBlur={() => setAdicionando(false)}
+            onChange={(e) => { if (e.target.value) { setQtd(e.target.value, 1); setComodoAberto(null); } setAdicionando(false); }}>
+            <option value="">Escolha o cômodo…</option>
+            {grupos.map((g) => {
+              const opts = ausentes.filter((a) => (a.grupo || "") === g);
+              return opts.length ? <optgroup key={g} label={g}>{opts.map((a) => <option key={a.id} value={a.id}>{a.nome}</option>)}</optgroup> : null;
+            })}
+          </select>
+        ) : (
+          ausentes.length > 0 && <button type="button" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={() => setAdicionando(true)}>＋ Adicionar cômodo</button>
+        )}
+        {presentes.length === 0 && <span style={{ fontSize: 12, color: "#9ca3af" }}>nenhum cômodo ainda</span>}
+      </div>
     </div>
   );
 }
@@ -10769,7 +10810,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
           <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Cômodos <span style={{ fontWeight: 400, color: "#9ca3af" }}>— quantidade de cada um; clique no nome para editar medidas, revestimento e bancada</span></div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Cômodos</div>
             <ListaComodos projeto={projetoDraft} get={get} set={set} comodoAberto={comodoAberto} setComodoAberto={setComodoAberto} isMobile={isMobile} />
           </div>
         </BlocoColapsavel>

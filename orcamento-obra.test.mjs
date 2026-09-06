@@ -574,6 +574,9 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   const g = modulo.estimarPelosComodos({ tamanhoComodos: "Grande", ambientes: { cozinha: 1 } });
   assert.strictEqual(g.pisoInterno, 24); // 6×4
   assert.strictEqual(modulo.estimarPelosComodos({}).detalhes.length, 0);
+  // WC Suítes usa as medidas do WC; WC Suíte Master um tamanho acima (Médio → Grande 3,5 × 2)
+  const wcs = modulo.estimarPelosComodos({ tamanhoComodos: "Médio", ambientes: { wcSuite: 1, wcSuiteMaster: 1 } });
+  assert.deepStrictEqual(wcs.detalhes.map((d) => [d.nome, d.L, d.W]), [["WC Suíte Master", 3.5, 2], ["WC Suítes", 3, 1.4]]);
   assert.strictEqual(normalizarProjeto({ tamanhoComodos: "Compacta" }).tamanhoComodos, "Compacta");
   assert.strictEqual(normalizarProjeto({}).tamanhoComodos, "Médio");
 });
