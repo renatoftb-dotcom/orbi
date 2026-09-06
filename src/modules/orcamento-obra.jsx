@@ -2499,12 +2499,17 @@ function projetoVazio() {
   };
 }
 
-function CampoNum({ label, valor, onChange }) {
+function CampoNum({ label, valor, onChange, inteiro }) {
+  // inteiro: contagens (ambientes, peças) — passo 1, sem negativos, sem decimais
   return (
     <div>
       <label style={C.label}>{label}</label>
-      <input style={C.input} type="number" value={valor ?? ""} step="0.01"
-        onChange={(e) => onChange(e.target.value === "" ? "" : Number(e.target.value))} />
+      <input style={C.input} type="number" value={valor ?? ""} step={inteiro ? "1" : "0.01"} min={inteiro ? "0" : undefined}
+        onChange={(e) => {
+          if (e.target.value === "") return onChange("");
+          const n = Number(e.target.value);
+          onChange(inteiro ? Math.max(0, Math.round(n)) : n);
+        }} />
     </div>
   );
 }
@@ -2953,7 +2958,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                     <CampoSelect label="Linha" valor={e.linha} onChange={(v) => updateEsquadria(idx, "linha", v)}
                       opcoes={ESQUADRIAS_LINHAS.map((l) => ({ value: l.id, label: l.disponivel ? l.nome : `${l.nome} (em breve)` }))} />
                     <CampoSelect label="Folhas" valor={e.folhas} onChange={(v) => updateEsquadria(idx, "folhas", Number(v))} opcoes={fam.folhas} />
-                    <CampoNum label="Quantidade" valor={e.qtd} onChange={(v) => updateEsquadria(idx, "qtd", v)} />
+                    <CampoNum label="Quantidade" valor={e.qtd} onChange={(v) => updateEsquadria(idx, "qtd", v)} inteiro />
                     <CampoNum label="Largura (m)" valor={e.largura} onChange={(v) => updateEsquadria(idx, "largura", v)} />
                     <CampoNum label="Altura (m)" valor={e.altura} onChange={(v) => updateEsquadria(idx, "altura", v)} />
                     <button type="button" onClick={() => removeEsquadria(idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>Remover</button>
@@ -2984,11 +2989,11 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             Sem projeto de engenharia, as instalações são estimadas por conjuntos de pontos por ambiente (prática do SINAPI), com os kits de Insumos → Composições. Informe quantos ambientes de cada tipo a casa tem.
           </div>
           {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => a.molhado).map((a) => (
-            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} />
+            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} inteiro />
           ))}
           <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#9ca3af", marginTop: -4 }}>Cômodos secos (só elétrica e portas):</div>
           {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => !a.molhado).map((a) => (
-            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} />
+            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} inteiro />
           ))}
           <CampoSelect label="Padrão de acabamento" valor={get("instalacoes.padrao") || "Médio"} onChange={(v) => set("instalacoes.padrao", v)} opcoes={["Médio", "Alto"]} />
           <CampoSelect label="Aquecimento de água" valor={get("instalacoes.aquecimento") || "nenhum"} onChange={(v) => set("instalacoes.aquecimento", v)}
