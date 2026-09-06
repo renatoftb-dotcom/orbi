@@ -9434,7 +9434,8 @@ function comodoPadrao(id, tamanho) {
   // tamanhoMais: um degrau acima na escala Grande > Médio > Pequeno > Compacta
   const idx = Math.max(0, TAMANHOS_COMODOS.indexOf(tamanho) - (regra.tamanhoMais || 0));
   const [L, W] = (cfg && cfg.medidas && cfg.medidas[TAMANHOS_COMODOS[idx]]) || [0, 0];
-  return { L, W, peDireito: PE_DIREITO_PADRAO, revestir: regra.revestir, temBancada: !!regra.bancada, bancadaFracao: regra.bancada ? regra.bancada.fracao : 0.5, bancadaProfundidade: regra.bancada ? regra.bancada.profundidade : 0.6, rodape: !!regra.rodape };
+  return { L, W, peDireito: PE_DIREITO_PADRAO, revestir: regra.revestir, temBancada: !!regra.bancada, bancadaFracao: regra.bancada ? regra.bancada.fracao : 0.5, bancadaProfundidade: regra.bancada ? regra.bancada.profundidade : 0.6,
+    saiaCm: BANCADA_PADRAO.saiaCm, fundoCm: BANCADA_PADRAO.fundoCm, sapatas: BANCADA_PADRAO.sapatas, sapataCm: BANCADA_PADRAO.sapataCm, rodape: !!regra.rodape };
 }
 // Configuração efetiva: padrão do tamanho + edições do usuário
 function comodoConfig(projeto, id) {
@@ -9454,6 +9455,7 @@ function comodoConfig(projeto, id) {
     revestir: REVESTIR_OPCOES.some((r) => r.value === o.revestir) ? o.revestir : base.revestir,
     temBancada: o.temBancada == null ? base.temBancada : !!o.temBancada,
     bancadaFracao: num(o.bancadaFracao, base.bancadaFracao), bancadaProfundidade: num(o.bancadaProfundidade, base.bancadaProfundidade),
+    saiaCm: num(o.saiaCm, base.saiaCm), fundoCm: num(o.fundoCm, base.fundoCm), sapatas: num(o.sapatas, base.sapatas), sapataCm: num(o.sapataCm, base.sapataCm),
     rodape: base.rodape, editado: Object.keys(o).length > 0, tamanho,
   };
 }
@@ -9468,9 +9470,11 @@ function calcularComodo(cfg) {
     else if (cfg.revestir === "maior") revestimento = maior * pd;
   }
   const r2 = (x) => Math.round(x * 100) / 100;
-  const bancada = cfg.temBancada && maior > 0 ? { comprimento: r2(maior * numOrZero(cfg.bancadaFracao)), profundidade: numOrZero(cfg.bancadaProfundidade) } : null;
-  const bancadaM2 = bancada ? medirBancada({ ...BANCADA_PADRAO, ...bancada }).total : 0;
-  return { area: r2(area), perimetro: r2(perimetro), revestimento: r2(revestimento), bancada, bancadaM2, rodape: cfg.rodape ? r2(Math.max(0, perimetro - PORTA_LARGURA)) : 0 };
+  const bancada = cfg.temBancada && maior > 0
+    ? { comprimento: r2(maior * numOrZero(cfg.bancadaFracao)), profundidade: numOrZero(cfg.bancadaProfundidade), saiaCm: numOrZero(cfg.saiaCm), fundoCm: numOrZero(cfg.fundoCm), sapatas: numOrZero(cfg.sapatas), sapataCm: numOrZero(cfg.sapataCm) }
+    : null;
+  const medida = bancada ? medirBancada(bancada) : null;
+  return { area: r2(area), perimetro: r2(perimetro), revestimento: r2(revestimento), bancada, bancadaM2: medida ? medida.total : 0, bancadaPartes: medida, rodape: cfg.rodape ? r2(Math.max(0, perimetro - PORTA_LARGURA)) : 0 };
 }
 // Vãos para vergas/contravergas, automáticos: portas internas (1 por cômodo
 // com kit de porta, 0,80 m, só verga) + esquadrias (portas externas 1 verga;
@@ -9526,7 +9530,7 @@ function estimarPelosComodos(projeto) {
     r.revestimentoInterno += n * c.revestimento;
     r.rodapeM += n * c.rodape;
     r.soleirasM += n * PORTA_LARGURA;
-    if (c.bancada) for (let k = 0; k < n; k++) r.bancadas.push({ ...BANCADA_PADRAO, nome: NOME_AMBIENTE(id) + (n > 1 ? ` ${k + 1}` : ""), comprimento: c.bancada.comprimento, profundidade: c.bancada.profundidade });
+    if (c.bancada) for (let k = 0; k < n; k++) r.bancadas.push({ ...BANCADA_PADRAO, ...c.bancada, nome: NOME_AMBIENTE(id) + (n > 1 ? ` ${k + 1}` : "") });
     r.detalhes.push({ id, nome: NOME_AMBIENTE(id), n, L: cfg.L, W: cfg.W, area: r1(n * c.area), revestimento: r1(n * c.revestimento), bancadaM2: r1(n * c.bancadaM2) });
   }
   for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
@@ -10477,7 +10481,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
   const fmt = (x) => Number(x).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
   const inputQtd = { width: 48, padding: "4px 4px", border: "1.5px solid #1f2a37", borderRadius: 7, fontSize: 13, fontFamily: "inherit", textAlign: "center", background: "#fff" };
   const colunasMolhado = isMobile ? "1fr 52px 60px 60px 20px" : "170px 52px 72px 72px 20px";
-  const colunasSeco = isMobile ? "1fr 52px 20px" : "170px 52px 20px";
+  const colunasSeco = isMobile ? "1fr 52px 20px" : "150px 52px 20px";
   const cabecalho = { fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, textAlign: "center" };
   function setQtd(id, v) { set(`ambientes.${id}`, v === "" ? "" : Math.max(0, Math.round(Number(v)))); }
   function setCfg(id, campo, valor) { set(`comodosCfg.${id}.${campo}`, valor); }
@@ -10517,12 +10521,16 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
               {cfg.temBancada && (
                 <>
                   <CampoPercentual label="Bancada: % da parede mais comprida" valor={cfg.bancadaFracao} onChange={(v) => setCfg(a.id, "bancadaFracao", v)} />
-                  <CampoNum label="Profundidade da bancada (m)" valor={cfg.bancadaProfundidade} onChange={(v) => setCfg(a.id, "bancadaProfundidade", v)} />
+                  <CampoNum label="Profundidade (m)" valor={cfg.bancadaProfundidade} onChange={(v) => setCfg(a.id, "bancadaProfundidade", v)} />
+                  <CampoNum label="Saia (cm)" valor={cfg.saiaCm} onChange={(v) => setCfg(a.id, "saiaCm", v)} />
+                  <CampoNum label="Fundo / frontão (cm)" valor={cfg.fundoCm} onChange={(v) => setCfg(a.id, "fundoCm", v)} />
+                  <CampoNum label="Sapatas (un)" valor={cfg.sapatas} onChange={(v) => setCfg(a.id, "sapatas", v)} inteiro />
+                  <CampoNum label="Largura da sapata (cm)" valor={cfg.sapataCm} onChange={(v) => setCfg(a.id, "sapataCm", v)} />
                 </>
               )}
             </div>
             <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6, fontSize: 11.5, color: "#6b7280", flexWrap: "wrap" }}>
-              <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancada ? ` · bancada ${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m = ${fmt(c.bancadaM2)} m² de pedra (tampo, saia, fundo e sapatas)` : ""}</span>
+              <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancadaPartes ? ` · granito ${fmt(c.bancadaM2)} m² = tampo ${fmt(c.bancadaPartes.tampo)} (${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m) + saia ${fmt(c.bancadaPartes.saia)} + fundo ${fmt(c.bancadaPartes.fundo)} + sapatas ${fmt(c.bancadaPartes.sapatas)}` : ""}</span>
               {cfg.editado && <button type="button" style={{ ...C.btnGhost, fontSize: 11.5 }} onClick={() => restaurar(a.id)}>Voltar ao padrão ({cfg.tamanho})</button>}
             </div>
           </div>
@@ -10532,19 +10540,25 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: 460 }}>
-      {molhados.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: colunasMolhado, gap: 8, alignItems: "end", padding: "0 0 2px" }}>
-          <div style={{ ...cabecalho, textAlign: "left" }}>Áreas molhadas</div><div style={cabecalho}>Qtd</div><div style={cabecalho}>Revest. m²</div><div style={cabecalho}>Granito m²</div><div />
+    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(380px, 460px) minmax(220px, 280px)", gap: isMobile ? 12 : 28, alignItems: "start" }}>
+        <div>
+          {molhados.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: colunasMolhado, gap: 8, alignItems: "end", padding: "0 0 2px" }}>
+              <div style={{ ...cabecalho, textAlign: "left" }}>Áreas molhadas</div><div style={cabecalho}>Qtd</div><div style={cabecalho}>Revest. m²</div><div style={cabecalho}>Granito m²</div><div />
+            </div>
+          )}
+          {molhados.map((a) => <div key={a.id}>{linha(a)}</div>)}
         </div>
-      )}
-      {molhados.map((a) => <div key={a.id}>{linha(a)}</div>)}
-      {secos.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: colunasSeco, gap: 8, alignItems: "end", padding: "8px 0 2px" }}>
-          <div style={{ ...cabecalho, textAlign: "left" }}>Demais cômodos</div><div style={cabecalho}>Qtd</div><div />
+        <div>
+          {secos.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: colunasSeco, gap: 8, alignItems: "end", padding: "0 0 2px" }}>
+              <div style={{ ...cabecalho, textAlign: "left" }}>Demais cômodos</div><div style={cabecalho}>Qtd</div><div />
+            </div>
+          )}
+          {secos.map((a) => <div key={a.id}>{linha(a)}</div>)}
         </div>
-      )}
-      {secos.map((a) => <div key={a.id}>{linha(a)}</div>)}
+      </div>
       <div style={{ marginTop: 6, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         {adicionando ? (
           <select autoFocus style={{ ...C.input, width: "auto", minWidth: 220 }} defaultValue="" onBlur={() => setAdicionando(false)}

@@ -561,6 +561,14 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   const ed = modulo.estimarPelosComodos({ tamanhoComodos: "Médio", ambientes: { banheiroSocial: 1 }, comodosCfg: { banheiroSocial: { L: 4, W: 2, revestir: "meia", bancadaFracao: 1, bancadaProfundidade: 0.6 } } });
   assert.strictEqual(ed.pisoInterno, 8); assert.strictEqual(ed.revestimentoInterno, 18); // 12 × 1,5
   assert.deepStrictEqual(ed.bancadas.map((b) => [b.comprimento, b.profundidade]), [[4, 0.6]]);
+  // saia, fundo e sapatas entram na bancada automática e são editáveis por cômodo
+  const r0 = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 } }, { materiais: [] });
+  const g0 = r0.itens.find((i) => i.subEtapa === "Bancadas");
+  assert.deepStrictEqual([g0.composicao[0].tampo, g0.composicao[0].saia, g0.composicao[0].fundo, g0.composicao[0].sapatas], [1.2, 0.1, 0.2, 0.12]);
+  assert.strictEqual(g0.qtd, 1.62);
+  const r1 = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 }, comodosCfg: { cozinha: { saiaCm: 10, fundoCm: 15, sapatas: 3, sapataCm: 12 } } }, { materiais: [] });
+  const g1 = r1.itens.find((i) => i.subEtapa === "Bancadas");
+  assert.deepStrictEqual([g1.composicao[0].saia, g1.composicao[0].fundo, g1.composicao[0].sapatas], [0.2, 0.3, 0.22]); // 2×0,10; 2×0,15; 3×0,6×0,12
   // sem nada digitado, revestimento e bancadas do orçamento vêm dos cômodos
   const cp = normalizarProjeto({ tamanhoComodos: "Médio", ambientes: { cozinha: 1 } });
   assert.strictEqual(cp.revestimentoInterno, 37.5);
