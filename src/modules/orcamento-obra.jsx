@@ -2069,7 +2069,13 @@ function comodoConfig(projeto, id) {
   const p = projeto || {};
   const tamanho = TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio";
   const base = comodoPadrao(id, tamanho);
-  const o = (p.comodosCfg && p.comodosCfg[id]) || {};
+  const cfgs = p.comodosCfg || {};
+  let o = cfgs[id];
+  if (!o) { // edição gravada com id antigo
+    const mapa = typeof AMBIENTES_MIGRACAO !== "undefined" ? AMBIENTES_MIGRACAO : {};
+    for (const [antigo, novo] of Object.entries(mapa)) if (novo === id && cfgs[antigo]) { o = cfgs[antigo]; break; }
+  }
+  o = o || {};
   const num = (v, d) => (v === "" || v == null || !Number.isFinite(Number(v)) ? d : Number(v));
   return {
     L: num(o.L, base.L), W: num(o.W, base.W), peDireito: num(o.peDireito, base.peDireito),
