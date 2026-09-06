@@ -9399,9 +9399,19 @@ const SOLEIRA_LARGURA_M = 0.15;
 // como m² de pedra; não há perda porque a peça vem pronta.
 const BANCADA_PADRAO = { nome: "", comprimento: "", profundidade: 0.60, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10, produto: "" };
 const BANCADAS_MAX = 20;
+// Ilha: comprimento = parede mais comprida do cômodo menos esta folga (m)
+const ILHA_FOLGA_M = 1;
 function medirBancada(b) {
   const C = numOrZero(b.comprimento), P = numOrZero(b.profundidade);
   const tampo = C * P;
+  const r2i = (x) => Math.round(x * 100) / 100;
+  // Ilha: solta no meio do ambiente, sem parede atrás. As quatro faces são de
+  // pedra (perímetro × altura da saia) e já sustentam o tampo — sem fundo
+  // (rodabanca) e sem sapatas.
+  if (b.ilha) {
+    const laterais = 2 * (C + P) * numOrZero(b.saiaCm) / 100;
+    return { tampo: r2i(tampo), laterais: r2i(laterais), total: r2i(tampo + laterais) };
+  }
   const saia = C * numOrZero(b.saiaCm) / 100;
   const fundo = C * numOrZero(b.fundoCm) / 100;
   const sapatas = numOrZero(b.sapatas) * P * numOrZero(b.sapataCm) / 100;
@@ -9466,10 +9476,10 @@ const COMODO_OBRA_PROJETO = {
   salaJantar:    { revestir: "nenhuma", rodape: true },
   escritorio:    { revestir: "nenhuma", rodape: true },
   lavabo:        { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.45 } },
-  cozinha:       { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.6 } },
+  cozinha:       { revestir: "todas", bancada: { fracao: 0.1, profundidade: 0.6, ilha: true } },
   lavanderia:    { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.6 } },
   deposito:      { revestir: "nenhuma" },
-  areaLazer:     { revestir: "maior", bancada: { fracao: 0.5, profundidade: 0.6 } },
+  areaLazer:     { revestir: "maior", bancada: { fracao: 0.1, profundidade: 0.6, ilha: true } },
   lavaboLazer:   { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.45 } },
   sauna:         { revestir: "nenhuma" },
   academia:      { revestir: "nenhuma", rodape: true },
@@ -9508,6 +9518,7 @@ function comodoPadrao(id, tamanho) {
   const idx = Math.max(0, TAMANHOS_COMODOS.indexOf(tamanho) - (regra.tamanhoMais || 0));
   const [L, W] = (cfg && cfg.medidas && cfg.medidas[TAMANHOS_COMODOS[idx]]) || [0, 0];
   return { L, W, peDireito: PE_DIREITO_PADRAO, revestir: regra.revestir, temBancada: !!regra.bancada, bancadaFracao: regra.bancada ? regra.bancada.fracao : 0.5, bancadaProfundidade: regra.bancada ? regra.bancada.profundidade : 0.6,
+    permiteIlha: !!(regra.bancada && regra.bancada.ilha), temIlha: false,
     saiaCm: BANCADA_PADRAO.saiaCm, fundoCm: BANCADA_PADRAO.fundoCm, sapatas: BANCADA_PADRAO.sapatas, sapataCm: BANCADA_PADRAO.sapataCm, rodape: !!regra.rodape };
 }
 // Configuração efetiva: padrão do tamanho + edições do usuário
@@ -9528,6 +9539,7 @@ function comodoConfig(projeto, id) {
     revestir: REVESTIR_OPCOES.some((r) => r.value === o.revestir) ? o.revestir : base.revestir,
     temBancada: o.temBancada == null ? base.temBancada : !!o.temBancada,
     bancadaFracao: num(o.bancadaFracao, base.bancadaFracao), bancadaProfundidade: num(o.bancadaProfundidade, base.bancadaProfundidade),
+    permiteIlha: base.permiteIlha, temIlha: base.permiteIlha && (o.temIlha == null ? base.temIlha : !!o.temIlha),
     saiaCm: num(o.saiaCm, base.saiaCm), fundoCm: num(o.fundoCm, base.fundoCm), sapatas: num(o.sapatas, base.sapatas), sapataCm: num(o.sapataCm, base.sapataCm),
     rodape: base.rodape, editado: Object.keys(o).length > 0, tamanho,
   };
@@ -9547,7 +9559,13 @@ function calcularComodo(cfg) {
     ? { comprimento: r2(maior * numOrZero(cfg.bancadaFracao)), profundidade: numOrZero(cfg.bancadaProfundidade), saiaCm: numOrZero(cfg.saiaCm), fundoCm: numOrZero(cfg.fundoCm), sapatas: numOrZero(cfg.sapatas), sapataCm: numOrZero(cfg.sapataCm) }
     : null;
   const medida = bancada ? medirBancada(bancada) : null;
-  return { area: r2(area), perimetro: r2(perimetro), revestimento: r2(revestimento), bancada, bancadaM2: medida ? medida.total : 0, bancadaPartes: medida, rodape: cfg.rodape ? r2(Math.max(0, perimetro - PORTA_LARGURA)) : 0 };
+  // Ilha (cozinha e área de lazer): 1 m mais curta que a parede mais comprida
+  const ilha = cfg.temIlha && maior > ILHA_FOLGA_M
+    ? { comprimento: r2(maior - ILHA_FOLGA_M), profundidade: numOrZero(cfg.bancadaProfundidade), saiaCm: numOrZero(cfg.saiaCm), ilha: true }
+    : null;
+  const medidaIlha = ilha ? medirBancada(ilha) : null;
+  return { area: r2(area), perimetro: r2(perimetro), revestimento: r2(revestimento), bancada, ilha, ilhaPartes: medidaIlha,
+    bancadaM2: r2((medida ? medida.total : 0) + (medidaIlha ? medidaIlha.total : 0)), bancadaPartes: medida, rodape: cfg.rodape ? r2(Math.max(0, perimetro - PORTA_LARGURA)) : 0 };
 }
 // Vãos para vergas/contravergas, automáticos: portas internas (1 por cômodo
 // com kit de porta, 0,80 m, só verga) + esquadrias (portas externas 1 verga;
@@ -9604,7 +9622,11 @@ function estimarPelosComodos(projeto) {
     r.revestimentoInterno += n * c.revestimento;
     r.rodapeM += n * c.rodape;
     r.soleirasM += n * PORTA_LARGURA;
-    if (c.bancada) for (let k = 0; k < n; k++) r.bancadas.push({ ...BANCADA_PADRAO, ...c.bancada, nome: NOME_AMBIENTE(id) + (n > 1 ? ` ${k + 1}` : "") });
+    for (let k = 0; k < n; k++) {
+      const sufixo = n > 1 ? ` ${k + 1}` : "";
+      if (c.bancada) r.bancadas.push({ ...BANCADA_PADRAO, ...c.bancada, nome: NOME_AMBIENTE(id) + sufixo });
+      if (c.ilha) r.bancadas.push({ ...BANCADA_PADRAO, fundoCm: 0, sapatas: 0, ...c.ilha, nome: NOME_AMBIENTE(id) + sufixo + " — ilha" });
+    }
     r.detalhes.push({ id, nome: NOME_AMBIENTE(id), n, L: cfg.L, W: cfg.W, area: r1(n * c.area), revestimento: r1(n * c.revestimento), bancadaM2: r1(n * c.bancadaM2) });
   }
   for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
@@ -9660,7 +9682,9 @@ function pisosRevestimentos(cp, out, data) {
     const produto = String(b.produto || "").trim() || granitoPadrao(padrao);
     const acc = porPedra[produto] || (porPedra[produto] = { m2: 0, composicao: [] });
     acc.m2 += m.total;
-    acc.composicao.push({ bancada: b.nome || "Bancada", m2: m.total, tampo: m.tampo, saia: m.saia, fundo: m.fundo, sapatas: m.sapatas });
+    acc.composicao.push(b.ilha
+      ? { bancada: b.nome || "Ilha", m2: m.total, tampo: m.tampo, laterais: m.laterais }
+      : { bancada: b.nome || "Bancada", m2: m.total, tampo: m.tampo, saia: m.saia, fundo: m.fundo, sapatas: m.sapatas });
   }
   for (const [produto, acc] of Object.entries(porPedra)) {
     emitir(out, { ...base, subEtapa: "Bancadas", item: produto, unidade: "m2", qtd: Math.round(acc.m2 * 100) / 100, composicao: acc.composicao });
@@ -10171,6 +10195,7 @@ function normalizarProjeto(projeto) {
       bancadas: ((Array.isArray(pisosIn.bancadas) && pisosIn.bancadas.length) ? pisosIn.bancadas : estimativaComodos.bancadas).slice(0, BANCADAS_MAX).map((b) => ({
         nome: String((b && b.nome) || "").trim(), comprimento: numOrZero(b && b.comprimento), profundidade: numOrZero(b && b.profundidade),
         saiaCm: numOrZero(b && b.saiaCm), fundoCm: numOrZero(b && b.fundoCm), sapatas: numOrZero(b && b.sapatas), sapataCm: numOrZero(b && b.sapataCm), produto: (b && b.produto) || "",
+        ilha: !!(b && b.ilha),
       })),
       deckM2: numOrZero(pisosIn.deckM2), deckProduto: pisosIn.deckProduto || "",
     },
@@ -10592,7 +10617,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
           )}
           <input type="number" min="0" step="1" style={inputQtd} value={get(`ambientes.${a.id}`) ?? ""} onChange={(e) => setQtd(a.id, e.target.value)} />
           {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.revestimento > 0 ? fmt(n * c.revestimento) : "—"}</div>}
-          {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.bancada ? fmt(n * c.bancadaM2) : "—"}</div>}
+          {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.bancadaM2 > 0 ? fmt(n * c.bancadaM2) : "—"}</div>}
           <button type="button" onClick={() => { setQtd(a.id, 0); if (aberto) setComodoAberto(null); }} title="Tirar da obra" style={{ ...C.btnGhost, fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
         </div>
         {aberto && a.molhado && (
@@ -10603,6 +10628,9 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
               <CampoNum label="Pé-direito (m)" valor={cfg.peDireito} onChange={(v) => setCfg(a.id, "peDireito", v)} />
               <CampoSelect label="Revestimento nas paredes" valor={cfg.revestir} onChange={(v) => setCfg(a.id, "revestir", v)} opcoes={REVESTIR_OPCOES} />
               <CampoSelect label="Bancada" valor={cfg.temBancada ? "sim" : "nao"} onChange={(v) => setCfg(a.id, "temBancada", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
+              {cfg.permiteIlha && (
+                <CampoSelect label="Ilha" valor={cfg.temIlha ? "sim" : "nao"} onChange={(v) => setCfg(a.id, "temIlha", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
+              )}
               {cfg.temBancada && (
                 <>
                   <CampoPercentual label="Bancada (% da parede maior)" valor={cfg.bancadaFracao} onChange={(v) => setCfg(a.id, "bancadaFracao", v)} />
@@ -10615,7 +10643,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
               )}
             </div>
             <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6, fontSize: 11.5, color: "#6b7280", flexWrap: "wrap" }}>
-              <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancadaPartes ? ` · granito ${fmt(c.bancadaM2)} m² = tampo ${fmt(c.bancadaPartes.tampo)} (${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m) + saia ${fmt(c.bancadaPartes.saia)} + fundo ${fmt(c.bancadaPartes.fundo)} + sapatas ${fmt(c.bancadaPartes.sapatas)}` : ""}</span>
+              <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancadaM2 > 0 ? ` · granito ${fmt(c.bancadaM2)} m²` : ""}{c.bancadaPartes ? ` = bancada ${fmt(c.bancadaPartes.total)} (tampo ${fmt(c.bancadaPartes.tampo)} de ${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m + saia ${fmt(c.bancadaPartes.saia)} + fundo ${fmt(c.bancadaPartes.fundo)} + sapatas ${fmt(c.bancadaPartes.sapatas)})` : ""}{c.ilhaPartes ? ` + ilha ${fmt(c.ilhaPartes.total)} (tampo ${fmt(c.ilhaPartes.tampo)} de ${fmt(c.ilha.comprimento)} × ${fmt(c.ilha.profundidade)} m + laterais ${fmt(c.ilhaPartes.laterais)})` : ""}</span>
               {cfg.editado && <button type="button" style={{ ...C.btnGhost, fontSize: 11.5 }} onClick={() => restaurar(a.id)}>Voltar ao padrão ({cfg.tamanho})</button>}
             </div>
           </div>

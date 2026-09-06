@@ -39,7 +39,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo,
   };
 `)();
 
@@ -555,8 +555,8 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   assert.strictEqual(est.rodapeM, 39.6);               // 3×(14−0,8)
   assert.strictEqual(est.soleirasM, 10.8);             // 6 portas × 0,8 + 4 janelas × 1,5
   assert.strictEqual(est.bancadas.length, 3);
-  // bancada = metade da parede mais comprida: WC 3 m → 1,5; cozinha 4 m → 2
-  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento, b.profundidade]), [["Cozinha", 2, 0.6], ["WC 1", 1.5, 0.5], ["WC 2", 1.5, 0.5]]);
+  // bancada = fração da parede mais comprida: WC 50% de 3 m → 1,5; cozinha 10% de 4 m → 0,4
+  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento, b.profundidade]), [["Cozinha", 0.4, 0.6], ["WC 1", 1.5, 0.5], ["WC 2", 1.5, 0.5]]);
   // cômodo editado: banheiro 4 × 2, meia parede, bancada 100% × 0,6
   const ed = modulo.estimarPelosComodos({ tamanhoComodos: "Médio", ambientes: { banheiroSocial: 1 }, comodosCfg: { banheiroSocial: { L: 4, W: 2, revestir: "meia", bancadaFracao: 1, bancadaProfundidade: 0.6 } } });
   assert.strictEqual(ed.pisoInterno, 8); assert.strictEqual(ed.revestimentoInterno, 18); // 12 × 1,5
@@ -564,20 +564,20 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   // saia, fundo e sapatas entram na bancada automática e são editáveis por cômodo
   const r0 = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 } }, { materiais: [] });
   const g0 = r0.itens.find((i) => i.subEtapa === "Bancadas");
-  assert.deepStrictEqual([g0.composicao[0].tampo, g0.composicao[0].saia, g0.composicao[0].fundo, g0.composicao[0].sapatas], [1.2, 0.1, 0.2, 0.12]);
-  assert.strictEqual(g0.qtd, 1.62);
+  assert.deepStrictEqual([g0.composicao[0].tampo, g0.composicao[0].saia, g0.composicao[0].fundo, g0.composicao[0].sapatas], [0.24, 0.02, 0.04, 0.12]);
+  assert.strictEqual(g0.qtd, 0.42);
   const r1 = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 }, comodosCfg: { cozinha: { saiaCm: 10, fundoCm: 15, sapatas: 3, sapataCm: 12 } } }, { materiais: [] });
   const g1 = r1.itens.find((i) => i.subEtapa === "Bancadas");
-  assert.deepStrictEqual([g1.composicao[0].saia, g1.composicao[0].fundo, g1.composicao[0].sapatas], [0.2, 0.3, 0.22]); // 2×0,10; 2×0,15; 3×0,6×0,12
+  assert.deepStrictEqual([g1.composicao[0].saia, g1.composicao[0].fundo, g1.composicao[0].sapatas], [0.04, 0.06, 0.22]); // 0,4×0,10; 0,4×0,15; 3×0,6×0,12
   // sem nada digitado, revestimento e bancadas do orçamento vêm dos cômodos
   const cp = normalizarProjeto({ tamanhoComodos: "Médio", ambientes: { cozinha: 1 } });
   assert.strictEqual(cp.revestimentoInterno, 37.5);
   // ids antigos migram (banheiroSuite/banheiroSocial → wc, salaEstar → salaTV)
   const mig = normalizarProjeto({ ambientes: { banheiroSuite: 2, banheiroSocial: 1, salaEstar: 1 } }).ambientes;
   assert.strictEqual(mig.wc, 3); assert.strictEqual(mig.salaTV, 1); assert.ok(!("banheiroSuite" in mig));
-  assert.strictEqual(cp.pisos.bancadas.length, 1); assert.strictEqual(cp.pisos.bancadas[0].comprimento, 2);
+  assert.strictEqual(cp.pisos.bancadas.length, 1); assert.strictEqual(cp.pisos.bancadas[0].comprimento, 0.4);
   const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 } }, { materiais: [] });
-  assert.ok(r.itens.some((i) => i.subEtapa === "Bancadas" && i.item === "Granito padrão Médio" && i.qtd > 1));
+  assert.ok(r.itens.some((i) => i.subEtapa === "Bancadas" && i.item === "Granito padrão Médio" && i.qtd > 0));
   assert.ok(r.itens.some((i) => i.subEtapa === "Revestimento interno"));
   const g = modulo.estimarPelosComodos({ tamanhoComodos: "Grande", ambientes: { cozinha: 1 } });
   assert.strictEqual(g.pisoInterno, 24); // 6×4
@@ -650,6 +650,34 @@ teste("louças e metais pelo padrão da obra: abaixo de Alto é misturador, Alto
   assert.ok(!alt.some((n) => /Misturador/.test(n)));
   assert.ok(!alt.some((n) => /\{padr/.test(n)) && !mcmv.some((n) => /\{padr/.test(n)));
   assert.strictEqual(modulo.nomeItemKit("Louças - Cuba padrão {padrão}", "Alto"), "Louças - Cuba padrão Alto");
+});
+
+teste("ilha (cozinha e área de lazer): 1 m menor que a parede maior, laterais de granito, só onde é permitida", () => {
+  // Cozinha Médio 4 × 3: bancada 10% de 4 = 0,4 m; ilha 4 − 1 = 3 m
+  const semIlha = modulo.calcularComodo(modulo.comodoConfig({ tamanhoComodos: "Médio" }, "cozinha"));
+  assert.strictEqual(semIlha.bancada.comprimento, 0.4);
+  assert.strictEqual(semIlha.ilha, null);
+  const cfg = modulo.comodoConfig({ tamanhoComodos: "Médio", comodosCfg: { cozinha: { temIlha: true } } }, "cozinha");
+  assert.ok(cfg.permiteIlha && cfg.temIlha);
+  const c = modulo.calcularComodo(cfg);
+  assert.strictEqual(c.ilha.comprimento, 3);
+  assert.strictEqual(c.ilha.profundidade, 0.6);
+  // tampo 3 × 0,6 = 1,8; laterais 2 × (3 + 0,6) × 0,05 = 0,36
+  assert.deepStrictEqual(c.ilhaPartes, { tampo: 1.8, laterais: 0.36, total: 2.16 });
+  assert.strictEqual(c.bancadaM2, 2.58); // bancada 0,42 + ilha 2,16
+  // vira uma bancada própria na lista, com a marca de ilha preservada
+  const est = modulo.estimarPelosComodos({ tamanhoComodos: "Médio", ambientes: { cozinha: 1 }, comodosCfg: { cozinha: { temIlha: true } } });
+  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento, !!b.ilha]), [["Cozinha", 0.4, false], ["Cozinha — ilha", 3, true]]);
+  const cp = normalizarProjeto({ tamanhoComodos: "Médio", ambientes: { cozinha: 1 }, comodosCfg: { cozinha: { temIlha: true } } });
+  assert.strictEqual(cp.pisos.bancadas[1].ilha, true);
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 }, comodosCfg: { cozinha: { temIlha: true } } }, { materiais: [] });
+  const g = r.itens.find((i) => i.subEtapa === "Bancadas");
+  assert.strictEqual(g.qtd, 2.58);
+  assert.strictEqual(g.composicao[1].bancada, "Cozinha — ilha");
+  // área de lazer também oferece; WC e lavabo não
+  assert.ok(modulo.comodoConfig({}, "areaLazer").permiteIlha);
+  assert.ok(!modulo.comodoConfig({}, "wc").permiteIlha);
+  assert.ok(!modulo.calcularComodo(modulo.comodoConfig({ comodosCfg: { wc: { temIlha: true } } }, "wc")).ilha);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
