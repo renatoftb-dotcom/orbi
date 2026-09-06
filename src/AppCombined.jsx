@@ -10611,6 +10611,24 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         </div>
       )}
 
+      {(() => {
+        const todasRecolhidas = itensPorEtapa.length > 0 && itensPorEtapa.every((g) => etapasColapsadas[g.etapa]);
+        const alternarTodas = () => {
+          if (todasRecolhidas) { setEtapasColapsadas({}); return; }
+          const tudo = {};
+          for (const g of itensPorEtapa) tudo[g.etapa] = true;
+          setEtapasColapsadas(tudo);
+        };
+        return (
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>{itensPorEtapa.length} etapas · {orc.itens.length} itens</div>
+            <button type="button" onClick={alternarTodas} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
+              {todasRecolhidas ? "Mostrar todos os itens ▼" : "Recolher todos os itens ▲"}
+            </button>
+          </div>
+        );
+      })()}
+
       <div style={{ overflowX: "auto", marginBottom: 16 }}>
         {itensPorEtapa.map((grupo) => {
           const subtotal = grupo.itens.reduce((acc, i) => acc + i.total, 0);
