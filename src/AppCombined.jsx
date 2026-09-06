@@ -5324,55 +5324,91 @@ var COMPOSICOES_DISCIPLINAS = [
 // Tipos de ambiente que a obra conta. `kits` por disciplina (o sufixo
 // _ALTO é escolhido automaticamente quando o padrão é Alto e o kit existe);
 // `pontos` elétricos por unidade; `portas` por unidade.
+// Mesmos cômodos (e nomes) do orçamento de projetos (COMODOS em shared.jsx),
+// agrupados como lá; `grupo` ordena a lista. WC = banheiro (conte aqui os
+// banheiros das suítes também); Suíte e Suíte Master são o quarto. Jardim
+// não tem medidas no projeto — só puxa a torneira externa. Piscina fica no
+// bloco próprio do orçamento.
 var AMBIENTES_TIPOS = [
-  { id: "banheiroSuite",  nome: "Banheiro de suíte",         molhado: true,
-    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
-  { id: "banheiroSocial", nome: "Banheiro social",           molhado: true,
-    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
-  { id: "lavabo",         nome: "Lavabo",                    molhado: true,
-    kits: { HIDRAULICA: ["AGUA_FRIA_LAVABO"], ESGOTO: ["ESGOTO_LAVABO"], LOUCAS: ["LOUCAS_LAVABO"], PORTAS: ["PORTA_BANHEIRO"] },
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
-  { id: "cozinha",        nome: "Cozinha",                   molhado: true,
-    kits: { HIDRAULICA: ["AGUA_FRIA_COZINHA", "AGUA_QUENTE_COZINHA"], ESGOTO: ["ESGOTO_COZINHA"], LOUCAS: ["LOUCAS_COZINHA"], PORTAS: [] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 3, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
-  { id: "lavanderia",     nome: "Lavanderia / área de serviço", molhado: true,
-    kits: { HIDRAULICA: ["AGUA_FRIA_LAVANDERIA", "AGUA_QUENTE_LAVANDERIA"], ESGOTO: ["ESGOTO_LAVANDERIA"], LOUCAS: ["LOUCAS_LAVANDERIA"], PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
-  { id: "areaGourmet",    nome: "Área gourmet / lazer",      molhado: true,
-    kits: { HIDRAULICA: ["AGUA_FRIA_COZINHA"], ESGOTO: ["ESGOTO_COZINHA"], LOUCAS: ["LOUCAS_COZINHA"], PORTAS: [] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 3, iluminacaoParalela: 0 } },
-  { id: "torneiraExterna", nome: "Torneira externa / jardim", molhado: true,
-    kits: { HIDRAULICA: ["AGUA_FRIA_TORNEIRA_EXTERNA"], ESGOTO: [], LOUCAS: ["LOUCAS_TORNEIRA_EXTERNA"], PORTAS: [] },
-    pontos: { tomadaGeral: 0, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 0 } },
-  { id: "dormitorio",     nome: "Dormitório",                molhado: false,
-    kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 1 } },
-  { id: "closet",         nome: "Closet",                    molhado: false,
-    kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
-  { id: "salaEstar",      nome: "Sala de estar / living",    molhado: false,
+  { id: "garagem", nome: "Garagem", grupo: "Áreas Sociais", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 5, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 1 } },
-  { id: "salaJantar",     nome: "Sala de jantar",            molhado: false,
-    kits: {},
-    pontos: { tomadaGeral: 3, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
-  { id: "escritorio",     nome: "Escritório",                molhado: false,
-    kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
-  { id: "circulacao",     nome: "Circulação / hall",         molhado: false,
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "hallEntrada", nome: "Hall de entrada", grupo: "Áreas Sociais", molhado: false,
     kits: {},
     pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 1 } },
-  { id: "garagem",        nome: "Garagem",                   molhado: false,
+  { id: "salaTV", nome: "Sala TV", grupo: "Áreas Sociais", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
-  { id: "varanda",        nome: "Varanda / terraço",         molhado: false,
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 1 } },
+  { id: "living", nome: "Living", grupo: "Áreas Sociais", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 5, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 3, iluminacaoParalela: 1 } },
+  { id: "salaJantar", nome: "Sala de jantar", grupo: "Áreas Sociais", molhado: false,
+    kits: {},
+    pontos: { tomadaGeral: 3, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "escritorio", nome: "Escritório", grupo: "Áreas Sociais", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "lavabo", nome: "Lavabo", grupo: "Áreas Sociais", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_LAVABO"], ESGOTO: ["ESGOTO_LAVABO"], LOUCAS: ["LOUCAS_LAVABO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "cozinha", nome: "Cozinha", grupo: "Serviço", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_COZINHA", "AGUA_QUENTE_COZINHA"], ESGOTO: ["ESGOTO_COZINHA"], LOUCAS: ["LOUCAS_COZINHA"], PORTAS: [] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 3, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "lavanderia", nome: "Lavanderia", grupo: "Serviço", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_LAVANDERIA", "AGUA_QUENTE_LAVANDERIA"], ESGOTO: ["ESGOTO_LAVANDERIA"], LOUCAS: ["LOUCAS_LAVANDERIA"], PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "deposito", nome: "Depósito", grupo: "Serviço", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "areaLazer", nome: "Área de lazer", grupo: "Lazer", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_COZINHA"], ESGOTO: ["ESGOTO_COZINHA"], LOUCAS: ["LOUCAS_COZINHA"], PORTAS: [] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 3, iluminacaoParalela: 0 } },
+  { id: "lavaboLazer", nome: "Lavabo Lazer", grupo: "Lazer", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_LAVABO"], ESGOTO: ["ESGOTO_LAVABO"], LOUCAS: ["LOUCAS_LAVABO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "sauna", nome: "Sauna", grupo: "Lazer", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 0, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "academia", nome: "Academia", grupo: "Lazer", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "brinquedoteca", nome: "Brinquedoteca", grupo: "Lazer", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 3, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "louceiro", nome: "Louceiro", grupo: "Lazer", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "jardim", nome: "Jardim", grupo: "Lazer", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_TORNEIRA_EXTERNA"], ESGOTO: [], LOUCAS: ["LOUCAS_TORNEIRA_EXTERNA"], PORTAS: [] },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "dormitorio", nome: "Dormitório", grupo: "Dormitórios", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 1 } },
+  { id: "closet", nome: "Closet", grupo: "Dormitórios", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "wc", nome: "WC", grupo: "Dormitórios", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "suite", nome: "Suíte", grupo: "Dormitórios", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 1 } },
+  { id: "closetSuite", nome: "Closet Suíte", grupo: "Dormitórios", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "suiteMaster", nome: "Suíte Master", grupo: "Dormitórios", molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 6, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 1 } },
+  { id: "escada", nome: "Escada", grupo: "Outros", molhado: false,
+    kits: {},
+    pontos: { tomadaGeral: 0, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 1 } },
 ];
 
 // Kits por ponto elétrico (um ponto = eletroduto + cabo + caixa + dispositivo)
+var AMBIENTES_GRUPOS = ["Áreas Sociais", "Serviço", "Lazer", "Dormitórios", "Outros"];
+// ids antigos (antes de set/2026) → ids atuais, para projetos já gravados
+var AMBIENTES_MIGRACAO = { banheiroSuite: "wc", banheiroSocial: "wc", salaEstar: "salaTV", circulacao: "hallEntrada", areaGourmet: "areaLazer", varanda: "areaLazer", torneiraExterna: "jardim" };
+
 var PONTOS_ELETRICOS = [
   { id: "tomadaGeral",        nome: "Tomada de uso geral 10A",        kit: "PONTO_TOMADA_GERAL" },
   { id: "tomadaEspecifica",   nome: "Tomada de uso específico 20A",   kit: "PONTO_TOMADA_ESPECIFICA" },
@@ -9332,7 +9368,7 @@ function consumoRevestimento(formatoId, externo, juntaMm) {
 // Revestimento "todas": todas as paredes do piso ao pé-direito menos a
 // porta. Bancada: fração do lado mais comprido (padrão metade).
 const TAMANHOS_COMODOS = ["Grande", "Médio", "Pequeno", "Compacta"];
-const PE_DIREITO_PADRAO = 2.6;
+const PE_DIREITO_PADRAO = 2.8;
 const PORTA_M2 = 0.8 * 2.1, PORTA_LARGURA = 0.8;
 const REVESTIR_OPCOES = [
   { value: "todas", label: "Todas as paredes (até o pé-direito)" },
@@ -9340,29 +9376,53 @@ const REVESTIR_OPCOES = [
   { value: "maior", label: "Só a parede mais comprida" },
   { value: "nenhuma", label: "Sem revestimento" },
 ];
+// Regras de acabamento por cômodo (medidas: COMODOS[nome] do orçamento de
+// projetos, pelo tamanho). Molhados: todas as paredes revestidas e bancada
+// na metade da parede mais comprida; secos: rodapé.
 const COMODO_OBRA_PROJETO = {
-  banheiroSuite:  { comodo: "WC",              revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.5 } },
-  banheiroSocial: { comodo: "WC",              revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.5 } },
-  lavabo:         { comodo: "Lavabo",          revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.45 } },
-  cozinha:        { comodo: "Cozinha",         revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.6 } },
-  lavanderia:     { comodo: "Lavanderia",      revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.6 } },
-  areaGourmet:    { comodo: "Área de lazer",   revestir: "maior",   bancada: { fracao: 0.5, profundidade: 0.6 } },
-  torneiraExterna: { comodo: null,             revestir: "nenhuma" },
-  dormitorio:     { comodo: "Dormitório",      revestir: "nenhuma", rodape: true },
-  closet:         { comodo: "Closet",          revestir: "nenhuma", rodape: true },
-  salaEstar:      { comodo: "Sala TV",         revestir: "nenhuma", rodape: true },
-  salaJantar:     { comodo: "Sala de jantar",  revestir: "nenhuma", rodape: true },
-  escritorio:     { comodo: "Escritório",      revestir: "nenhuma", rodape: true },
-  circulacao:     { comodo: "Hall de entrada", revestir: "nenhuma", rodape: true },
-  garagem:        { comodo: "Garagem",         revestir: "nenhuma" },
-  varanda:        { comodo: "Área de lazer",   revestir: "nenhuma" },
+  garagem:       { revestir: "nenhuma" },
+  hallEntrada:   { revestir: "nenhuma", rodape: true },
+  salaTV:        { revestir: "nenhuma", rodape: true },
+  living:        { revestir: "nenhuma", rodape: true },
+  salaJantar:    { revestir: "nenhuma", rodape: true },
+  escritorio:    { revestir: "nenhuma", rodape: true },
+  lavabo:        { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.45 } },
+  cozinha:       { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.6 } },
+  lavanderia:    { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.6 } },
+  deposito:      { revestir: "nenhuma" },
+  areaLazer:     { revestir: "maior", bancada: { fracao: 0.5, profundidade: 0.6 } },
+  lavaboLazer:   { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.45 } },
+  sauna:         { revestir: "nenhuma" },
+  academia:      { revestir: "nenhuma", rodape: true },
+  brinquedoteca: { revestir: "nenhuma", rodape: true },
+  louceiro:      { revestir: "nenhuma", rodape: true },
+  jardim:        { revestir: "nenhuma", semMedidas: true },
+  dormitorio:    { revestir: "nenhuma", rodape: true },
+  closet:        { revestir: "nenhuma", rodape: true },
+  wc:            { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.5 } },
+  suite:         { revestir: "nenhuma", rodape: true },
+  closetSuite:   { revestir: "nenhuma", rodape: true },
+  suiteMaster:   { revestir: "nenhuma", rodape: true },
+  escada:        { revestir: "nenhuma" },
 };
+// Contagem de cômodos com ids antigos → atuais (projetos gravados antes)
+function migrarAmbientes(ambientes) {
+  const mapa = typeof AMBIENTES_MIGRACAO !== "undefined" ? AMBIENTES_MIGRACAO : {};
+  const out = {};
+  for (const [k, v] of Object.entries(ambientes || {})) {
+    const id = mapa[k] || k;
+    const n = numOrZero(v);
+    if (!n && !(id in out)) { out[id] = out[id] || v; continue; }
+    out[id] = numOrZero(out[id]) + n;
+  }
+  return out;
+}
 const NOME_AMBIENTE = (id) => { const t = (typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).find((a) => a.id === id); return t ? t.nome : id; };
 // Medidas de partida do cômodo pelo tamanho da obra
 function comodoPadrao(id, tamanho) {
-  const regra = COMODO_OBRA_PROJETO[id] || { comodo: null, revestir: "nenhuma" };
+  const regra = COMODO_OBRA_PROJETO[id] || { revestir: "nenhuma" };
   const comodos = typeof COMODOS !== "undefined" ? COMODOS : {};
-  const cfg = regra.comodo ? comodos[regra.comodo] : null;
+  const cfg = regra.semMedidas ? null : comodos[NOME_AMBIENTE(id)];
   const [L, W] = (cfg && cfg.medidas && cfg.medidas[tamanho]) || [0, 0];
   return { L, W, peDireito: PE_DIREITO_PADRAO, revestir: regra.revestir, temBancada: !!regra.bancada, bancadaFracao: regra.bancada ? regra.bancada.fracao : 0.5, bancadaProfundidade: regra.bancada ? regra.bancada.profundidade : 0.6, rodape: !!regra.rodape };
 }
@@ -9399,7 +9459,7 @@ function calcularComodo(cfg) {
 // Estimativa da obra inteira pelos cômodos (contagem × unitário)
 function estimarPelosComodos(projeto) {
   const p = projeto || {};
-  const ambientes = p.ambientes || {};
+  const ambientes = migrarAmbientes(p.ambientes || {});
   const r = { tamanho: TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio", pisoInterno: 0, revestimentoInterno: 0, rodapeM: 0, soleirasM: 0, bancadas: [], detalhes: [] };
   const r1 = (x) => Math.round(x * 10) / 10;
   for (const id of Object.keys(COMODO_OBRA_PROJETO)) {
@@ -9948,7 +10008,7 @@ function normalizarProjeto(projeto) {
     })),
 
     // cp.ambientes / cp.instalacoes — estimativa por kits (instalacoesPorAmbiente)
-    ambientes: Object.keys(ambientesIn).reduce((acc, k) => { acc[k] = numOrZero(ambientesIn[k]); return acc; }, {}),
+    ambientes: (() => { const m = migrarAmbientes(ambientesIn); for (const k of Object.keys(m)) m[k] = numOrZero(m[k]); return m; })(),
     instalacoes: {
       padrao: padraoInstalacoes(padrao), // derivado do padrão da obra (Alto/Altíssimo → kits _ALTO)
       aquecimento: instalacoesIn.aquecimento || "nenhum",
@@ -10349,7 +10409,8 @@ function formatoBRL(n) {
 // (m² de piso, revestimento e bancada) pelas medidas do tamanho escolhido.
 function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobile }) {
   const tipos = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
-  const ordem = [...tipos.filter((a) => a.molhado), ...tipos.filter((a) => !a.molhado)];
+  const grupos = typeof AMBIENTES_GRUPOS !== "undefined" ? AMBIENTES_GRUPOS : [...new Set(tipos.map((a) => a.grupo || ""))];
+  const ordem = grupos.flatMap((g) => tipos.filter((a) => (a.grupo || "") === g));
   const fmt = (x) => Number(x).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
   const inputQtd = { width: 52, padding: "5px 6px", border: "1.5px solid #1f2a37", borderRadius: 8, fontSize: 13, fontFamily: "inherit", textAlign: "center", background: "#fff" };
   function setCfg(id, campo, valor) { set(`comodosCfg.${id}.${campo}`, valor); }
@@ -10365,10 +10426,10 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
         const cfg = comodoConfig(projeto, a.id);
         const c = calcularComodo(cfg);
         const aberto = comodoAberto === a.id;
-        const primeiroSeco = !a.molhado && idx > 0 && ordem[idx - 1].molhado;
+        const novoGrupo = idx === 0 || (ordem[idx - 1].grupo || "") !== (a.grupo || "");
         return (
           <div key={a.id}>
-            {primeiroSeco && <div style={{ fontSize: 11, color: "#9ca3af", margin: "8px 0 4px" }}>Cômodos secos:</div>}
+            {novoGrupo && <div style={{ fontSize: 11, fontWeight: 600, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5, margin: idx === 0 ? "0 0 4px" : "10px 0 4px" }}>{a.grupo}</div>}
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 60px" : "190px 60px 1fr", gap: 10, alignItems: "center", padding: "4px 0" }}>
               <button type="button" onClick={() => setComodoAberto(aberto ? null : a.id)}
                 style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 14, color: aberto ? "#b5652f" : "#1f2a37", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
@@ -10420,7 +10481,10 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
 function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar }) {
   const perm = getPermissoes();
   const [viewInterna, setViewInterna] = useState(obra.orcamento ? "resultado" : obra.projeto ? "form" : "vazio");
-  const [projetoDraft, setProjetoDraft] = useState(() => obra.projeto || projetoVazio());
+  const [projetoDraft, setProjetoDraft] = useState(() => {
+    const p = obra.projeto || projetoVazio();
+    return p.ambientes ? { ...p, ambientes: migrarAmbientes(p.ambientes) } : p;
+  });
   const [blocosAbertos, setBlocosAbertos] = useState({ geral: true });
   const [etapasColapsadas, setEtapasColapsadas] = useState({});
   const [paredeTerreoExpandida, setParedeTerreoExpandida] = useState(false);

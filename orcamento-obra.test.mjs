@@ -545,19 +545,22 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   const est = modulo.estimarPelosComodos({ tamanhoComodos: "Médio", ambientes: { banheiroSuite: 2, cozinha: 1, dormitorio: 3 }, esquadrias: [{ familia: "JANELA_CORRER", qtd: 4, largura: 1.5 }] });
   // WC Médio 3×1,4 (×2), Cozinha 4×3, Dormitório 3×4 (×3)
   assert.strictEqual(est.pisoInterno, 56.4);
-  assert.strictEqual(est.revestimentoInterno, 77.1);   // 2×(8,8×2,6−1,68) + (14×2,6−1,68)
+  assert.strictEqual(est.revestimentoInterno, 83.4);   // pé-direito 2,80: 2×(8,8×2,8−1,68) + (14×2,8−1,68)
   assert.strictEqual(est.rodapeM, 39.6);               // 3×(14−0,8)
   assert.strictEqual(est.soleirasM, 10.8);             // 6 portas × 0,8 + 4 janelas × 1,5
   assert.strictEqual(est.bancadas.length, 3);
   // bancada = metade da parede mais comprida: WC 3 m → 1,5; cozinha 4 m → 2
-  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento, b.profundidade]), [["Banheiro de suíte 1", 1.5, 0.5], ["Banheiro de suíte 2", 1.5, 0.5], ["Cozinha", 2, 0.6]]);
+  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento, b.profundidade]), [["Cozinha", 2, 0.6], ["WC 1", 1.5, 0.5], ["WC 2", 1.5, 0.5]]);
   // cômodo editado: banheiro 4 × 2, meia parede, bancada 100% × 0,6
   const ed = modulo.estimarPelosComodos({ tamanhoComodos: "Médio", ambientes: { banheiroSocial: 1 }, comodosCfg: { banheiroSocial: { L: 4, W: 2, revestir: "meia", bancadaFracao: 1, bancadaProfundidade: 0.6 } } });
   assert.strictEqual(ed.pisoInterno, 8); assert.strictEqual(ed.revestimentoInterno, 18); // 12 × 1,5
   assert.deepStrictEqual(ed.bancadas.map((b) => [b.comprimento, b.profundidade]), [[4, 0.6]]);
   // sem nada digitado, revestimento e bancadas do orçamento vêm dos cômodos
   const cp = normalizarProjeto({ tamanhoComodos: "Médio", ambientes: { cozinha: 1 } });
-  assert.strictEqual(cp.revestimentoInterno, 34.7);
+  assert.strictEqual(cp.revestimentoInterno, 37.5);
+  // ids antigos migram (banheiroSuite/banheiroSocial → wc, salaEstar → salaTV)
+  const mig = normalizarProjeto({ ambientes: { banheiroSuite: 2, banheiroSocial: 1, salaEstar: 1 } }).ambientes;
+  assert.strictEqual(mig.wc, 3); assert.strictEqual(mig.salaTV, 1); assert.ok(!("banheiroSuite" in mig));
   assert.strictEqual(cp.pisos.bancadas.length, 1); assert.strictEqual(cp.pisos.bancadas[0].comprimento, 2);
   const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 } }, { materiais: [] });
   assert.ok(r.itens.some((i) => i.subEtapa === "Bancada — Cozinha" && i.qtd > 1));
