@@ -1996,62 +1996,99 @@ function consumoRevestimento(formatoId, externo, juntaMm) {
   };
 }
 
-// ── Pré-preenchimento pelos cômodos ─────────────────────────────
-// Usa as medidas por tamanho (Grande/Médio/Pequeno/Compacta) do orçamento
-// de projetos (COMODOS em shared.jsx) e a contagem de cômodos do bloco
-// Geral para estimar piso, revestimento de parede, rodapé, soleiras e
-// bancadas. É ponto de partida: o botão preenche os campos e o usuário
-// ajusta pelo projeto.
+// ── Cômodos: medidas, revestimento e bancada por cômodo ─────────
+// Cada cômodo da obra tem medidas de partida por tamanho (Grande/Médio/
+// Pequeno/Compacta) — a mesma tabela COMODOS do orçamento de projetos
+// (shared.jsx) — e regras de acabamento: quais paredes recebem
+// revestimento e se há bancada. O usuário pode abrir o cômodo e editar
+// comprimento, largura, pé-direito, revestimento e bancada
+// (projeto.comodosCfg[id]); o que não for editado segue o tamanho escolhido.
+// Revestimento "todas": todas as paredes do piso ao pé-direito menos a
+// porta. Bancada: fração do lado mais comprido (padrão metade).
 const TAMANHOS_COMODOS = ["Grande", "Médio", "Pequeno", "Compacta"];
-const PE_DIREITO_REVESTIMENTO = 2.6; // altura de azulejo em áreas molhadas
+const PE_DIREITO_PADRAO = 2.6;
 const PORTA_M2 = 0.8 * 2.1, PORTA_LARGURA = 0.8;
-// cômodo da obra → cômodo do orçamento de projetos, e regras de acabamento
+const REVESTIR_OPCOES = [
+  { value: "todas", label: "Todas as paredes (até o pé-direito)" },
+  { value: "meia", label: "Meia parede (1,50 m)" },
+  { value: "maior", label: "Só a parede mais comprida" },
+  { value: "nenhuma", label: "Sem revestimento" },
+];
 const COMODO_OBRA_PROJETO = {
-  banheiroSuite:  { comodo: "WC",             revestimento: "total",  bancada: { comprimento: "menor", profundidade: 0.5 } },
-  banheiroSocial: { comodo: "WC",             revestimento: "total",  bancada: { comprimento: "menor", profundidade: 0.5 } },
-  lavabo:         { comodo: "Lavabo",         revestimento: "total",  bancada: { comprimento: 0.8, profundidade: 0.45 } },
-  cozinha:        { comodo: "Cozinha",        revestimento: "total",  bancada: { comprimento: "maior", profundidade: 0.6 } },
-  lavanderia:     { comodo: "Lavanderia",     revestimento: "meia",   bancada: { comprimento: 1.2, profundidade: 0.6 } },
-  areaGourmet:    { comodo: "Área de lazer",  revestimento: "parede", bancada: { comprimento: 2.0, profundidade: 0.6 } },
-  dormitorio:     { comodo: "Dormitório",     rodape: true },
-  closet:         { comodo: "Closet",         rodape: true },
-  salaEstar:      { comodo: "Sala TV",        rodape: true },
-  salaJantar:     { comodo: "Sala de jantar", rodape: true },
-  escritorio:     { comodo: "Escritório",     rodape: true },
-  circulacao:     { comodo: "Hall de entrada", rodape: true },
-  garagem:        { comodo: "Garagem" },
-  varanda:        { comodo: "Área de lazer" },
+  banheiroSuite:  { comodo: "WC",              revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.5 } },
+  banheiroSocial: { comodo: "WC",              revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.5 } },
+  lavabo:         { comodo: "Lavabo",          revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.45 } },
+  cozinha:        { comodo: "Cozinha",         revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.6 } },
+  lavanderia:     { comodo: "Lavanderia",      revestir: "todas",   bancada: { fracao: 0.5, profundidade: 0.6 } },
+  areaGourmet:    { comodo: "Área de lazer",   revestir: "maior",   bancada: { fracao: 0.5, profundidade: 0.6 } },
+  torneiraExterna: { comodo: null,             revestir: "nenhuma" },
+  dormitorio:     { comodo: "Dormitório",      revestir: "nenhuma", rodape: true },
+  closet:         { comodo: "Closet",          revestir: "nenhuma", rodape: true },
+  salaEstar:      { comodo: "Sala TV",         revestir: "nenhuma", rodape: true },
+  salaJantar:     { comodo: "Sala de jantar",  revestir: "nenhuma", rodape: true },
+  escritorio:     { comodo: "Escritório",      revestir: "nenhuma", rodape: true },
+  circulacao:     { comodo: "Hall de entrada", revestir: "nenhuma", rodape: true },
+  garagem:        { comodo: "Garagem",         revestir: "nenhuma" },
+  varanda:        { comodo: "Área de lazer",   revestir: "nenhuma" },
 };
 const NOME_AMBIENTE = (id) => { const t = (typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).find((a) => a.id === id); return t ? t.nome : id; };
-function estimarPelosComodos(projeto) {
+// Medidas de partida do cômodo pelo tamanho da obra
+function comodoPadrao(id, tamanho) {
+  const regra = COMODO_OBRA_PROJETO[id] || { comodo: null, revestir: "nenhuma" };
+  const comodos = typeof COMODOS !== "undefined" ? COMODOS : {};
+  const cfg = regra.comodo ? comodos[regra.comodo] : null;
+  const [L, W] = (cfg && cfg.medidas && cfg.medidas[tamanho]) || [0, 0];
+  return { L, W, peDireito: PE_DIREITO_PADRAO, revestir: regra.revestir, temBancada: !!regra.bancada, bancadaFracao: regra.bancada ? regra.bancada.fracao : 0.5, bancadaProfundidade: regra.bancada ? regra.bancada.profundidade : 0.6, rodape: !!regra.rodape };
+}
+// Configuração efetiva: padrão do tamanho + edições do usuário
+function comodoConfig(projeto, id) {
   const p = projeto || {};
   const tamanho = TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio";
-  const comodos = typeof COMODOS !== "undefined" ? COMODOS : {};
+  const base = comodoPadrao(id, tamanho);
+  const o = (p.comodosCfg && p.comodosCfg[id]) || {};
+  const num = (v, d) => (v === "" || v == null || !Number.isFinite(Number(v)) ? d : Number(v));
+  return {
+    L: num(o.L, base.L), W: num(o.W, base.W), peDireito: num(o.peDireito, base.peDireito),
+    revestir: REVESTIR_OPCOES.some((r) => r.value === o.revestir) ? o.revestir : base.revestir,
+    temBancada: o.temBancada == null ? base.temBancada : !!o.temBancada,
+    bancadaFracao: num(o.bancadaFracao, base.bancadaFracao), bancadaProfundidade: num(o.bancadaProfundidade, base.bancadaProfundidade),
+    rodape: base.rodape, editado: Object.keys(o).length > 0, tamanho,
+  };
+}
+// Quantidades de um cômodo (unitárias)
+function calcularComodo(cfg) {
+  const L = numOrZero(cfg.L), W = numOrZero(cfg.W), pd = numOrZero(cfg.peDireito) || PE_DIREITO_PADRAO;
+  const area = L * W, perimetro = 2 * (L + W), maior = Math.max(L, W);
+  let revestimento = 0;
+  if (L > 0 && W > 0) {
+    if (cfg.revestir === "todas") revestimento = Math.max(0, perimetro * pd - PORTA_M2);
+    else if (cfg.revestir === "meia") revestimento = perimetro * 1.5;
+    else if (cfg.revestir === "maior") revestimento = maior * pd;
+  }
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const bancada = cfg.temBancada && maior > 0 ? { comprimento: r2(maior * numOrZero(cfg.bancadaFracao)), profundidade: numOrZero(cfg.bancadaProfundidade) } : null;
+  const bancadaM2 = bancada ? medirBancada({ ...BANCADA_PADRAO, ...bancada }).total : 0;
+  return { area: r2(area), perimetro: r2(perimetro), revestimento: r2(revestimento), bancada, bancadaM2, rodape: cfg.rodape ? r2(Math.max(0, perimetro - PORTA_LARGURA)) : 0 };
+}
+// Estimativa da obra inteira pelos cômodos (contagem × unitário)
+function estimarPelosComodos(projeto) {
+  const p = projeto || {};
   const ambientes = p.ambientes || {};
-  const r = { tamanho, pisoInterno: 0, revestimentoInterno: 0, rodapeM: 0, soleirasM: 0, bancadas: [], detalhes: [] };
+  const r = { tamanho: TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio", pisoInterno: 0, revestimentoInterno: 0, rodapeM: 0, soleirasM: 0, bancadas: [], detalhes: [] };
   const r1 = (x) => Math.round(x * 10) / 10;
-  for (const [id, regra] of Object.entries(COMODO_OBRA_PROJETO)) {
+  for (const id of Object.keys(COMODO_OBRA_PROJETO)) {
     const n = Math.max(0, Math.round(numOrZero(ambientes[id])));
     if (!n) continue;
-    const cfg = comodos[regra.comodo];
-    const [L, W] = (cfg && cfg.medidas && cfg.medidas[tamanho]) || [0, 0];
-    if (!(L > 0 && W > 0)) continue;
-    const area = L * W, perimetro = 2 * (L + W);
-    r.pisoInterno += n * area;
-    let rev = 0;
-    if (regra.revestimento === "total") rev = perimetro * PE_DIREITO_REVESTIMENTO - PORTA_M2;
-    else if (regra.revestimento === "meia") rev = perimetro * 1.5;
-    else if (regra.revestimento === "parede") rev = Math.max(L, W) * PE_DIREITO_REVESTIMENTO;
-    r.revestimentoInterno += n * Math.max(0, rev);
-    if (regra.rodape) r.rodapeM += n * Math.max(0, perimetro - PORTA_LARGURA);
-    r.soleirasM += n * PORTA_LARGURA; // soleira da porta de cada cômodo
-    if (regra.bancada) {
-      const comp = regra.bancada.comprimento === "maior" ? Math.max(L, W) : regra.bancada.comprimento === "menor" ? Math.min(L, W) : regra.bancada.comprimento;
-      for (let k = 0; k < n; k++) r.bancadas.push({ ...BANCADA_PADRAO, nome: NOME_AMBIENTE(id) + (n > 1 ? ` ${k + 1}` : ""), comprimento: r1(comp), profundidade: regra.bancada.profundidade });
-    }
-    r.detalhes.push({ id, nome: NOME_AMBIENTE(id), n, L, W, area: r1(n * area), revestimento: r1(n * Math.max(0, rev)) });
+    const cfg = comodoConfig(p, id);
+    const c = calcularComodo(cfg);
+    if (!(c.area > 0)) continue;
+    r.pisoInterno += n * c.area;
+    r.revestimentoInterno += n * c.revestimento;
+    r.rodapeM += n * c.rodape;
+    r.soleirasM += n * PORTA_LARGURA;
+    if (c.bancada) for (let k = 0; k < n; k++) r.bancadas.push({ ...BANCADA_PADRAO, nome: NOME_AMBIENTE(id) + (n > 1 ? ` ${k + 1}` : ""), comprimento: c.bancada.comprimento, profundidade: c.bancada.profundidade });
+    r.detalhes.push({ id, nome: NOME_AMBIENTE(id), n, L: cfg.L, W: cfg.W, area: r1(n * c.area), revestimento: r1(n * c.revestimento), bancadaM2: r1(n * c.bancadaM2) });
   }
-  // peitoris das janelas cadastradas em esquadrias
   for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
     if (/JANELA|MAXIM|FIXO/.test(String(e && e.familia || ""))) r.soleirasM += numOrZero(e.qtd) * numOrZero(e.largura);
   }
@@ -2362,6 +2399,7 @@ function normalizarProjeto(projeto) {
   const itensProjetoIn = Array.isArray(p.itensProjeto) ? p.itensProjeto : [];
   const ambientesIn = p.ambientes || {};
   const pisosIn = p.pisos || {};
+  const estimativaComodos = estimarPelosComodos(p);
   const instalacoesIn = p.instalacoes || {};
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
@@ -2476,9 +2514,11 @@ function normalizarProjeto(projeto) {
       volumeConcretoVigaRespaldo: numOrZero(volumeConcretoCobertura.viga),
     },
 
-    // m² de revestimento de parede interno: bloco "Pisos e revestimentos"
-    // (projeto antigo: campo externa.revestimentoInterno). Desconta da pintura.
-    revestimentoInterno: numOrZero(pisosIn.revestimentoInterno && pisosIn.revestimentoInterno.m2) || numOrZero(externa.revestimentoInterno),
+    // m² de revestimento de parede interno: digitado no bloco "Pisos e
+    // revestimentos"; em branco, o automático pelos cômodos; projeto antigo,
+    // o campo externa.revestimentoInterno. Desconta da pintura.
+    revestimentoInterno: numOrZero(pisosIn.revestimentoInterno && pisosIn.revestimentoInterno.m2) || estimativaComodos.revestimentoInterno || numOrZero(externa.revestimentoInterno),
+    comodosEstimativa: estimativaComodos,
     pavimentacaoExterna: numOrZero(externa.pavimentacao),
     perimetroPavimentacao: numOrZero(externa.perimetroPavimentacao),
     comprimentoMuroDivisa: numOrZero(muroDivisaIn.comprimento),
@@ -2594,12 +2634,13 @@ function normalizarProjeto(projeto) {
     pisos: {
       pisoInterno: normalizarSuperficie(pisosIn.pisoInterno),
       pisoExterno: normalizarSuperficie(pisosIn.pisoExterno),
-      revestimentoInterno: normalizarSuperficie(pisosIn.revestimentoInterno, numOrZero(externa.revestimentoInterno)),
+      revestimentoInterno: normalizarSuperficie(pisosIn.revestimentoInterno, estimativaComodos.revestimentoInterno || numOrZero(externa.revestimentoInterno)),
       revestimentoExterno: normalizarSuperficie(pisosIn.revestimentoExterno),
       rodapeM: numOrZero(pisosIn.rodapeM), rodapeTipo: pisosIn.rodapeTipo || "poliestireno",
       soleirasM: numOrZero(pisosIn.soleirasM), soleirasProduto: pisosIn.soleirasProduto || "",
       bancadasM2: numOrZero(pisosIn.bancadasM2), bancadasProduto: pisosIn.bancadasProduto || "",
-      bancadas: (Array.isArray(pisosIn.bancadas) ? pisosIn.bancadas : []).slice(0, BANCADAS_MAX).map((b) => ({
+      // lista digitada; em branco, as bancadas automáticas dos cômodos
+      bancadas: ((Array.isArray(pisosIn.bancadas) && pisosIn.bancadas.length) ? pisosIn.bancadas : estimativaComodos.bancadas).slice(0, BANCADAS_MAX).map((b) => ({
         nome: String((b && b.nome) || "").trim(), comprimento: numOrZero(b && b.comprimento), profundidade: numOrZero(b && b.profundidade),
         saiaCm: numOrZero(b && b.saiaCm), fundoCm: numOrZero(b && b.fundoCm), sapatas: numOrZero(b && b.sapatas), sapataCm: numOrZero(b && b.sapataCm), produto: (b && b.produto) || "",
       })),
@@ -2797,7 +2838,8 @@ function projetoVazio() {
     cobertura: [],
     esquadrias: [],
     pisos: {},
-    ambientes: {},
+    ambientes: { cozinha: 1, lavanderia: 1 }, // essenciais já contados
+    comodosCfg: {},
     instalacoes: { padrao: "Médio", aquecimento: "nenhum", pressurizador: false, doProjeto: {} },
     itensProjeto: [],
     prestadores: {},
@@ -2976,6 +3018,79 @@ function formatoBRL(n) {
   return (Number(n) || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
+// Lista de cômodos do bloco Geral: nome clicável (abre a edição do cômodo),
+// contagem inteira num campo estreito e, ao lado, o que aquele cômodo puxa
+// (m² de piso, revestimento e bancada) pelas medidas do tamanho escolhido.
+function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobile }) {
+  const tipos = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
+  const ordem = [...tipos.filter((a) => a.molhado), ...tipos.filter((a) => !a.molhado)];
+  const fmt = (x) => Number(x).toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+  const inputQtd = { width: 52, padding: "5px 6px", border: "1.5px solid #1f2a37", borderRadius: 8, fontSize: 13, fontFamily: "inherit", textAlign: "center", background: "#fff" };
+  function setCfg(id, campo, valor) { set(`comodosCfg.${id}.${campo}`, valor); }
+  function restaurar(id) {
+    const cfgs = { ...(projeto.comodosCfg || {}) };
+    delete cfgs[id];
+    set("comodosCfg", cfgs);
+  }
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 2, maxWidth: 720 }}>
+      {ordem.map((a, idx) => {
+        const n = Math.max(0, Math.round(numOrZero(get(`ambientes.${a.id}`))));
+        const cfg = comodoConfig(projeto, a.id);
+        const c = calcularComodo(cfg);
+        const aberto = comodoAberto === a.id;
+        const primeiroSeco = !a.molhado && idx > 0 && ordem[idx - 1].molhado;
+        return (
+          <div key={a.id}>
+            {primeiroSeco && <div style={{ fontSize: 11, color: "#9ca3af", margin: "8px 0 4px" }}>Cômodos secos:</div>}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 60px" : "190px 60px 1fr", gap: 10, alignItems: "center", padding: "4px 0" }}>
+              <button type="button" onClick={() => setComodoAberto(aberto ? null : a.id)}
+                style={{ background: "none", border: "none", padding: 0, textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 14, color: aberto ? "#b5652f" : "#1f2a37", textDecoration: "underline dotted", textUnderlineOffset: 3 }}
+                title="Clique para editar medidas, revestimento e bancada">
+                {a.nome}{cfg.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6, textDecoration: "none" }}>editado</span>}
+              </button>
+              <input type="number" min="0" step="1" style={inputQtd} value={get(`ambientes.${a.id}`) ?? ""}
+                onChange={(e) => set(`ambientes.${a.id}`, e.target.value === "" ? "" : Math.max(0, Math.round(Number(e.target.value))))} />
+              <div style={{ fontSize: 12, color: "#6b7280", gridColumn: isMobile ? "1 / -1" : "auto" }}>
+                {n > 0 && c.area > 0 ? (
+                  <>
+                    {fmt(n * c.area)} m² de piso
+                    {c.revestimento > 0 && <> · <b style={{ color: "#374151" }}>{fmt(n * c.revestimento)} m² de revestimento</b></>}
+                    {c.bancada && <> · <b style={{ color: "#374151" }}>{fmt(n * c.bancadaM2)} m² de bancada</b> ({n > 1 ? `${n} × ` : ""}{fmt(c.bancada.comprimento)} m)</>}
+                    {c.rodape > 0 && <> · rodapé {fmt(n * c.rodape)} m</>}
+                    <span style={{ color: "#9ca3af" }}> · {cfg.L} × {cfg.W} m</span>
+                  </>
+                ) : n > 0 ? <span style={{ color: "#9ca3af" }}>sem medidas — clique no nome e informe</span> : null}
+              </div>
+            </div>
+            {aberto && (
+              <div style={{ margin: "4px 0 10px", padding: 12, background: "#fafafa", border: "1px solid #eee", borderRadius: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 10 }}>
+                  <CampoNum label="Comprimento da parede (m)" valor={cfg.L} onChange={(v) => setCfg(a.id, "L", v)} />
+                  <CampoNum label="Largura da parede (m)" valor={cfg.W} onChange={(v) => setCfg(a.id, "W", v)} />
+                  <CampoNum label="Pé-direito (m)" valor={cfg.peDireito} onChange={(v) => setCfg(a.id, "peDireito", v)} />
+                  <CampoSelect label="Revestimento nas paredes" valor={cfg.revestir} onChange={(v) => setCfg(a.id, "revestir", v)} opcoes={REVESTIR_OPCOES} />
+                  <CampoSelect label="Bancada" valor={cfg.temBancada ? "sim" : "nao"} onChange={(v) => setCfg(a.id, "temBancada", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
+                  {cfg.temBancada && (
+                    <>
+                      <CampoPercentual label="Bancada: % da parede mais comprida" valor={cfg.bancadaFracao} onChange={(v) => setCfg(a.id, "bancadaFracao", v)} />
+                      <CampoNum label="Profundidade da bancada (m)" valor={cfg.bancadaProfundidade} onChange={(v) => setCfg(a.id, "bancadaProfundidade", v)} />
+                    </>
+                  )}
+                </div>
+                <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 8, fontSize: 12, color: "#6b7280", flexWrap: "wrap" }}>
+                  <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancada ? ` · bancada ${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m = ${fmt(c.bancadaM2)} m² de pedra (com saia, fundo e sapatas)` : ""}</span>
+                  {cfg.editado && <button type="button" style={{ ...C.btnGhost, fontSize: 12 }} onClick={() => restaurar(a.id)}>Voltar ao padrão ({cfg.tamanho})</button>}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar }) {
   const perm = getPermissoes();
   const [viewInterna, setViewInterna] = useState(obra.orcamento ? "resultado" : obra.projeto ? "form" : "vazio");
@@ -2984,6 +3099,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const [etapasColapsadas, setEtapasColapsadas] = useState({});
   const [paredeTerreoExpandida, setParedeTerreoExpandida] = useState(false);
   const [espessuraTerreaAberta, setEspessuraTerreaAberta] = useState(false);
+  const [comodoAberto, setComodoAberto] = useState(null);
 
   function toggleBloco(k) { setBlocosAbertos((b) => ({ ...b, [k]: !b[k] })); }
   function toggleEtapa(k) { setEtapasColapsadas((b) => ({ ...b, [k]: !b[k] })); }
@@ -3218,14 +3334,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             </>
           )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 600, color: "#374151", marginTop: 6 }}>Cômodos <span style={{ fontWeight: 400, color: "#9ca3af" }}>— áreas molhadas puxam hidráulica, esgoto, louças e portas; todos puxam elétrica</span></div>
-          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => a.molhado).map((a) => (
-            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} inteiro />
-          ))}
-          <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#9ca3af", marginTop: -4 }}>Cômodos secos:</div>
-          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => !a.molhado).map((a) => (
-            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} inteiro />
-          ))}
+          <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Cômodos <span style={{ fontWeight: 400, color: "#9ca3af" }}>— quantidade de cada um; clique no nome para editar medidas, revestimento e bancada</span></div>
+            <ListaComodos projeto={projetoDraft} get={get} set={set} comodoAberto={comodoAberto} setComodoAberto={setComodoAberto} isMobile={isMobile} />
+          </div>
         </BlocoColapsavel>
 
         {!ehTerrea && (
@@ -3374,7 +3486,15 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           })()}
           {SUPERFICIES_PISOS.map((sup) => (
             <div key={sup.id} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-              <CampoNum label={`${sup.nome} (m²)`} valor={get(`pisos.${sup.id}.m2`)} onChange={(v) => set(`pisos.${sup.id}.m2`, v)} />
+              {sup.id === "revestimentoInterno" ? (
+                <div>
+                  <label style={C.label}>{sup.nome} (m²)</label>
+                  <input style={C.input} type="number" step="0.01" value={get("pisos.revestimentoInterno.m2") ?? ""} placeholder={`auto: ${estimarPelosComodos(projetoDraft).revestimentoInterno} (cômodos)`}
+                    onChange={(e) => set("pisos.revestimentoInterno.m2", e.target.value === "" ? "" : Number(e.target.value))} />
+                </div>
+              ) : (
+                <CampoNum label={`${sup.nome} (m²)`} valor={get(`pisos.${sup.id}.m2`)} onChange={(v) => set(`pisos.${sup.id}.m2`, v)} />
+              )}
               <CampoSelect label="Formato da peça" valor={get(`pisos.${sup.id}.formato`) || ""} onChange={(v) => set(`pisos.${sup.id}.formato`, v)}
                 opcoes={[{ value: "", label: `automático (${FORMATO_PADRAO[sup.id][projetoDraft.padrao || "Médio"] || "60x60"})` }, ...FORMATOS_PECA.map((f) => ({ value: f.id, label: f.nome }))]} />
               <div>
@@ -3422,6 +3542,11 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               })}
               {bancadasLista.length < BANCADAS_MAX && (
                 <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addBancada}>＋ Adicionar bancada</button>
+              )}
+              {bancadasLista.length === 0 && estimarPelosComodos(projetoDraft).bancadas.length > 0 && (
+                <div style={{ fontSize: 12, color: "#374151", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
+                  Automático pelos cômodos: {estimarPelosComodos(projetoDraft).bancadas.map((b) => `${b.nome} ${Number(b.comprimento).toLocaleString("pt-BR")} × ${Number(b.profundidade).toLocaleString("pt-BR")} m`).join(" · ")} — em {BANCADA_PRODUTO_PADRAO}. Adicione bancadas aqui para substituir.
+                </div>
               )}
               {bancadasLista.length === 0 && numOrZero(get("pisos.bancadasM2")) > 0 && (
                 <div style={{ fontSize: 11, color: "#b45309" }}>Este projeto tem {get("pisos.bancadasM2")} m² de bancada no campo antigo; adicione as bancadas acima para detalhar (o campo antigo deixa de valer quando houver lista).</div>

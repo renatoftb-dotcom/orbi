@@ -549,7 +549,19 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   assert.strictEqual(est.rodapeM, 39.6);               // 3×(14−0,8)
   assert.strictEqual(est.soleirasM, 10.8);             // 6 portas × 0,8 + 4 janelas × 1,5
   assert.strictEqual(est.bancadas.length, 3);
-  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento, b.profundidade]), [["Banheiro de suíte 1", 1.4, 0.5], ["Banheiro de suíte 2", 1.4, 0.5], ["Cozinha", 4, 0.6]]);
+  // bancada = metade da parede mais comprida: WC 3 m → 1,5; cozinha 4 m → 2
+  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento, b.profundidade]), [["Banheiro de suíte 1", 1.5, 0.5], ["Banheiro de suíte 2", 1.5, 0.5], ["Cozinha", 2, 0.6]]);
+  // cômodo editado: banheiro 4 × 2, meia parede, bancada 100% × 0,6
+  const ed = modulo.estimarPelosComodos({ tamanhoComodos: "Médio", ambientes: { banheiroSocial: 1 }, comodosCfg: { banheiroSocial: { L: 4, W: 2, revestir: "meia", bancadaFracao: 1, bancadaProfundidade: 0.6 } } });
+  assert.strictEqual(ed.pisoInterno, 8); assert.strictEqual(ed.revestimentoInterno, 18); // 12 × 1,5
+  assert.deepStrictEqual(ed.bancadas.map((b) => [b.comprimento, b.profundidade]), [[4, 0.6]]);
+  // sem nada digitado, revestimento e bancadas do orçamento vêm dos cômodos
+  const cp = normalizarProjeto({ tamanhoComodos: "Médio", ambientes: { cozinha: 1 } });
+  assert.strictEqual(cp.revestimentoInterno, 34.7);
+  assert.strictEqual(cp.pisos.bancadas.length, 1); assert.strictEqual(cp.pisos.bancadas[0].comprimento, 2);
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 } }, { materiais: [] });
+  assert.ok(r.itens.some((i) => i.subEtapa === "Bancada — Cozinha" && i.qtd > 1));
+  assert.ok(r.itens.some((i) => i.subEtapa === "Revestimento interno"));
   const g = modulo.estimarPelosComodos({ tamanhoComodos: "Grande", ambientes: { cozinha: 1 } });
   assert.strictEqual(g.pisoInterno, 24); // 6×4
   assert.strictEqual(modulo.estimarPelosComodos({}).detalhes.length, 0);
