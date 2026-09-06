@@ -1148,7 +1148,7 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
           {be && be.pendentes > 0 ? <span style={{ color: "#b45309" }}> · {be.pendentes} item(ns) aguardando conferência</span> : null}
         </span>
         {perm.isMaster && (
-          <button style={INS_S.btnSec} disabled={atualizando} onClick={() => atualizarAgora(false)}>{atualizando ? "Iniciando…" : "Buscar base nova agora"}</button>
+          <button style={INS_S.btnSec} disabled={atualizando} onClick={() => atualizarAgora(true)}>{atualizando ? "Iniciando…" : "Buscar base nova agora"}</button>
         )}
       </div>
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, marginBottom: 12, overflowX: "auto" }}>
