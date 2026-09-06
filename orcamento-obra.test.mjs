@@ -35,7 +35,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada,
   };
 `)();
 
@@ -519,6 +519,22 @@ teste("padrão Baixo usa cerâmica; rodapé do próprio piso vira m² do produto
   assert.ok(!it.some((i) => i.item === "RODAPE POLIESTIRENO 15CM"));
   const vazio = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 } }, { materiais: [] });
   assert.ok(!vazio.itens.some((i) => i.etapa === "Pisos e revestimentos"));
+});
+
+teste("bancada: tampo + saia + fundo + sapatas em m² de pedra; uma linha por bancada, com a medição na composição", () => {
+  const m = modulo.medirBancada({ comprimento: 3, profundidade: 0.6, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10 });
+  assert.deepStrictEqual(m, { tampo: 1.8, saia: 0.15, fundo: 0.3, sapatas: 0.12, total: 2.37 });
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 100 }, pisos: { bancadasM2: 9, bancadas: [
+    { nome: "Cozinha", comprimento: 3, profundidade: 0.6, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10 },
+    { nome: "Banheiro", comprimento: 1.2, profundidade: 0.5, saiaCm: 5, fundoCm: 10, sapatas: 0, sapataCm: 10, produto: "Soleiras Preto São Gabriel" },
+    { nome: "vazia", comprimento: 0, profundidade: 0.6, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10 },
+  ] } }, { materiais: [] });
+  const b = r.itens.filter((i) => i.etapa === "Pisos e revestimentos" && /^Bancada/.test(i.subEtapa));
+  assert.strictEqual(b.length, 2);
+  assert.strictEqual(b[0].item, "Granito - Bancadas"); assert.strictEqual(b[0].qtd, 2.37); assert.strictEqual(b[0].subEtapa, "Bancada — Cozinha");
+  assert.ok(b[0].composicao.some((c) => c.parte === "Sapatas" && c.m2 === 0.12));
+  assert.strictEqual(b[1].item, "Soleiras Preto São Gabriel"); assert.strictEqual(b[1].qtd, 0.78); // 0,6 + 0,06 + 0,12
+  assert.ok(!r.itens.some((i) => i.subEtapa === "Bancadas")); // campo antigo (9 m²) não vale com lista
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

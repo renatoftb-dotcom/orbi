@@ -1951,6 +1951,24 @@ const FORMATO_PADRAO = { pisoInterno: { MCMV: "45x45", Baixo: "45x45", Médio: "
 const RODAPE_TIPOS = [{ value: "poliestireno", label: "Poliestireno 15 cm (barra 2,40 m)" }, { value: "mesmoPiso", label: "Recorte do próprio piso (10 cm)" }, { value: "nenhum", label: "Sem rodapé" }];
 const SOLEIRA_PADRAO = "Soleiras Preto São Gabriel";
 const SOLEIRA_LARGURA_M = 0.15;
+// Bancadas de granito/mármore: cada bancada vira m² de pedra pronta — tampo
+// (comprimento × profundidade), saia (frente, altura em cm), fundo/rodabanca
+// (encosto na parede, altura em cm) e sapatas (apoios sob o tampo,
+// quantidade × profundidade × largura em cm). A marmoraria cobra as tiras
+// como m² de pedra; não há perda porque a peça vem pronta.
+const BANCADA_PADRAO = { nome: "", comprimento: "", profundidade: 0.60, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10, produto: "" };
+const BANCADA_PRODUTO_PADRAO = "Granito - Bancadas";
+const BANCADAS_MAX = 20;
+function medirBancada(b) {
+  const C = numOrZero(b.comprimento), P = numOrZero(b.profundidade);
+  const tampo = C * P;
+  const saia = C * numOrZero(b.saiaCm) / 100;
+  const fundo = C * numOrZero(b.fundoCm) / 100;
+  const sapatas = numOrZero(b.sapatas) * P * numOrZero(b.sapataCm) / 100;
+  const total = tampo + saia + fundo + sapatas;
+  const r2 = (x) => Math.round(x * 100) / 100;
+  return { tampo: r2(tampo), saia: r2(saia), fundo: r2(fundo), sapatas: r2(sapatas), total: r2(total) };
+}
 const ARGAMASSA_KG_M2 = { AC3: 7.5, AC2: 4.5 };
 const REJUNTE_DENSIDADE = 1600, REJUNTE_FATOR = 1.5;
 
@@ -2021,9 +2039,22 @@ function pisosRevestimentos(cp, out, data) {
     totais.AC3 += m2 * ARGAMASSA_KG_M2.AC3;
   }
 
-  // Bancadas
+  // Bancadas — uma linha por bancada (tampo + saia + fundo + sapatas em m² de pedra),
+  // com a medição guardada em `composicao`; sem lista, vale o m² digitado à moda antiga.
+  const bancadas = Array.isArray(ps.bancadas) ? ps.bancadas : [];
+  let algumaBancada = false;
+  for (const b of bancadas) {
+    const m = medirBancada(b);
+    if (!(numOrZero(b.comprimento) > 0) || !(m.total > 0)) continue; // sem comprimento não é bancada
+    algumaBancada = true;
+    const produto = String(b.produto || "").trim() || BANCADA_PRODUTO_PADRAO;
+    emitir(out, { ...base, subEtapa: `Bancada${b.nome ? " — " + b.nome : ""}`, item: produto, unidade: "m2", qtd: m.total,
+      composicao: [
+        { parte: "Tampo", m2: m.tampo }, { parte: "Saia", m2: m.saia }, { parte: "Fundo (rodabanca)", m2: m.fundo }, { parte: "Sapatas", m2: m.sapatas },
+      ].filter((c) => c.m2 > 0) });
+  }
   const bancadasM2 = numOrZero(ps.bancadasM2);
-  if (bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || "Granito - Bancadas", unidade: "m2", qtd: ceil2(bancadasM2) });
+  if (!algumaBancada && bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || BANCADA_PRODUTO_PADRAO, unidade: "m2", qtd: ceil2(bancadasM2) });
 
   // Deck
   const deckM2 = numOrZero(ps.deckM2);
@@ -2504,6 +2535,10 @@ function normalizarProjeto(projeto) {
       rodapeM: numOrZero(pisosIn.rodapeM), rodapeTipo: pisosIn.rodapeTipo || "poliestireno",
       soleirasM: numOrZero(pisosIn.soleirasM), soleirasProduto: pisosIn.soleirasProduto || "",
       bancadasM2: numOrZero(pisosIn.bancadasM2), bancadasProduto: pisosIn.bancadasProduto || "",
+      bancadas: (Array.isArray(pisosIn.bancadas) ? pisosIn.bancadas : []).slice(0, BANCADAS_MAX).map((b) => ({
+        nome: String((b && b.nome) || "").trim(), comprimento: numOrZero(b && b.comprimento), profundidade: numOrZero(b && b.profundidade),
+        saiaCm: numOrZero(b && b.saiaCm), fundoCm: numOrZero(b && b.fundoCm), sapatas: numOrZero(b && b.sapatas), sapataCm: numOrZero(b && b.sapataCm), produto: (b && b.produto) || "",
+      })),
       deckM2: numOrZero(pisosIn.deckM2), deckProduto: pisosIn.deckProduto || "",
     },
 
@@ -2980,6 +3015,17 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     set("cobertura", coberturas.filter((_, i) => i !== idx));
   }
 
+  const bancadasLista = (projetoDraft.pisos && projetoDraft.pisos.bancadas) || [];
+  function addBancada() {
+    if (bancadasLista.length >= BANCADAS_MAX) return;
+    set("pisos.bancadas", [...bancadasLista, { ...BANCADA_PADRAO }]);
+  }
+  function updateBancada(idx, campo, valor) {
+    set("pisos.bancadas", bancadasLista.map((b, i) => (i === idx ? { ...b, [campo]: valor } : b)));
+  }
+  function removeBancada(idx) {
+    set("pisos.bancadas", bancadasLista.filter((_, i) => i !== idx));
+  }
   const esquadriasLista = projetoDraft.esquadrias || [];
   function addEsquadria() {
     if (esquadriasLista.length >= 40) return;
@@ -3253,10 +3299,40 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             <div style={{ fontSize: 11, color: "#9ca3af" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
             <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.soleirasProduto") ?? ""} placeholder={SOLEIRA_PADRAO} onChange={(e) => set("pisos.soleirasProduto", e.target.value)} /></div>
           </div>
-          <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-            <CampoNum label="Bancadas (m²)" valor={get("pisos.bancadasM2")} onChange={(v) => set("pisos.bancadasM2", v)} />
-            <div />
-            <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.bancadasProduto") ?? ""} placeholder="Granito - Bancadas" onChange={(e) => set("pisos.bancadasProduto", e.target.value)} /></div>
+          <div style={{ gridColumn: "1 / -1", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Bancadas de granito / mármore <span style={{ fontWeight: 400, color: "#9ca3af" }}>— tampo + saia + fundo (rodabanca) + sapatas, em m² de pedra pronta</span></div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {bancadasLista.map((b, idx) => {
+                const m = medirBancada(b);
+                return (
+                  <div key={idx} style={{ padding: 10, background: "#fafafa", borderRadius: 8 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1.4fr 1fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr auto", gap: 8, alignItems: "end" }}>
+                      <CampoTexto label="Ambiente" valor={b.nome} onChange={(v) => updateBancada(idx, "nome", v)} placeholder="Cozinha, banheiro suíte…" />
+                      <CampoNum label="Comprimento (m)" valor={b.comprimento} onChange={(v) => updateBancada(idx, "comprimento", v)} />
+                      <CampoNum label="Profundidade (m)" valor={b.profundidade} onChange={(v) => updateBancada(idx, "profundidade", v)} />
+                      <CampoNum label="Saia (cm)" valor={b.saiaCm} onChange={(v) => updateBancada(idx, "saiaCm", v)} />
+                      <CampoNum label="Fundo (cm)" valor={b.fundoCm} onChange={(v) => updateBancada(idx, "fundoCm", v)} />
+                      <CampoNum label="Sapatas (un)" valor={b.sapatas} onChange={(v) => updateBancada(idx, "sapatas", v)} inteiro />
+                      <CampoNum label="Larg. sapata (cm)" valor={b.sapataCm} onChange={(v) => updateBancada(idx, "sapataCm", v)} />
+                      <button type="button" onClick={() => removeBancada(idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>Remover</button>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, alignItems: "end", marginTop: 6 }}>
+                      <div><label style={C.label}>Pedra (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={b.produto ?? ""} placeholder={BANCADA_PRODUTO_PADRAO} onChange={(e) => updateBancada(idx, "produto", e.target.value)} /></div>
+                      <div style={{ fontSize: 12, color: "#374151", paddingBottom: 8 }}>
+                        <b>{m.total.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²</b>
+                        <span style={{ color: "#9ca3af" }}> · tampo {m.tampo} · saia {m.saia} · fundo {m.fundo} · sapatas {m.sapatas}</span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {bancadasLista.length < BANCADAS_MAX && (
+                <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addBancada}>＋ Adicionar bancada</button>
+              )}
+              {bancadasLista.length === 0 && numOrZero(get("pisos.bancadasM2")) > 0 && (
+                <div style={{ fontSize: 11, color: "#b45309" }}>Este projeto tem {get("pisos.bancadasM2")} m² de bancada no campo antigo; adicione as bancadas acima para detalhar (o campo antigo deixa de valer quando houver lista).</div>
+              )}
+            </div>
           </div>
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <CampoNum label="Deck (m²)" valor={get("pisos.deckM2")} onChange={(v) => set("pisos.deckM2", v)} />
