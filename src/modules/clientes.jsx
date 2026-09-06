@@ -1343,6 +1343,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
     );
   }
 
+  if (view === "cronogramaObra" && obraSelecionada) {
+    return (
+      <CronogramaObraView
+        obra={obraSelecionada}
+        obras={obras}
+        data={data}
+        save={save}
+        onObraAtualizada={setObraSelecionada}
+        isMobile={isMobile}
+        onVoltar={() => setView("detalheObra")}
+        onIrParaOrcamento={() => setView("orcamentoObra")}
+      />
+    );
+  }
+
   if (view === "detalheObra" && obraSelecionada) {
     return (
       <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -1372,10 +1387,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Contratos</div>
             <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
           </button>
-          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }}
-            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
-            <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Em breve</div>
+          <button onClick={() => setView("cronogramaObra")}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Cronograma</div>
+            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>{obraSelecionada.cronograma?.prazoMeses ? `${obraSelecionada.cronograma.prazoMeses} meses` : "Prazo, etapas e equipe"}</div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>

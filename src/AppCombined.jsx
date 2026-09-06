@@ -10590,10 +10590,6 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         </div>
       )}
 
-      {typeof CronogramaObraBloco === "function" && (
-        <CronogramaObraBloco obra={obra} obras={obras} data={data} save={save} onObraAtualizada={onObraAtualizada} isMobile={isMobile} podeEditar={!!perm.podeEditar} />
-      )}
-
       <div style={{ overflowX: "auto", marginBottom: 16 }}>
         {itensPorEtapa.map((grupo) => {
           const subtotal = grupo.itens.reduce((acc, i) => acc + i.total, 0);
@@ -11281,11 +11277,11 @@ function fmtMesCrono(chave) {
 function fmtHorasCrono(h) { return `${Math.round(numOrZero(h)).toLocaleString("pt-BR")} h`; }
 const CRONO_COR_GRUPO = { Bruto: "#3b82f6", Acabamento: "#10b981", Externa: "#a855f7" };
 
-function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobile, podeEditar, abaInicial }) {
+function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobile, podeEditar, abaInicial, semCabecalho }) {
   const oficios = typeof OFICIOS !== "undefined" ? OFICIOS : [];
   const salvo = obra.cronograma || {};
   const [cfg, setCfg] = useState(() => ({
-    dataInicio: salvo.dataInicio || new Date().toISOString().slice(0, 10),
+    dataInicio: salvo.dataInicio || (obra.dataInicio ? String(obra.dataInicio).slice(0, 10) : new Date().toISOString().slice(0, 10)),
     modo: salvo.modo || "simplificado",
     prazoAlvoMeses: salvo.prazoAlvoMeses || 0,
     equipe: { ...equipePadrao(), ...(salvo.equipe || {}) },
@@ -11294,6 +11290,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
   }));
   const [aba, setAba] = useState(abaInicial || "gantt");
   const [aberto, setAberto] = useState(true);
+  const mostrar = semCabecalho || aberto;
 
   const res = useMemo(() => {
     try { return gerarCronogramaObra(obra.projeto || {}, obra.orcamento, data, cfg); }
@@ -11335,16 +11332,16 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
   }
 
   return (
-    <div style={{ marginBottom: 16, border: "1px solid rgba(38,36,33,0.1)", borderRadius: 10, overflow: "hidden" }}>
-      <button type="button" onClick={() => setAberto((a) => !a)}
+    <div style={{ marginBottom: 16, border: semCabecalho ? "none" : "1px solid rgba(38,36,33,0.1)", borderRadius: 10, overflow: "hidden" }}>
+      {!semCabecalho && <button type="button" onClick={() => setAberto((a) => !a)}
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#f9fafb", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
         <span style={{ fontSize: 12.5, fontWeight: 700, color: "#262421" }}>Cronograma da obra
           <span style={{ fontWeight: 400, color: "#6b7280", marginLeft: 8 }}>{at.meses} meses · término {fmtDataCrono(at.dataFim)} · {ehProd ? "por produtividade" : "simplificado"}</span>
         </span>
         <span style={{ fontSize: 12, color: "#6b7280" }}>{aberto ? "▲" : "▼"}</span>
-      </button>
-      {aberto && (
-        <div style={{ padding: 14 }}>
+      </button>}
+      {mostrar && (
+        <div style={{ padding: semCabecalho ? 0 : 14 }}>
           {/* Configuração */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
             <div><div style={rotulo}>Início da obra</div><input type="date" style={input} value={cfg.dataInicio} disabled={!podeEditar} onChange={(e) => setCampo("dataInicio", e.target.value)} /></div>
@@ -11614,6 +11611,39 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
               {salvo.geradoEm && <span style={{ fontSize: 11, color: "#9ca3af" }}>salvo em {new Date(salvo.geradoEm).toLocaleString("pt-BR")} · {salvo.prazoMeses} meses</span>}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Tela "Cronograma" da obra (GestaoObraPanel → botão Cronograma), no mesmo
+// molde de OrcamentoObraView. Lê obra.projeto e obra.orcamento; sem projeto,
+// manda preencher o orçamento primeiro.
+function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, onIrParaOrcamento }) {
+  const perm = getPermissoes();
+  const temProjeto = !!(obra.projeto && obra.projeto.arquitetura && numOrZero(obra.projeto.arquitetura.areaConstruida) > 0);
+  const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 16, marginBottom: 20 };
+  return (
+    <div style={wrap}>
+      <button onClick={onVoltar} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#262421" }}>Cronograma — {obra.nome}</div>
+        <div style={{ fontSize: 12, color: "#6b7280" }}>prazo pela tabela do escritório ou por produtividade (HH SINAPI × equipe), caminho crítico, desembolso por mês e mão de obra de referência</div>
+      </div>
+      {!temProjeto ? (
+        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "14px 16px", fontSize: 12.5, color: "#92400e" }}>
+          O cronograma usa as áreas, volumes e ambientes do orçamento da obra. Preencha os dados do projeto e gere o orçamento primeiro.
+          {onIrParaOrcamento && <div style={{ marginTop: 10 }}><button style={C.btn} onClick={onIrParaOrcamento}>Ir para o orçamento</button></div>}
+        </div>
+      ) : (
+        <div>
+          {!obra.orcamento && (
+            <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 14px", fontSize: 12, color: "#374151", marginBottom: 12 }}>
+              Orçamento ainda não gerado: prazo e equipe já saem do projeto; o físico-financeiro e a comparação de mão de obra aparecem depois de calcular o orçamento.
+            </div>
+          )}
+          <CronogramaObraBloco obra={obra} obras={obras} data={data} save={save} onObraAtualizada={onObraAtualizada} isMobile={isMobile} podeEditar={!!perm.podeEditar} semCabecalho />
         </div>
       )}
     </div>
@@ -13152,6 +13182,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
     );
   }
 
+  if (view === "cronogramaObra" && obraSelecionada) {
+    return (
+      <CronogramaObraView
+        obra={obraSelecionada}
+        obras={obras}
+        data={data}
+        save={save}
+        onObraAtualizada={setObraSelecionada}
+        isMobile={isMobile}
+        onVoltar={() => setView("detalheObra")}
+        onIrParaOrcamento={() => setView("orcamentoObra")}
+      />
+    );
+  }
+
   if (view === "detalheObra" && obraSelecionada) {
     return (
       <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -13181,10 +13226,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile }) {
             <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Contratos</div>
             <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
           </button>
-          <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Cronograma será implementado em breve.", tipo: "aviso" }); }}
-            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#9ca3af", textAlign: "center" }}>Cronograma</div>
-            <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Em breve</div>
+          <button onClick={() => setView("cronogramaObra")}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Cronograma</div>
+            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>{obraSelecionada.cronograma?.prazoMeses ? `${obraSelecionada.cronograma.prazoMeses} meses` : "Prazo, etapas e equipe"}</div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>

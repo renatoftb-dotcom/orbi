@@ -1,8 +1,9 @@
 # SPEC — Cronograma de obra
 
-Prazo, rede de etapas, produtividade e físico-financeiro da obra, dentro do
-resultado do orçamento (Gestão de obra → Orçamento → bloco "Cronograma da
-obra"). Complementa `SPEC-ORCAMENTO-OBRA.md`; a análise que motivou o
+Prazo, rede de etapas, produtividade e físico-financeiro da obra, na tela
+Gestão de obra → Cronograma (`CronogramaObraView`, botão do painel da obra;
+lê `obra.projeto` e `obra.orcamento`, e manda preencher o orçamento quando
+não há projeto). Complementa `SPEC-ORCAMENTO-OBRA.md`; a análise que motivou o
 desenho está em `referencia-orcamento/ANALISE-CRONOGRAMA.md`.
 
 Arquivos: `src/modules/cronograma-seed.jsx` (tabelas editáveis),
