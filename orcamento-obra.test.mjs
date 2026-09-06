@@ -497,8 +497,8 @@ teste("módulo: genérico pelo padrão, produto do projeto vence, consumíveis s
   const r = gerarOrcamentoObra(proj, { materiais: [] });
   const it = r.itens.filter((i) => i.etapa === "Pisos e revestimentos");
   const achar = (nome) => it.find((i) => i.item === nome);
-  assert.strictEqual(achar("Piso - Porcelanato padrão Alto").qtd, 115.28);           // (100 + rodapé 48 × 0,10) × 1,1
-  assert.strictEqual(achar("Pisos e revestimentos - REVESTIMENTO BRANCO 10X20").qtd, 55);
+  assert.strictEqual(achar("Piso - Porcelanato padrão Alto").qtd, 125.76);           // (100 + rodapé 48 × 0,10) × 1,2 (perda de peças)
+  assert.strictEqual(achar("Pisos e revestimentos - REVESTIMENTO BRANCO 10X20").qtd, 60); // 50 × 1,2
   assert.ok(!achar("Revestimento - Porcelanato parede padrão Alto"));
   // AC3: piso 104,8 m² (90x90 → porcelanato) 7,5 + soleiras 1,5 m² × 7,5 = 797,25 kg → /20 × 1,1 = 43,8 → 44
   assert.strictEqual(achar("Argamassa AC 3 GF - 20kg").qtd, 44);
@@ -519,11 +519,11 @@ teste("padrão Baixo usa cerâmica; rodapé soma no m² do piso; sem m² nada é
   const it = r.itens.filter((i) => i.etapa === "Pisos e revestimentos");
   const ceram = it.filter((i) => i.item === "Piso - Cerâmica padrão Baixo");
   assert.strictEqual(ceram.length, 1);
-  assert.strictEqual(ceram[0].qtd, 58.3); // (50 + 30 × 0,10) × 1,1
+  assert.strictEqual(ceram[0].qtd, 63.6); // (50 + 30 × 0,10) × 1,2
   assert.ok(!it.some((i) => i.item === "RODAPE POLIESTIRENO 15CM"));
   // área construída preenche o piso interno sozinha; sem área nem cômodos, nada
   const auto = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 } }, { materiais: [] });
-  assert.strictEqual(auto.itens.find((i) => i.subEtapa === "Piso interno").qtd, 66);
+  assert.strictEqual(auto.itens.find((i) => i.subEtapa === "Piso interno").qtd, 72); // 60 × 1,2
   const vazio = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: {} }, { materiais: [] });
   assert.ok(!vazio.itens.some((i) => i.etapa === "Pisos e revestimentos"));
 });

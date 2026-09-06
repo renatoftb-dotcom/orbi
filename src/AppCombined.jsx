@@ -9337,6 +9337,7 @@ function medirBancada(b) {
   const r2 = (x) => Math.round(x * 100) / 100;
   return { tampo: r2(tampo), saia: r2(saia), fundo: r2(fundo), sapatas: r2(sapatas), total: r2(total) };
 }
+const PERDA_PECAS = 1.2; // peças cerâmicas (piso e revestimento): 20% de recortes e quebras; consumíveis seguem os 10% gerais
 const ARGAMASSA_KG_M2 = { AC3: 7.5, AC2: 4.5 };
 const REJUNTE_DENSIDADE = 1600, REJUNTE_FATOR = 1.5;
 
@@ -9556,7 +9557,7 @@ function pisosRevestimentos(cp, out, data) {
     const formatoId = (ps[sup.id] && ps[sup.id].formato) || FORMATO_PADRAO[sup.id][padrao] || "60x60";
     const c = consumoRevestimento(formatoId, sup.externo, numOrZero(ps[sup.id] && ps[sup.id].juntaMm));
     const produto = String((ps[sup.id] && ps[sup.id].produto) || "").trim() || PISOS_GENERICOS[sup.id][padrao] || PISOS_GENERICOS[sup.id]["Médio"];
-    emitir(out, { ...base, subEtapa: sup.subEtapa, item: produto, unidade: "m2", qtd: ceil2(area * PERDA) });
+    emitir(out, { ...base, subEtapa: sup.subEtapa, item: produto, unidade: "m2", qtd: ceil2(area * PERDA_PECAS) });
     totais[c.argamassa] += area * c.argamassaKg;
     totais.rejunteKg += area * c.rejunteKg;
     totais.clips += area * c.clipsM2;
@@ -10941,7 +10942,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleiras|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
           </datalist>
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
-            Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({projetoDraft.padrao || "Médio"}); sem formato, o tamanho típico do padrão. A partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
+            Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({projetoDraft.padrao || "Médio"}); sem formato, o tamanho típico do padrão. Peças com {Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras); a partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
           </div>
           {(() => { const au = autosPisos(projetoDraft); return (
             <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
