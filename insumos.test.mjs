@@ -317,6 +317,13 @@ t("semente compra_corrigida (já com fator) não é corrigida duas vezes", () =>
   assert(r.preco > 76 && r.preco < 78, "corrigiu duas vezes: " + r.preco);
 });
 
+t("material do cadastro antigo (só ultimoPreco) já vale como preço, com confiança baixa", () => {
+  const r = precoInsumo({ nome: "PVC - Esgoto - Tubo 100mm", unidade: "Unidades", ultimoPreco: 68.9 }, HOJE);
+  eq(r.preco, 68.9);
+  eq(r.confianca, "baixa");
+  eq(precoInsumo({ nome: "x", ultimoPreco: 0 }, HOJE).preco, null);
+});
+
 console.log("\n" + ok + " testes passaram" + (falhas.length ? ", " + falhas.length + " falharam" : ""));
 if (falhas.length) {
   console.log("\nFALHAS:\n  - " + falhas.join("\n  - ") + "\n");

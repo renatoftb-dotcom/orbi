@@ -260,6 +260,12 @@ function precoInsumo(insumo, ate) {
     return { preco: insumo.precoManual, confianca: "manual", meses: null, corrigido: false };
   }
   if (insumo.precoReferencia == null) {
+    // Material do cadastro antigo, ainda não migrado: só tem ultimoPreco.
+    // Vale como referência (sem data → confiança baixa) até a semeadura
+    // preencher os campos novos.
+    if (insumo.ultimoPreco != null && Number(insumo.ultimoPreco) > 0) {
+      return { preco: Math.round(Number(insumo.ultimoPreco) * 100) / 100, confianca: "baixa", meses: null, corrigido: false, legado: true };
+    }
     return { preco: null, confianca: "sem_preco", meses: null, corrigido: false };
   }
   var meses = mesesEntre(insumo.precoData, ate);
