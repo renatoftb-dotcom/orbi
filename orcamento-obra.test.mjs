@@ -505,7 +505,7 @@ teste("módulo: genérico pelo padrão, produto do projeto vence, consumíveis s
   // AC2: azulejo 50 × 4,5 = 225 kg → 12,4 → 13
   assert.strictEqual(achar("Argamassa AC 2 - 20kg").qtd, 13);
   assert.ok(!achar("RODAPE POLIESTIRENO 15CM"));                                      // rodapé é recorte do piso
-  assert.strictEqual(achar("Soleiras Preto São Gabriel").qtd, 1.65);                 // 10 × 0,15 × 1,1
+  assert.strictEqual(achar("Soleira padrão Alto").qtd, 1.65);                        // 10 × 0,15 × 1,1 — pedra pelo padrão da obra
   assert.ok(achar("Rejunte - 5kg").qtd >= 6);
   assert.ok(achar("Pisos e revestimentos - Espaçador").qtd > 0 && achar("Pisos e revestimentos - Cunha Niveladora").qtd > 0);
   assert.ok(achar("Pisos e revestimentos - Espaçador Cruzeta").qtd > 0);
@@ -538,7 +538,7 @@ teste("bancada: tampo + saia + fundo + sapatas em m² de pedra; uma linha por ba
   ] } }, { materiais: [] });
   const b = r.itens.filter((i) => i.etapa === "Pisos e revestimentos" && i.subEtapa === "Bancadas");
   assert.strictEqual(b.length, 2); // uma linha por pedra
-  assert.strictEqual(b[0].item, "Granito - Bancadas"); assert.strictEqual(b[0].qtd, 2.37);
+  assert.strictEqual(b[0].item, "Granito padrão Médio"); assert.strictEqual(b[0].qtd, 2.37);
   assert.strictEqual(b[0].composicao[0].bancada, "Cozinha"); assert.strictEqual(b[0].composicao[0].sapatas, 0.12);
   assert.strictEqual(b[1].item, "Soleiras Preto São Gabriel"); assert.strictEqual(b[1].qtd, 0.78); // 0,6 + 0,06 + 0,12
   // duas bancadas na mesma pedra somam numa linha só
@@ -577,7 +577,7 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   assert.strictEqual(mig.wc, 3); assert.strictEqual(mig.salaTV, 1); assert.ok(!("banheiroSuite" in mig));
   assert.strictEqual(cp.pisos.bancadas.length, 1); assert.strictEqual(cp.pisos.bancadas[0].comprimento, 2);
   const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 80 }, tamanhoComodos: "Médio", ambientes: { cozinha: 1 } }, { materiais: [] });
-  assert.ok(r.itens.some((i) => i.subEtapa === "Bancadas" && i.item === "Granito - Bancadas" && i.qtd > 1));
+  assert.ok(r.itens.some((i) => i.subEtapa === "Bancadas" && i.item === "Granito padrão Médio" && i.qtd > 1));
   assert.ok(r.itens.some((i) => i.subEtapa === "Revestimento interno"));
   const g = modulo.estimarPelosComodos({ tamanhoComodos: "Grande", ambientes: { cozinha: 1 } });
   assert.strictEqual(g.pisoInterno, 24); // 6×4
@@ -629,6 +629,14 @@ teste("padrão da obra: tela e motor usam a mesma regra; genérico do padrão M�
   assert.ok(out.some((l) => l.item === "Piso - Porcelanato padrão Médio"));
   assert.ok(out.some((l) => l.item === "Revestimento - Porcelanato parede padrão Médio"));
   assert.ok(!out.some((l) => /padrão Alt/.test(l.item)));
+  // granito e soleira acompanham o padrão da obra; produto digitado vence
+  const alt = normalizarProjeto({ padrao: "Altíssimo", arquitetura: { areaConstruida: 100 }, pisos: { soleirasM: 10, bancadas: [{ nome: "Cozinha", comprimento: 2, profundidade: 0.6, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10 }] } });
+  const o2 = []; modulo.pisosRevestimentos(alt, o2);
+  assert.ok(o2.some((l) => l.subEtapa === "Bancadas" && l.item === "Granito padrão Altíssimo"));
+  assert.ok(o2.some((l) => l.subEtapa === "Soleiras e peitoris" && l.item === "Soleira padrão Altíssimo"));
+  const dig = normalizarProjeto({ padrao: "MCMV", arquitetura: { areaConstruida: 100 }, pisos: { soleirasM: 10, soleirasProduto: "Minha pedra" } });
+  const o3 = []; modulo.pisosRevestimentos(dig, o3);
+  assert.ok(o3.some((l) => l.subEtapa === "Soleiras e peitoris" && l.item === "Minha pedra"));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

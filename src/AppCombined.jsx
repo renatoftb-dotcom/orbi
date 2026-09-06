@@ -4597,7 +4597,6 @@ var INSUMOS_SEED_CADASTRO = [
   { codigo:"FOR-017", nome:"Gesso - Saco Gesso 4kg", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:35.31, precoFonte:"compra_corrigida", precoData:"2025-02-26", precoNCompras:5, precoFatorInccAplicado:1.1147, aliases:["Gesso - Saco Gesso 4kg"], observacao:"última compra fora da faixa; usada a mediana das 5 últimas" },
   { codigo:"FOR-018", nome:"Gesso - Sisal 1kg", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:27.39, precoFonte:"compra_corrigida", precoData:"2024-04-08", precoNCompras:4, precoFatorInccAplicado:1.173, aliases:["Gesso - Sisal 1kg"] },
   { codigo:"FOR-019", nome:"Gesso - Tabica 3mts", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:14.41, precoFonte:"compra_corrigida", precoData:"2024-04-08", precoNCompras:4, precoFatorInccAplicado:1.173, aliases:["Gesso - Tabica 3mts"] },
-  { codigo:"REV-003", nome:"Granito - Bancadas", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:807.67, precoFonte:"compra_corrigida", precoData:"2025-09-24", precoNCompras:10, precoFatorInccAplicado:1.0769, aliases:["Granito - Bancadas"] },
   { codigo:"IMP-008", nome:"Impermeabilizantes - Bianco 3.6KG", grupo:"Impermeabilizantes", unidade:"Unidades", tipo:"material", precoReferencia:106.92, precoFonte:"compra_corrigida", precoData:"2025-05-06", precoNCompras:3, precoFatorInccAplicado:1.0983, aliases:["Impermeabilizantes - Bianco 3.6KG"] },
   { codigo:"IMP-009", nome:"Impermeabilizantes - Bianco 900G", grupo:"Impermeabilizantes", unidade:"Unidades", tipo:"material", precoReferencia:45.1, precoFonte:"compra_corrigida", precoData:"2023-07-03", precoNCompras:2, precoFatorInccAplicado:1.2108, aliases:["Impermeabilizantes - Bianco 900G"] },
   { codigo:"IMP-010", nome:"Impermeabilizantes - Tela Poliester 5mts", grupo:"Impermeabilizantes", unidade:"Unidades", tipo:"material", precoReferencia:53.21, precoFonte:"compra_corrigida", precoData:"2025-09-10", precoNCompras:3, precoFatorInccAplicado:1.0769, aliases:["Impermeabilizantes - Tela Poliester 5mts"], observacao:"última compra fora da faixa; usada a mediana das 5 últimas" },
@@ -5025,9 +5024,6 @@ var INSUMOS_SEED_CADASTRO = [
   { codigo:"FER-052", nome:"Régua Bitubular", grupo:"Ferramentas", unidade:"Unidades", tipo:"material", precoReferencia:45.17, precoFonte:"compra_corrigida", precoData:"2024-09-19", precoNCompras:4, precoFatorInccAplicado:1.1434, aliases:["Régua Bitubular"] },
   { codigo:"CIM-003", nome:"Sacos de cimento 25kg", grupo:"Cimento", unidade:"Unidades", tipo:"material", precoReferencia:26.58, precoFonte:"compra_corrigida", precoData:"2024-02-29", precoNCompras:2, precoFatorInccAplicado:1.185, aliases:["Sacos de cimento 25kg"] },
   { codigo:"REV-050", nome:"Salva Piso 1,00m x 25mts", grupo:"Pisos e revestimentos", unidade:"Unidades", tipo:"material", precoReferencia:132.03, precoFonte:"compra_corrigida", precoData:"2025-04-17", precoNCompras:4, precoFatorInccAplicado:1.1038, aliases:["Salva Piso 1,00m x 25mts"] },
-  { codigo:"REV-051", nome:"Soleiras Branco Siena", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:1572.0, precoFonte:"compra_corrigida", precoData:"2024-03-25", precoNCompras:1, precoFatorInccAplicado:1.179, aliases:["Soleiras Branco Siena"] },
-  { codigo:"REV-052", nome:"Soleiras Preto São Gabriel", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:803.57, precoFonte:"compra", precoData:"2026-02-23", precoNCompras:11, precoFatorInccAplicado:1.0, aliases:["Soleiras Preto São Gabriel"] },
-  { codigo:"REV-053", nome:"Soleiras Verde Ubatuba", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:600.51, precoFonte:"compra", precoData:"2025-12-16", precoNCompras:4, precoFatorInccAplicado:1.0, aliases:["Soleiras Verde Ubatuba"] },
   { codigo:"LOU-085", nome:"TANQUE G 600X520 C/MESA INCEPA BR", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:438.42, precoFonte:"compra_corrigida", precoData:"2025-01-17", precoNCompras:3, precoFatorInccAplicado:1.1202, aliases:["TANQUE G 600X520 C/MESA INCEPA BR"] },
   { codigo:"ELE-184", nome:"Tampa Quadro 100A Embutir 18 Disjuntores", grupo:"Elétrica e iluminação", unidade:"Unidades", tipo:"material", precoReferencia:107.42, precoFonte:"compra_corrigida", precoData:"2024-05-07", precoNCompras:1, precoFatorInccAplicado:1.167, aliases:["Tampa Quadro 100A Embutir 18 Disjuntores"] },
   { codigo:"FOR-021", nome:"Tela Veda Trinca", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:30.84, precoFonte:"compra_corrigida", precoData:"2023-02-08", precoNCompras:3, precoFatorInccAplicado:1.2275, aliases:["Tela Veda Trinca"] },
@@ -5265,6 +5261,16 @@ var INSUMOS_SEED = [
   { codigo:"REV-058", nome:"Revestimento - Azulejo padrão Baixo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:45, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Azulejo padrão Baixo"], observacao:"Revestimento de parede padrão MCMV/Baixo — cerâmica 30x60 (referência de mercado SP)" },
   { codigo:"REV-059", nome:"Revestimento - Azulejo padrão Médio", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:65, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Azulejo padrão Médio"], observacao:"Revestimento de parede padrão Médio — cerâmica/azulejo 10x20 a 33x60 (compras do escritório)" },
   { codigo:"REV-066", nome:"Revestimento - Porcelanato parede padrão Médio", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:75, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Porcelanato parede padrão Médio"], observacao:"Revestimento de parede/fachada padrão Médio — porcelanato 30x60 acetinado (compras do escritório)" },
+  { codigo:"REV-067", nome:"Granito padrão MCMV", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:600, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Granito padrão MCMV"], observacao:"Pedra pronta de bancada, padrão MCMV — granito comum (Cinza Andorinha / Verde Ubatuba) (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-068", nome:"Granito padrão Baixo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:700, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Granito padrão Baixo"], observacao:"Pedra pronta de bancada, padrão Baixo — granito comum (Cinza Andorinha / Verde Ubatuba) (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-069", nome:"Granito padrão Médio", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:800, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Granito padrão Médio"], observacao:"Pedra pronta de bancada, padrão Médio — granito Preto São Gabriel / Branco Itaúnas (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-070", nome:"Granito padrão Alto", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:1550, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Granito padrão Alto"], observacao:"Pedra pronta de bancada, padrão Alto — mármore ou quartzo nacional (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-071", nome:"Granito padrão Altíssimo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:2000, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Granito padrão Altíssimo"], observacao:"Pedra pronta de bancada, padrão Altíssimo — quartzo / pedra importada (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-072", nome:"Soleira padrão MCMV", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:600, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Soleira padrão MCMV"], observacao:"Pedra pronta de soleira e peitoril, padrão MCMV — granito comum (Cinza Andorinha / Verde Ubatuba) (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-073", nome:"Soleira padrão Baixo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:700, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Soleira padrão Baixo"], observacao:"Pedra pronta de soleira e peitoril, padrão Baixo — granito comum (Cinza Andorinha / Verde Ubatuba) (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-074", nome:"Soleira padrão Médio", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:800, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Soleira padrão Médio"], observacao:"Pedra pronta de soleira e peitoril, padrão Médio — granito Preto São Gabriel / Branco Itaúnas (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-075", nome:"Soleira padrão Alto", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:1550, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Soleira padrão Alto"], observacao:"Pedra pronta de soleira e peitoril, padrão Alto — mármore ou quartzo nacional (m² de pedra: tampo + saia + fundo + sapatas)" },
+  { codigo:"REV-076", nome:"Soleira padrão Altíssimo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:2000, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Soleira padrão Altíssimo"], observacao:"Pedra pronta de soleira e peitoril, padrão Altíssimo — quartzo / pedra importada (m² de pedra: tampo + saia + fundo + sapatas)" },
   { codigo:"REV-060", nome:"Revestimento - Porcelanato parede padrão Alto", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:110, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Porcelanato parede padrão Alto"], observacao:"Revestimento de parede padrão Alto — porcelanato 45x90/32x100 (compras do escritório)" },
   { codigo:"REV-061", nome:"Revestimento - Porcelanato parede padrão Altíssimo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:200, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Porcelanato parede padrão Altíssimo"], observacao:"Revestimento de parede padrão Altíssimo — porcelanato grandes formatos (compras do escritório)" },
   { codigo:"REV-062", nome:"Piso - Externo cerâmico padrão Baixo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:45, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Externo cerâmico padrão Baixo"], observacao:"Piso externo padrão MCMV/Baixo — cerâmica antiderrapante (referência de mercado SP)" },
@@ -9326,7 +9332,13 @@ const FORMATO_PADRAO = { pisoInterno: { MCMV: "45x45", Baixo: "45x45", Médio: "
   revestimentoInterno: { MCMV: "30x60", Baixo: "30x60", Médio: "30x60", Alto: "45x90", Altíssimo: "60x120" },
   revestimentoExterno: { MCMV: "30x60", Baixo: "30x60", Médio: "30x60", Alto: "45x90", Altíssimo: "60x120" } };
 const RODAPE_ALTURA_M = 0.10; // rodapé = recorte do próprio piso interno, 10 cm, somado ao m² do piso
-const SOLEIRA_PADRAO = "Soleiras Preto São Gabriel";
+// Pedras (granito de bancada e soleira) por padrão da obra — item genérico da
+// semente (REV-067…076); o quantitativo mostra só "Granito padrão X" /
+// "Soleira padrão X". Produto digitado na bancada/soleira continua vencendo.
+const GRANITO_GENERICOS = { MCMV: "Granito padrão MCMV", Baixo: "Granito padrão Baixo", Médio: "Granito padrão Médio", Alto: "Granito padrão Alto", Altíssimo: "Granito padrão Altíssimo" };
+const SOLEIRA_GENERICOS = { MCMV: "Soleira padrão MCMV", Baixo: "Soleira padrão Baixo", Médio: "Soleira padrão Médio", Alto: "Soleira padrão Alto", Altíssimo: "Soleira padrão Altíssimo" };
+const granitoPadrao = (padrao) => GRANITO_GENERICOS[padrao] || GRANITO_GENERICOS["Médio"];
+const soleiraPadrao = (padrao) => SOLEIRA_GENERICOS[padrao] || SOLEIRA_GENERICOS["Médio"];
 const SOLEIRA_LARGURA_M = 0.15;
 // Bancadas de granito/mármore: cada bancada vira m² de pedra pronta — tampo
 // (comprimento × profundidade), saia (frente, altura em cm), fundo/rodabanca
@@ -9334,7 +9346,6 @@ const SOLEIRA_LARGURA_M = 0.15;
 // quantidade × profundidade × largura em cm). A marmoraria cobra as tiras
 // como m² de pedra; não há perda porque a peça vem pronta.
 const BANCADA_PADRAO = { nome: "", comprimento: "", profundidade: 0.60, saiaCm: 5, fundoCm: 10, sapatas: 2, sapataCm: 10, produto: "" };
-const BANCADA_PRODUTO_PADRAO = "Granito - Bancadas";
 const BANCADAS_MAX = 20;
 function medirBancada(b) {
   const C = numOrZero(b.comprimento), P = numOrZero(b.profundidade);
@@ -9581,7 +9592,7 @@ function pisosRevestimentos(cp, out, data) {
   const soleirasM = numOrZero(ps.soleirasM);
   if (soleirasM > 0) {
     const m2 = soleirasM * SOLEIRA_LARGURA_M;
-    emitir(out, { ...base, subEtapa: "Soleiras e peitoris", item: String(ps.soleirasProduto || "").trim() || SOLEIRA_PADRAO, unidade: "m2", qtd: ceil2(m2 * PERDA) });
+    emitir(out, { ...base, subEtapa: "Soleiras e peitoris", item: String(ps.soleirasProduto || "").trim() || soleiraPadrao(padrao), unidade: "m2", qtd: ceil2(m2 * PERDA) });
     totais.AC3 += m2 * ARGAMASSA_KG_M2.AC3;
   }
 
@@ -9594,7 +9605,7 @@ function pisosRevestimentos(cp, out, data) {
   for (const b of bancadas) {
     const m = medirBancada(b);
     if (!(numOrZero(b.comprimento) > 0) || !(m.total > 0)) continue; // sem comprimento não é bancada
-    const produto = String(b.produto || "").trim() || BANCADA_PRODUTO_PADRAO;
+    const produto = String(b.produto || "").trim() || granitoPadrao(padrao);
     const acc = porPedra[produto] || (porPedra[produto] = { m2: 0, composicao: [] });
     acc.m2 += m.total;
     acc.composicao.push({ bancada: b.nome || "Bancada", m2: m.total, tampo: m.tampo, saia: m.saia, fundo: m.fundo, sapatas: m.sapatas });
@@ -9603,7 +9614,7 @@ function pisosRevestimentos(cp, out, data) {
     emitir(out, { ...base, subEtapa: "Bancadas", item: produto, unidade: "m2", qtd: Math.round(acc.m2 * 100) / 100, composicao: acc.composicao });
   }
   const bancadasM2 = numOrZero(ps.bancadasM2);
-  if (!Object.keys(porPedra).length && bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || BANCADA_PRODUTO_PADRAO, unidade: "m2", qtd: ceil2(bancadasM2) });
+  if (!Object.keys(porPedra).length && bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || granitoPadrao(padrao), unidade: "m2", qtd: ceil2(bancadasM2) });
 
   // Deck
   const deckM2 = numOrZero(ps.deckM2);
@@ -10961,7 +10972,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
         <BlocoColapsavel titulo="Pisos e revestimentos" subtitulo="peça, argamassa, rejunte, espaçadores, rodapé, soleiras, bancadas e deck" aberto={!!blocosAbertos.pisos} onToggle={() => toggleBloco("pisos")}>
           <datalist id="vk-insumos-pisos">
-            {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleiras|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
+            {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleira|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
           </datalist>
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
             Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({padraoObra(projetoDraft)}); sem formato, o tamanho típico do padrão. Peças com {Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras); a partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
@@ -10998,7 +11009,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div><label style={C.label}>Soleiras e peitoris (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.soleirasM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).soleirasM} (esquadrias)`} onChange={(e) => set("pisos.soleirasM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
             <div style={{ fontSize: 11, color: "#9ca3af" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
-            <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.soleirasProduto") ?? ""} placeholder={SOLEIRA_PADRAO} onChange={(e) => set("pisos.soleirasProduto", e.target.value)} /></div>
+            <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.soleirasProduto") ?? ""} placeholder={soleiraPadrao(padraoObra(projetoDraft))} onChange={(e) => set("pisos.soleirasProduto", e.target.value)} /></div>
           </div>
           <div style={{ gridColumn: "1 / -1", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Bancadas de granito / mármore <span style={{ fontWeight: 400, color: "#9ca3af" }}>— tampo + saia + fundo (rodabanca) + sapatas, em m² de pedra pronta</span></div>
@@ -11018,7 +11029,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                       <button type="button" onClick={() => removeBancada(idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>Remover</button>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, alignItems: "end", marginTop: 6 }}>
-                      <div><label style={C.label}>Pedra (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={b.produto ?? ""} placeholder={BANCADA_PRODUTO_PADRAO} onChange={(e) => updateBancada(idx, "produto", e.target.value)} /></div>
+                      <div><label style={C.label}>Pedra (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={b.produto ?? ""} placeholder={granitoPadrao(padraoObra(projetoDraft))} onChange={(e) => updateBancada(idx, "produto", e.target.value)} /></div>
                       <div style={{ fontSize: 12, color: "#374151", paddingBottom: 8 }}>
                         <b>{m.total.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²</b>
                         <span style={{ color: "#9ca3af" }}> · tampo {m.tampo} · saia {m.saia} · fundo {m.fundo} · sapatas {m.sapatas}</span>
@@ -11032,7 +11043,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               )}
               {bancadasLista.length === 0 && estimarPelosComodos(projetoDraft).bancadas.length > 0 && (
                 <div style={{ fontSize: 12, color: "#374151", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
-                  Automático pelos cômodos: {estimarPelosComodos(projetoDraft).bancadas.map((b) => `${b.nome} ${Number(b.comprimento).toLocaleString("pt-BR")} × ${Number(b.profundidade).toLocaleString("pt-BR")} m`).join(" · ")} — em {BANCADA_PRODUTO_PADRAO}. Adicione bancadas aqui para substituir.
+                  Automático pelos cômodos: {estimarPelosComodos(projetoDraft).bancadas.map((b) => `${b.nome} ${Number(b.comprimento).toLocaleString("pt-BR")} × ${Number(b.profundidade).toLocaleString("pt-BR")} m`).join(" · ")} — em {granitoPadrao(padraoObra(projetoDraft))}. Adicione bancadas aqui para substituir.
                 </div>
               )}
               {bancadasLista.length === 0 && numOrZero(get("pisos.bancadasM2")) > 0 && (
