@@ -10294,10 +10294,14 @@ function projetoVazio() {
   };
 }
 
+// Célula de formulário: rótulo em cima, input embaixo. Em grades, a célula
+// ocupa a altura toda da linha e o input fica no pé — assim os inputs de uma
+// mesma linha ficam sempre alinhados mesmo quando um rótulo quebra em 2 linhas.
+const CAMPO_CELULA = { display: "flex", flexDirection: "column", justifyContent: "flex-end", minWidth: 0 };
 function CampoNum({ label, valor, onChange, inteiro }) {
   // inteiro: contagens (ambientes, peças) — passo 1, sem negativos, sem decimais
   return (
-    <div>
+    <div style={CAMPO_CELULA}>
       <label style={C.label}>{label}</label>
       <input style={C.input} type="number" value={valor ?? ""} step={inteiro ? "1" : "0.01"} min={inteiro ? "0" : undefined}
         onChange={(e) => {
@@ -10324,7 +10328,7 @@ function CampoPercentual({ label, valor, onChange }) {
     if (Number.isFinite(n)) onChange(Math.round(n * 100) / 10000);
   }
   return (
-    <div>
+    <div style={CAMPO_CELULA}>
       <label style={C.label}>{label}</label>
       <input style={C.input} inputMode="decimal" value={texto === "" ? "" : `${texto}%`} placeholder="0%"
         onChange={aoDigitar}
@@ -10334,7 +10338,7 @@ function CampoPercentual({ label, valor, onChange }) {
 }
 function CampoTexto({ label, valor, onChange, placeholder }) {
   return (
-    <div>
+    <div style={CAMPO_CELULA}>
       <label style={C.label}>{label}</label>
       <input style={C.input} value={valor ?? ""} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
     </div>
@@ -10342,7 +10346,7 @@ function CampoTexto({ label, valor, onChange, placeholder }) {
 }
 function CampoSelect({ label, valor, onChange, opcoes }) {
   return (
-    <div>
+    <div style={CAMPO_CELULA}>
       <label style={C.label}>{label}</label>
       <select style={{ ...C.input, cursor: "pointer" }} value={valor ?? ""} onChange={(e) => onChange(e.target.value)}>
         {opcoes.map((o) => (
@@ -10521,7 +10525,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
               <CampoSelect label="Bancada" valor={cfg.temBancada ? "sim" : "nao"} onChange={(v) => setCfg(a.id, "temBancada", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
               {cfg.temBancada && (
                 <>
-                  <CampoPercentual label="Bancada: % da parede mais comprida" valor={cfg.bancadaFracao} onChange={(v) => setCfg(a.id, "bancadaFracao", v)} />
+                  <CampoPercentual label="Bancada (% da parede maior)" valor={cfg.bancadaFracao} onChange={(v) => setCfg(a.id, "bancadaFracao", v)} />
                   <CampoNum label="Profundidade (m)" valor={cfg.bancadaProfundidade} onChange={(v) => setCfg(a.id, "bancadaProfundidade", v)} />
                   <CampoNum label="Saia (cm)" valor={cfg.saiaCm} onChange={(v) => setCfg(a.id, "saiaCm", v)} />
                   <CampoNum label="Fundo / frontão (cm)" valor={cfg.fundoCm} onChange={(v) => setCfg(a.id, "fundoCm", v)} />
