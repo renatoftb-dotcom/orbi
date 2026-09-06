@@ -445,5 +445,12 @@ teste("kit editado pelo escritório (data.escritorio.composicoes) vence a sement
   assert.strictEqual(est.find((i) => /Tomada hexagonal.*10A/.test(i.item)).qtd, 6);
 });
 
+teste("inclinação do telhado: 0,35 e 35 (digitado como %) dão o mesmo resultado", () => {
+  const a = normalizarProjeto({ tipologia: "Térrea", cobertura: [{ tipo: "Telha Barro Portuguesa", comprimento: 10, largura: 8, aguas: 2, inclinacao: 0.35 }] });
+  const b = normalizarProjeto({ tipologia: "Térrea", cobertura: [{ tipo: "Telha Barro Portuguesa", comprimento: 10, largura: 8, aguas: 2, inclinacao: 35 }] });
+  assert.strictEqual(a.coberturas[0].inclinacao, 0.35);
+  assert.strictEqual(b.coberturas[0].inclinacao, 0.35);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);

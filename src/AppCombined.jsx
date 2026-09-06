@@ -8557,7 +8557,8 @@ function normalizarProjeto(projeto) {
       comprimento: numOrZero(t && t.comprimento),
       largura: numOrZero(t && t.largura),
       aguas: numOrZero(t && t.aguas),
-      inclinacao: numOrZero(t && t.inclinacao),
+      // fração (0,35). Projeto antigo com 35 digitado como percentual → 0,35
+      inclinacao: (() => { const i = numOrZero(t && t.inclinacao); return i > 1 ? i / 100 : i; })(),
     })),
 
     // Escrito por cobertura() (variável pública no VBA original) e lido
@@ -8785,6 +8786,30 @@ function CampoNum({ label, valor, onChange, inteiro }) {
           const n = Number(e.target.value);
           onChange(inteiro ? Math.max(0, Math.round(n)) : n);
         }} />
+    </div>
+  );
+}
+// Percentual: o usuário digita 35 e vê "35%"; o projeto guarda 0.35 (fração,
+// como a célula % da planilha e como o motor usa em sqrt(incl² + 1)).
+function CampoPercentual({ label, valor, onChange }) {
+  const [texto, setTexto] = useState(() => (valor === "" || valor == null ? "" : String(Math.round(Number(valor) * 10000) / 100)));
+  useEffect(() => {
+    const externo = valor === "" || valor == null ? "" : String(Math.round(Number(valor) * 10000) / 100);
+    setTexto((t) => (Number(t.replace(",", ".")) === Number(externo) || (t === "" && externo === "") ? t : externo));
+  }, [valor]);
+  function aoDigitar(e) {
+    const limpo = e.target.value.replace("%", "").replace(/[^0-9.,]/g, "");
+    setTexto(limpo);
+    if (limpo === "" || limpo === "." || limpo === ",") return onChange("");
+    const n = Number(limpo.replace(",", "."));
+    if (Number.isFinite(n)) onChange(Math.round(n * 100) / 10000);
+  }
+  return (
+    <div>
+      <label style={C.label}>{label}</label>
+      <input style={C.input} inputMode="decimal" value={texto === "" ? "" : `${texto}%`} placeholder="0%"
+        onChange={aoDigitar}
+        onKeyDown={(e) => { if (e.key === "Backspace" && texto !== "") { e.preventDefault(); aoDigitar({ target: { value: texto.slice(0, -1) } }); } }} />
     </div>
   );
 }
@@ -9210,7 +9235,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                 <CampoNum label="Comprimento" valor={t.comprimento} onChange={(v) => updateTelhado(idx, "comprimento", v)} />
                 <CampoNum label="Largura" valor={t.largura} onChange={(v) => updateTelhado(idx, "largura", v)} />
                 <CampoSelect label="Nº de águas" valor={t.aguas} onChange={(v) => updateTelhado(idx, "aguas", Number(v))} opcoes={[1, 2, 3, 4]} />
-                <CampoNum label="Inclinação" valor={t.inclinacao} onChange={(v) => updateTelhado(idx, "inclinacao", v)} />
+                <CampoPercentual label="Inclinação (%)" valor={t.inclinacao} onChange={(v) => updateTelhado(idx, "inclinacao", v)} />
                 <button type="button" onClick={() => removeTelhado(idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>Remover</button>
               </div>
             ))}
