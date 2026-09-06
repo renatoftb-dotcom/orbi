@@ -308,8 +308,12 @@ function medicoesCronograma(projeto, data) {
   add("PISCINA", "AZULEJO", pi.paredesM2Total + pi.areaConstruida);
 
   // Acabamentos
-  add("REVESTIMENTOS", "AZULEJO", cp.revestimentoInterno);
-  add("REVESTIMENTOS", "PISO_CERAMICO", cp.areaConstruida, "área construída");
+  const ps = cp.pisos || {};
+  const m2 = (k) => numOrZero(ps[k] && ps[k].m2);
+  const pisoInformado = m2("pisoInterno") + m2("pisoExterno");
+  add("REVESTIMENTOS", "AZULEJO", (m2("revestimentoInterno") || cp.revestimentoInterno) + m2("revestimentoExterno"));
+  if (pisoInformado > 0) add("REVESTIMENTOS", "PISO_CERAMICO", pisoInformado + numOrZero(ps.soleirasM) * 0.15);
+  else add("REVESTIMENTOS", "PISO_CERAMICO", cp.areaConstruida, "área construída — informe os m² de piso no orçamento");
   add("FORROS", "FORRO_GESSO", cp.areaConstruida, "área construída — zere o serviço em Composições se a obra não tem forro");
   add("ESQUADRIAS", "ESQUADRIA", cp.esquadrias.reduce((a, e) => a + e.qtd * e.largura * e.altura, 0));
   add("PINTURA", "PINTURA_INT", Math.max(0, cp.m2ParedesInternas - cp.revestimentoInterno) * 2 + cp.m2ParedesExternas);

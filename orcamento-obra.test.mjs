@@ -35,6 +35,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA,
   };
 `)();
 
@@ -475,6 +476,49 @@ teste("sem piscina: dados da piscina são ignorados e os prestadores da piscina 
   // projeto antigo sem o campo: tem piscina se havia área digitada
   assert.strictEqual(normalizarProjeto(base).temPiscina, true);
   assert.strictEqual(normalizarProjeto(projetoReferencia).temPiscina, false);
+});
+
+
+console.log("\n--- pisos e revestimentos ---");
+teste("consumos por formato: 60x60 = porcelanato AC-III, rejunte ≈ 0,16 kg/m², 8,3 clips/m²; 10x20 = AC-II, cruzetas, rejunte ≈ 0,58", () => {
+  const g = modulo.consumoRevestimento("60x60", false, 0);
+  assert.strictEqual(g.argamassa, "AC3"); assert.strictEqual(g.juntaMm, 2); assert.ok(Math.abs(g.rejunteKg - 0.16) < 0.005); assert.ok(Math.abs(g.clipsM2 - 8.33) < 0.01); assert.strictEqual(g.cruzetasM2, 0);
+  const a = modulo.consumoRevestimento("10x20", false, 0);
+  assert.strictEqual(a.argamassa, "AC2"); assert.ok(Math.abs(a.rejunteKg - 0.576) < 0.005); assert.ok(Math.abs(a.cruzetasM2 - 50) < 0.01); assert.strictEqual(a.clipsM2, 0);
+  assert.strictEqual(modulo.consumoRevestimento("45x45", true, 0).argamassa, "AC3"); // externo sempre AC-III
+  assert.strictEqual(modulo.consumoRevestimento("30x60", false, 4).juntaMm, 4);
+});
+teste("módulo: genérico pelo padrão, produto do projeto vence, consumíveis somados", () => {
+  const proj = { tipologia: "Térrea", padrao: "Alto", arquitetura: { areaConstruida: 150 }, pisos: { pisoInterno: { m2: 100 }, revestimentoInterno: { m2: 50, formato: "10x20", produto: "Pisos e revestimentos - REVESTIMENTO BRANCO 10X20" }, rodapeM: 48, soleirasM: 10 } };
+  const r = gerarOrcamentoObra(proj, { materiais: [] });
+  const it = r.itens.filter((i) => i.etapa === "Pisos e revestimentos");
+  const achar = (nome) => it.find((i) => i.item === nome);
+  assert.strictEqual(achar("Piso - Porcelanato padrão Alto").qtd, 110);              // 100 × 1,1
+  assert.strictEqual(achar("Pisos e revestimentos - REVESTIMENTO BRANCO 10X20").qtd, 55);
+  assert.ok(!achar("Revestimento - Porcelanato parede padrão Alto"));
+  // AC3: piso 100 m² (90x90 → porcelanato) 7,5 + soleiras 1,5 m² × 7,5 = 761,25 kg → /20 × 1,1 = 41,9 → 42
+  assert.strictEqual(achar("Argamassa AC 3 GF - 20kg").qtd, 42);
+  // AC2: azulejo 50 × 4,5 = 225 kg → 12,4 → 13
+  assert.strictEqual(achar("Argamassa AC 2 - 20kg").qtd, 13);
+  assert.strictEqual(achar("RODAPE POLIESTIRENO 15CM").qtd, 22);                     // 48/2,4 × 1,1 = 22
+  assert.strictEqual(achar("Soleiras Preto São Gabriel").qtd, 1.65);                 // 10 × 0,15 × 1,1
+  assert.ok(achar("Rejunte - 5kg").qtd >= 6);
+  assert.ok(achar("Pisos e revestimentos - Espaçador").qtd > 0 && achar("Pisos e revestimentos - Cunha Niveladora").qtd > 0);
+  assert.ok(achar("Pisos e revestimentos - Espaçador Cruzeta").qtd > 0);
+  assert.strictEqual(achar("Salva Piso 1,00m x 25mts").qtd, 5);                      // 100/25 × 1,1 = 4,4 → 5
+  assert.ok(achar("Disco Porcelanato").qtd >= 1);
+  // revestimento interno desconta da pintura (mesmo campo de antes)
+  assert.strictEqual(normalizarProjeto(proj).revestimentoInterno, 50);
+});
+teste("padrão Baixo usa cerâmica; rodapé do próprio piso vira m² do produto; sem m² nada é emitido", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", padrao: "Baixo", arquitetura: { areaConstruida: 60 }, pisos: { pisoInterno: { m2: 50, produto: "" }, rodapeM: 30, rodapeTipo: "mesmoPiso" } }, { materiais: [] });
+  const it = r.itens.filter((i) => i.etapa === "Pisos e revestimentos");
+  const ceram = it.filter((i) => i.item === "Piso - Cerâmica padrão Baixo");
+  assert.strictEqual(ceram.length, 2); // piso + rodapé
+  assert.strictEqual(ceram[1].qtd, 3.3); // 30 × 0,10 × 1,1
+  assert.ok(!it.some((i) => i.item === "RODAPE POLIESTIRENO 15CM"));
+  const vazio = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 } }, { materiais: [] });
+  assert.ok(!vazio.itens.some((i) => i.etapa === "Pisos e revestimentos"));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -5256,6 +5256,20 @@ var INSUMOS_SEED = [
   { codigo:"LOU-011", nome:"Metal - Acabamento Válvula Descarga", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:135, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Válvula Descarga"], observacao:"Referência do modelo antigo" },
   { codigo:"LOU-012", nome:"Metal - Acabamento Misturador Chuveiro 3/4", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:80, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Misturador Chuveiro 3/4"], observacao:"Referência do modelo antigo" },
   { codigo:"LOU-013", nome:"Metal - Acabamento Monocomando Chuveiro 3/4", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:300, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Monocomando Chuveiro 3/4"], observacao:"Padrão Alto — referência do modelo antigo" },
+  // Pisos e revestimentos — genéricos por padrão da obra (o produto do projeto,
+  // escolhido no orçamento, substitui o genérico; a compra real atualiza o preço)
+  { codigo:"REV-054", nome:"Piso - Cerâmica padrão Baixo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:35, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Cerâmica padrão Baixo"], observacao:"Piso interno padrão MCMV/Baixo — cerâmica 45x45 (referência de mercado SP)" },
+  { codigo:"REV-055", nome:"Piso - Porcelanato padrão Médio", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:70, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Porcelanato padrão Médio"], observacao:"Piso interno padrão Médio — porcelanato 60x60 acetinado (mediana das compras do escritório)" },
+  { codigo:"REV-056", nome:"Piso - Porcelanato padrão Alto", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:120, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Porcelanato padrão Alto"], observacao:"Piso interno padrão Alto — porcelanato 90x90/108x108 (mediana das compras do escritório)" },
+  { codigo:"REV-057", nome:"Piso - Porcelanato padrão Altíssimo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:250, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Porcelanato padrão Altíssimo"], observacao:"Piso interno padrão Altíssimo — porcelanato 120x120 grandes formatos (compras do escritório)" },
+  { codigo:"REV-058", nome:"Revestimento - Azulejo padrão Baixo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:45, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Azulejo padrão Baixo"], observacao:"Revestimento de parede padrão MCMV/Baixo — cerâmica 30x60 (referência de mercado SP)" },
+  { codigo:"REV-059", nome:"Revestimento - Azulejo padrão Médio", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:65, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Azulejo padrão Médio"], observacao:"Revestimento de parede padrão Médio — cerâmica/azulejo 10x20 a 33x60 (compras do escritório)" },
+  { codigo:"REV-060", nome:"Revestimento - Porcelanato parede padrão Alto", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:110, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Porcelanato parede padrão Alto"], observacao:"Revestimento de parede padrão Alto — porcelanato 45x90/32x100 (compras do escritório)" },
+  { codigo:"REV-061", nome:"Revestimento - Porcelanato parede padrão Altíssimo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:200, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Revestimento - Porcelanato parede padrão Altíssimo"], observacao:"Revestimento de parede padrão Altíssimo — porcelanato grandes formatos (compras do escritório)" },
+  { codigo:"REV-062", nome:"Piso - Externo cerâmico padrão Baixo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:45, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Externo cerâmico padrão Baixo"], observacao:"Piso externo padrão MCMV/Baixo — cerâmica antiderrapante (referência de mercado SP)" },
+  { codigo:"REV-063", nome:"Piso - Externo antiderrapante padrão Médio", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:80, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Externo antiderrapante padrão Médio"], observacao:"Piso externo padrão Médio — porcelanato externo 60x60 (compras do escritório)" },
+  { codigo:"REV-064", nome:"Piso - Externo antiderrapante padrão Alto", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:120, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Externo antiderrapante padrão Alto"], observacao:"Piso externo padrão Alto — porcelanato externo 108x108 (Lombardia externo)" },
+  { codigo:"REV-065", nome:"Piso - Externo antiderrapante padrão Altíssimo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:180, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Externo antiderrapante padrão Altíssimo"], observacao:"Piso externo padrão Altíssimo — porcelanato externo grandes formatos" },
 ];
 
 // Cadastro completo do escritório (insumos-seed-cadastro.jsx): entra atrás da
@@ -5829,7 +5843,7 @@ var ETAPAS_CRONOGRAMA_SEED = [
   { id: "CONTRAPISO_EXTERNO", nome: "Contrapisos externos e calçadas",        grupo: "Externa", duracaoBase: 2, condicao: "pavimentacao", predecessoras: [{ id: "REBOCO", tipo: "FS" }], custoOrdens: [13] },
   { id: "MURO_DIVISA",       nome: "Muro de divisa",                          grupo: "Externa", duracaoBase: 2, condicao: "muro", predecessoras: [{ id: "FUNDACAO", tipo: "FS" }], custoOrdens: [14] },
   { id: "PISCINA",           nome: "Piscina",                                 grupo: "Externa", duracaoBase: 3, condicao: "piscina", predecessoras: [{ id: "TERRAPLANAGEM", tipo: "FS" }], custoOrdens: [16] },
-  { id: "REVESTIMENTOS",     nome: "Revestimentos cerâmicos (azulejos e pisos)", grupo: "Acabamento", duracaoBase: 2, predecessoras: [{ id: "IMPERM_MOLHADAS", tipo: "FS" }, { id: "CONTRAPISO_PAV1", tipo: "FS" }] },
+  { id: "REVESTIMENTOS",     nome: "Revestimentos cerâmicos (azulejos e pisos)", grupo: "Acabamento", duracaoBase: 2, predecessoras: [{ id: "IMPERM_MOLHADAS", tipo: "FS" }, { id: "CONTRAPISO_PAV1", tipo: "FS" }], custoOrdens: [25] },
   { id: "FORROS",            nome: "Forros",                                  grupo: "Acabamento", duracaoBase: 1, predecessoras: [{ id: "REVESTIMENTOS", tipo: "SS", avanco: 0.5 }] },
   { id: "ESQUADRIAS",        nome: "Esquadrias, vidros, soleiras e peitoris", grupo: "Acabamento", duracaoBase: 1.5, predecessoras: [{ id: "REBOCO", tipo: "FS" }], custoOrdens: [17] },
   { id: "PINTURA",           nome: "Pintura",                                 grupo: "Acabamento", duracaoBase: 3, predecessoras: [{ id: "FORROS", tipo: "FS" }, { id: "ESQUADRIAS", tipo: "SS", avanco: 0.5 }], custoOrdens: [12] },
@@ -7367,7 +7381,8 @@ const ORD = {
   muroArrimo: 15,
   piscina: 16,
   esquadrias: 17,
-  itensProjeto: 18, // hidráulica, esgoto, elétrica, louças, aquecimento — lidos do projeto de engenharia
+  itensProjeto: 18, // hidráulica, esgoto, elétrica, louças, aquecimento — lidos do projeto de engenharia (18–24)
+  pisos: 25,        // pisos e revestimentos (módulo novo, sem equivalente no VBA)
 };
 
 // ── Classificação geral da obra (bloco "Geral" do formulário) ──
@@ -9204,6 +9219,159 @@ function esquadrias(cp, out, data) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// PISOS E REVESTIMENTOS — módulo novo (não existia no VBA)
+// ═══════════════════════════════════════════════════════════════
+// O NOVO MODELO ORÇAMENTO.xlsm tinha só os campos de entrada (GERAL!B49:B55:
+// revestimentos internos/externos, piso interno/externo, deck, bancadas) sem
+// fórmula nenhuma na casa; as únicas fórmulas de revestimento eram as da
+// piscina (R_PISCINA.bas): argamassa AC3 7,5 kg/m², disco 0,005/m² e um
+// rejunte de 0,095 kg/m² que não bate com nenhum fabricante. Aqui:
+//   • peça: m² × PERDA, produto do projeto (escolhido no orçamento) ou o
+//     genérico do padrão da obra (REV-054…065 na semente);
+//   • argamassa colante: porcelanato / peça ≥ 45 cm / externo → AC-III
+//     7,5 kg/m² (dupla colagem, mesma taxa da piscina); cerâmica e azulejo →
+//     AC-II 4,5 kg/m²; sacos de 20 kg;
+//   • rejunte: geometria da junta — comprimento de junta por m² ×
+//     largura × profundidade × 1.600 kg/m³ × 1,5 (perda e sobra) — dá 0,24
+//     kg/m² num 60x60 com 2 mm e 0,58 kg/m² num azulejo 10x20 com 2 mm, na
+//     faixa das tabelas Quartzolit/Eliane; sacos de 5 kg;
+//   • espaçadores: peça ≥ 60 cm usa clip nivelador (3 por peça) + cunha
+//     (1 para cada 3 clips, reaproveitada); peça menor usa cruzeta (1 por
+//     peça, pacote de 100);
+//   • disco de porcelanato 0,005/m² (piscina), salva-piso 1 rolo/25 m²;
+//   • deck (m² + Cetol 1 lata/20 m²), bancadas (m²), soleiras e peitoris
+//     (m lineares × 0,15 m de largura), rodapé (poliestireno barra 2,40 m
+//     ou recorte do próprio piso: m × 0,10 m²).
+// Etapa "Pisos e revestimentos" (ORD.pisos = 25, Acabamento). O cronograma
+// mede AZULEJO e PISO_CERAMICO a partir destes m².
+
+const FORMATOS_PECA = [
+  { id: "10x20", nome: "10 × 20 cm (azulejo)", a: 0.10, b: 0.20, esp: 8 },
+  { id: "20x20", nome: "20 × 20 cm", a: 0.20, b: 0.20, esp: 8 },
+  { id: "30x60", nome: "30 × 60 cm", a: 0.30, b: 0.60, esp: 9 },
+  { id: "45x45", nome: "45 × 45 cm", a: 0.45, b: 0.45, esp: 9 },
+  { id: "45x90", nome: "45 × 90 cm", a: 0.45, b: 0.90, esp: 10 },
+  { id: "60x60", nome: "60 × 60 cm", a: 0.60, b: 0.60, esp: 10 },
+  { id: "60x120", nome: "60 × 120 cm", a: 0.60, b: 1.20, esp: 10 },
+  { id: "90x90", nome: "90 × 90 cm", a: 0.90, b: 0.90, esp: 10 },
+  { id: "120x120", nome: "120 × 120 cm", a: 1.20, b: 1.20, esp: 11 },
+];
+const SUPERFICIES_PISOS = [
+  { id: "pisoInterno", nome: "Piso interno", subEtapa: "Piso interno", tipo: "piso", externo: false },
+  { id: "pisoExterno", nome: "Piso externo", subEtapa: "Piso externo", tipo: "piso", externo: true },
+  { id: "revestimentoInterno", nome: "Revestimento de parede interno", subEtapa: "Revestimento interno", tipo: "parede", externo: false },
+  { id: "revestimentoExterno", nome: "Revestimento de parede externo (fachada)", subEtapa: "Revestimento externo", tipo: "parede", externo: true },
+];
+// Genérico da semente por superfície e padrão da obra
+const PISOS_GENERICOS = {
+  pisoInterno:         { MCMV: "Piso - Cerâmica padrão Baixo", Baixo: "Piso - Cerâmica padrão Baixo", Médio: "Piso - Porcelanato padrão Médio", Alto: "Piso - Porcelanato padrão Alto", Altíssimo: "Piso - Porcelanato padrão Altíssimo" },
+  pisoExterno:         { MCMV: "Piso - Externo cerâmico padrão Baixo", Baixo: "Piso - Externo cerâmico padrão Baixo", Médio: "Piso - Externo antiderrapante padrão Médio", Alto: "Piso - Externo antiderrapante padrão Alto", Altíssimo: "Piso - Externo antiderrapante padrão Altíssimo" },
+  revestimentoInterno: { MCMV: "Revestimento - Azulejo padrão Baixo", Baixo: "Revestimento - Azulejo padrão Baixo", Médio: "Revestimento - Azulejo padrão Médio", Alto: "Revestimento - Porcelanato parede padrão Alto", Altíssimo: "Revestimento - Porcelanato parede padrão Altíssimo" },
+  revestimentoExterno: { MCMV: "Piso - Externo cerâmico padrão Baixo", Baixo: "Piso - Externo cerâmico padrão Baixo", Médio: "Revestimento - Porcelanato parede padrão Alto", Alto: "Revestimento - Porcelanato parede padrão Alto", Altíssimo: "Revestimento - Porcelanato parede padrão Altíssimo" },
+};
+// Formato padrão quando não informado (peça cresce com o padrão)
+const FORMATO_PADRAO = { pisoInterno: { MCMV: "45x45", Baixo: "45x45", Médio: "60x60", Alto: "90x90", Altíssimo: "120x120" },
+  pisoExterno: { MCMV: "45x45", Baixo: "45x45", Médio: "60x60", Alto: "60x60", Altíssimo: "90x90" },
+  revestimentoInterno: { MCMV: "30x60", Baixo: "30x60", Médio: "30x60", Alto: "45x90", Altíssimo: "60x120" },
+  revestimentoExterno: { MCMV: "30x60", Baixo: "30x60", Médio: "30x60", Alto: "45x90", Altíssimo: "60x120" } };
+const RODAPE_TIPOS = [{ value: "poliestireno", label: "Poliestireno 15 cm (barra 2,40 m)" }, { value: "mesmoPiso", label: "Recorte do próprio piso (10 cm)" }, { value: "nenhum", label: "Sem rodapé" }];
+const SOLEIRA_PADRAO = "Soleiras Preto São Gabriel";
+const SOLEIRA_LARGURA_M = 0.15;
+const ARGAMASSA_KG_M2 = { AC3: 7.5, AC2: 4.5 };
+const REJUNTE_DENSIDADE = 1600, REJUNTE_FATOR = 1.5;
+
+// Arredonda m² para cima em centésimos sem o ruído de ponto flutuante (100 × 1,1 = 110,00, não 110,01)
+function ceil2(x) { return Math.ceil(x * 100 - 1e-7) / 100; }
+function formatoPeca(id) { return FORMATOS_PECA.find((f) => f.id === id) || FORMATOS_PECA.find((f) => f.id === "60x60"); }
+function ehPorcelanato(fmt, externo) { return externo || Math.min(fmt.a, fmt.b) >= 0.45; }
+function juntaMmPadrao(fmt) { return Math.min(fmt.a, fmt.b) >= 0.60 ? 2 : (Math.max(fmt.a, fmt.b) <= 0.20 ? 2 : 3); }
+
+// Consumos por m² de uma superfície: argamassa (kg), rejunte (kg), peças,
+// clips/cunhas ou cruzetas. Puro, testável.
+function consumoRevestimento(formatoId, externo, juntaMm) {
+  const fmt = formatoPeca(formatoId);
+  const porcelanato = ehPorcelanato(fmt, externo);
+  const junta = juntaMm > 0 ? juntaMm : juntaMmPadrao(fmt);
+  const pecasM2 = 1 / (fmt.a * fmt.b);
+  const juntaM = (fmt.a + fmt.b) / (fmt.a * fmt.b); // metros de junta por m²
+  const rejunteKg = juntaM * (junta / 1000) * (fmt.esp / 1000) * REJUNTE_DENSIDADE * REJUNTE_FATOR;
+  const nivelador = Math.min(fmt.a, fmt.b) >= 0.60;
+  return {
+    formato: fmt, porcelanato, juntaMm: junta, pecasM2,
+    argamassa: porcelanato ? "AC3" : "AC2", argamassaKg: porcelanato ? ARGAMASSA_KG_M2.AC3 : ARGAMASSA_KG_M2.AC2,
+    rejunteKg: Math.round(rejunteKg * 1000) / 1000,
+    nivelador, clipsM2: nivelador ? pecasM2 * 3 : 0, cruzetasM2: nivelador ? 0 : pecasM2,
+  };
+}
+
+function pisosRevestimentos(cp, out, data) {
+  const base = { ordem: ORD.pisos, tipo: "Acabamento", etapa: "Pisos e revestimentos" };
+  const ps = cp.pisos || {};
+  const padrao = cp.padrao || "Médio";
+  let m2Porcelanato = 0, m2PisoInterno = 0;
+  const totais = { AC3: 0, AC2: 0, rejunteKg: 0, clips: 0, cruzetas: 0 };
+
+  for (const sup of SUPERFICIES_PISOS) {
+    const area = numOrZero(ps[sup.id] && ps[sup.id].m2);
+    if (!(area > 0)) continue;
+    const formatoId = (ps[sup.id] && ps[sup.id].formato) || FORMATO_PADRAO[sup.id][padrao] || "60x60";
+    const c = consumoRevestimento(formatoId, sup.externo, numOrZero(ps[sup.id] && ps[sup.id].juntaMm));
+    const produto = String((ps[sup.id] && ps[sup.id].produto) || "").trim() || PISOS_GENERICOS[sup.id][padrao] || PISOS_GENERICOS[sup.id]["Médio"];
+    emitir(out, { ...base, subEtapa: sup.subEtapa, item: produto, unidade: "m2", qtd: ceil2(area * PERDA) });
+    totais[c.argamassa] += area * c.argamassaKg;
+    totais.rejunteKg += area * c.rejunteKg;
+    totais.clips += area * c.clipsM2;
+    totais.cruzetas += area * c.cruzetasM2;
+    if (c.porcelanato) m2Porcelanato += area;
+    if (sup.id === "pisoInterno") m2PisoInterno += area;
+  }
+
+  // Rodapé
+  const rodapeM = numOrZero(ps.rodapeM);
+  const rodapeTipo = ps.rodapeTipo || "poliestireno";
+  if (rodapeM > 0 && rodapeTipo === "poliestireno") {
+    emitir(out, { ...base, subEtapa: "Rodapé", item: "RODAPE POLIESTIRENO 15CM", unidade: "Barras 2,40m", qtd: Math.ceil(rodapeM / 2.4 * PERDA) });
+  } else if (rodapeM > 0 && rodapeTipo === "mesmoPiso") {
+    const produto = String((ps.pisoInterno && ps.pisoInterno.produto) || "").trim() || PISOS_GENERICOS.pisoInterno[padrao];
+    const m2 = rodapeM * 0.10;
+    emitir(out, { ...base, subEtapa: "Rodapé", item: produto, unidade: "m2", qtd: ceil2(m2 * PERDA) });
+    totais.AC3 += m2 * ARGAMASSA_KG_M2.AC3;
+    m2Porcelanato += m2;
+  }
+
+  // Soleiras e peitoris (m lineares × largura)
+  const soleirasM = numOrZero(ps.soleirasM);
+  if (soleirasM > 0) {
+    const m2 = soleirasM * SOLEIRA_LARGURA_M;
+    emitir(out, { ...base, subEtapa: "Soleiras e peitoris", item: String(ps.soleirasProduto || "").trim() || SOLEIRA_PADRAO, unidade: "m2", qtd: ceil2(m2 * PERDA) });
+    totais.AC3 += m2 * ARGAMASSA_KG_M2.AC3;
+  }
+
+  // Bancadas
+  const bancadasM2 = numOrZero(ps.bancadasM2);
+  if (bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || "Granito - Bancadas", unidade: "m2", qtd: ceil2(bancadasM2) });
+
+  // Deck
+  const deckM2 = numOrZero(ps.deckM2);
+  if (deckM2 > 0) {
+    emitir(out, { ...base, subEtapa: "Deck", item: String(ps.deckProduto || "").trim() || "Piso - Deck", unidade: "m2", qtd: ceil2(deckM2 * PERDA) });
+    emitir(out, { ...base, subEtapa: "Deck", item: "tintas - Cetol Deck", unidade: "Unidades", qtd: Math.ceil(deckM2 / 20) });
+  }
+
+  // Consumíveis somados
+  if (totais.AC3 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 3 GF - 20kg", unidade: "Unidades", qtd: Math.ceil(totais.AC3 / 20 * PERDA) });
+  if (totais.AC2 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 2 - 20kg", unidade: "Unidades", qtd: Math.ceil(totais.AC2 / 20 * PERDA) });
+  if (totais.rejunteKg > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: Math.ceil(totais.rejunteKg / 5) });
+  if (totais.clips > 0) {
+    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador", unidade: "Unidades", qtd: Math.ceil(totais.clips * PERDA) });
+    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Cunha Niveladora", unidade: "Unidades", qtd: Math.ceil(totais.clips / 3) });
+  }
+  if (totais.cruzetas > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador Cruzeta", unidade: "Pacotes 100 un", qtd: Math.ceil(totais.cruzetas * PERDA / 100) });
+  if (m2Porcelanato > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Disco Porcelanato", unidade: "Unidades", qtd: Math.max(1, Math.ceil(m2Porcelanato * 0.005 * PERDA)) });
+  if (m2PisoInterno > 0) emitir(out, { ...base, subEtapa: "Proteção", item: "Salva Piso 1,00m x 25mts", unidade: "Rolos", qtd: Math.ceil(m2PisoInterno / 25 * PERDA) });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // ITENS DO PROJETO — hidráulica, esgoto, elétrica, louças e metais,
 // aquecimento, pressurização. A planilha de origem nunca quantificou esses
 // grupos (só a mão de obra): o escritório lê o projeto de engenharia e
@@ -9390,6 +9558,10 @@ function instalacoesPorAmbiente(cp, out, data) {
   cp._pontosEletricos = totalPontos;
 }
 
+function normalizarSuperficie(sup, m2Antigo) {
+  const o = sup || {};
+  return { m2: numOrZero(o.m2) || numOrZero(m2Antigo), formato: o.formato || "", produto: o.produto || "", juntaMm: numOrZero(o.juntaMm) };
+}
 function normalizarProjeto(projeto) {
   const p = projeto || {};
   const arq = p.arquitetura || {};
@@ -9421,6 +9593,7 @@ function normalizarProjeto(projeto) {
   const esquadriasIn = Array.isArray(p.esquadrias) ? p.esquadrias : [];
   const itensProjetoIn = Array.isArray(p.itensProjeto) ? p.itensProjeto : [];
   const ambientesIn = p.ambientes || {};
+  const pisosIn = p.pisos || {};
   const instalacoesIn = p.instalacoes || {};
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
@@ -9534,7 +9707,9 @@ function normalizarProjeto(projeto) {
       volumeConcretoVigaRespaldo: numOrZero(volumeConcretoCobertura.viga),
     },
 
-    revestimentoInterno: numOrZero(externa.revestimentoInterno),
+    // m² de revestimento de parede interno: bloco "Pisos e revestimentos"
+    // (projeto antigo: campo externa.revestimentoInterno). Desconta da pintura.
+    revestimentoInterno: numOrZero(pisosIn.revestimentoInterno && pisosIn.revestimentoInterno.m2) || numOrZero(externa.revestimentoInterno),
     pavimentacaoExterna: numOrZero(externa.pavimentacao),
     perimetroPavimentacao: numOrZero(externa.perimetroPavimentacao),
     comprimentoMuroDivisa: numOrZero(muroDivisaIn.comprimento),
@@ -9646,6 +9821,18 @@ function normalizarProjeto(projeto) {
       doProjeto: DISCIPLINAS_INSTALACOES.reduce((acc, d) => { acc[d] = !!(instalacoesIn.doProjeto && instalacoesIn.doProjeto[d]); return acc; }, {}),
     },
 
+    // cp.pisos — pisos, revestimentos, rodapé, soleiras, bancadas e deck
+    pisos: {
+      pisoInterno: normalizarSuperficie(pisosIn.pisoInterno),
+      pisoExterno: normalizarSuperficie(pisosIn.pisoExterno),
+      revestimentoInterno: normalizarSuperficie(pisosIn.revestimentoInterno, numOrZero(externa.revestimentoInterno)),
+      revestimentoExterno: normalizarSuperficie(pisosIn.revestimentoExterno),
+      rodapeM: numOrZero(pisosIn.rodapeM), rodapeTipo: pisosIn.rodapeTipo || "poliestireno",
+      soleirasM: numOrZero(pisosIn.soleirasM), soleirasProduto: pisosIn.soleirasProduto || "",
+      bancadasM2: numOrZero(pisosIn.bancadasM2), bancadasProduto: pisosIn.bancadasProduto || "",
+      deckM2: numOrZero(pisosIn.deckM2), deckProduto: pisosIn.deckProduto || "",
+    },
+
     // cp.itensProjeto — lista digitada do projeto de engenharia
     itensProjeto: itensProjetoIn.slice(0, ITENS_PROJETO_MAX).map((it) => ({
       etapa: (it && it.etapa) || "OUTROS",
@@ -9751,6 +9938,7 @@ function gerarOrcamentoObra(projeto, data) {
   // linhas fixas — compactador, sarrafos — em obra sem piscina).
   if (cp.temPiscina) piscina(cp, out);
   esquadrias(cp, out, data);
+  pisosRevestimentos(cp, out, data);
   instalacoesPorAmbiente(cp, out, data);
   itensProjeto(cp, out, data);
   prestadores(cp, out, data);
@@ -9834,6 +10022,7 @@ function projetoVazio() {
     piscina: {},
     cobertura: [],
     esquadrias: [],
+    pisos: {},
     ambientes: {},
     instalacoes: { padrao: "Médio", aquecimento: "nenhum", pressurizador: false, doProjeto: {} },
     itensProjeto: [],
@@ -10362,6 +10551,46 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
         </BlocoColapsavel>
 
+        <BlocoColapsavel titulo="Pisos e revestimentos" subtitulo="peça, argamassa, rejunte, espaçadores, rodapé, soleiras, bancadas e deck" aberto={!!blocosAbertos.pisos} onToggle={() => toggleBloco("pisos")}>
+          <datalist id="vk-insumos-pisos">
+            {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleiras|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
+          </datalist>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+            Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({projetoDraft.padrao || "Médio"}); sem formato, o tamanho típico do padrão. A partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
+          </div>
+          {SUPERFICIES_PISOS.map((sup) => (
+            <div key={sup.id} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+              <CampoNum label={`${sup.nome} (m²)`} valor={get(`pisos.${sup.id}.m2`)} onChange={(v) => set(`pisos.${sup.id}.m2`, v)} />
+              <CampoSelect label="Formato da peça" valor={get(`pisos.${sup.id}.formato`) || ""} onChange={(v) => set(`pisos.${sup.id}.formato`, v)}
+                opcoes={[{ value: "", label: `automático (${FORMATO_PADRAO[sup.id][projetoDraft.padrao || "Médio"] || "60x60"})` }, ...FORMATOS_PECA.map((f) => ({ value: f.id, label: f.nome }))]} />
+              <div>
+                <label style={C.label}>Produto (Insumos)</label>
+                <input style={C.input} list="vk-insumos-pisos" value={get(`pisos.${sup.id}.produto`) ?? ""} placeholder={PISOS_GENERICOS[sup.id][projetoDraft.padrao || "Médio"]} onChange={(e) => set(`pisos.${sup.id}.produto`, e.target.value)} />
+              </div>
+            </div>
+          ))}
+          <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+            <CampoNum label="Rodapé (m)" valor={get("pisos.rodapeM")} onChange={(v) => set("pisos.rodapeM", v)} />
+            <CampoSelect label="Tipo de rodapé" valor={get("pisos.rodapeTipo") || "poliestireno"} onChange={(v) => set("pisos.rodapeTipo", v)} opcoes={RODAPE_TIPOS} />
+            <div />
+          </div>
+          <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+            <CampoNum label="Soleiras e peitoris (m)" valor={get("pisos.soleirasM")} onChange={(v) => set("pisos.soleirasM", v)} />
+            <div style={{ fontSize: 11, color: "#9ca3af" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
+            <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.soleirasProduto") ?? ""} placeholder={SOLEIRA_PADRAO} onChange={(e) => set("pisos.soleirasProduto", e.target.value)} /></div>
+          </div>
+          <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+            <CampoNum label="Bancadas (m²)" valor={get("pisos.bancadasM2")} onChange={(v) => set("pisos.bancadasM2", v)} />
+            <div />
+            <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.bancadasProduto") ?? ""} placeholder="Granito - Bancadas" onChange={(e) => set("pisos.bancadasProduto", e.target.value)} /></div>
+          </div>
+          <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
+            <CampoNum label="Deck (m²)" valor={get("pisos.deckM2")} onChange={(v) => set("pisos.deckM2", v)} />
+            <div style={{ fontSize: 11, color: "#9ca3af" }}>+ Cetol 1 lata / 20 m²</div>
+            <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.deckProduto") ?? ""} placeholder="Piso - Deck" onChange={(e) => set("pisos.deckProduto", e.target.value)} /></div>
+          </div>
+        </BlocoColapsavel>
+
         <BlocoColapsavel titulo="Instalações" subtitulo={`estimativa por kits a partir dos cômodos do bloco Geral · padrão ${padraoInstalacoes(projetoDraft.padrao)}`} aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
             Sem projeto de engenharia, hidráulica, esgoto, elétrica, louças e portas são estimados por conjuntos de pontos por cômodo (prática do SINAPI), com os kits de Insumos → Composições e os cômodos informados no bloco Geral. Padrão Alto e Altíssimo usam os kits de acabamento superior.
@@ -10443,8 +10672,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
         </BlocoColapsavel>
 
-        <BlocoColapsavel titulo="Revestimento e externa" aberto={!!blocosAbertos.externa} onToggle={() => toggleBloco("externa")}>
-          <CampoNum label="Revestimento interno (m²)" valor={get("externa.revestimentoInterno")} onChange={(v) => set("externa.revestimentoInterno", v)} />
+        <BlocoColapsavel titulo="Pavimentação externa" aberto={!!blocosAbertos.externa} onToggle={() => toggleBloco("externa")}>
           <CampoNum label="Pavimentação externa (m²)" valor={get("externa.pavimentacao")} onChange={(v) => set("externa.pavimentacao", v)} />
           <CampoNum label="Perímetro da pavimentação" valor={get("externa.perimetroPavimentacao")} onChange={(v) => set("externa.perimetroPavimentacao", v)} />
         </BlocoColapsavel>
@@ -11040,8 +11268,12 @@ function medicoesCronograma(projeto, data) {
   add("PISCINA", "AZULEJO", pi.paredesM2Total + pi.areaConstruida);
 
   // Acabamentos
-  add("REVESTIMENTOS", "AZULEJO", cp.revestimentoInterno);
-  add("REVESTIMENTOS", "PISO_CERAMICO", cp.areaConstruida, "área construída");
+  const ps = cp.pisos || {};
+  const m2 = (k) => numOrZero(ps[k] && ps[k].m2);
+  const pisoInformado = m2("pisoInterno") + m2("pisoExterno");
+  add("REVESTIMENTOS", "AZULEJO", (m2("revestimentoInterno") || cp.revestimentoInterno) + m2("revestimentoExterno"));
+  if (pisoInformado > 0) add("REVESTIMENTOS", "PISO_CERAMICO", pisoInformado + numOrZero(ps.soleirasM) * 0.15);
+  else add("REVESTIMENTOS", "PISO_CERAMICO", cp.areaConstruida, "área construída — informe os m² de piso no orçamento");
   add("FORROS", "FORRO_GESSO", cp.areaConstruida, "área construída — zere o serviço em Composições se a obra não tem forro");
   add("ESQUADRIAS", "ESQUADRIA", cp.esquadrias.reduce((a, e) => a + e.qtd * e.largura * e.altura, 0));
   add("PINTURA", "PINTURA_INT", Math.max(0, cp.m2ParedesInternas - cp.revestimentoInterno) * 2 + cp.m2ParedesExternas);
