@@ -81,6 +81,23 @@ itens sem etapa são diluídos pela obra inteira. Saída: desembolso por mês,
 acumulado e % (curva S). Ainda não realimenta as locações por mês do
 orçamento (próximo passo) nem cruza com o realizado do P&L.
 
+## 4b. Mão de obra de referência (HH × R$/h)
+
+`PRECO_HORA_SEED`: preço da hora por ofício das composições SINAPI "<ofício>
+com encargos complementares" (SP jul/2026, desonerado e onerado; gesseiro =
+montador de forro 88278). `maoDeObraReferencia` multiplica as HH de cada
+serviço medido pelo R$/h do ofício e agrupa pelo prestador do orçamento que
+executa aquele serviço (`PRESTADOR_POR_ETAPA` vence `PRESTADOR_POR_SERVICO`:
+muro, arrimo, piscina e pavimentação têm o seu pedreiro; forro não tem
+prestador). Saída na aba "Mão de obra (SINAPI)": por prestador, HH, custo
+SINAPI (produtividade de referência), custo com a eficiência da equipe
+(÷ eficiência), valor contratado no orçamento (linha "Prestadores de
+serviços" pelo nome do insumo em `INSUMO_PRESTADOR`) e a diferença; total e
+R$/m². Regime por obra (`cronograma.regimeHora`) ou padrão do escritório; R$/h
+do escritório por ofício em Insumos → Composições → Produtividade
+(`escritorio.cronograma.precoHora`). É referência: o empreiteiro embute lucro
+e risco, e elétrica/hidráulica só medem pontos por ambiente.
+
 ## 5. Configuração e persistência
 
 Na obra (`obra.cronograma`, gravado por "Salvar cronograma"): `dataInicio`,
@@ -96,14 +113,14 @@ da semente.
 
 ## 6. Testes
 
-`cronograma-obra.test.mjs` (27): tabela interpolada e do escritório; rede
+`cronograma-obra.test.mjs` (31): tabela interpolada e do escritório; rede
 térrea × sobrado e integridade da semente; CPM (FS, SS, lag negativo, folga,
 crítico); calendário (7 de setembro, carnaval, sexta santa); medições
 (alvenaria, aço em kg, conjuntos hidráulicos, telhado por tipo, esquadrias);
 simplificado fecha no prazo da tabela e no prazo-alvo; produtividade
 (HH, equipe necessária cumpre o alvo, equipe maior/eficiência menor);
 overrides do escritório; físico-financeiro (mapeamento de custo, soma,
-curva monotônica) com o orçamento real do motor.
+curva monotônica) com o orçamento real do motor; mão de obra (preço da hora para todo ofício, prestador por serviço/etapa, HH × R$/h, onerado > desonerado, R$/h do escritório, comparação com o prestador orçado).
 
 ## 7. Próximos passos
 

@@ -28,7 +28,7 @@ const M = new Function(`
     prazoParametricoMeses, medicoesCronograma, condicoesObra, resolverRedeCronograma, cpmCronograma,
     dataDoDiaUtil, dataUTC, isoData, ehDiaUtil, fisicoFinanceiro, custoPorEtapaCronograma,
     gerarCronogramaObra, etapasCronogramaAtivas, servicosCronogramaAtivos, gerarOrcamentoObra,
-    ETAPAS_CRONOGRAMA_SEED, PRODUTIVIDADE_SEED, OFICIOS, DIAS_UTEIS_MES,
+    ETAPAS_CRONOGRAMA_SEED, PRODUTIVIDADE_SEED, OFICIOS, DIAS_UTEIS_MES, PRECO_HORA_SEED, precosHoraAtivos, prestadorDoServico,
   };
 `)();
 
@@ -239,6 +239,44 @@ teste("orçamento real do motor alimenta o físico-financeiro sem erro", () => {
   const orc = M.gerarOrcamentoObra(projetoSobrado, dataVazia);
   const r = M.gerarCronogramaObra(projetoSobrado, orc, dataVazia, cfg);
   assert.ok(r.financeiro && Array.isArray(r.financeiro.meses));
+});
+
+console.log("\n--- mão de obra de referência (HH × R$/h SINAPI) ---");
+teste("todo ofício com horas na semente tem preço da hora", () => {
+  const usados = new Set();
+  for (const s of Object.values(M.PRODUTIVIDADE_SEED)) for (const of of Object.keys(s.horas)) usados.add(of);
+  for (const of of usados) assert.ok(M.PRECO_HORA_SEED[of] && M.PRECO_HORA_SEED[of].desonerado > 0, of);
+});
+teste("prestador por serviço/etapa: alvenaria da casa → pedreiros; alvenaria do muro → muro; pintura → pintor", () => {
+  assert.strictEqual(M.prestadorDoServico("PAREDES_TERREO", "ALVENARIA"), "equipePedreiros");
+  assert.strictEqual(M.prestadorDoServico("MURO_DIVISA", "ALVENARIA"), "muroDivisa");
+  assert.strictEqual(M.prestadorDoServico("PINTURA", "PINTURA_INT"), "pintor");
+  assert.strictEqual(M.prestadorDoServico("COBERTURA", "TELHA_CERAMICA"), "carpinteiro");
+});
+teste("custo de referência = Σ HH × R$/h; onerado > desonerado; preço do escritório vence", () => {
+  const mo = res.maoDeObra;
+  const ped = mo.porPrestador.find((p) => p.chave === "equipePedreiros");
+  assert.ok(ped && ped.custoRef > 0 && ped.hh > 1000);
+  // alvenaria do térreo sozinha: 452,05 × (1,61 × 35,18 + 0,805 × 30,48)
+  const alv = res.medicoes.find((m) => m.etapa === "PAREDES_TERREO" && m.servico === "ALVENARIA");
+  perto(alv.custoRef, 452.05 * (1.61 * 35.18 + 0.805 * 30.48), 60);
+  perto(mo.totalEficiencia, mo.totalRef / 0.75, 0.05);
+  const on = M.gerarCronogramaObra(projetoSobrado, null, dataVazia, { ...cfg, regimeHora: "onerado" });
+  assert.ok(on.maoDeObra.totalRef > mo.totalRef);
+  const d = { materiais: [], escritorio: { cronograma: { precoHora: { pedreiro: 100 } } } };
+  const esc = M.gerarCronogramaObra(projetoSobrado, null, d, cfg);
+  assert.strictEqual(esc.maoDeObra.precoHora.pedreiro.fonte, "escritório");
+  assert.ok(esc.maoDeObra.totalRef > mo.totalRef * 1.5);
+});
+teste("compara com o prestador do orçamento pelo nome do insumo", () => {
+  const orc = { itens: [{ tipo: "Prestadores de serviços", item: "Pedreiros Casa", total: 330860 }, { tipo: "Prestadores de serviços", item: "Pintor", total: 33086 }] };
+  const r = M.gerarCronogramaObra(projetoSobrado, orc, dataVazia, cfg);
+  const ped = r.maoDeObra.porPrestador.find((p) => p.chave === "equipePedreiros");
+  assert.strictEqual(ped.orcado, 330860);
+  const pin = r.maoDeObra.porPrestador.find((p) => p.chave === "pintor");
+  assert.strictEqual(pin.orcado, 33086);
+  assert.strictEqual(r.maoDeObra.totalOrcadoComparavel, 363946);
+  assert.strictEqual(r.maoDeObra.porPrestador.find((p) => p.chave === "gesseiro").orcado, null);
 });
 
 console.log(`\n${passou} passaram, ${falhou} falharam`);

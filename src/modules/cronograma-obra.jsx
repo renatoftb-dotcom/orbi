@@ -56,6 +56,70 @@ function extraSobradoMeses(data) {
   const v = Number(cfg.sobradoExtra);
   return Number.isFinite(v) ? v : (typeof PRAZO_SOBRADO_EXTRA_MESES !== "undefined" ? PRAZO_SOBRADO_EXTRA_MESES : 1.5);
 }
+// Preço da hora por ofício: valor do escritório (data.escritorio.cronograma
+// .precoHora[oficio]) vence; senão SINAPI no regime pedido (desonerado padrão).
+function precosHoraAtivos(data, regime) {
+  const seed = typeof PRECO_HORA_SEED !== "undefined" ? PRECO_HORA_SEED : {};
+  const ov = cronogramaCfg(data).precoHora || {};
+  const reg = regime === "onerado" ? "onerado" : "desonerado";
+  const out = {};
+  for (const id of Object.keys({ ...seed, ...ov })) {
+    const s = seed[id], o = Number(ov[id]);
+    if (Number.isFinite(o) && o > 0) out[id] = { preco: o, fonte: "escritório", codigo: s ? s.codigo : null, sinapi: s || null, regime: reg };
+    else if (s) out[id] = { preco: s[reg], fonte: "SINAPI " + s.codigo, codigo: s.codigo, sinapi: s, regime: reg };
+  }
+  return out;
+}
+function prestadorDoServico(etapaId, servicoId) {
+  const pe = typeof PRESTADOR_POR_ETAPA !== "undefined" ? PRESTADOR_POR_ETAPA : {};
+  const ps = typeof PRESTADOR_POR_SERVICO !== "undefined" ? PRESTADOR_POR_SERVICO : {};
+  return pe[etapaId] || ps[servicoId] || "outros";
+}
+// Custo de mão de obra de referência: HH medidas × R$/h, agrupado pelo
+// prestador do orçamento que executa cada serviço; comparado ao valor
+// contratado (linhas "Prestadores de serviços" do orçamento). Também grava
+// `custoRef` em cada linha de medição.
+function maoDeObraReferencia(medicoesDetalhe, precoHora, eficiencia, orcamento, areaConstruida) {
+  const r2 = (x) => Math.round(x * 100) / 100;
+  const rotulos = typeof PRESTADORES_ROTULO !== "undefined" ? PRESTADORES_ROTULO : {};
+  const nomeDe = typeof INSUMO_PRESTADOR !== "undefined" ? INSUMO_PRESTADOR : {};
+  const porPrestador = {}, porOficio = {};
+  for (const m of medicoesDetalhe) {
+    const chave = prestadorDoServico(m.etapa, m.servico);
+    const p = porPrestador[chave] || (porPrestador[chave] = { chave, rotulo: rotulos[chave] || chave, hh: 0, custoRef: 0, servicos: [] });
+    let custoLinha = 0;
+    for (const of of Object.keys(m.horas || {})) {
+      const ph = precoHora[of];
+      const c = ph ? m.horas[of] * ph.preco : 0;
+      custoLinha += c;
+      p.hh += m.horas[of];
+      const o = porOficio[of] || (porOficio[of] = { hh: 0, custoRef: 0, precoHora: ph ? ph.preco : 0, fonte: ph ? ph.fonte : "sem preço" });
+      o.hh += m.horas[of];
+      o.custoRef += c;
+    }
+    m.custoRef = r2(custoLinha);
+    p.custoRef += custoLinha;
+    if (!p.servicos.includes(m.servico)) p.servicos.push(m.servico);
+  }
+  const itens = (orcamento && Array.isArray(orcamento.itens)) ? orcamento.itens : [];
+  const ef = eficiencia > 0 ? eficiencia : 1;
+  const lista = Object.values(porPrestador).map((p) => {
+    const nome = nomeDe[p.chave];
+    const orcadoItens = nome ? itens.filter((i) => i.tipo === "Prestadores de serviços" && i.item === nome) : [];
+    const orcado = orcadoItens.length ? orcadoItens.reduce((a, i) => a + numOrZero(i.total), 0) : null;
+    return { ...p, hh: Math.round(p.hh), custoRef: r2(p.custoRef), custoEficiencia: r2(p.custoRef / ef), orcado: orcado != null ? r2(orcado) : null, temPrestador: !!nome };
+  }).sort((a, b) => b.custoRef - a.custoRef);
+  const totalRef = r2(lista.reduce((a, p) => a + p.custoRef, 0));
+  const totalOrcadoComparavel = r2(lista.filter((p) => p.orcado != null).reduce((a, p) => a + p.orcado, 0));
+  const totalRefComparavel = r2(lista.filter((p) => p.orcado != null).reduce((a, p) => a + p.custoRef, 0));
+  for (const of of Object.keys(porOficio)) { porOficio[of].hh = Math.round(porOficio[of].hh); porOficio[of].custoRef = r2(porOficio[of].custoRef); }
+  const area = numOrZero(areaConstruida);
+  return {
+    porPrestador: lista, porOficio, totalRef, totalEficiencia: r2(totalRef / ef), totalOrcadoComparavel, totalRefComparavel,
+    porM2Ref: area > 0 ? r2(totalRef / area) : null, porM2Eficiencia: area > 0 ? r2(totalRef / ef / area) : null,
+    eficiencia: ef, regime: Object.values(precoHora)[0] ? Object.values(precoHora)[0].regime : "desonerado",
+  };
+}
 function equipePadrao() {
   const out = {};
   for (const o of (typeof OFICIOS !== "undefined" ? OFICIOS : [])) out[o.id] = o.padrao;
@@ -455,6 +519,8 @@ function gerarCronogramaObra(projeto, orcamento, data, config) {
     medicoesDetalhe.push(linha);
   }
   const hhTotal = Object.values(hhOficio).reduce((a, v) => a + v, 0);
+  const regimeHora = cfg.regimeHora || cronogramaCfg(data).regimeHora || "desonerado";
+  const precoHora = precosHoraAtivos(data, regimeHora);
 
   // Simplificado: duração-base × fator, fator calibrado para o prazo-alvo
   const durBase = {};
@@ -525,9 +591,11 @@ function gerarCronogramaObra(projeto, orcamento, data, config) {
   });
 
   const financeiro = orcamento && Array.isArray(orcamento.itens) ? fisicoFinanceiro(ativo, rede, orcamento.itens, inicio) : null;
+  const maoDeObra = maoDeObraReferencia(medicoesDetalhe, precoHora, eficiencia, orcamento, cp.areaConstruida);
+  maoDeObra.precoHora = precoHora;
 
   return {
-    modo, dataInicio: isoData(inicio), prazoTabela, prazoAlvo, eficiencia, equipe, cond,
+    modo, dataInicio: isoData(inicio), prazoTabela, prazoAlvo, eficiencia, equipe, cond, maoDeObra,
     simplificado: { ...resumo(simplificado), fator, etapas: comDatas(simplificado) },
     produtividade: { ...resumo(produtividade), etapas: comDatas(produtividade), hhPorOficio: hhOficio, hhTotal, equipeNecessaria, kEquipe, prazoComEquipeNecessariaMeses: prazoComEquipeNecessaria != null ? Math.round(prazoComEquipeNecessaria / DIAS_UTEIS_MES * 10) / 10 : null },
     ativo: { ...resumo(ativo), etapas: comDatas(ativo) },
@@ -551,7 +619,7 @@ function fmtMesCrono(chave) {
 function fmtHorasCrono(h) { return `${Math.round(numOrZero(h)).toLocaleString("pt-BR")} h`; }
 const CRONO_COR_GRUPO = { Bruto: "#3b82f6", Acabamento: "#10b981", Externa: "#a855f7" };
 
-function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobile, podeEditar }) {
+function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobile, podeEditar, abaInicial }) {
   const oficios = typeof OFICIOS !== "undefined" ? OFICIOS : [];
   const salvo = obra.cronograma || {};
   const [cfg, setCfg] = useState(() => ({
@@ -560,8 +628,9 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
     prazoAlvoMeses: salvo.prazoAlvoMeses || 0,
     equipe: { ...equipePadrao(), ...(salvo.equipe || {}) },
     eficiencia: salvo.eficiencia || 0.75,
+    regimeHora: salvo.regimeHora || cronogramaCfg(data).regimeHora || "desonerado",
   }));
-  const [aba, setAba] = useState("gantt");
+  const [aba, setAba] = useState(abaInicial || "gantt");
   const [aberto, setAberto] = useState(true);
 
   const res = useMemo(() => {
@@ -685,7 +754,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
 
           {/* Abas */}
           <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-            {[["gantt", "Etapas e Gantt"], ["financeiro", "Físico-financeiro"], ["medicoes", "Serviços medidos"], ["comparar", "Simplificado × produtividade"]].map(([k, l]) => (
+            {[["gantt", "Etapas e Gantt"], ["financeiro", "Físico-financeiro"], ["maoDeObra", "Mão de obra (SINAPI)"], ["medicoes", "Serviços medidos"], ["comparar", "Simplificado × produtividade"]].map(([k, l]) => (
               <button key={k} style={aba === k ? C.btn : C.btnSec} onClick={() => setAba(k)}>{l}</button>
             ))}
           </div>
@@ -761,11 +830,64 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
             ) : <div style={{ fontSize: 12, color: "#6b7280" }}>Gere o orçamento para ver o desembolso por mês.</div>
           )}
 
+          {aba === "maoDeObra" && (() => {
+            const mo = res.maoDeObra;
+            const dif = (p) => (p.orcado != null && p.orcado > 0 ? (p.custoRef - p.orcado) / p.orcado : null);
+            const area = numOrZero(obra.projeto && obra.projeto.arquitetura && obra.projeto.arquitetura.areaConstruida);
+            return (
+              <div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 10 }}>
+                  <div><div style={rotulo}>Preço da hora</div>
+                    <select style={input} value={cfg.regimeHora} disabled={!podeEditar} onChange={(e) => setCampo("regimeHora", e.target.value)}>
+                      <option value="desonerado">SINAPI desonerado</option>
+                      <option value="onerado">SINAPI onerado</option>
+                    </select></div>
+                  <div style={card}><div style={rotulo}>Mão de obra SINAPI</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalRef)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>{mo.porM2Ref != null ? `${formatoBRL(mo.porM2Ref)}/m²` : ""} · produtividade de referência</div></div>
+                  <div style={card}><div style={rotulo}>Com eficiência {Math.round(mo.eficiencia * 100)}%</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalEficiencia)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>{mo.porM2Eficiencia != null ? `${formatoBRL(mo.porM2Eficiencia)}/m²` : ""} · horas reais da equipe</div></div>
+                  <div style={card}><div style={rotulo}>Prestadores no orçamento</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalOrcadoComparavel)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>só os comparáveis · SINAPI {formatoBRL(mo.totalRefComparavel)}</div></div>
+                </div>
+                <div style={{ overflowX: "auto" }}>
+                  <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 720, width: "100%" }}>
+                    <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                      <th style={{ padding: "6px 8px" }}>Prestador</th><th style={{ padding: "6px 8px", textAlign: "right" }}>HH</th>
+                      <th style={{ padding: "6px 8px", textAlign: "right" }}>SINAPI</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Com eficiência</th>
+                      <th style={{ padding: "6px 8px", textAlign: "right" }}>No orçamento</th><th style={{ padding: "6px 8px", textAlign: "right" }}>SINAPI × orçado</th>
+                    </tr></thead>
+                    <tbody>
+                      {mo.porPrestador.map((p) => {
+                        const d = dif(p);
+                        return (
+                          <tr key={p.chave} style={{ borderTop: "1px solid #f3f4f6" }} title={p.servicos.join(", ")}>
+                            <td style={{ padding: "6px 8px", color: p.temPrestador ? "#262421" : "#9ca3af" }}>{p.rotulo}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{p.hh.toLocaleString("pt-BR")} h</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>{formatoBRL(p.custoRef)}{area > 0 && p.chave === "equipePedreiros" ? <span style={{ color: "#9ca3af" }}> ({formatoBRL(p.custoRef / area)}/m²)</span> : null}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{formatoBRL(p.custoEficiencia)}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{p.orcado != null ? formatoBRL(p.orcado) : <span style={{ color: "#9ca3af", fontWeight: 400 }}>—</span>}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: d == null ? "#9ca3af" : Math.abs(d) > 0.3 ? "#b45309" : "#16a34a" }}>{d == null ? "" : `${d > 0 ? "+" : ""}${Math.round(d * 100)}%`}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <details style={{ marginTop: 8, fontSize: 12 }}>
+                  <summary style={{ cursor: "pointer", color: "#374151" }}>Preço da hora por ofício ({typeof PRECO_HORA_REFERENCIA !== "undefined" ? PRECO_HORA_REFERENCIA : "SINAPI"})</summary>
+                  <div style={{ marginTop: 6, color: "#374151" }}>
+                    {oficios.map((o) => { const ph = mo.precoHora[o.id]; const po = mo.porOficio[o.id]; return ph ? <span key={o.id} style={{ display: "inline-block", marginRight: 14, marginBottom: 4 }}>{o.nome.split(" /")[0]} <b>{formatoBRL(ph.preco)}/h</b>{po ? <span style={{ color: "#9ca3af" }}> · {po.hh.toLocaleString("pt-BR")} h · {formatoBRL(po.custoRef)}</span> : null}{ph.fonte === "escritório" ? <span style={{ color: "#b45309" }}> (escritório)</span> : null}</span> : null; })}
+                  </div>
+                </details>
+                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
+                  Referência, não orçamento: HH das composições SINAPI × preço da hora "com encargos complementares" (salário, encargos, EPI, alimentação, transporte). O contratado por empreitada embute lucro, ferramentas maiores e o risco do prestador — diferença de até ±30% é normal; acima disso vale revisar a taxa por m² em Insumos. Elétrica e hidráulica só medem os pontos por ambiente (sem quadro, prumadas, ligação e ramal externo) — o contratado cobre mais. "Com eficiência" converte para as horas que a sua equipe gasta de fato. Ajuste o preço da hora em Insumos → Composições → Produtividade.
+                </div>
+              </div>
+            );
+          })()}
+
           {aba === "medicoes" && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640, width: "100%" }}>
                 <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
-                  <th style={{ padding: "6px 8px" }}>Etapa</th><th style={{ padding: "6px 8px" }}>Serviço</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Quantidade</th><th style={{ padding: "6px 8px" }}>Horas por ofício</th><th style={{ padding: "6px 8px" }}>Fonte</th>
+                  <th style={{ padding: "6px 8px" }}>Etapa</th><th style={{ padding: "6px 8px" }}>Serviço</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Quantidade</th><th style={{ padding: "6px 8px" }}>Horas por ofício</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Mão de obra SINAPI</th><th style={{ padding: "6px 8px" }}>Fonte</th>
                 </tr></thead>
                 <tbody>
                   {res.medicoes.map((m, i) => {
@@ -776,6 +898,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                         <td style={{ padding: "6px 8px", color: "#262421" }}>{m.nome}{m.nota ? <span style={{ color: "#9ca3af" }}> · {m.nota}</span> : null}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{m.qtd.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} {m.unidade}</td>
                         <td style={{ padding: "6px 8px", color: "#374151" }}>{Object.keys(m.horas).map((of) => `${of} ${Math.round(m.horas[of])} h`).join(" · ")}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{formatoBRL(m.custoRef || 0)}</td>
                         <td style={{ padding: "6px 8px", color: "#9ca3af", whiteSpace: "nowrap" }}>{m.fonte}</td>
                       </tr>
                     );
@@ -939,11 +1062,51 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
     delete sv[id];
     gravarCronogramaCfg(data, save, { ...cfg, servicos: sv });
   }
+  const precoSeed = typeof PRECO_HORA_SEED !== "undefined" ? PRECO_HORA_SEED : {};
+  const regime = cfg.regimeHora === "onerado" ? "onerado" : "desonerado";
+  const precoAtivo = precosHoraAtivos(data, regime);
+  function setPrecoHora(of, v) {
+    const ph = { ...(cfg.precoHora || {}) };
+    const n = Number(String(v).replace(",", "."));
+    if (v === "" || !Number.isFinite(n) || n <= 0) delete ph[of]; else ph[of] = n;
+    gravarCronogramaCfg(data, save, { ...cfg, precoHora: ph });
+  }
 
   return (
     <div>
       <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 10 }}>
         Horas por unidade de serviço, por ofício — composições analíticas do SINAPI (base SP). É a produtividade de referência; a eficiência da equipe (na obra) ajusta para a realidade do canteiro. Zere as horas de um serviço que sua obra não tem (ex.: forro de gesso) ou troque pelo seu número.
+      </div>
+      <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, marginBottom: 12, overflowX: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+          <div style={{ fontWeight: 600, fontSize: 12.5 }}>Preço da hora por ofício ({typeof PRECO_HORA_REFERENCIA !== "undefined" ? PRECO_HORA_REFERENCIA : "SINAPI"})</div>
+          <label style={{ fontSize: 12, color: "#374151" }}>Regime padrão:{" "}
+            <select value={regime} disabled={!podeEditar} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, regimeHora: e.target.value })} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontFamily: "inherit", fontSize: 12 }}>
+              <option value="desonerado">desonerado</option><option value="onerado">onerado</option>
+            </select>
+          </label>
+        </div>
+        <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640 }}>
+          <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+            <th style={{ padding: "4px 8px" }}>Ofício</th><th style={{ padding: "4px 8px" }}>SINAPI</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Desonerado</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Onerado</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Do escritório (R$/h)</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Em uso</th>
+          </tr></thead>
+          <tbody>
+            {oficios.map((o) => {
+              const s = precoSeed[o.id]; const ov = cfg.precoHora && cfg.precoHora[o.id]; const at = precoAtivo[o.id];
+              return (
+                <tr key={o.id} style={{ borderTop: "1px solid #f3f4f6" }}>
+                  <td style={{ padding: "4px 8px", color: "#262421" }}>{o.nome}</td>
+                  <td style={{ padding: "4px 8px", color: "#9ca3af" }}>{s ? s.codigo : "—"}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#6b7280" }}>{s ? formatoBRL(s.desonerado) : "—"}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#6b7280" }}>{s ? formatoBRL(s.onerado) : "—"}</td>
+                  <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.01" min="0" style={input} disabled={!podeEditar} value={ov != null ? ov : ""} placeholder="—" onChange={(e) => setPrecoHora(o.id, e.target.value)} /></td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{at ? formatoBRL(at.preco) : "—"}{at && at.fonte === "escritório" ? <span style={{ color: "#b45309", fontWeight: 400, fontSize: 10, marginLeft: 4 }}>escritório</span> : null}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Hora "com encargos complementares" (salário + encargos + EPI, ferramentas, alimentação, transporte, exames, seguro). Multiplica as HH da obra para dar a referência de mão de obra por prestador, no bloco Cronograma → Mão de obra.</div>
       </div>
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%", minWidth: 900 }}>

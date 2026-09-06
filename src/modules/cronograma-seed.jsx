@@ -127,3 +127,46 @@ var ETAPAS_CRONOGRAMA_SEED = [
       { id: "PINTURA", tipo: "FS" }, { id: "PORTAS", tipo: "FS" }, { id: "ACABAMENTO_INST", tipo: "FS" },
       { id: "CONTRAPISO_EXTERNO", tipo: "FS" }, { id: "MURO_DIVISA", tipo: "FS" }, { id: "PISCINA", tipo: "FS" }] },
 ];
+
+// Preço da hora por ofício — composições SINAPI "<OFÍCIO> COM ENCARGOS
+// COMPLEMENTARES" (salário + encargos sociais + EPI, ferramentas,
+// alimentação, transporte, exames, seguro), base SP jul/2026, R$/h.
+// Desonerado = folha com CPRB; onerado = folha com INSS patronal. Serve como
+// referência para o custo de mão de obra de cada prestador do orçamento:
+// HH medidas × R$/h. Gesseiro usa o montador de forro (88278), que é o
+// ofício da composição de forro de gesso acartonado.
+var PRECO_HORA_REFERENCIA = "SINAPI SP jul/2026";
+var PRECO_HORA_SEED = {
+  pedreiro:          { codigo: "88309", desonerado: 35.18, onerado: 37.26 },
+  servente:          { codigo: "88316", desonerado: 30.48, onerado: 32.18 },
+  carpinteiro:       { codigo: "88262", desonerado: 34.48, onerado: 36.53 },
+  armador:           { codigo: "88245", desonerado: 34.94, onerado: 36.99 },
+  eletricista:       { codigo: "88264", desonerado: 42.52, onerado: 45.18 },
+  encanador:         { codigo: "88267", desonerado: 38.54, onerado: 40.92 },
+  azulejista:        { codigo: "88256", desonerado: 35.02, onerado: 37.08 },
+  gesseiro:          { codigo: "88278", desonerado: 33.58, onerado: 35.62 },
+  pintor:            { codigo: "88310", desonerado: 36.77, onerado: 38.83 },
+  telhadista:        { codigo: "88323", desonerado: 34.48, onerado: 36.53 },
+  impermeabilizador: { codigo: "88270", desonerado: 35.18, onerado: 37.26 },
+};
+
+// Qual prestador do orçamento (chave de TAXAS_PRESTADORES / INSUMO_PRESTADOR)
+// cada serviço medido representa — para comparar o custo SINAPI da mão de
+// obra com o valor contratado. A etapa vence o serviço (o muro tem seu
+// próprio pedreiro); "gesseiro" não tem prestador no orçamento.
+var PRESTADOR_POR_ETAPA = { MURO_DIVISA: "muroDivisa", ARRIMO: "muroArrimo", PISCINA: "pedreirosPiscina", CONTRAPISO_EXTERNO: "pavimentacaoExterna" };
+var PRESTADOR_POR_SERVICO = {
+  ESCAVACAO: "equipePedreiros", BROCA: "equipePedreiros", CONCRETO: "equipePedreiros", ARMACAO: "equipePedreiros", FORMA: "equipePedreiros",
+  ALVENARIA: "equipePedreiros", VERGAS: "equipePedreiros", LAJE: "equipePedreiros", CHAPISCO_INT: "equipePedreiros", CHAPISCO_EXT: "equipePedreiros",
+  REBOCO_INT: "equipePedreiros", REBOCO_EXT: "equipePedreiros", CONTRAPISO: "equipePedreiros", CALCADA: "equipePedreiros",
+  PISO_CERAMICO: "equipePedreiros", AZULEJO: "equipePedreiros", ESQUADRIA: "equipePedreiros",
+  MADEIRAMENTO: "carpinteiro", TELHA_CERAMICA: "carpinteiro", TELHA_FIBRO: "carpinteiro", TELHA_METALICA: "carpinteiro",
+  PONTO_LUZ: "eletricista", PONTO_TOMADA: "eletricista", HIDRO_BANHEIRO: "encanador", ESGOTO_BANHEIRO: "encanador",
+  IMPERM_BALDRAME: "impermeabilizador", IMPERM_MANTA: "impermeabilizador",
+  PINTURA_INT: "pintor", PINTURA_EXT: "pintor", FORRO_GESSO: "gesseiro", PORTA: "marceneiroPortas",
+};
+var PRESTADORES_ROTULO = {
+  equipePedreiros: "Pedreiros Casa", pintor: "Pintor", eletricista: "Eletricista", encanador: "Encanador", carpinteiro: "Carpinteiro (telhado)",
+  muroDivisa: "Pedreiros Muro Divisa", muroArrimo: "Pedreiros Muro Arrimo", pedreirosPiscina: "Pedreiros Piscina", pavimentacaoExterna: "Pedreiros Pavim. Externa",
+  impermeabilizador: "Impermeabilizador", marceneiroPortas: "Marceneiro Portas Internas", gesseiro: "Gesseiro (forro) — sem prestador no orçamento",
+};
