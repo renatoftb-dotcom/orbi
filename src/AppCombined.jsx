@@ -5235,23 +5235,68 @@ var INSUMOS_SEED = [
   { codigo:"ESQ-001", nome:"Alumínio linha Gold - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["CM060", "CM174", "CM200", "CM223", "DS238", "GN001", "GN003", "GN004", "GN005", "GN006", "GN007", "GN008", "GN009", "GN010", "GN011", "GN012", "GN013", "GN014", "GN018", "GN019", "GN020", "GN021", "GN022", "GN023", "GN024", "GN025", "GN026", "GN032", "GN033", "GN035", "GN037", "GN038", "GN039", "GN052", "GN053", "GN055", "GN061", "GN063", "GN070", "GN074", "GUA483", "MH006", "MN015", "MN055", "RM005", "RM038", "RM039", "VZC122", "VZP04"], observacao:"Preço por kg de perfil Alcoa Gold — referência da planilha (S_ESQUADRIAS.bas)" },
   { codigo:"ESQ-002", nome:"Alumínio linha Suprema - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["SU-001", "SU-002", "SU-003", "SU-039", "SU-040", "SU-041", "SU-044", "SU-047", "SU-049", "SU-053", "SU-102", "SU-225", "SU-227", "SU-228", "SU-291"], observacao:"Preço por kg de perfil Alcoa Suprema — mesma referência da Gold até haver compra" },
   { codigo:"ESQ-003", nome:"Vidro 8mm", grupo:"Esquadrias", unidade:"m2", tipo:"material", precoReferencia:166.63, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Vidro 8mm", "Vidro incolor 8mm", "Vidro temperado 8mm"], observacao:"Referência da planilha (S_ESQUADRIAS.bas)" },
-  // Louças e metais — categorias genéricas usadas pelos kits por ambiente
+  // Louças e metais — genéricos por padrão da obra (MCMV/Baixo/Médio/Alto/
+  // Altíssimo), usados pelos kits por ambiente (Insumos → Composições) através
+  // do marcador {padrão} no nome do item. Preços de referência de mercado SP
+  // set/2026 (Médio = modelo antigo do escritório); a compra real atualiza o
+  // preço quando lançada com o nome genérico como alias. Abaixo de Alto o
+  // chuveiro é misturador (base + acabamento); Alto e Altíssimo, monocomando.
   // (Insumos → Composições). Preço de referência: modelo antigo do escritório
   // (Base Orçamento Obra.xlsm, aba RESUMO TOTAL). A compra real (marca/modelo)
   // atualiza o preço quando lançada com o nome genérico como alias.
-  { codigo:"LOU-001", nome:"Louças - Sanitário", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1200, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Sanitário"], observacao:"Categoria genérica dos kits por ambiente; a bacia comprada (Liss, Vougan…) tem insumo próprio — ajuste este preço à mão ou pelo realizado" },
-  { codigo:"LOU-002", nome:"Louças - Cuba", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:800, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Cuba"], observacao:"Cuba de louça para lavatório — referência do modelo antigo" },
-  { codigo:"LOU-003", nome:"Louças - Tanque", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:650, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Tanque"], observacao:"Tanque de louça com coluna — referência de mercado" },
+  { codigo:"LOU-101", nome:"Louças - Sanitário padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:450, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Sanitário padrão MCMV"], observacao:"Bacia com caixa acoplada e assento — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-102", nome:"Louças - Sanitário padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:650, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Sanitário padrão Baixo"], observacao:"Bacia com caixa acoplada e assento — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-103", nome:"Louças - Sanitário padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1200, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Sanitário padrão Médio"], observacao:"Bacia com caixa acoplada e assento — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-104", nome:"Louças - Sanitário padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:2200, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Sanitário padrão Alto"], observacao:"Bacia com caixa acoplada e assento — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-105", nome:"Louças - Sanitário padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:4500, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Sanitário padrão Altíssimo"], observacao:"Bacia com caixa acoplada e assento — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-106", nome:"Louças - Cuba padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:180, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Cuba padrão MCMV"], observacao:"Cuba de louça para lavatório — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-107", nome:"Louças - Cuba padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:350, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Cuba padrão Baixo"], observacao:"Cuba de louça para lavatório — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-108", nome:"Louças - Cuba padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:800, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Cuba padrão Médio"], observacao:"Cuba de louça para lavatório — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-109", nome:"Louças - Cuba padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1400, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Cuba padrão Alto"], observacao:"Cuba de louça para lavatório — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-110", nome:"Louças - Cuba padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:2800, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Cuba padrão Altíssimo"], observacao:"Cuba de louça para lavatório — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-111", nome:"Louças - Tanque padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:250, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Tanque padrão MCMV"], observacao:"Tanque com coluna — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-112", nome:"Louças - Tanque padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:400, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Tanque padrão Baixo"], observacao:"Tanque com coluna — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-113", nome:"Louças - Tanque padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:650, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Tanque padrão Médio"], observacao:"Tanque com coluna — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-114", nome:"Louças - Tanque padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1100, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Tanque padrão Alto"], observacao:"Tanque com coluna — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-115", nome:"Louças - Tanque padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1800, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Tanque padrão Altíssimo"], observacao:"Tanque com coluna — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-116", nome:"Metal - Torneira Lavatório padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:120, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Lavatório padrão MCMV"], observacao:"Torneira de lavatório (banheiro/lavabo) — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-117", nome:"Metal - Torneira Lavatório padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:250, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Lavatório padrão Baixo"], observacao:"Torneira de lavatório (banheiro/lavabo) — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-118", nome:"Metal - Torneira Lavatório padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:530, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Lavatório padrão Médio"], observacao:"Torneira de lavatório (banheiro/lavabo) — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-119", nome:"Metal - Torneira Lavatório padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1100, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Lavatório padrão Alto"], observacao:"Torneira de lavatório (banheiro/lavabo) — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-120", nome:"Metal - Torneira Lavatório padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:2200, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Lavatório padrão Altíssimo"], observacao:"Torneira de lavatório (banheiro/lavabo) — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-121", nome:"Metal - Torneira Cozinha e Lazer padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:150, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Cozinha e Lazer padrão MCMV"], observacao:"Torneira de cozinha / gourmet — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-122", nome:"Metal - Torneira Cozinha e Lazer padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:280, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Cozinha e Lazer padrão Baixo"], observacao:"Torneira de cozinha / gourmet — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-123", nome:"Metal - Torneira Cozinha e Lazer padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:450, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Cozinha e Lazer padrão Médio"], observacao:"Torneira de cozinha / gourmet — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-124", nome:"Metal - Torneira Cozinha e Lazer padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1200, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Cozinha e Lazer padrão Alto"], observacao:"Torneira de cozinha / gourmet — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-125", nome:"Metal - Torneira Cozinha e Lazer padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:2500, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Cozinha e Lazer padrão Altíssimo"], observacao:"Torneira de cozinha / gourmet — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-126", nome:"Metal - Chuveiro padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:120, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Chuveiro padrão MCMV"], observacao:"Chuveiro/ducha de parede ou teto — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-127", nome:"Metal - Chuveiro padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:250, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Chuveiro padrão Baixo"], observacao:"Chuveiro/ducha de parede ou teto — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-128", nome:"Metal - Chuveiro padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:400, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Chuveiro padrão Médio"], observacao:"Chuveiro/ducha de parede ou teto — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-129", nome:"Metal - Chuveiro padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:900, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Chuveiro padrão Alto"], observacao:"Chuveiro/ducha de parede ou teto — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-130", nome:"Metal - Chuveiro padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:2000, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Chuveiro padrão Altíssimo"], observacao:"Chuveiro/ducha de parede ou teto — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-131", nome:"Metal - Ducha Higiênica padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:90, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Ducha Higiênica padrão MCMV"], observacao:"Ducha higiênica — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-132", nome:"Metal - Ducha Higiênica padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:180, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Ducha Higiênica padrão Baixo"], observacao:"Ducha higiênica — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-133", nome:"Metal - Ducha Higiênica padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:300, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Ducha Higiênica padrão Médio"], observacao:"Ducha higiênica — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-134", nome:"Metal - Ducha Higiênica padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:550, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Ducha Higiênica padrão Alto"], observacao:"Ducha higiênica — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-135", nome:"Metal - Ducha Higiênica padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1000, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Ducha Higiênica padrão Altíssimo"], observacao:"Ducha higiênica — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-136", nome:"Metal - Acabamento Registro padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:45, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Registro padrão MCMV"], observacao:"Acabamento de registro gaveta/pressão — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-137", nome:"Metal - Acabamento Registro padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:70, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Registro padrão Baixo"], observacao:"Acabamento de registro gaveta/pressão — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-138", nome:"Metal - Acabamento Registro padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:125, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Registro padrão Médio"], observacao:"Acabamento de registro gaveta/pressão — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-139", nome:"Metal - Acabamento Registro padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:250, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Registro padrão Alto"], observacao:"Acabamento de registro gaveta/pressão — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-140", nome:"Metal - Acabamento Registro padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:450, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Registro padrão Altíssimo"], observacao:"Acabamento de registro gaveta/pressão — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-141", nome:"Metal - Acabamento Válvula Descarga padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:70, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Válvula Descarga padrão MCMV"], observacao:"Acabamento de válvula de descarga — padrão MCMV (genérico dos kits por ambiente)" },
+  { codigo:"LOU-142", nome:"Metal - Acabamento Válvula Descarga padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:100, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Válvula Descarga padrão Baixo"], observacao:"Acabamento de válvula de descarga — padrão Baixo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-143", nome:"Metal - Acabamento Válvula Descarga padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:135, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Válvula Descarga padrão Médio"], observacao:"Acabamento de válvula de descarga — padrão Médio (genérico dos kits por ambiente)" },
+  { codigo:"LOU-144", nome:"Metal - Acabamento Válvula Descarga padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:280, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Válvula Descarga padrão Alto"], observacao:"Acabamento de válvula de descarga — padrão Alto (genérico dos kits por ambiente)" },
+  { codigo:"LOU-145", nome:"Metal - Acabamento Válvula Descarga padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:500, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Válvula Descarga padrão Altíssimo"], observacao:"Acabamento de válvula de descarga — padrão Altíssimo (genérico dos kits por ambiente)" },
+  { codigo:"LOU-146", nome:"Metal - Acabamento Misturador Chuveiro padrão MCMV", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:50, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Misturador Chuveiro padrão MCMV"], observacao:"Acabamento do misturador de chuveiro 3/4 (base LOU-043) — padrão MCMV; abaixo de Alto não entra monocomando" },
+  { codigo:"LOU-147", nome:"Metal - Acabamento Misturador Chuveiro padrão Baixo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:65, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Misturador Chuveiro padrão Baixo"], observacao:"Acabamento do misturador de chuveiro 3/4 (base LOU-043) — padrão Baixo; abaixo de Alto não entra monocomando" },
+  { codigo:"LOU-148", nome:"Metal - Acabamento Misturador Chuveiro padrão Médio", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:80, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Misturador Chuveiro padrão Médio"], observacao:"Acabamento do misturador de chuveiro 3/4 (base LOU-043) — padrão Médio; abaixo de Alto não entra monocomando" },
+  { codigo:"LOU-149", nome:"Metal - Acabamento Monocomando Chuveiro padrão Alto", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:300, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Monocomando Chuveiro padrão Alto"], observacao:"Acabamento do monocomando de chuveiro 3/4 (base LOU-048) — padrão Alto" },
+  { codigo:"LOU-150", nome:"Metal - Acabamento Monocomando Chuveiro padrão Altíssimo", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:700, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Monocomando Chuveiro padrão Altíssimo"], observacao:"Acabamento do monocomando de chuveiro 3/4 (base LOU-048) — padrão Altíssimo" },
   { codigo:"LOU-004", nome:"Box - Banho", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1800, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Box - Banho"], observacao:"Box de vidro temperado — referência do modelo antigo" },
-  { codigo:"LOU-005", nome:"Metal - Chuveiro", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:400, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Chuveiro"], observacao:"Chuveiro de parede — referência do modelo antigo" },
-  { codigo:"LOU-006", nome:"Metal - Ducha Higiênica", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:300, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Ducha Higiênica"], observacao:"Referência do modelo antigo" },
-  { codigo:"LOU-007", nome:"Metal - Torneira WC", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:530, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira WC"], observacao:"Torneira de lavatório — referência do modelo antigo" },
-  { codigo:"LOU-008", nome:"Metal - Torneira Cozinha e Lazer", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:450, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Cozinha e Lazer"], observacao:"Torneira de cozinha/gourmet — referência de mercado" },
   { codigo:"LOU-009", nome:"Metal - Sifão Flexível", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:20, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Sifão Flexível"], observacao:"Referência do modelo antigo" },
   { codigo:"LOU-010", nome:"Metal - Sifão Metálico", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:200, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Sifão Metálico"], observacao:"Padrão Alto — referência do modelo antigo" },
-  { codigo:"LOU-011", nome:"Metal - Acabamento Válvula Descarga", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:135, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Válvula Descarga"], observacao:"Referência do modelo antigo" },
-  { codigo:"LOU-012", nome:"Metal - Acabamento Misturador Chuveiro 3/4", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:80, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Misturador Chuveiro 3/4"], observacao:"Referência do modelo antigo" },
-  { codigo:"LOU-013", nome:"Metal - Acabamento Monocomando Chuveiro 3/4", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:300, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Monocomando Chuveiro 3/4"], observacao:"Padrão Alto — referência do modelo antigo" },
   // Pisos e revestimentos — genéricos por padrão da obra (o produto do projeto,
   // escolhido no orçamento, substitui o genérico; a compra real atualiza o preço)
   { codigo:"REV-054", nome:"Piso - Cerâmica padrão Baixo", grupo:"Pisos e revestimentos", unidade:"m2", tipo:"material", precoReferencia:35, precoFonte:"mercado", precoData:"2026-09-06", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Piso - Cerâmica padrão Baixo"], observacao:"Piso interno padrão MCMV/Baixo — cerâmica 45x45 (referência de mercado SP)" },
@@ -5570,86 +5615,90 @@ var COMPOSICOES_SEED = {
   ] },
 
   // ═══ Louças e metais (matriz do modelo antigo) ═══
-  LOUCAS_BANHEIRO: { nome: "Louças e metais — banheiro (padrão Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+  // "{padrão}" no nome vira o padrão da obra (MCMV/Baixo/Médio/Alto/Altíssimo)
+  // na hora do cálculo — os genéricos LOU-101… da semente existem para cada
+  // padrão. Kits sem _ALTO valem para MCMV/Baixo/Médio (misturador: base +
+  // acabamento); _ALTO vale para Alto/Altíssimo (monocomando).
+  LOUCAS_BANHEIRO: { nome: "Louças e metais — banheiro (MCMV / Baixo / Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Registro padrão {padrão}", qtd: 2, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Base Válvula Descarga", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Acabamento Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Válvula Descarga padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Base Misturador Chuveiro 3/4", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Acabamento Misturador Chuveiro 3/4", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Chuveiro", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Ducha Higiênica", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Torneira WC", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Misturador Chuveiro padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Chuveiro padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Ducha Higiênica padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Torneira Lavatório padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Sifão Flexível", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Cuba", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Sanitário padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Cuba padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Box - Banho", qtd: 1, unidade: "Unidades" },
   ] },
-  LOUCAS_BANHEIRO_ALTO: { nome: "Louças e metais — banheiro (padrão Alto)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+  LOUCAS_BANHEIRO_ALTO: { nome: "Louças e metais — banheiro (Alto / Altíssimo)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Registro padrão {padrão}", qtd: 2, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Base Válvula Descarga", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Acabamento Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Válvula Descarga padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Base Registro Monocomando Chuveiro 3/4", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Acabamento Monocomando Chuveiro 3/4", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Chuveiro", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Ducha Higiênica", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Torneira WC", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Monocomando Chuveiro padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Chuveiro padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Ducha Higiênica padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Torneira Lavatório padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Sifão Metálico", qtd: 1, unidade: "Unidades" },
     { nome: "PVC -  Esgoto - Ralo Oculto Quadrado 6''", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Cuba", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Sanitário padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Cuba padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Box - Banho", qtd: 1, unidade: "Unidades" },
   ] },
-  LOUCAS_LAVABO: { nome: "Louças e metais — lavabo (padrão Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+  LOUCAS_LAVABO: { nome: "Louças e metais — lavabo (MCMV / Baixo / Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Registro padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Base Válvula Descarga", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Acabamento Válvula Descarga", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Ducha Higiênica", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Torneira WC", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Válvula Descarga padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Ducha Higiênica padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Torneira Lavatório padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Sifão Flexível", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Cuba", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Sanitário padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Cuba padrão {padrão}", qtd: 1, unidade: "Unidades" },
   ] },
-  LOUCAS_LAVABO_ALTO: { nome: "Louças e metais — lavabo (padrão Alto)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+  LOUCAS_LAVABO_ALTO: { nome: "Louças e metais — lavabo (Alto / Altíssimo)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Registro padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Base Válvula Descarga", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Acabamento Válvula Descarga", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Ducha Higiênica", qtd: 1, unidade: "Unidades" },
-    { nome: "Metal - Torneira WC", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Válvula Descarga padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Ducha Higiênica padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Torneira Lavatório padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Sifão Metálico", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Cuba", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Sanitário padrão {padrão}", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Cuba padrão {padrão}", qtd: 1, unidade: "Unidades" },
   ] },
-  LOUCAS_COZINHA: { nome: "Louças e metais — cozinha / gourmet (padrão Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+  LOUCAS_COZINHA: { nome: "Louças e metais — cozinha / gourmet (MCMV / Baixo / Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Torneira Cozinha e Lazer", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Registro padrão {padrão}", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Torneira Cozinha e Lazer padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Cuba Metálica 56x34", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Sifão Flexível", qtd: 1, unidade: "Unidades" },
   ] },
-  LOUCAS_COZINHA_ALTO: { nome: "Louças e metais — cozinha / gourmet (padrão Alto)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+  LOUCAS_COZINHA_ALTO: { nome: "Louças e metais — cozinha / gourmet (Alto / Altíssimo)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Torneira Cozinha e Lazer", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Registro padrão {padrão}", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Torneira Cozinha e Lazer padrão {padrão}", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Cuba Metálica 56x34", qtd: 2, unidade: "Unidades" },
     { nome: "Metal - Sifão Metálico", qtd: 1, unidade: "Unidades" },
   ] },
-  LOUCAS_LAVANDERIA: { nome: "Louças e metais — lavanderia (padrão Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+  LOUCAS_LAVANDERIA: { nome: "Louças e metais — lavanderia (MCMV / Baixo / Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Registro padrão {padrão}", qtd: 2, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Torneira Jardim", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Torneira Máquina de Lavar", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Tanque", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Tanque padrão {padrão}", qtd: 1, unidade: "Unidades" },
   ] },
-  LOUCAS_LAVANDERIA_ALTO: { nome: "Louças e metais — lavanderia (padrão Alto)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+  LOUCAS_LAVANDERIA_ALTO: { nome: "Louças e metais — lavanderia (Alto / Altíssimo)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
-    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Registro padrão {padrão}", qtd: 2, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Torneira Jardim", qtd: 1, unidade: "Unidades" },
     { nome: "Metal - Hidráulica - Torneira Máquina de Lavar", qtd: 1, unidade: "Unidades" },
-    { nome: "Louças - Tanque", qtd: 2, unidade: "Unidades" },
+    { nome: "Louças - Tanque padrão {padrão}", qtd: 2, unidade: "Unidades" },
   ] },
   LOUCAS_TORNEIRA_EXTERNA: { nome: "Metais — torneira externa / jardim", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
     { nome: "Metal - Hidráulica - Torneira Jardim", qtd: 1, unidade: "Unidades" },
@@ -6819,8 +6868,11 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
     return Object.assign({}, t.pontos || {}, (o && o.pontos) || {});
   }
   function statusNome(nome) {
-    var r = resolverInsumo(nome, insumos);
-    if (!r.insumo) return { cor: "#b45309", texto: "não está em Insumos" };
+    // "{padrão}" no nome = genérico por padrão da obra; confere pelo Médio
+    var porPadrao = /\{padr[ãa]o\}/i.test(String(nome || ""));
+    var r = resolverInsumo(porPadrao ? String(nome).replace(/\{padr[ãa]o\}/gi, "Médio") : nome, insumos);
+    if (!r.insumo) return { cor: "#b45309", texto: porPadrao ? "genérico do padrão Médio não está em Insumos" : "não está em Insumos" };
+    if (porPadrao) { var pp = precoInsumo(r.insumo); return { cor: "#15803d", texto: "por padrão da obra · Médio " + r.insumo.codigo + (pp.preco != null ? " · " + fmtBRLIns(pp.preco) : "") }; }
     var p = precoInsumo(r.insumo);
     return p.preco != null ? { cor: "#15803d", texto: r.insumo.codigo + " · " + fmtBRLIns(p.preco) } : { cor: "#b45309", texto: r.insumo.codigo + " · sem preço" };
   }
@@ -9745,6 +9797,11 @@ function ambientesAtivos(data) {
   const over = (cfg && cfg.ambientes) || {};
   return base.map((a) => over[a.id] ? { ...a, pontos: { ...(a.pontos || {}), ...(over[a.id].pontos || {}) } } : a);
 }
+// Nome de item de kit resolvido para a obra: o marcador {padrão} vira o
+// padrão em vigor ("Louças - Sanitário padrão {padrão}" → "… padrão Médio").
+function nomeItemKit(nome, padrao) {
+  return String(nome || "").replace(/\{padr[ãa]o\}/gi, padrao || "Médio").trim();
+}
 function escolherKit(kits, id, padrao) {
   if (!id) return null;
   if (padrao === "Alto" && kits[id + "_ALTO"]) return kits[id + "_ALTO"];
@@ -9768,11 +9825,13 @@ function instalacoesPorAmbiente(cp, out, data) {
     const a = acumulado[k] || (acumulado[k] = { disc, nome, qtd: 0, unidade: unidade || "Unidades" });
     a.qtd += qtd;
   };
+  const padraoDaObra = PADROES_OBRA.includes(cp.padrao) ? cp.padrao : "Médio";
   const aplicarKit = (kit, vezes, disc) => {
     if (!kit || !(vezes > 0)) return;
     for (const it of kit.itens || []) {
       if (!it || !it.nome || !(Number(it.qtd) > 0)) continue;
-      add(disc || kit.disciplina, String(it.nome).trim(), Number(it.qtd) * vezes, it.unidade);
+      // "{padrão}" no nome do item = genérico por padrão da obra (louças e metais)
+      add(disc || kit.disciplina, nomeItemKit(it.nome, padraoDaObra), Number(it.qtd) * vezes, it.unidade);
     }
   };
   const temAquecimento = !!inst.aquecimento && inst.aquecimento !== "nenhum" && inst.aquecimento !== "eletrico";

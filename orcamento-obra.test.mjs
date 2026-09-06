@@ -39,7 +39,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit,
   };
 `)();
 
@@ -396,7 +396,7 @@ teste("casa com 2 suítes, 1 lavabo, cozinha, lavanderia e 3 dormitórios gera k
   const chaves = est.map((i) => i.etapa + "|" + i.item);
   assert.strictEqual(new Set(chaves).size, chaves.length);
   // sanitários: 2 suítes + 1 lavabo = 3
-  assert.strictEqual(est.find((i) => i.item === "Louças - Sanitário").qtd, 3);
+  assert.strictEqual(est.find((i) => i.item === "Louças - Sanitário padrão Médio").qtd, 3);
   // registros gaveta: 2 por suíte, lavabo, cozinha e lavanderia = 10
   assert.strictEqual(est.find((i) => i.item === "Metal - Hidráulica - Base Registro Gaveta 3/4").qtd, 10);
   // portas: 2 suítes + lavabo (WC) + 3 dormitórios + lavanderia (interna) = 7 folhas, 21 dobradiças
@@ -637,6 +637,19 @@ teste("padrão da obra: tela e motor usam a mesma regra; genérico do padrão M�
   const dig = normalizarProjeto({ padrao: "MCMV", arquitetura: { areaConstruida: 100 }, pisos: { soleirasM: 10, soleirasProduto: "Minha pedra" } });
   const o3 = []; modulo.pisosRevestimentos(dig, o3);
   assert.ok(o3.some((l) => l.subEtapa === "Soleiras e peitoris" && l.item === "Minha pedra"));
+});
+
+teste("louças e metais pelo padrão da obra: abaixo de Alto é misturador, Alto/Altíssimo monocomando", () => {
+  const itens = (padrao) => gerarOrcamentoObra({ tipologia: "Térrea", padrao, arquitetura: { areaConstruida: 100 }, ambientes: { wc: 1, cozinha: 1 } }, { materiais: [] }).itens.filter((i) => i.subEtapa === "Estimativa por ambientes").map((i) => i.item);
+  const mcmv = itens("MCMV"), alt = itens("Altíssimo"), medio = itens("Médio");
+  assert.ok(mcmv.includes("Louças - Sanitário padrão MCMV") && mcmv.includes("Metal - Torneira Lavatório padrão MCMV") && mcmv.includes("Metal - Torneira Cozinha e Lazer padrão MCMV"));
+  assert.ok(mcmv.includes("Metal - Hidráulica - Base Misturador Chuveiro 3/4") && mcmv.includes("Metal - Acabamento Misturador Chuveiro padrão MCMV"));
+  assert.ok(!mcmv.some((n) => /Monocomando/.test(n)));
+  assert.ok(medio.includes("Metal - Acabamento Misturador Chuveiro padrão Médio") && !medio.some((n) => /Monocomando/.test(n)));
+  assert.ok(alt.includes("Louças - Sanitário padrão Altíssimo") && alt.includes("Metal - Acabamento Monocomando Chuveiro padrão Altíssimo") && alt.includes("Metal - Hidráulica - Base Registro Monocomando Chuveiro 3/4"));
+  assert.ok(!alt.some((n) => /Misturador/.test(n)));
+  assert.ok(!alt.some((n) => /\{padr/.test(n)) && !mcmv.some((n) => /\{padr/.test(n)));
+  assert.strictEqual(modulo.nomeItemKit("Louças - Cuba padrão {padrão}", "Alto"), "Louças - Cuba padrão Alto");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

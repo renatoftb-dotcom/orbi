@@ -2370,6 +2370,11 @@ function ambientesAtivos(data) {
   const over = (cfg && cfg.ambientes) || {};
   return base.map((a) => over[a.id] ? { ...a, pontos: { ...(a.pontos || {}), ...(over[a.id].pontos || {}) } } : a);
 }
+// Nome de item de kit resolvido para a obra: o marcador {padrão} vira o
+// padrão em vigor ("Louças - Sanitário padrão {padrão}" → "… padrão Médio").
+function nomeItemKit(nome, padrao) {
+  return String(nome || "").replace(/\{padr[ãa]o\}/gi, padrao || "Médio").trim();
+}
 function escolherKit(kits, id, padrao) {
   if (!id) return null;
   if (padrao === "Alto" && kits[id + "_ALTO"]) return kits[id + "_ALTO"];
@@ -2393,11 +2398,13 @@ function instalacoesPorAmbiente(cp, out, data) {
     const a = acumulado[k] || (acumulado[k] = { disc, nome, qtd: 0, unidade: unidade || "Unidades" });
     a.qtd += qtd;
   };
+  const padraoDaObra = PADROES_OBRA.includes(cp.padrao) ? cp.padrao : "Médio";
   const aplicarKit = (kit, vezes, disc) => {
     if (!kit || !(vezes > 0)) return;
     for (const it of kit.itens || []) {
       if (!it || !it.nome || !(Number(it.qtd) > 0)) continue;
-      add(disc || kit.disciplina, String(it.nome).trim(), Number(it.qtd) * vezes, it.unidade);
+      // "{padrão}" no nome do item = genérico por padrão da obra (louças e metais)
+      add(disc || kit.disciplina, nomeItemKit(it.nome, padraoDaObra), Number(it.qtd) * vezes, it.unidade);
     }
   };
   const temAquecimento = !!inst.aquecimento && inst.aquecimento !== "nenhum" && inst.aquecimento !== "eletrico";

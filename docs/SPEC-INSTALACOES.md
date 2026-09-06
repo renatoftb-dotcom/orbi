@@ -41,9 +41,17 @@ de luz, 1 de 20A a cada 6 tomadas gerais (calculados, não são kit).
 
 Nomes dos itens = nomes do cadastro do escritório (101 dos 103 existem; os
 dois do aquecedor a gás entram sem preço até serem cadastrados). Louças e
-metais genéricos ("Louças - Sanitário", "Metal - Chuveiro"…) viraram insumos
-LOU-001…013 na semente, com o preço do modelo antigo e a marca comprada como
-alias — a compra real atualiza o genérico.
+metais genéricos seguem o **padrão da obra** (MCMV/Baixo/Médio/Alto/Altíssimo):
+o item do kit leva o marcador `{padrão}` no nome ("Louças - Sanitário padrão
+{padrão}") e o motor (`nomeItemKit`) troca pelo padrão em vigor; a semente tem
+um insumo por padrão (LOU-101…150: sanitário, cuba, tanque, torneira de
+lavatório, torneira de cozinha, chuveiro, ducha higiênica, acabamento de
+registro e de válvula, acabamento do chuveiro), com preço de referência de
+mercado e o Médio igual ao modelo antigo. Abaixo de Alto o chuveiro é
+misturador (base LOU-043 + acabamento); nos kits `_ALTO` (Alto e Altíssimo),
+monocomando (base LOU-048 + acabamento). Box, sifões e bases mantêm o preço
+do cadastro. A compra real atualiza o genérico quando lançada com o nome
+dele como alias.
 
 ## 3. Edição pelo escritório
 

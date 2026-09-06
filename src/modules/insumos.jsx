@@ -866,8 +866,11 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
     return Object.assign({}, t.pontos || {}, (o && o.pontos) || {});
   }
   function statusNome(nome) {
-    var r = resolverInsumo(nome, insumos);
-    if (!r.insumo) return { cor: "#b45309", texto: "não está em Insumos" };
+    // "{padrão}" no nome = genérico por padrão da obra; confere pelo Médio
+    var porPadrao = /\{padr[ãa]o\}/i.test(String(nome || ""));
+    var r = resolverInsumo(porPadrao ? String(nome).replace(/\{padr[ãa]o\}/gi, "Médio") : nome, insumos);
+    if (!r.insumo) return { cor: "#b45309", texto: porPadrao ? "genérico do padrão Médio não está em Insumos" : "não está em Insumos" };
+    if (porPadrao) { var pp = precoInsumo(r.insumo); return { cor: "#15803d", texto: "por padrão da obra · Médio " + r.insumo.codigo + (pp.preco != null ? " · " + fmtBRLIns(pp.preco) : "") }; }
     var p = precoInsumo(r.insumo);
     return p.preco != null ? { cor: "#15803d", texto: r.insumo.codigo + " · " + fmtBRLIns(p.preco) } : { cor: "#b45309", texto: r.insumo.codigo + " · sem preço" };
   }
