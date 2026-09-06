@@ -549,3 +549,29 @@ Faça commit ao fim de cada passo. Não empilhe a transcrição inteira num comm
   prestadores, que já vêm precificados do VBA.
 - Não reimplementar permissão — usar `getPermissoes()`.
 - Não recalcular o orçamento a cada render; ele é snapshot.
+
+## Memória de cálculo (engrenagem do quantitativo)
+
+Cada linha emitida pode levar `memoria`: a sequência de passos que leva do
+dado do projeto até a quantidade da tabela. Os passos são objetos criados
+pelos helpers `MEM.dado` (número lido do projeto, com o bloco de onde veio),
+`MEM.conta` (fórmula em palavras + a mesma conta com os números
+substituídos automaticamente a partir dos pares `[nome, valor]`), `MEM.teto`
+(o arredondamento para cima) e `MEM.nota` (explicação em texto). Itens de
+canteiro usam `MEM_CANTEIRO(texto)`. Para as barras de ferro há
+`memoriaBitola(k, partes, barras)`, e `emitBarras` aceita a função que a
+monta por bitola.
+
+Regra que os testes cobrem: **o último passo com número tem de ser
+exatamente a quantidade emitida**. Se a conta mudar e a memória não, o teste
+quebra.
+
+Na tela, `mapaMemorias(projeto, data)` regera o orçamento e indexa os passos
+por `etapa|subEtapa|item`; a engrenagem só aparece na linha que tem memória.
+Os passos **não** são gravados junto do orçamento (`recalcular` remove o
+campo antes de salvar) — dobrariam o tamanho do registro da obra e ficariam
+desatualizados. Orçamento antigo continua abrindo: a memória é recalculada a
+partir do `projeto` gravado.
+
+Etapas já escritas: **Instalações pré obra e projetos** e **Fundação**. As
+demais aparecem sem engrenagem até serem instrumentadas.

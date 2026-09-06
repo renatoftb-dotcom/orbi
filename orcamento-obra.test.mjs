@@ -39,7 +39,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM,
   };
 `)();
 
@@ -650,6 +650,55 @@ teste("louças e metais pelo padrão da obra: abaixo de Alto é misturador, Alto
   assert.ok(!alt.some((n) => /Misturador/.test(n)));
   assert.ok(!alt.some((n) => /\{padr/.test(n)) && !mcmv.some((n) => /\{padr/.test(n)));
   assert.strictEqual(modulo.nomeItemKit("Louças - Cuba padrão {padrão}", "Alto"), "Louças - Cuba padrão Alto");
+});
+
+teste("memória de cálculo: instalações pré obra e fundação, com o último passo batendo com a quantidade", () => {
+  // substituição automática dos números na fórmula (nomes maiores primeiro)
+  assert.strictEqual(modulo.contaMem("perímetro × 2 ÷ 3", [["perímetro", 48]]), "48 × 2 ÷ 3");
+  assert.strictEqual(modulo.contaMem("gabarito ÷ 3 × 1,20", [["gabarito", 42.5]]), "42,5 ÷ 3 × 1,20");
+  assert.strictEqual(modulo.numMem(1234.5678), "1.234,568");
+
+  const proj = {
+    tipologia: "Térrea", arquitetura: { areaConstruida: 120, gabarito: 60 },
+    terreo: { perimetroParedes: 48, m2Parede20: 100 },
+    engenharia: { fundacao: { qtdEstacas: 20, profEstacas: 4, resistenciaConcreto: "Concreto - FCK25",
+      ferro: { baldrames: { CA50_8MM: 600, CA50_5MM: 300 }, estacas: { CA50_8MM: 240 } },
+      concreto: { estacas: 3, baldrames: 5 } } },
+  };
+  const r = gerarOrcamentoObra(proj, { materiais: [] });
+  const etapas = ["Instalações pré obra e projetos", "Fundação"];
+  const itens = r.itens.filter((i) => etapas.includes(i.etapa));
+  assert.ok(itens.length > 20, `poucos itens: ${itens.length}`);
+  // toda linha dessas duas etapas tem memória
+  const sem = itens.filter((i) => !i.memoria || !i.memoria.length).map((i) => i.item);
+  assert.deepStrictEqual(sem, []);
+  // e o último passo com número é exatamente a quantidade que foi para a tabela
+  for (const i of itens) {
+    const passos = i.memoria.filter((x) => x.tipo !== "nota");
+    if (!passos.length) continue; // item de canteiro: só a explicação
+    assert.strictEqual(passos[passos.length - 1].valor, modulo.numMem(i.qtd), `${i.item}: memória termina em ${passos[passos.length - 1].valor}, tabela diz ${modulo.numMem(i.qtd)}`);
+  }
+  const achar = (nome, etapa) => itens.find((i) => i.item === nome && (!etapa || i.etapa === etapa));
+  // gabarito 60 m → tábuas ceil(60 ÷ 3 × 1,2) = 24
+  const tab = achar("Madeira Caixaria - Tábuas de 10cm x 3mts");
+  assert.strictEqual(tab.qtd, 24);
+  assert.strictEqual(tab.memoria.find((x) => x.tipo === "dado").valor, "60");
+  assert.ok(tab.memoria.some((x) => x.conta === "60 ÷ 3 × 1,20"));
+  // ferro 8 mm: 600 (baldrames) + 240 (estacas) = 840 m → 840 ÷ 12 × 1,1 = 77 barras
+  const aco = achar("Aço - Barras de CA50 8.0mm 12mts");
+  assert.strictEqual(aco.qtd, 77);
+  assert.ok(aco.memoria.some((x) => x.formula === "estacas + baldrames" && x.conta === "240 + 600" && x.valor === "840"));
+  // concreto: (3 + 5) × 1,1 = 8,8 → 9 m³, com a resistência escolhida no nome
+  const conc = achar("Concreto - FCK25");
+  assert.strictEqual(conc.qtd, 9);
+  assert.ok(conc.memoria.some((x) => x.tipo === "teto" && x.conta === "8,8 → 9"));
+  // perfuração usa 1,15 e não arredonda
+  assert.strictEqual(achar("Maquinário - Perfuração").qtd, 92); // 20 × 4 × 1,15
+  // item de canteiro tem só a explicação, sem conta
+  const poste = achar("Elétrica - Poste Padrão - Trifásica C3");
+  assert.deepStrictEqual(poste.memoria.map((x) => x.tipo), ["nota"]);
+  // a memória não é gravada com o orçamento: quem grava tira o campo
+  assert.ok(!("memoria" in JSON.parse(JSON.stringify({ ...poste, memoria: undefined }))));
 });
 
 teste("ilha (cozinha e área de lazer): 1 m menor que a parede maior, laterais de granito, só onde é permitida", () => {

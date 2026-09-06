@@ -7521,11 +7521,44 @@ function precoDoInsumo(nomeItem, data, opts) {
   return { preco: p.preco, confianca: p.confianca, codigo: r.insumo.codigo, meses: p.meses, corrigido: p.corrigido, insumo: r.insumo };
 }
 
+// ── Memória de cálculo (§ memória) ─────────────────────────────
+// Todo item emitido pode levar `memoria`: a sequência de passos que leva do
+// dado do projeto até a quantidade final, para a tela da engrenagem no
+// quantitativo. Quatro tipos de passo:
+//   dado   — número lido do projeto (com o bloco de onde veio)
+//   conta  — fórmula em palavras + a mesma conta com os números substituídos
+//   teto   — o arredondamento para cima (peça inteira: barra, saco, balde)
+//   nota   — explicação em texto, sem conta
+// A substituição dos números é automática: a fórmula é escrita com os nomes
+// ("perímetro ÷ 3 × 1,10") e os pares [nome, valor] viram a linha com os
+// números. Nomes maiores primeiro, para "perímetro" não estragar "perímetro
+// da pavimentação".
+function numMem(x) {
+  const n = Number(x);
+  return Number.isFinite(n) ? n.toLocaleString("pt-BR", { maximumFractionDigits: 3 }) : String(x);
+}
+function contaMem(formula, subs) {
+  let c = String(formula);
+  for (const [nome, v] of (subs || []).slice().sort((a, b) => String(b[0]).length - String(a[0]).length)) {
+    c = c.split(nome).join(numMem(v));
+  }
+  return c;
+}
+const MEM = {
+  dado: (rotulo, valor, unidade, fonte) => ({ tipo: "dado", rotulo, valor: numMem(valor), unidade: unidade || "", fonte: fonte || "" }),
+  conta: (rotulo, formula, subs, valor, unidade) => ({ tipo: "conta", rotulo, formula, conta: contaMem(formula, subs), valor: numMem(valor), unidade: unidade || "" }),
+  teto: (bruto, valor, unidade, rotulo) => ({ tipo: "teto", rotulo: rotulo || "Arredonda para cima (peça inteira)", conta: `${numMem(bruto)} → ${numMem(valor)}`, valor: numMem(valor), unidade: unidade || "" }),
+  nota: (texto) => ({ tipo: "nota", texto }),
+};
+// Itens de canteiro: quantidade fixa da planilha do escritório, sem conta.
+const MEM_CANTEIRO = (texto) => [MEM.nota(texto || "Quantidade fixa do canteiro: entra igual em qualquer obra, não depende das medidas do projeto. Herdada da planilha do escritório; para mudar, edite o item no orçamento.")];
+
 // ── Helper de emissão, usado por todo módulo de cálculo (§4) ──
-function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao, confianca, insumoCodigo }) {
+function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao, confianca, insumoCodigo, memoria }) {
   if (!qtd || qtd === 0) return; // regra do VBA: só emite se qtd ≠ 0
   const linha = { ordem, item, tipo, etapa, subEtapa, unidade, qtd: Number(qtd), preco: preco ?? null };
   if (composicao) linha.composicao = composicao; // item composto (esquadria): o que forma o preço unitário
+  if (memoria) linha.memoria = memoria;          // passos do cálculo da quantidade (tela da engrenagem)
   if (confianca) linha.confianca = confianca;
   if (insumoCodigo) linha.insumoCodigo = insumoCodigo;
   out.push(linha);
@@ -7581,10 +7614,24 @@ const LABEL_BARRA = {
 // que apenas somam elementos e emitem o conjunto completo (fundação, arrimo,
 // piscina). Módulos com bitolas ausentes/tratamento especial (paredesTerreo,
 // paredesPav1, supraCobertura) emitem manualmente, sem este helper.
-function emitBarras(out, base, barras) {
+function emitBarras(out, base, barras, memoriaDaBitola) {
   for (const k of Object.keys(PESOS_FERRO)) {
-    emitir(out, { ...base, item: LABEL_BARRA[k], unidade: "Barras 12mts", qtd: barras[k] });
+    emitir(out, { ...base, item: LABEL_BARRA[k], unidade: "Barras 12mts", qtd: barras[k], memoria: memoriaDaBitola ? memoriaDaBitola(k) : undefined });
   }
+}
+// Memória padrão de uma bitola: metros por elemento → total → barras de 12 m
+// com 10% de perda → arredonda. `partes` são pares [elemento, metros].
+function memoriaBitola(k, partes, barras) {
+  const usadas = partes.filter(([, v]) => numOrZero(v) > 0);
+  const total = usadas.reduce((acc, [, v]) => acc + numOrZero(v), 0);
+  const bruto = total / BARRA_FERRO_MTS * PERDA;
+  return [
+    MEM.nota(`Metros de ${LABEL_BARRA[k]} lançados no projeto, elemento por elemento.`),
+    ...usadas.map(([nome, v]) => MEM.dado(`Metros em ${nome}`, v, "m", "bloco de engenharia")),
+    MEM.conta("Metros da bitola na etapa", usadas.map(([nome]) => nome).join(" + "), usadas, total, "m"),
+    MEM.conta("Barras de 12 m, com 10% de perda", "metros ÷ 12 × 1,10", [["metros", total]], bruto, "barras"),
+    MEM.teto(bruto, barras[k], "barras", "Arredonda para cima (barra inteira)"),
+  ];
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -7907,31 +7954,58 @@ function instalacoesObraProjetos(cp, out) {
 
   // Quantidades fixas — sempre presentes em qualquer orçamento (não dependem
   // de nenhum CP_ de projeto), exatamente como no .bas.
-  emitir(out, { ...baseInst, subEtapa: "Bruto - Elétrica", item: "Elétrica - Poste Padrão - Trifásica C3", unidade: "Unidades", qtd: 1 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Serra Circular Dewalt DWE560-B2", unidade: "Unidades", qtd: 1 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Furadeira Dewalt 1/2 DWD502-BR 710W", unidade: "Unidades", qtd: 1 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Nível", unidade: "Mts", qtd: 25 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Lapis", unidade: "Rolos", qtd: 4 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Disco Serra Circular", unidade: "Unidades", qtd: 2 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Metal - Hidráulica - Torneira Jardim", unidade: "Unidades", qtd: 1 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Pá de bico com cabo", unidade: "Unidades", qtd: 4 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Cavadeira", unidade: "Unidades", qtd: 4 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Jardim", unidade: "Mts", qtd: 30 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Engate Rápido Mangueira Jardim", unidade: "Unidades", qtd: 1 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Torquesa Ferragem", unidade: "Unidades", qtd: 5 });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Luva Mucambo", unidade: "Unidades", qtd: 10 });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Linha de pedreiro", unidade: "Unidades", qtd: 2 });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Carrinho Pedreiro", unidade: "Unidades", qtd: 4 });
+  const memPoste = MEM_CANTEIRO("Padrão de entrada de energia da obra: um por obra. Trifásico C3 é o padrão adotado pelo escritório; se a obra for monofásica, troque o item.");
+  const memFerramenta = MEM_CANTEIRO();
+  emitir(out, { ...baseInst, subEtapa: "Bruto - Elétrica", item: "Elétrica - Poste Padrão - Trifásica C3", unidade: "Unidades", qtd: 1, memoria: memPoste });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Serra Circular Dewalt DWE560-B2", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Furadeira Dewalt 1/2 DWD502-BR 710W", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Nível", unidade: "Mts", qtd: 25, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Lapis", unidade: "Rolos", qtd: 4, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Disco Serra Circular", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Metal - Hidráulica - Torneira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Pá de bico com cabo", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Cavadeira", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Jardim", unidade: "Mts", qtd: 30, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Engate Rápido Mangueira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Torquesa Ferragem", unidade: "Unidades", qtd: 5, memoria: memFerramenta });
+  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Luva Mucambo", unidade: "Unidades", qtd: 10, memoria: memFerramenta });
+  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Linha de pedreiro", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
+  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Carrinho Pedreiro", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
 
-  const tabua10 = Math.ceil(cp.gabarito / 3 * 1.2);
-  const sarrafo5 = Math.ceil((cp.gabarito * 1.2 / 1.3 * 0.6 / 3) + 20);
-  const prego18x27 = Math.ceil(0.05 * tabua10 / 2);
+  const gab = cp.gabarito;
+  const tabua10Bruto = gab / 3 * 1.2;
+  const tabua10 = Math.ceil(tabua10Bruto);
+  const sarrafo5Bruto = (gab * 1.2 / 1.3 * 0.6 / 3) + 20;
+  const sarrafo5 = Math.ceil(sarrafo5Bruto);
+  const prego18x27Bruto = 0.05 * tabua10 / 2;
+  const prego18x27 = Math.ceil(prego18x27Bruto);
   const prego17x21 = prego18x27;
+  const memGabarito = MEM.dado("Gabarito da obra (perímetro do cavalete de marcação)", gab, "m", "bloco Geral");
 
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3mts", qtd: tabua10 });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3mts", qtd: sarrafo5 });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego18x27 });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Aço - Pregos 17x21", unidade: "KG", qtd: prego17x21 });
+  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3mts", qtd: tabua10, memoria: [
+    MEM.nota("O gabarito é o cavalete de tábuas que cerca a obra e guarda os eixos das paredes até a fundação sair do chão."),
+    memGabarito,
+    MEM.conta("Tábuas de 3 m, com 20% de emendas e recortes", "gabarito ÷ 3 × 1,20", [["gabarito", gab]], tabua10Bruto, "tábuas"),
+    MEM.teto(tabua10Bruto, tabua10, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ] });
+  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3mts", qtd: sarrafo5, memoria: [
+    MEM.nota("Sarrafos: as estacas verticais que seguram as tábuas do gabarito, cravadas a cada 1,30 m, mais 20 de folga para escoras e travamento dos cantos."),
+    memGabarito,
+    MEM.conta("Sarrafos do gabarito", "gabarito × 1,20 ÷ 1,30 × 0,60 ÷ 3 + 20", [["gabarito", gab]], sarrafo5Bruto, "sarrafos"),
+    MEM.teto(sarrafo5Bruto, sarrafo5, "sarrafos de 3 m", "Arredonda para cima (sarrafo inteiro)"),
+  ] });
+  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego18x27, memoria: [
+    MEM.nota("Pregos do gabarito: 0,05 kg por tábua pregada, metade em cada bitola (18x27 e 17x21)."),
+    MEM.dado("Tábuas de 10 cm do gabarito", tabua10, "tábuas", "passo anterior"),
+    MEM.conta("Pregos 18x27", "tábuas × 0,05 ÷ 2", [["tábuas", tabua10]], prego18x27Bruto, "kg"),
+    MEM.teto(prego18x27Bruto, prego18x27, "kg", "Arredonda para cima (embalagem fechada)"),
+  ] });
+  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Aço - Pregos 17x21", unidade: "KG", qtd: prego17x21, memoria: [
+    MEM.nota("Mesma conta dos pregos 18x27 — a outra metade do consumo do gabarito."),
+    MEM.dado("Tábuas de 10 cm do gabarito", tabua10, "tábuas", "passo anterior"),
+    MEM.conta("Pregos 17x21", "tábuas × 0,05 ÷ 2", [["tábuas", tabua10]], prego18x27Bruto, "kg"),
+    MEM.teto(prego18x27Bruto, prego17x21, "kg", "Arredonda para cima (embalagem fechada)"),
+  ] });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -7941,31 +8015,86 @@ function fundacao(cp, out) {
   const f = cp.fundacao;
   const perim = cp.perimetroParedesTerreo;
 
-  const tabuas30 = Math.ceil(((perim * 2 / 3) + perim * 2 / 3 * 0.45 / 3) * PERDA);
-  const sarrafo5 = Math.ceil(((perim * 2 / 0.7 * 0.45) + (perim / 0.75 * 0.3)) / 3 * PERDA);
+  const tabuas30Bruto = ((perim * 2 / 3) + perim * 2 / 3 * 0.45 / 3) * PERDA;
+  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const sarrafo5Bruto = ((perim * 2 / 0.7 * 0.45) + (perim / 0.75 * 0.3)) / 3 * PERDA;
+  const sarrafo5 = Math.ceil(sarrafo5Bruto);
   // [VBA] fator 1.15 (não 1.1) — perda de perfuração é diferente da perda de material
   const perfuracaoEstacas = f.qtdEstacas * f.profEstacas * 1.15;
 
   const soma = somarFerro(f.ferro.estacas, f.ferro.sapatas, f.ferro.arranques, f.ferro.baldrames);
   const barras = barrasPorBitola(soma);
   const peso = pesoTotalFerro(barras);
-  const concreto = Math.ceil(somaN(f.concreto.estacas, f.concreto.sapatas, f.concreto.arranques, f.concreto.baldrames) * PERDA);
-  const discoFerro = Math.ceil(peso * 0.01);
-  const arame = Math.ceil(peso * 0.06);
-  const prego = Math.ceil(0.55 * arame);
-  const vedatop = Math.ceil((((perim * 2 * 0.3) + (perim * 0.15)) * 3 * PERDA) / 18);
+  const concretoBruto = somaN(f.concreto.estacas, f.concreto.sapatas, f.concreto.arranques, f.concreto.baldrames) * PERDA;
+  const concreto = Math.ceil(concretoBruto);
+  const discoFerroBruto = peso * 0.01;
+  const discoFerro = Math.ceil(discoFerroBruto);
+  const arameBruto = peso * 0.06;
+  const arame = Math.ceil(arameBruto);
+  const pregoBruto = 0.55 * arame;
+  const prego = Math.ceil(pregoBruto);
+  const vedatopBruto = (((perim * 2 * 0.3) + (perim * 0.15)) * 3 * PERDA) / 18;
+  const vedatop = Math.ceil(vedatopBruto);
+
+  const memPerim = MEM.dado("Perímetro das paredes do térreo", perim, "m", "bloco Pav. Térreo");
+  // Só os elementos com volume lançado entram na memória — listar "sapatas 0"
+  // em obra sem sapata só atrapalha a conferência.
+  const partesConcreto = [["estacas", f.concreto.estacas], ["sapatas", f.concreto.sapatas], ["arranques", f.concreto.arranques], ["baldrames", f.concreto.baldrames]].filter(([, v]) => numOrZero(v) > 0);
+  const memPeso = [
+    MEM.nota("O consumo de disco, arame e prego sai do peso do ferro já comprado (barras × peso por barra), não do comprimento."),
+    ...Object.keys(PESOS_FERRO).filter((k) => numOrZero(barras[k]) > 0).map((k) => MEM.dado(`${LABEL_BARRA[k]}: ${numMem(barras[k])} barras × ${numMem(PESOS_FERRO[k])} kg`, numOrZero(barras[k]) * PESOS_FERRO[k], "kg", "passo das barras")),
+    MEM.conta("Peso total do ferro da fundação", "soma das bitolas", [], peso, "kg"),
+  ];
 
   const base = { ordem: ORD.fundacao, tipo: "Bruto", etapa: "Fundação", subEtapa: "Brocas e baldrames" };
-  emitBarras(out, base, barras);
-  emitir(out, { ...base, item: "Disco Ferro", unidade: "Unidades", qtd: discoFerro });
-  emitir(out, { ...base, item: "Aço - Arame Recozido", unidade: "KG", qtd: arame });
-  emitir(out, { ...base, item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego });
-  emitir(out, { ...base, item: "Maquinário - Perfuração", unidade: "Mts", qtd: perfuracaoEstacas });
-  emitir(out, { ...base, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3mts", qtd: tabuas30 });
-  emitir(out, { ...base, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3mts", qtd: sarrafo5 });
-  emitir(out, { ...base, item: f.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto });
-  emitir(out, { ...base, item: "Concreto - Bomba", unidade: "Unidades", qtd: 1 });
-  emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Vedatop 18KG", unidade: "Baldes 18L", qtd: vedatop });
+  emitBarras(out, base, barras, (k) => memoriaBitola(k, [["estacas", f.ferro.estacas[k]], ["sapatas", f.ferro.sapatas[k]], ["arranques", f.ferro.arranques[k]], ["baldrames", f.ferro.baldrames[k]]], barras));
+  emitir(out, { ...base, item: "Disco Ferro", unidade: "Unidades", qtd: discoFerro, memoria: [
+    ...memPeso,
+    MEM.conta("Discos de corte", "peso × 0,01", [["peso", peso]], discoFerroBruto, "discos"),
+    MEM.teto(discoFerroBruto, discoFerro, "discos"),
+  ] });
+  emitir(out, { ...base, item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: [
+    ...memPeso,
+    MEM.conta("Arame para amarrar as armaduras", "peso × 0,06", [["peso", peso]], arameBruto, "kg"),
+    MEM.teto(arameBruto, arame, "kg"),
+  ] });
+  emitir(out, { ...base, item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: [
+    MEM.nota("Pregos da caixaria dos baldrames, proporcionais ao arame já calculado."),
+    MEM.dado("Arame recozido da fundação", arame, "kg", "passo anterior"),
+    MEM.conta("Pregos", "arame × 0,55", [["arame", arame]], pregoBruto, "kg"),
+    MEM.teto(pregoBruto, prego, "kg"),
+  ] });
+  emitir(out, { ...base, item: "Maquinário - Perfuração", unidade: "Mts", qtd: perfuracaoEstacas, memoria: [
+    MEM.nota("Metros perfurados que a empresa de brocas cobra. A folga aqui é de 15% (e não os 10% de material): conta com o refugo do trado e o retrabalho de estaca que desmorona."),
+    MEM.dado("Quantidade de estacas (brocas)", f.qtdEstacas, "estacas", "bloco Engenharia — Fundação"),
+    MEM.dado("Profundidade de cada estaca", f.profEstacas, "m", "bloco Engenharia — Fundação"),
+    MEM.conta("Metros perfurados", "estacas × profundidade × 1,15", [["estacas", f.qtdEstacas], ["profundidade", f.profEstacas]], perfuracaoEstacas, "m"),
+  ] });
+  emitir(out, { ...base, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3mts", qtd: tabuas30, memoria: [
+    MEM.nota("Caixaria dos baldrames: duas laterais ao longo de todo o perímetro (perímetro × 2), em tábuas de 3 m, mais 45 cm de travessas a cada trecho."),
+    memPerim,
+    MEM.conta("Tábuas, com 10% de perda", "(perímetro × 2 ÷ 3 + perímetro × 2 ÷ 3 × 0,45 ÷ 3) × 1,10", [["perímetro", perim]], tabuas30Bruto, "tábuas"),
+    MEM.teto(tabuas30Bruto, tabuas30, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ] });
+  emitir(out, { ...base, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3mts", qtd: sarrafo5, memoria: [
+    MEM.nota("Sarrafos da caixaria: gravatas a cada 70 cm nas duas faces (0,45 m cada) e escoras a cada 75 cm (0,30 m cada)."),
+    memPerim,
+    MEM.conta("Sarrafos, com 10% de perda", "(perímetro × 2 ÷ 0,70 × 0,45 + perímetro ÷ 0,75 × 0,30) ÷ 3 × 1,10", [["perímetro", perim]], sarrafo5Bruto, "sarrafos"),
+    MEM.teto(sarrafo5Bruto, sarrafo5, "sarrafos de 3 m", "Arredonda para cima (sarrafo inteiro)"),
+  ] });
+  emitir(out, { ...base, item: f.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto, memoria: [
+    MEM.nota(`Volume de concreto lançado no bloco Engenharia — Fundação, elemento por elemento. Resistência escolhida: ${f.resistenciaConcreto || "Concreto"}.`),
+    ...partesConcreto.map(([nome, v]) => MEM.dado(nome[0].toUpperCase() + nome.slice(1), v, "m³", "bloco Engenharia — Fundação")),
+    MEM.conta("Volume com 10% de perda", `(${partesConcreto.map(([nome]) => nome).join(" + ")}) × 1,10`, partesConcreto, concretoBruto, "m³"),
+    MEM.teto(concretoBruto, concreto, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  emitir(out, { ...base, item: "Concreto - Bomba", unidade: "Unidades", qtd: 1, memoria: MEM_CANTEIRO("Uma bombeada de concreto por obra na fundação. Se a concretagem for feita em mais de um dia, aumente a quantidade no item.") });
+  emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Vedatop 18KG", unidade: "Baldes 18L", qtd: vedatop, memoria: [
+    MEM.nota("Impermeabilização do baldrame: as duas faces (30 cm de altura cada) mais o topo (15 cm de largura), com 3 kg por m² e 10% de perda. Balde de 18 kg."),
+    memPerim,
+    MEM.conta("Baldes de 18 kg", "(perímetro × 2 × 0,30 + perímetro × 0,15) × 3 × 1,10 ÷ 18", [["perímetro", perim]], vedatopBruto, "baldes"),
+    MEM.teto(vedatopBruto, vedatop, "baldes", "Arredonda para cima (balde fechado)"),
+  ] });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -10691,6 +10820,91 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
   );
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Memória de cálculo — a tela da engrenagem
+// ═══════════════════════════════════════════════════════════════
+// Os passos não são gravados junto do orçamento (dobrariam o tamanho do
+// registro da obra): são recalculados a partir do projeto quando a tela do
+// resultado abre, e casados com a linha da tabela por etapa + sub-etapa +
+// item. Orçamento antigo, gerado antes de um item ganhar memória, mostra a
+// linha sem engrenagem.
+function chaveMemoria(i) { return `${i.etapa}|${i.subEtapa || ""}|${i.item}`; }
+function mapaMemorias(projeto, data) {
+  const m = {};
+  if (!projeto) return m;
+  try {
+    for (const i of gerarOrcamentoObra(projeto, data).itens) if (i.memoria) m[chaveMemoria(i)] = i.memoria;
+  } catch (e) { /* projeto incompleto: a tabela segue, só sem memória */ }
+  return m;
+}
+const MEM_S = {
+  fundo: { position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, zIndex: 60, overflowY: "auto" },
+  card: { background: "#fff", borderRadius: 14, maxWidth: 680, width: "100%", margin: "24px auto", boxShadow: "0 18px 50px rgba(0,0,0,0.25)", overflow: "hidden" },
+  topo: { padding: "14px 18px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
+  passo: { display: "flex", gap: 10, padding: "10px 0", borderTop: "1px solid #f6f6f6" },
+  bolinha: { flex: "0 0 22px", height: 22, borderRadius: 11, background: "#f3f4f6", color: "#6b7280", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
+  formula: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11.5, color: "#6b7280" },
+  conta: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, color: "#262421" },
+};
+function MemoriaCalculo({ item, passos, onFechar }) {
+  const qtd = Number(item.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
+  let n = 0;
+  return (
+    <div style={MEM_S.fundo} onClick={onFechar}>
+      <div style={MEM_S.card} onClick={(e) => e.stopPropagation()}>
+        <div style={MEM_S.topo}>
+          <div>
+            <div style={{ fontSize: 10.5, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+              Memória de cálculo · {item.etapa}{item.subEtapa ? ` › ${item.subEtapa}` : ""}
+            </div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#262421", marginTop: 3 }}>{item.item}</div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Quantidade no orçamento: <b style={{ color: "#262421" }}>{qtd} {item.unidade}</b></div>
+          </div>
+          <button type="button" onClick={onFechar} style={{ ...C.btnGhost, fontSize: 18, padding: "0 4px", lineHeight: 1 }} title="Fechar">×</button>
+        </div>
+        <div style={{ padding: "4px 18px 14px" }}>
+          {!passos || !passos.length ? (
+            <div style={{ fontSize: 12.5, color: "#6b7280", padding: "14px 0" }}>
+              A memória deste item ainda não foi escrita. Estamos publicando etapa por etapa — por enquanto valem "Instalações pré obra e projetos" e "Fundação".
+            </div>
+          ) : passos.map((p, idx) => {
+            if (p.tipo === "nota") {
+              return <div key={idx} style={{ ...MEM_S.passo, color: "#6b7280", fontSize: 12.5, lineHeight: 1.5 }}>{p.texto}</div>;
+            }
+            n += 1;
+            return (
+              <div key={idx} style={MEM_S.passo}>
+                <div style={MEM_S.bolinha}>{n}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, color: "#262421", fontWeight: 600 }}>{p.rotulo}</div>
+                  {p.tipo === "dado" && (
+                    <div style={{ fontSize: 12.5, color: "#374151", marginTop: 2 }}>
+                      <b>{p.valor}</b> {p.unidade}
+                      {p.fonte ? <span style={{ color: "#9ca3af" }}> · lido do {p.fonte}</span> : null}
+                    </div>
+                  )}
+                  {p.tipo === "conta" && (
+                    <div style={{ marginTop: 3 }}>
+                      <div style={MEM_S.formula}>{p.formula}</div>
+                      <div style={MEM_S.conta}>{p.conta} = <b>{p.valor}</b> {p.unidade}</div>
+                    </div>
+                  )}
+                  {p.tipo === "teto" && (
+                    <div style={{ ...MEM_S.conta, marginTop: 3 }}>{p.conta} <span style={{ color: "#9ca3af" }}>{p.unidade}</span></div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ padding: "10px 18px", background: "#fafafa", borderTop: "1px solid #f3f4f6", fontSize: 11.5, color: "#6b7280" }}>
+          Os números vêm do projeto que gerou este orçamento. Mudou uma medida? Edite os dados do projeto e recalcule — a memória acompanha.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar }) {
   const perm = getPermissoes();
   const [viewInterna, setViewInterna] = useState(obra.orcamento ? "resultado" : obra.projeto ? "form" : "vazio");
@@ -10703,6 +10917,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const [paredeTerreoExpandida, setParedeTerreoExpandida] = useState(false);
   const [espessuraTerreaAberta, setEspessuraTerreaAberta] = useState(false);
   const [comodoAberto, setComodoAberto] = useState(null);
+  const [memoriaAberta, setMemoriaAberta] = useState(null);
+  const memorias = useMemo(() => (viewInterna === "resultado" && obra.orcamento ? mapaMemorias(obra.projeto, data) : {}), [viewInterna, obra.projeto, obra.orcamento, data]);
 
   function toggleBloco(k) { setBlocosAbertos((b) => ({ ...b, [k]: !b[k] })); }
   function toggleEtapa(k) { setEtapasColapsadas((b) => ({ ...b, [k]: !b[k] })); }
@@ -10759,7 +10975,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     const orcamento = {
       geradoEm: new Date().toISOString(),
       versao: (obra.orcamento?.versao || 0) + 1,
-      itens: resultado.itens,
+      itens: resultado.itens.map(({ memoria, ...i }) => i), // memória é recalculada na tela, não gravada
       totais: resultado.totais,
       qualidade: resultado.qualidade,
       avisos: resultado.avisos,
@@ -11461,6 +11677,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                       <th style={{ padding: "6px 14px", textAlign: "right" }}>Qtd</th>
                       <th style={{ padding: "6px 14px", textAlign: "right" }}>Preço</th>
                       <th style={{ padding: "6px 14px", textAlign: "right" }}>Total</th>
+                      <th style={{ padding: "6px 6px", width: 28 }} />
                     </tr>
                   </thead>
                   <tbody>
@@ -11474,6 +11691,12 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                           {formatoBRL(i.preco)}
                         </td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#262421", fontWeight: 600 }}>{formatoBRL(i.total)}</td>
+                        <td style={{ padding: "6px 6px", textAlign: "center" }}>
+                          {memorias[chaveMemoria(i)] && (
+                            <button type="button" onClick={() => setMemoriaAberta(i)} title="Memória de cálculo: como se chegou nesta quantidade"
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 2, color: "#9ca3af", fontFamily: "inherit" }}>⚙</button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -11497,6 +11720,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
       )}
       {!perm.podeEditar && (
         <button style={C.btnSec} onClick={exportarCSV}>Exportar CSV</button>
+      )}
+
+      {memoriaAberta && (
+        <MemoriaCalculo item={memoriaAberta} passos={memorias[chaveMemoria(memoriaAberta)]} onFechar={() => setMemoriaAberta(null)} />
       )}
     </div>
   );
