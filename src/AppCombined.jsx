@@ -4261,7 +4261,7 @@ var S = {
 // ═══════════════════════════════════════════════════════════════
 // INSUMOS — SEMENTE DO CATÁLOGO
 // ═══════════════════════════════════════════════════════════════
-// 114 insumos (97 materiais + 17 prestadores) com código estável, preço de
+// 127 insumos (110 materiais + 17 prestadores) com código estável, preço de
 // referência, unidade, grupo e aliases.
 //
 // Origem dos preços (docs/referencia-orcamento/PRECOS-REFERENCIA-VICKE.xlsx):
@@ -4396,7 +4396,463 @@ var INSUMOS_SEED = [
   { codigo:"ESQ-001", nome:"Alumínio linha Gold - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["CM060", "CM174", "CM200", "CM223", "DS238", "GN001", "GN003", "GN004", "GN005", "GN006", "GN007", "GN008", "GN009", "GN010", "GN011", "GN012", "GN013", "GN014", "GN018", "GN019", "GN020", "GN021", "GN022", "GN023", "GN024", "GN025", "GN026", "GN032", "GN033", "GN035", "GN037", "GN038", "GN039", "GN052", "GN053", "GN055", "GN061", "GN063", "GN070", "GN074", "GUA483", "MH006", "MN015", "MN055", "RM005", "RM038", "RM039", "VZC122", "VZP04"], observacao:"Preço por kg de perfil Alcoa Gold — referência da planilha (S_ESQUADRIAS.bas)" },
   { codigo:"ESQ-002", nome:"Alumínio linha Suprema - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["SU-001", "SU-002", "SU-003", "SU-039", "SU-040", "SU-041", "SU-044", "SU-047", "SU-049", "SU-053", "SU-102", "SU-225", "SU-227", "SU-228", "SU-291"], observacao:"Preço por kg de perfil Alcoa Suprema — mesma referência da Gold até haver compra" },
   { codigo:"ESQ-003", nome:"Vidro 8mm", grupo:"Esquadrias", unidade:"m2", tipo:"material", precoReferencia:166.63, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Vidro 8mm", "Vidro incolor 8mm", "Vidro temperado 8mm"], observacao:"Referência da planilha (S_ESQUADRIAS.bas)" },
+  // Louças e metais — categorias genéricas usadas pelos kits por ambiente
+  // (Insumos → Composições). Preço de referência: modelo antigo do escritório
+  // (Base Orçamento Obra.xlsm, aba RESUMO TOTAL). A compra real (marca/modelo)
+  // atualiza o preço quando lançada com o nome genérico como alias.
+  { codigo:"LOU-001", nome:"Louças - Sanitário", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1200, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Sanitário", "Louças - Bacia Liss", "Louças - Bacia Vougan"], observacao:"Bacia com caixa acoplada — referência do modelo antigo" },
+  { codigo:"LOU-002", nome:"Louças - Cuba", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:800, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Cuba", "Louças - Cuba de Apoio RT2 500x400x130 WH"], observacao:"Cuba de louça para lavatório — referência do modelo antigo" },
+  { codigo:"LOU-003", nome:"Louças - Tanque", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:650, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Louças - Tanque", "TANQUE G 600X520 C/MESA INCEPA BR"], observacao:"Tanque de louça com coluna — referência de mercado" },
+  { codigo:"LOU-004", nome:"Box - Banho", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:1800, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Box - Banho", "Vidro - Boxes"], observacao:"Box de vidro temperado — referência do modelo antigo" },
+  { codigo:"LOU-005", nome:"Metal - Chuveiro", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:400, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Chuveiro", "Metal - Hidráulica - Chuveiro Parede Heaven Q150"], observacao:"Chuveiro de parede — referência do modelo antigo" },
+  { codigo:"LOU-006", nome:"Metal - Ducha Higiênica", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:300, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Ducha Higiênica", "Metal - Hidráulica - Ducha Higiênica Lift", "Metal - Hidráulica - DUCHA HIG REG DER C/ GATILHO NOVA LOG"], observacao:"Referência do modelo antigo" },
+  { codigo:"LOU-007", nome:"Metal - Torneira WC", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:530, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira WC", "Metal - Hidráulica - TOR LAV ME BA NOVA LOGGICA CR", "Metal - Hidráulica - Misturador Monocomonado Lavatório Bica Alta Lift"], observacao:"Torneira de lavatório — referência do modelo antigo" },
+  { codigo:"LOU-008", nome:"Metal - Torneira Cozinha e Lazer", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:450, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Torneira Cozinha e Lazer", "Metal - Hidráulica - TOR COZ ME BA 90' MOVEL NOVA LOGGICA", "Metal - Hidráulica - Misturador Monocomonado Cozinha Bistrô"], observacao:"Torneira de cozinha/gourmet — referência de mercado" },
+  { codigo:"LOU-009", nome:"Metal - Sifão Flexível", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:20, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Sifão Flexível", "Metal - Hidráulica - SIFAO UNIVERSAL EXTENSIVEL 72CM WH"], observacao:"Referência do modelo antigo" },
+  { codigo:"LOU-010", nome:"Metal - Sifão Metálico", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:200, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Sifão Metálico"], observacao:"Padrão Alto — referência do modelo antigo" },
+  { codigo:"LOU-011", nome:"Metal - Acabamento Válvula Descarga", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:135, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Válvula Descarga", "Metal - Hidráulica - Acabamento Válvula Descarga Flat"], observacao:"Referência do modelo antigo" },
+  { codigo:"LOU-012", nome:"Metal - Acabamento Misturador Chuveiro 3/4", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:80, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Misturador Chuveiro 3/4", "Metal - Hidráulica - Acabamento registro 3/4 Lift"], observacao:"Referência do modelo antigo" },
+  { codigo:"LOU-013", nome:"Metal - Acabamento Monocomando Chuveiro 3/4", grupo:"Louças e metais", unidade:"Unidades", tipo:"material", precoReferencia:300, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Metal - Acabamento Monocomando Chuveiro 3/4", "Metal - Hidráulica - Acabamento Monocomando Chuveiro 3/4 Lift"], observacao:"Padrão Alto — referência do modelo antigo" },
 ];
+
+
+// ════════════════════════════════════════════════════════════
+// composicoes-seed.jsx
+// ════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════
+// COMPOSIÇÕES — KITS POR AMBIENTE (estimativa preliminar de instalações)
+// ═══════════════════════════════════════════════════════════════
+// Estimativa por "conjuntos de pontos por ambiente", a prática do SINAPI
+// (composições paramétricas AF_05/2023 e AF_11/2022) traduzida para os nomes
+// do cadastro de materiais do escritório. Cada kit é uma lista de insumos ×
+// quantidade por ambiente (ou por ponto elétrico, ou por obra).
+//
+// Origem das quantidades:
+//   água fria    SINAPI 104660 (banheiro), 104661 (cozinha), 104662 (área de
+//                serviço) — o ramal de distribuição de 40 mm do prédio foi
+//                trocado por 25/32 mm de residência
+//   água quente  SINAPI 104673 (banheiro, CPVC 15/22 → 22/28 do cadastro)
+//   esgoto       SINAPI 104676 (banheiro), 104678 (cozinha), 104679 (área de
+//                serviço) + ramal até a caixa de inspeção
+//   elétrica     SINAPI 104475 (tomada geral), 104476 (tomada específica),
+//                104481 (chuveiro), 104473 (iluminação simples), 104478
+//                (iluminação paralela); pontos por cômodo pela NBR 5410 e
+//                prática de residência de padrão médio/alto
+//   louças/metais matriz ambiente × item do modelo antigo do escritório
+//                (padrão Médio/Alto)
+//   portas       1 por cômodo fechado; folha + 3 dobradiças + fechadura
+//
+// As quantidades do SINAPI já incluem perdas. Não aplicar PERDA em cima.
+// O escritório edita tudo isso na tela Composições (Insumos); o que for
+// editado fica em data.escritorio.composicoes e vence esta semente.
+// ═══════════════════════════════════════════════════════════════
+
+var COMPOSICOES_VERSAO = 1;
+
+// Disciplinas (mesmos ids das etapas de projeto em orcamento-obra.jsx)
+var COMPOSICOES_DISCIPLINAS = [
+  { id: "HIDRAULICA",  nome: "Hidráulica (água fria e quente)" },
+  { id: "ESGOTO",      nome: "Esgoto e pluvial" },
+  { id: "ELETRICA",    nome: "Elétrica e iluminação" },
+  { id: "LOUCAS",      nome: "Louças e metais" },
+  { id: "AQUECIMENTO", nome: "Aquecimento e pressurização" },
+  { id: "PORTAS",      nome: "Portas internas" },
+];
+
+// Tipos de ambiente que a obra conta. `kits` por disciplina (o sufixo
+// _ALTO é escolhido automaticamente quando o padrão é Alto e o kit existe);
+// `pontos` elétricos por unidade; `portas` por unidade.
+var AMBIENTES_TIPOS = [
+  { id: "banheiroSuite",  nome: "Banheiro de suíte",         molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "banheiroSocial", nome: "Banheiro social",           molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "lavabo",         nome: "Lavabo",                    molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_LAVABO"], ESGOTO: ["ESGOTO_LAVABO"], LOUCAS: ["LOUCAS_LAVABO"], PORTAS: ["PORTA_BANHEIRO"] },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "cozinha",        nome: "Cozinha",                   molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_COZINHA", "AGUA_QUENTE_COZINHA"], ESGOTO: ["ESGOTO_COZINHA"], LOUCAS: ["LOUCAS_COZINHA"], PORTAS: [] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 3, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "lavanderia",     nome: "Lavanderia / área de serviço", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_LAVANDERIA", "AGUA_QUENTE_LAVANDERIA"], ESGOTO: ["ESGOTO_LAVANDERIA"], LOUCAS: ["LOUCAS_LAVANDERIA"], PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "areaGourmet",    nome: "Área gourmet / lazer",      molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_COZINHA"], ESGOTO: ["ESGOTO_COZINHA"], LOUCAS: ["LOUCAS_COZINHA"], PORTAS: [] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 3, iluminacaoParalela: 0 } },
+  { id: "torneiraExterna", nome: "Torneira externa / jardim", molhado: true,
+    kits: { HIDRAULICA: ["AGUA_FRIA_TORNEIRA_EXTERNA"], ESGOTO: [], LOUCAS: ["LOUCAS_TORNEIRA_EXTERNA"], PORTAS: [] },
+    pontos: { tomadaGeral: 0, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 0 } },
+  { id: "dormitorio",     nome: "Dormitório",                molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 1 } },
+  { id: "closet",         nome: "Closet",                    molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "salaEstar",      nome: "Sala de estar / living",    molhado: false,
+    kits: {},
+    pontos: { tomadaGeral: 5, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 1 } },
+  { id: "salaJantar",     nome: "Sala de jantar",            molhado: false,
+    kits: {},
+    pontos: { tomadaGeral: 3, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "escritorio",     nome: "Escritório",                molhado: false,
+    kits: { PORTAS: ["PORTA_INTERNA"] },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+  { id: "circulacao",     nome: "Circulação / hall",         molhado: false,
+    kits: {},
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 1 } },
+  { id: "garagem",        nome: "Garagem",                   molhado: false,
+    kits: {},
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+  { id: "varanda",        nome: "Varanda / terraço",         molhado: false,
+    kits: {},
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+];
+
+// Kits por ponto elétrico (um ponto = eletroduto + cabo + caixa + dispositivo)
+var PONTOS_ELETRICOS = [
+  { id: "tomadaGeral",        nome: "Tomada de uso geral 10A",        kit: "PONTO_TOMADA_GERAL" },
+  { id: "tomadaEspecifica",   nome: "Tomada de uso específico 20A",   kit: "PONTO_TOMADA_ESPECIFICA" },
+  { id: "chuveiro",           nome: "Ponto de chuveiro",              kit: "PONTO_CHUVEIRO" },
+  { id: "iluminacao",         nome: "Ponto de luz (interruptor simples)", kit: "PONTO_ILUMINACAO" },
+  { id: "iluminacaoParalela", nome: "Ponto de luz (interruptor paralelo)", kit: "PONTO_ILUMINACAO_PARALELA" },
+];
+
+// Sistemas por obra
+var SISTEMAS_AQUECIMENTO = [
+  { id: "nenhum",   nome: "Sem aquecimento central", kit: null },
+  { id: "eletrico", nome: "Elétrico (chuveiro/torneira)", kit: null },
+  { id: "gas",      nome: "Gás de passagem",          kit: "AQUECIMENTO_GAS" },
+  { id: "solar",    nome: "Solar com boiler",         kit: "AQUECIMENTO_SOLAR" },
+];
+
+// ── Kits ────────────────────────────────────────────────────────
+// { nome, disciplina, base: "ambiente" | "ponto" | "obra", fonte, itens: [{ nome, qtd, unidade }] }
+var COMPOSICOES_SEED = {
+  // ═══ Água fria ═══
+  AGUA_FRIA_BANHEIRO: { nome: "Água fria — banheiro (lavatório, vaso, chuveiro)", disciplina: "HIDRAULICA", base: "ambiente", fonte: "SINAPI 104660 adaptada", itens: [
+    { nome: "PVC -  Alimentação - Marrom - Tubo 20mm", qtd: 3, unidade: "Mts" },
+    { nome: "PVC -  Alimentação - Marrom - Tubo 25mm", qtd: 6, unidade: "Mts" },
+    { nome: "PVC -  Alimentação - Marrom - Tubo 32mm", qtd: 3, unidade: "Mts" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 20mm", qtd: 5, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm", qtd: 4, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm C/ Bucha latão", qtd: 3, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Tê 25mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Tê 25x20mm C/ Bucha latão", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Luva 25mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Adaptador 25mm Bol/Rosca", qtd: 2, unidade: "Unidades" },
+  ] },
+  AGUA_FRIA_LAVABO: { nome: "Água fria — lavabo (lavatório e vaso)", disciplina: "HIDRAULICA", base: "ambiente", fonte: "SINAPI 104660 sem chuveiro", itens: [
+    { nome: "PVC -  Alimentação - Marrom - Tubo 20mm", qtd: 2, unidade: "Mts" },
+    { nome: "PVC -  Alimentação - Marrom - Tubo 25mm", qtd: 4, unidade: "Mts" },
+    { nome: "PVC -  Alimentação - Marrom - Tubo 32mm", qtd: 2, unidade: "Mts" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 20mm", qtd: 3, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm", qtd: 3, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm C/ Bucha latão", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Tê 25mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Tê 25x20mm C/ Bucha latão", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Luva 25mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Adaptador 25mm Bol/Rosca", qtd: 2, unidade: "Unidades" },
+  ] },
+  AGUA_FRIA_COZINHA: { nome: "Água fria — cozinha / área gourmet", disciplina: "HIDRAULICA", base: "ambiente", fonte: "SINAPI 104661 adaptada", itens: [
+    { nome: "PVC -  Alimentação - Marrom - Tubo 20mm", qtd: 1, unidade: "Mts" },
+    { nome: "PVC -  Alimentação - Marrom - Tubo 25mm", qtd: 6, unidade: "Mts" },
+    { nome: "PVC -  Alimentação - Marrom - Tubo 32mm", qtd: 3, unidade: "Mts" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 20mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm", qtd: 3, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm C/ Bucha latão", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Tê 25mm", qtd: 3, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Luva 25mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Adaptador 25mm Bol/Rosca", qtd: 1, unidade: "Unidades" },
+  ] },
+  AGUA_FRIA_LAVANDERIA: { nome: "Água fria — lavanderia (tanque e máquina)", disciplina: "HIDRAULICA", base: "ambiente", fonte: "SINAPI 104662 adaptada", itens: [
+    { nome: "PVC -  Alimentação - Marrom - Tubo 25mm", qtd: 3, unidade: "Mts" },
+    { nome: "PVC -  Alimentação - Marrom - Tubo 32mm", qtd: 3, unidade: "Mts" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm C/ Bucha latão", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Tê 25mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Luva 25mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Adaptador 25mm Bol/Rosca", qtd: 1, unidade: "Unidades" },
+  ] },
+  AGUA_FRIA_TORNEIRA_EXTERNA: { nome: "Água fria — torneira externa / jardim", disciplina: "HIDRAULICA", base: "ambiente", fonte: "prática do escritório", itens: [
+    { nome: "PVC -  Alimentação - Marrom - Tubo 25mm", qtd: 6, unidade: "Mts" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Joelho 90° 25mm C/ Bucha latão", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Tê 25mm", qtd: 1, unidade: "Unidades" },
+  ] },
+
+  // ═══ Água quente (CPVC 22/28) — só quando há aquecimento ═══
+  AGUA_QUENTE_BANHEIRO: { nome: "Água quente — banheiro", disciplina: "HIDRAULICA", base: "ambiente", fonte: "SINAPI 104673 adaptada", requer: "aquecimento", itens: [
+    { nome: "PVC - Hidráulica - CPVC -Tubo 22mm ou 3/4", qtd: 9.5, unidade: "Mts" },
+    { nome: "PVC - Hidráulica - CPVC -Tubo 28mm", qtd: 3, unidade: "Mts" },
+    { nome: "PVC - Água Quente - Joelho Normal 90° 22mm", qtd: 8, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Joelho Transição 90° 22mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Conector 22mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Luva 22mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Luva Transição 22mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Tê 22mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Tê 28mm", qtd: 1, unidade: "Unidades" },
+  ] },
+  AGUA_QUENTE_COZINHA: { nome: "Água quente — cozinha", disciplina: "HIDRAULICA", base: "ambiente", fonte: "SINAPI 104673 reduzida", requer: "aquecimento", itens: [
+    { nome: "PVC - Hidráulica - CPVC -Tubo 22mm ou 3/4", qtd: 5, unidade: "Mts" },
+    { nome: "PVC - Hidráulica - CPVC -Tubo 28mm", qtd: 2, unidade: "Mts" },
+    { nome: "PVC - Água Quente - Joelho Normal 90° 22mm", qtd: 4, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Joelho Transição 90° 22mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Tê 22mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Luva 22mm", qtd: 1, unidade: "Unidades" },
+  ] },
+  AGUA_QUENTE_LAVANDERIA: { nome: "Água quente — lavanderia", disciplina: "HIDRAULICA", base: "ambiente", fonte: "SINAPI 104673 reduzida", requer: "aquecimento", itens: [
+    { nome: "PVC - Hidráulica - CPVC -Tubo 22mm ou 3/4", qtd: 4, unidade: "Mts" },
+    { nome: "PVC - Água Quente - Joelho Normal 90° 22mm", qtd: 3, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Joelho Transição 90° 22mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - Tê 22mm", qtd: 1, unidade: "Unidades" },
+  ] },
+
+  // ═══ Esgoto ═══
+  ESGOTO_BANHEIRO: { nome: "Esgoto — banheiro (lavatório, vaso, ralo, chuveiro)", disciplina: "ESGOTO", base: "ambiente", fonte: "SINAPI 104676 + ramal até caixa de inspeção", itens: [
+    { nome: "PVC -  Esgoto – Tubo 40mm", qtd: 3, unidade: "Mts" },
+    { nome: "PVC -  Esgoto - Tubo 50mm", qtd: 1, unidade: "Mts" },
+    { nome: "PVC -  Esgoto – Tubo 100mm", qtd: 3, unidade: "Mts" },
+    { nome: "PVC - Esgoto - Joelho 90° 40mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Joelho 45° 40mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Joelho 90° 50mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Curva 90° Curta 100mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Junção 40mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Junção 100x50mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Caixas Sifonada 150x150x50mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC -  Esgoto - Ralo Click Inox 10cm", qtd: 1, unidade: "Unidades" },
+  ] },
+  ESGOTO_LAVABO: { nome: "Esgoto — lavabo", disciplina: "ESGOTO", base: "ambiente", fonte: "SINAPI 104676 sem chuveiro", itens: [
+    { nome: "PVC -  Esgoto – Tubo 40mm", qtd: 2, unidade: "Mts" },
+    { nome: "PVC -  Esgoto – Tubo 100mm", qtd: 2.5, unidade: "Mts" },
+    { nome: "PVC - Esgoto - Joelho 90° 40mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Joelho 45° 40mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Curva 90° Curta 100mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Junção 100x50mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Caixas Sifonada 100x100x50mm", qtd: 1, unidade: "Unidades" },
+  ] },
+  ESGOTO_COZINHA: { nome: "Esgoto — cozinha / área gourmet (pia)", disciplina: "ESGOTO", base: "ambiente", fonte: "SINAPI 104678 + ramal até caixa de gordura", itens: [
+    { nome: "PVC -  Esgoto - Tubo 50mm", qtd: 2.5, unidade: "Mts" },
+    { nome: "PVC -  Esgoto – Tubo 100mm", qtd: 2, unidade: "Mts" },
+    { nome: "PVC - Esgoto - Joelho 90° 50mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Junção 50mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Junção 100x50mm", qtd: 1, unidade: "Unidades" },
+  ] },
+  ESGOTO_LAVANDERIA: { nome: "Esgoto — lavanderia (tanque, máquina, ralo)", disciplina: "ESGOTO", base: "ambiente", fonte: "SINAPI 104679", itens: [
+    { nome: "PVC -  Esgoto – Tubo 40mm", qtd: 1, unidade: "Mts" },
+    { nome: "PVC -  Esgoto - Tubo 50mm", qtd: 2, unidade: "Mts" },
+    { nome: "PVC - Esgoto - Joelho 90° 50mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Joelho 45° 50mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Bucha Redução 50x40mm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC -  Esgoto - Ralo Click Inox 10cm", qtd: 1, unidade: "Unidades" },
+  ] },
+  ESGOTO_POR_OBRA: { nome: "Esgoto — rede da casa até a rua (por obra)", disciplina: "ESGOTO", base: "obra", fonte: "prática do escritório", itens: [
+    { nome: "PVC - Esgoto - Caixas Gordura 30cm", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Caixas Inspeção 60x60cm", qtd: 3, unidade: "Unidades" },
+    { nome: "PVC -  Esgoto – Tubo 100mm", qtd: 15, unidade: "Mts" },
+    { nome: "PVC -  Esgoto – Tubo 150mm", qtd: 6, unidade: "Mts" },
+    { nome: "PVC - Esgoto - Curva 45° Longa 100mm", qtd: 4, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Junção 100mm", qtd: 3, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Luva 100mm", qtd: 4, unidade: "Unidades" },
+    { nome: "PVC - Esgoto - Tê 100mm", qtd: 2, unidade: "Unidades" },
+  ] },
+
+  // ═══ Louças e metais (matriz do modelo antigo) ═══
+  LOUCAS_BANHEIRO: { nome: "Louças e metais — banheiro (padrão Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Base Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Base Misturador Chuveiro 3/4", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Misturador Chuveiro 3/4", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Chuveiro", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Ducha Higiênica", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Torneira WC", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Sifão Flexível", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Cuba", qtd: 1, unidade: "Unidades" },
+    { nome: "Box - Banho", qtd: 1, unidade: "Unidades" },
+  ] },
+  LOUCAS_BANHEIRO_ALTO: { nome: "Louças e metais — banheiro (padrão Alto)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Base Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Base Registro Monocomando Chuveiro 3/4", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Monocomando Chuveiro 3/4", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Chuveiro", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Ducha Higiênica", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Torneira WC", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Sifão Metálico", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC -  Esgoto - Ralo Oculto Quadrado 6''", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Cuba", qtd: 1, unidade: "Unidades" },
+    { nome: "Box - Banho", qtd: 1, unidade: "Unidades" },
+  ] },
+  LOUCAS_LAVABO: { nome: "Louças e metais — lavabo (padrão Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Base Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Ducha Higiênica", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Torneira WC", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Sifão Flexível", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Cuba", qtd: 1, unidade: "Unidades" },
+  ] },
+  LOUCAS_LAVABO_ALTO: { nome: "Louças e metais — lavabo (padrão Alto)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Base Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Acabamento Válvula Descarga", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Ducha Higiênica", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Torneira WC", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Sifão Metálico", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Cuba", qtd: 1, unidade: "Unidades" },
+  ] },
+  LOUCAS_COZINHA: { nome: "Louças e metais — cozinha / gourmet (padrão Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Torneira Cozinha e Lazer", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Cuba Metálica 56x34", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Sifão Flexível", qtd: 1, unidade: "Unidades" },
+  ] },
+  LOUCAS_COZINHA_ALTO: { nome: "Louças e metais — cozinha / gourmet (padrão Alto)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Torneira Cozinha e Lazer", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Cuba Metálica 56x34", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Sifão Metálico", qtd: 1, unidade: "Unidades" },
+  ] },
+  LOUCAS_LAVANDERIA: { nome: "Louças e metais — lavanderia (padrão Médio)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Torneira Jardim", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Torneira Máquina de Lavar", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Tanque", qtd: 1, unidade: "Unidades" },
+  ] },
+  LOUCAS_LAVANDERIA_ALTO: { nome: "Louças e metais — lavanderia (padrão Alto)", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Base Registro Gaveta 3/4", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Acabamento registro", qtd: 2, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Torneira Jardim", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Torneira Máquina de Lavar", qtd: 1, unidade: "Unidades" },
+    { nome: "Louças - Tanque", qtd: 2, unidade: "Unidades" },
+  ] },
+  LOUCAS_TORNEIRA_EXTERNA: { nome: "Metais — torneira externa / jardim", disciplina: "LOUCAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Metal - Hidráulica - Torneira Jardim", qtd: 1, unidade: "Unidades" },
+  ] },
+
+  // ═══ Elétrica — por ponto ═══
+  PONTO_TOMADA_GERAL: { nome: "Ponto de tomada de uso geral 2P+T 10A", disciplina: "ELETRICA", base: "ponto", fonte: "SINAPI 104475", itens: [
+    { nome: "PVC – Elétrica - Corrugado amarelo ¾”", qtd: 2.5, unidade: "Mts" },
+    { nome: "Elétrica - Cabo Flex Cobre 2.5mm", qtd: 10.5, unidade: "Mts" },
+    { nome: "PVC – Elétrica - Caixa 4x2” pvc embutir", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Interruptores e placas - Tomada hexagonal (NBR 14136) 2P+T 10A", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Interruptores e placas - Placa p/ 1 função", qtd: 1, unidade: "Unidades" },
+  ] },
+  PONTO_TOMADA_ESPECIFICA: { nome: "Ponto de tomada de uso específico 2P+T 20A (circuito próprio)", disciplina: "ELETRICA", base: "ponto", fonte: "SINAPI 104476", itens: [
+    { nome: "PVC – Elétrica - Corrugado amarelo ¾”", qtd: 3.3, unidade: "Mts" },
+    { nome: "Elétrica - Cabo Flex Cobre 2.5mm", qtd: 10.6, unidade: "Mts" },
+    { nome: "PVC – Elétrica - Caixa 4x2” pvc embutir", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Interruptores e placas - Tomada hexagonal (NBR 14136) 2P+T 20A", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Interruptores e placas - Placa p/ 1 função", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Disjuntor Unipolar 20A - 10kA", qtd: 1, unidade: "Unidades" },
+  ] },
+  PONTO_CHUVEIRO: { nome: "Ponto de chuveiro (circuito próprio 4 mm²)", disciplina: "ELETRICA", base: "ponto", fonte: "SINAPI 104481", itens: [
+    { nome: "PVC – Elétrica - Corrugado amarelo ¾”", qtd: 7.7, unidade: "Mts" },
+    { nome: "Elétrica - Cabo Flex Cobre 4mm", qtd: 23.2, unidade: "Mts" },
+    { nome: "PVC – Elétrica - Caixa 4x2” pvc embutir", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Disjuntor Bipolar 32A - 10kA", qtd: 1, unidade: "Unidades" },
+  ] },
+  PONTO_ILUMINACAO: { nome: "Ponto de luz com interruptor simples (com luminária)", disciplina: "ELETRICA", base: "ponto", fonte: "SINAPI 104473", itens: [
+    { nome: "PVC – Elétrica - Corrugado amarelo ¾”", qtd: 3.5, unidade: "Mts" },
+    { nome: "Elétrica - Cabo Flex Cobre 1.5mm", qtd: 10.7, unidade: "Mts" },
+    { nome: "Elétrica - Cabo Flex Cobre 2.5mm", qtd: 1.5, unidade: "Mts" },
+    { nome: "PVC – Elétrica - Caixa Octogonal 4x4” pvc embutir", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC – Elétrica - Caixa 4x2” pvc embutir", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Interruptores e placas - Interruptor simples 1 tecla", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Interruptores e placas - Placa p/ 1 função", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Luminárias", qtd: 1, unidade: "Unidades" },
+  ] },
+  PONTO_ILUMINACAO_PARALELA: { nome: "Ponto de luz com dois interruptores paralelos (com luminária)", disciplina: "ELETRICA", base: "ponto", fonte: "SINAPI 104478 adaptada", itens: [
+    { nome: "PVC – Elétrica - Corrugado amarelo ¾”", qtd: 5, unidade: "Mts" },
+    { nome: "Elétrica - Cabo Flex Cobre 1.5mm", qtd: 16, unidade: "Mts" },
+    { nome: "Elétrica - Cabo Flex Cobre 2.5mm", qtd: 1.5, unidade: "Mts" },
+    { nome: "PVC – Elétrica - Caixa Octogonal 4x4” pvc embutir", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC – Elétrica - Caixa 4x2” pvc embutir", qtd: 2, unidade: "Unidades" },
+    { nome: "Elétrica - Interruptores e placas - Interruptor paralela - 1 tecla", qtd: 2, unidade: "Unidades" },
+    { nome: "Elétrica - Interruptores e placas - Placa p/ 1 função", qtd: 2, unidade: "Unidades" },
+    { nome: "Elétrica - Luminárias", qtd: 1, unidade: "Unidades" },
+  ] },
+  ELETRICA_POR_OBRA: { nome: "Elétrica — entrada e quadro (por obra)", disciplina: "ELETRICA", base: "obra", fonte: "prática do escritório", itens: [
+    { nome: "Quadro 100A Embutir 32 Disjuntores sem Barramento", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Disjuntor Tripolar 63A - 10kA", qtd: 1, unidade: "Unidades" },
+    { nome: "Elétrica - Disjuntor Dispositivo de proteção 175V - 8kA", qtd: 3, unidade: "Unidades" },
+    { nome: "Elétrica - Cabo Flex Cobre 16mm", qtd: 60, unidade: "Mts" },
+    { nome: "PVC – Elétrica - Corrugado Kanaflex 1.1/2''", qtd: 15, unidade: "Mts" },
+    { nome: "Quadro de Dados 20x20 Embutir", qtd: 1, unidade: "Unidades" },
+  ] },
+  // Circuitos calculados pelo motor (não são kit fixo):
+  //   disjuntor 10A unipolar = ceil(pontos de luz / 8)
+  //   disjuntor 20A unipolar = ceil(tomadas gerais / 6)
+
+  // ═══ Aquecimento e pressurização ═══
+  AQUECIMENTO_SOLAR: { nome: "Aquecimento solar com boiler (por obra)", disciplina: "AQUECIMENTO", base: "obra", fonte: "prática do escritório", itens: [
+    { nome: "Aquecedor - Coletor Solares Casa", qtd: 3, unidade: "Unidades" },
+    { nome: "Equipamentos e Sistemas - Boiler Baixa Pressão 500 L", qtd: 1, unidade: "Unidades" },
+    { nome: "Equipamentos e Sistemas - Bomba Circulação Boiler", qtd: 1, unidade: "Unidades" },
+    { nome: "Equipamentos e Sistemas - Controlador Temperatura Boiler", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Hidráulica - CPVC -Tubo 28mm", qtd: 20, unidade: "Mts" },
+    { nome: "PVC - Água Quente - Joelho Normal 90° 28mm", qtd: 8, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - União 28mm", qtd: 4, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Registro Esfera 25mm", qtd: 4, unidade: "Unidades" },
+  ] },
+  AQUECIMENTO_SOLAR_ALTO: { nome: "Aquecimento solar com boiler pressurizado (padrão Alto, por obra)", disciplina: "AQUECIMENTO", base: "obra", fonte: "prática do escritório", itens: [
+    { nome: "Aquecedor - Coletor Solares Casa", qtd: 4, unidade: "Unidades" },
+    { nome: "Equipamentos e Sistemas - Boiler Pressurizado 500 L", qtd: 1, unidade: "Unidades" },
+    { nome: "Equipamentos e Sistemas - Bomba Circulação Boiler", qtd: 1, unidade: "Unidades" },
+    { nome: "Equipamentos e Sistemas - Controlador Temperatura Boiler", qtd: 1, unidade: "Unidades" },
+    { nome: "PVC - Hidráulica - CPVC -Tubo 28mm", qtd: 24, unidade: "Mts" },
+    { nome: "PVC - Água Quente - Joelho Normal 90° 28mm", qtd: 10, unidade: "Unidades" },
+    { nome: "PVC - Água Quente - União 28mm", qtd: 4, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Registro Esfera 25mm", qtd: 4, unidade: "Unidades" },
+  ] },
+  AQUECIMENTO_GAS: { nome: "Aquecedor a gás de passagem (por obra)", disciplina: "AQUECIMENTO", base: "obra", fonte: "prática do escritório", itens: [
+    { nome: "Aquecedor - Gás de Passagem", qtd: 1, unidade: "Unidades" },
+    { nome: "Aquecedor - Kit instalação gás (tubulação, registro, chaminé)", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Registro Esfera 25mm", qtd: 2, unidade: "Unidades" },
+  ] },
+  PRESSURIZADOR: { nome: "Pressurizador da casa (por obra)", disciplina: "AQUECIMENTO", base: "obra", fonte: "prática do escritório", itens: [
+    { nome: "Equipamentos e Sistemas - Pressurizador Casa", qtd: 1, unidade: "Unidades" },
+    { nome: "Metal - Hidráulica - Registro Esfera 32mm", qtd: 2, unidade: "Unidades" },
+    { nome: "PVC - Alimentação Água Fria - Registro c/ União 50mm", qtd: 1, unidade: "Unidades" },
+  ] },
+
+  // ═══ Portas internas ═══
+  PORTA_INTERNA: { nome: "Porta interna de giro — dormitório/escritório/closet (padrão Médio)", disciplina: "PORTAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Portas Internas Comum", qtd: 1, unidade: "Unidades" },
+    { nome: "Fechaduras - Dobradiças- STAM", qtd: 3, unidade: "Unidades" },
+    { nome: "Fechaduras - Classic 3400 (40mm) Ros. Quadrada INT - STAM", qtd: 1, unidade: "Unidades" },
+  ] },
+  PORTA_INTERNA_ALTO: { nome: "Porta interna de giro — dormitório/escritório/closet (padrão Alto)", disciplina: "PORTAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Portas Internas Sincol Sólida", qtd: 1, unidade: "Unidades" },
+    { nome: "Fechaduras - Dobradiças- STAM", qtd: 3, unidade: "Unidades" },
+    { nome: "Fechaduras - Inox Home iX60 (55mm) Interna Black - STAM", qtd: 1, unidade: "Unidades" },
+  ] },
+  PORTA_BANHEIRO: { nome: "Porta interna de giro — banheiro/lavabo (padrão Médio)", disciplina: "PORTAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Portas Internas Comum", qtd: 1, unidade: "Unidades" },
+    { nome: "Fechaduras - Dobradiças- STAM", qtd: 3, unidade: "Unidades" },
+    { nome: "Fechaduras - Classic 3400 (40mm) Ros. Quadrada WC - STAM", qtd: 1, unidade: "Unidades" },
+  ] },
+  PORTA_BANHEIRO_ALTO: { nome: "Porta interna de giro — banheiro/lavabo (padrão Alto)", disciplina: "PORTAS", base: "ambiente", fonte: "modelo antigo do escritório", itens: [
+    { nome: "Portas Internas Sincol Sólida", qtd: 1, unidade: "Unidades" },
+    { nome: "Fechaduras - Dobradiças- STAM", qtd: 3, unidade: "Unidades" },
+    { nome: "Fechaduras - Inox Home iX60 (55mm) WC Black - STAM", qtd: 1, unidade: "Unidades" },
+  ] },
+};
 
 
 // ════════════════════════════════════════════════════════════
@@ -4446,6 +4902,7 @@ var INSUMO_GRUPOS = [
   { prefixo: "TIN", nome: "Tintas" },
   { prefixo: "TLH", nome: "Telhas" },
   { prefixo: "ESQ", nome: "Esquadrias" },
+  { prefixo: "LOU", nome: "Louças e metais" },
   { prefixo: "OUT", nome: "Outros" },
 ];
 
@@ -5219,6 +5676,159 @@ function GraficoPrecoInsumo({ compras }) {
 }
 
 // ── Módulo ───────────────────────────────────────────────────
+// ── Composições: kits por ambiente (estimativa preliminar de instalações) ──
+// Lê COMPOSICOES_SEED / AMBIENTES_TIPOS (composicoes-seed.jsx) e grava o que
+// o escritório mudar em data.escritorio.composicoes = { kits: {id: {itens}}, ambientes: {id: {pontos}} }.
+function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
+  var cfg = (data.escritorio && data.escritorio.composicoes) || {};
+  var seed = typeof COMPOSICOES_SEED !== "undefined" ? COMPOSICOES_SEED : {};
+  var tipos = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
+  var disciplinas = typeof COMPOSICOES_DISCIPLINAS !== "undefined" ? COMPOSICOES_DISCIPLINAS : [];
+  var pontosDef = typeof PONTOS_ELETRICOS !== "undefined" ? PONTOS_ELETRICOS : [];
+  var [aba, setAba] = useState("kits");
+  var [disc, setDisc] = useState(disciplinas.length ? disciplinas[0].id : "");
+  var [aberto, setAberto] = useState({});
+
+  function kitAtual(id) {
+    var o = cfg.kits && cfg.kits[id];
+    return o && Array.isArray(o.itens) ? Object.assign({}, seed[id], { itens: o.itens, editado: true }) : seed[id];
+  }
+  function gravarCfg(novaCfg) {
+    save(Object.assign({}, data, { escritorio: Object.assign({}, data.escritorio || {}, { composicoes: novaCfg }) }));
+  }
+  function setItensKit(id, itens) {
+    var kits = Object.assign({}, cfg.kits || {});
+    kits[id] = { itens: itens };
+    gravarCfg(Object.assign({}, cfg, { kits: kits }));
+  }
+  function restaurarKit(id) {
+    var kits = Object.assign({}, cfg.kits || {});
+    delete kits[id];
+    gravarCfg(Object.assign({}, cfg, { kits: kits }));
+  }
+  function setPonto(ambId, pontoId, valor) {
+    var ambs = Object.assign({}, cfg.ambientes || {});
+    var atual = Object.assign({}, (ambs[ambId] && ambs[ambId].pontos) || {});
+    atual[pontoId] = Number(valor) || 0;
+    ambs[ambId] = { pontos: atual };
+    gravarCfg(Object.assign({}, cfg, { ambientes: ambs }));
+  }
+  function pontosDe(t) {
+    var o = cfg.ambientes && cfg.ambientes[t.id];
+    return Object.assign({}, t.pontos || {}, (o && o.pontos) || {});
+  }
+  function statusNome(nome) {
+    var r = resolverInsumo(nome, insumos);
+    if (!r.insumo) return { cor: "#b45309", texto: "não está em Insumos" };
+    var p = precoInsumo(r.insumo);
+    return p.preco != null ? { cor: "#15803d", texto: r.insumo.codigo + " · " + fmtBRLIns(p.preco) } : { cor: "#b45309", texto: r.insumo.codigo + " · sem preço" };
+  }
+
+  var ids = Object.keys(seed).filter(function (id) { return (seed[id].disciplina || "OUTROS") === disc; });
+
+  return (
+    <div>
+      <button style={INS_S.btnGhost} onClick={onVoltar}>← Insumos</button>
+      <div style={{ fontSize: 22, fontWeight: 700, color: INS.grafite, margin: "8px 0 2px" }}>Composições</div>
+      <div style={{ fontSize: 12.5, color: INS.inkSoft, marginBottom: 14 }}>
+        Kits que a estimativa usa quando a obra ainda não tem projeto de engenharia: o que entra por banheiro, cozinha, lavanderia, por ponto elétrico e por obra. Quantidades de partida das composições paramétricas do SINAPI, com os nomes do seu cadastro. Edite e o VICKE passa a usar o seu número.
+      </div>
+      <datalist id="vk-insumos-lista-comp">{insumos.map(function (m) { return <option key={m.id || m.codigo || m.nome} value={m.nome} />; })}</datalist>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        <button style={aba === "kits" ? INS_S.btn : INS_S.btnSec} onClick={function () { setAba("kits"); }}>Kits</button>
+        <button style={aba === "pontos" ? INS_S.btn : INS_S.btnSec} onClick={function () { setAba("pontos"); }}>Pontos elétricos por cômodo</button>
+      </div>
+
+      {aba === "pontos" && (
+        <div style={INS_S.card}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 640 }}>
+              <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10.5, textTransform: "uppercase" }}>
+                <th style={{ padding: "6px 8px" }}>Cômodo</th>
+                {pontosDef.map(function (p) { return <th key={p.id} style={{ padding: "6px 8px", textAlign: "right" }}>{p.nome}</th>; })}
+              </tr></thead>
+              <tbody>
+                {tipos.map(function (t) {
+                  var pt = pontosDe(t);
+                  return (
+                    <tr key={t.id} style={{ borderTop: "1px solid #f3f4f6" }}>
+                      <td style={{ padding: "6px 8px", color: "#262421" }}>{t.nome}</td>
+                      {pontosDef.map(function (p) {
+                        return <td key={p.id} style={{ padding: "4px 8px", textAlign: "right" }}>
+                          <input type="number" min="0" step="1" disabled={!podeEditar} value={pt[p.id] == null ? 0 : pt[p.id]}
+                            onChange={function (e) { setPonto(t.id, p.id, e.target.value); }}
+                            style={Object.assign({}, INS_S.input, { width: 64, textAlign: "right", padding: "5px 8px" })} />
+                        </td>;
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 8 }}>Por unidade de cômodo. Cada ponto vira o kit correspondente (aba Kits → Elétrica). Circuitos: 1 disjuntor 10A a cada 8 pontos de luz e 1 de 20A a cada 6 tomadas gerais, calculados pelo motor.</div>
+        </div>
+      )}
+
+      {aba === "kits" && (
+        <div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {disciplinas.map(function (d) {
+              return <button key={d.id} style={Object.assign({}, disc === d.id ? INS_S.btn : INS_S.btnSec, { padding: "6px 12px", fontSize: 12 })} onClick={function () { setDisc(d.id); }}>{d.nome}</button>;
+            })}
+          </div>
+          {ids.map(function (id) {
+            var kit = kitAtual(id);
+            var ab = !!aberto[id];
+            return (
+              <div key={id} style={Object.assign({}, INS_S.card, { marginBottom: 10, padding: 0, overflow: "hidden" })}>
+                <button type="button" onClick={function () { var n = Object.assign({}, aberto); n[id] = !ab; setAberto(n); }}
+                  style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#fafafa", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                  <span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: INS.grafite }}>{kit.nome}</span>
+                    <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 8 }}>{kit.base === "ponto" ? "por ponto" : kit.base === "obra" ? "por obra" : "por ambiente"} · {kit.itens.length} itens · {kit.editado ? "editado pelo escritório" : kit.fonte}</span>
+                  </span>
+                  <span style={{ fontSize: 11, color: "#9ca3af" }}>{ab ? "▲" : "▼"}</span>
+                </button>
+                {ab && (
+                  <div style={{ padding: 12 }}>
+                    {kit.itens.map(function (it, idx) {
+                      var st = statusNome(it.nome);
+                      return (
+                        <div key={idx} style={{ display: "grid", gridTemplateColumns: "3fr 90px 110px auto", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                          <div>
+                            <input list="vk-insumos-lista-comp" disabled={!podeEditar} value={it.nome || ""} style={INS_S.input}
+                              onChange={function (e) { var n = kit.itens.slice(); n[idx] = Object.assign({}, it, { nome: e.target.value }); setItensKit(id, n); }} />
+                            <div style={{ fontSize: 10.5, color: st.cor, marginTop: 2 }}>{st.texto}</div>
+                          </div>
+                          <input type="number" step="0.1" min="0" disabled={!podeEditar} value={it.qtd == null ? "" : it.qtd} style={Object.assign({}, INS_S.input, { textAlign: "right" })}
+                            onChange={function (e) { var n = kit.itens.slice(); n[idx] = Object.assign({}, it, { qtd: e.target.value === "" ? "" : Number(e.target.value) }); setItensKit(id, n); }} />
+                          <input disabled={!podeEditar} value={it.unidade || ""} placeholder="Unidades" style={INS_S.input}
+                            onChange={function (e) { var n = kit.itens.slice(); n[idx] = Object.assign({}, it, { unidade: e.target.value }); setItensKit(id, n); }} />
+                          <button type="button" disabled={!podeEditar} style={Object.assign({}, INS_S.btnGhost, { color: "#dc2626" })}
+                            onClick={function () { setItensKit(id, kit.itens.filter(function (_, i) { return i !== idx; })); }}>Remover</button>
+                        </div>
+                      );
+                    })}
+                    {podeEditar && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <button type="button" style={INS_S.btnSec} onClick={function () { setItensKit(id, kit.itens.concat([{ nome: "", qtd: 1, unidade: "Unidades" }])); }}>＋ Item</button>
+                        {kit.editado && <button type="button" style={INS_S.btnSec} onClick={function () { restaurarKit(id); }}>Restaurar padrão</button>}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!ids.length && <div style={{ fontSize: 12.5, color: "#6b7280" }}>Nenhum kit nesta disciplina.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Insumos({ data, save }) {
   var perm = getPermissoes();
   var [view, setView] = useState("lista");
@@ -5338,6 +5948,16 @@ function Insumos({ data, save }) {
   }
 
   // ── detalhe ──
+  if (view === "composicoes") {
+    return (
+      <div style={{ padding: isMobile ? 16 : "28px 32px", background: INS.fundo, minHeight: "100%", fontFamily: INS_FONT }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <ComposicoesEditor data={data} save={save} insumos={insumos} podeEditar={perm.podeAlterarConfig} onVoltar={() => setView("lista")} />
+        </div>
+      </div>
+    );
+  }
+
   if (view === "detalhe" && sel) {
     var atual = insumos.find(x => x.codigo === sel.codigo) || sel;
     return (
@@ -5365,6 +5985,9 @@ function Insumos({ data, save }) {
               Catálogo de materiais e serviços. É daqui que a estimativa lê preço e é aqui que as compras o atualizam.
             </div>
           </div>
+          {perm.podeAlterarConfig && typeof COMPOSICOES_SEED !== "undefined" && (
+            <button style={INS_S.btnSec} onClick={() => setView("composicoes")}>Composições (kits por ambiente)</button>
+          )}
           {perm.podeEditar && (
             <button style={INS_S.btn} onClick={() => { setSel({}); setView("form"); }}>+ Novo insumo</button>
           )}
@@ -5376,7 +5999,7 @@ function Insumos({ data, save }) {
               {insumos.length === 0 ? "Catálogo vazio" : "Catálogo incompleto"}
             </div>
             <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12 }}>
-              {faltamDaSemente > 0 && <>Faltam <strong>{faltamDaSemente}</strong> insumos do catálogo padrão (94 materiais e 17 prestadores, com preço de referência). </>}
+              {faltamDaSemente > 0 && <>Faltam <strong>{faltamDaSemente}</strong> insumos do catálogo padrão (materiais, louças e metais, esquadrias e prestadores, com preço de referência). </>}
               {pendentesMigracao > 0 && <><strong>{pendentesMigracao}</strong> material antigo ainda não tem código. </>}
               A operação é segura de repetir: nunca sobrescreve preço definido à mão nem preço mais recente que o da semente.
             </div>
@@ -7538,6 +8161,7 @@ const ETAPAS_PROJETO = [
   { id: "LOUCAS",      nome: "Louças e metais",                 tipo: "Acabamento", ordem: 21 },
   { id: "AQUECIMENTO", nome: "Aquecimento e pressurização",     tipo: "Acabamento", ordem: 22 },
   { id: "OUTROS",      nome: "Outros itens do projeto",         tipo: "Acabamento", ordem: 23 },
+  { id: "PORTAS",      nome: "Portas internas",                 tipo: "Acabamento", ordem: 24 },
 ];
 const ITENS_PROJETO_MAX = 600;
 
@@ -7597,6 +8221,119 @@ function itensProjeto(cp, out, data) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// INSTALAÇÕES POR AMBIENTE — estimativa preliminar por kits
+// ═══════════════════════════════════════════════════════════════
+// Quando não há projeto de engenharia, hidráulica, esgoto, elétrica, louças
+// e metais, aquecimento e portas internas são estimados por "conjuntos de
+// pontos por ambiente" (prática das composições paramétricas do SINAPI):
+// a obra informa quantos ambientes de cada tipo tem, o padrão (Médio/Alto)
+// e o sistema de aquecimento; cada ambiente puxa seus kits
+// (composicoes-seed.jsx, editáveis em Insumos → Composições).
+// Quando a lista do projeto chega (bloco "Itens do projeto"), a disciplina
+// é marcada "do projeto" e a estimativa por kits daquela disciplina sai.
+const DISCIPLINAS_INSTALACOES = ["HIDRAULICA", "ESGOTO", "ELETRICA", "LOUCAS", "AQUECIMENTO", "PORTAS"];
+
+// Kits em vigor: semente + o que o escritório editou (data.escritorio.composicoes.kits)
+function composicoesAtivas(data) {
+  const base = typeof COMPOSICOES_SEED !== "undefined" ? COMPOSICOES_SEED : {};
+  const cfg = data && data.escritorio && data.escritorio.composicoes;
+  const over = (cfg && cfg.kits) || {};
+  const kits = {};
+  for (const id of Object.keys(base)) {
+    kits[id] = over[id] && Array.isArray(over[id].itens) ? { ...base[id], itens: over[id].itens, editado: true } : base[id];
+  }
+  for (const id of Object.keys(over)) {
+    if (kits[id] || !over[id] || !Array.isArray(over[id].itens)) continue;
+    kits[id] = { nome: over[id].nome || id, disciplina: over[id].disciplina || "OUTROS", base: over[id].base || "ambiente", fonte: "escritório", itens: over[id].itens, editado: true };
+  }
+  return kits;
+}
+// Tipos de ambiente em vigor: semente + pontos elétricos editados pelo escritório
+function ambientesAtivos(data) {
+  const base = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
+  const cfg = data && data.escritorio && data.escritorio.composicoes;
+  const over = (cfg && cfg.ambientes) || {};
+  return base.map((a) => over[a.id] ? { ...a, pontos: { ...(a.pontos || {}), ...(over[a.id].pontos || {}) } } : a);
+}
+function escolherKit(kits, id, padrao) {
+  if (!id) return null;
+  if (padrao === "Alto" && kits[id + "_ALTO"]) return kits[id + "_ALTO"];
+  return kits[id] || null;
+}
+
+function instalacoesPorAmbiente(cp, out, data) {
+  const amb = cp.ambientes || {};
+  const inst = cp.instalacoes || {};
+  const doProjeto = inst.doProjeto || {};
+  const kits = composicoesAtivas(data);
+  const tipos = ambientesAtivos(data);
+  const pontosDef = typeof PONTOS_ELETRICOS !== "undefined" ? PONTOS_ELETRICOS : [];
+  const sistemas = typeof SISTEMAS_AQUECIMENTO !== "undefined" ? SISTEMAS_AQUECIMENTO : [];
+  const avisos = cp._avisos || (cp._avisos = []);
+  if (!tipos.length || !Object.keys(kits).length) return;
+
+  const acumulado = {};
+  const add = (disc, nome, qtd, unidade) => {
+    const k = disc + "|" + nome;
+    const a = acumulado[k] || (acumulado[k] = { disc, nome, qtd: 0, unidade: unidade || "Unidades" });
+    a.qtd += qtd;
+  };
+  const aplicarKit = (kit, vezes, disc) => {
+    if (!kit || !(vezes > 0)) return;
+    for (const it of kit.itens || []) {
+      if (!it || !it.nome || !(Number(it.qtd) > 0)) continue;
+      add(disc || kit.disciplina, String(it.nome).trim(), Number(it.qtd) * vezes, it.unidade);
+    }
+  };
+  const temAquecimento = !!inst.aquecimento && inst.aquecimento !== "nenhum" && inst.aquecimento !== "eletrico";
+  const totalPontos = {};
+  for (const p of pontosDef) totalPontos[p.id] = 0;
+  let algumAmbiente = false;
+
+  for (const t of tipos) {
+    const n = numOrZero(amb[t.id]);
+    if (!(n > 0)) continue;
+    algumAmbiente = true;
+    for (const disc of Object.keys(t.kits || {})) {
+      if (doProjeto[disc]) continue;
+      for (const kitId of t.kits[disc] || []) {
+        const base = kits[kitId];
+        if (!base) {
+          if (!avisos.some((a) => a.tipo === "kit_ausente" && a.kit === kitId)) avisos.push({ tipo: "kit_ausente", kit: kitId, mensagem: `Kit ${kitId} não existe nas composições` });
+          continue;
+        }
+        if (base.requer === "aquecimento" && !temAquecimento) continue;
+        aplicarKit(escolherKit(kits, kitId, inst.padrao), n, disc);
+      }
+    }
+    if (!doProjeto.ELETRICA) for (const p of pontosDef) totalPontos[p.id] += numOrZero(t.pontos && t.pontos[p.id]) * n;
+  }
+  if (!algumAmbiente) return;
+
+  if (!doProjeto.ELETRICA) {
+    for (const p of pontosDef) aplicarKit(escolherKit(kits, p.kit, inst.padrao), totalPontos[p.id], "ELETRICA");
+    aplicarKit(escolherKit(kits, "ELETRICA_POR_OBRA", inst.padrao), 1, "ELETRICA");
+    const luz = numOrZero(totalPontos.iluminacao) + numOrZero(totalPontos.iluminacaoParalela);
+    if (luz > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 10A - 10kA", Math.ceil(luz / 8), "Unidades");
+    if (totalPontos.tomadaGeral > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 20A - 10kA", Math.ceil(totalPontos.tomadaGeral / 6), "Unidades");
+  }
+  if (!doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO");
+  if (!doProjeto.AQUECIMENTO) {
+    const sis = sistemas.find((x) => x.id === inst.aquecimento);
+    if (sis && sis.kit) aplicarKit(escolherKit(kits, sis.kit, inst.padrao), 1, "AQUECIMENTO");
+    if (inst.pressurizador) aplicarKit(escolherKit(kits, "PRESSURIZADOR", inst.padrao), 1, "AQUECIMENTO");
+  }
+
+  for (const a of Object.values(acumulado)) {
+    const etapa = ETAPAS_PROJETO.find((e) => e.id === a.disc) || ETAPAS_PROJETO.find((e) => e.id === "OUTROS");
+    const metros = /^m(ts|etros)?$/i.test(String(a.unidade || ""));
+    const qtd = metros ? Math.ceil(a.qtd * 10 - 1e-9) / 10 : Math.ceil(a.qtd - 1e-9);
+    emitir(out, { ordem: etapa.ordem, item: a.nome, tipo: etapa.tipo, etapa: etapa.nome, subEtapa: "Estimativa por ambientes", unidade: a.unidade, qtd });
+  }
+  cp._pontosEletricos = totalPontos;
+}
+
 function normalizarProjeto(projeto) {
   const p = projeto || {};
   const arq = p.arquitetura || {};
@@ -7627,6 +8364,8 @@ function normalizarProjeto(projeto) {
   const coberturasIn = Array.isArray(p.cobertura) ? p.cobertura : [];
   const esquadriasIn = Array.isArray(p.esquadrias) ? p.esquadrias : [];
   const itensProjetoIn = Array.isArray(p.itensProjeto) ? p.itensProjeto : [];
+  const ambientesIn = p.ambientes || {};
+  const instalacoesIn = p.instalacoes || {};
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
 
@@ -7830,6 +8569,15 @@ function normalizarProjeto(projeto) {
       altura: numOrZero(e && e.altura),
     })),
 
+    // cp.ambientes / cp.instalacoes — estimativa por kits (instalacoesPorAmbiente)
+    ambientes: Object.keys(ambientesIn).reduce((acc, k) => { acc[k] = numOrZero(ambientesIn[k]); return acc; }, {}),
+    instalacoes: {
+      padrao: instalacoesIn.padrao === "Alto" ? "Alto" : "Médio",
+      aquecimento: instalacoesIn.aquecimento || "nenhum",
+      pressurizador: !!instalacoesIn.pressurizador,
+      doProjeto: DISCIPLINAS_INSTALACOES.reduce((acc, d) => { acc[d] = !!(instalacoesIn.doProjeto && instalacoesIn.doProjeto[d]); return acc; }, {}),
+    },
+
     // cp.itensProjeto — lista digitada do projeto de engenharia
     itensProjeto: itensProjetoIn.slice(0, ITENS_PROJETO_MAX).map((it) => ({
       etapa: (it && it.etapa) || "OUTROS",
@@ -7933,6 +8681,7 @@ function gerarOrcamentoObra(projeto, data) {
   muroArrimo(cp, out);
   piscina(cp, out);
   esquadrias(cp, out, data);
+  instalacoesPorAmbiente(cp, out, data);
   itensProjeto(cp, out, data);
   prestadores(cp, out, data);
 
@@ -8012,6 +8761,8 @@ function projetoVazio() {
     piscina: {},
     cobertura: [],
     esquadrias: [],
+    ambientes: {},
+    instalacoes: { padrao: "Médio", aquecimento: "nenhum", pressurizador: false, doProjeto: {} },
     itensProjeto: [],
     prestadores: {},
   };
@@ -8493,6 +9244,39 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             )}
             <div style={{ fontSize: 11, color: "#9ca3af" }}>
               Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. No orçamento aparece uma linha por esquadria com o preço fechado; a composição fica guardada no item. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold. Para usar seus preços, cadastre o alumínio, o vidro e os acessórios em Insumos com o código Alcoa como alias.
+            </div>
+          </div>
+        </BlocoColapsavel>
+
+        <BlocoColapsavel titulo="Ambientes e instalações" subtitulo="estimativa por kits: hidráulica, esgoto, elétrica, louças, aquecimento, portas" aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+            Sem projeto de engenharia, as instalações são estimadas por conjuntos de pontos por ambiente (prática do SINAPI), com os kits de Insumos → Composições. Informe quantos ambientes de cada tipo a casa tem.
+          </div>
+          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => a.molhado).map((a) => (
+            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} />
+          ))}
+          <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#9ca3af", marginTop: -4 }}>Cômodos secos (só elétrica e portas):</div>
+          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => !a.molhado).map((a) => (
+            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} />
+          ))}
+          <CampoSelect label="Padrão de acabamento" valor={get("instalacoes.padrao") || "Médio"} onChange={(v) => set("instalacoes.padrao", v)} opcoes={["Médio", "Alto"]} />
+          <CampoSelect label="Aquecimento de água" valor={get("instalacoes.aquecimento") || "nenhum"} onChange={(v) => set("instalacoes.aquecimento", v)}
+            opcoes={(typeof SISTEMAS_AQUECIMENTO !== "undefined" ? SISTEMAS_AQUECIMENTO : []).map((x) => ({ value: x.id, label: x.nome }))} />
+          <CampoSelect label="Pressurizador" valor={get("instalacoes.pressurizador") ? "sim" : "nao"} onChange={(v) => set("instalacoes.pressurizador", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
+          <div style={{ gridColumn: "1 / -1", marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Disciplinas que vêm do projeto de engenharia (a estimativa por kits sai destas):</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {ETAPAS_PROJETO.filter((e) => DISCIPLINAS_INSTALACOES.includes(e.id)).map((e) => {
+                const marcado = !!get(`instalacoes.doProjeto.${e.id}`);
+                const temItens = itensProjetoLista.some((it) => it.etapa === e.id && it.nome);
+                return (
+                  <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#374151", padding: "6px 10px", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 8, background: marcado ? "#eef2ff" : "#fff", cursor: "pointer" }}>
+                    <input type="checkbox" checked={marcado} onChange={(ev) => set(`instalacoes.doProjeto.${e.id}`, ev.target.checked)} />
+                    {e.nome}
+                    {temItens && !marcado && <span style={{ color: "#b45309", fontSize: 11 }} title="Há itens do projeto nesta disciplina e a estimativa por kits também está ligada: vai somar os dois.">· soma com o projeto</span>}
+                  </label>
+                );
+              })}
             </div>
           </div>
         </BlocoColapsavel>

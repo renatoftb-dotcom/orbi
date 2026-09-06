@@ -19,6 +19,7 @@ const ORDER = [
   // estimativa (precoInsumo) e a chave (insumo.codigo) que liga estimado e
   // realizado. A semente é um arquivo gerado — ver docs/SPEC-INSUMOS.md.
   "insumos-seed.jsx",
+  "composicoes-seed.jsx",
   "insumos.jsx",
   // obra-financeiro.jsx vem ANTES de clientes.jsx: clientes.jsx
   // (GestaoObraPanel) consome a taxonomia (PLANO_CONTAS, ETAPAS_OBRA,

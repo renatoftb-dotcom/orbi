@@ -21,7 +21,8 @@ const srcCompleto = readFileSync(join(__dirname, "src", "modules", "orcamento-ob
 const marcador = "// UI (§7)";
 const idx = srcCompleto.indexOf(marcador);
 if (idx === -1) throw new Error(`Marcador "${marcador}" não encontrado em orcamento-obra.jsx`);
-const src = srcCompleto.slice(0, idx);
+const srcSeedComposicoes = readFileSync(join(__dirname, "src", "modules", "composicoes-seed.jsx"), "utf-8");
+const src = srcSeedComposicoes + "\n" + srcCompleto.slice(0, idx);
 
 const modulo = new Function(`
   ${src}
@@ -33,6 +34,7 @@ const modulo = new Function(`
     calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO,
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
+    instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
   };
 `)();
 
@@ -366,6 +368,81 @@ teste("itens do projeto entram na etapa escolhida; sem catálogo ficam sem preç
   assert.strictEqual(lou.tipo, "Acabamento");
   assert.strictEqual(lou.unidade, "Unidades");
   assert.ok(r.qualidade.semPreco.includes("PVC - Esgoto - Tubo 100mm"));
+});
+
+console.log("\n--- instalações por ambiente (kits) ---");
+const { instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS } = modulo;
+
+teste("todo tipo de ambiente aponta para kits que existem; todo ponto elétrico tem kit", () => {
+  for (const t of AMBIENTES_TIPOS) for (const disc of Object.keys(t.kits)) for (const id of t.kits[disc]) {
+    assert.ok(COMPOSICOES_SEED[id], `${t.id} → ${id}`);
+    assert.strictEqual(COMPOSICOES_SEED[id].disciplina, disc, `${id} disciplina`);
+  }
+  for (const p of PONTOS_ELETRICOS) assert.ok(COMPOSICOES_SEED[p.kit], p.kit);
+  for (const [id, k] of Object.entries(COMPOSICOES_SEED)) for (const it of k.itens) assert.ok(it.nome && it.qtd > 0 && it.unidade, `${id}: ${JSON.stringify(it)}`);
+});
+
+teste("casa com 2 suítes, 1 lavabo, cozinha, lavanderia e 3 dormitórios gera kits somados por item, portas e circuitos", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", ambientes: { banheiroSuite: 2, lavabo: 1, cozinha: 1, lavanderia: 1, dormitorio: 3, salaEstar: 1 },
+    instalacoes: { padrao: "Médio", aquecimento: "nenhum", pressurizador: false } }, { materiais: [] });
+  const est = r.itens.filter((i) => i.subEtapa === "Estimativa por ambientes");
+  assert.ok(est.length > 40, `poucos itens: ${est.length}`);
+  // cada item aparece uma vez por disciplina (somado entre ambientes)
+  const chaves = est.map((i) => i.etapa + "|" + i.item);
+  assert.strictEqual(new Set(chaves).size, chaves.length);
+  // sanitários: 2 suítes + 1 lavabo = 3
+  assert.strictEqual(est.find((i) => i.item === "Louças - Sanitário").qtd, 3);
+  // registros gaveta: 2 por suíte, lavabo, cozinha e lavanderia = 10
+  assert.strictEqual(est.find((i) => i.item === "Metal - Hidráulica - Base Registro Gaveta 3/4").qtd, 10);
+  // portas: 2 suítes + lavabo (WC) + 3 dormitórios + lavanderia (interna) = 7 folhas, 21 dobradiças
+  assert.strictEqual(est.find((i) => i.item === "Portas Internas Comum").qtd, 7);
+  assert.strictEqual(est.find((i) => i.item === "Fechaduras - Dobradiças- STAM").qtd, 21);
+  // sem aquecimento → nada de CPVC
+  assert.ok(!est.some((i) => /CPVC/.test(i.item)));
+  // pontos: tomadas gerais = 2×2 + 1 + 4 + 2 + 3×4 + 5 = 24 → 4 disjuntores 20A + 2 das tomadas específicas… (aqui só o de circuito geral)
+  const dj20 = est.find((i) => i.item === "Elétrica - Disjuntor Unipolar 20A - 10kA");
+  assert.ok(dj20.qtd >= 4, `disjuntores 20A: ${dj20.qtd}`);
+  assert.strictEqual(est.find((i) => i.item === "Elétrica - Disjuntor Bipolar 32A - 10kA").qtd, 2); // 2 chuveiros
+  assert.ok(est.every((i) => i.ordem >= 18 && i.ordem <= 24));
+  assert.ok(est.some((i) => i.etapa === "Portas internas" && i.tipo === "Acabamento"));
+});
+
+teste("padrão Alto troca os kits _ALTO; aquecimento solar e pressurizador entram por obra", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", ambientes: { banheiroSuite: 1 },
+    instalacoes: { padrao: "Alto", aquecimento: "solar", pressurizador: true } }, { materiais: [] });
+  const est = r.itens.filter((i) => i.subEtapa === "Estimativa por ambientes");
+  assert.ok(est.some((i) => i.item === "Metal - Sifão Metálico"));
+  assert.ok(!est.some((i) => i.item === "Metal - Sifão Flexível"));
+  assert.ok(est.some((i) => i.item === "Portas Internas Sincol Sólida"));
+  assert.ok(est.some((i) => i.item === "Equipamentos e Sistemas - Boiler Pressurizado 500 L"));
+  assert.ok(est.some((i) => i.item === "Equipamentos e Sistemas - Pressurizador Casa"));
+  assert.ok(est.some((i) => /CPVC -Tubo 22mm/.test(i.item)), "água quente do banheiro com aquecimento");
+});
+
+teste("disciplina marcada 'do projeto' sai da estimativa por kits; sem ambientes não emite nada", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", ambientes: { banheiroSuite: 1, cozinha: 1 },
+    instalacoes: { padrao: "Médio", aquecimento: "nenhum", doProjeto: { HIDRAULICA: true, ELETRICA: true } } }, { materiais: [] });
+  const est = r.itens.filter((i) => i.subEtapa === "Estimativa por ambientes");
+  assert.ok(!est.some((i) => i.etapa === "Hidráulica (água fria e quente)"));
+  assert.ok(!est.some((i) => i.etapa === "Elétrica e iluminação"));
+  assert.ok(est.some((i) => i.etapa === "Esgoto e pluvial"));
+  assert.ok(est.some((i) => i.etapa === "Louças e metais"));
+  const vazio = gerarOrcamentoObra({ tipologia: "Térrea", ambientes: {}, instalacoes: { aquecimento: "solar" } }, { materiais: [] });
+  assert.strictEqual(vazio.itens.filter((i) => i.subEtapa === "Estimativa por ambientes").length, 0);
+});
+
+teste("kit editado pelo escritório (data.escritorio.composicoes) vence a semente", () => {
+  const data = { materiais: [], escritorio: { composicoes: { kits: { LOUCAS_LAVABO: { itens: [{ nome: "Louças - Sanitário", qtd: 1, unidade: "Unidades" }, { nome: "Item do escritório", qtd: 2, unidade: "Unidades" }] } },
+    ambientes: { lavabo: { pontos: { tomadaGeral: 3 } } } } } };
+  const kits = composicoesAtivas(data);
+  assert.strictEqual(kits.LOUCAS_LAVABO.itens.length, 2);
+  assert.ok(kits.LOUCAS_LAVABO.editado);
+  assert.ok(!kits.LOUCAS_BANHEIRO.editado);
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", ambientes: { lavabo: 2 }, instalacoes: { padrao: "Médio", aquecimento: "nenhum" } }, data);
+  const est = r.itens.filter((i) => i.subEtapa === "Estimativa por ambientes");
+  assert.strictEqual(est.find((i) => i.item === "Item do escritório").qtd, 4);
+  // 3 tomadas gerais por lavabo × 2 = 6 → 6 tomadas 10A
+  assert.strictEqual(est.find((i) => /Tomada hexagonal.*10A/.test(i.item)).qtd, 6);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

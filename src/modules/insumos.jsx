@@ -41,6 +41,7 @@ var INSUMO_GRUPOS = [
   { prefixo: "TIN", nome: "Tintas" },
   { prefixo: "TLH", nome: "Telhas" },
   { prefixo: "ESQ", nome: "Esquadrias" },
+  { prefixo: "LOU", nome: "Louças e metais" },
   { prefixo: "OUT", nome: "Outros" },
 ];
 
@@ -814,6 +815,159 @@ function GraficoPrecoInsumo({ compras }) {
 }
 
 // ── Módulo ───────────────────────────────────────────────────
+// ── Composições: kits por ambiente (estimativa preliminar de instalações) ──
+// Lê COMPOSICOES_SEED / AMBIENTES_TIPOS (composicoes-seed.jsx) e grava o que
+// o escritório mudar em data.escritorio.composicoes = { kits: {id: {itens}}, ambientes: {id: {pontos}} }.
+function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
+  var cfg = (data.escritorio && data.escritorio.composicoes) || {};
+  var seed = typeof COMPOSICOES_SEED !== "undefined" ? COMPOSICOES_SEED : {};
+  var tipos = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
+  var disciplinas = typeof COMPOSICOES_DISCIPLINAS !== "undefined" ? COMPOSICOES_DISCIPLINAS : [];
+  var pontosDef = typeof PONTOS_ELETRICOS !== "undefined" ? PONTOS_ELETRICOS : [];
+  var [aba, setAba] = useState("kits");
+  var [disc, setDisc] = useState(disciplinas.length ? disciplinas[0].id : "");
+  var [aberto, setAberto] = useState({});
+
+  function kitAtual(id) {
+    var o = cfg.kits && cfg.kits[id];
+    return o && Array.isArray(o.itens) ? Object.assign({}, seed[id], { itens: o.itens, editado: true }) : seed[id];
+  }
+  function gravarCfg(novaCfg) {
+    save(Object.assign({}, data, { escritorio: Object.assign({}, data.escritorio || {}, { composicoes: novaCfg }) }));
+  }
+  function setItensKit(id, itens) {
+    var kits = Object.assign({}, cfg.kits || {});
+    kits[id] = { itens: itens };
+    gravarCfg(Object.assign({}, cfg, { kits: kits }));
+  }
+  function restaurarKit(id) {
+    var kits = Object.assign({}, cfg.kits || {});
+    delete kits[id];
+    gravarCfg(Object.assign({}, cfg, { kits: kits }));
+  }
+  function setPonto(ambId, pontoId, valor) {
+    var ambs = Object.assign({}, cfg.ambientes || {});
+    var atual = Object.assign({}, (ambs[ambId] && ambs[ambId].pontos) || {});
+    atual[pontoId] = Number(valor) || 0;
+    ambs[ambId] = { pontos: atual };
+    gravarCfg(Object.assign({}, cfg, { ambientes: ambs }));
+  }
+  function pontosDe(t) {
+    var o = cfg.ambientes && cfg.ambientes[t.id];
+    return Object.assign({}, t.pontos || {}, (o && o.pontos) || {});
+  }
+  function statusNome(nome) {
+    var r = resolverInsumo(nome, insumos);
+    if (!r.insumo) return { cor: "#b45309", texto: "não está em Insumos" };
+    var p = precoInsumo(r.insumo);
+    return p.preco != null ? { cor: "#15803d", texto: r.insumo.codigo + " · " + fmtBRLIns(p.preco) } : { cor: "#b45309", texto: r.insumo.codigo + " · sem preço" };
+  }
+
+  var ids = Object.keys(seed).filter(function (id) { return (seed[id].disciplina || "OUTROS") === disc; });
+
+  return (
+    <div>
+      <button style={INS_S.btnGhost} onClick={onVoltar}>← Insumos</button>
+      <div style={{ fontSize: 22, fontWeight: 700, color: INS.grafite, margin: "8px 0 2px" }}>Composições</div>
+      <div style={{ fontSize: 12.5, color: INS.inkSoft, marginBottom: 14 }}>
+        Kits que a estimativa usa quando a obra ainda não tem projeto de engenharia: o que entra por banheiro, cozinha, lavanderia, por ponto elétrico e por obra. Quantidades de partida das composições paramétricas do SINAPI, com os nomes do seu cadastro. Edite e o VICKE passa a usar o seu número.
+      </div>
+      <datalist id="vk-insumos-lista-comp">{insumos.map(function (m) { return <option key={m.id || m.codigo || m.nome} value={m.nome} />; })}</datalist>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        <button style={aba === "kits" ? INS_S.btn : INS_S.btnSec} onClick={function () { setAba("kits"); }}>Kits</button>
+        <button style={aba === "pontos" ? INS_S.btn : INS_S.btnSec} onClick={function () { setAba("pontos"); }}>Pontos elétricos por cômodo</button>
+      </div>
+
+      {aba === "pontos" && (
+        <div style={INS_S.card}>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 640 }}>
+              <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10.5, textTransform: "uppercase" }}>
+                <th style={{ padding: "6px 8px" }}>Cômodo</th>
+                {pontosDef.map(function (p) { return <th key={p.id} style={{ padding: "6px 8px", textAlign: "right" }}>{p.nome}</th>; })}
+              </tr></thead>
+              <tbody>
+                {tipos.map(function (t) {
+                  var pt = pontosDe(t);
+                  return (
+                    <tr key={t.id} style={{ borderTop: "1px solid #f3f4f6" }}>
+                      <td style={{ padding: "6px 8px", color: "#262421" }}>{t.nome}</td>
+                      {pontosDef.map(function (p) {
+                        return <td key={p.id} style={{ padding: "4px 8px", textAlign: "right" }}>
+                          <input type="number" min="0" step="1" disabled={!podeEditar} value={pt[p.id] == null ? 0 : pt[p.id]}
+                            onChange={function (e) { setPonto(t.id, p.id, e.target.value); }}
+                            style={Object.assign({}, INS_S.input, { width: 64, textAlign: "right", padding: "5px 8px" })} />
+                        </td>;
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 8 }}>Por unidade de cômodo. Cada ponto vira o kit correspondente (aba Kits → Elétrica). Circuitos: 1 disjuntor 10A a cada 8 pontos de luz e 1 de 20A a cada 6 tomadas gerais, calculados pelo motor.</div>
+        </div>
+      )}
+
+      {aba === "kits" && (
+        <div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+            {disciplinas.map(function (d) {
+              return <button key={d.id} style={Object.assign({}, disc === d.id ? INS_S.btn : INS_S.btnSec, { padding: "6px 12px", fontSize: 12 })} onClick={function () { setDisc(d.id); }}>{d.nome}</button>;
+            })}
+          </div>
+          {ids.map(function (id) {
+            var kit = kitAtual(id);
+            var ab = !!aberto[id];
+            return (
+              <div key={id} style={Object.assign({}, INS_S.card, { marginBottom: 10, padding: 0, overflow: "hidden" })}>
+                <button type="button" onClick={function () { var n = Object.assign({}, aberto); n[id] = !ab; setAberto(n); }}
+                  style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#fafafa", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                  <span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: INS.grafite }}>{kit.nome}</span>
+                    <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 8 }}>{kit.base === "ponto" ? "por ponto" : kit.base === "obra" ? "por obra" : "por ambiente"} · {kit.itens.length} itens · {kit.editado ? "editado pelo escritório" : kit.fonte}</span>
+                  </span>
+                  <span style={{ fontSize: 11, color: "#9ca3af" }}>{ab ? "▲" : "▼"}</span>
+                </button>
+                {ab && (
+                  <div style={{ padding: 12 }}>
+                    {kit.itens.map(function (it, idx) {
+                      var st = statusNome(it.nome);
+                      return (
+                        <div key={idx} style={{ display: "grid", gridTemplateColumns: "3fr 90px 110px auto", gap: 8, alignItems: "center", marginBottom: 6 }}>
+                          <div>
+                            <input list="vk-insumos-lista-comp" disabled={!podeEditar} value={it.nome || ""} style={INS_S.input}
+                              onChange={function (e) { var n = kit.itens.slice(); n[idx] = Object.assign({}, it, { nome: e.target.value }); setItensKit(id, n); }} />
+                            <div style={{ fontSize: 10.5, color: st.cor, marginTop: 2 }}>{st.texto}</div>
+                          </div>
+                          <input type="number" step="0.1" min="0" disabled={!podeEditar} value={it.qtd == null ? "" : it.qtd} style={Object.assign({}, INS_S.input, { textAlign: "right" })}
+                            onChange={function (e) { var n = kit.itens.slice(); n[idx] = Object.assign({}, it, { qtd: e.target.value === "" ? "" : Number(e.target.value) }); setItensKit(id, n); }} />
+                          <input disabled={!podeEditar} value={it.unidade || ""} placeholder="Unidades" style={INS_S.input}
+                            onChange={function (e) { var n = kit.itens.slice(); n[idx] = Object.assign({}, it, { unidade: e.target.value }); setItensKit(id, n); }} />
+                          <button type="button" disabled={!podeEditar} style={Object.assign({}, INS_S.btnGhost, { color: "#dc2626" })}
+                            onClick={function () { setItensKit(id, kit.itens.filter(function (_, i) { return i !== idx; })); }}>Remover</button>
+                        </div>
+                      );
+                    })}
+                    {podeEditar && (
+                      <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                        <button type="button" style={INS_S.btnSec} onClick={function () { setItensKit(id, kit.itens.concat([{ nome: "", qtd: 1, unidade: "Unidades" }])); }}>＋ Item</button>
+                        {kit.editado && <button type="button" style={INS_S.btnSec} onClick={function () { restaurarKit(id); }}>Restaurar padrão</button>}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {!ids.length && <div style={{ fontSize: 12.5, color: "#6b7280" }}>Nenhum kit nesta disciplina.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Insumos({ data, save }) {
   var perm = getPermissoes();
   var [view, setView] = useState("lista");
@@ -933,6 +1087,16 @@ function Insumos({ data, save }) {
   }
 
   // ── detalhe ──
+  if (view === "composicoes") {
+    return (
+      <div style={{ padding: isMobile ? 16 : "28px 32px", background: INS.fundo, minHeight: "100%", fontFamily: INS_FONT }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
+          <ComposicoesEditor data={data} save={save} insumos={insumos} podeEditar={perm.podeAlterarConfig} onVoltar={() => setView("lista")} />
+        </div>
+      </div>
+    );
+  }
+
   if (view === "detalhe" && sel) {
     var atual = insumos.find(x => x.codigo === sel.codigo) || sel;
     return (
@@ -960,6 +1124,9 @@ function Insumos({ data, save }) {
               Catálogo de materiais e serviços. É daqui que a estimativa lê preço e é aqui que as compras o atualizam.
             </div>
           </div>
+          {perm.podeAlterarConfig && typeof COMPOSICOES_SEED !== "undefined" && (
+            <button style={INS_S.btnSec} onClick={() => setView("composicoes")}>Composições (kits por ambiente)</button>
+          )}
           {perm.podeEditar && (
             <button style={INS_S.btn} onClick={() => { setSel({}); setView("form"); }}>+ Novo insumo</button>
           )}
@@ -971,7 +1138,7 @@ function Insumos({ data, save }) {
               {insumos.length === 0 ? "Catálogo vazio" : "Catálogo incompleto"}
             </div>
             <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12 }}>
-              {faltamDaSemente > 0 && <>Faltam <strong>{faltamDaSemente}</strong> insumos do catálogo padrão (94 materiais e 17 prestadores, com preço de referência). </>}
+              {faltamDaSemente > 0 && <>Faltam <strong>{faltamDaSemente}</strong> insumos do catálogo padrão (materiais, louças e metais, esquadrias e prestadores, com preço de referência). </>}
               {pendentesMigracao > 0 && <><strong>{pendentesMigracao}</strong> material antigo ainda não tem código. </>}
               A operação é segura de repetir: nunca sobrescreve preço definido à mão nem preço mais recente que o da semente.
             </div>

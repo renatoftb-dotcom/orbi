@@ -1892,6 +1892,7 @@ const ETAPAS_PROJETO = [
   { id: "LOUCAS",      nome: "Louças e metais",                 tipo: "Acabamento", ordem: 21 },
   { id: "AQUECIMENTO", nome: "Aquecimento e pressurização",     tipo: "Acabamento", ordem: 22 },
   { id: "OUTROS",      nome: "Outros itens do projeto",         tipo: "Acabamento", ordem: 23 },
+  { id: "PORTAS",      nome: "Portas internas",                 tipo: "Acabamento", ordem: 24 },
 ];
 const ITENS_PROJETO_MAX = 600;
 
@@ -1951,6 +1952,119 @@ function itensProjeto(cp, out, data) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// INSTALAÇÕES POR AMBIENTE — estimativa preliminar por kits
+// ═══════════════════════════════════════════════════════════════
+// Quando não há projeto de engenharia, hidráulica, esgoto, elétrica, louças
+// e metais, aquecimento e portas internas são estimados por "conjuntos de
+// pontos por ambiente" (prática das composições paramétricas do SINAPI):
+// a obra informa quantos ambientes de cada tipo tem, o padrão (Médio/Alto)
+// e o sistema de aquecimento; cada ambiente puxa seus kits
+// (composicoes-seed.jsx, editáveis em Insumos → Composições).
+// Quando a lista do projeto chega (bloco "Itens do projeto"), a disciplina
+// é marcada "do projeto" e a estimativa por kits daquela disciplina sai.
+const DISCIPLINAS_INSTALACOES = ["HIDRAULICA", "ESGOTO", "ELETRICA", "LOUCAS", "AQUECIMENTO", "PORTAS"];
+
+// Kits em vigor: semente + o que o escritório editou (data.escritorio.composicoes.kits)
+function composicoesAtivas(data) {
+  const base = typeof COMPOSICOES_SEED !== "undefined" ? COMPOSICOES_SEED : {};
+  const cfg = data && data.escritorio && data.escritorio.composicoes;
+  const over = (cfg && cfg.kits) || {};
+  const kits = {};
+  for (const id of Object.keys(base)) {
+    kits[id] = over[id] && Array.isArray(over[id].itens) ? { ...base[id], itens: over[id].itens, editado: true } : base[id];
+  }
+  for (const id of Object.keys(over)) {
+    if (kits[id] || !over[id] || !Array.isArray(over[id].itens)) continue;
+    kits[id] = { nome: over[id].nome || id, disciplina: over[id].disciplina || "OUTROS", base: over[id].base || "ambiente", fonte: "escritório", itens: over[id].itens, editado: true };
+  }
+  return kits;
+}
+// Tipos de ambiente em vigor: semente + pontos elétricos editados pelo escritório
+function ambientesAtivos(data) {
+  const base = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
+  const cfg = data && data.escritorio && data.escritorio.composicoes;
+  const over = (cfg && cfg.ambientes) || {};
+  return base.map((a) => over[a.id] ? { ...a, pontos: { ...(a.pontos || {}), ...(over[a.id].pontos || {}) } } : a);
+}
+function escolherKit(kits, id, padrao) {
+  if (!id) return null;
+  if (padrao === "Alto" && kits[id + "_ALTO"]) return kits[id + "_ALTO"];
+  return kits[id] || null;
+}
+
+function instalacoesPorAmbiente(cp, out, data) {
+  const amb = cp.ambientes || {};
+  const inst = cp.instalacoes || {};
+  const doProjeto = inst.doProjeto || {};
+  const kits = composicoesAtivas(data);
+  const tipos = ambientesAtivos(data);
+  const pontosDef = typeof PONTOS_ELETRICOS !== "undefined" ? PONTOS_ELETRICOS : [];
+  const sistemas = typeof SISTEMAS_AQUECIMENTO !== "undefined" ? SISTEMAS_AQUECIMENTO : [];
+  const avisos = cp._avisos || (cp._avisos = []);
+  if (!tipos.length || !Object.keys(kits).length) return;
+
+  const acumulado = {};
+  const add = (disc, nome, qtd, unidade) => {
+    const k = disc + "|" + nome;
+    const a = acumulado[k] || (acumulado[k] = { disc, nome, qtd: 0, unidade: unidade || "Unidades" });
+    a.qtd += qtd;
+  };
+  const aplicarKit = (kit, vezes, disc) => {
+    if (!kit || !(vezes > 0)) return;
+    for (const it of kit.itens || []) {
+      if (!it || !it.nome || !(Number(it.qtd) > 0)) continue;
+      add(disc || kit.disciplina, String(it.nome).trim(), Number(it.qtd) * vezes, it.unidade);
+    }
+  };
+  const temAquecimento = !!inst.aquecimento && inst.aquecimento !== "nenhum" && inst.aquecimento !== "eletrico";
+  const totalPontos = {};
+  for (const p of pontosDef) totalPontos[p.id] = 0;
+  let algumAmbiente = false;
+
+  for (const t of tipos) {
+    const n = numOrZero(amb[t.id]);
+    if (!(n > 0)) continue;
+    algumAmbiente = true;
+    for (const disc of Object.keys(t.kits || {})) {
+      if (doProjeto[disc]) continue;
+      for (const kitId of t.kits[disc] || []) {
+        const base = kits[kitId];
+        if (!base) {
+          if (!avisos.some((a) => a.tipo === "kit_ausente" && a.kit === kitId)) avisos.push({ tipo: "kit_ausente", kit: kitId, mensagem: `Kit ${kitId} não existe nas composições` });
+          continue;
+        }
+        if (base.requer === "aquecimento" && !temAquecimento) continue;
+        aplicarKit(escolherKit(kits, kitId, inst.padrao), n, disc);
+      }
+    }
+    if (!doProjeto.ELETRICA) for (const p of pontosDef) totalPontos[p.id] += numOrZero(t.pontos && t.pontos[p.id]) * n;
+  }
+  if (!algumAmbiente) return;
+
+  if (!doProjeto.ELETRICA) {
+    for (const p of pontosDef) aplicarKit(escolherKit(kits, p.kit, inst.padrao), totalPontos[p.id], "ELETRICA");
+    aplicarKit(escolherKit(kits, "ELETRICA_POR_OBRA", inst.padrao), 1, "ELETRICA");
+    const luz = numOrZero(totalPontos.iluminacao) + numOrZero(totalPontos.iluminacaoParalela);
+    if (luz > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 10A - 10kA", Math.ceil(luz / 8), "Unidades");
+    if (totalPontos.tomadaGeral > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 20A - 10kA", Math.ceil(totalPontos.tomadaGeral / 6), "Unidades");
+  }
+  if (!doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO");
+  if (!doProjeto.AQUECIMENTO) {
+    const sis = sistemas.find((x) => x.id === inst.aquecimento);
+    if (sis && sis.kit) aplicarKit(escolherKit(kits, sis.kit, inst.padrao), 1, "AQUECIMENTO");
+    if (inst.pressurizador) aplicarKit(escolherKit(kits, "PRESSURIZADOR", inst.padrao), 1, "AQUECIMENTO");
+  }
+
+  for (const a of Object.values(acumulado)) {
+    const etapa = ETAPAS_PROJETO.find((e) => e.id === a.disc) || ETAPAS_PROJETO.find((e) => e.id === "OUTROS");
+    const metros = /^m(ts|etros)?$/i.test(String(a.unidade || ""));
+    const qtd = metros ? Math.ceil(a.qtd * 10 - 1e-9) / 10 : Math.ceil(a.qtd - 1e-9);
+    emitir(out, { ordem: etapa.ordem, item: a.nome, tipo: etapa.tipo, etapa: etapa.nome, subEtapa: "Estimativa por ambientes", unidade: a.unidade, qtd });
+  }
+  cp._pontosEletricos = totalPontos;
+}
+
 function normalizarProjeto(projeto) {
   const p = projeto || {};
   const arq = p.arquitetura || {};
@@ -1981,6 +2095,8 @@ function normalizarProjeto(projeto) {
   const coberturasIn = Array.isArray(p.cobertura) ? p.cobertura : [];
   const esquadriasIn = Array.isArray(p.esquadrias) ? p.esquadrias : [];
   const itensProjetoIn = Array.isArray(p.itensProjeto) ? p.itensProjeto : [];
+  const ambientesIn = p.ambientes || {};
+  const instalacoesIn = p.instalacoes || {};
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
 
@@ -2184,6 +2300,15 @@ function normalizarProjeto(projeto) {
       altura: numOrZero(e && e.altura),
     })),
 
+    // cp.ambientes / cp.instalacoes — estimativa por kits (instalacoesPorAmbiente)
+    ambientes: Object.keys(ambientesIn).reduce((acc, k) => { acc[k] = numOrZero(ambientesIn[k]); return acc; }, {}),
+    instalacoes: {
+      padrao: instalacoesIn.padrao === "Alto" ? "Alto" : "Médio",
+      aquecimento: instalacoesIn.aquecimento || "nenhum",
+      pressurizador: !!instalacoesIn.pressurizador,
+      doProjeto: DISCIPLINAS_INSTALACOES.reduce((acc, d) => { acc[d] = !!(instalacoesIn.doProjeto && instalacoesIn.doProjeto[d]); return acc; }, {}),
+    },
+
     // cp.itensProjeto — lista digitada do projeto de engenharia
     itensProjeto: itensProjetoIn.slice(0, ITENS_PROJETO_MAX).map((it) => ({
       etapa: (it && it.etapa) || "OUTROS",
@@ -2287,6 +2412,7 @@ function gerarOrcamentoObra(projeto, data) {
   muroArrimo(cp, out);
   piscina(cp, out);
   esquadrias(cp, out, data);
+  instalacoesPorAmbiente(cp, out, data);
   itensProjeto(cp, out, data);
   prestadores(cp, out, data);
 
@@ -2366,6 +2492,8 @@ function projetoVazio() {
     piscina: {},
     cobertura: [],
     esquadrias: [],
+    ambientes: {},
+    instalacoes: { padrao: "Médio", aquecimento: "nenhum", pressurizador: false, doProjeto: {} },
     itensProjeto: [],
     prestadores: {},
   };
@@ -2847,6 +2975,39 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             )}
             <div style={{ fontSize: 11, color: "#9ca3af" }}>
               Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. No orçamento aparece uma linha por esquadria com o preço fechado; a composição fica guardada no item. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold. Para usar seus preços, cadastre o alumínio, o vidro e os acessórios em Insumos com o código Alcoa como alias.
+            </div>
+          </div>
+        </BlocoColapsavel>
+
+        <BlocoColapsavel titulo="Ambientes e instalações" subtitulo="estimativa por kits: hidráulica, esgoto, elétrica, louças, aquecimento, portas" aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+            Sem projeto de engenharia, as instalações são estimadas por conjuntos de pontos por ambiente (prática do SINAPI), com os kits de Insumos → Composições. Informe quantos ambientes de cada tipo a casa tem.
+          </div>
+          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => a.molhado).map((a) => (
+            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} />
+          ))}
+          <div style={{ gridColumn: "1 / -1", fontSize: 11, color: "#9ca3af", marginTop: -4 }}>Cômodos secos (só elétrica e portas):</div>
+          {(typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).filter((a) => !a.molhado).map((a) => (
+            <CampoNum key={a.id} label={a.nome} valor={get(`ambientes.${a.id}`)} onChange={(v) => set(`ambientes.${a.id}`, v)} />
+          ))}
+          <CampoSelect label="Padrão de acabamento" valor={get("instalacoes.padrao") || "Médio"} onChange={(v) => set("instalacoes.padrao", v)} opcoes={["Médio", "Alto"]} />
+          <CampoSelect label="Aquecimento de água" valor={get("instalacoes.aquecimento") || "nenhum"} onChange={(v) => set("instalacoes.aquecimento", v)}
+            opcoes={(typeof SISTEMAS_AQUECIMENTO !== "undefined" ? SISTEMAS_AQUECIMENTO : []).map((x) => ({ value: x.id, label: x.nome }))} />
+          <CampoSelect label="Pressurizador" valor={get("instalacoes.pressurizador") ? "sim" : "nao"} onChange={(v) => set("instalacoes.pressurizador", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
+          <div style={{ gridColumn: "1 / -1", marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Disciplinas que vêm do projeto de engenharia (a estimativa por kits sai destas):</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+              {ETAPAS_PROJETO.filter((e) => DISCIPLINAS_INSTALACOES.includes(e.id)).map((e) => {
+                const marcado = !!get(`instalacoes.doProjeto.${e.id}`);
+                const temItens = itensProjetoLista.some((it) => it.etapa === e.id && it.nome);
+                return (
+                  <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#374151", padding: "6px 10px", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 8, background: marcado ? "#eef2ff" : "#fff", cursor: "pointer" }}>
+                    <input type="checkbox" checked={marcado} onChange={(ev) => set(`instalacoes.doProjeto.${e.id}`, ev.target.checked)} />
+                    {e.nome}
+                    {temItens && !marcado && <span style={{ color: "#b45309", fontSize: 11 }} title="Há itens do projeto nesta disciplina e a estimativa por kits também está ligada: vai somar os dois.">· soma com o projeto</span>}
+                  </label>
+                );
+              })}
             </div>
           </div>
         </BlocoColapsavel>
