@@ -9322,6 +9322,69 @@ function consumoRevestimento(formatoId, externo, juntaMm) {
   };
 }
 
+// ── Pré-preenchimento pelos cômodos ─────────────────────────────
+// Usa as medidas por tamanho (Grande/Médio/Pequeno/Compacta) do orçamento
+// de projetos (COMODOS em shared.jsx) e a contagem de cômodos do bloco
+// Geral para estimar piso, revestimento de parede, rodapé, soleiras e
+// bancadas. É ponto de partida: o botão preenche os campos e o usuário
+// ajusta pelo projeto.
+const TAMANHOS_COMODOS = ["Grande", "Médio", "Pequeno", "Compacta"];
+const PE_DIREITO_REVESTIMENTO = 2.6; // altura de azulejo em áreas molhadas
+const PORTA_M2 = 0.8 * 2.1, PORTA_LARGURA = 0.8;
+// cômodo da obra → cômodo do orçamento de projetos, e regras de acabamento
+const COMODO_OBRA_PROJETO = {
+  banheiroSuite:  { comodo: "WC",             revestimento: "total",  bancada: { comprimento: "menor", profundidade: 0.5 } },
+  banheiroSocial: { comodo: "WC",             revestimento: "total",  bancada: { comprimento: "menor", profundidade: 0.5 } },
+  lavabo:         { comodo: "Lavabo",         revestimento: "total",  bancada: { comprimento: 0.8, profundidade: 0.45 } },
+  cozinha:        { comodo: "Cozinha",        revestimento: "total",  bancada: { comprimento: "maior", profundidade: 0.6 } },
+  lavanderia:     { comodo: "Lavanderia",     revestimento: "meia",   bancada: { comprimento: 1.2, profundidade: 0.6 } },
+  areaGourmet:    { comodo: "Área de lazer",  revestimento: "parede", bancada: { comprimento: 2.0, profundidade: 0.6 } },
+  dormitorio:     { comodo: "Dormitório",     rodape: true },
+  closet:         { comodo: "Closet",         rodape: true },
+  salaEstar:      { comodo: "Sala TV",        rodape: true },
+  salaJantar:     { comodo: "Sala de jantar", rodape: true },
+  escritorio:     { comodo: "Escritório",     rodape: true },
+  circulacao:     { comodo: "Hall de entrada", rodape: true },
+  garagem:        { comodo: "Garagem" },
+  varanda:        { comodo: "Área de lazer" },
+};
+const NOME_AMBIENTE = (id) => { const t = (typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : []).find((a) => a.id === id); return t ? t.nome : id; };
+function estimarPelosComodos(projeto) {
+  const p = projeto || {};
+  const tamanho = TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio";
+  const comodos = typeof COMODOS !== "undefined" ? COMODOS : {};
+  const ambientes = p.ambientes || {};
+  const r = { tamanho, pisoInterno: 0, revestimentoInterno: 0, rodapeM: 0, soleirasM: 0, bancadas: [], detalhes: [] };
+  const r1 = (x) => Math.round(x * 10) / 10;
+  for (const [id, regra] of Object.entries(COMODO_OBRA_PROJETO)) {
+    const n = Math.max(0, Math.round(numOrZero(ambientes[id])));
+    if (!n) continue;
+    const cfg = comodos[regra.comodo];
+    const [L, W] = (cfg && cfg.medidas && cfg.medidas[tamanho]) || [0, 0];
+    if (!(L > 0 && W > 0)) continue;
+    const area = L * W, perimetro = 2 * (L + W);
+    r.pisoInterno += n * area;
+    let rev = 0;
+    if (regra.revestimento === "total") rev = perimetro * PE_DIREITO_REVESTIMENTO - PORTA_M2;
+    else if (regra.revestimento === "meia") rev = perimetro * 1.5;
+    else if (regra.revestimento === "parede") rev = Math.max(L, W) * PE_DIREITO_REVESTIMENTO;
+    r.revestimentoInterno += n * Math.max(0, rev);
+    if (regra.rodape) r.rodapeM += n * Math.max(0, perimetro - PORTA_LARGURA);
+    r.soleirasM += n * PORTA_LARGURA; // soleira da porta de cada cômodo
+    if (regra.bancada) {
+      const comp = regra.bancada.comprimento === "maior" ? Math.max(L, W) : regra.bancada.comprimento === "menor" ? Math.min(L, W) : regra.bancada.comprimento;
+      for (let k = 0; k < n; k++) r.bancadas.push({ ...BANCADA_PADRAO, nome: NOME_AMBIENTE(id) + (n > 1 ? ` ${k + 1}` : ""), comprimento: r1(comp), profundidade: regra.bancada.profundidade });
+    }
+    r.detalhes.push({ id, nome: NOME_AMBIENTE(id), n, L, W, area: r1(n * area), revestimento: r1(n * Math.max(0, rev)) });
+  }
+  // peitoris das janelas cadastradas em esquadrias
+  for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
+    if (/JANELA|MAXIM|FIXO/.test(String(e && e.familia || ""))) r.soleirasM += numOrZero(e.qtd) * numOrZero(e.largura);
+  }
+  r.pisoInterno = r1(r.pisoInterno); r.revestimentoInterno = r1(r.revestimentoInterno); r.rodapeM = r1(r.rodapeM); r.soleirasM = r1(r.soleirasM);
+  return r;
+}
+
 function pisosRevestimentos(cp, out, data) {
   const base = { ordem: ORD.pisos, tipo: "Acabamento", etapa: "Pisos e revestimentos" };
   const ps = cp.pisos || {};
@@ -9641,6 +9704,7 @@ function normalizarProjeto(projeto) {
     tipologia,
     tipoObra,
     padrao,
+    tamanhoComodos: TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio",
     temPiscina,
 
     areaConstruida: numOrZero(arq.areaConstruida),
@@ -10047,6 +10111,7 @@ function projetoVazio() {
     tipologia: "Sobrado",
     tipoObra: "nova",
     padrao: "Médio",
+    tamanhoComodos: "Médio",
     temPiscina: false,
     arquitetura: {},
     terreo: {},
@@ -10444,6 +10509,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoSelect label="Tipologia" valor={projetoDraft.tipologia} onChange={(v) => set("tipologia", v)}
             opcoes={[{ value: "Sobrado", label: "Sobrado" }, { value: "Térrea", label: "Térrea" }]} />
           <CampoSelect label="Padrão" valor={projetoDraft.padrao || "Médio"} onChange={(v) => set("padrao", v)} opcoes={PADROES_OBRA} />
+          <CampoSelect label="Tamanho dos cômodos" valor={projetoDraft.tamanhoComodos || "Médio"} onChange={(v) => set("tamanhoComodos", v)} opcoes={TAMANHOS_COMODOS} />
           <CampoSelect label="Piscina" valor={temPiscina ? "sim" : "nao"} onChange={(v) => set("temPiscina", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
           {ehTerrea ? (
             <CampoNum label="Área construída (m²)" valor={get("arquitetura.areaConstruida")} onChange={setAreaConstruidaTerrea} />
@@ -10604,6 +10670,34 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
             Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({projetoDraft.padrao || "Médio"}); sem formato, o tamanho típico do padrão. A partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
           </div>
+          {(() => {
+            const est = estimarPelosComodos(projetoDraft);
+            const temComodos = est.detalhes.length > 0;
+            const jaPreenchido = numOrZero(get("pisos.pisoInterno.m2")) > 0 || numOrZero(get("pisos.revestimentoInterno.m2")) > 0 || bancadasLista.length > 0;
+            function aplicarEstimativa() {
+              const aplicar = () => setProjetoDraft((pd) => {
+                let n = setEmCaminho(pd, "pisos.pisoInterno.m2", est.pisoInterno);
+                n = setEmCaminho(n, "pisos.revestimentoInterno.m2", est.revestimentoInterno);
+                n = setEmCaminho(n, "pisos.rodapeM", est.rodapeM);
+                n = setEmCaminho(n, "pisos.soleirasM", est.soleirasM);
+                n = setEmCaminho(n, "pisos.bancadas", est.bancadas);
+                return n;
+              });
+              if (jaPreenchido && typeof dialogo !== "undefined") {
+                dialogo.confirmar({ titulo: "Substituir pelos cômodos?", mensagem: "Piso interno, revestimento interno, rodapé, soleiras e as bancadas serão substituídos pela estimativa do tamanho dos cômodos.", confirmar: "Substituir" }).then((ok) => { if (ok) aplicar(); });
+              } else aplicar();
+            }
+            return (
+              <div style={{ gridColumn: "1 / -1", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
+                <button type="button" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }} disabled={!temComodos} onClick={aplicarEstimativa}>Pré-preencher pelos cômodos ({projetoDraft.tamanhoComodos || "Médio"})</button>
+                <span style={{ fontSize: 12, color: "#6b7280" }}>
+                  {temComodos
+                    ? `estimativa: piso ${est.pisoInterno} m² · revestimento de parede ${est.revestimentoInterno} m² · rodapé ${est.rodapeM} m · soleiras e peitoris ${est.soleirasM} m · ${est.bancadas.length} bancada${est.bancadas.length !== 1 ? "s" : ""} — pelas medidas do orçamento de projetos (${est.detalhes.map((d) => `${d.n}× ${d.nome} ${d.L}×${d.W}`).join(", ")})`
+                    : "informe os cômodos no bloco Geral para estimar piso, revestimento, rodapé, soleiras e bancadas pelo tamanho dos cômodos"}
+                </span>
+              </div>
+            );
+          })()}
           {SUPERFICIES_PISOS.map((sup) => (
             <div key={sup.id} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
               <CampoNum label={`${sup.nome} (m²)`} valor={get(`pisos.${sup.id}.m2`)} onChange={(v) => set(`pisos.${sup.id}.m2`, v)} />

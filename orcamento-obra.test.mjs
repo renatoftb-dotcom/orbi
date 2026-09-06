@@ -22,7 +22,11 @@ const marcador = "// UI (§7)";
 const idx = srcCompleto.indexOf(marcador);
 if (idx === -1) throw new Error(`Marcador "${marcador}" não encontrado em orcamento-obra.jsx`);
 const srcSeedComposicoes = readFileSync(join(__dirname, "src", "modules", "composicoes-seed.jsx"), "utf-8");
-const src = srcSeedComposicoes + "\n" + srcCompleto.slice(0, idx);
+// COMODOS (medidas por tamanho do orçamento de projetos) vem de shared.jsx — só esse trecho.
+const srcShared = readFileSync(join(__dirname, "src", "modules", "shared.jsx"), "utf-8");
+const mComodos = srcShared.match(/var COMODOS = \{[\s\S]*?\n\};/);
+if (!mComodos) throw new Error("var COMODOS não encontrado em shared.jsx");
+const src = mComodos[0] + "\n" + srcSeedComposicoes + "\n" + srcCompleto.slice(0, idx);
 
 const modulo = new Function(`
   ${src}
@@ -35,7 +39,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos,
   };
 `)();
 
@@ -535,6 +539,22 @@ teste("bancada: tampo + saia + fundo + sapatas em m² de pedra; uma linha por ba
   assert.ok(b[0].composicao.some((c) => c.parte === "Sapatas" && c.m2 === 0.12));
   assert.strictEqual(b[1].item, "Soleiras Preto São Gabriel"); assert.strictEqual(b[1].qtd, 0.78); // 0,6 + 0,06 + 0,12
   assert.ok(!r.itens.some((i) => i.subEtapa === "Bancadas")); // campo antigo (9 m²) não vale com lista
+});
+
+teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, soleiras e bancadas", () => {
+  const est = modulo.estimarPelosComodos({ tamanhoComodos: "Médio", ambientes: { banheiroSuite: 2, cozinha: 1, dormitorio: 3 }, esquadrias: [{ familia: "JANELA_CORRER", qtd: 4, largura: 1.5 }] });
+  // WC Médio 3×1,4 (×2), Cozinha 4×3, Dormitório 3×4 (×3)
+  assert.strictEqual(est.pisoInterno, 56.4);
+  assert.strictEqual(est.revestimentoInterno, 77.1);   // 2×(8,8×2,6−1,68) + (14×2,6−1,68)
+  assert.strictEqual(est.rodapeM, 39.6);               // 3×(14−0,8)
+  assert.strictEqual(est.soleirasM, 10.8);             // 6 portas × 0,8 + 4 janelas × 1,5
+  assert.strictEqual(est.bancadas.length, 3);
+  assert.deepStrictEqual(est.bancadas.map((b) => [b.nome, b.comprimento, b.profundidade]), [["Banheiro de suíte 1", 1.4, 0.5], ["Banheiro de suíte 2", 1.4, 0.5], ["Cozinha", 4, 0.6]]);
+  const g = modulo.estimarPelosComodos({ tamanhoComodos: "Grande", ambientes: { cozinha: 1 } });
+  assert.strictEqual(g.pisoInterno, 24); // 6×4
+  assert.strictEqual(modulo.estimarPelosComodos({}).detalhes.length, 0);
+  assert.strictEqual(normalizarProjeto({ tamanhoComodos: "Compacta" }).tamanhoComodos, "Compacta");
+  assert.strictEqual(normalizarProjeto({}).tamanhoComodos, "Médio");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
