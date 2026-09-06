@@ -42,6 +42,9 @@ var INSUMO_GRUPOS = [
   { prefixo: "TLH", nome: "Telhas" },
   { prefixo: "ESQ", nome: "Esquadrias" },
   { prefixo: "LOU", nome: "Louças e metais" },
+  { prefixo: "POR", nome: "Portas e fechaduras" },
+  { prefixo: "FOR", nome: "Forros e gesso" },
+  { prefixo: "EQP", nome: "Equipamentos e sistemas" },
   { prefixo: "OUT", nome: "Outros" },
 ];
 

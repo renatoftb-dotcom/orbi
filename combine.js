@@ -18,6 +18,7 @@ const ORDER = [
   // orcamento-obra.jsx: o catálogo de insumos é a fonte de preço da
   // estimativa (precoInsumo) e a chave (insumo.codigo) que liga estimado e
   // realizado. A semente é um arquivo gerado — ver docs/SPEC-INSUMOS.md.
+  "insumos-seed-cadastro.jsx",
   "insumos-seed.jsx",
   "composicoes-seed.jsx",
   "insumos.jsx",
