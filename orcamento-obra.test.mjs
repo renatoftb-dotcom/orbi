@@ -611,6 +611,11 @@ teste("vãos automáticos: portas internas 0,80 (1 verga) + esquadrias (janela 2
   const sob = normalizarProjeto({ ...proj, tipologia: "Sobrado", pav1: { m2Parede20: 100, perimetroParedes: 30 } });
   assert.strictEqual(sob.vaoPortasJanelasTerreo, 6.9); assert.strictEqual(sob.pav1.vaoPortasJanelas, 2.3);
   assert.strictEqual(modulo.autosPisos({ ...proj, tipologia: "Sobrado", pav1: { perimetroParedes: 30 } }).rodapeM, 116);
+  // piso externo em branco = área da pavimentação externa; digitado vence
+  assert.strictEqual(modulo.autosPisos({ ...proj, externa: { pavimentacao: 45.5 } }).pisoExterno, 45.5);
+  assert.strictEqual(normalizarProjeto({ ...proj, externa: { pavimentacao: 45.5 } }).pisos.pisoExterno.m2, 45.5);
+  assert.strictEqual(normalizarProjeto({ ...proj, externa: { pavimentacao: 45.5 }, pisos: { pisoExterno: { m2: 30 } } }).pisos.pisoExterno.m2, 30);
+  assert.strictEqual(au.pisoExterno, 0);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

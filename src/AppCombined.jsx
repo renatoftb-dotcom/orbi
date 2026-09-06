@@ -9501,13 +9501,14 @@ function vaosAutomaticos(projeto) {
 // Valores automáticos do bloco Pisos e revestimentos quando o campo está em branco
 function autosPisos(projeto) {
   const p = projeto || {};
-  const arq = p.arquitetura || {}, terreo = p.terreo || {}, pav1 = p.pav1 || {};
+  const arq = p.arquitetura || {}, terreo = p.terreo || {}, pav1 = p.pav1 || {}, externa = p.externa || {};
   const v = vaosAutomaticos(p);
   const est = estimarPelosComodos(p);
   const perimetro = numOrZero(terreo.perimetroParedes) + (p.tipologia === "Sobrado" ? numOrZero(pav1.perimetroParedes) : 0);
   const r1 = (x) => Math.round(x * 10) / 10;
   return {
     pisoInterno: r1(numOrZero(arq.areaConstruida)),
+    pisoExterno: r1(numOrZero(externa.pavimentacao)), // mesma área do bloco Pavimentação externa
     rodapeM: r1(Math.max(0, perimetro - v.portasInternas * PORTA_LARGURA)),
     soleirasM: r1(v.vaoEsquadrias),
     revestimentoInterno: est.revestimentoInterno,
@@ -10081,7 +10082,7 @@ function normalizarProjeto(projeto) {
     // cp.pisos — pisos, revestimentos, rodapé, soleiras, bancadas e deck
     pisos: {
       pisoInterno: normalizarSuperficie(pisosIn.pisoInterno, autos.pisoInterno),
-      pisoExterno: normalizarSuperficie(pisosIn.pisoExterno),
+      pisoExterno: normalizarSuperficie(pisosIn.pisoExterno, autos.pisoExterno),
       revestimentoInterno: normalizarSuperficie(pisosIn.revestimentoInterno, estimativaComodos.revestimentoInterno || numOrZero(externa.revestimentoInterno)),
       revestimentoExterno: normalizarSuperficie(pisosIn.revestimentoExterno),
       rodapeM: numOrZero(pisosIn.rodapeM) || autos.rodapeM,
@@ -10941,6 +10942,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
         </BlocoColapsavel>
 
+        <BlocoColapsavel titulo="Pavimentação externa" subtitulo="contrapiso externo · a área pré-preenche o piso externo" aberto={!!blocosAbertos.externa} onToggle={() => toggleBloco("externa")}>
+          <CampoNum label="Pavimentação externa (m²)" valor={get("externa.pavimentacao")} onChange={(v) => set("externa.pavimentacao", v)} />
+          <CampoNum label="Perímetro da pavimentação (m)" valor={get("externa.perimetroPavimentacao")} onChange={(v) => set("externa.perimetroPavimentacao", v)} />
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+            A área dimensiona o contrapiso (concreto, malha pop, massiamento) e vira o automático do piso externo em Pisos e revestimentos. O perímetro só dimensiona a caixaria da borda do contrapiso (tábuas e sarrafos) — rodapé e soleira não entram aqui.
+          </div>
+        </BlocoColapsavel>
+
         <BlocoColapsavel titulo="Pisos e revestimentos" subtitulo="peça, argamassa, rejunte, espaçadores, rodapé, soleiras, bancadas e deck" aberto={!!blocosAbertos.pisos} onToggle={() => toggleBloco("pisos")}>
           <datalist id="vk-insumos-pisos">
             {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleiras|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
@@ -10950,16 +10959,16 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
           {(() => { const au = autosPisos(projetoDraft); return (
             <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
-              Em branco, o VICKE usa o automático: piso interno = área construída ({au.pisoInterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = perímetro das paredes menos portas ({au.rodapeM} m) · soleiras e peitoris = vão das esquadrias ({au.soleirasM} m) · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
+              Em branco, o VICKE usa o automático: piso interno = área construída ({au.pisoInterno} m²) · piso externo = pavimentação externa ({au.pisoExterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = perímetro das paredes menos portas ({au.rodapeM} m) · soleiras e peitoris = vão das esquadrias ({au.soleirasM} m) · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
             </div>
           ); })()}
           {SUPERFICIES_PISOS.map((sup) => (
             <div key={sup.id} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-              {sup.id === "revestimentoInterno" || sup.id === "pisoInterno" ? (
-                <div>
+              {sup.id === "revestimentoInterno" || sup.id === "pisoInterno" || sup.id === "pisoExterno" ? (
+                <div style={CAMPO_CELULA}>
                   <label style={C.label}>{sup.nome} (m²)</label>
                   <input style={C.input} type="number" step="0.01" value={get(`pisos.${sup.id}.m2`) ?? ""}
-                    placeholder={sup.id === "pisoInterno" ? `auto: ${autosPisos(projetoDraft).pisoInterno} (área construída)` : `auto: ${autosPisos(projetoDraft).revestimentoInterno} (cômodos)`}
+                    placeholder={sup.id === "pisoInterno" ? `auto: ${autosPisos(projetoDraft).pisoInterno} (área construída)` : sup.id === "pisoExterno" ? `auto: ${autosPisos(projetoDraft).pisoExterno} (pavimentação externa)` : `auto: ${autosPisos(projetoDraft).revestimentoInterno} (cômodos)`}
                     onChange={(e) => set(`pisos.${sup.id}.m2`, e.target.value === "" ? "" : Number(e.target.value))} />
                 </div>
               ) : (
@@ -11108,11 +11117,6 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               </div>
             )}
           </div>
-        </BlocoColapsavel>
-
-        <BlocoColapsavel titulo="Pavimentação externa" aberto={!!blocosAbertos.externa} onToggle={() => toggleBloco("externa")}>
-          <CampoNum label="Pavimentação externa (m²)" valor={get("externa.pavimentacao")} onChange={(v) => set("externa.pavimentacao", v)} />
-          <CampoNum label="Perímetro da pavimentação" valor={get("externa.perimetroPavimentacao")} onChange={(v) => set("externa.perimetroPavimentacao", v)} />
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Muro de divisa" aberto={!!blocosAbertos.muroDivisa} onToggle={() => toggleBloco("muroDivisa")}>
