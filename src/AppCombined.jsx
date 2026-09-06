@@ -4881,13 +4881,13 @@ function PontoConfianca({ conf, tamanho }) {
 // ── Formulário ───────────────────────────────────────────────
 function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
   var ehNovo = !insumo.codigo;
-  var [f, setF] = React.useState(function () {
+  var [f, setF] = useState(function () {
     return Object.assign({
       nome: "", grupo: "Outros", unidade: "Unidades", tipo: "material",
       precoManual: null, observacao: "", ativo: true, aliases: [],
     }, insumo);
   });
-  var [novoAlias, setNovoAlias] = React.useState("");
+  var [novoAlias, setNovoAlias] = useState("");
 
   function set(k, v) { setF(function (p) { var o = Object.assign({}, p); o[k] = v; return o; }); }
 
@@ -5192,29 +5192,29 @@ function GraficoPrecoInsumo({ compras }) {
 // ── Módulo ───────────────────────────────────────────────────
 function Insumos({ data, save }) {
   var perm = getPermissoes();
-  var [view, setView] = React.useState("lista");
-  var [sel, setSel] = React.useState(null);
-  var [busca, setBusca] = React.useState("");
-  var [filtroGrupo, setFiltroGrupo] = React.useState("");
-  var [filtroConf, setFiltroConf] = React.useState("");
-  var [semeando, setSemeando] = React.useState(false);
+  var [view, setView] = useState("lista");
+  var [sel, setSel] = useState(null);
+  var [busca, setBusca] = useState("");
+  var [filtroGrupo, setFiltroGrupo] = useState("");
+  var [filtroConf, setFiltroConf] = useState("");
+  var [semeando, setSemeando] = useState(false);
 
-  var [isMobile, setIsMobile] = React.useState(typeof window !== "undefined" && window.innerWidth < 768);
-  React.useEffect(function () {
+  var [isMobile, setIsMobile] = useState(typeof window !== "undefined" && window.innerWidth < 768);
+  useEffect(function () {
     function onResize() { setIsMobile(window.innerWidth < 768); }
     window.addEventListener("resize", onResize);
     return function () { window.removeEventListener("resize", onResize); };
   }, []);
 
-  var insumos = React.useMemo(function () { return data.materiais || []; }, [data.materiais]);
+  var insumos = useMemo(function () { return data.materiais || []; }, [data.materiais]);
   var pendentesMigracao = insumos.filter(i => !i.codigo).length;
-  var faltamDaSemente = React.useMemo(function () {
+  var faltamDaSemente = useMemo(function () {
     var codigos = {};
     insumos.forEach(i => { if (i.codigo) codigos[i.codigo] = 1; });
     return INSUMOS_SEED.filter(s => !codigos[s.codigo]).length;
   }, [insumos]);
 
-  var enriquecidos = React.useMemo(function () {
+  var enriquecidos = useMemo(function () {
     return insumos.map(function (i) {
       var p = precoInsumo(i);
       return { i: i, p: p };
@@ -5222,7 +5222,7 @@ function Insumos({ data, save }) {
   }, [insumos]);
 
   var ORDEM_CONF = { sem_preco: 0, obsoleta: 1, baixa: 2, media: 3, manual: 4, alta: 5 };
-  var filtrados = React.useMemo(function () {
+  var filtrados = useMemo(function () {
     var n = normalizarTexto(busca);
     return enriquecidos
       .filter(function (x) {
@@ -5240,7 +5240,7 @@ function Insumos({ data, save }) {
       });
   }, [enriquecidos, busca, filtroGrupo, filtroConf]);
 
-  var resumo = React.useMemo(function () {
+  var resumo = useMemo(function () {
     var r = { total: enriquecidos.length, alta: 0, media: 0, baixa: 0, obsoleta: 0, sem_preco: 0, manual: 0, pendentes: 0 };
     enriquecidos.forEach(function (x) {
       if (r[x.p.confianca] != null) r[x.p.confianca]++;
