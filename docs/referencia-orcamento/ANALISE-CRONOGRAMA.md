@@ -85,7 +85,7 @@ tem cinco camadas:
    repetitivas, linha de balanço; em canteiro, Last Planner (planejamento
    semanal com % de tarefas concluídas).
 
-## 3. Proposta para o VICKE (quando for a hora)
+## 3. Proposta para o VICKE (implementada em set/2026 — ver docs/SPEC-CRONOGRAMA.md)
 
 Reaproveitar o que já existe: as etapas do orçamento (ORD 0–24, incluindo as
 de instalações) viram a EAP; os prestadores do orçamento dão a equipe.

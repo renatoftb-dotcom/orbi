@@ -21,6 +21,7 @@ const ORDER = [
   "insumos-seed-cadastro.jsx",
   "insumos-seed.jsx",
   "composicoes-seed.jsx",
+  "cronograma-seed.jsx",
   "insumos.jsx",
   // obra-financeiro.jsx vem ANTES de clientes.jsx: clientes.jsx
   // (GestaoObraPanel) consome a taxonomia (PLANO_CONTAS, ETAPAS_OBRA,
@@ -31,6 +32,9 @@ const ORDER = [
   // ETAPAS_OBRA de lá quando a ponte com o P&L for implementada; e antes de
   // clientes.jsx porque é lá (GestaoObraPanel) que a UI futura vai entrar.
   "orcamento-obra.jsx",
+  // cronograma-obra.jsx usa normalizarProjeto/calcularTelhado de orcamento-obra.jsx
+  // e é renderizado dentro do resultado do orçamento (OrcamentoObraView).
+  "cronograma-obra.jsx",
   "clientes.jsx",
   "resultado-pdf.jsx",
   // shared-textos.jsx vem antes de quem o consome (modelo-padrao.jsx,

@@ -886,7 +886,12 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
         <button style={aba === "kits" ? INS_S.btn : INS_S.btnSec} onClick={function () { setAba("kits"); }}>Kits</button>
         <button style={aba === "pontos" ? INS_S.btn : INS_S.btnSec} onClick={function () { setAba("pontos"); }}>Pontos elétricos por cômodo</button>
+        {typeof CronogramaEditor === "function" && <button style={aba === "cronograma" ? INS_S.btn : INS_S.btnSec} onClick={function () { setAba("cronograma"); }}>Cronograma</button>}
+        {typeof ProdutividadeEditor === "function" && <button style={aba === "produtividade" ? INS_S.btn : INS_S.btnSec} onClick={function () { setAba("produtividade"); }}>Produtividade (HH)</button>}
       </div>
+
+      {aba === "cronograma" && <CronogramaEditor data={data} save={save} podeEditar={podeEditar} />}
+      {aba === "produtividade" && <ProdutividadeEditor data={data} save={save} podeEditar={podeEditar} />}
 
       {aba === "pontos" && (
         <div style={INS_S.card}>

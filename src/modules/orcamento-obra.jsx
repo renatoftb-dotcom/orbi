@@ -3299,6 +3299,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         </div>
       )}
 
+      {typeof CronogramaObraBloco === "function" && (
+        <CronogramaObraBloco obra={obra} obras={obras} data={data} save={save} onObraAtualizada={onObraAtualizada} isMobile={isMobile} podeEditar={!!perm.podeEditar} />
+      )}
+
       <div style={{ overflowX: "auto", marginBottom: 16 }}>
         {itensPorEtapa.map((grupo) => {
           const subtotal = grupo.itens.reduce((acc, i) => acc + i.total, 0);
