@@ -9462,6 +9462,44 @@ function calcularComodo(cfg) {
   const bancadaM2 = bancada ? medirBancada({ ...BANCADA_PADRAO, ...bancada }).total : 0;
   return { area: r2(area), perimetro: r2(perimetro), revestimento: r2(revestimento), bancada, bancadaM2, rodape: cfg.rodape ? r2(Math.max(0, perimetro - PORTA_LARGURA)) : 0 };
 }
+// Vãos para vergas/contravergas, automáticos: portas internas (1 por cômodo
+// com kit de porta, 0,80 m, só verga) + esquadrias (portas externas 1 verga;
+// janelas, maxim-ar e fixos verga + contraverga). O VBA lia um "vão de
+// portas e janelas" digitado e fazia treliça = vão × 2 / 12; aqui o campo
+// deixa de existir e o motor entrega o vão equivalente (metros de verga ÷ 2)
+// para a mesma fórmula. Sobrado: reparte pelo m² de parede de cada pavimento.
+function vaosAutomaticos(projeto) {
+  const p = projeto || {};
+  const tipos = typeof AMBIENTES_TIPOS !== "undefined" ? AMBIENTES_TIPOS : [];
+  const amb = migrarAmbientes(p.ambientes || {});
+  let portasInternas = 0;
+  for (const t of tipos) if (((t.kits || {}).PORTAS || []).length) portasInternas += Math.max(0, Math.round(numOrZero(amb[t.id])));
+  let metrosPortasExternas = 0, metrosJanelas = 0;
+  for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
+    const m = numOrZero(e && e.qtd) * numOrZero(e && e.largura);
+    if (/^PORTA/.test(String(e && e.familia || ""))) metrosPortasExternas += m; else metrosJanelas += m;
+  }
+  const metrosVergas = portasInternas * PORTA_LARGURA + metrosPortasExternas + 2 * metrosJanelas;
+  const r1 = (x) => Math.round(x * 100) / 100;
+  return { portasInternas, metrosPortasInternas: r1(portasInternas * PORTA_LARGURA), metrosPortasExternas: r1(metrosPortasExternas), metrosJanelas: r1(metrosJanelas), vaoEsquadrias: r1(metrosPortasExternas + metrosJanelas), metrosVergas: r1(metrosVergas), vaoEquivalente: r1(metrosVergas / 2) };
+}
+// Valores automáticos do bloco Pisos e revestimentos quando o campo está em branco
+function autosPisos(projeto) {
+  const p = projeto || {};
+  const arq = p.arquitetura || {}, terreo = p.terreo || {}, pav1 = p.pav1 || {};
+  const v = vaosAutomaticos(p);
+  const est = estimarPelosComodos(p);
+  const perimetro = numOrZero(terreo.perimetroParedes) + (p.tipologia === "Sobrado" ? numOrZero(pav1.perimetroParedes) : 0);
+  const r1 = (x) => Math.round(x * 10) / 10;
+  return {
+    pisoInterno: r1(numOrZero(arq.areaConstruida)),
+    rodapeM: r1(Math.max(0, perimetro - v.portasInternas * PORTA_LARGURA)),
+    soleirasM: r1(v.vaoEsquadrias),
+    revestimentoInterno: est.revestimentoInterno,
+    bancadas: est.bancadas,
+    vaos: v,
+  };
+}
 // Estimativa da obra inteira pelos cômodos (contagem × unitário)
 function estimarPelosComodos(projeto) {
   const p = projeto || {};
@@ -9792,6 +9830,12 @@ function normalizarProjeto(projeto) {
   const ambientesIn = p.ambientes || {};
   const pisosIn = p.pisos || {};
   const estimativaComodos = estimarPelosComodos(p);
+  const autos = autosPisos(p);
+  const vaosAuto = autos.vaos;
+  // parcela do térreo nos vãos (sobrado reparte pelo m² de parede de cada pavimento)
+  const m2ParTerreo = numOrZero(terreoIn.m2Parede20) + numOrZero(terreoIn.m2Parede15) + numOrZero(terreoIn.m2Parede25);
+  const m2ParPav1 = (p.tipologia === "Sobrado") ? numOrZero(pav1In.m2Parede20) + numOrZero(pav1In.m2Parede15) + numOrZero(pav1In.m2Parede25) : 0;
+  const shareTerreo = p.tipologia !== "Sobrado" ? 1 : (m2ParTerreo + m2ParPav1 > 0 ? m2ParTerreo / (m2ParTerreo + m2ParPav1) : 0.5);
   const instalacoesIn = p.instalacoes || {};
 
   const tipologia = p.tipologia === "Sobrado" ? "Sobrado" : "Térrea";
@@ -9823,7 +9867,10 @@ function normalizarProjeto(projeto) {
     m2Paredes20Terreo: numOrZero(terreoIn.m2Parede20),
     m2Paredes25Terreo: numOrZero(terreoIn.m2Parede25),
     m2Paredes15Terreo: numOrZero(terreoIn.m2Parede15),
-    vaoPortasJanelasTerreo: numOrZero(terreoIn.vaoPortasJanelas),
+    // vão equivalente para vergas/contravergas — automático (cômodos + esquadrias);
+    // projeto antigo sem cômodos nem esquadrias mantém o valor digitado
+    vaoPortasJanelasTerreo: vaosAuto.vaoEquivalente > 0 ? Math.round(vaosAuto.vaoEquivalente * shareTerreo * 100) / 100 : numOrZero(terreoIn.vaoPortasJanelas),
+    vaos: vaosAuto,
     colunas15Terreo: numOrZero(colunasTerreo["15"]),
     colunas20Terreo: numOrZero(colunasTerreo["20"]),
     colunas30Terreo: numOrZero(colunasTerreo["30"]),
@@ -9856,7 +9903,7 @@ function normalizarProjeto(projeto) {
       m2Parede20: numOrZero(pav1In.m2Parede20),
       m2Parede25: numOrZero(pav1In.m2Parede25),
       m2Parede15: numOrZero(pav1In.m2Parede15),
-      vaoPortasJanelas: numOrZero(pav1In.vaoPortasJanelas),
+      vaoPortasJanelas: vaosAuto.vaoEquivalente > 0 ? Math.round(vaosAuto.vaoEquivalente * (1 - shareTerreo) * 100) / 100 : numOrZero(pav1In.vaoPortasJanelas),
       colunas15: numOrZero(colunasPav1["15"]),
       colunas20: numOrZero(colunasPav1["20"]),
       colunas25: numOrZero(colunasPav1["25"]),
@@ -10024,12 +10071,12 @@ function normalizarProjeto(projeto) {
 
     // cp.pisos — pisos, revestimentos, rodapé, soleiras, bancadas e deck
     pisos: {
-      pisoInterno: normalizarSuperficie(pisosIn.pisoInterno),
+      pisoInterno: normalizarSuperficie(pisosIn.pisoInterno, autos.pisoInterno),
       pisoExterno: normalizarSuperficie(pisosIn.pisoExterno),
       revestimentoInterno: normalizarSuperficie(pisosIn.revestimentoInterno, estimativaComodos.revestimentoInterno || numOrZero(externa.revestimentoInterno)),
       revestimentoExterno: normalizarSuperficie(pisosIn.revestimentoExterno),
-      rodapeM: numOrZero(pisosIn.rodapeM), rodapeTipo: pisosIn.rodapeTipo || "poliestireno",
-      soleirasM: numOrZero(pisosIn.soleirasM), soleirasProduto: pisosIn.soleirasProduto || "",
+      rodapeM: numOrZero(pisosIn.rodapeM) || autos.rodapeM, rodapeTipo: pisosIn.rodapeTipo || "poliestireno",
+      soleirasM: numOrZero(pisosIn.soleirasM) || autos.soleirasM, soleirasProduto: pisosIn.soleirasProduto || "",
       bancadasM2: numOrZero(pisosIn.bancadasM2), bancadasProduto: pisosIn.bancadasProduto || "",
       // lista digitada; em branco, as bancadas automáticas dos cômodos
       bancadas: ((Array.isArray(pisosIn.bancadas) && pisosIn.bancadas.length) ? pisosIn.bancadas : estimativaComodos.bancadas).slice(0, BANCADAS_MAX).map((b) => ({
@@ -10447,13 +10494,11 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
               <div style={{ fontSize: 12, color: "#6b7280", gridColumn: isMobile ? "1 / -1" : "auto" }}>
                 {n > 0 && c.area > 0 ? (
                   <>
-                    {fmt(n * c.area)} m² de piso
-                    {c.revestimento > 0 && <> · <b style={{ color: "#374151" }}>{fmt(n * c.revestimento)} m² de revestimento</b></>}
-                    {c.bancada && <> · <b style={{ color: "#374151" }}>{fmt(n * c.bancadaM2)} m² de bancada</b> ({n > 1 ? `${n} × ` : ""}{fmt(c.bancada.comprimento)} m)</>}
-                    {c.rodape > 0 && <> · rodapé {fmt(n * c.rodape)} m</>}
-                    <span style={{ color: "#9ca3af" }}> · {cfg.L} × {cfg.W} m</span>
+                    {c.revestimento > 0 && <b style={{ color: "#374151" }}>{fmt(n * c.revestimento)} m² de revestimento</b>}
+                    {c.bancada && <>{c.revestimento > 0 ? " · " : ""}<b style={{ color: "#374151" }}>{fmt(n * c.bancadaM2)} m² de bancada</b> ({n > 1 ? `${n} × ` : ""}{fmt(c.bancada.comprimento)} m)</>}
+                    <span style={{ color: "#9ca3af" }}>{c.revestimento > 0 || c.bancada ? " · " : ""}{cfg.L} × {cfg.W} m</span>
                   </>
-                ) : n > 0 ? <span style={{ color: "#9ca3af" }}>sem medidas — clique no nome e informe</span> : null}
+                ) : n > 0 && !(COMODO_OBRA_PROJETO[a.id] || {}).semMedidas ? <span style={{ color: "#9ca3af" }}>sem medidas — clique no nome e informe</span> : null}
               </div>
             </div>
             {aberto && (
@@ -10726,7 +10771,6 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                   </div>
                 </>
               )}
-              <CampoNum label="Vãos de portas e janelas" valor={get("terreo.vaoPortasJanelas")} onChange={(v) => set("terreo.vaoPortasJanelas", v)} />
             </>
           )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
@@ -10749,7 +10793,6 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                 <CampoNum label="M² parede 25cm" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
               </>
             )}
-            <CampoNum label="Vãos de portas e janelas" valor={get("terreo.vaoPortasJanelas")} onChange={(v) => set("terreo.vaoPortasJanelas", v)} />
             <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
               <button type="button" style={{ ...C.btnGhost, fontSize: 11 }} onClick={() => setParedeTerreoExpandida((v) => !v)}>
                 {paredeTerreoExpandida ? "Simplificar (tudo 20cm)" : "Expandir espessuras de parede (15/20/25cm)"}
@@ -10774,7 +10817,6 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               <CampoNum label="M² parede 15cm" valor={get("pav1.m2Parede15")} onChange={(v) => set("pav1.m2Parede15", v)} />
               <CampoNum label="M² parede 20cm" valor={get("pav1.m2Parede20")} onChange={(v) => set("pav1.m2Parede20", v)} />
               <CampoNum label="M² parede 25cm" valor={get("pav1.m2Parede25")} onChange={(v) => set("pav1.m2Parede25", v)} />
-              <CampoNum label="Vãos de portas e janelas" valor={get("pav1.vaoPortasJanelas")} onChange={(v) => set("pav1.vaoPortasJanelas", v)} />
             </BlocoColapsavel>
 
             <BlocoColapsavel titulo="Laje Pav. 1" aberto={!!blocosAbertos.lajePav1} onToggle={() => toggleBloco("lajePav1")}>
@@ -10852,41 +10894,19 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
             Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({projetoDraft.padrao || "Médio"}); sem formato, o tamanho típico do padrão. A partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
           </div>
-          {(() => {
-            const est = estimarPelosComodos(projetoDraft);
-            const temComodos = est.detalhes.length > 0;
-            const jaPreenchido = numOrZero(get("pisos.pisoInterno.m2")) > 0 || numOrZero(get("pisos.revestimentoInterno.m2")) > 0 || bancadasLista.length > 0;
-            function aplicarEstimativa() {
-              const aplicar = () => setProjetoDraft((pd) => {
-                let n = setEmCaminho(pd, "pisos.pisoInterno.m2", est.pisoInterno);
-                n = setEmCaminho(n, "pisos.revestimentoInterno.m2", est.revestimentoInterno);
-                n = setEmCaminho(n, "pisos.rodapeM", est.rodapeM);
-                n = setEmCaminho(n, "pisos.soleirasM", est.soleirasM);
-                n = setEmCaminho(n, "pisos.bancadas", est.bancadas);
-                return n;
-              });
-              if (jaPreenchido && typeof dialogo !== "undefined") {
-                dialogo.confirmar({ titulo: "Substituir pelos cômodos?", mensagem: "Piso interno, revestimento interno, rodapé, soleiras e as bancadas serão substituídos pela estimativa do tamanho dos cômodos.", confirmar: "Substituir" }).then((ok) => { if (ok) aplicar(); });
-              } else aplicar();
-            }
-            return (
-              <div style={{ gridColumn: "1 / -1", display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
-                <button type="button" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }} disabled={!temComodos} onClick={aplicarEstimativa}>Pré-preencher pelos cômodos ({projetoDraft.tamanhoComodos || "Médio"})</button>
-                <span style={{ fontSize: 12, color: "#6b7280" }}>
-                  {temComodos
-                    ? `estimativa: piso ${est.pisoInterno} m² · revestimento de parede ${est.revestimentoInterno} m² · rodapé ${est.rodapeM} m · soleiras e peitoris ${est.soleirasM} m · ${est.bancadas.length} bancada${est.bancadas.length !== 1 ? "s" : ""} — pelas medidas do orçamento de projetos (${est.detalhes.map((d) => `${d.n}× ${d.nome} ${d.L}×${d.W}`).join(", ")})`
-                    : "informe os cômodos no bloco Geral para estimar piso, revestimento, rodapé, soleiras e bancadas pelo tamanho dos cômodos"}
-                </span>
-              </div>
-            );
-          })()}
+          {(() => { const au = autosPisos(projetoDraft); return (
+            <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
+              Em branco, o VICKE usa o automático: piso interno = área construída ({au.pisoInterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = perímetro das paredes menos portas ({au.rodapeM} m) · soleiras e peitoris = vão das esquadrias ({au.soleirasM} m) · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
+            </div>
+          ); })()}
           {SUPERFICIES_PISOS.map((sup) => (
             <div key={sup.id} style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-              {sup.id === "revestimentoInterno" ? (
+              {sup.id === "revestimentoInterno" || sup.id === "pisoInterno" ? (
                 <div>
                   <label style={C.label}>{sup.nome} (m²)</label>
-                  <input style={C.input} type="number" step="0.01" value={get("pisos.revestimentoInterno.m2") ?? ""} placeholder={`auto: ${estimarPelosComodos(projetoDraft).revestimentoInterno} (cômodos)`}
-                    onChange={(e) => set("pisos.revestimentoInterno.m2", e.target.value === "" ? "" : Number(e.target.value))} />
+                  <input style={C.input} type="number" step="0.01" value={get(`pisos.${sup.id}.m2`) ?? ""}
+                    placeholder={sup.id === "pisoInterno" ? `auto: ${autosPisos(projetoDraft).pisoInterno} (área construída)` : `auto: ${autosPisos(projetoDraft).revestimentoInterno} (cômodos)`}
+                    onChange={(e) => set(`pisos.${sup.id}.m2`, e.target.value === "" ? "" : Number(e.target.value))} />
                 </div>
               ) : (
                 <CampoNum label={`${sup.nome} (m²)`} valor={get(`pisos.${sup.id}.m2`)} onChange={(v) => set(`pisos.${sup.id}.m2`, v)} />
@@ -10900,12 +10920,12 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             </div>
           ))}
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-            <CampoNum label="Rodapé (m)" valor={get("pisos.rodapeM")} onChange={(v) => set("pisos.rodapeM", v)} />
+            <div><label style={C.label}>Rodapé (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.rodapeM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).rodapeM} (perímetro)`} onChange={(e) => set("pisos.rodapeM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
             <CampoSelect label="Tipo de rodapé" valor={get("pisos.rodapeTipo") || "poliestireno"} onChange={(v) => set("pisos.rodapeTipo", v)} opcoes={RODAPE_TIPOS} />
             <div />
           </div>
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-            <CampoNum label="Soleiras e peitoris (m)" valor={get("pisos.soleirasM")} onChange={(v) => set("pisos.soleirasM", v)} />
+            <div><label style={C.label}>Soleiras e peitoris (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.soleirasM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).soleirasM} (esquadrias)`} onChange={(e) => set("pisos.soleirasM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
             <div style={{ fontSize: 11, color: "#9ca3af" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
             <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.soleirasProduto") ?? ""} placeholder={SOLEIRA_PADRAO} onChange={(e) => set("pisos.soleirasProduto", e.target.value)} /></div>
           </div>

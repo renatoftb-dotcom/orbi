@@ -39,7 +39,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos,
   };
 `)();
 
@@ -521,7 +521,10 @@ teste("padrão Baixo usa cerâmica; rodapé do próprio piso vira m² do produto
   assert.strictEqual(ceram.length, 2); // piso + rodapé
   assert.strictEqual(ceram[1].qtd, 3.3); // 30 × 0,10 × 1,1
   assert.ok(!it.some((i) => i.item === "RODAPE POLIESTIRENO 15CM"));
-  const vazio = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 } }, { materiais: [] });
+  // área construída preenche o piso interno sozinha; sem área nem cômodos, nada
+  const auto = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 } }, { materiais: [] });
+  assert.strictEqual(auto.itens.find((i) => i.subEtapa === "Piso interno").qtd, 66);
+  const vazio = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: {} }, { materiais: [] });
   assert.ok(!vazio.itens.some((i) => i.etapa === "Pisos e revestimentos"));
 });
 
@@ -570,6 +573,30 @@ teste("estimativa pelos cômodos (tamanho Médio): piso, revestimento, rodapé, 
   assert.strictEqual(modulo.estimarPelosComodos({}).detalhes.length, 0);
   assert.strictEqual(normalizarProjeto({ tamanhoComodos: "Compacta" }).tamanhoComodos, "Compacta");
   assert.strictEqual(normalizarProjeto({}).tamanhoComodos, "Médio");
+});
+
+teste("vãos automáticos: portas internas 0,80 (1 verga) + esquadrias (janela 2 vergas, porta externa 1); rodapé pelo perímetro; soleiras pelo vão das esquadrias", () => {
+  const proj = { tipologia: "Térrea", arquitetura: { areaConstruida: 120 }, terreo: { perimetroParedes: 90, m2Parede20: 300 },
+    ambientes: { dormitorio: 3, wc: 2, cozinha: 1 }, // 3 + 2 portas (cozinha sem porta)
+    esquadrias: [{ familia: "JANELA_CORRER", qtd: 4, largura: 1.5 }, { familia: "PORTA_CORRER", qtd: 1, largura: 2.4 }] };
+  const v = modulo.vaosAutomaticos(proj);
+  assert.strictEqual(v.portasInternas, 5);
+  assert.strictEqual(v.metrosVergas, 5 * 0.8 + 2.4 + 2 * 6); // 18,4
+  assert.strictEqual(v.vaoEquivalente, 9.2);
+  const cp = normalizarProjeto(proj);
+  assert.strictEqual(cp.vaoPortasJanelasTerreo, 9.2);
+  const au = modulo.autosPisos(proj);
+  assert.strictEqual(au.pisoInterno, 120);
+  assert.strictEqual(au.rodapeM, 86);      // 90 − 5 × 0,8
+  assert.strictEqual(au.soleirasM, 8.4);   // 6 + 2,4
+  assert.strictEqual(cp.pisos.rodapeM, 86); assert.strictEqual(cp.pisos.soleirasM, 8.4); assert.strictEqual(cp.pisos.pisoInterno.m2, 120);
+  // digitado vence o automático; projeto antigo sem cômodos/esquadrias mantém o vão digitado
+  assert.strictEqual(normalizarProjeto({ ...proj, pisos: { rodapeM: 50 } }).pisos.rodapeM, 50);
+  assert.strictEqual(normalizarProjeto({ tipologia: "Térrea", terreo: { vaoPortasJanelas: 49 } }).vaoPortasJanelasTerreo, 49);
+  // sobrado reparte pelo m² de parede
+  const sob = normalizarProjeto({ ...proj, tipologia: "Sobrado", pav1: { m2Parede20: 100, perimetroParedes: 30 } });
+  assert.strictEqual(sob.vaoPortasJanelasTerreo, 6.9); assert.strictEqual(sob.pav1.vaoPortasJanelas, 2.3);
+  assert.strictEqual(modulo.autosPisos({ ...proj, tipologia: "Sobrado", pav1: { perimetroParedes: 30 } }).rodapeM, 116);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
