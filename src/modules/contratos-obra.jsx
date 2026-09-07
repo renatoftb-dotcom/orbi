@@ -174,6 +174,16 @@ function enderecoLinha(o) {
   return [x.logradouro, x.numero && `nº ${x.numero}`, x.bairro, [x.cidade, x.estado].filter(Boolean).join("/"), x.cep && `CEP ${x.cep}`].filter(Boolean).join(", ");
 }
 
+// Endereço da obra. O cadastro da obra só guarda endereço próprio quando o
+// usuário marca "Endereço diferente"; do contrário a obra fica no endereço
+// do cliente. Obras antigas (sem a marcação) usam o endereço que tiverem.
+function enderecoDaObra(obra, cliente) {
+  const o = obra || {};
+  const propria = enderecoLinha(o);
+  if (propria && (o.enderecoProprio || o.enderecoProprio === undefined)) return propria;
+  return enderecoLinha(cliente);
+}
+
 // ── Dados de partida de um contrato novo ────────────────────────
 function contratoVazio(modeloId, clienteId, obraId, tipoId) {
   const m = contratoModelo(modeloId);
@@ -253,7 +263,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const ela = global ? "a CONTRATADA" : "o CONTRATADO";      // sujeito
   const aEla = global ? "à CONTRATADA" : "ao CONTRATADO";    // objeto indireto
   const dela = global ? "da CONTRATADA" : "do CONTRATADO";
-  const enderecoObra = c.enderecoObra || enderecoLinha(obra) || enderecoLinha(cliente);
+  const enderecoObra = c.enderecoObra || enderecoDaObra(obra, cliente);
   const foro = c.foro || (cliente && cliente.cidade) || "";
   const cidadeAss = c.cidadeAssinatura || (cliente && cliente.cidade ? `${cliente.cidade}/${cliente.estado || "SP"}` : "");
 

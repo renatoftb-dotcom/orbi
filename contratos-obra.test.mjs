@@ -17,7 +17,7 @@ const modulo = new Function(`
   ${src.slice(0, corte)}
   return { CONTRATO_MODELOS, contratoModelo, contratoVazio, valorContrato, parcelasContrato,
            porExtensoCtr, moedaExtensoCtr, qualificarParte, montarContrato, fmtMoedaCtr,
-           TIPOS_PROFISSIONAL, tipoProfissional, prestadoresDoTipo };
+           TIPOS_PROFISSIONAL, tipoProfissional, prestadoresDoTipo, enderecoDaObra };
 `)();
 
 let passou = 0, falhou = 0;
@@ -149,6 +149,26 @@ teste("endereço da obra, foro e cidade caem no cadastro do cliente quando não 
   // endereço próprio da obra vence o do cliente
   const outro = modulo.montarContrato({ ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), enderecoObra: "Rua X, nº 10, Jacarezinho/PR" }, { cliente, obra, prestador: serralheiro });
   assert.ok(texto(outro).includes("Rua X, nº 10, Jacarezinho/PR"));
+});
+
+teste("obra marcada como 'endereço diferente' manda o seu próprio endereço para o contrato", () => {
+  const obraPropria = { id: "o2", nome: "Chácara", enderecoProprio: true,
+    logradouro: "Estrada do Limoeiro", numero: "km 4", bairro: "Zona Rural", cidade: "Jacarezinho", estado: "PR", cep: "86400-000" };
+  assert.strictEqual(modulo.enderecoDaObra(obraPropria, cliente), "Estrada do Limoeiro, nº km 4, Zona Rural, Jacarezinho/PR, CEP 86400-000");
+  const d = modulo.montarContrato(modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o2", "empreiteiro"), { cliente, obra: obraPropria, prestador: serralheiro });
+  assert.ok(texto(d).includes("Estrada do Limoeiro, nº km 4"));
+
+  // marcada como "endereço do cliente": o que estiver gravado na obra é ignorado
+  assert.strictEqual(modulo.enderecoDaObra({ ...obraPropria, enderecoProprio: false }, cliente),
+    "Avenida Doutor Altino Arantes, nº 524, Centro, Ourinhos/SP, CEP 19.900-031");
+  // obra sem endereço nenhum cai no cliente
+  assert.ok(modulo.enderecoDaObra(obra, cliente).startsWith("Avenida Doutor Altino Arantes"));
+  // obra antiga, sem a marcação, mantém o endereço que tiver
+  const { enderecoProprio, ...antiga } = obraPropria;
+  assert.ok(modulo.enderecoDaObra(antiga, cliente).startsWith("Estrada do Limoeiro"));
+  // o campo digitado no gerador continua vencendo tudo
+  const manual = modulo.montarContrato({ ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o2"), enderecoObra: "Rua X, nº 10" }, { cliente, obra: obraPropria, prestador: serralheiro });
+  assert.ok(texto(manual).includes("Rua X, nº 10"));
 });
 
 teste("sem prestador escolhido o contrato sai com o nome digitado e sem qualificação", () => {

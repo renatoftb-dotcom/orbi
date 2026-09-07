@@ -1048,13 +1048,25 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   }
 
   function novaObra() {
-    setFormObra({ id: uid(), clienteId: cliente.id, nome: "", status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "", ativo: true });
+    setFormObra({ id: uid(), clienteId: cliente.id, nome: "", status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "", ativo: true,
+      enderecoProprio: false, cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "" });
     setView("form");
   }
 
   function editarObra(obra) {
     setFormObra({ ...obra });
     setView("form");
+  }
+
+  // ViaCEP, igual ao cadastro do cliente — preenche o endereço próprio da obra.
+  async function buscarCepObra(cepBruto) {
+    const clean = String(cepBruto || "").replace(/\D/g, "");
+    if (clean.length !== 8) return;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const d = await r.json();
+      if (!d.erro) setFormObra(f => ({ ...f, logradouro: d.logradouro || f.logradouro, bairro: d.bairro || f.bairro, cidade: d.localidade || f.cidade, estado: d.uf || f.estado }));
+    } catch {}
   }
 
   function salvarObra() {
@@ -1114,6 +1126,39 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={isMobile ? { gridColumn: "1 / -1" } : {}}><label style={C.label}>Responsável</label><input style={C.input} value={formObra.responsavel} onChange={e => setFormObra({ ...formObra, responsavel: e.target.value })} placeholder="Nome do responsável" /></div>
         </div>
         <div style={{ marginBottom: 12 }}><label style={C.label}>Descrição</label><textarea style={{ ...C.input, resize: "vertical" }} value={formObra.descricao} onChange={e => setFormObra({ ...formObra, descricao: e.target.value })} rows={3} /></div>
+
+        {/* Endereço da obra — é o que vai para os contratos. Por padrão a obra
+            fica no endereço do cliente; "Endereço diferente" abre os campos. */}
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 8 }}>Endereço da obra</div>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: formObra.enderecoProprio ? 12 : 0 }}>
+            {[{ v: false, label: "Endereço do cliente" }, { v: true, label: "Endereço diferente" }].map(op => (
+              <label key={String(op.v)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#262421", cursor: "pointer" }}>
+                <input type="radio" name="enderecoObra" checked={!!formObra.enderecoProprio === op.v} onChange={() => setFormObra({ ...formObra, enderecoProprio: op.v })} style={{ cursor: "pointer" }} />
+                {op.label}
+              </label>
+            ))}
+          </div>
+          {!formObra.enderecoProprio ? (
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 8 }}>
+              {[cliente.logradouro, cliente.numero && `nº ${cliente.numero}`, cliente.bairro, [cliente.cidade, cliente.estado].filter(Boolean).join("/"), cliente.cep && `CEP ${cliente.cep}`].filter(Boolean).join(", ")
+                || "O cadastro do cliente ainda não tem endereço — preencha lá ou marque \"Endereço diferente\"."}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr 1fr", gap: 12 }}>
+              <div><label style={C.label}>CEP</label><input style={C.input} value={formObra.cep || ""} onChange={e => { setFormObra({ ...formObra, cep: e.target.value }); buscarCepObra(e.target.value); }} placeholder="00000-000" /></div>
+              <div><label style={C.label}>Logradouro</label><input style={C.input} value={formObra.logradouro || ""} onChange={e => setFormObra({ ...formObra, logradouro: e.target.value })} /></div>
+              <div><label style={C.label}>Número</label><input style={C.input} value={formObra.numero || ""} onChange={e => setFormObra({ ...formObra, numero: e.target.value })} /></div>
+              <div><label style={C.label}>Complemento</label><input style={C.input} value={formObra.complemento || ""} onChange={e => setFormObra({ ...formObra, complemento: e.target.value })} placeholder="quadra, lote, bloco" /></div>
+              <div><label style={C.label}>Bairro</label><input style={C.input} value={formObra.bairro || ""} onChange={e => setFormObra({ ...formObra, bairro: e.target.value })} /></div>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 12 }}>
+                <div><label style={C.label}>Cidade</label><input style={C.input} value={formObra.cidade || ""} onChange={e => setFormObra({ ...formObra, cidade: e.target.value })} /></div>
+                <div><label style={C.label}>UF</label><input style={C.input} value={formObra.estado || ""} onChange={e => setFormObra({ ...formObra, estado: e.target.value.toUpperCase().slice(0, 2) })} maxLength={2} /></div>
+              </div>
+            </div>
+          )}
+        </div>
+
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button style={C.btnSec} onClick={() => setView("lista")}>Cancelar</button>
           <button style={C.btn} onClick={salvarObra}>Salvar obra</button>
@@ -1391,7 +1436,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
             <label style={C.label}>Endereço da obra</label>
-            <input style={C.input} value={g.enderecoObra || ""} onChange={e => setG("enderecoObra", e.target.value)} placeholder="em branco, usa o endereço do cliente" />
+            <input style={C.input} value={g.enderecoObra || ""} onChange={e => setG("enderecoObra", e.target.value)} placeholder={enderecoDaObra(obraSelecionada, cliente) || "em branco, usa o endereço do cadastro"} />
+            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Em branco, o contrato usa o endereço do cadastro da obra — ou o do cliente, quando a obra está marcada como "Endereço do cliente".</div>
           </div>
           {global ? (
             <div>

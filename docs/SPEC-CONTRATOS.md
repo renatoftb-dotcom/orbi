@@ -40,6 +40,22 @@ Cada tipo carrega três coisas:
 essa lista. Contratos gravados antes desta versão ficam com
 `tipoProfissional: ""` e continuam abrindo normalmente.
 
+## Endereço da obra
+
+O cadastro da obra (Gestão de Obra → nova/editar obra) tem a marcação
+**Endereço do cliente** / **Endereço diferente**:
+
+- *Endereço do cliente* (padrão) — a obra não guarda endereço; o contrato usa
+  o endereço do cadastro do cliente. A tela mostra qual é.
+- *Endereço diferente* — abre CEP (com ViaCEP), logradouro, número,
+  complemento, bairro, cidade e UF na própria obra.
+
+`enderecoDaObra(obra, cliente)` resolve nessa ordem, e `montarContrato` a usa
+como padrão. O campo *Endereço da obra* do gerador continua existindo e vence
+tudo quando preenchido — em branco, ele mostra como placeholder o endereço
+que será usado. Obras cadastradas antes da marcação mantêm o endereço que
+tiverem.
+
 ## Modelos
 
 Tirados de dois contratos reais do escritório (COBOP, set/2026):
