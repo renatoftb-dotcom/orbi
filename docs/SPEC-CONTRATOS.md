@@ -176,6 +176,14 @@ Detalhes que vieram dos contratos reais e estão cobertos por teste
 - **Pessoa física** troca CNPJ por CPF, "com sede" por "residente e
   domiciliado" e não leva representante.
 
+## Exclusões do objeto
+
+O campo aceita as duas formas de escrever, sem duplicar a abertura: começando
+em **minúscula** ("o lixamento do concreto e …"), o contrato monta "Não
+integram o objeto deste contrato: …"; começando em **maiúscula** ("Não
+integra o objeto deste contrato a revisão da estrutura existente."), o texto
+entra como está. O ponto final é garantido uma vez só.
+
 ## Data de assinatura
 
 `dataAssinatura` nasce com a data do dia e é editável no gerador. O fecho do

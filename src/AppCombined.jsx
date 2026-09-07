@@ -14668,7 +14668,15 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     marcas.itens = { id: "objeto", i: objeto.length - 1 };
     itensApos = objeto.length - 1;
   }
-  if (c.exclusoes) objeto.push(`Não integram o objeto deste contrato: ${c.exclusoes}`);
+  // Exclusões: se a pessoa já escreveu a frase inteira ("Não integra o objeto
+  // deste contrato a revisão..."), o texto entra como está; se escreveu só a
+  // lista ("o lixamento do concreto e ..."), o contrato põe a abertura.
+  const exclusoes = String(c.exclusoes || "").trim();
+  if (exclusoes) {
+    const jaEhFrase = /^[A-ZÁÂÃÀÉÊÍÓÔÕÚÇ]/.test(exclusoes);
+    const corpo = jaEhFrase ? exclusoes : `Não integram o objeto deste contrato: ${exclusoes}`;
+    objeto.push(/[.!?]$/.test(corpo) ? corpo : `${corpo}.`);
+  }
   add("objeto", "DO OBJETO", objeto, { tabelaItens: temItens, tabelaItensApos: itensApos });
 
   // ── Regime ──
@@ -16740,7 +16748,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         <div style={{ marginBottom: 12 }}>
           <label style={C.label}>Exclusões do objeto (o que não entra)</label>
-          <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: lixamento do concreto, montagem hidráulica e elétrica da piscina" />
+          <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: o lixamento do concreto e a montagem hidráulica da piscina" />
+          <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Comece em minúscula para o contrato abrir com "Não integram o objeto deste contrato:". Começando em maiúscula, o seu texto entra como está.</div>
         </div>
 
         <div style={bloco}>

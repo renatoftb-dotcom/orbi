@@ -419,5 +419,24 @@ teste("'Especificar' entra na cláusula do regime, e sem ele o texto padrão con
   assert.ok(!t({ opcoes: { ...base.opcoes, ferramentas: false }, ferramentasDetalhe: "colher e prumo" }).includes("colher e prumo"));
 });
 
+teste("exclusões não repetem a abertura quando a frase já vem pronta", () => {
+  const base = modulo.contratoVazio("empreitadaGlobal", "c1", "o1", "serralheiro");
+  const cl1 = (ex) => modulo.montarContrato({ ...base, exclusoes: ex }, { cliente, obra, prestador: serralheiro })
+    .clausulas.find(x => x.id === "objeto").itens.slice(-1)[0];
+  // lista em minúscula: o contrato põe a abertura
+  assert.strictEqual(cl1("o lixamento do concreto e a montagem da piscina"),
+    "1.3. Não integram o objeto deste contrato: o lixamento do concreto e a montagem da piscina.");
+  // frase já escrita: entra como está, sem a abertura duplicada
+  const pronta = cl1("Não integra o objeto deste contrato a revisão da estrutura existente. Não inclui o fornecimento de lápis.");
+  assert.strictEqual(pronta, "1.3. Não integra o objeto deste contrato a revisão da estrutura existente. Não inclui o fornecimento de lápis.");
+  assert.ok(!/Não integram o objeto deste contrato: Não integra/.test(pronta));
+  // ponto final é garantido uma vez só
+  assert.ok(cl1("o lixamento do concreto.").endsWith("o lixamento do concreto."));
+  assert.ok(!cl1("o lixamento do concreto.").endsWith(".."));
+  // espaço em branco não vira cláusula
+  assert.strictEqual(modulo.montarContrato({ ...base, exclusoes: "   " }, { cliente, obra, prestador: serralheiro })
+    .clausulas.find(x => x.id === "objeto").itens.length, 2);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

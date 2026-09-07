@@ -1676,7 +1676,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         <div style={{ marginBottom: 12 }}>
           <label style={C.label}>Exclusões do objeto (o que não entra)</label>
-          <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: lixamento do concreto, montagem hidráulica e elétrica da piscina" />
+          <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: o lixamento do concreto e a montagem hidráulica da piscina" />
+          <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Comece em minúscula para o contrato abrir com "Não integram o objeto deste contrato:". Começando em maiúscula, o seu texto entra como está.</div>
         </div>
 
         <div style={bloco}>
