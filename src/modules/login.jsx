@@ -47,7 +47,7 @@ function getEstilos(loading) {
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      background: "#f5f3f0",
+      background: "#fafafb",
       padding: "20px",
     },
     box: { width: "100%", maxWidth: 360 },

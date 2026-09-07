@@ -4419,7 +4419,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
         <div style={{ display: "grid", gridTemplateColumns: a.molhado ? colunasMolhado : colunasSeco, gap: 8, alignItems: "center", padding: "3px 0" }}>
           {a.molhado ? (
             <button type="button" onClick={() => setComodoAberto(aberto ? null : a.id)} title="Editar medidas, revestimento e bancada"
-              style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 13, padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${aberto ? "#b5652f" : "rgba(38,36,33,0.18)"}`, background: aberto ? "#fdf6f0" : "#fff", color: "#1f2a37", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 13, padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${aberto ? "#b5652f" : "rgba(38,36,33,0.18)"}`, background: aberto ? "#eef5ff" : "#fff", color: "#1f2a37", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {a.nome}{cfg.editado ? " *" : ""}
             </button>
           ) : (

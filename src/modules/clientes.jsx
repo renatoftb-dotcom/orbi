@@ -859,10 +859,10 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // Sol (fundo levemente colorido, borda neutra translúcida, foco com glow,
   // seções em uppercase com cor de destaque), mas cores próprias do Vicke.
   const VK = {
-    fundo:      "#f5f3f0",
+    fundo:      "#fafafb",
     grafite:    "#111827",
     cobre:      "#b5652f",
-    cobreClaro: "#fdf6f0",
+    cobreClaro: "#eef5ff",
     ink:        "#111827",
     inkSoft:    "#4b5563",
   };

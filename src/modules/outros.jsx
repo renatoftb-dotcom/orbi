@@ -181,7 +181,7 @@ function FilterPill({ label, count, active, onClick, countColor }) {
         fontSize:12, color: active ? "#b5652f" : "#6b7280",
         border:"1.5px solid " + (active ? "#b5652f" : "rgba(38,36,33,0.16)"),
         borderRadius:20, padding:"5px 12px",
-        background: active ? "#fdf6f0" : "#fff",
+        background: active ? "#eef5ff" : "#fff",
         cursor:"pointer", fontFamily:"inherit",
         display:"flex", alignItems:"center", gap:5,
       }}>
@@ -500,7 +500,7 @@ function Obras({ data, save }) {
   const pillStyle = (ativa) => ({
     padding: "6px 14px", borderRadius: 7, fontSize: 12,
     border: "1.5px solid " + (ativa ? "#0474f4" : "rgba(38,36,33,0.16)"),
-    background: ativa ? "#fdf6f0" : "#fff",
+    background: ativa ? "#eef5ff" : "#fff",
     color: ativa ? "#0474f4" : "#6b7280",
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });

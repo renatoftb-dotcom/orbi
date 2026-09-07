@@ -404,6 +404,9 @@ function tempoRelativo(iso) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// Azul de interação do app — ver docs/SPEC-VISUAL.md.
+const AZUL_VK_APP = "#0474f4";
+
 // HOME MENU
 // ═══════════════════════════════════════════════════════════════
 
@@ -451,7 +454,7 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
   // Paleta oficial do Vicke (grafite + cobre) — ver memória de projeto
   // "vicke_paleta_cores". Uma fonte só (Inter) em toda a hierarquia visual;
   // diferenciação é por tamanho/cor/peso, não por família de fonte.
-  const VK = { fundo:"#f5f3f0", grafite:"#262421", cobre:"#b5652f", cobreClaro:"#fdf6f0", inkSoft:"#78716c" };
+  const VK = { fundo:"#fafafb", grafite:"#111827", cobre:AZUL_VK_APP, cobreClaro:"#eef5ff", inkSoft:"#4b5563" };
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"calc(100vh - 53px)", padding: isMobile ? "32px 16px" : "40px 32px", background:VK.fundo, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');`}</style>
@@ -465,7 +468,7 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
             style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: isMobile ? "16px 14px" : "20px", textAlign:"left", cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif", position:"relative", boxShadow:"0 4px 16px -10px rgba(38,36,33,0.2)", transition:"all 0.15s ease" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor=VK.cobre; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.16)"; }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor=VK.cobre; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.16)"; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="0 4px 16px -10px rgba(38,36,33,0.2)"; }}>
             <div style={{ fontSize:14, fontWeight:700, color:VK.grafite, marginBottom:4 }}>{m.label}</div>
             <div style={{ fontSize:12, color:VK.inkSoft }}>{m.desc}</div>
@@ -1725,7 +1728,7 @@ export default function ModuloClientesFornecedores() {
                                 fontFamily:"'Inter', system-ui, sans-serif",
                                 textAlign:"left", transition:"all 0.12s",
                               }}
-                              onMouseEnter={e => { if (!ativoSub) { e.currentTarget.style.background="#faf9f7"; e.currentTarget.style.color="#78716c"; } }}
+                              onMouseEnter={e => { if (!ativoSub) { e.currentTarget.style.background="#eef5ff"; e.currentTarget.style.color="#78716c"; } }}
                               onMouseLeave={e => { if (!ativoSub) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}
                               onClick={() => {
                                 tentarTrocar(() => {
@@ -1751,7 +1754,7 @@ export default function ModuloClientesFornecedores() {
               return (
                 <button key={k} style={itemStyle(aba===k)}
                   title={colapsadaEf ? label : undefined}
-                  onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#faf9f7"; }}
+                  onMouseEnter={e => { if(aba!==k) e.currentTarget.style.background="#eef5ff"; }}
                   onMouseLeave={e => { if(aba!==k) e.currentTarget.style.background="transparent"; }}
                   onClick={() => {
                     tentarTrocar(() => {
@@ -1784,7 +1787,7 @@ export default function ModuloClientesFornecedores() {
             {!isMaster && (
               <button style={itemStyle(aba==="escritorio")}
                 title={colapsadaEf ? "Escritório" : undefined}
-                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#faf9f7"; }}
+                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#eef5ff"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -1798,7 +1801,7 @@ export default function ModuloClientesFornecedores() {
                 Master também vê — útil pra Vicke caso queira testar o fluxo. */}
             <button style={itemStyle(aba==="orcamento")}
               title={colapsadaEf ? "Orçamento" : undefined}
-              onMouseEnter={e => { if(aba!=="orcamento") e.currentTarget.style.background="#faf9f7"; }}
+              onMouseEnter={e => { if(aba!=="orcamento") e.currentTarget.style.background="#eef5ff"; }}
               onMouseLeave={e => { if(aba!=="orcamento") e.currentTarget.style.background="transparent"; }}
               onClick={() => { tentarTrocar(() => { setAba("orcamento"); setOrcamentoTelaCheia(null); }); }}>
               <span style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -1811,7 +1814,7 @@ export default function ModuloClientesFornecedores() {
             {isMaster && (
               <button style={itemStyle(aba==="escritorio")}
                 title={colapsadaEf ? "Escritório (Master)" : undefined}
-                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#faf9f7"; }}
+                onMouseEnter={e => { if(aba!=="escritorio") e.currentTarget.style.background="#eef5ff"; }}
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -1873,7 +1876,7 @@ export default function ModuloClientesFornecedores() {
           </div>
       </div>
 
-      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#f5f3f0" }}>
+      <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", background:"#fafafb" }}>
         {/* ── Header mobile: aparece só em <768px. Tem hamburguer pra abrir
             o drawer da sidebar + nome do escritório (compacto). ── */}
         {isMobile && (
@@ -2071,7 +2074,7 @@ export default function ModuloClientesFornecedores() {
                   fontWeight: ativoSub ? 600 : 400,
                   fontFamily:"inherit", cursor:"pointer", textAlign:"left",
                 }}
-                onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#faf9f7"; }}
+                onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#eef5ff"; }}
                 onMouseLeave={e => { if (!ativoSub) e.currentTarget.style.background="transparent"; }}>
                 {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#0474f4" : "#4b5563"} />}
                 {s.label}

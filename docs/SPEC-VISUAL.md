@@ -34,8 +34,10 @@ Para as bordas que são estilo inline (seleção), os módulos usam a constante
 
 ## Superfícies
 
-Fundo branco, bordas finas `rgba(38,36,33,0.14)`, blocos auxiliares em
-`#fafafa`. Sem fundo cobre, âmbar ou verde; sem ícone colorido de cabeçalho;
+Fundo das telas em `#fafafb` (cinza quase branco) — o areia `#f5f3f0` saiu.
+Cartões e blocos em branco, bordas finas `rgba(38,36,33,0.14)`, blocos
+auxiliares em `#fafafa`. O pêssego `#fdf6f0` de item selecionado e o
+`#faf9f7` de hover viraram o azul claro `#eef5ff`. Sem fundo cobre, âmbar ou verde; sem ícone colorido de cabeçalho;
 sem etiqueta colorida de status — status é texto, com negrito no que exige
 atenção.
 
