@@ -22,10 +22,10 @@ if (typeof window !== "undefined" && typeof import.meta !== "undefined" && impor
 
 // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 const C = {
-  input:    { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-  label:    { fontSize:12, color:"#6b7280", fontWeight:500, display:"block", marginBottom:5 },
+  input:    { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 12px", fontSize:13.5, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  label:    { fontSize:12, color:"#4b5563", fontWeight:600, display:"block", marginBottom:5 },
   btn:      { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec:   { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btnSec:   { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
@@ -1208,7 +1208,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "formContrato" && formContrato && obraSelecionada) {
     return (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("contratosDaObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Contratado *</label><input style={C.input} value={formContrato.nomeContratado} onChange={e => setFormContrato({ ...formContrato, nomeContratado: e.target.value })} placeholder="Nome da empresa/pessoa" /></div>
@@ -1237,8 +1237,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
-          <span style={{ fontSize: 14, fontWeight: 600, color: "#262421" }}>Gestão de Obra</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Gestão de Obra</span>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Nome da obra *</label><input style={C.input} value={formObra.nome} onChange={e => setFormObra({ ...formObra, nome: e.target.value })} /></div>
@@ -1252,17 +1251,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Endereço da obra — é o que vai para os contratos. Por padrão a obra
             fica no endereço do cliente; "Endereço diferente" abre os campos. */}
         <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 8 }}>Endereço da obra</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 8 }}>Endereço da obra</div>
           <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: formObra.enderecoProprio ? 12 : 0 }}>
             {[{ v: false, label: "Endereço do cliente" }, { v: true, label: "Endereço diferente" }].map(op => (
-              <label key={String(op.v)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#262421", cursor: "pointer" }}>
+              <label key={String(op.v)} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, color: "#111827", cursor: "pointer" }}>
                 <input type="radio" name="enderecoObra" checked={!!formObra.enderecoProprio === op.v} onChange={() => setFormObra({ ...formObra, enderecoProprio: op.v })} style={{ cursor: "pointer" }} />
                 {op.label}
               </label>
             ))}
           </div>
           {!formObra.enderecoProprio ? (
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 8 }}>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 8 }}>
               {[cliente.logradouro, cliente.numero && `nº ${cliente.numero}`, cliente.bairro, [cliente.cidade, cliente.estado].filter(Boolean).join("/"), cliente.cep && `CEP ${cliente.cep}`].filter(Boolean).join(", ")
                 || "O cadastro do cliente ainda não tem endereço — preencha lá ou marque \"Endereço diferente\"."}
             </div>
@@ -1297,9 +1296,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // ── Formulário de item (novo/editar) ──────────────────────
     if (formItemPL) {
       return (
-        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+        <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
           <button onClick={() => setFormItemPL(null)} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", marginBottom: 16 }}>{itensPL.find(i => i.id === formItemPL.id) ? "Editar item" : "Novo item da estimativa"}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 16 }}>{itensPL.find(i => i.id === formItemPL.id) ? "Editar item" : "Novo item da estimativa"}</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <label style={C.label}>Conta *</label>
@@ -1369,28 +1368,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const comparativo = (estimado, realizado) => {
       if (!realizado) return null;
       const dif = realizado - estimado;
-      const cor = dif > 0.005 ? "#dc2626" : "#10b981";
+      const cor = dif > 0.005 ? "#dc2626" : "#4b5563";
       const sinal = dif > 0 ? "+" : "−";
       return <span style={{ fontSize: 11, color: cor, marginLeft: 8 }}>pago {fmtBRL(realizado)}{estimado > 0 ? ` (${sinal}${fmtBRL(Math.abs(dif))})` : ""}</span>;
     };
 
     return (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Planejamento</div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>P&L estimado · {obraSelecionada.nome}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Planejamento</div>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>P&L estimado · {obraSelecionada.nome}</div>
           </div>
           <div style={{ display: "flex", gap: 20, textAlign: "right" }}>
             <div>
-              <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5 }}>Total estimado</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: "#262421" }}>{fmtBRL(totalPL)}</div>
+              <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5 }}>Total estimado</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtBRL(totalPL)}</div>
             </div>
             {totalRealizado > 0 && (
               <div>
-                <div style={{ fontSize: 11, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5 }}>Já pago</div>
-                <div style={{ fontSize: 18, fontWeight: 700, color: "#10b981" }}>{fmtBRL(totalRealizado)}</div>
+                <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5 }}>Já pago</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtBRL(totalRealizado)}</div>
               </div>
             )}
           </div>
@@ -1400,14 +1399,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           {[["conta", "Por conta"], ["prestador", "Por prestador"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
-              style={{ border: visaoPL === v ? "1px solid #b5652f" : "1px solid rgba(38,36,33,0.16)", background: visaoPL === v ? "#fdf6f0" : "#fff", color: visaoPL === v ? "#b5652f" : "#6b7280", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 600 : 400, cursor: "pointer", fontFamily: "inherit" }}>
+              style={{ border: visaoPL === v ? "1.5px solid #111827" : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
             </button>
           ))}
         </div>
 
         {itensPL.length === 0 ? (
-          <div style={{ padding: "24px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
+          <div style={{ padding: "24px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
             Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
           </div>
         ) : visaoPL === "conta" ? (
@@ -1415,28 +1414,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             {gruposComItens.map(({ grupo, contas: contasG, total }) => (
               <div key={grupo.id}>
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1.5px solid rgba(38,36,33,0.14)", marginBottom: 6 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#262421", textTransform: "uppercase", letterSpacing: 0.5 }}>{grupo.titulo}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#262421" }}>{fmtBRL(total)}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#111827", textTransform: "uppercase", letterSpacing: 0.5 }}>{grupo.titulo}</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{fmtBRL(total)}</div>
                 </div>
                 {contasG.map(({ conta, itens: itensDaConta, total: totalConta }) => (
                   <div key={conta.id} style={{ marginBottom: 6 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0" }}>
-                      <div style={{ fontSize: 13, color: "#374151" }}>{conta.nome}{comparativo(totalConta, realConta[conta.id] || 0)}</div>
-                      <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{fmtBRL(totalConta)}</div>
+                      <div style={{ fontSize: 13, color: "#111827" }}>{conta.nome}{comparativo(totalConta, realConta[conta.id] || 0)}</div>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{fmtBRL(totalConta)}</div>
                     </div>
                     {itensDaConta.map(item => (
                       <div key={item.id} onClick={() => perm.podeEditar && editarItemPL(item)}
                         style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", marginLeft: 8, borderRadius: 8, cursor: perm.podeEditar ? "pointer" : "default", transition: "background 0.15s" }}
                         onMouseEnter={e => { if (perm.podeEditar) e.currentTarget.style.backgroundColor = "#fafafa"; }}
                         onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}>
-                        <div style={{ fontSize: 12, color: "#6b7280" }}>
+                        <div style={{ fontSize: 12, color: "#4b5563" }}>
                           {item.prestadorId ? (prestadores.find(p => p.id === item.prestadorId)?.nome || "Prestador removido") : "—"}
                           {item.observacao ? ` · ${item.observacao}` : ""}
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                          <div style={{ fontSize: 12, color: "#6b7280" }}>{fmtBRL(Number(item.valor) || 0)}</div>
+                          <div style={{ fontSize: 12, color: "#4b5563" }}>{fmtBRL(Number(item.valor) || 0)}</div>
                           {perm.podeEditar && (
-                            <button onClick={e => { e.stopPropagation(); removerItemPL(item.id); }} style={{ background: "none", border: "none", color: "#a32e12", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Remover</button>
+                            <button onClick={e => { e.stopPropagation(); removerItemPL(item.id); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Remover</button>
                           )}
                         </div>
                       </div>
@@ -1453,13 +1452,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               return (
                 <div key={p.nome} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: "12px 14px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{p.nome}{comparativo(p.total, realPrestador[p.chave] || 0)}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#262421" }}>{fmtBRL(p.total)}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.nome}{comparativo(p.total, realPrestador[p.chave] || 0)}</div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{fmtBRL(p.total)}</div>
                   </div>
                   <div style={{ height: 6, background: "#f3f4f6", borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                    <div style={{ height: "100%", width: `${pct}%`, background: "#b5652f", borderRadius: 4 }} />
+                    <div style={{ height: "100%", width: `${pct}%`, background: "#111827", borderRadius: 4 }} />
                   </div>
-                  <div style={{ fontSize: 11, color: "#9ca3af" }}>{pct.toFixed(1)}% do total · {p.itens.length} {p.itens.length !== 1 ? "itens" : "item"}</div>
+                  <div style={{ fontSize: 11, color: "#6b7280" }}>{pct.toFixed(1)}% do total · {p.itens.length} {p.itens.length !== 1 ? "itens" : "item"}</div>
                 </div>
               );
             })}
@@ -1478,7 +1477,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const prest = prestadores.find(p => p.id === contratoAberto.prestadorId) || null;
     const obraDoContrato = obras.find(o => o.id === contratoAberto.obraId) || obraSelecionada;
     return (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <div data-vk-noprint="1" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
           <button onClick={() => { setContratoAberto(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, fontSize: 12 }}>← Voltar</button>
           <div style={{ flex: 1 }} />
@@ -1551,14 +1550,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       setNovoPrestador(null);
     };
     const bloco = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 12 };
-    const tituloBloco = { fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 8 };
+    const tituloBloco = { fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 8 };
     const grade = (cols) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : cols, gap: 12 });
 
     return (
       <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setContratoGerando(null); setNovoPrestador(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", marginBottom: 2 }}>Gerar contrato</div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>{obraSelecionada.nome} · contratante: {cliente.nome}</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Gerar contrato</div>
+        <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 16 }}>{obraSelecionada.nome} · contratante: {cliente.nome}</div>
 
         {/* 1 — quem é o profissional. O formulário abaixo é o mesmo para todos. */}
         <div style={{ marginBottom: 12 }}>
@@ -1580,7 +1579,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <option value="">— escolher o tipo de profissional —</option>
             {TIPOS_PROFISSIONAL.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
           </select>
-          <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
         </div>
 
         <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
@@ -1597,7 +1596,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </button>
             </div>
             {tipoP && tipoP.categorias.length > 0 && prestadoresDisponiveis.length === 0 && (
-              <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]}. Use ＋ Novo para cadastrar.</div>
+              <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]}. Use ＋ Novo para cadastrar.</div>
             )}
           </div>
           <div>
@@ -1612,12 +1611,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             }}>
               {ESCOPOS_FORNECIMENTO.map(e2 => <option key={e2.id} value={e2.id}>{e2.nome}</option>)}
             </select>
-            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>{modelo.resumo}</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>{modelo.resumo}</div>
           </div>
         </div>
 
         {novoPrestador && (
-          <div style={{ ...bloco, background: "#fdf6f0", borderColor: "#e7d3c2" }}>
+          <div style={{ ...bloco, background: "#fafafa" }}>
             <div style={tituloBloco}>Novo prestador de serviço</div>
             <div style={{ ...grade("2fr 1fr 1.2fr"), marginBottom: 12 }}>
               <div><label style={C.label}>Nome / razão social *</label><input style={C.input} value={novoPrestador.nome} onChange={e => setNovoPrestador({ ...novoPrestador, nome: e.target.value })} /></div>
@@ -1659,7 +1658,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         )}
 
         {tipoP && !prest && !novoPrestador && (
-          <div style={{ fontSize: 12, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
             Sem prestador escolhido o contrato sai sem CNPJ, endereço e representante do contratado.
             <div style={{ marginTop: 6 }}>
               <label style={C.label}>Nome do contratado (provisório)</label>
@@ -1673,7 +1672,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
             <label style={C.label}>Objeto do contrato</label>
             <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={objetoPadrao(g.tipoProfissional, escopo) || modelo.subtitulo} />
-            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>
               {objetoEditado
                 ? <>Texto editado à mão — não é mais reescrito quando você troca o tipo. <button type="button" onClick={() => setG("objeto", objetoPadrao(g.tipoProfissional, escopo))} style={{ background: "none", border: "none", padding: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>Voltar ao padrão</button></>
                 : "Escrito a partir do tipo de profissional e do que o contrato inclui. Pode ser editado."}
@@ -1682,7 +1681,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
             <label style={C.label}>Endereço da obra</label>
             <input style={C.input} value={g.enderecoObra || ""} onChange={e => setG("enderecoObra", e.target.value)} placeholder={enderecoDaObra(obraSelecionada, cliente) || "em branco, usa o endereço do cadastro"} />
-            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Em branco, o contrato usa o endereço do cadastro da obra — ou o do cliente, quando a obra está marcada como "Endereço do cliente".</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Em branco, o contrato usa o endereço do cadastro da obra — ou o do cliente, quando a obra está marcada como "Endereço do cliente".</div>
           </div>
           <div>
             <label style={C.label}>Prazo de execução</label>
@@ -1699,7 +1698,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div>
             <label style={C.label}>Data de assinatura</label>
             <input style={C.input} type="date" value={g.dataAssinatura || ""} onChange={e => setG("dataAssinatura", e.target.value)} />
-            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Vem com a data de hoje; é a data que fecha o contrato, acima das assinaturas.</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Vem com a data de hoje; é a data que fecha o contrato, acima das assinaturas.</div>
           </div>
           <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={g.status} onChange={e => setG("status", e.target.value)}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
         </div>
@@ -1711,9 +1710,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div>
               <label style={C.label}>Valor total (R$)</label>
               <CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" disabled={(g.itens || []).some(i => Number(i.valor) > 0)} />
-              <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
+              <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
             </div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "flex-end", fontSize: 14, fontWeight: 700, color: "#262421" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "flex-end", fontSize: 14, fontWeight: 700, color: "#111827" }}>
               Total: {fmtMoedaCtr(total)}
             </div>
           </div>
@@ -1732,11 +1731,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={tituloBloco}>Modalidade de pagamento</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {MODALIDADES_PAGAMENTO.map(mp => (
-              <label key={mp.id} style={{ display: "flex", gap: 8, alignItems: "start", border: `1.5px solid ${modo === mp.id ? "#b5652f" : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: modo === mp.id ? "#fdf6f0" : "#fff" }}>
+              <label key={mp.id} style={{ display: "flex", gap: 8, alignItems: "start", border: `1.5px solid ${modo === mp.id ? "#111827" : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: "#fff" }}>
                 <input type="radio" name="ctr-modalidade" checked={modo === mp.id} onChange={() => setG("modalidade", mp.id)} style={{ marginTop: 2, cursor: "pointer" }} />
                 <span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{mp.nome}</span>
-                  <span style={{ display: "block", fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>{mp.resumo}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{mp.nome}</span>
+                  <span style={{ display: "block", fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>{mp.resumo}</span>
                 </span>
               </label>
             ))}
@@ -1778,22 +1777,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             )}
           </div>
           {modo === "entradaFinal" && (g.entradaEscopo || "contrato") === "item" && !(g.itens || []).some(i => Number(i.valor) > 0) && (
-            <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 8 }}>Pagamento item a item precisa de itens com valor — sem eles, o contrato sai como entrada + saldo no final.</div>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 8 }}>Pagamento item a item precisa de itens com valor — sem eles, o contrato sai como entrada + saldo no final.</div>
           )}
         </div>
 
         {/* Cláusulas opcionais */}
         <div style={bloco}>
           <div style={tituloBloco}>Cláusulas do contrato</div>
-          <div style={{ fontSize: 11.5, color: "#9ca3af", marginBottom: 10 }}>Marque o que entra neste contrato. O texto e a numeração se ajustam sozinhos.</div>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>Marque o que entra neste contrato. O texto e a numeração se ajustam sozinhos.</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
             {CONTRATO_OPCOES.map(op => (
               <div key={op.id} style={{ border: "1px solid rgba(38,36,33,0.10)", borderRadius: 10, padding: "9px 11px", background: ligada(op.id) ? "#fff" : "#fafafa" }}>
                 <label style={{ display: "flex", gap: 8, alignItems: "start", cursor: "pointer" }}>
                   <input type="checkbox" checked={ligada(op.id)} onChange={e => setOpcao(op.id, e.target.checked)} style={{ marginTop: 3, cursor: "pointer" }} />
                   <span>
-                    <span style={{ fontSize: 12.5, color: "#262421", fontWeight: 600 }}>{op.label}</span>
-                    {op.ajuda && <span style={{ display: "block", fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{op.ajuda}</span>}
+                    <span style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>{op.label}</span>
+                    {op.ajuda && <span style={{ display: "block", fontSize: 11, color: "#6b7280", marginTop: 2 }}>{op.ajuda}</span>}
                   </span>
                 </label>
                 {ligada(op.id) && op.especifica && (
@@ -1838,7 +1837,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ marginBottom: 12 }}>
           <label style={C.label}>Exclusões do objeto (o que não entra)</label>
           <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: o lixamento do concreto e a montagem hidráulica da piscina" />
-          <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Comece em minúscula para o contrato abrir com "Não integram o objeto deste contrato:". Começando em maiúscula, o seu texto entra como está.</div>
+          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Comece em minúscula para o contrato abrir com "Não integram o objeto deste contrato:". Começando em maiúscula, o seu texto entra como está.</div>
         </div>
 
         <div style={bloco}>
@@ -1860,11 +1859,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <button style={C.btnSec} onClick={gerarPDF}>Gerar PDF</button>
           {jaSalvo && <button style={C.btnSec} onClick={() => { const n = salvar(); if (n) { setContratoAberto(n); setView("verContrato"); } }}>Ver contrato</button>}
           <button style={C.btnGhost} onClick={() => { setContratoGerando(null); setNovoPrestador(null); setView("contratosDaObra"); }}>Voltar</button>
-          {contratoSalvoEm > 0 && <span style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>✓ Salvo</span>}
+          {contratoSalvoEm > 0 && <span style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>✓ Salvo</span>}
         </div>
 
         <details style={{ marginTop: 18 }}>
-          <summary style={{ cursor: "pointer", fontSize: 12, color: "#6b7280" }}>Prévia do contrato</summary>
+          <summary style={{ cursor: "pointer", fontSize: 12, color: "#4b5563" }}>Prévia do contrato</summary>
           <div style={{ marginTop: 12, border: "1px solid #eee", borderRadius: 10, padding: 12, maxHeight: 420, overflowY: "auto" }}>
             <ContratoDocumento contrato={g} cliente={cliente} obra={obraSelecionada} prestador={prest} />
           </div>
@@ -1900,7 +1899,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px", background: "#fff" }}>
         <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>{rot}</div>
         <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtMoedaCtr(valor)}</div>
-        {sub ? <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>{sub}</div> : null}
+        {sub ? <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>{sub}</div> : null}
       </div>
     );
 
@@ -1909,7 +1908,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <button onClick={() => { setFormConta(null); setView("detalheObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Contas a pagar</div>
-          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{obraSelecionada.nome}</div>
+          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.nome}</div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
@@ -1956,7 +1955,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ))}
 
         {lista.length === 0 ? (
-          <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+          <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
             Nenhuma conta nesta obra. Salvando um contrato, as parcelas dele entram aqui automaticamente.
           </div>
         ) : (
@@ -1975,7 +1974,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       return (
                         <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid rgba(38,36,33,0.10)", borderRadius: 10, padding: "9px 11px", background: "#fff" }}>
                           <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                            <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{c.descricao || "—"}{c.estimada ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · estimada</span> : null}</div>
+                            <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{c.descricao || "—"}{c.estimada ? <span style={{ fontWeight: 400, color: "#4b5563" }}> · estimada</span> : null}</div>
                             <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>
                               {nomeConta(c.contaId)}
                               {c.prestadorId || c.favorecido ? ` · ${nomePrestador(c.prestadorId) || c.favorecido}` : ""}
@@ -2014,18 +2013,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     return (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 14, background: "#fdf6f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>📋</div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Contratos</div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>{obraSelecionada.nome}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Contratos</div>
+            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.nome}</div>
           </div>
         </div>
 
         {contratosDaObra.length === 0 ? (
-          <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+          <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
             Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
           </div>
         ) : (
@@ -2035,14 +2033,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               return (
                 <div key={contrato.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{contrato.nomeContratado}</div>
-                    <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{contrato.nomeContratado}</div>
+                    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 12, color: "#111827", fontWeight: 600 }}>{sts.label}</span>
                       {tipoProfissional(contrato.tipoProfissional) && <span>{tipoProfissional(contrato.tipoProfissional).nome}</span>}
                       {contrato.valor && <span>R$ {parseFloat(contrato.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                       {contrato.dataVencimento && <span>Vence: {new Date(contrato.dataVencimento).toLocaleDateString("pt-BR")}</span>}
                     </div>
-                    {contrato.descricaoServico && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>{contrato.descricaoServico}</div>}
+                    {contrato.descricaoServico && <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>{contrato.descricaoServico}</div>}
                   </div>
                   {perm.podeEditar && (
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
@@ -2105,12 +2103,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "detalheObra" && obraSelecionada) {
     return (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { if (onSairDaObra) { onSairDaObra(); return; } setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 16, fontWeight: 700, color: "#262421" }}>{obraSelecionada.nome}</div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{obraSelecionada.responsavel || "Sem responsável"}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{obraSelecionada.nome}</div>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.responsavel || "Sem responsável"}</div>
           </div>
           {perm.podeEditar && (
             <button onClick={() => editarObra(obraSelecionada)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
@@ -2118,67 +2116,67 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
           <button onClick={() => setView("orcamentoObra")}
-            style={{ border: "1px solid #b5652f", borderRadius: 16, padding: "20px", background: "#fdf6f0", boxShadow: "0 0 0 3px rgba(181,101,47,0.14)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#b5652f", textAlign: "center" }}>Orçamento</div>
-            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Quantitativos da obra</div>
+            style={{ border: "1.5px solid #111827", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Orçamento</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Quantitativos da obra</div>
           </button>
           <button onClick={() => setView("planejamento")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Planejamento</div>
-            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>P&L estimado da obra</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Planejamento</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>P&L estimado da obra</div>
           </button>
           <button onClick={() => setView("contratosDaObra")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Contratos</div>
-            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Gerenciar contratos</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Contratos</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Gerenciar contratos</div>
           </button>
           <button onClick={() => setView("cronogramaObra")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Cronograma</div>
-            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>{obraSelecionada.cronograma?.prazoMeses ? `${obraSelecionada.cronograma.prazoMeses} meses` : "Prazo, etapas e equipe"}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Cronograma</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>{obraSelecionada.cronograma?.prazoMeses ? `${obraSelecionada.cronograma.prazoMeses} meses` : "Prazo, etapas e equipe"}</div>
           </button>
           <button onClick={() => setView("contasPagar")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", textAlign: "center" }}>Contas a pagar</div>
-            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Contas a pagar</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
               {(() => { const t = totaisContas((obraSelecionada.contasPagar || []), hojeIso);
                 return t.aberto > 0 ? `${fmtMoedaCtr(t.aberto)} em aberto` : "Parcelas dos contratos"; })()}
             </div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}
-            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#f9fafb", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#9ca3af", textAlign: "center" }}>Documentos</div>
-            <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center" }}>Em breve</div>
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fafafa", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>Documentos</div>
+            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Em breve</div>
           </button>
         </div>
 
         {/* Info da obra */}
         {(obraSelecionada.status || obraSelecionada.dataInicio || obraSelecionada.descricao) && (
-          <div style={{ background: "#f9fafb", border: "1px solid #f3f4f6", borderRadius: 16, padding: "14px 16px", marginBottom: 16 }}>
+          <div style={{ background: "#fafafa", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "14px 16px", marginBottom: 16 }}>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 14 }}>
               {obraSelecionada.status && (
                 <div>
-                  <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Status</div>
-                  <span style={C.tag(statusObra[obraSelecionada.status]?.cor || "#9ca3af")}>{statusObra[obraSelecionada.status]?.label || obraSelecionada.status}</span>
+                  <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Status</div>
+                  <span style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{statusObra[obraSelecionada.status]?.label || obraSelecionada.status}</span>
                 </div>
               )}
               {obraSelecionada.dataInicio && (
                 <div>
-                  <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de início</div>
-                  <div style={{ fontSize: 13, color: "#374151" }}>{new Date(obraSelecionada.dataInicio).toLocaleDateString("pt-BR")}</div>
+                  <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de início</div>
+                  <div style={{ fontSize: 13, color: "#111827" }}>{new Date(obraSelecionada.dataInicio).toLocaleDateString("pt-BR")}</div>
                 </div>
               )}
               {obraSelecionada.dataFim && (
                 <div>
-                  <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de conclusão</div>
-                  <div style={{ fontSize: 13, color: "#374151" }}>{new Date(obraSelecionada.dataFim).toLocaleDateString("pt-BR")}</div>
+                  <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de conclusão</div>
+                  <div style={{ fontSize: 13, color: "#111827" }}>{new Date(obraSelecionada.dataFim).toLocaleDateString("pt-BR")}</div>
                 </div>
               )}
             </div>
             {obraSelecionada.descricao && (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1.5px solid rgba(38,36,33,0.16)" }}>
-                <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Descrição</div>
-                <div style={{ fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{obraSelecionada.descricao}</div>
+                <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Descrição</div>
+                <div style={{ fontSize: 13, color: "#111827", lineHeight: 1.5 }}>{obraSelecionada.descricao}</div>
               </div>
             )}
           </div>
@@ -2194,9 +2192,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Lista de obras — view padrão. Sem quadro/container externo: só os
   // cards discretos das obras + um botão redondo de adicionar.
   return (
-    <div>
+    <div data-vk-obra="1">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-        <div style={{ fontSize: 12, color: "#6b7280" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
+        <div style={{ fontSize: 12.5, color: "#4b5563" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
         {perm.podeEditar && (
           <button onClick={novaObra} title="Adicionar obra"
             style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: "#262421", color: "#fff", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
@@ -2208,7 +2206,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       </div>
 
       {obras.length === 0 ? (
-        <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+        <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
           Nenhuma obra cadastrada.
         </div>
       ) : (
@@ -2220,7 +2218,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               style={{ padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", borderRadius: 9, transition: "background 0.15s", backgroundColor: "transparent" }}
               onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#fafafa"; }}
               onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{obra.nome}</div>
+              <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{obra.nome}</div>
               {perm.podeEditar && (
                 <div onClick={e => e.stopPropagation()}>
                   <button onClick={() => editarObra(obra)} style={{ ...C.btnGhost, fontSize: 12 }}>Editar</button>
