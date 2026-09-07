@@ -39,7 +39,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto,
   };
 `)();
 
@@ -699,6 +699,19 @@ teste("memória de cálculo: instalações pré obra e fundação, com o último
   assert.deepStrictEqual(poste.memoria.map((x) => x.tipo), ["nota"]);
   // a memória não é gravada com o orçamento: quem grava tira o campo
   assert.ok(!("memoria" in JSON.parse(JSON.stringify({ ...poste, memoria: undefined }))));
+});
+
+teste("arredondamento ignora o ruído de ponto flutuante (150 × 40 × 1,10 = 6.600 tijolos, não 6.601)", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 120, areaTerreo: 120 }, terreo: { m2Parede20: 150, perimetroParedes: 48 } }, { materiais: [] });
+  const tijolo = r.itens.find((i) => i.item === "Cerâmicas - Tijolo - Bloco  6 Furos");
+  assert.strictEqual(tijolo.qtd, 6600); // em JS, 150 * 40 * 1.1 = 6600.000000000001
+  // o cimento do contrapiso caía no mesmo ruído (pedra × 6 × 1,1)
+  const r2 = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 120 }, terreo: { area: 120 } }, { materiais: [] });
+  assert.strictEqual(r2.itens.find((i) => i.item === "Pedra" && i.etapa === "Contrapiso Interno").qtd, 14); // 120 × 0,1 × 1,1 = 13,2
+  assert.strictEqual(r2.itens.find((i) => i.item === "Sacos de cimento 50kg" && i.etapa === "Contrapiso Interno" && i.subEtapa === "Contrapiso Interno Pav. Térreo").qtd, 93); // 14 × 6 × 1,1 = 92,4
+  // e o teto continua arredondando de verdade quando há fração
+  assert.strictEqual(modulo.teto(6600.4), 6601);
+  assert.strictEqual(modulo.teto(6600.000000001), 6600);
 });
 
 teste("memória de cálculo: toda linha do orçamento tem os passos, e o último bate com a quantidade", () => {

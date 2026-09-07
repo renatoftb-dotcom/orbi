@@ -7589,7 +7589,7 @@ function somarFerro(...objs) {
 function barrasPorBitola(somaPorBitola) {
   const out = {};
   for (const k of Object.keys(PESOS_FERRO)) {
-    out[k] = Math.ceil(numOrZero(somaPorBitola[k]) / BARRA_FERRO_MTS * PERDA);
+    out[k] = teto(numOrZero(somaPorBitola[k]) / BARRA_FERRO_MTS * PERDA);
   }
   return out;
 }
@@ -7977,48 +7977,48 @@ function prestadores(cp, out, data) {
 // ═══════════════════════════════════════════════════════════════
 function paredesTerreo(cp, out) {
   const tijolos6FBruto = cp.m2Paredes20Terreo * 40 * PERDA;
-  const tijolos6F = Math.ceil(tijolos6FBruto);
+  const tijolos6F = teto(tijolos6FBruto);
   const tijolos8FBruto = (cp.m2Paredes25Terreo * 40 + cp.m2Paredes15Terreo * 20) * PERDA;
-  const tijolos8F = Math.ceil(tijolos8FBruto);
+  const tijolos8F = teto(tijolos8FBruto);
   // [VBA] aqui o *1.1 já está embutido em cada parcela — não há um *PERDA
   // extra por fora da soma, exatamente como no .bas.
   const areiaFinaAssentBruto = tijolos6F * 0.001638 * PERDA + tijolos8F * 0.002223 * PERDA;
-  const areiaFinaAssent = Math.ceil(areiaFinaAssentBruto);
+  const areiaFinaAssent = teto(areiaFinaAssentBruto);
   const vedalitFinaAssentBruto = areiaFinaAssent / 25 * PERDA;
-  const vedalitFinaAssent = Math.ceil(vedalitFinaAssentBruto);
+  const vedalitFinaAssent = teto(vedalitFinaAssentBruto);
   const cimentoFinaAssentBruto = areiaFinaAssent * 2 * PERDA;
-  const cimentoFinaAssent = Math.ceil(cimentoFinaAssentBruto);
+  const cimentoFinaAssent = teto(cimentoFinaAssentBruto);
   const contravergaBruto = cp.vaoPortasJanelasTerreo * 2 / 12 * PERDA;
-  const contraverga = Math.ceil(contravergaBruto);
+  const contraverga = teto(contravergaBruto);
 
   const tabuas15ColunBruto = cp.colunas15Terreo * 2.8 * 2 / 3 * PERDA;
-  const tabuas15Colun = Math.ceil(tabuas15ColunBruto);
+  const tabuas15Colun = teto(tabuas15ColunBruto);
   const tabuas20ColunBruto = cp.colunas20Terreo * 2.8 * 2 / 3 * PERDA;
-  const tabuas20Colun = Math.ceil(tabuas20ColunBruto);
+  const tabuas20Colun = teto(tabuas20ColunBruto);
   const tabuas30ColunBruto = cp.colunas30Terreo * 2.8 * 2 / 3 * PERDA;
-  const tabuas30Colun = Math.ceil(tabuas30ColunBruto);
+  const tabuas30Colun = teto(tabuas30ColunBruto);
   const sarrafo5ColunBruto =
     ((cp.colunas15Terreo * 2.8 * 2 / 0.5 * 0.2) +
       (cp.colunas20Terreo * 2.8 * 2 / 0.5 * 0.25) +
       (cp.colunas30Terreo * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3;
-  const sarrafo5Colun = Math.ceil(sarrafo5ColunBruto);
+  const sarrafo5Colun = teto(sarrafo5ColunBruto);
   const maderitesColunBruto = cp.areaFormaColunaMaior25cmTerreo / 2.42 * PERDA;
-  const maderitesColun = Math.ceil(maderitesColunBruto);
+  const maderitesColun = teto(maderitesColunBruto);
   const areiaGrossaColunasBruto = cp.concrColunaTerreo * 0.6 * PERDA;
-  const areiaGrossaColunas = Math.ceil(areiaGrossaColunasBruto);
+  const areiaGrossaColunas = teto(areiaGrossaColunasBruto);
   const pedraColunasBruto = cp.concrColunaTerreo * PERDA;
-  const pedraColunas = Math.ceil(pedraColunasBruto);
+  const pedraColunas = teto(pedraColunasBruto);
   const cimentoColunasBruto = pedraColunas * 6 * PERDA;
-  const cimentoColunas = Math.ceil(cimentoColunasBruto);
+  const cimentoColunas = teto(cimentoColunasBruto);
 
-  const ca60_4mm = Math.ceil(cp.ca60_4mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
-  const ca50_5mm = Math.ceil(cp.ca50_5mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
-  const ca50_6mm = Math.ceil(cp.ca50_6mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
-  const ca50_8mm = Math.ceil(cp.ca50_8mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
-  const ca50_10mm = Math.ceil(cp.ca50_10mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
-  const ca50_12mm = Math.ceil(cp.ca50_12mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
-  const ca50_16mm = Math.ceil(cp.ca50_16mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
-  const ca60_5mm = Math.ceil(cp.ca60_5mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca60_4mm = teto(cp.ca60_4mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca50_5mm = teto(cp.ca50_5mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca50_6mm = teto(cp.ca50_6mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca50_8mm = teto(cp.ca50_8mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca50_10mm = teto(cp.ca50_10mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca50_12mm = teto(cp.ca50_12mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca50_16mm = teto(cp.ca50_16mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
+  const ca60_5mm = teto(cp.ca60_5mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
 
   // Soma dos pesos SEM ceiling — o .bas guarda isso num Double cru, só o
   // arame calculado a partir dele que leva ceil.
@@ -8033,11 +8033,11 @@ function paredesTerreo(cp, out) {
     ca60_5mm * PESOS_FERRO.CA60_5MM;
 
   const arameColunasBruto = pesoFerroColunas * 0.06 * PERDA;
-  const arameColunas = Math.ceil(arameColunasBruto);
+  const arameColunas = teto(arameColunasBruto);
   // [VBA] sem *PERDA aqui — só o arame leva perda, o cálculo de pregos a
   // partir do arame não, confirmado contra o original.
   const pregos18x27Bruto = arameColunas * 0.55;
-  const pregos18x27 = Math.ceil(pregos18x27Bruto);
+  const pregos18x27 = teto(pregos18x27Bruto);
 
   const base = { ordem: ORD.paredesTerreo, tipo: "Bruto", etapa: "Supra estrutura e paredes" };
   const subParedes = "Paredes Pav. Térreo";
@@ -8082,13 +8082,13 @@ function pintura(cp, out) {
   const paredeTotal = paredeInterna + paredeExterna;
 
   const seladorBruto = (0.2 * paredeTotal) / 10 * PERDA;
-  const selador = Math.ceil(seladorBruto);
+  const selador = teto(seladorBruto);
   const massaCorridaBruto = ((paredeInterna / 3) * 2.5) / 15 * PERDA;
-  const massaCorrida = Math.ceil(massaCorridaBruto);
+  const massaCorrida = teto(massaCorridaBruto);
   const fundoPreparadorBruto = (0.2 * paredeTotal) / 8 * PERDA;
-  const fundoPreparador = Math.ceil(fundoPreparadorBruto);
+  const fundoPreparador = teto(fundoPreparadorBruto);
   const tintasBruto = 0.15 * paredeTotal / 9 * PERDA;
-  const tintas = Math.ceil(tintasBruto);
+  const tintas = teto(tintasBruto);
 
   const passosArea = [
     MEM.nota("Área a pintar: as paredes internas contam duas faces e descontam o que é revestido de cerâmica; as externas entram uma vez na conta das internas (herdado da planilha) e mais uma vez como fachada."),
@@ -8170,11 +8170,11 @@ function instalacoesObraProjetos(cp, out) {
 
   const gab = cp.gabarito;
   const tabua10Bruto = gab / 3 * 1.2;
-  const tabua10 = Math.ceil(tabua10Bruto);
+  const tabua10 = teto(tabua10Bruto);
   const sarrafo5Bruto = (gab * 1.2 / 1.3 * 0.6 / 3) + 20;
-  const sarrafo5 = Math.ceil(sarrafo5Bruto);
+  const sarrafo5 = teto(sarrafo5Bruto);
   const prego18x27Bruto = 0.05 * tabua10 / 2;
-  const prego18x27 = Math.ceil(prego18x27Bruto);
+  const prego18x27 = teto(prego18x27Bruto);
   const prego17x21 = prego18x27;
   const memGabarito = MEM.dado("Gabarito da obra (perímetro do cavalete de marcação)", gab, "m", "bloco Geral");
 
@@ -8212,9 +8212,9 @@ function fundacao(cp, out) {
   const perim = cp.perimetroParedesTerreo;
 
   const tabuas30Bruto = ((perim * 2 / 3) + perim * 2 / 3 * 0.45 / 3) * PERDA;
-  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const tabuas30 = teto(tabuas30Bruto);
   const sarrafo5Bruto = ((perim * 2 / 0.7 * 0.45) + (perim / 0.75 * 0.3)) / 3 * PERDA;
-  const sarrafo5 = Math.ceil(sarrafo5Bruto);
+  const sarrafo5 = teto(sarrafo5Bruto);
   // [VBA] fator 1.15 (não 1.1) — perda de perfuração é diferente da perda de material
   const perfuracaoEstacas = f.qtdEstacas * f.profEstacas * 1.15;
 
@@ -8222,15 +8222,15 @@ function fundacao(cp, out) {
   const barras = barrasPorBitola(soma);
   const peso = pesoTotalFerro(barras);
   const concretoBruto = somaN(f.concreto.estacas, f.concreto.sapatas, f.concreto.arranques, f.concreto.baldrames) * PERDA;
-  const concreto = Math.ceil(concretoBruto);
+  const concreto = teto(concretoBruto);
   const discoFerroBruto = peso * 0.01;
-  const discoFerro = Math.ceil(discoFerroBruto);
+  const discoFerro = teto(discoFerroBruto);
   const arameBruto = peso * 0.06;
-  const arame = Math.ceil(arameBruto);
+  const arame = teto(arameBruto);
   const pregoBruto = 0.55 * arame;
-  const prego = Math.ceil(pregoBruto);
+  const prego = teto(pregoBruto);
   const vedatopBruto = (((perim * 2 * 0.3) + (perim * 0.15)) * 3 * PERDA) / 18;
-  const vedatop = Math.ceil(vedatopBruto);
+  const vedatop = teto(vedatopBruto);
 
   const memPerim = MEM.dado("Perímetro das paredes do térreo", perim, "m", "bloco Pav. Térreo");
   // Só os elementos com volume lançado entram na memória — listar "sapatas 0"
@@ -8299,19 +8299,19 @@ function fundacao(cp, out) {
 function contrapisoInternoTerreo(cp, out) {
   const area = cp.areaTerreo;
   const areiaGrossaContrapBruto = area * 0.6 * 0.1 * PERDA;
-  const areiaGrossaContrap = Math.ceil(areiaGrossaContrapBruto);
+  const areiaGrossaContrap = teto(areiaGrossaContrapBruto);
   const pedraContrapBruto = area * 0.1 * PERDA;
-  const pedraContrap = Math.ceil(pedraContrapBruto);
+  const pedraContrap = teto(pedraContrapBruto);
   const cimentoContrapBruto = pedraContrap * 6 * PERDA;
-  const cimentoContrap = Math.ceil(cimentoContrapBruto);
+  const cimentoContrap = teto(cimentoContrapBruto);
   const malhaPopBruto = area / (2.9 * 1.9 * PERDA);
-  const malhaPop = Math.ceil(malhaPopBruto);
+  const malhaPop = teto(malhaPopBruto);
   const cimentoMassiamBruto = area * 0.05 * 0.25 * 1200 / 50 * PERDA;
-  const cimentoMassiam = Math.ceil(cimentoMassiamBruto);
+  const cimentoMassiam = teto(cimentoMassiamBruto);
   const areiaGrossaMassiamBruto = area * 0.05 * 0.75 * PERDA;
-  const areiaGrossaMassiam = Math.ceil(areiaGrossaMassiamBruto);
+  const areiaGrossaMassiam = teto(areiaGrossaMassiamBruto);
   const biancoMassiamBruto = area / 60 * PERDA;
-  const biancoMassiam = Math.ceil(biancoMassiamBruto);
+  const biancoMassiam = teto(biancoMassiamBruto);
 
   const memArea = MEM.dado("Área do pavimento térreo", area, "m²", "bloco Pav. Térreo");
   const notaContrap = MEM.nota("Contrapiso do térreo: 10 cm de concreto magro sobre o solo compactado, traço com 60% de areia por volume de pedra.");
@@ -8372,33 +8372,33 @@ function vigaRespaldoLajeTerreo(cp, out) {
   const tipologiaVba = cp.tipologia === "Sobrado" ? "Sobrado" : "Térreo";
 
   const tabuas10Bruto = (((t.perimetroLoje * 2 / 3) + t.perimetroLoje * 2 / 3 * 0.45 / 3)) * PERDA;
-  const tabuas10 = Math.ceil(tabuas10Bruto);
+  const tabuas10 = teto(tabuas10Bruto);
   const tabuas30Bruto = (((cp.perimetroParedesTerreo * 2 / 3) + cp.perimetroParedesTerreo * 2 / 3 * 0.45 / 3)) * PERDA;
-  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const tabuas30 = teto(tabuas30Bruto);
   const sarrafo5Bruto = ((cp.perimetroParedesTerreo * 2 / 0.7 * 0.45) + (cp.perimetroParedesTerreo / 0.75 * 0.3)) / 3 * PERDA;
-  const sarrafo5 = Math.ceil(sarrafo5Bruto);
+  const sarrafo5 = teto(sarrafo5Bruto);
 
   const ferro = normalizarFerro(t.vigaRespaldo);
-  const ca60_4mm = Math.ceil(ferro.CA60_4MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_5mm = Math.ceil(ferro.CA50_5MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_6mm = Math.ceil(ferro.CA50_6MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_8mm = Math.ceil(ferro.CA50_8MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_10mm = Math.ceil(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_12mm = Math.ceil(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_16mm = Math.ceil(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
-  const ca60_5mm = Math.ceil(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
+  const ca60_4mm = teto(ferro.CA60_4MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_5mm = teto(ferro.CA50_5MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_6mm = teto(ferro.CA50_6MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_8mm = teto(ferro.CA50_8MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_10mm = teto(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_12mm = teto(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_16mm = teto(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
+  const ca60_5mm = teto(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
   const peso = ca60_4mm * PESOS_FERRO.CA60_4MM + ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM +
     ca50_8mm * PESOS_FERRO.CA50_8MM + ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM +
     ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
   const arameBruto = peso * 0.06 * PERDA;
-  const arame = Math.ceil(arameBruto);
+  const arame = teto(arameBruto);
   const pregoBruto = arame * 0.55;
-  const prego = Math.ceil(pregoBruto);
+  const prego = teto(pregoBruto);
 
   const volumeConcretoLojeBruto = ((t.areaLoje * 0.1) + t.concretoVigaRespaldo) * PERDA;
-  const volumeConcretoLoje = Math.ceil(volumeConcretoLojeBruto);
+  const volumeConcretoLoje = teto(volumeConcretoLojeBruto);
   const malhaPopBruto = (t.areaLoje / (2.9 * 1.9)) * PERDA;
-  const malhaPop = Math.ceil(malhaPopBruto);
+  const malhaPop = teto(malhaPopBruto);
 
   const tipoConcat = tipologiaVba + t.tipoLoje;
   let nomeModelo = "";
@@ -8408,16 +8408,16 @@ function vigaRespaldoLajeTerreo(cp, out) {
   else if (tipoConcat === "SobradoTreliça") nomeModelo = "Laje Pré Moldada Treliça Piso";
 
   const qtdLojeBruto = t.areaLoje * PERDA;
-  const qtdLoje = Math.ceil(qtdLojeBruto);
+  const qtdLoje = teto(qtdLojeBruto);
   const qtdEscorasBruto = t.tipoLoje === "Protendida" ? t.areaLoje * 0.6 * mesesEscoras * PERDA : t.areaLoje * mesesEscoras * PERDA;
-  const qtdEscoras = Math.ceil(qtdEscorasBruto);
+  const qtdEscoras = teto(qtdEscorasBruto);
 
   const lojeMacicaBruto = t.areaLojeMacica * 0.15 * PERDA;
-  const lojeMacica = Math.ceil(lojeMacicaBruto);
+  const lojeMacica = teto(lojeMacicaBruto);
   const maderiteLojeMacicaBruto = t.areaLojeMacica / 2.42 * PERDA;
-  const maderiteLojeMacica = Math.ceil(maderiteLojeMacicaBruto);
+  const maderiteLojeMacica = teto(maderiteLojeMacicaBruto);
   const escorasLojeMacicaBruto = t.areaLojeMacica * mesesEscoras * PERDA;
-  const escorasLojeMacica = Math.ceil(escorasLojeMacicaBruto);
+  const escorasLojeMacica = teto(escorasLojeMacicaBruto);
 
   const memViga = (k) => memoriaBitolaSimples(k, ferro[k], { CA60_4MM: ca60_4mm, CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do térreo");
   const memEscoras = (area, bruto, valor) => [
@@ -8506,59 +8506,59 @@ function vigaRespaldoLajeTerreo(cp, out) {
 function paredesPav1(cp, out) {
   const p1 = cp.pav1;
   const tijolos6FBruto = p1.m2Parede20 * 40 * PERDA;
-  const tijolos6F = Math.ceil(tijolos6FBruto);
+  const tijolos6F = teto(tijolos6FBruto);
   const tijolos8FBruto = (p1.m2Parede25 * 40 + p1.m2Parede15 * 20) * PERDA;
-  const tijolos8F = Math.ceil(tijolos8FBruto);
+  const tijolos8F = teto(tijolos8FBruto);
   const areiaFinaAssentBruto = tijolos6F * 0.001638 * PERDA + tijolos8F * 0.002223 * PERDA;
-  const areiaFinaAssent = Math.ceil(areiaFinaAssentBruto);
+  const areiaFinaAssent = teto(areiaFinaAssentBruto);
   const vedalitFinaAssentBruto = areiaFinaAssent / 25 * PERDA;
-  const vedalitFinaAssent = Math.ceil(vedalitFinaAssentBruto);
+  const vedalitFinaAssent = teto(vedalitFinaAssentBruto);
   const cimentoFinaAssentBruto = areiaFinaAssent * 2 * PERDA;
-  const cimentoFinaAssent = Math.ceil(cimentoFinaAssentBruto);
+  const cimentoFinaAssent = teto(cimentoFinaAssentBruto);
   const contravergaBruto = p1.vaoPortasJanelas * 2 / 12 * PERDA;
-  const contraverga = Math.ceil(contravergaBruto);
+  const contraverga = teto(contravergaBruto);
 
   const tabuas15ColunBruto = p1.colunas15 * 2.8 * 2 / 3 * PERDA;
-  const tabuas15Colun = Math.ceil(tabuas15ColunBruto);
+  const tabuas15Colun = teto(tabuas15ColunBruto);
   const tabuas20ColunBruto = p1.colunas20 * 2.8 * 2 / 3 * PERDA;
-  const tabuas20Colun = Math.ceil(tabuas20ColunBruto);
+  const tabuas20Colun = teto(tabuas20ColunBruto);
   // [VBA] usa CP_COLUNAS_25 aqui (não 30) — divergência real do original em
   // relação ao F_PAREDES_TERREO, preservada de propósito.
   const tabuas30ColunBruto = p1.colunas25 * 2.8 * 2 / 3 * PERDA;
-  const tabuas30Colun = Math.ceil(tabuas30ColunBruto);
+  const tabuas30Colun = teto(tabuas30ColunBruto);
   const sarrafo5ColunBruto =
     ((p1.colunas15 * 2.8 * 2 / 0.5 * 0.2) +
       (p1.colunas20 * 2.8 * 2 / 0.5 * 0.25) +
       (p1.colunas30 * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3;
-  const sarrafo5Colun = Math.ceil(sarrafo5ColunBruto);
+  const sarrafo5Colun = teto(sarrafo5ColunBruto);
   const maderitesColunBruto = p1.areaFormaColunaMaior25cm / 2.42 * PERDA;
-  const maderitesColun = Math.ceil(maderitesColunBruto);
+  const maderitesColun = teto(maderitesColunBruto);
   const areiaGrossaColunasBruto = p1.concrColuna * 0.6 * PERDA;
-  const areiaGrossaColunas = Math.ceil(areiaGrossaColunasBruto);
+  const areiaGrossaColunas = teto(areiaGrossaColunasBruto);
   const pedraColunasBruto = p1.concrColuna * PERDA;
-  const pedraColunas = Math.ceil(pedraColunasBruto);
+  const pedraColunas = teto(pedraColunasBruto);
   const cimentoColunasBruto = pedraColunas * 6 * PERDA;
-  const cimentoColunas = Math.ceil(cimentoColunasBruto);
+  const cimentoColunas = teto(cimentoColunasBruto);
 
   const ferro = normalizarFerro(p1.ferro);
   // [VBA] CA60_4mm nunca é calculado neste módulo (só declarado/emitido no
   // Térreo) — a condição correspondente em H_PAREDES_PAV_1.bas testa uma
   // variável nunca atribuída (sempre 0) e por isso NUNCA emite. Preservado:
   // nem calculamos nem emitimos essa linha aqui.
-  const ca50_5mm = Math.ceil(ferro.CA50_5MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_6mm = Math.ceil(ferro.CA50_6MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_8mm = Math.ceil(ferro.CA50_8MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_10mm = Math.ceil(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_12mm = Math.ceil(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_16mm = Math.ceil(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
-  const ca60_5mm = Math.ceil(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_5mm = teto(ferro.CA50_5MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_6mm = teto(ferro.CA50_6MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_8mm = teto(ferro.CA50_8MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_10mm = teto(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_12mm = teto(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_16mm = teto(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
+  const ca60_5mm = teto(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
   const pesoFerroColunas = ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM +
     ca50_8mm * PESOS_FERRO.CA50_8MM + ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM +
     ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
   const arameColunasBruto = pesoFerroColunas * 0.06 * PERDA;
-  const arameColunas = Math.ceil(arameColunasBruto);
+  const arameColunas = teto(arameColunasBruto);
   const pregos18x27Bruto = arameColunas * 0.55;
-  const pregos18x27 = Math.ceil(pregos18x27Bruto);
+  const pregos18x27 = teto(pregos18x27Bruto);
 
   const base = { ordem: ORD.paredesPav1, tipo: "Bruto", etapa: "Supra estrutura e paredes" };
   const subParedes = "Paredes Pav 1";
@@ -8598,31 +8598,31 @@ function vigaRespaldoLajePav1(cp, out) {
   const tipologiaVba = cp.tipologia === "Sobrado" ? "Sobrado" : "Térreo";
 
   const tabuas10Bruto = (((p1.perimetroLoje * 2 / 3) + p1.perimetroLoje * 2 / 3 * 0.45 / 3)) * PERDA;
-  const tabuas10 = Math.ceil(tabuas10Bruto);
+  const tabuas10 = teto(tabuas10Bruto);
   const tabuas30Bruto = (((p1.perimetroParedes * 2 / 3) + p1.perimetroParedes * 2 / 3 * 0.45 / 3)) * PERDA;
-  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const tabuas30 = teto(tabuas30Bruto);
   const sarrafo5Bruto = ((p1.perimetroParedes * 2 / 0.7 * 0.45) + (p1.perimetroParedes / 0.75 * 0.3)) / 3 * PERDA;
-  const sarrafo5 = Math.ceil(sarrafo5Bruto);
+  const sarrafo5 = teto(sarrafo5Bruto);
 
   const ferro = normalizarFerro(p1.vigaRespaldo);
-  const ca50_5mm = Math.ceil(ferro.CA50_5MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_6mm = Math.ceil(ferro.CA50_6MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_8mm = Math.ceil(ferro.CA50_8MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_10mm = Math.ceil(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_12mm = Math.ceil(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
-  const ca50_16mm = Math.ceil(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
-  const ca60_5mm = Math.ceil(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_5mm = teto(ferro.CA50_5MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_6mm = teto(ferro.CA50_6MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_8mm = teto(ferro.CA50_8MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_10mm = teto(ferro.CA50_10MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_12mm = teto(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
+  const ca50_16mm = teto(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
+  const ca60_5mm = teto(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
   const peso = ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM + ca50_8mm * PESOS_FERRO.CA50_8MM +
     ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM + ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
   const arameBruto = peso * 0.06 * PERDA;
-  const arame = Math.ceil(arameBruto);
+  const arame = teto(arameBruto);
   const pregoBruto = arame * 0.55;
-  const prego = Math.ceil(pregoBruto);
+  const prego = teto(pregoBruto);
 
   const volumeConcretoLojeBruto = ((p1.areaLoje * 0.1) + p1.concretoVigaRespaldo) * PERDA;
-  const volumeConcretoLoje = Math.ceil(volumeConcretoLojeBruto);
+  const volumeConcretoLoje = teto(volumeConcretoLojeBruto);
   const malhaPopBruto = (p1.areaLoje / (2.9 * 1.9)) * PERDA;
-  const malhaPop = Math.ceil(malhaPopBruto);
+  const malhaPop = teto(malhaPopBruto);
 
   const tipoConcat = tipologiaVba + p1.tipoLoje;
   let nomeModelo = "";
@@ -8632,28 +8632,28 @@ function vigaRespaldoLajePav1(cp, out) {
   else if (tipoConcat === "SobradoTreliça") nomeModelo = "Laje Pré Moldada Treliça Piso";
 
   const qtdLojeBruto = p1.areaLoje * PERDA;
-  const qtdLoje = Math.ceil(qtdLojeBruto);
+  const qtdLoje = teto(qtdLojeBruto);
   // [VBA] meses de escora fixo em 1.5 aqui (não usa a variável de meses do
   // módulo do Térreo) — preservado literalmente.
   const qtdEscorasBruto = p1.tipoLoje === "Protendida" ? p1.areaLoje * 0.6 * 1.5 * PERDA : p1.areaLoje * 1.5 * PERDA;
-  const qtdEscoras = Math.ceil(qtdEscorasBruto);
+  const qtdEscoras = teto(qtdEscorasBruto);
 
   const lojeMacicaBruto = p1.areaLojeMacica * 0.15 * PERDA;
-  const lojeMacica = Math.ceil(lojeMacicaBruto);
+  const lojeMacica = teto(lojeMacicaBruto);
   const maderiteLojeMacicaBruto = p1.areaLojeMacica / 2.42 * PERDA;
-  const maderiteLojeMacica = Math.ceil(maderiteLojeMacicaBruto);
+  const maderiteLojeMacica = teto(maderiteLojeMacicaBruto);
   const escorasLojeMacicaBruto = p1.areaLojeMacica * 1.5 * PERDA;
-  const escorasLojeMacica = Math.ceil(escorasLojeMacicaBruto);
+  const escorasLojeMacica = teto(escorasLojeMacicaBruto);
 
   // [VBA] bug real de copy-paste no original: usa a área de laje do TÉRREO
   // (não do Pav 1) para o massiamento do contrapiso do Pav 1. Preservado.
   const areaBase = cp.terreo.areaLoje;
   const cimentoMassiamBruto = areaBase * 0.05 * 0.25 * 1200 / 50 * PERDA;
-  const cimentoMassiam = Math.ceil(cimentoMassiamBruto);
+  const cimentoMassiam = teto(cimentoMassiamBruto);
   const areiaGrossaMassiamBruto = areaBase * 0.05 * 0.75 * PERDA;
-  const areiaGrossaMassiam = Math.ceil(areiaGrossaMassiamBruto);
+  const areiaGrossaMassiam = teto(areiaGrossaMassiamBruto);
   const biancoMassiamBruto = areaBase / 60 * PERDA;
-  const biancoMassiam = Math.ceil(biancoMassiamBruto);
+  const biancoMassiam = teto(biancoMassiamBruto);
 
   const memVigaP1 = (k) => memoriaBitolaSimples(k, ferro[k], { CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do pav. 1");
   const notaMassiamP1 = MEM.nota("Massiamento do contrapiso do pav. 1: camada de 5 cm que nivela a laje para o piso. A planilha original usa aqui a área da laje do TÉRREO — o VICKE preserva a conta como está no sistema antigo.");
@@ -8759,35 +8759,35 @@ function supraCobertura(cp, out) {
   const barras = barrasPorBitola(somaFerro);
   const peso = pesoTotalFerro(barras);
   const arameBruto = peso * 0.06 * PERDA;
-  const arame = Math.ceil(arameBruto);
+  const arame = teto(arameBruto);
   const pregoBruto = arame * 0.55;
-  const prego = Math.ceil(pregoBruto);
+  const prego = teto(pregoBruto);
 
   const volumeConcreto = numOrZero(c.volumeConcretoColunaRespaldo) + numOrZero(c.volumeConcretoVigaRespaldo); // [VBA] soma crua, sem ceil
   const areiaGrossaBruto = volumeConcreto * 0.6 * PERDA;
-  const areiaGrossa = Math.ceil(areiaGrossaBruto);
+  const areiaGrossa = teto(areiaGrossaBruto);
   const pedraBruto = volumeConcreto * PERDA;
-  const pedra = Math.ceil(pedraBruto);
+  const pedra = teto(pedraBruto);
   const cimentoBruto = pedra * 6 * PERDA;
-  const cimento = Math.ceil(cimentoBruto);
+  const cimento = teto(cimentoBruto);
 
   const tabuas20Bruto = c.colunas15 * 0.6 * 2 / 3 * PERDA;
-  const tabuas20 = Math.ceil(tabuas20Bruto);
+  const tabuas20 = teto(tabuas20Bruto);
   const tabuas25Bruto = c.colunas20 * 0.6 * 2 / 3 * PERDA;
-  const tabuas25 = Math.ceil(tabuas25Bruto);
+  const tabuas25 = teto(tabuas25Bruto);
   // [VBA] soma o perímetro da laje do Pav 1 aqui mesmo quando a tipologia é
   // Térrea — preservado literalmente do original.
   const tabuas30Bruto = ((c.colunas25 * 0.6 * 2) + (cp.pav1.perimetroLoje * 2)) / 3 * PERDA;
-  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const tabuas30 = teto(tabuas30Bruto);
   const maderitesBruto = c.areaFormaColunaMaior25cm / 2.42 * PERDA;
-  const maderites = Math.ceil(maderitesBruto);
+  const maderites = teto(maderitesBruto);
   const sarrafo5Bruto =
     ((c.colunas15 * 0.6 * 2 / 0.5 * 0.2) +
       (c.colunas20 * 0.6 * 2 / 0.5 * 0.25) +
       (c.colunas25 * 0.6 * 2 / 0.5 * 0.35) +
       (cp.pav1.perimetroLoje * 2 / 0.7 * 0.45) +
       (cp.pav1.perimetroLoje / 0.75 * 0.3)) * PERDA / 3;
-  const sarrafo5 = Math.ceil(sarrafo5Bruto);
+  const sarrafo5 = teto(sarrafo5Bruto);
 
   const memSupra = (k) => memoriaBitola(k, [["vigas de respaldo", c.vigaFerro[k]], ["pilaretes", c.colunaFerro[k]]], barras);
   const notaSupra = MEM.nota("Supra cobertura: as vigas de respaldo e os pilaretes de 60 cm que fecham a alvenaria e apoiam o telhado.");
@@ -8888,28 +8888,28 @@ function calcularTelhado(t) {
   if (TELHAS_BARRO_CONCRETO.includes(tipo)) espMaoFrancesa = 1.2;
 
   const ESP_TERCAS_VIGA = 1.5;
-  const vigas = Math.ceil((((larg / ESP_TERCAS_VIGA) + 1) * comp) * PERDA);
+  const vigas = teto((((larg / ESP_TERCAS_VIGA) + 1) * comp) * PERDA);
 
   const caibVar1 = aguas === 1
-    ? Math.ceil(larg * ((incl ** 2) + 1) ** 0.5)
-    : Math.ceil((larg / 2) * ((incl ** 2) + 1) ** 0.5);
+    ? teto(larg * ((incl ** 2) + 1) ** 0.5)
+    : teto((larg / 2) * ((incl ** 2) + 1) ** 0.5);
   let caibVar2;
   if (espCaibros5x5 === 0) caibVar2 = 0;
-  else if (aguas === 1) caibVar2 = Math.ceil(((comp * 2) + 2) / 2 / espCaibros5x5);
-  else caibVar2 = Math.ceil(((comp * 2) + 1) / espCaibros5x5);
-  const caibros = Math.ceil((caibVar1 * caibVar2) * PERDA);
+  else if (aguas === 1) caibVar2 = teto(((comp * 2) + 2) / 2 / espCaibros5x5);
+  else caibVar2 = teto(((comp * 2) + 1) / espCaibros5x5);
+  const caibros = teto((caibVar1 * caibVar2) * PERDA);
 
-  const ripas = espRipas25x5 === 0 ? 0 : Math.ceil((larg / espRipas25x5 * comp) * PERDA);
-  const apoios = espApoio === 0 ? 0 : Math.ceil((larg / espApoio * 0.51) * PERDA);
+  const ripas = espRipas25x5 === 0 ? 0 : teto((larg / espRipas25x5 * comp) * PERDA);
+  const apoios = espApoio === 0 ? 0 : teto((larg / espApoio * 0.51) * PERDA);
 
   let espigVar1 = 0, espigVar2 = 0, espigVar3 = 0;
   if (!(aguas === 1 || aguas === 2)) { espigVar1 = larg / 2; espigVar2 = larg / 2; }
   if (aguas === 3) espigVar3 = 2;
   else if (aguas === 4) espigVar3 = 4;
-  const espigao = Math.ceil((((espigVar1 ** 2 + espigVar2 ** 2) ** 0.5) * espigVar3) * PERDA);
+  const espigao = teto((((espigVar1 ** 2 + espigVar2 ** 2) ** 0.5) * espigVar3) * PERDA);
 
-  const berco = Math.ceil((espBercos * larg * 0.5) * PERDA);
-  const maoFrancesa = Math.ceil((espMaoFrancesa * larg * 0.45) * PERDA);
+  const berco = teto((espBercos * larg * 0.5) * PERDA);
+  const maoFrancesa = teto((espMaoFrancesa * larg * 0.45) * PERDA);
 
   const areaInclinada = comp * larg * ((incl ** 2) + 1) ** 0.5;
 
@@ -8940,12 +8940,12 @@ function calcularTelhado(t) {
   const perimetro2 = calcularMedida;
 
   const mtsCumeeira = ((cumeVar1 * ((cumeVar2 ** 2) + (cumeVar3 ** 2)) ** 0.5) + cumeVar4) * PERDA;
-  const telhas = areaTelha === 0 ? 0 : Math.ceil((areaInclinada / areaTelha) * PERDA);
+  const telhas = areaTelha === 0 ? 0 : teto((areaInclinada / areaTelha) * PERDA);
   const denomCumeeira = areaCumeeiraTelha - 0.05;
-  const cumeeira = denomCumeeira === 0 ? 0 : Math.ceil((mtsCumeeira / denomCumeeira) * PERDA);
-  const prego1 = Math.ceil(areaInclinada * 0.016 * PERDA);
-  const prego2 = Math.ceil(areaInclinada * 0.021 * PERDA);
-  const manta = Math.ceil(areaInclinada * 1.2);
+  const cumeeira = denomCumeeira === 0 ? 0 : teto((mtsCumeeira / denomCumeeira) * PERDA);
+  const prego1 = teto(areaInclinada * 0.016 * PERDA);
+  const prego2 = teto(areaInclinada * 0.021 * PERDA);
+  const manta = teto(areaInclinada * 1.2);
 
   // Telhas de barro/concreto não usam rufo (perímetro zerado no original).
   if (TELHAS_BARRO_CONCRETO.includes(tipo)) perimetro1 = 0;
@@ -9049,18 +9049,18 @@ function chapiscoReboco(cp, out) {
   const volumeChapisco = m2 * PERDA * 2 * 0.005;
   const cimentoChapisco = (volumeChapisco * 0.2 * 1200 / 50) * PERDA;
   const areiaGrossaChapiscoBruto = (volumeChapisco * 0.8) * PERDA;
-  const areiaGrossaChapisco = Math.ceil(areiaGrossaChapiscoBruto);
+  const areiaGrossaChapisco = teto(areiaGrossaChapiscoBruto);
 
   const volumeReboco = m2 * PERDA * 2 * 0.025;
   const cimentoReboco = (volumeReboco * 0.125 * 1200 / 50) * PERDA;
   const areiaFinaRebocoBruto = (volumeReboco * 0.875) * PERDA;
-  const areiaFinaReboco = Math.ceil(areiaFinaRebocoBruto);
+  const areiaFinaReboco = teto(areiaFinaRebocoBruto);
 
   const aguaTotal = ((volumeChapisco * 0.36) * PERDA) + ((volumeReboco * 0.36) * PERDA);
   const cimentoTotalBruto = cimentoChapisco + cimentoReboco;
-  const cimentoTotal = Math.ceil(cimentoTotalBruto);
+  const cimentoTotal = teto(cimentoTotalBruto);
   const vedalitBruto = (0.3 * cimentoTotal / 18) * PERDA;
-  const vedalit = Math.ceil(vedalitBruto);
+  const vedalit = teto(vedalitBruto);
 
   const memParedes = MEM.dado("Área total de paredes a revestir (duas faces das internas + externas)", m2, "m²", "calculado dos blocos de parede");
   const notaCamadas = MEM.nota("Duas camadas por face: chapisco de 5 mm e reboco de 25 mm. O volume já entra com 10% de perda.");
@@ -9110,24 +9110,24 @@ function contrapisosExternos(cp, out) {
   const perim = cp.perimetroPavimentacao;
 
   const areiaGrossaBruto = pav * 0.6 * 0.1 * PERDA;
-  const areiaGrossa = Math.ceil(areiaGrossaBruto);
+  const areiaGrossa = teto(areiaGrossaBruto);
   // [VBA] sem ceiling aqui — diferente das outras fórmulas de "pedra".
   const pedra = pav * 0.1 * PERDA;
   const cimentoBruto = pedra * 6 * PERDA;
-  const cimento = Math.ceil(cimentoBruto);
+  const cimento = teto(cimentoBruto);
   const malhaPopBruto = (pav / (2.9 * 1.9)) * PERDA;
-  const malhaPop = Math.ceil(malhaPopBruto);
+  const malhaPop = teto(malhaPopBruto);
   const tabua20Bruto = perim / 3 * PERDA;
-  const tabua20 = Math.ceil(tabua20Bruto);
+  const tabua20 = teto(tabua20Bruto);
   const sarrafo5Bruto = perim / 0.7 * 0.3 / 3 * PERDA;
-  const sarrafo5 = Math.ceil(sarrafo5Bruto);
+  const sarrafo5 = teto(sarrafo5Bruto);
 
   const cimentoMassiamBruto = pav * 0.05 * 0.25 * 1200 / 50 * PERDA;
-  const cimentoMassiam = Math.ceil(cimentoMassiamBruto);
+  const cimentoMassiam = teto(cimentoMassiamBruto);
   const areiaGrossaMassiamBruto = pav * 0.05 * 0.75 * PERDA;
-  const areiaGrossaMassiam = Math.ceil(areiaGrossaMassiamBruto);
+  const areiaGrossaMassiam = teto(areiaGrossaMassiamBruto);
   const biancoMassiamBruto = pav / 60 * PERDA;
-  const biancoMassiam = Math.ceil(biancoMassiamBruto);
+  const biancoMassiam = teto(biancoMassiamBruto);
 
   const memPav = MEM.dado("Área de pavimentação externa", pav, "m²", "bloco Pavimentação externa");
   const memPerimPav = MEM.dado("Perímetro da pavimentação", perim, "m", "bloco Pavimentação externa");
@@ -9195,46 +9195,46 @@ function muroDivisa(cp, out) {
   const PROF_BROCAS = 4;
   const DIAM_BROCAS = 0.125;
 
-  const numBrocas = Math.ceil(comp / 2.5);
+  const numBrocas = teto(comp / 2.5);
   const perfuracao = numBrocas * PROF_BROCAS * 1.15;
   const volBrocas = (numBrocas * 3.14 * (DIAM_BROCAS ** 2) * PROF_BROCAS) * PERDA;
   const volColunas = alt * numBrocas * 0.2 * 0.25 * PERDA;
   const volVigas = comp * 2 * 0.3 * 0.2 * PERDA;
   const concreto = volBrocas + volColunas + volVigas;
   const tabuas30Bruto = ((comp * 2 / 3) + comp * 2 / 3 * 0.45 / 3) * 2 * PERDA;
-  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const tabuas30 = teto(tabuas30Bruto);
   const sarrafo5Bruto = ((comp * 2 / 0.7 * 0.45) + (comp / 0.75 * 0.3)) / 3 * PERDA;
-  const sarrafo5 = Math.ceil(sarrafo5Bruto);
+  const sarrafo5 = teto(sarrafo5Bruto);
   const ferro5Bruto = ((PROF_BROCAS / 0.15 * DIAM_BROCAS * 2 * PERDA * numBrocas) + (alt / 0.15 * 0.9 * PERDA * numBrocas) + (comp / 0.15 * 1 * PERDA)) / 12 * PERDA;
-  const ferro5 = Math.ceil(ferro5Bruto);
+  const ferro5 = teto(ferro5Bruto);
   const ferro8Bruto = ((numBrocas * PROF_BROCAS * 3 * PERDA) + (alt * 4 * numBrocas * PERDA) + (comp * 2 * 4 * PERDA)) / 12 * PERDA;
-  const ferro8 = Math.ceil(ferro8Bruto);
+  const ferro8 = teto(ferro8Bruto);
   const pesoFerroMuro = (ferro5 * PERDA * PESOS_FERRO.CA50_5MM) + (ferro8 * PERDA * PESOS_FERRO.CA50_8MM);
   const arameBruto = 0.06 * pesoFerroMuro;
-  const arame = Math.ceil(arameBruto);
+  const arame = teto(arameBruto);
   const pregoBruto = 0.55 * arame;
-  const prego = Math.ceil(pregoBruto);
+  const prego = teto(pregoBruto);
 
   const areaMuro = comp * alt * PERDA;
   const volChapisco = areaMuro * PERDA * 2 * 0.005;
   const volReboco = areaMuro * PERDA * 2 * 0.025;
   const tijolosBruto = areaMuro * 46.458 * PERDA;
-  const tijolos = Math.ceil(tijolosBruto);
+  const tijolos = teto(tijolosBruto);
   const areiaFinaAssent = tijolos * 0.002223 * PERDA;
   const areiaFinaReboco = volReboco * 0.875 * PERDA;
   const areiaFinaTotalBruto = areiaFinaAssent + areiaFinaReboco;
-  const areiaFinaTotal = Math.ceil(areiaFinaTotalBruto);
+  const areiaFinaTotal = teto(areiaFinaTotalBruto);
   const areiaGrossaChapisco = volChapisco * 0.8 * PERDA;
   const agua = ((volChapisco * 0.36) + (volReboco * 0.36)) * PERDA;
   const vedalitBruto = (areiaFinaTotal / 25) * PERDA;
-  const vedalit = Math.ceil(vedalitBruto);
+  const vedalit = teto(vedalitBruto);
   const cimentoChapisco = (0.2 * volChapisco * 1200 / 50) * PERDA;
   const cimentoReboco = (0.125 * volReboco * 1200 / 50) * PERDA;
   const cimentoAssentamento = areiaFinaAssent * 2 * PERDA;
   const cimentoTotalBruto = cimentoChapisco + cimentoReboco + cimentoAssentamento;
-  const cimentoTotal = Math.ceil(cimentoTotalBruto);
+  const cimentoTotal = teto(cimentoTotalBruto);
   const vedatopBruto = ((0.3 * comp) * 3 / 10) * PERDA + (comp * 3 / 18) * PERDA;
-  const vedatop = Math.ceil(vedatopBruto);
+  const vedatop = teto(vedatopBruto);
 
   const memMuro = [MEM.dado("Comprimento do muro de divisa", comp, "m", "bloco Muro de divisa"), MEM.dado("Altura do muro", alt, "m", "bloco Muro de divisa")];
   const memBrocas = MEM.conta("Brocas: uma a cada 2,50 m", "comprimento ÷ 2,50 → arredonda para cima", [["comprimento", comp]], numBrocas, "brocas");
@@ -9334,32 +9334,32 @@ function muroArrimo(cp, out) {
   const a = cp.arrimo;
 
   const tijolos8FBruto = (a.altura * a.comprimento * 40) * PERDA;
-  const tijolos8F = Math.ceil(tijolos8FBruto);
+  const tijolos8F = teto(tijolos8FBruto);
   const areiaFinaAssentBruto = tijolos8F * 0.002223 * PERDA;
-  const areiaFinaAssent = Math.ceil(areiaFinaAssentBruto);
+  const areiaFinaAssent = teto(areiaFinaAssentBruto);
   const vedalitFinaAssentBruto = areiaFinaAssent / 25 * PERDA;
-  const vedalitFinaAssent = Math.ceil(vedalitFinaAssentBruto);
+  const vedalitFinaAssent = teto(vedalitFinaAssentBruto);
   const cimentoFinaAssentBruto = areiaFinaAssent * 2 * PERDA;
-  const cimentoFinaAssent = Math.ceil(cimentoFinaAssentBruto);
+  const cimentoFinaAssent = teto(cimentoFinaAssentBruto);
 
   const tabuas15ColunBruto = a.colunas15 * 2.8 * 2 / 3 * PERDA;
-  const tabuas15Colun = Math.ceil(tabuas15ColunBruto);
+  const tabuas15Colun = teto(tabuas15ColunBruto);
   const tabuas20ColunBruto = a.colunas20 * 2.8 * 2 / 3 * PERDA;
-  const tabuas20Colun = Math.ceil(tabuas20ColunBruto);
+  const tabuas20Colun = teto(tabuas20ColunBruto);
   const tabuas30ColunBruto = a.colunas30 * 2.8 * 2 / 3 * PERDA;
-  const tabuas30Colun = Math.ceil(tabuas30ColunBruto);
+  const tabuas30Colun = teto(tabuas30ColunBruto);
   const sarrafo5ColunBruto =
     ((a.colunas15 * 2.8 * 2 / 0.5 * 0.2) +
       (a.colunas20 * 2.8 * 2 / 0.5 * 0.25) +
       (a.colunas30 * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3;
-  const sarrafo5Colun = Math.ceil(sarrafo5ColunBruto);
+  const sarrafo5Colun = teto(sarrafo5ColunBruto);
   const maderitesColunBruto = a.areaFormaColunaMaior25cm / 2.42 * PERDA;
-  const maderitesColun = Math.ceil(maderitesColunBruto);
+  const maderitesColun = teto(maderitesColunBruto);
 
   const tabuas30ArrimoBruto = ((a.comprimento * 2 / 3) + a.comprimento * 2 / 3 * 0.45 / 3) * a.numeroVigas * PERDA;
-  const tabuas30Arrimo = Math.ceil(tabuas30ArrimoBruto);
+  const tabuas30Arrimo = teto(tabuas30ArrimoBruto);
   const sarrafo5ArrimoBruto = ((a.comprimento * 2 / 0.7 * 0.45) + (a.comprimento / 0.75 * 0.3)) / 3 * a.numeroVigas * PERDA;
-  const sarrafo5Arrimo = Math.ceil(sarrafo5ArrimoBruto);
+  const sarrafo5Arrimo = teto(sarrafo5ArrimoBruto);
   const perfuracaoEstacas = a.qtdEstacas * a.profEstacas * 1.15;
 
   const soma = somarFerro(a.ferro.estacas, a.ferro.sapatas, a.ferro.arranques, a.ferro.baldrame, a.ferro.gigante, a.ferro.colunas, a.ferro.vigas);
@@ -9367,16 +9367,16 @@ function muroArrimo(cp, out) {
   const peso = pesoTotalFerro(barras);
   const partesConcretoArrimo = [["estacas", a.concreto.estacas], ["sapatas", a.concreto.sapatas], ["arranques", a.concreto.arranques], ["baldrame", a.concreto.baldrame], ["gigante", a.concreto.gigante], ["colunas", a.concreto.colunas], ["vigas", a.concreto.vigas]].filter(([, v]) => numOrZero(v) > 0);
   const concretoBruto = somaN(a.concreto.estacas, a.concreto.sapatas, a.concreto.arranques, a.concreto.baldrame, a.concreto.gigante, a.concreto.colunas, a.concreto.vigas) * PERDA;
-  const concreto = Math.ceil(concretoBruto);
+  const concreto = teto(concretoBruto);
 
   const discoFerroBruto = peso * 0.01;
-  const discoFerro = Math.ceil(discoFerroBruto);
+  const discoFerro = teto(discoFerroBruto);
   const arameBruto = peso * 0.06;
-  const arame = Math.ceil(arameBruto);
+  const arame = teto(arameBruto);
   const pregoBruto = 0.55 * arame;
-  const prego = Math.ceil(pregoBruto);
+  const prego = teto(pregoBruto);
   const vedatopBruto = ((a.altura * a.comprimento) * 3 * PERDA) / 18;
-  const vedatop = Math.ceil(vedatopBruto);
+  const vedatop = teto(vedatopBruto);
 
   const tabuas30Total = tabuas30Arrimo + tabuas30Colun;
   const sarrafo5Total = sarrafo5Arrimo + sarrafo5Colun;
@@ -9458,7 +9458,7 @@ function piscina(cp, out) {
   const p = cp.piscina;
 
   const tabua10MarcacaoBruto = p.gabaritoObra / 3 * 1.2;
-  const tabua10Marcacao = Math.ceil(tabua10MarcacaoBruto);
+  const tabua10Marcacao = teto(tabua10MarcacaoBruto);
   // [DIVERGÊNCIA COM A SPEC §9 — reportada, preservada de propósito]
   // Esta fórmula tem um "+20" fixo, então nunca zera mesmo com
   // gabaritoObra=0 — e PISCINA() roda incondicionalmente em todo orçamento
@@ -9469,94 +9469,94 @@ function piscina(cp, out) {
   // arrimo (conferido, fórmulas ali são puramente multiplicativas), mas não
   // pra piscina por causa deste "+20". Não suprimido aqui — é o que a
   // planilha real produziria.
-  const sarrafo5Marcacao = Math.ceil((p.gabaritoObra * 1.2 / 1.3 * 0.6 / 3) + 20);
+  const sarrafo5Marcacao = teto((p.gabaritoObra * 1.2 / 1.3 * 0.6 / 3) + 20);
   const prego18x27MarcacaoBruto = 0.05 * tabua10Marcacao / 2;
-  const prego18x27Marcacao = Math.ceil(prego18x27MarcacaoBruto);
+  const prego18x27Marcacao = teto(prego18x27MarcacaoBruto);
   const prego17x21Marcacao = prego18x27Marcacao;
 
   const perfuracaoEstacas = p.qtdEstacas * p.profundidadeEstacas * 1.15;
 
   const pedraContrapBruto = p.areaConstruida * 0.1 * PERDA;
-  const pedraContrap = Math.ceil(pedraContrapBruto);
-  const cimentoContrap = Math.ceil(pedraContrap * 6 * PERDA);
+  const pedraContrap = teto(pedraContrapBruto);
+  const cimentoContrap = teto(pedraContrap * 6 * PERDA);
   const malhaPopContrapBruto = p.areaConstruida / (2.9 * 1.9 * PERDA);
-  const malhaPopContrap = Math.ceil(malhaPopContrapBruto);
-  const areiaGrossaContrap = Math.ceil(p.areaConstruida * 0.6 * 0.1 * PERDA);
+  const malhaPopContrap = teto(malhaPopContrapBruto);
+  const areiaGrossaContrap = teto(p.areaConstruida * 0.6 * 0.1 * PERDA);
 
   const tijolinhoMacicoBruto = p.paredesM2Total * 84.2 * PERDA;
-  const tijolinhoMacico = Math.ceil(tijolinhoMacicoBruto);
-  const areiaFinaAssent = Math.ceil(tijolinhoMacico * 0.0291 * PERDA);
-  const cimentoFinaAssent = Math.ceil(areiaFinaAssent * 2 * PERDA);
+  const tijolinhoMacico = teto(tijolinhoMacicoBruto);
+  const areiaFinaAssent = teto(tijolinhoMacico * 0.0291 * PERDA);
+  const cimentoFinaAssent = teto(areiaFinaAssent * 2 * PERDA);
 
   const tabuas15ColunBruto = p.colunas15 * p.profundidade * 2 / 3 * PERDA;
-  const tabuas15Colun = Math.ceil(tabuas15ColunBruto);
+  const tabuas15Colun = teto(tabuas15ColunBruto);
   const tabuas20ColunBruto = p.colunas20 * p.profundidade * 2 / 3 * PERDA;
-  const tabuas20Colun = Math.ceil(tabuas20ColunBruto);
-  const tabuas30Colun = Math.ceil(p.colunas25 * p.profundidade * 2 / 3 * PERDA);
+  const tabuas20Colun = teto(tabuas20ColunBruto);
+  const tabuas30Colun = teto(p.colunas25 * p.profundidade * 2 / 3 * PERDA);
   const QTD_NUMERO_VIGAS_PISCINA = 3;
-  const tabuas30Vigas = Math.ceil(((p.perimetroParedes * 2 / 3) + p.perimetroParedes * 2 / 3 * 0.45 / 3) * QTD_NUMERO_VIGAS_PISCINA * PERDA);
+  const tabuas30Vigas = teto(((p.perimetroParedes * 2 / 3) + p.perimetroParedes * 2 / 3 * 0.45 / 3) * QTD_NUMERO_VIGAS_PISCINA * PERDA);
   const tabuas30Total = tabuas30Colun + tabuas30Vigas;
 
-  const sarrafo5Colun = Math.ceil(
+  const sarrafo5Colun = teto(
     ((p.colunas15 * p.profundidade * 2 / 0.5 * 0.2) +
       (p.colunas20 * p.profundidade * 2 / 0.5 * 0.25) +
       (p.colunas25 * p.profundidade * 2 / 0.5 * 0.35)) * PERDA / 3
   );
-  const sarrafo5Vigas = Math.ceil(((p.perimetroParedes * 2 / 0.7 * 0.45) + (p.perimetroParedes / 0.75 * 0.3)) / 3 * QTD_NUMERO_VIGAS_PISCINA * PERDA);
+  const sarrafo5Vigas = teto(((p.perimetroParedes * 2 / 0.7 * 0.45) + (p.perimetroParedes / 0.75 * 0.3)) / 3 * QTD_NUMERO_VIGAS_PISCINA * PERDA);
   const sarrafo5Total = sarrafo5Colun + sarrafo5Vigas + sarrafo5Marcacao;
 
   const maderitesColunBruto = p.areaFormaColunaMaior25cm / 2.42 * PERDA;
-  const maderitesColun = Math.ceil(maderitesColunBruto);
+  const maderitesColun = teto(maderitesColunBruto);
 
   const soma = somarFerro(p.ferro.estacas, p.ferro.sapatas, p.ferro.arranques, p.ferro.baldrame, p.ferro.contrapiso, p.ferro.colunas, p.ferro.vigas);
   const barras = barrasPorBitola(soma);
   const peso = pesoTotalFerro(barras);
   const partesConcPisc = [["estacas", p.concreto.estacas], ["sapatas", p.concreto.sapatas], ["arranques", p.concreto.arranques], ["baldrame", p.concreto.baldrame], ["contrapiso", p.concreto.contrapiso], ["colunas", p.concreto.colunas], ["vigas", p.concreto.vigas]].filter(([, v]) => numOrZero(v) > 0);
   const concretoBruto = somaN(p.concreto.estacas, p.concreto.sapatas, p.concreto.arranques, p.concreto.baldrame, p.concreto.contrapiso, p.concreto.colunas, p.concreto.vigas) * PERDA;
-  const concreto = Math.ceil(concretoBruto);
+  const concreto = teto(concretoBruto);
 
   const discoFerroBruto = peso * 0.01;
-  const discoFerro = Math.ceil(discoFerroBruto);
+  const discoFerro = teto(discoFerroBruto);
   const arameBruto = peso * 0.06;
-  const arame = Math.ceil(arameBruto);
+  const arame = teto(arameBruto);
   const prego18x27Bruto = (0.55 * arame) + prego18x27Marcacao;
-  const prego18x27 = Math.ceil(prego18x27Bruto);
+  const prego18x27 = teto(prego18x27Bruto);
 
-  const vedatopBaldrames = Math.ceil((((p.perimetroParedes * 2 * 0.3) + (p.perimetroParedes * 0.15)) * 3 * PERDA) / 18);
-  const vedatopParedesContrapiso = Math.ceil(((p.paredesM2Total + p.areaConstruida) * 3 * PERDA) / 18);
+  const vedatopBaldrames = teto((((p.perimetroParedes * 2 * 0.3) + (p.perimetroParedes * 0.15)) * 3 * PERDA) / 18);
+  const vedatopParedesContrapiso = teto(((p.paredesM2Total + p.areaConstruida) * 3 * PERDA) / 18);
   const vedatopTotal = vedatopBaldrames + vedatopParedesContrapiso;
   const telaPoliesterBruto = (p.paredesM2Total + p.areaConstruida) * PERDA;
-  const telaPoliester = Math.ceil(telaPoliesterBruto);
+  const telaPoliester = teto(telaPoliesterBruto);
 
   const volumeChapisco = p.paredesM2Total * PERDA * 2 * 0.005;
   const cimentoChapisco = (volumeChapisco * 0.2 * 1200 / 50) * PERDA;
-  const areiaGrossaChapisco = Math.ceil((volumeChapisco * 0.8) * PERDA);
+  const areiaGrossaChapisco = teto((volumeChapisco * 0.8) * PERDA);
   const aguaChapisco = (volumeChapisco * 0.36) * PERDA;
 
   const volumeReboco = p.paredesM2Total * PERDA * 2 * 0.025;
   const cimentoReboco = (volumeReboco * 0.125 * 1200 / 50) * PERDA;
-  const areiaFinaReboco = Math.ceil((volumeReboco * 0.875) * PERDA);
+  const areiaFinaReboco = teto((volumeReboco * 0.875) * PERDA);
   const aguaReboco = (volumeReboco * 0.36) * PERDA;
 
-  const cimentoMassiamentoPiso = Math.ceil(p.areaConstruida * 0.05 * 0.25 * 1200 / 50 * PERDA);
-  const areiaGrossaMassiamentoPiso = Math.ceil(p.areaConstruida * 0.05 * 0.75 * PERDA);
+  const cimentoMassiamentoPiso = teto(p.areaConstruida * 0.05 * 0.25 * 1200 / 50 * PERDA);
+  const areiaGrossaMassiamentoPiso = teto(p.areaConstruida * 0.05 * 0.75 * PERDA);
 
   const cimentoTotalBruto = cimentoContrap + cimentoFinaAssent + cimentoChapisco + cimentoReboco;
-  const cimentoTotal = Math.ceil(cimentoTotalBruto);
+  const cimentoTotal = teto(cimentoTotalBruto);
   const aguaTotal = aguaChapisco + aguaReboco;
   const vedalitBruto = (0.3 * cimentoTotal / 18) * PERDA;
-  const vedalit = Math.ceil(vedalitBruto);
+  const vedalit = teto(vedalitBruto);
   const areiaGrossaTotal = areiaGrossaContrap + areiaGrossaChapisco + areiaGrossaMassiamentoPiso;
   const areiaFinaTotal = areiaFinaAssent + areiaFinaReboco;
 
   const revestimentoBruto = p.paredesM2Total + p.areaConstruida * 1.2;
-  const revestimento = Math.ceil(revestimentoBruto);
+  const revestimento = teto(revestimentoBruto);
   const rejuntesBruto = revestimento * 0.095 / 5 * PERDA;
-  const rejuntes = Math.ceil(rejuntesBruto);
+  const rejuntes = teto(rejuntesBruto);
   const argamassasBruto = revestimento * 7.5 / 20 * PERDA;
-  const argamassas = Math.ceil(argamassasBruto);
+  const argamassas = teto(argamassasBruto);
   const discoPorcelanatoBruto = revestimento * 0.005 * PERDA;
-  const discoPorcelanato = Math.ceil(discoPorcelanatoBruto);
+  const discoPorcelanato = teto(discoPorcelanatoBruto);
 
   const memPiscina = [
     MEM.dado("Área construída da piscina (fundo)", p.areaConstruida, "m²", "bloco Piscina"),
@@ -10177,7 +10177,7 @@ function acessoriosEsquadria(familia, L, H, folhas) {
     if (a.apenasFolhas != null && a.apenasFolhas !== n) continue;
     if (a.metros) {
       const m = medidas[a.metros] || 0;
-      if (a.porMetro) saida.push({ codigo: a.codigo, descricao: a.descricao, unidade: "Unidades", qtd: Math.ceil(m / a.porMetro) });
+      if (a.porMetro) saida.push({ codigo: a.codigo, descricao: a.descricao, unidade: "Unidades", qtd: teto(m / a.porMetro) });
       else saida.push({ codigo: a.codigo, descricao: a.descricao, unidade: "Mts", qtd: Math.round(m * 100) / 100 });
       continue;
     }
@@ -10220,7 +10220,7 @@ function calcularEsquadria(e, avisos) {
     if (p.regra === "PALHETA_CEGA" || p.regra === "PALHETA_VENTILADA") {
       const b = barrasPalhetas(L, H);
       const barras = (p.regra === "PALHETA_CEGA" ? b.cega : b.ventilada) * q;
-      saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, codigo: p.codigo, unidade: "Barras 6mts", qtd: Math.ceil(barras), subEtapa: rotulo });
+      saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, codigo: p.codigo, unidade: "Barras 6mts", qtd: teto(barras), subEtapa: rotulo });
       continue;
     }
     const metros = metrosPorRegra(p.regra, L, H, e.folhas);
@@ -10230,7 +10230,7 @@ function calcularEsquadria(e, avisos) {
       saida.push({ item: `Alumínio ${e.linha} - ${p.codigo} - ${p.perfil}`, codigo: p.codigo, unidade: "Kg", qtd: Math.round(metros * p.kgPorMetro * q * 100) / 100, subEtapa: rotulo });
     } else {
       // sem peso na aba (ex.: GUA483 mata térmica, vende em rolo) → metros lineares
-      saida.push({ item: `${p.perfil} - ${p.codigo}`, codigo: p.codigo, unidade: "Mts", qtd: Math.ceil(metros * q), subEtapa: rotulo });
+      saida.push({ item: `${p.perfil} - ${p.codigo}`, codigo: p.codigo, unidade: "Mts", qtd: teto(metros * q), subEtapa: rotulo });
     }
   }
   // vidro: pela regra de desconto da família, por peça
@@ -10238,7 +10238,7 @@ function calcularEsquadria(e, avisos) {
   if (vidro > 0) saida.push({ item: "Vidro 8mm", unidade: "m2", qtd: Math.round(vidro * 100) / 100, subEtapa: rotulo });
   // acessórios: contagem por esquadria/folha ou metros de perímetro
   for (const a of acessoriosEsquadria(e.familia, L, H, e.folhas)) {
-    const qtd = a.unidade === "Mts" ? Math.ceil(a.qtd * q) : a.qtd * q;
+    const qtd = a.unidade === "Mts" ? teto(a.qtd * q) : a.qtd * q;
     saida.push({ item: `Acessório esquadria - ${a.codigo} - ${a.descricao}`, codigo: a.codigo, unidade: a.unidade, qtd, subEtapa: rotulo });
   }
   return saida;
@@ -10405,6 +10405,11 @@ const PERDA_PECAS = 1.2; // peças cerâmicas (piso e revestimento): 20% de reco
 const ARGAMASSA_KG_M2 = { AC3: 7.5, AC2: 4.5 };
 const REJUNTE_DENSIDADE = 1600, REJUNTE_FATOR = 1.5;
 
+// Arredonda para cima ignorando o ruído de ponto flutuante: 150 × 40 × 1,1
+// dá 6600.000000000001 em JavaScript, e Math.ceil viraria 6601 tijolos. A
+// tolerância de 1e-9 é milhões de vezes menor que qualquer quantidade real
+// de obra, então só apaga o ruído — nunca um centésimo de verdade.
+function teto(x) { return Math.ceil(x - 1e-9); }
 // Arredonda m² para cima em centésimos sem o ruído de ponto flutuante (100 × 1,1 = 110,00, não 110,01)
 function ceil2(x) { return Math.ceil(x * 100 - 1e-7) / 100; }
 function formatoPeca(id) { return FORMATOS_PECA.find((f) => f.id === id) || FORMATOS_PECA.find((f) => f.id === "60x60"); }
@@ -10707,64 +10712,64 @@ function pisosRevestimentos(cp, out, data) {
       MEM.conta("Com 10% de perda", "área × 1,10", [["área", deckM2]], deckM2 * PERDA, "m²"),
       MEM.teto(deckM2 * PERDA, ceil2(deckM2 * PERDA), "m²", "Arredonda em centésimos de m²"),
     ] });
-    emitir(out, { ...base, subEtapa: "Deck", item: "tintas - Cetol Deck", unidade: "Unidades", qtd: Math.ceil(deckM2 / 20), memoria: [
+    emitir(out, { ...base, subEtapa: "Deck", item: "tintas - Cetol Deck", unidade: "Unidades", qtd: teto(deckM2 / 20), memoria: [
       MEM.nota("Cetol para o deck: uma lata rende 20 m²."),
       MEM.dado("Área de deck", deckM2, "m²", "bloco Pisos e revestimentos"),
       MEM.conta("Latas", "área ÷ 20", [["área", deckM2]], deckM2 / 20, "latas"),
-      MEM.teto(deckM2 / 20, Math.ceil(deckM2 / 20), "latas", "Arredonda para cima (lata fechada)"),
+      MEM.teto(deckM2 / 20, teto(deckM2 / 20), "latas", "Arredonda para cima (lata fechada)"),
     ] });
   }
 
   // Consumíveis somados
-  if (totais.AC3 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 3 GF - 20kg", unidade: "Unidades", qtd: Math.ceil(totais.AC3 / 20 * PERDA), memoria: [
+  if (totais.AC3 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 3 GF - 20kg", unidade: "Unidades", qtd: teto(totais.AC3 / 20 * PERDA), memoria: [
     MEM.nota(`Argamassa AC-III: usada em porcelanato e em tudo que é externo, a ${numMem(ARGAMASSA_KG_M2.AC3)} kg por m². Soma todas as superfícies desse tipo mais as soleiras. Saco de 20 kg.`),
     MEM.conta("Argamassa necessária", "soma das superfícies em AC-III", [], totais.AC3, "kg"),
     MEM.conta("Sacos, com 10% de perda", "kg ÷ 20 × 1,10", [["kg", totais.AC3]], totais.AC3 / 20 * PERDA, "sacos"),
-    MEM.teto(totais.AC3 / 20 * PERDA, Math.ceil(totais.AC3 / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
+    MEM.teto(totais.AC3 / 20 * PERDA, teto(totais.AC3 / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
   ] });
-  if (totais.AC2 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 2 - 20kg", unidade: "Unidades", qtd: Math.ceil(totais.AC2 / 20 * PERDA), memoria: [
+  if (totais.AC2 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 2 - 20kg", unidade: "Unidades", qtd: teto(totais.AC2 / 20 * PERDA), memoria: [
     MEM.nota(`Argamassa AC-II: cerâmica em área interna, a ${numMem(ARGAMASSA_KG_M2.AC2)} kg por m². Saco de 20 kg.`),
     MEM.conta("Argamassa necessária", "soma das superfícies em AC-II", [], totais.AC2, "kg"),
     MEM.conta("Sacos, com 10% de perda", "kg ÷ 20 × 1,10", [["kg", totais.AC2]], totais.AC2 / 20 * PERDA, "sacos"),
-    MEM.teto(totais.AC2 / 20 * PERDA, Math.ceil(totais.AC2 / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
+    MEM.teto(totais.AC2 / 20 * PERDA, teto(totais.AC2 / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
   ] });
-  if (totais.rejunteKg > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: Math.ceil(totais.rejunteKg / 5), memoria: [
+  if (totais.rejunteKg > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: teto(totais.rejunteKg / 5), memoria: [
     MEM.nota("Rejunte pela geometria da junta de cada superfície: metros de junta por m² × largura da junta × espessura da peça × densidade 1.600 kg/m³, com fator 1,5 de acomodação. Embalagem de 5 kg."),
     MEM.conta("Rejunte necessário", "soma das superfícies", [], totais.rejunteKg, "kg"),
     MEM.conta("Embalagens", "kg ÷ 5", [["kg", totais.rejunteKg]], totais.rejunteKg / 5, "embalagens"),
-    MEM.teto(totais.rejunteKg / 5, Math.ceil(totais.rejunteKg / 5), "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
+    MEM.teto(totais.rejunteKg / 5, teto(totais.rejunteKg / 5), "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
   ] });
   if (totais.clips > 0) {
-    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador", unidade: "Unidades", qtd: Math.ceil(totais.clips * PERDA), memoria: [
+    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador", unidade: "Unidades", qtd: teto(totais.clips * PERDA), memoria: [
     MEM.nota("Clips niveladores: só em peça de 60 cm ou maior, 3 por peça."),
     MEM.conta("Clips necessários", "3 × peças das superfícies com peça ≥ 60 cm", [], totais.clips, "clips"),
     MEM.conta("Com 10% de perda", "clips × 1,10", [["clips", totais.clips]], totais.clips * PERDA, "clips"),
-    MEM.teto(totais.clips * PERDA, Math.ceil(totais.clips * PERDA), "clips"),
+    MEM.teto(totais.clips * PERDA, teto(totais.clips * PERDA), "clips"),
   ] });
-    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Cunha Niveladora", unidade: "Unidades", qtd: Math.ceil(totais.clips / 3), memoria: [
+    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Cunha Niveladora", unidade: "Unidades", qtd: teto(totais.clips / 3), memoria: [
     MEM.nota("Cunhas do sistema de nivelamento: uma para cada 3 clips (a cunha é reutilizada)."),
     MEM.dado("Clips niveladores", totais.clips, "clips", "passo anterior"),
     MEM.conta("Cunhas", "clips ÷ 3", [["clips", totais.clips]], totais.clips / 3, "cunhas"),
-    MEM.teto(totais.clips / 3, Math.ceil(totais.clips / 3), "cunhas"),
+    MEM.teto(totais.clips / 3, teto(totais.clips / 3), "cunhas"),
   ] });
   }
-  if (totais.cruzetas > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador Cruzeta", unidade: "Pacotes 100 un", qtd: Math.ceil(totais.cruzetas * PERDA / 100), memoria: [
+  if (totais.cruzetas > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador Cruzeta", unidade: "Pacotes 100 un", qtd: teto(totais.cruzetas * PERDA / 100), memoria: [
     MEM.nota("Cruzetas: nas peças menores que 60 cm, uma por peça. Pacote de 100."),
     MEM.conta("Cruzetas necessárias", "peças das superfícies com peça < 60 cm", [], totais.cruzetas, "cruzetas"),
     MEM.conta("Pacotes, com 10% de perda", "cruzetas × 1,10 ÷ 100", [["cruzetas", totais.cruzetas]], totais.cruzetas * PERDA / 100, "pacotes"),
-    MEM.teto(totais.cruzetas * PERDA / 100, Math.ceil(totais.cruzetas * PERDA / 100), "pacotes de 100", "Arredonda para cima (pacote fechado)"),
+    MEM.teto(totais.cruzetas * PERDA / 100, teto(totais.cruzetas * PERDA / 100), "pacotes de 100", "Arredonda para cima (pacote fechado)"),
   ] });
-  if (m2Porcelanato > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Disco Porcelanato", unidade: "Unidades", qtd: Math.max(1, Math.ceil(m2Porcelanato * 0.005 * PERDA)), memoria: [
+  if (m2Porcelanato > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Disco Porcelanato", unidade: "Unidades", qtd: Math.max(1, teto(m2Porcelanato * 0.005 * PERDA)), memoria: [
     MEM.nota("Disco de corte de porcelanato: 0,005 por m² de porcelanato, no mínimo um."),
     MEM.conta("Área em porcelanato", "soma das superfícies", [], m2Porcelanato, "m²"),
     MEM.conta("Discos, com 10% de perda", "área × 0,005 × 1,10", [["área", m2Porcelanato]], m2Porcelanato * 0.005 * PERDA, "discos"),
-    MEM.teto(m2Porcelanato * 0.005 * PERDA, Math.max(1, Math.ceil(m2Porcelanato * 0.005 * PERDA)), "discos", "Arredonda para cima (mínimo de 1 disco)"),
+    MEM.teto(m2Porcelanato * 0.005 * PERDA, Math.max(1, teto(m2Porcelanato * 0.005 * PERDA)), "discos", "Arredonda para cima (mínimo de 1 disco)"),
   ] });
-  if (m2PisoInterno > 0) emitir(out, { ...base, subEtapa: "Proteção", item: "Salva Piso 1,00m x 25mts", unidade: "Rolos", qtd: Math.ceil(m2PisoInterno / 25 * PERDA), memoria: [
+  if (m2PisoInterno > 0) emitir(out, { ...base, subEtapa: "Proteção", item: "Salva Piso 1,00m x 25mts", unidade: "Rolos", qtd: teto(m2PisoInterno / 25 * PERDA), memoria: [
     MEM.nota("Salva-piso para proteger o piso assentado até o fim da obra: rolo de 1 m × 25 m."),
     MEM.conta("Área de piso interno", "piso interno + rodapé", [], m2PisoInterno, "m²"),
     MEM.conta("Rolos, com 10% de perda", "área ÷ 25 × 1,10", [["área", m2PisoInterno]], m2PisoInterno / 25 * PERDA, "rolos"),
-    MEM.teto(m2PisoInterno / 25 * PERDA, Math.ceil(m2PisoInterno / 25 * PERDA), "rolos", "Arredonda para cima (rolo inteiro)"),
+    MEM.teto(m2PisoInterno / 25 * PERDA, teto(m2PisoInterno / 25 * PERDA), "rolos", "Arredonda para cima (rolo inteiro)"),
   ] });
 }
 
@@ -10949,8 +10954,8 @@ function instalacoesPorAmbiente(cp, out, data) {
     for (const p of pontosDef) aplicarKit(escolherKit(kits, p.kit, inst.padrao), totalPontos[p.id], "ELETRICA", `${p.nome} (${numMem(totalPontos[p.id])} pontos somados nos cômodos)`);
     aplicarKit(escolherKit(kits, "ELETRICA_POR_OBRA", inst.padrao), 1, "ELETRICA", "Uma vez por obra (quadro, entrada e aterramento)");
     const luz = numOrZero(totalPontos.iluminacao) + numOrZero(totalPontos.iluminacaoParalela);
-    if (luz > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 10A - 10kA", Math.ceil(luz / 8), "Unidades", `Um circuito de iluminação a cada 8 pontos de luz (${numMem(luz)} pontos)`);
-    if (totalPontos.tomadaGeral > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 20A - 10kA", Math.ceil(totalPontos.tomadaGeral / 6), "Unidades", `Um circuito de tomadas a cada 6 tomadas de uso geral (${numMem(totalPontos.tomadaGeral)} tomadas)`);
+    if (luz > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 10A - 10kA", teto(luz / 8), "Unidades", `Um circuito de iluminação a cada 8 pontos de luz (${numMem(luz)} pontos)`);
+    if (totalPontos.tomadaGeral > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 20A - 10kA", teto(totalPontos.tomadaGeral / 6), "Unidades", `Um circuito de tomadas a cada 6 tomadas de uso geral (${numMem(totalPontos.tomadaGeral)} tomadas)`);
   }
   if (!doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO", "Uma vez por obra (caixas, ramal de saída e ventilação)");
   if (!doProjeto.AQUECIMENTO) {
@@ -10962,7 +10967,7 @@ function instalacoesPorAmbiente(cp, out, data) {
   for (const a of Object.values(acumulado)) {
     const etapa = ETAPAS_PROJETO.find((e) => e.id === a.disc) || ETAPAS_PROJETO.find((e) => e.id === "OUTROS");
     const metros = /^m(ts|etros)?$/i.test(String(a.unidade || ""));
-    const qtd = metros ? Math.ceil(a.qtd * 10 - 1e-9) / 10 : Math.ceil(a.qtd - 1e-9);
+    const qtd = metros ? teto(a.qtd * 10 - 1e-9) / 10 : teto(a.qtd - 1e-9);
     emitir(out, { ordem: etapa.ordem, item: a.nome, tipo: etapa.tipo, etapa: etapa.nome, subEtapa: "Estimativa por ambientes", unidade: a.unidade, qtd, memoria: [
       MEM.nota(`Estimativa por conjuntos: sem projeto de engenharia lançado, o VICKE monta a lista a partir dos cômodos marcados no bloco Geral e dos pontos elétricos de cada um. Os conjuntos são editáveis em Insumos → Composições. Padrão da obra: ${padraoDaObra}.`),
       ...a.origens.map((o) => MEM.dado(o.origem, o.qtd, a.unidade, "conjunto por cômodo")),
