@@ -314,6 +314,13 @@ function opcaoAtiva(c, id) {
   return op ? opcaoPadrao(op, o.modelo) : false;
 }
 
+// Grava a fatia de um cliente (suas obras, seus contratos) de volta na coleção
+// inteira, preservando os registros dos demais clientes. Sem isso, salvar um
+// contrato apagava os contratos de todos os outros clientes.
+function mesclarPorCliente(colecao, clienteId, fatia) {
+  return [...(colecao || []).filter((x) => x && x.clienteId !== clienteId), ...(fatia || [])];
+}
+
 // Endereço da obra. O cadastro da obra só guarda endereço próprio quando o
 // usuário marca "Endereço diferente"; do contrário a obra fica no endereço
 // do cliente. Obras antigas (sem a marcação) usam o endereço que tiverem.

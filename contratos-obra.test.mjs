@@ -21,7 +21,8 @@ const modulo = new Function(`
            MODALIDADES_PAGAMENTO, modalidadeContrato, entradaESaldo, prazoContrato,
            ESCOPOS_FORNECIMENTO, escopoContrato, escopoDoTipo, objetoPadrao, tituloServicoCtr,
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
-           textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr };
+           textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr,
+           mesclarPorCliente };
 `)();
 
 let passou = 0, falhou = 0;
@@ -483,6 +484,32 @@ teste("exclusões não repetem a abertura quando a frase já vem pronta", () => 
   // espaço em branco não vira cláusula
   assert.strictEqual(modulo.montarContrato({ ...base, exclusoes: "   " }, { cliente, obra, prestador: serralheiro })
     .clausulas.find(x => x.id === "objeto").itens.length, 2);
+});
+
+teste("salvar a fatia de um cliente não apaga os registros dos outros", () => {
+  const todos = [
+    { id: "k1", clienteId: "c1", nome: "Contrato A" },
+    { id: "k2", clienteId: "c2", nome: "Contrato de outro cliente" },
+    { id: "k3", clienteId: "c1", nome: "Contrato B" },
+    { id: "k4", clienteId: "c3", nome: "Contrato de um terceiro" },
+  ];
+  const fatiaC1 = todos.filter(x => x.clienteId === "c1");
+  // editar um contrato do c1
+  const editado = modulo.mesclarPorCliente(todos, "c1", fatiaC1.map(x => x.id === "k1" ? { ...x, nome: "Contrato A (v2)" } : x));
+  assert.strictEqual(editado.length, 4);
+  assert.ok(editado.find(x => x.id === "k2"), "o contrato do c2 tem de continuar lá");
+  assert.ok(editado.find(x => x.id === "k4"), "o contrato do c3 tem de continuar lá");
+  assert.strictEqual(editado.find(x => x.id === "k1").nome, "Contrato A (v2)");
+  // acrescentar um contrato novo
+  assert.strictEqual(modulo.mesclarPorCliente(todos, "c1", [...fatiaC1, { id: "k5", clienteId: "c1" }]).length, 5);
+  // remover um contrato do c1
+  const removido = modulo.mesclarPorCliente(todos, "c1", fatiaC1.filter(x => x.id !== "k1"));
+  assert.strictEqual(removido.length, 3);
+  assert.ok(!removido.find(x => x.id === "k1"));
+  assert.ok(removido.find(x => x.id === "k2") && removido.find(x => x.id === "k4"));
+  // coleção vazia ou ausente não quebra
+  assert.deepStrictEqual(modulo.mesclarPorCliente(null, "c1", [{ id: "k9", clienteId: "c1" }]), [{ id: "k9", clienteId: "c1" }]);
+  assert.deepStrictEqual(modulo.mesclarPorCliente(todos, "c9", []).length, 4);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -1003,6 +1003,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [novoPrestador, setNovoPrestador] = useState(null);
   // Cláusulas cujo campo livre "Especificar" está aberto no gerador.
   const [especificando, setEspecificando] = useState({});
+  // Aviso de "salvo" no gerador e pedido de impressão vindo do botão Gerar PDF.
+  const [contratoSalvoEm, setContratoSalvoEm] = useState(0);
+  const [imprimirAoAbrir, setImprimirAoAbrir] = useState(false);
   const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
@@ -1011,6 +1014,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
   const contratos = (data.contratos || []).filter(c => c.clienteId === cliente.id);
   const prestadores = data.fornecedores || [];
+  // data.obras e data.contratos guardam TODOS os clientes; `obras` e
+  // `contratos` acima são só a fatia deste. Gravar a fatia por cima da
+  // coleção apagava as obras e os contratos dos outros clientes — por isso
+  // toda escrita passa por estes dois ajudantes.
+  const gravarObras = (fatia) => save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia) });
+  const gravarContratos = (fatia) => save({ ...data, contratos: mesclarPorCliente(data.contratos, cliente.id, fatia) });
   const statusObra = { planejamento: { label: "Planejamento", cor: "#f59e0b" }, execucao: { label: "Em execução", cor: "#3b82f6" }, concluida: { label: "Concluída", cor: "#10b981" } };
   const statusContrato = { ativo: { label: "Ativo", cor: "#10b981" }, pendente: { label: "Pendente", cor: "#f59e0b" }, encerrado: { label: "Encerrado", cor: "#9ca3af" } };
 
@@ -1035,8 +1044,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const ehNovo = !itensAtuais.find(i => i.id === itemFinal.id);
     const novosItens = ehNovo ? [...itensAtuais, itemFinal] : itensAtuais.map(i => i.id === itemFinal.id ? itemFinal : i);
     const obraAtualizada = { ...obraSelecionada, estimativaPL: novosItens };
-    const novasObras = obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o);
-    save({ ...data, obras: novasObras });
+    gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
     setObraSelecionada(obraAtualizada);
     setFormItemPL(null);
   }
@@ -1046,10 +1054,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!ok) return;
     const novosItens = (obraSelecionada.estimativaPL || []).filter(i => i.id !== itemId);
     const obraAtualizada = { ...obraSelecionada, estimativaPL: novosItens };
-    const novasObras = obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o);
-    save({ ...data, obras: novasObras });
+    gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
     setObraSelecionada(obraAtualizada);
   }
+
+  // "Gerar PDF" salva, abre o contrato e manda imprimir — só depois que a
+  // tela do documento está montada, senão o navegador imprime a tela anterior.
+  useEffect(() => {
+    if (!imprimirAoAbrir || view !== "verContrato" || !contratoAberto) return;
+    // O reset vai dentro do timeout: mexer no estado aqui fora dispararia a
+    // limpeza do efeito e cancelaria a impressão antes de ela acontecer.
+    const t = setTimeout(() => {
+      setImprimirAoAbrir(false);
+      try { window.print(); } catch (e) { /* sem impressora/ambiente */ }
+    }, 350);
+    return () => clearTimeout(t);
+  }, [imprimirAoAbrir, view, contratoAberto]);
 
   function novaObra() {
     setFormObra({ id: uid(), clienteId: cliente.id, nome: "", status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "", ativo: true,
@@ -1086,15 +1106,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   function salvarObra() {
     if (!formObra.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome da obra", tipo: "aviso" }); return; }
     const ehNova = !obras.find(o => o.id === formObra.id);
-    const novasObras = ehNova ? [...obras, formObra] : obras.map(o => o.id === formObra.id ? formObra : o);
-    save({ ...data, obras: novasObras });
+    gravarObras(ehNova ? [...obras, formObra] : obras.map(o => o.id === formObra.id ? formObra : o));
     setView("lista");
   }
 
   async function deletarObra(obraId) {
     const ok = await dialogo.confirmar({ titulo: "Remover obra?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
     if (!ok) return;
-    save({ ...data, obras: obras.filter(o => o.id !== obraId) });
+    gravarObras(obras.filter(o => o.id !== obraId));
   }
 
   if (view === "formContrato" && formContrato && obraSelecionada) {
@@ -1115,8 +1134,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <button style={C.btn} onClick={() => {
             if (!formContrato.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Informe o nome do contratado", tipo: "aviso" }); return; }
             const ehNovo = !contratos.find(c => c.id === formContrato.id);
-            const novosContratos = ehNovo ? [...contratos, formContrato] : contratos.map(c => c.id === formContrato.id ? formContrato : c);
-            save({ ...data, contratos: novosContratos });
+            gravarContratos(ehNovo ? [...contratos, formContrato] : contratos.map(c => c.id === formContrato.id ? formContrato : c));
             setView("contratosDaObra");
           }}>Salvar contrato</button>
         </div>
@@ -1353,9 +1371,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <button onClick={() => { setContratoAberto(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, fontSize: 12 }}>← Voltar</button>
           <div style={{ flex: 1 }} />
           {perm.podeEditar && (
-            <button style={C.btnSec} onClick={() => { setContratoGerando(contratoAberto); setContratoAberto(null); setView("gerarContrato"); }}>Editar dados</button>
+            <button style={C.btnSec} onClick={() => { setContratoSalvoEm(0); setContratoGerando(contratoAberto); setContratoAberto(null); setView("gerarContrato"); }}>Editar dados</button>
           )}
-          <button style={C.btn} onClick={() => window.print()}>Imprimir / salvar PDF</button>
+          <button style={C.btn} onClick={() => window.print()}>Gerar PDF</button>
         </div>
         <ContratoDocumento contrato={contratoAberto} cliente={cliente} obra={obraDoContrato} prestador={prest} />
       </div>
@@ -1381,14 +1399,26 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const delLinha = (campo, idx) => setContratoGerando({ ...g, [campo]: (g[campo] || []).filter((_, i) => i !== idx) });
     const setOpcao = (id, ligada) => setContratoGerando({ ...g, opcoes: { ...(g.opcoes || opcoesPadrao(g.modelo)), [id]: ligada } });
     const ligada = (id) => opcaoAtiva(g, id);
+    // Salvar grava e continua na tela; o contrato fica registrado na obra e
+    // pode ser reaberto depois. Devolve o contrato salvo, ou null se faltou dado.
     const salvar = () => {
-      if (!g.tipoProfissional) { dialogo.alertar({ titulo: "Escolha o tipo de profissional", mensagem: "O contrato começa pelo tipo de profissional — é ele que define o regime e o objeto.", tipo: "aviso" }); return; }
-      if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado, cadastre um novo ou digite o nome do contratado.", tipo: "aviso" }); return; }
-      const novo = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total, geradoEm: new Date().toISOString() };
+      if (!g.tipoProfissional) { dialogo.alertar({ titulo: "Escolha o tipo de profissional", mensagem: "O contrato começa pelo tipo de profissional — é ele que define o regime e o objeto.", tipo: "aviso" }); return null; }
+      if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado, cadastre um novo ou digite o nome do contratado.", tipo: "aviso" }); return null; }
+      const novo = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total,
+        geradoEm: g.geradoEm || new Date().toISOString(), atualizadoEm: new Date().toISOString() };
       const existe = contratos.some(c => c.id === novo.id);
-      save({ ...data, contratos: existe ? contratos.map(c => c.id === novo.id ? novo : c) : [...contratos, novo] });
-      setContratoGerando(null); setContratoAberto(novo); setView("verContrato");
+      gravarContratos(existe ? contratos.map(c => c.id === novo.id ? novo : c) : [...contratos, novo]);
+      setContratoGerando(novo);
+      setContratoSalvoEm(Date.now());
+      setTimeout(() => setContratoSalvoEm(0), 4000);
+      return novo;
     };
+    const gerarPDF = () => {
+      const novo = salvar();
+      if (!novo) return;
+      setContratoAberto(novo); setImprimirAoAbrir(true); setView("verContrato");
+    };
+    const jaSalvo = contratos.some(c => c.id === g.id);
     // Cadastro rápido de prestador, sem sair do gerador — os campos são os
     // que o preâmbulo do contrato usa.
     const salvarNovoPrestador = () => {
@@ -1704,9 +1734,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <button type="button" style={C.btnSec} onClick={() => addLinha("escopo", { titulo: "", texto: "" })}>＋ Adicionar bloco do descritivo</button>
         </div>
 
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
-          <button style={C.btn} onClick={salvar}>Salvar e ver contrato</button>
-          <button style={C.btnSec} onClick={() => { setContratoGerando(null); setNovoPrestador(null); setView("contratosDaObra"); }}>Cancelar</button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
+          <button style={C.btn} onClick={salvar}>Salvar</button>
+          <button style={C.btnSec} onClick={gerarPDF}>Gerar PDF</button>
+          {jaSalvo && <button style={C.btnSec} onClick={() => { const n = salvar(); if (n) { setContratoAberto(n); setView("verContrato"); } }}>Ver contrato</button>}
+          <button style={C.btnGhost} onClick={() => { setContratoGerando(null); setNovoPrestador(null); setView("contratosDaObra"); }}>Voltar</button>
+          {contratoSalvoEm > 0 && <span style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>✓ Salvo</span>}
         </div>
 
         <details style={{ marginTop: 18 }}>
@@ -1755,8 +1788,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   {perm.podeEditar && (
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       {contrato.gerado && <button onClick={() => { setContratoAberto(contrato); setView("verContrato"); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Abrir</button>}
-                      <button onClick={() => { if (contrato.gerado) { setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
-                      <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) save({ ...data, contratos: contratos.filter(c => c.id !== contrato.id) }); }); }} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
+                      <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
+                      <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) gravarContratos(contratos.filter(c => c.id !== contrato.id)); }); }} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
                     </div>
                   )}
                 </div>
@@ -1767,7 +1800,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {perm.podeEditar && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-            <button style={{ ...C.btn, flex: 1, minWidth: 200 }} onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id, "")); setView("gerarContrato"); }}>📄 Gerar contrato</button>
+            <button style={{ ...C.btn, flex: 1, minWidth: 200 }} onClick={() => { setContratoSalvoEm(0); setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id, "")); setView("gerarContrato"); }}>📄 Gerar contrato</button>
             <button style={{ ...C.btnSec, flex: 1, minWidth: 160 }} onClick={() => { setFormContrato({ id: uid(), clienteId: cliente.id, obraId: obraSelecionada.id, nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" }); setView("formContrato"); }}>+ Só registrar contrato</button>
           </div>
         )}

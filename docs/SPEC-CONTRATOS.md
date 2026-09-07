@@ -216,6 +216,28 @@ contrato sai como "Ourinhos/SP, 7 de setembro de 2026." (`dataExtensoCtr`, que
 lê a string ISO na mão para não escorregar de dia por fuso). Em branco, volta
 a lacuna para preencher à caneta.
 
+## Salvar e gerar PDF
+
+São dois botões separados no gerador:
+
+- **Salvar** grava o contrato e continua na tela (mostra "✓ Salvo" por alguns
+  segundos), para continuar editando. O contrato fica registrado na obra e
+  pode ser reaberto depois; `geradoEm` é preservado e `atualizadoEm` marca a
+  última gravação.
+- **Gerar PDF** salva e abre o documento já mandando imprimir.
+- **Ver contrato** aparece depois da primeira gravação, e **Voltar** sai sem
+  gravar.
+
+### Persistência
+
+`data.obras` e `data.contratos` guardam os registros de **todos** os
+clientes, mas dentro do painel de obras as listas são a fatia de um cliente
+só. As gravações escreviam essa fatia por cima da coleção inteira, apagando
+as obras e os contratos dos demais clientes. Agora toda escrita passa por
+`mesclarPorCliente(colecao, clienteId, fatia)`, que devolve os registros dos
+outros clientes acrescidos da fatia nova — vale para salvar, editar e
+remover, tanto de obras quanto de contratos.
+
 ## Impressão
 
 Ao imprimir, `ContratoDocumento` move o próprio nó para dentro do `body`
