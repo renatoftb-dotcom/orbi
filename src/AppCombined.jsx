@@ -7691,7 +7691,7 @@ const MEMB = {
     MEM.teto(bruto, valor, "barras", "Arredonda para cima (barra inteira)"),
   ],
   tabuaColuna: (onde, larguraCm, colunas, bruto, valor) => [
-    MEM.nota(`Fôrma das colunas ${onde}: duas tábuas por face, 2,80 m de altura, em peças de 3 m.`),
+    MEM.nota(`Fôrma das colunas ${onde}: duas tábuas por face, 2,80 m de altura, em peças de 3 m. A tábua é sempre um degrau mais larga que a coluna, para o concreto não vazar pelas laterais.`),
     MEM.dado(`Colunas de ${larguraCm} cm`, colunas, "colunas", "bloco Engenharia — Pilares e vigas"),
     MEM.conta("Tábuas de 3 m, com 10% de perda", "colunas × 2,80 × 2 ÷ 3 × 1,10", [["colunas", colunas]], bruto, "tábuas"),
     MEM.teto(bruto, valor, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
@@ -8522,14 +8522,17 @@ function paredesPav1(cp, out) {
   const tabuas15Colun = teto(tabuas15ColunBruto);
   const tabuas20ColunBruto = p1.colunas20 * 2.8 * 2 / 3 * PERDA;
   const tabuas20Colun = teto(tabuas20ColunBruto);
-  // [VBA] usa CP_COLUNAS_25 aqui (não 30) — divergência real do original em
-  // relação ao F_PAREDES_TERREO, preservada de propósito.
-  const tabuas30ColunBruto = p1.colunas25 * 2.8 * 2 / 3 * PERDA;
+  // O VBA usava só CP_COLUNAS_25 aqui, e as colunas de 30 cm do pav. 1
+  // ficavam sem fôrma nenhuma (o térreo, que não tem campo de 25, usava as
+  // de 30). Corrigido em set/2026: a tábua de 30 cm atende as colunas de 25
+  // e as de 30 — nenhuma coluna fica sem fôrma.
+  const colunasTabua30Pav1 = p1.colunas25 + p1.colunas30;
+  const tabuas30ColunBruto = colunasTabua30Pav1 * 2.8 * 2 / 3 * PERDA;
   const tabuas30Colun = teto(tabuas30ColunBruto);
   const sarrafo5ColunBruto =
     ((p1.colunas15 * 2.8 * 2 / 0.5 * 0.2) +
       (p1.colunas20 * 2.8 * 2 / 0.5 * 0.25) +
-      (p1.colunas30 * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3;
+      (colunasTabua30Pav1 * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3;
   const sarrafo5Colun = teto(sarrafo5ColunBruto);
   const maderitesColunBruto = p1.areaFormaColunaMaior25cm / 2.42 * PERDA;
   const maderitesColun = teto(maderitesColunBruto);
@@ -8541,10 +8544,11 @@ function paredesPav1(cp, out) {
   const cimentoColunas = teto(cimentoColunasBruto);
 
   const ferro = normalizarFerro(p1.ferro);
-  // [VBA] CA60_4mm nunca é calculado neste módulo (só declarado/emitido no
-  // Térreo) — a condição correspondente em H_PAREDES_PAV_1.bas testa uma
-  // variável nunca atribuída (sempre 0) e por isso NUNCA emite. Preservado:
-  // nem calculamos nem emitimos essa linha aqui.
+  // No VBA, a linha de CA60 4,2 mm do pav. 1 testava uma variável que nunca
+  // era atribuída (sempre 0), então o ferro de 4,2 mm lançado nas colunas do
+  // pav. 1 simplesmente sumia do orçamento. Corrigido em set/2026: calculado
+  // e emitido como as demais bitolas.
+  const ca60_4mm = teto(ferro.CA60_4MM / BARRA_FERRO_MTS * PERDA);
   const ca50_5mm = teto(ferro.CA50_5MM / BARRA_FERRO_MTS * PERDA);
   const ca50_6mm = teto(ferro.CA50_6MM / BARRA_FERRO_MTS * PERDA);
   const ca50_8mm = teto(ferro.CA50_8MM / BARRA_FERRO_MTS * PERDA);
@@ -8552,7 +8556,7 @@ function paredesPav1(cp, out) {
   const ca50_12mm = teto(ferro.CA50_12MM / BARRA_FERRO_MTS * PERDA);
   const ca50_16mm = teto(ferro.CA50_16MM / BARRA_FERRO_MTS * PERDA);
   const ca60_5mm = teto(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
-  const pesoFerroColunas = ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM +
+  const pesoFerroColunas = ca60_4mm * PESOS_FERRO.CA60_4MM + ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM +
     ca50_8mm * PESOS_FERRO.CA50_8MM + ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM +
     ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
   const arameColunasBruto = pesoFerroColunas * 0.06 * PERDA;
@@ -8562,8 +8566,10 @@ function paredesPav1(cp, out) {
 
   const base = { ordem: ORD.paredesPav1, tipo: "Bruto", etapa: "Supra estrutura e paredes" };
   const subParedes = "Paredes Pav 1";
-  // [VBA] rótulo copiado do módulo do Térreo, preservado do original.
-  const subSupra = "Supra estrutura Pav. Térreo";
+  // O VBA repetia aqui o rótulo do módulo do térreo ("Supra estrutura Pav.
+  // Térreo"), então os itens do pav. 1 apareciam sob o nome do pavimento de
+  // baixo. Corrigido em set/2026.
+  const subSupra = "Supra estrutura Pav 1";
 
   emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco  6 Furos", unidade: "Unidade", qtd: tijolos6F, memoria: MEMB.tijolo6("no pav. 1", p1.m2Parede20, tijolos6FBruto, tijolos6F) });
   emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco 8 Furos", unidade: "Unidade", qtd: tijolos8F, memoria: MEMB.tijolo8("no pav. 1", p1.m2Parede25, p1.m2Parede15, tijolos8FBruto, tijolos8F) });
@@ -8573,12 +8579,13 @@ function paredesPav1(cp, out) {
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Treliça H8 Barras 12mts", unidade: "Barras 12mts", qtd: contraverga, memoria: MEMB.trelicaVergas("do pav. 1", p1.vaoPortasJanelas, contravergaBruto, contraverga) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas15Colun, memoria: MEMB.tabuaColuna("do pav. 1", 15, p1.colunas15, tabuas15ColunBruto, tabuas15Colun) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20Colun, memoria: MEMB.tabuaColuna("do pav. 1", 20, p1.colunas20, tabuas20ColunBruto, tabuas20Colun) });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30Colun, memoria: MEMB.tabuaColuna("do pav. 1", 25, p1.colunas25, tabuas30ColunBruto, tabuas30Colun) });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5Colun, memoria: MEMB.sarrafoColunas(p1.colunas15, p1.colunas20, p1.colunas30, sarrafo5ColunBruto, sarrafo5Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30Colun, memoria: MEMB.tabuaColuna("do pav. 1", "25 e 30", colunasTabua30Pav1, tabuas30ColunBruto, tabuas30Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5Colun, memoria: MEMB.sarrafoColunas(p1.colunas15, p1.colunas20, colunasTabua30Pav1, sarrafo5ColunBruto, sarrafo5Colun) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderitesColun, memoria: MEMB.madeirite(p1.areaFormaColunaMaior25cm, maderitesColunBruto, maderitesColun) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaColunas, memoria: MEMB.areiaConcreto("Concreto das colunas do pav. 1", p1.concrColuna, areiaGrossaColunasBruto, areiaGrossaColunas) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Pedra", unidade: "m3", qtd: pedraColunas, memoria: MEMB.pedraConcreto("Concreto das colunas do pav. 1", p1.concrColuna, pedraColunasBruto, pedraColunas) });
   emitir(out, { ...base, subEtapa: subSupra, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoColunas, memoria: MEMB.cimentoDaPedra(pedraColunas, cimentoColunasBruto, cimentoColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 4.2mm 12mts", unidade: "Barras 12mts", qtd: ca60_4mm, memoria: memoriaBitolaSimples("CA60_4MM", ferro.CA60_4MM, ca60_4mm, "nas colunas do pav. 1") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm, memoria: memoriaBitolaSimples("CA50_5MM", ferro.CA50_5MM, ca50_5mm, "nas colunas do pav. 1") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm, memoria: memoriaBitolaSimples("CA50_6MM", ferro.CA50_6MM, ca50_6mm, "nas colunas do pav. 1") });
   emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm, memoria: memoriaBitolaSimples("CA50_8MM", ferro.CA50_8MM, ca50_8mm, "nas colunas do pav. 1") });
@@ -8645,9 +8652,12 @@ function vigaRespaldoLajePav1(cp, out) {
   const escorasLojeMacicaBruto = p1.areaLojeMacica * 1.5 * PERDA;
   const escorasLojeMacica = teto(escorasLojeMacicaBruto);
 
-  // [VBA] bug real de copy-paste no original: usa a área de laje do TÉRREO
-  // (não do Pav 1) para o massiamento do contrapiso do Pav 1. Preservado.
-  const areaBase = cp.terreo.areaLoje;
+  // O VBA original usava aqui a área de laje do TÉRREO para o massiamento do
+  // contrapiso do Pav. 1 (copy-paste do módulo do térreo). Corrigido em
+  // set/2026: usa a área construída do próprio Pav. 1, que por padrão vem
+  // pré-preenchida com a área da laje do térreo — mesmo número na maioria
+  // das obras, mas editável quando os pavimentos têm áreas diferentes.
+  const areaBase = numOrZero(cp.pav1.area) || cp.terreo.areaLoje;
   const cimentoMassiamBruto = areaBase * 0.05 * 0.25 * 1200 / 50 * PERDA;
   const cimentoMassiam = teto(cimentoMassiamBruto);
   const areiaGrossaMassiamBruto = areaBase * 0.05 * 0.75 * PERDA;
@@ -8656,7 +8666,7 @@ function vigaRespaldoLajePav1(cp, out) {
   const biancoMassiam = teto(biancoMassiamBruto);
 
   const memVigaP1 = (k) => memoriaBitolaSimples(k, ferro[k], { CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do pav. 1");
-  const notaMassiamP1 = MEM.nota("Massiamento do contrapiso do pav. 1: camada de 5 cm que nivela a laje para o piso. A planilha original usa aqui a área da laje do TÉRREO — o VICKE preserva a conta como está no sistema antigo.");
+  const notaMassiamP1 = MEM.nota("Massiamento do contrapiso do pav. 1: camada de 5 cm que nivela a laje para o piso. Usa a área construída do pav. 1 (em branco, a área da laje do térreo).");
   const etapa = "Viga Respaldo e Laje";
   const o = ORD.vigaLajePav1;
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas10, memoria: [
@@ -8732,19 +8742,19 @@ function vigaRespaldoLajePav1(cp, out) {
   ] });
   emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Sacos de cimento 50kg", unidade: "Unidade", qtd: cimentoMassiam, memoria: [
     notaMassiamP1,
-    MEM.dado("Área da laje do térreo (base da conta original)", areaBase, "m²", "bloco Laje (forro)"),
+    MEM.dado("Área construída do pav. 1", areaBase, "m²", "bloco Pav. 1"),
     MEM.conta("Cimento: 5 cm, 25% de cimento, 1.200 kg/m³, saco de 50 kg, 10% de perda", "área × 0,05 × 0,25 × 1.200 ÷ 50 × 1,10", [["área", areaBase]], cimentoMassiamBruto, "sacos"),
     MEM.teto(cimentoMassiamBruto, cimentoMassiam, "sacos de 50 kg", "Arredonda para cima (saco fechado)"),
   ] });
   emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaMassiam, memoria: [
     notaMassiamP1,
-    MEM.dado("Área da laje do térreo (base da conta original)", areaBase, "m²", "bloco Laje (forro)"),
+    MEM.dado("Área construída do pav. 1", areaBase, "m²", "bloco Pav. 1"),
     MEM.conta("Areia: 5 cm de camada, 75% de areia, com 10% de perda", "área × 0,05 × 0,75 × 1,10", [["área", areaBase]], areiaGrossaMassiamBruto, "m³"),
     MEM.teto(areiaGrossaMassiamBruto, areiaGrossaMassiam, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
   ] });
   emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Impermeabilizantes - Bianco 18KG", unidade: "Unidade", qtd: biancoMassiam, memoria: [
     notaMassiamP1,
-    MEM.dado("Área da laje do térreo (base da conta original)", areaBase, "m²", "bloco Laje (forro)"),
+    MEM.dado("Área construída do pav. 1", areaBase, "m²", "bloco Pav. 1"),
     MEM.conta("Baldes de Bianco (rende 60 m²), com 10% de perda", "área ÷ 60 × 1,10", [["área", areaBase]], biancoMassiamBruto, "baldes"),
     MEM.teto(biancoMassiamBruto, biancoMassiam, "baldes", "Arredonda para cima (balde fechado)"),
   ] });
@@ -8982,13 +8992,10 @@ function cobertura(cp, out) {
   // prestadores() (Carpinteiro). Mutamos cp de propósito, espelhando isso.
   cp.areaCoberturaTotal = areaCoberturaTotal;
 
-  // [VBA] bug real do original: logo antes do laço, o rótulo do primeiro
-  // slot de telha é sobrescrito com o tipo do PRIMEIRO telhado cadastrado —
-  // então a linha de "Telha Barro Portuguesa" (e sua cumeeira) sai com esse
-  // rótulo trocado, mesmo carregando a quantidade acumulada de barro
-  // português. Preservado; na prática só importa quando essa quantidade for
-  // ≠0 e o primeiro telhado não for barro português.
-  const labelPrimeiroSlot = (cp.coberturas[0] && cp.coberturas[0].tipo) || "";
+  // No VBA, o rótulo do primeiro slot de telha era sobrescrito com o tipo do
+  // PRIMEIRO telhado cadastrado: a linha saía com a quantidade de barro
+  // português e o nome de outra telha — e o preço vinha do insumo errado.
+  // Corrigido em set/2026: cada linha usa o nome da sua própria telha.
   const ORDEM_TIPOS_TELHA = Object.keys(AREA_TELHA);
 
   // Memória: cada telhado entra com a sua parcela (já arredondada dentro de
@@ -9004,10 +9011,10 @@ function cobertura(cp, out) {
   };
   const base = { ordem: ORD.cobertura, tipo: "Bruto", etapa: "Cobertura", subEtapa: "Telhas" };
   for (const tipoTelha of ORDEM_TIPOS_TELHA) {
-    const rotulo = tipoTelha === "Telha Barro Portuguesa" ? labelPrimeiroSlot : tipoTelha;
+    const rotulo = tipoTelha;
     const doTipo = det.filter((d) => d.r.tipo === tipoTelha);
     emitir(out, { ...base, item: rotulo, unidade: "Unidades", qtd: telhasPorTipo[tipoTelha] || 0,
-      memoria: memSoma(`Telhas de ${tipoTelha}: a área inclinada de cada telhado dividida pela área útil da peça, com 10% de quebra.${rotulo !== tipoTelha ? ` (O rótulo desta linha sai como "${rotulo}" — a planilha original troca o nome do primeiro slot pelo tipo do primeiro telhado cadastrado; a quantidade é a de ${tipoTelha}.)` : ""}`,
+      memoria: memSoma(`Telhas de ${tipoTelha}: a área inclinada de cada telhado dividida pela área útil da peça, com 10% de quebra.`,
         (r) => r.telhas, telhasPorTipo[tipoTelha] || 0, "telhas", doTipo) });
     emitir(out, { ...base, item: `Cumeeira ${rotulo}`, unidade: "Unidades", qtd: cumeeiraPorTipo[tipoTelha] || 0,
       memoria: memSoma(`Cumeeiras de ${tipoTelha}: peças da linha de topo e dos espigões de cada telhado.`, (r) => r.cumeeira, cumeeiraPorTipo[tipoTelha] || 0, "peças", doTipo) });
@@ -9111,8 +9118,11 @@ function contrapisosExternos(cp, out) {
 
   const areiaGrossaBruto = pav * 0.6 * 0.1 * PERDA;
   const areiaGrossa = teto(areiaGrossaBruto);
-  // [VBA] sem ceiling aqui — diferente das outras fórmulas de "pedra".
-  const pedra = pav * 0.1 * PERDA;
+  // O VBA não arredondava esta linha — era a única "pedra" do sistema a sair
+  // quebrada (8,8 m³). Corrigido em set/2026: arredonda para cima como todas
+  // as outras, que é como a pedreira entrega.
+  const pedraBruto = pav * 0.1 * PERDA;
+  const pedra = teto(pedraBruto);
   const cimentoBruto = pedra * 6 * PERDA;
   const cimento = teto(cimentoBruto);
   const malhaPopBruto = (pav / (2.9 * 1.9)) * PERDA;
@@ -9139,9 +9149,10 @@ function contrapisosExternos(cp, out) {
     MEM.teto(areiaGrossaBruto, areiaGrossa, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
   ] });
   emitir(out, { ...base, subEtapa: "Concretagem", item: "Pedra", unidade: "m3", qtd: pedra, memoria: [
-    MEM.nota("Pedra da camada de 10 cm. É a única linha de pedra do sistema que não arredonda — a planilha original deixa o número cheio."),
+    MEM.nota("Pedra da camada de 10 cm do contrapiso externo."),
     memPav,
-    MEM.conta("Pedra, com 10% de perda", "área × 0,10 × 1,10", [["área", pav]], pedra, "m³"),
+    MEM.conta("Pedra, com 10% de perda", "área × 0,10 × 1,10", [["área", pav]], pedraBruto, "m³"),
+    MEM.teto(pedraBruto, pedra, "m³", "Arredonda para cima (a pedra vem em m³ inteiro)"),
   ] });
   emitir(out, { ...base, subEtapa: "Concretagem", item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimento, memoria: [
     MEM.dado("Pedra do contrapiso externo", pedra, "m³", "passo anterior"),
@@ -10575,6 +10586,29 @@ function vaosAutomaticos(projeto) {
   const r1 = (x) => Math.round(x * 100) / 100;
   return { portasInternas, metrosPortasInternas: r1(portasInternas * PORTA_LARGURA), metrosPortasExternas: r1(metrosPortasExternas), metrosJanelas: r1(metrosJanelas), vaoEsquadrias: r1(metrosPortasExternas + metrosJanelas), metrosVergas: r1(metrosVergas), vaoEquivalente: r1(metrosVergas / 2) };
 }
+// Rateio automático entre pavimentos. No sobrado, o que o usuário lança no
+// bloco Geral (m² de parede total e perímetro de paredes) vale para a casa
+// inteira; cada pavimento entra com metade até que alguém digite o seu. A
+// área construída do Pav. 1 parte da área da laje do térreo — é o piso do
+// pavimento de cima. Tudo editável: digitou, o digitado vence.
+function autosPavimentos(projeto) {
+  const p = projeto || {};
+  const arq = p.arquitetura || {}, terreo = p.terreo || {};
+  const sobrado = p.tipologia === "Sobrado";
+  const fatia = sobrado ? 0.5 : 1;
+  const r1 = (x) => Math.round(x * 10) / 10;
+  return {
+    sobrado,
+    paredePavimento: r1(numOrZero(arq.m2ParedesTotal) * fatia),
+    perimetroPavimento: r1(numOrZero(arq.perimetroParedes) * fatia),
+    areaPav1: r1(numOrZero(terreo.areaLoje)),
+  };
+}
+// Soma das espessuras lançadas num pavimento (0 = nada digitado, vale o rateio)
+function paredeDigitada(pav) {
+  const o = pav || {};
+  return numOrZero(o.m2Parede20) + numOrZero(o.m2Parede15) + numOrZero(o.m2Parede25);
+}
 // Valores automáticos do bloco Pisos e revestimentos quando o campo está em branco
 function autosPisos(projeto) {
   const p = projeto || {};
@@ -11017,9 +11051,18 @@ function normalizarProjeto(projeto) {
   const estimativaComodos = estimarPelosComodos(p);
   const autos = autosPisos(p);
   const vaosAuto = autos.vaos;
+  // Rateio automático entre pavimentos (Geral → térreo e pav. 1, 50% cada
+  // no sobrado); o pavimento que tiver espessura digitada usa a sua.
+  const autoPav = autosPavimentos(p);
+  const parTerreoDigitada = paredeDigitada(terreoIn);
+  const parPav1Digitada = paredeDigitada(pav1In);
+  const parede20Terreo = parTerreoDigitada > 0 ? numOrZero(terreoIn.m2Parede20) : autoPav.paredePavimento;
+  const parede20Pav1 = parPav1Digitada > 0 ? numOrZero(pav1In.m2Parede20) : autoPav.paredePavimento;
+  const perimetroTerreo = numOrZero(terreoIn.perimetroParedes) || autoPav.perimetroPavimento;
+  const perimetroPav1 = numOrZero(pav1In.perimetroParedes) || autoPav.perimetroPavimento;
   // parcela do térreo nos vãos (sobrado reparte pelo m² de parede de cada pavimento)
-  const m2ParTerreo = numOrZero(terreoIn.m2Parede20) + numOrZero(terreoIn.m2Parede15) + numOrZero(terreoIn.m2Parede25);
-  const m2ParPav1 = (p.tipologia === "Sobrado") ? numOrZero(pav1In.m2Parede20) + numOrZero(pav1In.m2Parede15) + numOrZero(pav1In.m2Parede25) : 0;
+  const m2ParTerreo = parede20Terreo + numOrZero(terreoIn.m2Parede15) + numOrZero(terreoIn.m2Parede25);
+  const m2ParPav1 = (p.tipologia === "Sobrado") ? parede20Pav1 + numOrZero(pav1In.m2Parede15) + numOrZero(pav1In.m2Parede25) : 0;
   const shareTerreo = p.tipologia !== "Sobrado" ? 1 : (m2ParTerreo + m2ParPav1 > 0 ? m2ParTerreo / (m2ParTerreo + m2ParPav1) : 0.5);
   const instalacoesIn = p.instalacoes || {};
 
@@ -11045,11 +11088,12 @@ function normalizarProjeto(projeto) {
     m2ParedesInternas: numOrZero(arq.m2ParedesInternas),
     m2ParedesExternas: numOrZero(arq.m2ParedesExternas),
     gabarito: numOrZero(arq.gabarito),
+    perimetroParedesGeral: numOrZero(arq.perimetroParedes),
 
     // Campos achatados historicamente usados por paredesTerreo() (pilotos
     // do Passo 2) — mantidos como estão, sem alterar seu comportamento já
     // testado.
-    m2Paredes20Terreo: numOrZero(terreoIn.m2Parede20),
+    m2Paredes20Terreo: parede20Terreo,
     m2Paredes25Terreo: numOrZero(terreoIn.m2Parede25),
     m2Paredes15Terreo: numOrZero(terreoIn.m2Parede15),
     // vão equivalente para vergas/contravergas — automático (cômodos + esquadrias);
@@ -11069,7 +11113,7 @@ function normalizarProjeto(projeto) {
     ca50_12mmColunaTerreo: numOrZero(ferroColunasTerreo.CA50_12MM),
     ca50_16mmColunaTerreo: numOrZero(ferroColunasTerreo.CA50_16MM),
     ca60_5mmColunaTerreo: numOrZero(ferroColunasTerreo.CA60_5MM),
-    perimetroParedesTerreo: numOrZero(terreoIn.perimetroParedes),
+    perimetroParedesTerreo: perimetroTerreo,
     areaTerreo: numOrZero(terreoIn.area),
 
     // cp.terreo — usado por vigaRespaldoLajeTerreo() (Pav. Térreo)
@@ -11085,7 +11129,7 @@ function normalizarProjeto(projeto) {
 
     // cp.pav1 — usado por paredesPav1() e vigaRespaldoLajePav1()
     pav1: {
-      m2Parede20: numOrZero(pav1In.m2Parede20),
+      m2Parede20: parede20Pav1,
       m2Parede25: numOrZero(pav1In.m2Parede25),
       m2Parede15: numOrZero(pav1In.m2Parede15),
       vaoPortasJanelas: vaosAuto.vaoEquivalente > 0 ? Math.round(vaosAuto.vaoEquivalente * (1 - shareTerreo) * 100) / 100 : numOrZero(pav1In.vaoPortasJanelas),
@@ -11097,7 +11141,9 @@ function normalizarProjeto(projeto) {
       concrColuna: numOrZero(colunasPav1.concreto),
       ferro: normalizarFerro(ferroColunasPav1),
       perimetroLoje: numOrZero(pav1In.perimetroLoje),
-      perimetroParedes: numOrZero(pav1In.perimetroParedes),
+      perimetroParedes: perimetroPav1,
+      // Área construída do pav. 1 — em branco, a área da laje do térreo
+      area: numOrZero(pav1In.area) || autoPav.areaPav1,
       areaLoje: numOrZero(pav1In.areaLoje),
       areaLojeMacica: numOrZero(pav1In.areaLojeMacica),
       tipoLoje: pav1In.tipoLoje || "",
@@ -11858,6 +11904,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const [blocosAbertos, setBlocosAbertos] = useState({ geral: true });
   const [etapasColapsadas, setEtapasColapsadas] = useState({});
   const [paredeTerreoExpandida, setParedeTerreoExpandida] = useState(false);
+  const [paredePav1Expandida, setParedePav1Expandida] = useState(false);
   const [espessuraTerreaAberta, setEspessuraTerreaAberta] = useState(false);
   const [comodoAberto, setComodoAberto] = useState(null);
   const [memoriaAberta, setMemoriaAberta] = useState(null);
@@ -11911,6 +11958,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   // 15/25cm); o botão "Expandir" libera o detalhamento por espessura.
   function setParedeTerreoSimples(v) {
     setProjetoDraft((p) => setEmCaminho(setEmCaminho(setEmCaminho(p, "terreo.m2Parede20", v), "terreo.m2Parede15", 0), "terreo.m2Parede25", 0));
+  }
+  // Pav. 1 — mesmo racional do térreo: modo simples zera 15/25cm
+  function setParedePav1Simples(v) {
+    setProjetoDraft((p) => setEmCaminho(setEmCaminho(setEmCaminho(p, "pav1.m2Parede20", v), "pav1.m2Parede15", 0), "pav1.m2Parede25", 0));
   }
 
   function recalcular() {
@@ -12094,6 +12145,9 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               )}
             </>
           )}
+          {!ehTerrea && (
+            <CampoNum label="Perímetro de paredes (casa toda)" valor={get("arquitetura.perimetroParedes")} onChange={(v) => set("arquitetura.perimetroParedes", v)} />
+          )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
           <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
             <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Cômodos</div>
@@ -12104,9 +12158,19 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         {!ehTerrea && (
           <BlocoColapsavel titulo="Pav. Térreo" aberto={!!blocosAbertos.terreo} onToggle={() => toggleBloco("terreo")}>
             <CampoNum label="Área (m²)" valor={get("terreo.area")} onChange={(v) => set("terreo.area", v)} />
-            <CampoNum label="Perímetro de paredes" valor={get("terreo.perimetroParedes")} onChange={(v) => set("terreo.perimetroParedes", v)} />
+            <div style={CAMPO_CELULA}>
+              <label style={C.label}>Perímetro de paredes</label>
+              <input style={C.input} type="number" step="0.01" value={get("terreo.perimetroParedes") ?? ""}
+                placeholder={`auto: ${autosPavimentos(projetoDraft).perimetroPavimento} (metade do Geral)`}
+                onChange={(e) => set("terreo.perimetroParedes", e.target.value === "" ? "" : Number(e.target.value))} />
+            </div>
             {!paredeTerreoExpandida ? (
-              <CampoNum label="M² de parede (considera tudo 20cm)" valor={get("terreo.m2Parede20")} onChange={setParedeTerreoSimples} />
+              <div style={CAMPO_CELULA}>
+                <label style={C.label}>M² de parede (considera tudo 20cm)</label>
+                <input style={C.input} type="number" step="0.01" value={get("terreo.m2Parede20") ?? ""}
+                  placeholder={`auto: ${autosPavimentos(projetoDraft).paredePavimento} (metade do Geral)`}
+                  onChange={(e) => setParedeTerreoSimples(e.target.value === "" ? "" : Number(e.target.value))} />
+              </div>
             ) : (
               <>
                 <CampoNum label="M² parede 15cm" valor={get("terreo.m2Parede15")} onChange={(v) => set("terreo.m2Parede15", v)} />
@@ -12134,10 +12198,42 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         {projetoDraft.tipologia === "Sobrado" && (
           <>
             <BlocoColapsavel titulo="Pav. 1" aberto={!!blocosAbertos.pav1} onToggle={() => toggleBloco("pav1")}>
-              <CampoNum label="Perímetro de paredes" valor={get("pav1.perimetroParedes")} onChange={(v) => set("pav1.perimetroParedes", v)} />
-              <CampoNum label="M² parede 15cm" valor={get("pav1.m2Parede15")} onChange={(v) => set("pav1.m2Parede15", v)} />
-              <CampoNum label="M² parede 20cm" valor={get("pav1.m2Parede20")} onChange={(v) => set("pav1.m2Parede20", v)} />
-              <CampoNum label="M² parede 25cm" valor={get("pav1.m2Parede25")} onChange={(v) => set("pav1.m2Parede25", v)} />
+              {(() => { const au = autosPavimentos(projetoDraft); return (<>
+                <div style={CAMPO_CELULA}>
+                  <label style={C.label}>Área construída (m²)</label>
+                  <input style={C.input} type="number" step="0.01" value={get("pav1.area") ?? ""}
+                    placeholder={`auto: ${au.areaPav1} (laje do térreo)`}
+                    onChange={(e) => set("pav1.area", e.target.value === "" ? "" : Number(e.target.value))} />
+                </div>
+                <div style={CAMPO_CELULA}>
+                  <label style={C.label}>Perímetro de paredes</label>
+                  <input style={C.input} type="number" step="0.01" value={get("pav1.perimetroParedes") ?? ""}
+                    placeholder={`auto: ${au.perimetroPavimento} (metade do Geral)`}
+                    onChange={(e) => set("pav1.perimetroParedes", e.target.value === "" ? "" : Number(e.target.value))} />
+                </div>
+                {!paredePav1Expandida ? (
+                  <div style={CAMPO_CELULA}>
+                    <label style={C.label}>M² de parede (considera tudo 20cm)</label>
+                    <input style={C.input} type="number" step="0.01" value={get("pav1.m2Parede20") ?? ""}
+                      placeholder={`auto: ${au.paredePavimento} (metade do Geral)`}
+                      onChange={(e) => setParedePav1Simples(e.target.value === "" ? "" : Number(e.target.value))} />
+                  </div>
+                ) : (
+                  <>
+                    <CampoNum label="M² parede 15cm" valor={get("pav1.m2Parede15")} onChange={(v) => set("pav1.m2Parede15", v)} />
+                    <CampoNum label="M² parede 20cm" valor={get("pav1.m2Parede20")} onChange={(v) => set("pav1.m2Parede20", v)} />
+                    <CampoNum label="M² parede 25cm" valor={get("pav1.m2Parede25")} onChange={(v) => set("pav1.m2Parede25", v)} />
+                  </>
+                )}
+                <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end" }}>
+                  <button type="button" style={{ ...C.btnGhost, fontSize: 11 }} onClick={() => setParedePav1Expandida((v) => !v)}>
+                    {paredePav1Expandida ? "Simplificar (tudo 20cm)" : "Expandir espessuras de parede (15/20/25cm)"}
+                  </button>
+                </div>
+                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#6b7280" }}>
+                  Em branco, cada pavimento entra com metade do que está no bloco Geral (parede {au.paredePavimento} m², perímetro {au.perimetroPavimento} m). Digitou aqui, o digitado vence.
+                </div>
+              </>); })()}
             </BlocoColapsavel>
 
             <BlocoColapsavel titulo="Laje Pav. 1" aberto={!!blocosAbertos.lajePav1} onToggle={() => toggleBloco("lajePav1")}>

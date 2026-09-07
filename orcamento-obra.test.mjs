@@ -701,6 +701,52 @@ teste("memória de cálculo: instalações pré obra e fundação, com o último
   assert.ok(!("memoria" in JSON.parse(JSON.stringify({ ...poste, memoria: undefined }))));
 });
 
+teste("correções das heranças do VBA: pav. 1 (área, paredes 50%, tábuas de 30, CA60 4,2), rótulo da telha e pedra do contrapiso externo", () => {
+  // rateio 50/50 entre pavimentos a partir do bloco Geral
+  const base = { tipologia: "Sobrado", arquitetura: { areaConstruida: 260, m2ParedesTotal: 400, perimetroParedes: 100 }, terreo: { areaLoje: 130 } };
+  const cp = normalizarProjeto(base);
+  assert.strictEqual(cp.m2Paredes20Terreo, 200);
+  assert.strictEqual(cp.pav1.m2Parede20, 200);
+  assert.strictEqual(cp.perimetroParedesTerreo, 50);
+  assert.strictEqual(cp.pav1.perimetroParedes, 50);
+  assert.strictEqual(cp.pav1.area, 130); // área construída do pav. 1 = laje do térreo
+  // digitado vence o rateio
+  const dig = normalizarProjeto({ ...base, pav1: { m2Parede20: 150, perimetroParedes: 60, area: 110 } });
+  assert.strictEqual(dig.pav1.m2Parede20, 150);
+  assert.strictEqual(dig.pav1.perimetroParedes, 60);
+  assert.strictEqual(dig.pav1.area, 110);
+  // térrea não é rateada: o pavimento recebe o total do Geral
+  const terrea = normalizarProjeto({ tipologia: "Térrea", arquitetura: { m2ParedesTotal: 300, perimetroParedes: 48 } });
+  assert.strictEqual(terrea.m2Paredes20Terreo, 300);
+  assert.strictEqual(terrea.perimetroParedesTerreo, 48);
+
+  // massiamento do pav. 1 usa a área do pav. 1 (o VBA usava a do térreo)
+  const massi = gerarOrcamentoObra({ ...base, pav1: { area: 100, areaLoje: 100 } }, { materiais: [] })
+    .itens.find((i) => i.etapa === "Contrapiso Interno Pav 1" && i.item === "Sacos de cimento 50kg");
+  assert.strictEqual(massi.qtd, 33); // 100 × 0,05 × 0,25 × 1200 ÷ 50 × 1,1 = 33
+
+  // colunas de 30 cm do pav. 1 deixam de ficar sem fôrma; ferro de 4,2 mm deixa de sumir
+  const eng = gerarOrcamentoObra({ ...base, engenharia: { colunasPav1: { "25": 4, "30": 3, ferro: { CA60_4MM: 240 } } } }, { materiais: [] })
+    .itens.filter((i) => i.subEtapa === "Supra estrutura Pav 1");
+  assert.strictEqual(eng.find((i) => i.item === "Madeira Caixaria - Tábuas de 30cm x 3mts").qtd, 15); // (4+3) colunas
+  assert.strictEqual(eng.find((i) => i.item === "Aço - Barras de CA60 4.2mm 12mts").qtd, 22); // 240 ÷ 12 × 1,1
+  assert.ok(eng.length > 0); // e a sub-etapa deixou de se chamar "Pav. Térreo"
+
+  // telha: cada linha com o nome da sua própria telha (o VBA trocava o rótulo do 1º slot)
+  const telhas = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 120 },
+    cobertura: [{ tipo: "Telha Fibrocimento 6mm", comprimento: 6, largura: 4, aguas: 2, inclinacao: 0.15 },
+                { tipo: "Telha Barro Portuguesa", comprimento: 12, largura: 10, aguas: 4, inclinacao: 0.3 }] }, { materiais: [] })
+    .itens.filter((i) => i.etapa === "Cobertura" && i.subEtapa === "Telhas");
+  assert.ok(telhas.some((i) => i.item === "Telha Barro Portuguesa" && i.qtd > 1000));
+  assert.ok(telhas.some((i) => i.item === "Telha Fibrocimento 6mm"));
+  assert.ok(!telhas.some((i) => i.item === "Cumeeira Telha Fibrocimento 6mm" && i.qtd > 100));
+
+  // pedra do contrapiso externo passa a arredondar como todas as outras
+  const ext = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 120 }, externa: { pavimentacao: 80, perimetroPavimentacao: 40 } }, { materiais: [] })
+    .itens.find((i) => i.etapa === "Contrapisos Externos" && i.item === "Pedra");
+  assert.strictEqual(ext.qtd, 9); // 80 × 0,10 × 1,10 = 8,8 → 9
+});
+
 teste("arredondamento ignora o ruído de ponto flutuante (150 × 40 × 1,10 = 6.600 tijolos, não 6.601)", () => {
   const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 120, areaTerreo: 120 }, terreo: { m2Parede20: 150, perimetroParedes: 48 } }, { materiais: [] });
   const tijolo = r.itens.find((i) => i.item === "Cerâmicas - Tijolo - Bloco  6 Furos");
