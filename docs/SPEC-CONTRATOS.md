@@ -233,15 +233,27 @@ São dois botões separados no gerador:
 - **Ver contrato** aparece depois da primeira gravação, e **Voltar** sai sem
   gravar.
 
-### Persistência
+### Onde o contrato é gravado
 
-`data.obras` e `data.contratos` guardam os registros de **todos** os
-clientes, mas dentro do painel de obras as listas são a fatia de um cliente
-só. As gravações escreviam essa fatia por cima da coleção inteira, apagando
-as obras e os contratos dos demais clientes. Agora toda escrita passa por
-`mesclarPorCliente(colecao, clienteId, fatia)`, que devolve os registros dos
-outros clientes acrescidos da fatia nova — vale para salvar, editar e
-remover, tanto de obras quanto de contratos.
+O contrato mora **dentro da obra** (`obra.contratos`), ao lado da estimativa.
+Motivo: `saveAllData` grava clientes, fornecedores, orçamentos, receitas,
+obras, lançamentos, materiais e escritório — `data.contratos` nunca esteve
+nessa lista, então o contrato só existia na memória da aba e sumia no
+reload. A obra, por sua vez, é gravada como documento JSON (`obras.dados`),
+e leva junto o que estiver dentro dela.
+
+`contratosDasObras(obras, clienteId)` lê e `contratosNasObras(obras,
+contratos, clienteId, obraPadraoId)` grava. O que tiver sobrado em
+`data.contratos` de versões anteriores é migrado para dentro da obra na
+primeira renderização em que der.
+
+Duas armadilhas cobertas: gravações da obra que partem de uma cópia antiga
+(`obraSelecionada`, `formObra`) preservam explicitamente `contratos` e
+`estimativaPL` do registro fresco, senão apagariam o que foi salvo desde que
+a cópia foi feita; e `data.obras` guarda as obras de **todos** os clientes,
+enquanto o painel trabalha com a fatia de um só — por isso toda escrita passa
+por `mesclarPorCliente(colecao, clienteId, fatia)`, que devolve os registros
+dos outros clientes acrescidos da fatia nova.
 
 ## Impressão
 

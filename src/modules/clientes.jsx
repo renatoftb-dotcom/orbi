@@ -1027,14 +1027,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [visaoPL, setVisaoPL] = useState("conta"); // "conta" | "prestador"
 
   const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
-  const contratos = (data.contratos || []).filter(c => c.clienteId === cliente.id);
   const prestadores = data.fornecedores || [];
-  // data.obras e data.contratos guardam TODOS os clientes; `obras` e
-  // `contratos` acima são só a fatia deste. Gravar a fatia por cima da
-  // coleção apagava as obras e os contratos dos outros clientes — por isso
-  // toda escrita passa por estes dois ajudantes.
+  // Os contratos moram DENTRO da obra (obra.contratos). A coleção
+  // data.contratos nunca foi gravada pelo backend — o contrato ficava só na
+  // memória da aba e sumia no reload. A obra é gravada como documento JSON,
+  // então é nela que o contrato fica, junto da estimativa.
+  const contratosLegado = (data.contratos || []).filter(c => c.clienteId === cliente.id);
+  const contratos = [
+    ...contratosDasObras(obras, cliente.id),
+    // contratos que ficaram em memória antes desta mudança
+    ...contratosLegado.filter(c => !obras.some(o => (o.contratos || []).some(x => x.id === c.id))),
+  ];
+  // data.obras guarda as obras de TODOS os clientes; `obras` acima é só a
+  // fatia deste. Gravar a fatia por cima da coleção apagava as obras dos
+  // outros clientes — por isso toda escrita passa por aqui.
   const gravarObras = (fatia) => save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia) });
-  const gravarContratos = (fatia) => save({ ...data, contratos: mesclarPorCliente(data.contratos, cliente.id, fatia) });
+  const gravarContratos = (fatia) => save({
+    ...data,
+    obras: mesclarPorCliente(data.obras, cliente.id,
+      contratosNasObras(obras, fatia, cliente.id, obraSelecionada && obraSelecionada.id)),
+    // o que estava solto neste cliente já foi para dentro das obras
+    contratos: (data.contratos || []).filter(c => c.clienteId !== cliente.id),
+  });
   const statusObra = { planejamento: { label: "Planejamento", cor: "#f59e0b" }, execucao: { label: "Em execução", cor: "#3b82f6" }, concluida: { label: "Concluída", cor: "#10b981" } };
   const statusContrato = { ativo: { label: "Ativo", cor: "#10b981" }, pendente: { label: "Pendente", cor: "#f59e0b" }, encerrado: { label: "Encerrado", cor: "#9ca3af" } };
 
@@ -1058,7 +1072,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const itensAtuais = obraSelecionada.estimativaPL || [];
     const ehNovo = !itensAtuais.find(i => i.id === itemFinal.id);
     const novosItens = ehNovo ? [...itensAtuais, itemFinal] : itensAtuais.map(i => i.id === itemFinal.id ? itemFinal : i);
-    const obraAtualizada = { ...obraSelecionada, estimativaPL: novosItens };
+    // parte do registro fresco da obra: obraSelecionada pode ter uma cópia
+    // antiga de `contratos` e apagaria o que foi salvo desde então
+    const obraAtualizada = { ...(obras.find(o => o.id === obraSelecionada.id) || obraSelecionada), estimativaPL: novosItens };
     gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
     setObraSelecionada(obraAtualizada);
     setFormItemPL(null);
@@ -1068,10 +1084,23 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const ok = await dialogo.confirmar({ titulo: "Remover item da estimativa?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
     if (!ok) return;
     const novosItens = (obraSelecionada.estimativaPL || []).filter(i => i.id !== itemId);
-    const obraAtualizada = { ...obraSelecionada, estimativaPL: novosItens };
+    const obraAtualizada = { ...(obras.find(o => o.id === obraSelecionada.id) || obraSelecionada), estimativaPL: novosItens };
     gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
     setObraSelecionada(obraAtualizada);
   }
+
+  // Migração: o que sobrou em data.contratos entra na obra correspondente na
+  // primeira renderização em que der — depois disso a obra é a fonte única.
+  const migrouContratos = useRef(false);
+  useEffect(() => {
+    if (migrouContratos.current) return;
+    const soltos = contratosLegado.filter(c => c.obraId && obras.some(o => o.id === c.obraId)
+      && !obras.some(o => (o.contratos || []).some(x => x.id === c.id)));
+    if (!soltos.length) return;
+    migrouContratos.current = true;
+    gravarContratos(contratos);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contratosLegado.length, obras.length]);
 
   // "Gerar PDF" salva, abre o contrato e manda imprimir — só depois que a
   // tela do documento está montada, senão o navegador imprime a tela anterior.
@@ -1121,7 +1150,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   function salvarObra() {
     if (!formObra.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome da obra", tipo: "aviso" }); return; }
     const ehNova = !obras.find(o => o.id === formObra.id);
-    gravarObras(ehNova ? [...obras, formObra] : obras.map(o => o.id === formObra.id ? formObra : o));
+    // ao editar a obra, preserva o que vive dentro dela e não está no formulário
+    gravarObras(ehNova ? [...obras, formObra]
+      : obras.map(o => o.id === formObra.id ? { ...formObra, contratos: o.contratos || [], estimativaPL: o.estimativaPL || [] } : o));
     setView("lista");
   }
 

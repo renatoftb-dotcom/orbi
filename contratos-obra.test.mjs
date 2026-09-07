@@ -22,7 +22,7 @@ const modulo = new Function(`
            ESCOPOS_FORNECIMENTO, escopoContrato, escopoDoTipo, objetoPadrao, tituloServicoCtr,
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
            textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr,
-           mesclarPorCliente };
+           mesclarPorCliente, contratosDasObras, contratosNasObras };
 `)();
 
 let passou = 0, falhou = 0;
@@ -526,6 +526,34 @@ teste("o representante legal do cliente sai no preâmbulo e na assinatura", () =
   assert.ok(!texto(d2).includes("Recepção"));
   const linhaContratante = d2.preambulo.find(l => l.startsWith("CONTRATANTE:"));
   assert.ok(!linhaContratante.includes("neste ato representada por"), "sem representante, o preâmbulo do contratante não inventa um");
+});
+
+teste("o contrato mora dentro da obra, que é o que o backend grava", () => {
+  const obras = [
+    { id: "o1", clienteId: "c1", nome: "Casa", estimativaPL: [{ id: "e1" }], contratos: [{ id: "k1", obraId: "o1", nomeContratado: "Serralheiro" }] },
+    { id: "o2", clienteId: "c1", nome: "Piscina", contratos: [] },
+  ];
+  // leitura: os contratos das obras do cliente, com obraId e clienteId
+  const lidos = modulo.contratosDasObras(obras, "c1");
+  assert.strictEqual(lidos.length, 1);
+  assert.deepStrictEqual({ id: lidos[0].id, obraId: lidos[0].obraId, clienteId: lidos[0].clienteId }, { id: "k1", obraId: "o1", clienteId: "c1" });
+
+  // escrita: um contrato novo na obra 2 não mexe no da obra 1 nem no resto da obra
+  const gravadas = modulo.contratosNasObras(obras, [...lidos, { id: "k2", obraId: "o2" }], "c1", "o2");
+  assert.strictEqual(gravadas[0].contratos.length, 1);
+  assert.strictEqual(gravadas[1].contratos.length, 1);
+  assert.strictEqual(gravadas[1].contratos[0].id, "k2");
+  assert.strictEqual(gravadas[1].contratos[0].clienteId, "c1");
+  assert.deepStrictEqual(gravadas[0].estimativaPL, [{ id: "e1" }], "a estimativa da obra tem de sobreviver");
+  assert.strictEqual(gravadas[0].nome, "Casa");
+
+  // contrato sem obraId cai na obra aberta
+  assert.strictEqual(modulo.contratosNasObras(obras, [{ id: "k3" }], "c1", "o2")[1].contratos[0].id, "k3");
+  // remover: a obra fica com a lista vazia, não com a antiga
+  assert.deepStrictEqual(modulo.contratosNasObras(obras, [], "c1", "o1")[0].contratos, []);
+  // e o ciclo fecha: gravar e ler de volta dá a mesma coisa
+  const ida = modulo.contratosNasObras(obras, [...lidos, { id: "k2", obraId: "o2" }], "c1", "o2");
+  assert.deepStrictEqual(modulo.contratosDasObras(ida, "c1").map(c => c.id).sort(), ["k1", "k2"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

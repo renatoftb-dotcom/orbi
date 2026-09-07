@@ -17,10 +17,11 @@
 // Prestadores (data.fornecedores), que já guarda CNPJ/CPF, endereço,
 // representante e CPF do representante.
 //
-// O contrato gerado fica em data.contratos, junto do cadastro que já
-// existia, com o valor, o status e o texto montado a partir dos campos —
-// o documento é remontado na hora de exibir, então corrigir um dado do
-// cliente ou do prestador atualiza o contrato.
+// O contrato gerado fica dentro da obra (obra.contratos), com o valor, o
+// status e os campos — o documento é remontado na hora de exibir, então
+// corrigir um dado do cliente ou do prestador atualiza o contrato. Ele mora
+// na obra porque é a obra que o backend grava como documento JSON; a coleção
+// data.contratos não é persistida.
 
 const CONTRATO_MODELOS = [
   {
@@ -319,6 +320,22 @@ function opcaoAtiva(c, id) {
 // contrato apagava os contratos de todos os outros clientes.
 function mesclarPorCliente(colecao, clienteId, fatia) {
   return [...(colecao || []).filter((x) => x && x.clienteId !== clienteId), ...(fatia || [])];
+}
+
+// Os contratos moram dentro da obra (obra.contratos), que é o documento que o
+// backend grava. Estes dois fazem a ponte: um lê os contratos de todas as
+// obras do cliente, o outro devolve as obras com os contratos distribuídos.
+function contratosDasObras(obras, clienteId) {
+  return (obras || []).flatMap((o) => ((o && o.contratos) || []).map((c) => ({ ...c, obraId: o.id, clienteId })));
+}
+function contratosNasObras(obras, contratos, clienteId, obraPadraoId) {
+  const porObra = {};
+  (contratos || []).forEach((c) => {
+    const alvo = (c && c.obraId) || obraPadraoId;
+    if (!alvo) return;
+    (porObra[alvo] = porObra[alvo] || []).push({ ...c, obraId: alvo, clienteId });
+  });
+  return (obras || []).map((o) => ({ ...o, contratos: porObra[o.id] || [] }));
 }
 
 // Endereço da obra. O cadastro da obra só guarda endereço próprio quando o
