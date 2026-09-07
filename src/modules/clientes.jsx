@@ -1533,6 +1533,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             </div>
           </div>
           <div><label style={C.label}>Início previsto</label><input style={C.input} type="date" value={g.dataInicio || ""} onChange={e => setG("dataInicio", e.target.value)} /></div>
+          <div>
+            <label style={C.label}>Data de assinatura</label>
+            <input style={C.input} type="date" value={g.dataAssinatura || ""} onChange={e => setG("dataAssinatura", e.target.value)} />
+            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Vem com a data de hoje; é a data que fecha o contrato, acima das assinaturas.</div>
+          </div>
           <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={g.status} onChange={e => setG("status", e.target.value)}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
         </div>
 

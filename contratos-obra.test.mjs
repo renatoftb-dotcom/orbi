@@ -20,7 +20,7 @@ const modulo = new Function(`
            TIPOS_PROFISSIONAL, tipoProfissional, prestadoresDoTipo, enderecoDaObra,
            MODALIDADES_PAGAMENTO, modalidadeContrato, entradaESaldo, prazoContrato,
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
-           textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero };
+           textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr };
 `)();
 
 let passou = 0, falhou = 0;
@@ -362,6 +362,36 @@ teste("máscaras formatam o que a pessoa digita e o backspace apaga dígito", ()
   // apagar o "%" ou a vírgula apaga um dígito de verdade
   assert.strictEqual(modulo.digitandoNumero("0,50%", "0,50", 2), 0.05);
   assert.strictEqual(modulo.digitandoNumero("0,09", "0,0", 2), 0);
+});
+
+teste("a tabela é ancorada no item que a anuncia, não no fim da cláusula", () => {
+  const c = { ...modulo.contratoVazio("empreitadaGlobal", "c1", "o1", "serralheiro"), entradaPct: 50,
+    exclusoes: "a revisão da estrutura existente",
+    itens: [{ descricao: "Cobertura", valor: 60000 }, { descricao: "Vitrine", valor: 40000 }] };
+  const d = modulo.montarContrato(c, { cliente, obra, prestador: serralheiro });
+  const objeto = d.clausulas.find(x => x.id === "objeto");
+  // 1.3 anuncia a tabela, 1.4 são as exclusões — a tabela fica entre as duas
+  assert.strictEqual(objeto.tabelaItensApos, 2);
+  assert.ok(objeto.itens[2].startsWith("1.3. Compõem o objeto"));
+  assert.ok(objeto.itens[3].startsWith("1.4. Não integram"));
+  // o quadro de parcelas segue o item que o anuncia
+  const pg = d.clausulas.find(x => x.id === "pagamento");
+  assert.ok(pg.itens[pg.tabelaParcelasApos].includes("conforme o quadro abaixo"));
+  // sem exclusões, a âncora continua sendo o último item
+  const semExcl = modulo.montarContrato({ ...c, exclusoes: "" }, { cliente, obra, prestador: serralheiro });
+  assert.strictEqual(semExcl.clausulas.find(x => x.id === "objeto").tabelaItensApos, 2);
+});
+
+teste("data de assinatura vem do dia e sai por extenso no fecho", () => {
+  const hoje = new Date().toISOString().slice(0, 10);
+  assert.strictEqual(modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1").dataAssinatura, hoje);
+  assert.strictEqual(modulo.dataExtensoCtr("2026-09-07"), "7 de setembro de 2026");
+  assert.strictEqual(modulo.dataExtensoCtr("2026-01-31"), "31 de janeiro de 2026");
+  assert.strictEqual(modulo.dataExtensoCtr(""), "");
+  const d = modulo.montarContrato({ ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), dataAssinatura: "2026-03-05" }, { cliente, obra, prestador: serralheiro });
+  assert.strictEqual(d.dataAssinaturaExtenso, "5 de março de 2026");
+  // sem data, o contrato sai com a lacuna para preencher à mão
+  assert.strictEqual(modulo.montarContrato({ ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), dataAssinatura: "" }, { cliente, obra, prestador: serralheiro }).dataAssinaturaExtenso, "");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -147,6 +147,14 @@ function moedaExtensoCtr(v) {
   return s;
 }
 function numExtensoCtr(n) { return `${n} (${porExtensoCtr(n)})`; }
+const CTR_MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+// "6 de setembro de 2026" — a data por extenso do fecho do contrato. Lê a
+// string ISO na mão para não escorregar de dia por causa de fuso.
+function dataExtensoCtr(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
+  if (!m) return "";
+  return `${Number(m[3])} de ${CTR_MESES[Number(m[2]) - 1]} de ${m[1]}`;
+}
 function fmtDataCtr(iso) {
   if (!iso) return "";
   const [a, m, d] = String(iso).split("-");
@@ -338,7 +346,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId) {
     foro: "",
     cidadeAssinatura: "",
     status: "pendente",
-    dataAssinatura: "", dataVencimento: "",
+    dataAssinatura: new Date().toISOString().slice(0, 10), dataVencimento: "",
     descricaoServico: "", observacoes: "",
     criadoEm: new Date().toISOString(),
   };
@@ -454,12 +462,14 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     objeto.push(`O presente contrato tem por objeto a execução, pelo CONTRATADO, dos serviços ${c.objeto ? `de ${c.objeto}` : "contratados"}${temAnexo ? ", descritos no ANEXO I, que integra este instrumento" : temItens ? ", discriminados no item {{it:itens}}" : ""}.`);
     objeto.push(`Os serviços serão executados no imóvel situado na ${enderecoObra}, doravante denominado simplesmente OBRA.`);
   }
+  let itensApos = null;
   if (temItens) {
     objeto.push("Compõem o objeto deste contrato os seguintes itens e respectivos valores:");
     marcas.itens = { id: "objeto", i: objeto.length - 1 };
+    itensApos = objeto.length - 1;
   }
   if (c.exclusoes) objeto.push(`Não integram o objeto deste contrato: ${c.exclusoes}`);
-  add("objeto", "DO OBJETO", objeto, { tabelaItens: temItens });
+  add("objeto", "DO OBJETO", objeto, { tabelaItens: temItens, tabelaItensApos: itensApos });
 
   // ── Regime ──
   const ferramentasTodas = (c.ferramentasEscopo || "basicas") === "todas";
@@ -502,7 +512,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const modo = modalidadeContrato(c);
   const per = periodicidadeAdj(c.periodicidade);
   const pag = [`Pela integral execução dos serviços, a CONTRATANTE pagará ${aEla} o valor total de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${temItens ? ", correspondente à soma dos itens discriminados no item {{it:itens}}" : ""}.`];
-  let tabelaParcelas = [];
+  let tabelaParcelas = [], parcelasApos = null;
 
   if (modo === "parcelado") {
     const p = parcelasContrato(total, c.parcelas);
@@ -531,6 +541,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     const porItem = (c.entradaEscopo || (global ? "item" : "contrato")) === "item" && temItens;
     if (porItem) {
       pag.push(`O pagamento será realizado item a item, na proporção de ${pctCtr(c.entradaPct)} do valor do respectivo item a título de entrada, na liberação de cada item para produção, e o restante na conclusão daquele mesmo item, conforme o quadro abaixo:`);
+      parcelasApos = pag.length - 1;
       pag.push(`A conclusão de cada item será verificada pela CONTRATANTE em até 5 (cinco) dias úteis da comunicação ${dela}, liberando-se o respectivo saldo caso não haja pendências apontadas por escrito.`);
       const pct = (Number(c.entradaPct) || 0) / 100;
       tabelaParcelas = tabelaItens.map((i) => {
@@ -556,7 +567,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
       ? "Os valores acima são fixos e irreajustáveis pelo prazo deste contrato e compreendem todos os custos diretos e indiretos, materiais, transporte, mão de obra, tributos e encargos incidentes sobre os serviços."
       : "Os valores acima são fixos e irreajustáveis pelo prazo deste contrato e remuneram exclusivamente a mão de obra, nele não se incluindo qualquer material, locação de equipamentos ou serviço de terceiros.");
   }
-  add("pagamento", "DO PREÇO E DA FORMA DE PAGAMENTO", pag, { tabelaParcelas: tabelaParcelas.length > 0 });
+  add("pagamento", "DO PREÇO E DA FORMA DE PAGAMENTO", pag, { tabelaParcelas: tabelaParcelas.length > 0, tabelaParcelasApos: parcelasApos });
 
   // ── Obrigações ──
   const obrC = [
@@ -648,6 +659,9 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     itens: x.itens.map((t, j) => `${i + 1}.${j + 1}. ${resolver(t)}`),
     tabelaItens: !!x.tabelaItens,
     tabelaParcelas: !!x.tabelaParcelas,
+    // índice do item que anuncia a tabela — ela é desenhada logo abaixo dele
+    tabelaItensApos: x.tabelaItensApos == null ? null : x.tabelaItensApos,
+    tabelaParcelasApos: x.tabelaParcelasApos == null ? null : x.tabelaParcelasApos,
   }));
 
   return {
@@ -658,6 +672,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     preambulo, clausulas, tabelaItens, tabelaParcelas,
     anexo,
     cidadeAssinatura: cidadeAss,
+    dataAssinaturaExtenso: dataExtensoCtr(c.dataAssinatura),
     assinaturas: [
       { nome: contratante.nome, papel: "CONTRATANTE", representante: contratante.representanteNome, cpf: contratante.representanteCpf },
       { nome: contratado.nome, papel: rotuloContratado, representante: contratado.representanteNome, cpf: contratado.representanteCpf },
@@ -685,10 +700,24 @@ const CTR_S = {
 // ocupar a folha inteira, sem cabeçalho do navegador atrapalhando.
 const CTR_PRINT_CSS = `
 @media print {
-  body * { visibility: hidden !important; }
-  [data-vk-contrato="1"], [data-vk-contrato="1"] * { visibility: visible !important; }
-  [data-vk-contrato="1"] { position: absolute; left: 0; top: 0; width: 100%; max-width: none; padding: 0; }
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+  /* Com o documento reparentado para o body, basta esconder os irmãos: ele
+     imprime como bloco normal e respeita a margem da folha. */
+  body[data-vk-imprimindo="1"] > *:not([data-vk-contrato="1"]) { display: none !important; }
+  body[data-vk-imprimindo="1"] [data-vk-contrato="1"],
+  body[data-vk-imprimindo="1"] [data-vk-contrato="1"] * { visibility: visible !important; }
+  body[data-vk-imprimindo="1"] [data-vk-contrato="1"] {
+    position: static !important; width: auto !important; max-width: none !important;
+    margin: 0 !important; padding: 0 !important; overflow: visible !important;
+  }
+  /* Sem o reparent (navegador sem beforeprint), cai no recurso antigo. */
+  body:not([data-vk-imprimindo="1"]) * { visibility: hidden !important; }
+  body:not([data-vk-imprimindo="1"]) [data-vk-contrato="1"],
+  body:not([data-vk-imprimindo="1"]) [data-vk-contrato="1"] * { visibility: visible !important; }
+  body:not([data-vk-imprimindo="1"]) [data-vk-contrato="1"] { position: absolute; left: 0; top: 0; width: 100%; max-width: none; padding: 0; }
   [data-vk-noprint="1"] { display: none !important; }
+  [data-vk-contrato="1"] table { page-break-inside: auto; }
+  [data-vk-contrato="1"] tr { page-break-inside: avoid; }
   @page { size: A4; margin: 18mm 16mm; }
 }
 `;
@@ -706,6 +735,7 @@ function CampoCtrNum({ tipo, valor, onChange, style, placeholder, disabled }) {
 
 function ContratoDocumento({ contrato, cliente, obra, prestador }) {
   const d = montarContrato(contrato, { cliente, obra, prestador });
+  const alvo = useRef(null);
   useEffect(() => {
     const tag = document.createElement("style");
     tag.setAttribute("data-vk-contrato-print", "1");
@@ -713,46 +743,83 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
     document.head.appendChild(tag);
     return () => { try { document.head.removeChild(tag); } catch (e) { /* já removido */ } };
   }, []);
+  // Na hora de imprimir, o documento sobe para o body. Dentro dos painéis do
+  // app ele herdava larguras e recortes que cortavam o texto nas laterais da
+  // folha; solto no body, ele ocupa exatamente a área útil da página.
+  useEffect(() => {
+    const el = alvo.current;
+    if (!el || typeof window === "undefined" || !window.addEventListener) return;
+    const pai = el.parentNode, proximo = el.nextSibling;
+    let movido = false;
+    const antes = () => {
+      if (movido) return;
+      try { document.body.appendChild(el); document.body.setAttribute("data-vk-imprimindo", "1"); movido = true; } catch (e) { /* segue no lugar */ }
+    };
+    const depois = () => {
+      if (!movido) return;
+      try { if (pai) pai.insertBefore(el, proximo); } catch (e) { /* nó já removido */ }
+      try { document.body.removeAttribute("data-vk-imprimindo"); } catch (e) { /* ignora */ }
+      movido = false;
+    };
+    window.addEventListener("beforeprint", antes);
+    window.addEventListener("afterprint", depois);
+    return () => {
+      window.removeEventListener("beforeprint", antes);
+      window.removeEventListener("afterprint", depois);
+      depois();
+    };
+  }, []);
+  const moeda = (v) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const tabelaItensEl = (k) => (
+    <table key={k} style={CTR_S.tabela}>
+      <thead><tr><th style={{ ...CTR_S.th, width: 44 }}>Item</th><th style={CTR_S.th}>Descrição do serviço</th><th style={{ ...CTR_S.th, textAlign: "right" }}>Valor (R$)</th></tr></thead>
+      <tbody>
+        {d.tabelaItens.map((it) => (
+          <tr key={it.n}><td style={CTR_S.td}>{it.n}</td><td style={CTR_S.td}>{it.descricao}</td><td style={CTR_S.tdNum}>{moeda(it.valor)}</td></tr>
+        ))}
+        <tr><td style={{ ...CTR_S.td, fontWeight: 700 }} /><td style={{ ...CTR_S.td, fontWeight: 700 }}>VALOR TOTAL</td><td style={{ ...CTR_S.tdNum, fontWeight: 700 }}>{moeda(d.total)}</td></tr>
+      </tbody>
+    </table>
+  );
+  const tabelaParcelasEl = (k) => (
+    <table key={k} style={CTR_S.tabela}>
+      <thead><tr><th style={{ ...CTR_S.th, width: 44 }}>Item</th><th style={CTR_S.th}>Serviço</th><th style={{ ...CTR_S.th, textAlign: "right" }}>1ª parcela</th><th style={{ ...CTR_S.th, textAlign: "right" }}>2ª parcela</th></tr></thead>
+      <tbody>
+        {d.tabelaParcelas.map((it) => (
+          <tr key={it.n}><td style={CTR_S.td}>{it.n}</td><td style={CTR_S.td}>{it.descricao}</td><td style={CTR_S.tdNum}>{moeda(it.p1)}</td><td style={CTR_S.tdNum}>{moeda(it.p2)}</td></tr>
+        ))}
+        <tr>
+          <td style={CTR_S.td} /><td style={{ ...CTR_S.td, fontWeight: 700 }}>TOTAIS</td>
+          <td style={{ ...CTR_S.tdNum, fontWeight: 700 }}>{moeda(d.tabelaParcelas.reduce((a, i) => a + i.p1, 0))}</td>
+          <td style={{ ...CTR_S.tdNum, fontWeight: 700 }}>{moeda(d.tabelaParcelas.reduce((a, i) => a + i.p2, 0))}</td>
+        </tr>
+      </tbody>
+    </table>
+  );
+
   return (
-    <div style={CTR_S.doc} data-vk-contrato="1">
+    <div style={CTR_S.doc} data-vk-contrato="1" ref={alvo}>
       <h1 style={CTR_S.h1}>{d.titulo}</h1>
       <div style={CTR_S.h2}>{d.subtitulo}</div>
       {d.preambulo.map((t, i) => <p key={i} style={CTR_S.p}>{t}</p>)}
       {d.clausulas.map((cl, i) => (
         <div key={i}>
           <div style={CTR_S.clausula}>{cl.titulo}</div>
-          {cl.itens.map((t, j) => <p key={j} style={CTR_S.p}>{t}</p>)}
-          {cl.tabelaItens && d.tabelaItens.length > 0 && (
-            <table style={CTR_S.tabela}>
-              <thead><tr><th style={{ ...CTR_S.th, width: 44 }}>Item</th><th style={CTR_S.th}>Descrição do serviço</th><th style={{ ...CTR_S.th, textAlign: "right" }}>Valor (R$)</th></tr></thead>
-              <tbody>
-                {d.tabelaItens.map((it) => (
-                  <tr key={it.n}><td style={CTR_S.td}>{it.n}</td><td style={CTR_S.td}>{it.descricao}</td><td style={CTR_S.tdNum}>{it.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td></tr>
-                ))}
-                <tr><td style={{ ...CTR_S.td, fontWeight: 700 }} /><td style={{ ...CTR_S.td, fontWeight: 700 }}>VALOR TOTAL</td><td style={{ ...CTR_S.tdNum, fontWeight: 700 }}>{d.total.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td></tr>
-              </tbody>
-            </table>
-          )}
-          {cl.tabelaParcelas && d.tabelaParcelas.length > 0 && (
-            <table style={CTR_S.tabela}>
-              <thead><tr><th style={{ ...CTR_S.th, width: 44 }}>Item</th><th style={CTR_S.th}>Serviço</th><th style={{ ...CTR_S.th, textAlign: "right" }}>1ª parcela</th><th style={{ ...CTR_S.th, textAlign: "right" }}>2ª parcela</th></tr></thead>
-              <tbody>
-                {d.tabelaParcelas.map((it) => (
-                  <tr key={it.n}><td style={CTR_S.td}>{it.n}</td><td style={CTR_S.td}>{it.descricao}</td><td style={CTR_S.tdNum}>{it.p1.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td><td style={CTR_S.tdNum}>{it.p2.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td></tr>
-                ))}
-                <tr>
-                  <td style={CTR_S.td} /><td style={{ ...CTR_S.td, fontWeight: 700 }}>TOTAIS</td>
-                  <td style={{ ...CTR_S.tdNum, fontWeight: 700 }}>{d.tabelaParcelas.reduce((a, i) => a + i.p1, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                  <td style={{ ...CTR_S.tdNum, fontWeight: 700 }}>{d.tabelaParcelas.reduce((a, i) => a + i.p2, 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</td>
-                </tr>
-              </tbody>
-            </table>
-          )}
+          {cl.itens.flatMap((t, j) => {
+            // A tabela é desenhada logo abaixo do item que a anuncia — não no
+            // fim da cláusula, senão ela cai depois das exclusões do objeto.
+            const saida = [<p key={`p${j}`} style={CTR_S.p}>{t}</p>];
+            if (cl.tabelaItens && cl.tabelaItensApos === j) saida.push(tabelaItensEl(`ti${j}`));
+            if (cl.tabelaParcelas && cl.tabelaParcelasApos === j) saida.push(tabelaParcelasEl(`tp${j}`));
+            return saida;
+          })}
+          {cl.tabelaItens && cl.tabelaItensApos == null ? tabelaItensEl("ti") : null}
+          {cl.tabelaParcelas && cl.tabelaParcelasApos == null ? tabelaParcelasEl("tp") : null}
         </div>
       ))}
 
       <p style={{ ...CTR_S.p, marginTop: 18 }}>E, por estarem assim justas e contratadas, as partes assinam o presente instrumento em 2 (duas) vias de igual teor e forma, na presença das 2 (duas) testemunhas abaixo.</p>
-      <p style={{ ...CTR_S.p, textAlign: "center", marginTop: 14 }}>{d.cidadeAssinatura || "______________________"}, ______ de ____________________ de __________.</p>
+      <p style={{ ...CTR_S.p, textAlign: "center", marginTop: 14 }}>{`${d.cidadeAssinatura || "______________________"}, ${d.dataAssinaturaExtenso || "______ de ____________________ de __________"}.`}</p>
       {d.assinaturas.map((a, i) => (
         <div key={i} style={CTR_S.assinatura}>
           <div style={CTR_S.linha} />

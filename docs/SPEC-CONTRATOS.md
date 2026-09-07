@@ -167,10 +167,24 @@ Detalhes que vieram dos contratos reais e estão cobertos por teste
 - **Pessoa física** troca CNPJ por CPF, "com sede" por "residente e
   domiciliado" e não leva representante.
 
+## Data de assinatura
+
+`dataAssinatura` nasce com a data do dia e é editável no gerador. O fecho do
+contrato sai como "Ourinhos/SP, 7 de setembro de 2026." (`dataExtensoCtr`, que
+lê a string ISO na mão para não escorregar de dia por fuso). Em branco, volta
+a lacuna para preencher à caneta.
+
 ## Impressão
 
-A tela do contrato injeta um `@media print` que esconde o app e deixa só o
-documento, em A4 com margens de 18/16 mm. O botão "Imprimir / salvar PDF"
-chama `window.print()` — no navegador, "Salvar como PDF" resolve. Se depois
-for preciso o PDF pelo mesmo motor das propostas (Puppeteer), o
-`montarContrato` já entrega a estrutura pronta para uma rota de render.
+Ao imprimir, `ContratoDocumento` move o próprio nó para dentro do `body`
+(eventos `beforeprint`/`afterprint`) e marca `body[data-vk-imprimindo]`.
+Dentro dos painéis do app o documento herdava largura e recortes dos
+contêineres e saía com o texto cortado nas laterais da folha; solto no body
+ele imprime como bloco estático e respeita a margem de `@page` (A4, 18mm ×
+16mm). Navegadores sem `beforeprint` caem no recurso antigo (visibilidade +
+posicionamento absoluto). As linhas de tabela não se partem entre páginas.
+
+As tabelas (itens do objeto e quadro de parcelas) são desenhadas **logo abaixo
+do item que as anuncia** — `tabelaItensApos` / `tabelaParcelasApos` guardam o
+índice desse item —, de modo que o quadro fique entre o 1.3 e o 1.4, e não
+depois das exclusões.
