@@ -88,8 +88,16 @@ um `path` com os dois cantos de cima curvos, e as de baixo, retas — assim as
 faixas encostam sem entalhe, e não é preciso recortar nada.
 
 Ao abrir a tela elas surgem crescendo da linha de base, em cascata (70 ms
-entre uma e outra), com o valor aparecendo logo depois; quem tem
-`prefers-reduced-motion` ligado vê o gráfico parado.
+entre uma e outra), com o valor aparecendo logo depois.
+
+**Quem pede menos movimento no sistema não fica sem entrada.** No Windows,
+Acessibilidade → Efeitos visuais → Efeitos de animação desligado faz o Chrome
+responder `prefers-reduced-motion: reduce`; a regra antiga era
+`animation: none !important` e o gráfico abria estático — foi por isso que a
+animação "não funcionava" numa máquina onde a da calibragem funcionava (aquele
+gráfico não tem a regra). Agora, sob essa preferência, as barras e os valores
+trocam de animação em vez de perdê-la: aparecem por **opacidade**, na mesma
+cascata, sem crescer nem deslocar.
 
 A técnica é a mesma do gráfico da calibragem de preço (`onboarding.jsx`), que
 já funcionava: **animação CSS aplicada no próprio desenho** (`path`), com

@@ -15790,8 +15790,17 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
       <style>{`
         @keyframes vk-cp-crescer { from { transform: scaleY(0); } to { transform: scaleY(1); } }
         @keyframes vk-cp-subir { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes vk-cp-surgir { from { opacity: 0; } to { opacity: 1; } }
+        /* Quem pede menos movimento no sistema (Windows: Acessibilidade →
+           Efeitos visuais → Efeitos de animação) não perde a entrada: as
+           barras aparecem por opacidade, na mesma ordem, sem crescer nem
+           deslocar. Antes aqui era animation:none, e a tela abria estática. */
         @media (prefers-reduced-motion: reduce) {
-          .vk-cp-barra, .vk-cp-valor { animation: none !important; }
+          .vk-cp-barra, .vk-cp-valor {
+            animation-name: vk-cp-surgir !important;
+            animation-duration: 0.45s !important;
+            animation-timing-function: ease-out !important;
+          }
         }
       `}</style>
       <svg width={largura} height={ALT + 46} role="img" style={{ display: "block" }}>
