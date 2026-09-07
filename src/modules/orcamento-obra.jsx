@@ -3035,6 +3035,9 @@ const REVESTIR_OPCOES = [
 // Regras de acabamento por cômodo (medidas: COMODOS[nome] do orçamento de
 // projetos, pelo tamanho). Molhados: todas as paredes revestidas e bancada
 // na metade da parede mais comprida; secos: rodapé.
+// Fração da parede mais comprida ocupada pela bancada: 100% nas áreas de
+// trabalho (cozinha, lavanderia, área de lazer/gourmet — a bancada corre a
+// parede inteira) e 50% nos lavabos e WCs. Editável cômodo a cômodo.
 const COMODO_OBRA_PROJETO = {
   garagem:       { revestir: "nenhuma" },
   hallEntrada:   { revestir: "nenhuma", rodape: true },
@@ -3043,10 +3046,10 @@ const COMODO_OBRA_PROJETO = {
   salaJantar:    { revestir: "nenhuma", rodape: true },
   escritorio:    { revestir: "nenhuma", rodape: true },
   lavabo:        { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.45 } },
-  cozinha:       { revestir: "todas", bancada: { fracao: 0.1, profundidade: 0.6, ilha: true } },
-  lavanderia:    { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.6 } },
+  cozinha:       { revestir: "todas", bancada: { fracao: 1, profundidade: 0.6, ilha: true } },
+  lavanderia:    { revestir: "todas", bancada: { fracao: 1, profundidade: 0.6 } },
   deposito:      { revestir: "nenhuma" },
-  areaLazer:     { revestir: "maior", bancada: { fracao: 0.1, profundidade: 0.6, ilha: true } },
+  areaLazer:     { revestir: "maior", bancada: { fracao: 1, profundidade: 0.6, ilha: true } },
   lavaboLazer:   { revestir: "todas", bancada: { fracao: 0.5, profundidade: 0.45 } },
   sauna:         { revestir: "nenhuma" },
   academia:      { revestir: "nenhuma", rodape: true },
