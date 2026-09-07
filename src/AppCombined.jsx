@@ -14602,10 +14602,11 @@ function prestadorDoEscritorio(escritorio) {
     nome: e.nome,
     tipo: "PJ",
     categoria: "Gestão de Obra",
-    cnpjCpf: e.cnpj || "",
+    // cadastros antigos guardaram o documento com outros nomes de campo
+    cnpjCpf: e.cnpj || e.cnpjCpf || e.documento || "",
     // o cadastro guarda o logradouro numa linha só, com o número junto
-    logradouro: e.endereco || "",
-    numero: "", bairro: "",
+    logradouro: e.endereco || e.logradouro || "",
+    numero: e.numero || "", bairro: e.bairro || "",
     cidade: e.cidade || "", estado: e.estado || "", cep: e.cep || "",
     representanteNome: (resp && resp.nome) || e.responsavel || "",
     representanteCpf: (resp && resp.cpf) || e.cpfResponsavel || "",
@@ -16912,6 +16913,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
   const [visaoPL, setVisaoPL] = useState("conta"); // "conta" | "prestador"
+  // Cadastro do escritório editado de dentro do gerador de contratos: sem ele
+  // o contrato do escritório sai sem CNPJ, endereço e responsável técnico.
+  const [formEscritorio, setFormEscritorio] = useState(null);
 
   const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
   const prestadores = data.fornecedores || [];
@@ -16929,6 +16933,30 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // fatia deste. Gravar a fatia por cima da coleção apagava as obras dos
   // outros clientes — por isso toda escrita passa por aqui.
   const gravarObras = (fatia) => save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia) });
+  // ── Cadastro do escritório (contratado dos contratos de gestão) ──
+  const abrirFormEscritorio = () => {
+    const e = data.escritorio || {};
+    const r = (e.responsaveis && e.responsaveis[0]) || {};
+    setFormEscritorio({
+      nome: e.nome || "", cnpj: e.cnpj || e.cnpjCpf || e.documento || "",
+      endereco: e.endereco || e.logradouro || "", cidade: e.cidade || "",
+      estado: e.estado || "", cep: e.cep || "",
+      respNome: r.nome || e.responsavel || "", respCpf: r.cpf || e.cpfResponsavel || "",
+      respCau: r.cau || e.cau || "",
+    });
+  };
+  const salvarFormEscritorio = () => {
+    const f = formEscritorio; if (!f) return;
+    const e = data.escritorio || {};
+    const antigos = e.responsaveis || [];
+    const primeiro = { ...(antigos[0] || { id: "r1" }), nome: f.respNome, cpf: f.respCpf, cau: f.respCau };
+    save({ ...data, escritorio: {
+      ...e, nome: f.nome, cnpj: f.cnpj, endereco: f.endereco,
+      cidade: f.cidade, estado: f.estado, cep: f.cep,
+      responsaveis: [primeiro, ...antigos.slice(1)],
+    } });
+    setFormEscritorio(null);
+  };
   // ── Contas a pagar ──────────────────────────────────────────
   // Também moram dentro da obra (obra.contasPagar). As de contrato são
   // geradas ao salvar o contrato; as avulsas, à mão.
@@ -17534,9 +17562,51 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {faltaEscritorio.length > 0 && (
+        {prest && prest.escritorio && (
           <div style={{ fontSize: 12.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
-            O contrato usa o cadastro do escritório. Falta preencher lá: <strong style={{ color: "#111827" }}>{faltaEscritorio.join(" · ")}</strong>.
+            {faltaEscritorio.length > 0 ? (
+              <span>Os dados do contratado vêm do cadastro do escritório. Falta preencher: <strong style={{ color: "#111827" }}>{faltaEscritorio.join(" · ")}</strong>.</span>
+            ) : (
+              <span>Os dados do contratado vêm do cadastro do escritório.</span>
+            )}
+            {!formEscritorio && (
+              <button type="button" onClick={abrirFormEscritorio}
+                style={{ marginLeft: 8, background: "none", border: "none", padding: 0, color: AZUL_VK, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                {faltaEscritorio.length > 0 ? "Completar aqui" : "Editar aqui"}
+              </button>
+            )}
+            {formEscritorio && (
+              <div style={{ marginTop: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 10 }}>
+                  <div><label style={C.label}>Razão social</label>
+                    <input style={C.input} value={formEscritorio.nome} onChange={e => setFormEscritorio({ ...formEscritorio, nome: e.target.value })} /></div>
+                  <div><label style={C.label}>CNPJ</label>
+                    <input style={C.input} value={formEscritorio.cnpj} onChange={e => setFormEscritorio({ ...formEscritorio, cnpj: e.target.value })} placeholder="00.000.000/0000-00" /></div>
+                </div>
+                <div style={{ marginTop: 8 }}><label style={C.label}>Endereço (com número)</label>
+                  <input style={C.input} value={formEscritorio.endereco} onChange={e => setFormEscritorio({ ...formEscritorio, endereco: e.target.value })} placeholder="Rua, nº, bairro" /></div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 10, marginTop: 8 }}>
+                  <div><label style={C.label}>Cidade</label>
+                    <input style={C.input} value={formEscritorio.cidade} onChange={e => setFormEscritorio({ ...formEscritorio, cidade: e.target.value })} /></div>
+                  <div><label style={C.label}>UF</label>
+                    <input style={C.input} value={formEscritorio.estado} onChange={e => setFormEscritorio({ ...formEscritorio, estado: e.target.value.toUpperCase().slice(0, 2) })} /></div>
+                  <div><label style={C.label}>CEP</label>
+                    <input style={C.input} value={formEscritorio.cep} onChange={e => setFormEscritorio({ ...formEscritorio, cep: e.target.value })} /></div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 10, marginTop: 8 }}>
+                  <div><label style={C.label}>Responsável técnico</label>
+                    <input style={C.input} value={formEscritorio.respNome} onChange={e => setFormEscritorio({ ...formEscritorio, respNome: e.target.value })} /></div>
+                  <div><label style={C.label}>CPF</label>
+                    <input style={C.input} value={formEscritorio.respCpf} onChange={e => setFormEscritorio({ ...formEscritorio, respCpf: e.target.value })} /></div>
+                  <div><label style={C.label}>CAU</label>
+                    <input style={C.input} value={formEscritorio.respCau} onChange={e => setFormEscritorio({ ...formEscritorio, respCau: e.target.value })} /></div>
+                </div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 10 }}>
+                  <button type="button" style={C.btnSec} onClick={() => setFormEscritorio(null)}>Cancelar</button>
+                  <button type="button" style={C.btn} onClick={salvarFormEscritorio}>Salvar no cadastro</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {tipoP && !prest && !novoPrestador && (

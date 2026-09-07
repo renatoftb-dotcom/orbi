@@ -97,6 +97,17 @@ CPF e CAU do representante, que sai no preâmbulo ("neste ato representada por
 LEONARDO PADOVAN, inscrito no CPF sob o nº …, CAU nº …"). Faltando algo,
 `faltaNoEscritorio()` lista os campos e o gerador avisa antes de gerar.
 
+Esse aviso é **editável no próprio gerador**: escolhido o escritório como
+contratado, o cartão traz "Completar aqui" (ou "Editar aqui", se nada falta) e
+abre os campos — razão social, CNPJ, endereço com número, cidade/UF, CEP e o
+responsável técnico (nome, CPF, CAU). "Salvar no cadastro" grava em
+`data.escritorio` (preservando os demais responsáveis e o resto do cadastro), e
+o contrato passa a sair qualificado sem sair da tela. Um cadastro só com nome e
+cidade produzia o preâmbulo truncado "PADOVAN ARQUITETOS, sediada na
+Ourinhos/SP." — era falta de dado, não de código. `prestadorDoEscritorio()`
+também aceita as chaves de cadastros antigos (`cnpjCpf`/`documento` e
+`logradouro`/`numero`/`bairro`).
+
 No passo do prestador há **＋ Novo**, que abre o cadastro rápido dentro do
 próprio gerador — nome, PJ/PF, CNPJ/CPF, categoria (já vem a do tipo
 escolhido), endereço com ViaCEP e representante legal, exatamente os dados

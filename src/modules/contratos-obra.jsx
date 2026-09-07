@@ -404,10 +404,11 @@ function prestadorDoEscritorio(escritorio) {
     nome: e.nome,
     tipo: "PJ",
     categoria: "Gestão de Obra",
-    cnpjCpf: e.cnpj || "",
+    // cadastros antigos guardaram o documento com outros nomes de campo
+    cnpjCpf: e.cnpj || e.cnpjCpf || e.documento || "",
     // o cadastro guarda o logradouro numa linha só, com o número junto
-    logradouro: e.endereco || "",
-    numero: "", bairro: "",
+    logradouro: e.endereco || e.logradouro || "",
+    numero: e.numero || "", bairro: e.bairro || "",
     cidade: e.cidade || "", estado: e.estado || "", cep: e.cep || "",
     representanteNome: (resp && resp.nome) || e.responsavel || "",
     representanteCpf: (resp && resp.cpf) || e.cpfResponsavel || "",

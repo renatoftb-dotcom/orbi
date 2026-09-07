@@ -24,7 +24,7 @@ const modulo = new Function(`
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
            textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr,
            mesclarPorCliente, contratosDasObras, contratosNasObras,
-           prestadorDoEscritorio, faltaNoEscritorio, ID_PRESTADOR_ESCRITORIO };
+           prestadorDoEscritorio, faltaNoEscritorio, qualificarCurto, ID_PRESTADOR_ESCRITORIO };
 `)();
 
 let passou = 0, falhou = 0;
@@ -694,6 +694,22 @@ teste("no gerenciamento, a condição de pagamento muda a frase do vencimento", 
   assert.ok(t("transferencia").includes("por transferência bancária, com vencimento todo dia 05"));
   // sem dia informado, a frase some
   assert.ok(!texto(modulo.montarContrato({ ...c, diaVencimento: "" }, { cliente, obra, prestador: serralheiro })).includes("todo dia"));
+});
+
+teste("o contratado escritório sai qualificado; cadastro incompleto vira aviso", () => {
+  const cheio = { nome: "Padovan Arquitetos", cnpj: "20.205.619/0001-40", endereco: "Rua Expedicionários do Brasil, 1.234",
+    cidade: "Ourinhos", estado: "SP", cep: "19900-000", responsaveis: [{ id: "r1", nome: "Leonardo Padovan", cpf: "111.222.333-44", cau: "A123456-7" }] };
+  const p = modulo.prestadorDoEscritorio(cheio);
+  assert.strictEqual(p.cnpjCpf, "20.205.619/0001-40");
+  assert.ok(modulo.qualificarCurto(p).includes("inscrita no CNPJ 20.205.619/0001-40, sediada na Rua Expedicionários do Brasil, 1.234, Ourinhos/SP, CEP 19900-000"));
+  assert.deepStrictEqual(modulo.faltaNoEscritorio(cheio), []);
+  // cadastro só com nome/cidade: é o que produzia "sediada na Ourinhos/SP."
+  const magro = { nome: "Padovan Arquitetos", cidade: "Ourinhos", estado: "SP" };
+  assert.deepStrictEqual(modulo.faltaNoEscritorio(magro),
+    ["CNPJ", "Endereço", "CEP", "Responsável técnico", "CPF do responsável"]);
+  // cadastro antigo, com o documento e o endereço em outras chaves
+  const antigo = { nome: "Padovan Arquitetos", cnpjCpf: "20.205.619/0001-40", logradouro: "Rua A", numero: "10", bairro: "Centro", cidade: "Ourinhos", estado: "SP", cep: "19900-000" };
+  assert.ok(modulo.qualificarCurto(modulo.prestadorDoEscritorio(antigo)).includes("Rua A, nº 10, Centro"));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
