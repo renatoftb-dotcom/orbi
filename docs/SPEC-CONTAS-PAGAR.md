@@ -78,8 +78,15 @@ mil) e o mês atual em negrito no eixo. Cada barra é empilhada em três faixas
 que somadas fecham o total do mês. Clicar num mês abre as contas dele na
 lista abaixo.
 
-É SVG desenhado à mão, sem biblioteca. Contas sem vencimento ficam fora do
-gráfico e são contadas na nota de rodapé.
+As barras têm o topo levemente arredondado — cada uma é recortada por um
+`clipPath` de raio 5, de modo que o arredondamento seja da barra inteira e
+não de cada faixa. Ao abrir a tela elas surgem crescendo da linha de base,
+em cascata (55 ms entre uma e outra), com o valor aparecendo logo depois;
+quem tem `prefers-reduced-motion` ligado vê o gráfico parado.
+
+É SVG desenhado à mão, sem biblioteca — no mesmo espírito do gráfico de
+calibragem de preço do insumo. Contas sem vencimento ficam fora do gráfico e
+são contadas na nota de rodapé.
 
 ## A tela: fluxo agrupado
 

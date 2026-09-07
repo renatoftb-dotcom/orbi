@@ -17527,20 +17527,46 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </div>
             </div>
             <div style={{ overflowX: "auto" }}>
+              {/* As barras surgem crescendo da linha de base, em cascata. */}
+              <style>{`
+                @keyframes vkCpSurgir { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+                @keyframes vkCpAparecer { from { opacity: 0; } to { opacity: 1; } }
+                .vk-cp-barra { transform-box: fill-box; transform-origin: bottom; animation: vkCpSurgir 0.5s cubic-bezier(0.2,0.7,0.3,1) backwards; }
+                .vk-cp-valor { animation: vkCpAparecer 0.4s ease-out backwards; }
+                @media (prefers-reduced-motion: reduce) {
+                  .vk-cp-barra, .vk-cp-valor { animation: none; }
+                }
+              `}</style>
               <svg width={Math.max(largGrafico, 220)} height={ALT_BARRA + 46} role="img" style={{ display: "block" }}>
+                <defs>
+                  {fluxo.meses.map((m, i) => {
+                    const x = i * (LARG_BARRA + ESPACO) + ESPACO / 2;
+                    const h = FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
+                    return (
+                      <clipPath key={m.chave} id={`vk-cp-barra-${obraSelecionada.id}-${i}`}>
+                        <rect x={x} y={ALT_BARRA + 16 - h} width={LARG_BARRA} height={Math.max(h, 1)} rx={5} ry={5} />
+                      </clipPath>
+                    );
+                  })}
+                </defs>
                 {fluxo.meses.map((m, i) => {
                   const x = i * (LARG_BARRA + ESPACO) + ESPACO / 2;
+                  const hTotal = FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
                   let y = ALT_BARRA + 16;
+                  const atraso = `${i * 55}ms`;
                   return (
                     <g key={m.chave} onClick={() => irParaMes(m.chave)} style={{ cursor: "pointer" }}>
                       <title>{`${rotuloMes(m.chave)} — ${fmtMoedaCtr(m.total)}`}</title>
-                      {FAIXAS.map(([k, cor]) => {
-                        const h = altura(m[k]);
-                        if (!h) return null;
-                        y -= h;
-                        return <rect key={k} x={x} y={y} width={LARG_BARRA} height={h} fill={cor} rx={2} />;
-                      })}
-                      <text x={x + LARG_BARRA / 2} y={y - 5} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#111827">{curto(m.total)}</text>
+                      <g className="vk-cp-barra" style={{ animationDelay: atraso }} clipPath={`url(#vk-cp-barra-${obraSelecionada.id}-${i})`}>
+                        {FAIXAS.map(([k, cor]) => {
+                          const h = altura(m[k]);
+                          if (!h) return null;
+                          y -= h;
+                          return <rect key={k} x={x} y={y} width={LARG_BARRA} height={h} fill={cor} />;
+                        })}
+                      </g>
+                      <text className="vk-cp-valor" style={{ animationDelay: `${i * 55 + 260}ms` }}
+                        x={x + LARG_BARRA / 2} y={ALT_BARRA + 11 - hTotal} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#111827">{curto(m.total)}</text>
                       <text x={x + LARG_BARRA / 2} y={ALT_BARRA + 32} textAnchor="middle" fontSize="11" fill={m.chave === hojeIso.slice(0, 7) ? "#111827" : "#4b5563"} fontWeight={m.chave === hojeIso.slice(0, 7) ? 700 : 400}>{m.rotulo}</text>
                     </g>
                   );
