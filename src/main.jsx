@@ -56,3 +56,8 @@ const reactTree = isRenderRoute
   : <StrictMode><RouteSwitch /></StrictMode>;
 
 createRoot(document.getElementById('root')).render(reactTree);
+
+// Sinaliza pro guarda de tela branca do index.html que o app subiu, e limpa a
+// marca da recarga automática (senão a próxima tela branca não recarregaria).
+window.__vickeMontou = true;
+try { sessionStorage.removeItem('vicke-recarga-branca'); } catch (e) {}

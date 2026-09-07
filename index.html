@@ -10,6 +10,30 @@
   </head>
   <body>
     <div id="root"></div>
+    <!--
+      Guarda contra tela branca de deploy: depois de publicar uma versão nova,
+      o navegador pode ficar com o index.html antigo, que aponta para um
+      /assets/index-<hash>.js que não existe mais. A regra de SPA do Vercel
+      devolve o próprio index.html nessa URL, o navegador tenta executar HTML
+      como script e a tela fica em branco.
+      Se o app não montar em 8 segundos, recarrega uma vez sem cache (a marca
+      em sessionStorage impede laço infinito quando o erro for outro).
+    -->
+    <script>
+      window.__vickeMontou = false;
+      window.addEventListener("load", function () {
+        setTimeout(function () {
+          var raiz = document.getElementById("root");
+          var vazio = !window.__vickeMontou && (!raiz || raiz.childElementCount === 0);
+          if (!vazio) return;
+          var jaTentou;
+          try { jaTentou = sessionStorage.getItem("vicke-recarga-branca"); } catch (e) { jaTentou = "1"; }
+          if (jaTentou) return;
+          try { sessionStorage.setItem("vicke-recarga-branca", String(Date.now())); } catch (e) {}
+          location.reload(true);
+        }, 8000);
+      });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
