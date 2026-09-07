@@ -63,18 +63,20 @@ cabeçalho.
 
 ## Aparência
 
-Tela neutra, no formato do resto do app: fundo branco, bordas finas, sem
-ícone colorido no cabeçalho e sem chip colorido de status. O texto é preto
-(#111827) no que importa — valores, datas, títulos — e cinza escuro
-(#4b5563) no secundário, para ficar legível. A situação da conta é texto,
-não etiqueta: só "Vencida" vem em negrito, que é o que o olho precisa achar
-primeiro. Campo selecionado ganha borda azul (`[data-vk-obra]` + `:focus`),
-igual ao cadastro de cliente.
+Formato neutro, valendo para **todo o módulo do cliente** — tela principal
+(kanban e lista), cadastro do cliente, detalhe do cliente e todas as telas da
+obra, contas a pagar inclusive:
 
-O mesmo formato vale para **todas as telas da obra** — lista de obras,
-cadastro, detalhe, planejamento, contratos, gerador e contas a pagar: fundo
-branco, sem ícone colorido nem etiqueta colorida de status, texto preto no
-que importa e cinza escuro no secundário, seleção marcada por borda preta em
-vez de preenchimento cobre, e borda azul no campo em foco (`data-vk-obra`).
-As únicas cores que restam são o vermelho de "Remover" e o cobre dos links
-de ação, que são o padrão do app inteiro.
+- fundo branco e bordas finas; nada de fundo cobre, âmbar ou verde;
+- sem ícone colorido no cabeçalho e sem etiqueta colorida de status — a
+  situação é texto, e só o que exige atenção ("Vencida", "Será inativado em
+  breve") vem em negrito;
+- texto preto (#111827) no que importa — valores, datas, títulos, campos — e
+  cinza escuro (#4b5563) no secundário;
+- **azul #0474f4** na borda de campo, botão ou cartão em *hover*, em *foco* e
+  quando *selecionado*. É uma folha de estilo única, injetada pelo módulo e
+  escopada por `data-vk-ui`, mais a constante `AZUL_VK` para as bordas de
+  seleção que são estilo inline.
+
+As únicas cores que restam são o vermelho de "Remover" e o cobre dos links de
+ação, que são o padrão do app inteiro.

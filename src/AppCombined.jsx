@@ -15440,12 +15440,15 @@ if (typeof window !== "undefined" && typeof import.meta !== "undefined" && impor
 }
 
 // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
+// Azul de interação: borda do campo/cartão em foco, hover e seleção.
+const AZUL_VK = "#0474f4";
+
 const C = {
   input:    { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 12px", fontSize:13.5, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
   label:    { fontSize:12, color:"#4b5563", fontWeight:600, display:"block", marginBottom:5 },
-  btn:      { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
+  btn:      { background:"#111827", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
   btnSec:   { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-  btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+  btnGhost: { background:"none", border:"none", color:"#6b7280", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
   grid3:    { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
@@ -15616,7 +15619,7 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
   const totalReceber  = lancsCli.filter(r=>r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const fmtV = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
-  const VK = { grafite:"#262421", cobre:"#b5652f", inkSoft:"#78716c" };
+  const VK = { grafite:"#111827", cobre:"#b5652f", inkSoft:"#4b5563" };
   const secTit = { fontSize:11, fontWeight:600, color:VK.cobre, textTransform:"uppercase", letterSpacing:"0.18em", marginBottom:14 };
   const secBtn = () => ({ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", borderBottom:"1px solid rgba(38,36,33,0.08)", padding:"12px 0", cursor:"pointer", fontFamily:"inherit", color:VK.grafite, fontSize:13, fontWeight:600 });
   const card = { border:"1px solid rgba(38,36,33,0.12)", borderRadius:16, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff", boxShadow:"0 4px 16px -10px rgba(38,36,33,0.25)" };
@@ -15633,7 +15636,7 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
         </select>
         <button style={btnSec} onClick={onEditar}>Editar</button>
         <div style={{ flex:1 }} />
-        <button style={{ background:"none", border:"none", color:"#a32e12", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={onRemover}>Remover cliente</button>
+        <button style={{ background:"none", border:"none", color:"#dc2626", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={onRemover}>Remover cliente</button>
       </div>
 
       {/* Dados principais */}
@@ -15679,7 +15682,7 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
                 </div>
                 {ct.whatsapp && ct.telefone && (
                   <a href={waLink(ct.telefone)} target="_blank" rel="noopener noreferrer"
-                    style={{fontSize:12,color:"#fff",textDecoration:"none",background:"#16a34a",border:"1px solid #16a34a",borderRadius:6,padding:"4px 10px",flexShrink:0,fontWeight:600}}>WhatsApp</a>
+                    style={{fontSize:12,color:"#111827",textDecoration:"none",background:"#fff",border:"1.5px solid rgba(38,36,33,0.16)",borderRadius:6,padding:"4px 10px",flexShrink:0,fontWeight:600}}>WhatsApp</a>
                 )}
               </div>
             ))}
@@ -15697,7 +15700,7 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
           <div style={{paddingTop:16}}>
             {lancsCli.length===0?<p style={{color:VK.inkSoft,fontSize:13,margin:0}}>Nenhum lançamento.</p>:(
               <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap:10 }}>
-                {[["Receita total",totalContabil,VK.cobre],["Recebido",totalRecebido,"#16a34a"],["A receber",totalReceber,"#d97706"]].map(([l,v,cor])=>(
+                {[["Receita total",totalContabil,"#111827"],["Recebido",totalRecebido,"#111827"],["A receber",totalReceber,"#111827"]].map(([l,v,cor])=>(
                   <div key={l} style={{border:"1.5px solid rgba(38,36,33,0.14)",borderRadius:14,padding:"14px"}}>
                     <div style={{fontSize:11,color:VK.inkSoft,fontWeight:600,textTransform:"uppercase",letterSpacing:0.5,marginBottom:6}}>{l}</div>
                     <div style={{fontSize:16,fontWeight:700,color:cor}}>{fmtV(v)}</div>
@@ -15767,6 +15770,25 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abrirCadastroNovo]);
 
+
+  // Interação em azul: borda do campo, do botão e do cartão em hover e foco.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.querySelector("style[data-vk-ui-css]")) return;
+    const tag = document.createElement("style");
+    tag.setAttribute("data-vk-ui-css", "1");
+    tag.textContent = `
+      [data-vk-ui="1"] input:hover,
+      [data-vk-ui="1"] select:hover,
+      [data-vk-ui="1"] textarea:hover,
+      [data-vk-ui="1"] button:hover { border-color:${AZUL_VK} !important; }
+      [data-vk-ui="1"] input:focus,
+      [data-vk-ui="1"] select:focus,
+      [data-vk-ui="1"] textarea:focus {
+        border-color:${AZUL_VK} !important; box-shadow:0 0 0 3px rgba(4,116,244,0.18); outline:none;
+      }`;
+    document.head.appendChild(tag);
+  }, []);
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
     complemento:"", bairro:"", cidade:"", estado:"SP",
@@ -15785,9 +15807,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // Proteção: se data ainda não carregou, renderiza loading
   if (!data || !Array.isArray(data.clientes)) {
     return (
-      <div style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
-        <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Clientes</h2>
-        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
+      <div data-vk-ui="1" style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
+        <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Clientes</h2>
+        <div style={{ color:"#6b7280", fontSize:13, marginTop:4 }}>Carregando…</div>
       </div>
     );
   }
@@ -15904,42 +15926,42 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       if (isInativo) {
         if (c.inativadoAutomaticamente && c.inativadoEm) {
           const meses = Math.floor((Date.now() - new Date(c.inativadoEm).getTime()) / (1000 * 60 * 60 * 24 * 30));
-          return <span style={{ color:"#9ca3af" }}>Inativo há {meses} {meses === 1 ? "mês" : "meses"} · automático</span>;
+          return <span style={{ color:"#6b7280" }}>Inativo há {meses} {meses === 1 ? "mês" : "meses"} · automático</span>;
         }
         if (c.inativadoEm) {
-          return <span style={{ color:"#9ca3af" }}>Inativado em {new Date(c.inativadoEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}</span>;
+          return <span style={{ color:"#6b7280" }}>Inativado em {new Date(c.inativadoEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}</span>;
         }
-        return <span style={{ color:"#9ca3af" }}>Inativo</span>;
+        return <span style={{ color:"#6b7280" }}>Inativo</span>;
       }
 
       // Sem atividade: mostra "cliente inativa em X dias"
       if (!status.temAtividade) {
         if (status.inativaEm != null) {
           if (status.inativaEm <= 0) {
-            return <span style={{ color:"#b91c1c" }}>Será inativado em breve</span>;
+            return <span style={{ color:"#111827", fontWeight:600 }}>Será inativado em breve</span>;
           }
           if (status.inativaEm <= 15) {
-            return <span style={{ color:"#b91c1c", fontWeight:500 }}>⚠ Inativa em {status.inativaEm} dias</span>;
+            return <span style={{ color:"#111827", fontWeight:600 }}>Inativa em {status.inativaEm} dias</span>;
           }
           if (status.inativaEm <= 30) {
-            return <span style={{ color:"#b45309" }}>Inativa em {status.inativaEm} dias</span>;
+            return <span style={{ color:"#4b5563" }}>Inativa em {status.inativaEm} dias</span>;
           }
-          return <span style={{ color:"#9ca3af" }}>Sem serviço ativo</span>;
+          return <span style={{ color:"#6b7280" }}>Sem serviço ativo</span>;
         }
-        return <span style={{ color:"#9ca3af" }}>Novo cliente</span>;
+        return <span style={{ color:"#6b7280" }}>Novo cliente</span>;
       }
 
       // Cliente com serviços ativos: renderiza chips
       return status.chips.map((chip, i) => {
-        const corAlerta = chip.alerta === "vermelho" ? "#b91c1c" : chip.alerta === "amarelo" ? "#b45309" : null;
+        const corAlerta = chip.alerta === "vermelho" ? "#111827" : null;
         return (
-          <span key={i} style={{ color:"#374151" }}>
-            {i > 0 && <span style={{ color:"#9ca3af", margin:"0 6px" }}>·</span>}
+          <span key={i} style={{ color:"#111827" }}>
+            {i > 0 && <span style={{ color:"#6b7280", margin:"0 6px" }}>·</span>}
             <span>{chip.tipo}</span>
-            <span style={{ color:"#9ca3af" }}> ({chip.estado})</span>
+            <span style={{ color:"#6b7280" }}> ({chip.estado})</span>
             {chip.info && (
-              <span style={{ color:corAlerta || "#9ca3af", marginLeft:4 }}>
-                {corAlerta === "#b91c1c" ? "⚠ " : ""}{chip.info}
+              <span style={{ color:corAlerta || "#4b5563", marginLeft:4, fontWeight: corAlerta ? 600 : 400 }}>
+                {chip.info}
               </span>
             )}
           </span>
@@ -15959,7 +15981,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
         onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
-          <div style={{ fontSize:13, fontWeight:600, color:"#262421", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          <div style={{ fontSize:13, fontWeight:600, color:"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {c.nome}
           </div>
           <div style={{ fontSize:11.5, lineHeight:1.4, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -15972,12 +15994,12 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               value={colunaDoCliente(c)}
               onChange={e => { e.stopPropagation(); moverCliente(c.id, e.target.value); }}
               onClick={e => e.stopPropagation()}
-              style={{ fontSize:11, color:"#6b7280", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
+              style={{ fontSize:11, color:"#4b5563", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:5, padding:"4px 6px", cursor:"pointer", fontFamily:"inherit" }}>
               {COLUNAS.map(col => <option key={col.key} value={col.key}>{col.label}</option>)}
             </select>
           ) : (
             <button onClick={e=>{e.stopPropagation();openEdit(c);}}
-              style={{ fontSize:11, color:"#9ca3af", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 6px" }}
+              style={{ fontSize:11, color:"#6b7280", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 6px" }}
               title="Editar">⋯</button>
           )}
         </div>
@@ -15998,13 +16020,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       const colAtual = COLUNAS.find(x => x.key === abaKanban) || COLUNAS[0];
       const cardsAba = filtrados.filter(c => colunaDoCliente(c) === abaKanban);
       return (
-        <div style={{ fontFamily:"'Inter', system-ui, -apple-system, sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+        <div data-vk-ui="1" style={{ fontFamily:"'Inter', system-ui, -apple-system, sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
           {/* Header mobile */}
           <div style={{ padding:"16px 16px 0", display:"flex", flexDirection:"column", gap:12 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:17, fontWeight:700, color:"#262421" }}>Clientes</div>
-                <div style={{ fontSize:12, color:"#9ca3af" }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
+                <div style={{ fontSize:17, fontWeight:700, color:"#111827" }}>Clientes</div>
+                <div style={{ fontSize:12, color:"#6b7280" }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
               </div>
               {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
             </div>
@@ -16019,12 +16041,12 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               return (
                 <button key={col.key} onClick={() => setAbaKanban(col.key)}
                   style={{ flexShrink:0, padding:"10px 16px", fontSize:13, fontWeight: ativa ? 700 : 400,
-                    color: ativa ? col.cor : "#6b7280",
-                    background:"transparent", border:"none", borderBottom: ativa ? `2px solid ${col.cor}` : "2px solid transparent",
+                    color: ativa ? "#111827" : "#4b5563",
+                    background:"transparent", border:"none", borderBottom: ativa ? `2px solid ${AZUL_VK}` : "2px solid transparent",
                     cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 }}>
-                  <span style={{ width:7, height:7, borderRadius:"50%", background: ativa ? col.cor : "#d1d5db", display:"inline-block", flexShrink:0 }} />
+                  
                   {col.label}
-                  <span style={{ fontSize:11, background: ativa ? col.cor+"18" : "#f3f4f6", color: ativa ? col.cor : "#9ca3af", borderRadius: 14, padding:"1px 7px", fontWeight:600 }}>{count}</span>
+                  <span style={{ fontSize:11, background:"#f3f4f6", color: ativa ? "#111827" : "#4b5563", borderRadius: 14, padding:"1px 7px", fontWeight:600 }}>{count}</span>
                 </button>
               );
             })}
@@ -16033,7 +16055,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           {/* Cards da aba ativa */}
           <div style={{ flex:1, overflowY:"auto", padding:"12px 16px" }}>
             {cardsAba.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"48px 0", color:"#9ca3af", fontSize:13 }}>
+              <div style={{ textAlign:"center", padding:"48px 0", color:"#6b7280", fontSize:13 }}>
                 <div style={{ fontSize:28, marginBottom:8 }}>—</div>
                 Nenhum cliente em {colAtual.label}
               </div>
@@ -16047,12 +16069,12 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
 
     // ── DESKTOP: kanban 4 colunas ────────────────────────────
     return (
-      <div style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
+      <div data-vk-ui="1" style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", minHeight:"calc(100vh - 53px)", display:"flex", flexDirection:"column" }}>
         {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div>
-            <div style={{ fontSize:18, fontWeight:700, color:"#262421" }}>Clientes</div>
-            <div style={{ fontSize:13, color:"#9ca3af", marginTop:2 }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
+            <div style={{ fontSize:18, fontWeight:700, color:"#111827" }}>Clientes</div>
+            <div style={{ fontSize:13, color:"#6b7280", marginTop:2 }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
@@ -16068,17 +16090,17 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             const isOver = dragOver === col.key;
             return (
               <div key={col.key}
-                style={{ background: isOver ? col.cor+"08" : "#fafafa", border:`1px solid ${isOver ? col.cor : "#f3f4f6"}`, borderRadius: 16, display:"flex", flexDirection:"column", transition:"border-color 0.15s, background 0.15s" }}
+                style={{ background:"#fafafa", border:`1px solid ${isOver ? AZUL_VK : "#f3f4f6"}`, borderRadius: 16, display:"flex", flexDirection:"column", transition:"border-color 0.15s, background 0.15s" }}
                 onDragOver={e => { e.preventDefault(); setDragOver(col.key); }}
                 onDragLeave={() => setDragOver(null)}
                 onDrop={e => { e.preventDefault(); if (dragId) moverCliente(dragId, col.key); setDragId(null); setDragOver(null); }}>
                 {/* Header coluna */}
                 <div style={{ padding:"14px 16px", borderBottom:"1px solid #f3f4f6", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                    <div style={{ width:8, height:8, borderRadius:"50%", background:col.cor }} />
-                    <span style={{ fontSize:13, fontWeight:600, color:"#374151" }}>{col.label}</span>
+                    
+                    <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{col.label}</span>
                   </div>
-                  <span style={{ fontSize:12, color:"#9ca3af", background:"#f3f4f6", borderRadius: 14, padding:"1px 8px" }}>{cards.length}</span>
+                  <span style={{ fontSize:12, color:"#6b7280", background:"#f3f4f6", borderRadius: 14, padding:"1px 8px" }}>{cards.length}</span>
                 </div>
                 {/* Cards */}
                 <div style={{ flex:1, overflowY:"auto", padding:"10px 10px" }}>
@@ -16092,7 +16114,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                     </div>
                   ))}
                   {cards.length === 0 && (
-                    <div style={{ textAlign:"center", padding:"24px 0", color:"#9ca3af", fontSize:12 }}>
+                    <div style={{ textAlign:"center", padding:"24px 0", color:"#6b7280", fontSize:12 }}>
                       Arraste um cliente aqui
                     </div>
                   )}
@@ -16112,9 +16134,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       return !b || c.nome.toLowerCase().includes(b) || (c.cpfCnpj||"").includes(b) || (c.cidade||"").toLowerCase().includes(b);
     }).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     return (
-      <div style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
+      <div data-vk-ui="1" style={{ padding: isMobile ? "16px" : "28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, flexWrap:"wrap", gap:8 }}>
-          <div style={{ fontSize:18, fontWeight:700, color:"#262421" }}>Clientes</div>
+          <div style={{ fontSize:18, fontWeight:700, color:"#111827" }}>Clientes</div>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             <input style={{ ...C.input, width: isMobile ? "100%" : 220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
             {!isMobile && <button style={C.btnSec} onClick={()=>setView("kanban")}>Kanban</button>}
@@ -16134,13 +16156,13 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                 onClick={()=>openDetail(c)}>
                 <div style={{ width:40, height:40, borderRadius: 14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:"#262421" }}>{c.nome}</div>
-                  <div style={{ fontSize:12, color:"#9ca3af" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
+                  <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{c.nome}</div>
+                  <div style={{ fontSize:12, color:"#6b7280" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
-                  <span style={C.tag(col.cor)}>{col.label}</span>
-                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#16a34a", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a>}
-                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#6b7280", background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
+                  <span style={{ fontSize:12, color:"#111827", fontWeight:600 }}>{col.label}</span>
+                  {tel && <a href={waLink(tel)} target="_blank" rel="noopener noreferrer" style={{ fontSize:12, color:"#111827", textDecoration:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px" }}>WA</a>}
+                  <button onClick={()=>openEdit(c)} style={{ fontSize:12, color:"#4b5563", background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontFamily:"inherit" }}>Editar</button>
                 </div>
               </div>
             );
@@ -16160,7 +16182,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const VKD = { fundo:"#fafafb", grafite:"#1a1a1a", cobre:"#1e3a5f", cobreClaro:"#fafafa", inkSoft:"#8a8a8a" };
     const SYS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
     return (
-      <div className="vk-client-detail" style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:SYS_FONT }}>
+      <div className="vk-client-detail" data-vk-ui="1" style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:SYS_FONT }}>
         <style>{`
           .vk-client-detail input:focus, .vk-client-detail select:focus, .vk-client-detail textarea:focus,
           .vk-client-detail button:focus-visible {
@@ -16254,28 +16276,29 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   // seções em uppercase com cor de destaque), mas cores próprias do Vicke.
   const VK = {
     fundo:      "#f5f3f0",
-    grafite:    "#262421",
+    grafite:    "#111827",
     cobre:      "#b5652f",
     cobreClaro: "#fdf6f0",
-    ink:        "#262421",
-    inkSoft:    "#78716c",
+    ink:        "#111827",
+    inkSoft:    "#4b5563",
   };
   const FC = {
-    input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, height:46, padding:"0 14px", fontSize:15, color:VK.ink, outline:"none", background:"#fff", fontFamily:"'Inter', system-ui, sans-serif", width:"100%", boxSizing:"border-box" },
-    label:  { fontSize:10, color:VK.cobre, fontWeight:700, textTransform:"uppercase", letterSpacing:"0.14em", display:"block", marginBottom:6 },
-    secTit: { fontSize:11, fontWeight:600, color:VK.cobre, textTransform:"uppercase", letterSpacing:"0.22em", marginBottom:16 },
+    input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, height:46, padding:"0 14px", fontSize:15, color:"#111827", outline:"none", background:"#fff", fontFamily:"'Inter', system-ui, sans-serif", width:"100%", boxSizing:"border-box" },
+    label:  { fontSize:12, color:"#4b5563", fontWeight:600, display:"block", marginBottom:6 },
+    secTit: { fontSize:12.5, fontWeight:700, color:"#111827", marginBottom:16 },
     btn:    { background:VK.grafite, color:"#fff", border:"none", borderRadius:9, height:48, padding:"0 24px", fontSize:15, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif" },
-    btnSec: { background:"transparent", color:VK.grafite, boxShadow:`inset 0 0 0 1.5px ${VK.cobre}`, border:"none", borderRadius:9, height:42, padding:"0 20px", fontSize:13.5, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif" },
+    btnSec: { background:"#fff", color:"#111827", boxShadow:"inset 0 0 0 1.5px rgba(38,36,33,0.16)", border:"none", borderRadius:9, height:42, padding:"0 20px", fontSize:13.5, fontWeight:600, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif" },
     btnGhost: { background:"none", border:"none", color:VK.inkSoft, cursor:"pointer", fontFamily:"'Inter', system-ui, sans-serif", fontSize:13 },
     divider: { border:"none", borderTop:"1px solid rgba(38,36,33,0.1)", margin:"22px 0" },
   };
   return (
-    <div style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:VK.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
+    <div data-vk-ui="1" style={{ padding: isMobile ? "24px 16px 60px" : "40px 32px", background:VK.fundo, minHeight:"100%", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        .vk-fc-input:focus { border-color:#2a78d6 !important; box-shadow:0 0 0 3px rgba(42,120,214,0.18); outline:none; }
-        .vk-fc-tipo.ativo { border-color:${VK.cobre} !important; background:${VK.cobreClaro} !important; box-shadow:0 0 0 3px rgba(181,101,47,0.16); }
-        .vk-fc-check { accent-color:${VK.cobre}; }
+        .vk-fc-input:hover, .vk-fc-tipo:hover { border-color:#0474f4 !important; }
+        .vk-fc-input:focus { border-color:#0474f4 !important; box-shadow:0 0 0 3px rgba(4,116,244,0.18); outline:none; }
+        .vk-fc-tipo.ativo { border-color:#0474f4 !important; background:#fff !important; box-shadow:0 0 0 2px rgba(4,116,244,0.16); }
+        .vk-fc-check { accent-color:#111827; }
       `}</style>
       <div style={{ maxWidth:640, margin:"0 auto", background:"#fff", borderRadius:16, padding: isMobile ? "22px 18px 26px" : "28px 26px 32px", boxShadow:"0 18px 50px -28px rgba(38,36,33,0.35)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:8 }}>
@@ -16313,7 +16336,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               <input className="vk-fc-input" style={FC.input} value={form.representanteCpf || ""} onChange={e=>setForm({...form,representanteCpf:e.target.value})} placeholder="000.000.000-00" />
             </div>
           </div>
-          <div style={{ fontSize:11.5, color:"#9ca3af", marginBottom:12 }}>Usado no preâmbulo e na assinatura dos contratos gerados.</div>
+          <div style={{ fontSize:11.5, color:"#6b7280", marginBottom:12 }}>Usado no preâmbulo e na assinatura dos contratos gerados.</div>
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
             <input className="vk-fc-check" type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
           </label>
@@ -16350,9 +16373,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                 <label style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
                   <input className="vk-fc-check" type="checkbox" checked={ct.whatsapp} onChange={e=>setForm({...form,contatos:form.contatos.map((x,j)=>j===i?{...x,whatsapp:e.target.checked}:x)})} />
-                  <span style={{color:"#2d7a4f"}}>WhatsApp</span>
+                  <span style={{color:"#111827"}}>WhatsApp</span>
                 </label>
-                {form.contatos.length>1&&<button style={{...FC.btnGhost,color:"#a32e12",fontSize:12}} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
+                {form.contatos.length>1&&<button style={{...FC.btnGhost,color:"#dc2626",fontSize:12}} onClick={()=>setForm({...form,contatos:form.contatos.filter((_,j)=>j!==i)})}>Remover</button>}
               </div>
             </div>
           ))}
@@ -16385,14 +16408,14 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
     <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Projetos</div>
-          <div style={{ fontSize: 12, color: "#6b7280" }}>{orcamentos.length} projeto{orcamentos.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize: 14, fontWeight: 700, color:"#111827" }}>Projetos</div>
+          <div style={{ fontSize: 12, color:"#4b5563" }}>{orcamentos.length} projeto{orcamentos.length !== 1 ? "s" : ""}</div>
         </div>
         <button style={C.btn} onClick={() => onAbrirOrcamento(cliente, null, "novo")}>+ Novo projeto</button>
       </div>
 
       {orcamentos.length === 0 ? (
-        <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+        <div style={{ padding: "20px", textAlign: "center", color:"#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
           Nenhum projeto cadastrado.
         </div>
       ) : (
@@ -16407,9 +16430,9 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
                 onMouseEnter={e => { e.currentTarget.style.borderColor = "#b5652f"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(181,101,47,0.12)"; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
-                  <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <span style={C.tag(sts.cor)}>{sts.label}</span>
+                  <div style={{ fontSize: 13, fontWeight: 600, color:"#111827" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
+                  <div style={{ fontSize: 11, color:"#6b7280", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize:12, color:"#111827", fontWeight:600 }}>{sts.label}</span>
                     {orc.padrao && <span>Padrão: {orc.padrao}</span>}
                   </div>
                 </div>
@@ -16550,21 +16573,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratosLegado.length, obras.length]);
 
-  // Campo selecionado ganha borda azul, como no cadastro de cliente.
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    if (document.querySelector("style[data-vk-obra-css]")) return;
-    const tag = document.createElement("style");
-    tag.setAttribute("data-vk-obra-css", "1");
-    tag.textContent = `
-      [data-vk-obra="1"] input:focus,
-      [data-vk-obra="1"] select:focus,
-      [data-vk-obra="1"] textarea:focus {
-        border-color:#2a78d6 !important; box-shadow:0 0 0 3px rgba(42,120,214,0.18); outline:none;
-      }`;
-    document.head.appendChild(tag);
-  }, []);
-
   // "Gerar PDF" salva, abre o contrato e manda imprimir — só depois que a
   // tela do documento está montada, senão o navegador imprime a tela anterior.
   useEffect(() => {
@@ -16627,7 +16635,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "formContrato" && formContrato && obraSelecionada) {
     return (
-      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("contratosDaObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div><label style={C.label}>Contratado *</label><input style={C.input} value={formContrato.nomeContratado} onChange={e => setFormContrato({ ...formContrato, nomeContratado: e.target.value })} placeholder="Nome da empresa/pessoa" /></div>
@@ -16653,7 +16661,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "form" && formObra) {
     return (
-      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <span style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Gestão de Obra</span>
@@ -16715,7 +16723,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // ── Formulário de item (novo/editar) ──────────────────────
     if (formItemPL) {
       return (
-        <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+        <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
           <button onClick={() => setFormItemPL(null)} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 16 }}>{itensPL.find(i => i.id === formItemPL.id) ? "Editar item" : "Novo item da estimativa"}</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
@@ -16793,7 +16801,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     };
 
     return (
-      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
           <div>
@@ -16818,7 +16826,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
           {[["conta", "Por conta"], ["prestador", "Por prestador"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
-              style={{ border: visaoPL === v ? "1.5px solid #111827" : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
+              style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
             </button>
           ))}
@@ -16896,7 +16904,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const prest = prestadores.find(p => p.id === contratoAberto.prestadorId) || null;
     const obraDoContrato = obras.find(o => o.id === contratoAberto.obraId) || obraSelecionada;
     return (
-      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <div data-vk-noprint="1" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
           <button onClick={() => { setContratoAberto(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, fontSize: 12 }}>← Voltar</button>
           <div style={{ flex: 1 }} />
@@ -16973,7 +16981,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const grade = (cols) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : cols, gap: 12 });
 
     return (
-      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setContratoGerando(null); setNovoPrestador(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Gerar contrato</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 16 }}>{obraSelecionada.nome} · contratante: {cliente.nome}</div>
@@ -17150,7 +17158,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={tituloBloco}>Modalidade de pagamento</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {MODALIDADES_PAGAMENTO.map(mp => (
-              <label key={mp.id} style={{ display: "flex", gap: 8, alignItems: "start", border: `1.5px solid ${modo === mp.id ? "#111827" : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: "#fff" }}>
+              <label key={mp.id} style={{ display: "flex", gap: 8, alignItems: "start", border: `1.5px solid ${modo === mp.id ? AZUL_VK : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: "#fff" }}>
                 <input type="radio" name="ctr-modalidade" checked={modo === mp.id} onChange={() => setG("modalidade", mp.id)} style={{ marginTop: 2, cursor: "pointer" }} />
                 <span>
                   <span style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{mp.nome}</span>
@@ -17323,7 +17331,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     );
 
     return (
-      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setFormConta(null); setView("detalheObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Contas a pagar</div>
@@ -17401,7 +17409,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                             </div>
                           </div>
                           <div style={{ fontSize: 12.5, color: "#111827", minWidth: 96 }}>{c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}</div>
-                          <span style={{ fontSize: 11.5, color: st.forte ? "#262421" : "#9ca3af", fontWeight: st.forte ? 600 : 400, minWidth: 76 }}>{st.label}</span>
+                          <span style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500, minWidth: 80 }}>{st.label}</span>
                           <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", minWidth: 110, textAlign: "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                           {perm.podeEditar && (
                             <div style={{ display: "flex", gap: 6 }}>
@@ -17432,7 +17440,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     return (
-      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
           <div>
@@ -17522,7 +17530,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "detalheObra" && obraSelecionada) {
     return (
-      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { if (onSairDaObra) { onSairDaObra(); return; } setView("lista"); setObraSelecionada(null); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 24 }}>
           <div style={{ flex: 1 }}>
@@ -17535,7 +17543,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         </div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
           <button onClick={() => setView("orcamentoObra")}
-            style={{ border: "1.5px solid #111827", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            style={{ border: `1.5px solid ${AZUL_VK}`, borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Orçamento</div>
             <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Quantitativos da obra</div>
           </button>
@@ -17611,14 +17619,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Lista de obras — view padrão. Sem quadro/container externo: só os
   // cards discretos das obras + um botão redondo de adicionar.
   return (
-    <div data-vk-obra="1">
+    <div data-vk-ui="1">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 12.5, color: "#4b5563" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
         {perm.podeEditar && (
           <button onClick={novaObra} title="Adicionar obra"
-            style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: "#262421", color: "#fff", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
+            style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: "#111827", color: "#fff", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
             onMouseEnter={e => e.currentTarget.style.background = "#b5652f"}
-            onMouseLeave={e => e.currentTarget.style.background = "#262421"}>
+            onMouseLeave={e => e.currentTarget.style.background = "#111827"}>
             +
           </button>
         )}
