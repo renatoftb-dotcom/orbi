@@ -1131,6 +1131,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contratosLegado.length, obras.length]);
 
+  // Campo selecionado ganha borda azul, como no cadastro de cliente.
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (document.querySelector("style[data-vk-obra-css]")) return;
+    const tag = document.createElement("style");
+    tag.setAttribute("data-vk-obra-css", "1");
+    tag.textContent = `
+      [data-vk-obra="1"] input:focus,
+      [data-vk-obra="1"] select:focus,
+      [data-vk-obra="1"] textarea:focus {
+        border-color:#2a78d6 !important; box-shadow:0 0 0 3px rgba(42,120,214,0.18); outline:none;
+      }`;
+    document.head.appendChild(tag);
+  }, []);
+
   // "Gerar PDF" salva, abre o contrato e manda imprimir — só depois que a
   // tela do documento está montada, senão o navegador imprime a tela anterior.
   useEffect(() => {
@@ -1219,7 +1234,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "form" && formObra) {
     return (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("lista")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b" }} />
@@ -1540,7 +1555,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const grade = (cols) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : cols, gap: 12 });
 
     return (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setContratoGerando(null); setNovoPrestador(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", marginBottom: 2 }}>Gerar contrato</div>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>{obraSelecionada.nome} · contratante: {cliente.nome}</div>
@@ -1881,36 +1896,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     grupos.sort((a, b) => (a.avulsa ? 1 : 0) - (b.avulsa ? 1 : 0));
     for (const g of grupos) g.itens.sort((a, b) => String(a.vencimento || "9999").localeCompare(String(b.vencimento || "9999")));
 
-    const tile = (rot, valor, cor, sub) => (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px" }}>
-        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>{rot}</div>
-        <div style={{ fontSize: 17, fontWeight: 700, color: cor }}>{fmtMoedaCtr(valor)}</div>
-        {sub ? <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{sub}</div> : null}
+    const tile = (rot, valor, sub) => (
+      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px", background: "#fff" }}>
+        <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>{rot}</div>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtMoedaCtr(valor)}</div>
+        {sub ? <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>{sub}</div> : null}
       </div>
     );
 
     return (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
+      <div data-vk-obra="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setFormConta(null); setView("detalheObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 18 }}>
-          <div style={{ width: 40, height: 40, borderRadius: 14, background: "#fdf6f0", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, flexShrink: 0 }}>💸</div>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>Contas a pagar</div>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>{obraSelecionada.nome}</div>
-          </div>
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Contas a pagar</div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>{obraSelecionada.nome}</div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
-          {tile("A pagar", t.aberto, "#262421", `${t.qtdAberto} ${t.qtdAberto === 1 ? "conta" : "contas"}`)}
-          {tile("Vencido", t.vencido, t.vencido > 0 ? "#dc2626" : "#9ca3af", `${t.qtdVencido} em atraso`)}
-          {tile("Pago", t.pago, "#10b981", "realizado da obra")}
-          {tile("Total", t.total, "#6b7280", "contratado + avulsas")}
+          {tile("A pagar", t.aberto, `${t.qtdAberto} ${t.qtdAberto === 1 ? "conta" : "contas"}`)}
+          {tile("Vencido", t.vencido, `${t.qtdVencido} em atraso`)}
+          {tile("Pago", t.pago, "realizado da obra")}
+          {tile("Total", t.total, "contratado + avulsas")}
         </div>
 
         {/* Nova conta avulsa */}
         {perm.podeEditar && (formConta ? (
-          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 16, background: "#fdf6f0", borderColor: "#e7d3c2" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 10 }}>{contasDaObra.some(c => c.id === formConta.id) ? "Editar conta" : "Nova conta"}</div>
+          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 16, background: "#fafafa" }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>{contasDaObra.some(c => c.id === formConta.id) ? "Editar conta" : "Nova conta"}</div>
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1fr", gap: 12, marginBottom: 12 }}>
               <div><label style={C.label}>Descrição *</label><input style={C.input} value={formConta.descricao} onChange={e => setFormConta({ ...formConta, descricao: e.target.value })} placeholder="ex.: caçamba de entulho" /></div>
               <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formConta.valor} onChange={v => setFormConta({ ...formConta, valor: v })} style={C.input} placeholder="0,00" /></div>
@@ -1944,7 +1956,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ))}
 
         {lista.length === 0 ? (
-          <div style={{ padding: "20px", textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+          <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
             Nenhuma conta nesta obra. Salvando um contrato, as parcelas dele entram aqui automaticamente.
           </div>
         ) : (
@@ -1954,25 +1966,25 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               return (
                 <div key={g.chave}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: 8, paddingBottom: 6, borderBottom: "1.5px solid rgba(38,36,33,0.14)" }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#262421" }}>{g.avulsa ? "Contas avulsas" : nomeContrato(g.chave)}</div>
-                    <div style={{ fontSize: 11.5, color: "#6b7280" }}>{fmtMoedaCtr(tg.aberto)} em aberto de {fmtMoedaCtr(tg.total)}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{g.avulsa ? "Contas avulsas" : nomeContrato(g.chave)}</div>
+                    <div style={{ fontSize: 12, color: "#4b5563" }}>{fmtMoedaCtr(tg.aberto)} em aberto de {fmtMoedaCtr(tg.total)}</div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     {g.itens.map(c => {
                       const st = SITUACAO_CONTA[situacaoConta(c, hojeIso)] || SITUACAO_CONTA.aberto;
                       return (
-                        <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid rgba(38,36,33,0.10)", borderRadius: 10, padding: "9px 11px", background: c.pago ? "#f6fdf9" : "#fff" }}>
+                        <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid rgba(38,36,33,0.10)", borderRadius: 10, padding: "9px 11px", background: "#fff" }}>
                           <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                            <div style={{ fontSize: 13, color: "#262421", fontWeight: 600 }}>{c.descricao || "—"}{c.estimada ? <span style={{ fontWeight: 400, color: "#9ca3af" }}> · estimada</span> : null}</div>
-                            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+                            <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{c.descricao || "—"}{c.estimada ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · estimada</span> : null}</div>
+                            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>
                               {nomeConta(c.contaId)}
                               {c.prestadorId || c.favorecido ? ` · ${nomePrestador(c.prestadorId) || c.favorecido}` : ""}
                               {c.observacao ? ` · ${c.observacao}` : ""}
                             </div>
                           </div>
-                          <div style={{ fontSize: 12, color: "#6b7280", minWidth: 92 }}>{c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}</div>
-                          <span style={{ ...C.tag(st.cor) }}>{st.label}</span>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: "#262421", minWidth: 110, textAlign: "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
+                          <div style={{ fontSize: 12.5, color: "#111827", minWidth: 96 }}>{c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}</div>
+                          <span style={{ fontSize: 11.5, color: st.forte ? "#262421" : "#9ca3af", fontWeight: st.forte ? 600 : 400, minWidth: 76 }}>{st.label}</span>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", minWidth: 110, textAlign: "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                           {perm.podeEditar && (
                             <div style={{ display: "flex", gap: 6 }}>
                               <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
@@ -1992,7 +2004,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             })}
           </div>
         )}
-        <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 14 }}>
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px 14px", marginTop: 16, background: "#fafafa", fontSize: 12.5, color: "#4b5563", lineHeight: 1.55 }}>
           As parcelas vêm dos contratos salvos e se atualizam quando o contrato muda — o que já foi pago fica como está. O que é pago entra no realizado da obra, ao lado da estimativa do Planejamento.
         </div>
       </div>

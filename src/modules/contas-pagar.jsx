@@ -225,12 +225,14 @@ function situacaoConta(conta, hoje) {
   if (venc <= somarDias(hojeIso, 7)) return "vencendo";
   return "aberto";
 }
+// Rótulos em texto, sem cor — a tela é neutra, como o resto do app. `forte`
+// só marca o que o olho precisa achar primeiro (o que está vencido).
 const SITUACAO_CONTA = {
-  vencido:  { label: "Vencida",     cor: "#dc2626" },
-  vencendo: { label: "Vence em 7d", cor: "#f59e0b" },
-  aberto:   { label: "Em aberto",   cor: "#6b7280" },
-  semData:  { label: "Sem data",    cor: "#9ca3af" },
-  pago:     { label: "Paga",        cor: "#10b981" },
+  vencido:  { label: "Vencida",     forte: true },
+  vencendo: { label: "Vence em 7d", forte: false },
+  aberto:   { label: "Em aberto",   forte: false },
+  semData:  { label: "Sem data",    forte: false },
+  pago:     { label: "Paga",        forte: false },
 };
 function totaisContas(contas, hoje) {
   const r = { total: 0, aberto: 0, vencido: 0, pago: 0, qtdAberto: 0, qtdVencido: 0 };

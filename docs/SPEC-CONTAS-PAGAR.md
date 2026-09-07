@@ -60,3 +60,13 @@ registro do realizado. `realizadoPorConta` e `realizadoPorPrestador` somam o
 que foi pago e alimentam o Planejamento, que mostra "pago R$ x (+/− diferença)"
 ao lado de cada conta e de cada prestador, mais o total "Já pago" no
 cabeçalho.
+
+## Aparência
+
+Tela neutra, no formato do resto do app: fundo branco, bordas finas, sem
+ícone colorido no cabeçalho e sem chip colorido de status. O texto é preto
+(#111827) no que importa — valores, datas, títulos — e cinza escuro
+(#4b5563) no secundário, para ficar legível. A situação da conta é texto,
+não etiqueta: só "Vencida" vem em negrito, que é o que o olho precisa achar
+primeiro. Campo selecionado ganha borda azul (`[data-vk-obra]` + `:focus`),
+igual ao cadastro de cliente.
