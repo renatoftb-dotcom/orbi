@@ -91,7 +91,7 @@ function parcelasAPagar(contrato) {
     const p = parcelasContrato(total, n);
     for (let i = 1; i <= n; i++) {
       linhas.push({
-        n: i,
+        n: i, parcela: i, totalParcelas: n,
         descricao: `Parcela ${i}/${n} (${rotuloPer})`,
         valor: i === n ? p.ultima : p.base,
         vencimento: ancora ? somarDias(ancora, passo * i) : "",
@@ -100,11 +100,11 @@ function parcelasAPagar(contrato) {
   } else if (modo === "entradaParcelas") {
     const n = Math.max(0, Math.floor(Number(c.parcelas) || 0));
     const e = entradaESaldo(total, c.entradaPct, n || 1);
-    if (e.entrada > 0) linhas.push({ n: 1, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
+    if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: n + 1, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
     if (n && e.saldo > 0) {
       for (let i = 1; i <= n; i++) {
         linhas.push({
-          n: linhas.length + 1,
+          n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: n + 1,
           descricao: `Parcela ${i}/${n} (${rotuloPer})`,
           valor: i === n ? e.parcelas.ultima : e.parcelas.base,
           vencimento: ancora ? somarDias(ancora, passo * i) : "",
@@ -121,13 +121,13 @@ function parcelasAPagar(contrato) {
         const v = Number(it.valor) || 0;
         const p1 = Math.floor(v * pct * 100) / 100;
         const nome = it.descricao || `Item ${idx + 1}`;
-        linhas.push({ n: linhas.length + 1, descricao: `${nome} — entrada`, valor: p1, vencimento: "" });
-        linhas.push({ n: linhas.length + 1, descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100, vencimento: "" });
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2, descricao: `${nome} — entrada`, valor: p1, vencimento: "" });
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2, descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100, vencimento: "" });
       });
     } else {
       const e = entradaESaldo(total, c.entradaPct, 1);
-      if (e.entrada > 0) linhas.push({ n: 1, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
-      if (e.saldo > 0) linhas.push({ n: linhas.length + 1, descricao: "Saldo na conclusão", valor: e.saldo, vencimento: vencimentoFinal(c) });
+      if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: 2, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
+      if (e.saldo > 0) linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: 2, descricao: "Saldo na conclusão", valor: e.saldo, vencimento: vencimentoFinal(c) });
     }
   } else if (modo === "medicao") {
     // uma medição por período dentro do prazo, com valor estimado
@@ -138,7 +138,7 @@ function parcelasAPagar(contrato) {
     const prazoPag = Math.max(0, Math.floor(Number(c.medicaoPrazoDias) || 0));
     for (let i = 1; i <= n; i++) {
       linhas.push({
-        n: i,
+        n: i, parcela: i, totalParcelas: n,
         descricao: `Medição ${i}/${n} (estimada)`,
         valor: i === n ? p.ultima : p.base,
         vencimento: ancora ? somarDias(ancora, perMed * i + prazoPag) : "",
@@ -169,12 +169,16 @@ function vencimentoFinal(c) {
 // ── Contas geradas pelo contrato ────────────────────────────────
 function contasDoContrato(contrato) {
   const c = contrato || {};
+  const servico = typeof servicoDoContrato === "function" ? servicoDoContrato(c) : "Serviços";
   return parcelasAPagar(c).map((p, idx) => ({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
     contratoId: c.id,
+    numeroContrato: c.numeroContrato || "",
+    servico,
     obraId: c.obraId,
-    parcela: idx + 1,
+    parcela: p.parcela || idx + 1,
+    totalParcelas: p.totalParcelas || 0,
     contaId: contaDoTipo(c.tipoProfissional),
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
@@ -276,4 +280,97 @@ function contaAvulsaVazia(obraId) {
     vencimento: dataParaIso(new Date()),
     pago: false, pagoEm: "", valorPago: "", observacao: "",
   };
+}
+
+// ── Identificação da conta ──────────────────────────────────────
+// "Contrato 0007 · Serralheria · MB Viezzer · Parcela 2/6"
+function tituloConta(conta) {
+  const c = conta || {};
+  const partes = [];
+  if (c.numeroContrato) partes.push(`Contrato ${c.numeroContrato}`);
+  if (c.servico) partes.push(c.servico);
+  if (c.favorecido) partes.push(c.favorecido);
+  if (c.parcela && c.totalParcelas) partes.push(`Parcela ${c.parcela}/${c.totalParcelas}`);
+  else if (c.descricao) partes.push(c.descricao);
+  return partes.join(" · ") || (c.descricao || "—");
+}
+// Linha de apoio: o que a parcela é, sem repetir o que o título já diz.
+function detalheConta(conta) {
+  const c = conta || {};
+  const d = String(c.descricao || "");
+  if (c.origem !== "contrato") return d;
+  // "Parcela 2/6 (mensal)" → "mensal"; "Medição 1/3 (estimada)" → "estimada"
+  const m = /^(?:Parcela|Medição) \d+\/\d+ \((.+)\)$/.exec(d);
+  if (m) return m[1];
+  return c.parcela && c.totalParcelas && /^Parcela \d+\/\d+$/.test(d) ? "" : d;
+}
+
+// ── Visões ──────────────────────────────────────────────────────
+const VISOES_CONTAS = [
+  { id: "mes", nome: "Mês" },
+  { id: "ano", nome: "Ano" },
+  { id: "fornecedor", nome: "Fornecedor" },
+  { id: "contrato", nome: "Contrato" },
+];
+const FILTROS_CONTAS = [
+  { id: "todas", nome: "Todas" },
+  { id: "aPagar", nome: "A pagar" },
+  { id: "vencidas", nome: "Vencidas" },
+  { id: "pagas", nome: "Pagas" },
+];
+function filtrarContas(contas, filtro, hoje) {
+  const lista = contas || [];
+  if (filtro === "pagas") return lista.filter((c) => c.pago);
+  if (filtro === "aPagar") return lista.filter((c) => !c.pago);
+  if (filtro === "vencidas") return lista.filter((c) => situacaoConta(c, hoje) === "vencido");
+  return lista;
+}
+const MESES_CP = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+function rotuloMes(chave) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(chave || ""));
+  if (!m) return "Sem vencimento";
+  const nome = MESES_CP[Number(m[2]) - 1] || "";
+  return `${nome.charAt(0).toUpperCase()}${nome.slice(1)} de ${m[1]}`;
+}
+// Agrupa as contas conforme a visão escolhida. Devolve sempre
+// [{ chave, titulo, itens, totais }], em ordem de leitura.
+function agruparContas(contas, visao, ctx) {
+  const lista = contas || [];
+  const c = ctx || {};
+  const hoje = c.hoje;
+  const semData = "__sem_data__";
+  const chaveDe = (x) => {
+    if (visao === "mes") return x.vencimento ? String(x.vencimento).slice(0, 7) : semData;
+    if (visao === "ano") return x.vencimento ? String(x.vencimento).slice(0, 4) : semData;
+    if (visao === "fornecedor") return x.prestadorId || x.favorecido || semData;
+    return x.contratoId || semData;
+  };
+  const tituloDe = (chave, itens) => {
+    if (chave === semData) {
+      return visao === "fornecedor" ? "Sem fornecedor" : visao === "contrato" ? "Contas avulsas" : "Sem vencimento";
+    }
+    if (visao === "mes") return rotuloMes(chave);
+    if (visao === "ano") return chave;
+    if (visao === "fornecedor") return (c.nomePrestador && c.nomePrestador(chave)) || itens[0].favorecido || "Fornecedor";
+    return (c.nomeContrato && c.nomeContrato(chave)) || "Contrato";
+  };
+  const mapa = new Map();
+  for (const x of lista) {
+    const k = chaveDe(x);
+    if (!mapa.has(k)) mapa.set(k, []);
+    mapa.get(k).push(x);
+  }
+  const grupos = [...mapa.entries()].map(([chave, itens]) => {
+    itens.sort((a, b) => String(a.vencimento || "9999-99-99").localeCompare(String(b.vencimento || "9999-99-99")));
+    return { chave, titulo: tituloDe(chave, itens), itens, totais: totaisContas(itens, hoje) };
+  });
+  // por data, em ordem cronológica; por nome, do maior valor para o menor
+  grupos.sort((a, b) => {
+    if (a.chave === semData) return 1;
+    if (b.chave === semData) return -1;
+    if (visao === "mes" || visao === "ano") return a.chave.localeCompare(b.chave);
+    return b.totais.total - a.totais.total;
+  });
+  return grupos;
 }

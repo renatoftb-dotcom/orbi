@@ -14513,6 +14513,25 @@ function opcaoAtiva(c, id) {
   return op ? opcaoPadrao(op, o.modelo) : false;
 }
 
+// Número do contrato — sequencial, único no escritório, com 4 dígitos. É o
+// que identifica o contrato nas contas a pagar ("Contrato 0007").
+function proximoNumeroContrato(obras) {
+  let maior = 0;
+  for (const o of obras || []) {
+    for (const c of (o && o.contratos) || []) {
+      const n = parseInt(String((c && c.numeroContrato) || "").replace(/\D/g, ""), 10);
+      if (Number.isFinite(n) && n > maior) maior = n;
+    }
+  }
+  return String(maior + 1).padStart(4, "0");
+}
+// Rótulo do serviço contratado: o ofício do prestador, ou o objeto digitado.
+function servicoDoContrato(c) {
+  const t = tipoProfissional(c && c.tipoProfissional);
+  if (t && t.servico) return tituloServicoCtr(t.servico);
+  return String((c && c.objeto) || "").trim() || "Serviços";
+}
+
 // Grava a fatia de um cliente (suas obras, seus contratos) de volta na coleção
 // inteira, preservando os registros dos demais clientes. Sem isso, salvar um
 // contrato apagava os contratos de todos os outros clientes.
@@ -14571,6 +14590,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     gerado: true,
     modelo: m.id,
     tipoProfissional: t ? t.id : "",
+    numeroContrato: "",
     escopoFornecimento: esc.id,
     prestadorId: "",
     nomeContratado: "",
@@ -14942,6 +14962,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     titulo: "CONTRATO DE PRESTAÇÃO DE SERVIÇOS",
     subtitulo: objetoTexto,
     nomeDoContrato,
+    numeroContrato: c.numeroContrato || "",
     escopoFornecimento: escId,
     preambulo, clausulas, tabelaItens, tabelaParcelas,
     anexo,
@@ -15074,6 +15095,7 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
   return (
     <div style={CTR_S.doc} data-vk-contrato="1" ref={alvo}>
       <h1 style={CTR_S.h1}>{(d.nomeDoContrato || d.titulo).toUpperCase()}</h1>
+      {d.numeroContrato ? <div style={{ ...CTR_S.h2, margin: "2px 0 0" }}>{`Contrato nº ${d.numeroContrato}`}</div> : null}
       <div style={CTR_S.h2}>{d.subtitulo}</div>
       {d.preambulo.map((t, i) => <p key={i} style={CTR_S.p}>{t}</p>)}
       {d.clausulas.map((cl, i) => (
@@ -15225,7 +15247,7 @@ function parcelasAPagar(contrato) {
     const p = parcelasContrato(total, n);
     for (let i = 1; i <= n; i++) {
       linhas.push({
-        n: i,
+        n: i, parcela: i, totalParcelas: n,
         descricao: `Parcela ${i}/${n} (${rotuloPer})`,
         valor: i === n ? p.ultima : p.base,
         vencimento: ancora ? somarDias(ancora, passo * i) : "",
@@ -15234,11 +15256,11 @@ function parcelasAPagar(contrato) {
   } else if (modo === "entradaParcelas") {
     const n = Math.max(0, Math.floor(Number(c.parcelas) || 0));
     const e = entradaESaldo(total, c.entradaPct, n || 1);
-    if (e.entrada > 0) linhas.push({ n: 1, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
+    if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: n + 1, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
     if (n && e.saldo > 0) {
       for (let i = 1; i <= n; i++) {
         linhas.push({
-          n: linhas.length + 1,
+          n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: n + 1,
           descricao: `Parcela ${i}/${n} (${rotuloPer})`,
           valor: i === n ? e.parcelas.ultima : e.parcelas.base,
           vencimento: ancora ? somarDias(ancora, passo * i) : "",
@@ -15255,13 +15277,13 @@ function parcelasAPagar(contrato) {
         const v = Number(it.valor) || 0;
         const p1 = Math.floor(v * pct * 100) / 100;
         const nome = it.descricao || `Item ${idx + 1}`;
-        linhas.push({ n: linhas.length + 1, descricao: `${nome} — entrada`, valor: p1, vencimento: "" });
-        linhas.push({ n: linhas.length + 1, descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100, vencimento: "" });
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2, descricao: `${nome} — entrada`, valor: p1, vencimento: "" });
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2, descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100, vencimento: "" });
       });
     } else {
       const e = entradaESaldo(total, c.entradaPct, 1);
-      if (e.entrada > 0) linhas.push({ n: 1, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
-      if (e.saldo > 0) linhas.push({ n: linhas.length + 1, descricao: "Saldo na conclusão", valor: e.saldo, vencimento: vencimentoFinal(c) });
+      if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: 2, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
+      if (e.saldo > 0) linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: 2, descricao: "Saldo na conclusão", valor: e.saldo, vencimento: vencimentoFinal(c) });
     }
   } else if (modo === "medicao") {
     // uma medição por período dentro do prazo, com valor estimado
@@ -15272,7 +15294,7 @@ function parcelasAPagar(contrato) {
     const prazoPag = Math.max(0, Math.floor(Number(c.medicaoPrazoDias) || 0));
     for (let i = 1; i <= n; i++) {
       linhas.push({
-        n: i,
+        n: i, parcela: i, totalParcelas: n,
         descricao: `Medição ${i}/${n} (estimada)`,
         valor: i === n ? p.ultima : p.base,
         vencimento: ancora ? somarDias(ancora, perMed * i + prazoPag) : "",
@@ -15303,12 +15325,16 @@ function vencimentoFinal(c) {
 // ── Contas geradas pelo contrato ────────────────────────────────
 function contasDoContrato(contrato) {
   const c = contrato || {};
+  const servico = typeof servicoDoContrato === "function" ? servicoDoContrato(c) : "Serviços";
   return parcelasAPagar(c).map((p, idx) => ({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
     contratoId: c.id,
+    numeroContrato: c.numeroContrato || "",
+    servico,
     obraId: c.obraId,
-    parcela: idx + 1,
+    parcela: p.parcela || idx + 1,
+    totalParcelas: p.totalParcelas || 0,
     contaId: contaDoTipo(c.tipoProfissional),
     prestadorId: c.prestadorId || "",
     favorecido: c.nomeContratado || "",
@@ -15410,6 +15436,99 @@ function contaAvulsaVazia(obraId) {
     vencimento: dataParaIso(new Date()),
     pago: false, pagoEm: "", valorPago: "", observacao: "",
   };
+}
+
+// ── Identificação da conta ──────────────────────────────────────
+// "Contrato 0007 · Serralheria · MB Viezzer · Parcela 2/6"
+function tituloConta(conta) {
+  const c = conta || {};
+  const partes = [];
+  if (c.numeroContrato) partes.push(`Contrato ${c.numeroContrato}`);
+  if (c.servico) partes.push(c.servico);
+  if (c.favorecido) partes.push(c.favorecido);
+  if (c.parcela && c.totalParcelas) partes.push(`Parcela ${c.parcela}/${c.totalParcelas}`);
+  else if (c.descricao) partes.push(c.descricao);
+  return partes.join(" · ") || (c.descricao || "—");
+}
+// Linha de apoio: o que a parcela é, sem repetir o que o título já diz.
+function detalheConta(conta) {
+  const c = conta || {};
+  const d = String(c.descricao || "");
+  if (c.origem !== "contrato") return d;
+  // "Parcela 2/6 (mensal)" → "mensal"; "Medição 1/3 (estimada)" → "estimada"
+  const m = /^(?:Parcela|Medição) \d+\/\d+ \((.+)\)$/.exec(d);
+  if (m) return m[1];
+  return c.parcela && c.totalParcelas && /^Parcela \d+\/\d+$/.test(d) ? "" : d;
+}
+
+// ── Visões ──────────────────────────────────────────────────────
+const VISOES_CONTAS = [
+  { id: "mes", nome: "Mês" },
+  { id: "ano", nome: "Ano" },
+  { id: "fornecedor", nome: "Fornecedor" },
+  { id: "contrato", nome: "Contrato" },
+];
+const FILTROS_CONTAS = [
+  { id: "todas", nome: "Todas" },
+  { id: "aPagar", nome: "A pagar" },
+  { id: "vencidas", nome: "Vencidas" },
+  { id: "pagas", nome: "Pagas" },
+];
+function filtrarContas(contas, filtro, hoje) {
+  const lista = contas || [];
+  if (filtro === "pagas") return lista.filter((c) => c.pago);
+  if (filtro === "aPagar") return lista.filter((c) => !c.pago);
+  if (filtro === "vencidas") return lista.filter((c) => situacaoConta(c, hoje) === "vencido");
+  return lista;
+}
+const MESES_CP = ["janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+function rotuloMes(chave) {
+  const m = /^(\d{4})-(\d{2})$/.exec(String(chave || ""));
+  if (!m) return "Sem vencimento";
+  const nome = MESES_CP[Number(m[2]) - 1] || "";
+  return `${nome.charAt(0).toUpperCase()}${nome.slice(1)} de ${m[1]}`;
+}
+// Agrupa as contas conforme a visão escolhida. Devolve sempre
+// [{ chave, titulo, itens, totais }], em ordem de leitura.
+function agruparContas(contas, visao, ctx) {
+  const lista = contas || [];
+  const c = ctx || {};
+  const hoje = c.hoje;
+  const semData = "__sem_data__";
+  const chaveDe = (x) => {
+    if (visao === "mes") return x.vencimento ? String(x.vencimento).slice(0, 7) : semData;
+    if (visao === "ano") return x.vencimento ? String(x.vencimento).slice(0, 4) : semData;
+    if (visao === "fornecedor") return x.prestadorId || x.favorecido || semData;
+    return x.contratoId || semData;
+  };
+  const tituloDe = (chave, itens) => {
+    if (chave === semData) {
+      return visao === "fornecedor" ? "Sem fornecedor" : visao === "contrato" ? "Contas avulsas" : "Sem vencimento";
+    }
+    if (visao === "mes") return rotuloMes(chave);
+    if (visao === "ano") return chave;
+    if (visao === "fornecedor") return (c.nomePrestador && c.nomePrestador(chave)) || itens[0].favorecido || "Fornecedor";
+    return (c.nomeContrato && c.nomeContrato(chave)) || "Contrato";
+  };
+  const mapa = new Map();
+  for (const x of lista) {
+    const k = chaveDe(x);
+    if (!mapa.has(k)) mapa.set(k, []);
+    mapa.get(k).push(x);
+  }
+  const grupos = [...mapa.entries()].map(([chave, itens]) => {
+    itens.sort((a, b) => String(a.vencimento || "9999-99-99").localeCompare(String(b.vencimento || "9999-99-99")));
+    return { chave, titulo: tituloDe(chave, itens), itens, totais: totaisContas(itens, hoje) };
+  });
+  // por data, em ordem cronológica; por nome, do maior valor para o menor
+  grupos.sort((a, b) => {
+    if (a.chave === semData) return 1;
+    if (b.chave === semData) return -1;
+    if (visao === "mes" || visao === "ano") return a.chave.localeCompare(b.chave);
+    return b.totais.total - a.totais.total;
+  });
+  return grupos;
 }
 
 
@@ -16467,6 +16586,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contratoSalvoEm, setContratoSalvoEm] = useState(0);
   // Contas a pagar: formulário da conta avulsa em edição.
   const [formConta, setFormConta] = useState(null);
+  // Contas a pagar: como agrupar, o que mostrar e quais grupos estão fechados.
+  const [visaoContas, setVisaoContas] = useState("mes");
+  const [filtroContas, setFiltroContas] = useState("todas");
+  const [gruposFechados, setGruposFechados] = useState({});
   const [imprimirAoAbrir, setImprimirAoAbrir] = useState(false);
   const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
@@ -16946,6 +17069,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       if (!g.tipoProfissional) { dialogo.alertar({ titulo: "Escolha o tipo de profissional", mensagem: "O contrato começa pelo tipo de profissional — é ele que define o regime e o objeto.", tipo: "aviso" }); return null; }
       if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado, cadastre um novo ou digite o nome do contratado.", tipo: "aviso" }); return null; }
       const novo = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total,
+        // número sequencial atribuído na primeira gravação e mantido depois
+        numeroContrato: g.numeroContrato || proximoNumeroContrato(data.obras || []),
         geradoEm: g.geradoEm || new Date().toISOString(), atualizadoEm: new Date().toISOString() };
       const existe = contratos.some(c => c.id === novo.id);
       const listaContratos = existe ? contratos.map(c => c.id === novo.id ? novo : c) : [...contratos, novo];
@@ -17304,48 +17429,62 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   // ── Contas a pagar da obra ───────────────────────────────────
   if (view === "contasPagar" && obraSelecionada) {
-    const lista = contasDaObra;
-    const t = totaisContas(lista, hojeIso);
     const nomePrestador = (id) => (prestadores.find(p => p.id === id) || {}).nome || "";
     const nomeConta = (id) => (PLANO_CONTAS.find(c => c.id === id) || {}).nome || "—";
     const nomeContrato = (id) => {
       const ct = contratos.find(c => c.id === id);
       if (!ct) return "Contrato removido";
-      const tp = tipoProfissional(ct.tipoProfissional);
-      return `${ct.nomeContratado || "Contratado"}${tp ? ` · ${tp.nome}` : ""}`;
+      return `${ct.numeroContrato ? `Contrato ${ct.numeroContrato} · ` : ""}${servicoDoContrato(ct)} · ${ct.nomeContratado || "Contratado"}`;
     };
-    // agrupa por contrato, deixando as avulsas por último
-    const grupos = [];
-    for (const c of lista) {
-      const chave = c.origem === "contrato" ? c.contratoId : "__avulsas__";
-      let g = grupos.find(x => x.chave === chave);
-      if (!g) { g = { chave, avulsa: chave === "__avulsas__", itens: [] }; grupos.push(g); }
-      g.itens.push(c);
-    }
-    grupos.sort((a, b) => (a.avulsa ? 1 : 0) - (b.avulsa ? 1 : 0));
-    for (const g of grupos) g.itens.sort((a, b) => String(a.vencimento || "9999").localeCompare(String(b.vencimento || "9999")));
+    const t = totaisContas(contasDaObra, hojeIso);
+    const lista = filtrarContas(contasDaObra, filtroContas, hojeIso);
+    const grupos = agruparContas(lista, visaoContas, { hoje: hojeIso, nomePrestador, nomeContrato });
+    const mesAtual = hojeIso.slice(0, 7);
+    const abertoPadrao = (g) => (visaoContas === "mes" ? g.chave >= mesAtual : true);
+    const fechado = (g) => (gruposFechados[`${visaoContas}:${g.chave}`] ?? !abertoPadrao(g));
+    const alternarGrupo = (g) => setGruposFechados({ ...gruposFechados, [`${visaoContas}:${g.chave}`]: !fechado(g) });
 
     const tile = (rot, valor, sub) => (
       <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px", background: "#fff" }}>
         <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>{rot}</div>
         <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtMoedaCtr(valor)}</div>
-        {sub ? <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 3 }}>{sub}</div> : null}
+        {sub ? <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>{sub}</div> : null}
       </div>
     );
+    const chip = (ativo, texto, onClick) => (
+      <button key={texto} type="button" onClick={onClick}
+        style={{ border: `1.5px solid ${ativo ? AZUL_VK : "rgba(38,36,33,0.16)"}`, background: "#fff",
+          color: ativo ? AZUL_VK : "#4b5563", borderRadius: 20, padding: "6px 14px", fontSize: 12.5,
+          fontWeight: ativo ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
+        {texto}
+      </button>
+    );
+    // grade das colunas — a mesma no cabeçalho e nas linhas
+    const COLS = isMobile ? "1fr" : "1fr 104px 96px 116px 150px";
 
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setFormConta(null); setView("detalheObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Contas a pagar</div>
-          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.nome}</div>
+          <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.nome}</div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
           {tile("A pagar", t.aberto, `${t.qtdAberto} ${t.qtdAberto === 1 ? "conta" : "contas"}`)}
           {tile("Vencido", t.vencido, `${t.qtdVencido} em atraso`)}
           {tile("Pago", t.pago, "realizado da obra")}
           {tile("Total", t.total, "contratado + avulsas")}
+        </div>
+
+        {/* Visões e filtros */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+          <span style={{ fontSize: 11.5, color: "#6b7280", marginRight: 2 }}>Agrupar por</span>
+          {VISOES_CONTAS.map(v => chip(visaoContas === v.id, v.nome, () => setVisaoContas(v.id)))}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
+          <span style={{ fontSize: 11.5, color: "#6b7280", marginRight: 2 }}>Mostrar</span>
+          {FILTROS_CONTAS.map(f => chip(filtroContas === f.id, f.nome, () => setFiltroContas(f.id)))}
         </div>
 
         {/* Nova conta avulsa */}
@@ -17384,54 +17523,82 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <button style={{ ...C.btnSec, marginBottom: 16 }} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
         ))}
 
-        {lista.length === 0 ? (
-          <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+        {contasDaObra.length === 0 ? (
+          <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
             Nenhuma conta nesta obra. Salvando um contrato, as parcelas dele entram aqui automaticamente.
           </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            {grupos.map(g => {
-              const tg = totaisContas(g.itens, hojeIso);
-              return (
-                <div key={g.chave}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10, marginBottom: 8, paddingBottom: 6, borderBottom: "1.5px solid rgba(38,36,33,0.14)" }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{g.avulsa ? "Contas avulsas" : nomeContrato(g.chave)}</div>
-                    <div style={{ fontSize: 12, color: "#4b5563" }}>{fmtMoedaCtr(tg.aberto)} em aberto de {fmtMoedaCtr(tg.total)}</div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {g.itens.map(c => {
-                      const st = SITUACAO_CONTA[situacaoConta(c, hojeIso)] || SITUACAO_CONTA.aberto;
-                      return (
-                        <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", border: "1px solid rgba(38,36,33,0.10)", borderRadius: 10, padding: "9px 11px", background: "#fff" }}>
-                          <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                            <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{c.descricao || "—"}{c.estimada ? <span style={{ fontWeight: 400, color: "#4b5563" }}> · estimada</span> : null}</div>
-                            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 3 }}>
-                              {nomeConta(c.contaId)}
-                              {c.prestadorId || c.favorecido ? ` · ${nomePrestador(c.prestadorId) || c.favorecido}` : ""}
-                              {c.observacao ? ` · ${c.observacao}` : ""}
-                            </div>
-                          </div>
-                          <div style={{ fontSize: 12.5, color: "#111827", minWidth: 96 }}>{c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}</div>
-                          <span style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500, minWidth: 80 }}>{st.label}</span>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", minWidth: 110, textAlign: "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
-                          {perm.podeEditar && (
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
-                              {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
-                              {c.origem === "avulsa" && (
-                                <button onClick={() => { dialogo.confirmar({ titulo: "Remover conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); }}
-                                  style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
+        ) : grupos.length === 0 ? (
+          <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+            Nenhuma conta nesta visão.
           </div>
+        ) : (
+          <>
+            {/* Cabeçalho das colunas */}
+            {!isMobile && (
+              <div style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, padding: "0 11px 6px", borderBottom: "1.5px solid rgba(38,36,33,0.14)", fontSize: 11.5, color: "#4b5563", fontWeight: 600 }}>
+                <div>Documento</div>
+                <div>Vencimento</div>
+                <div>Status</div>
+                <div style={{ textAlign: "right" }}>Valor</div>
+                <div />
+              </div>
+            )}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
+              {grupos.map(g => {
+                const oculto = fechado(g);
+                return (
+                  <div key={g.chave} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
+                    <button type="button" onClick={() => alternarGrupo(g)}
+                      style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap",
+                        background: "#fafafa", border: "none", borderBottom: oculto ? "none" : "1px solid rgba(38,36,33,0.10)",
+                        padding: "10px 12px", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>
+                        <span style={{ display: "inline-block", width: 12, color: "#6b7280", fontSize: 10 }}>{oculto ? "▶" : "▼"}</span>
+                        {g.titulo}
+                      </span>
+                      <span style={{ fontSize: 12, color: "#4b5563" }}>
+                        {g.itens.length} {g.itens.length === 1 ? "conta" : "contas"}
+                        {g.totais.aberto > 0 ? ` · ${fmtMoedaCtr(g.totais.aberto)} em aberto` : " · tudo pago"}
+                        {g.totais.vencido > 0 ? ` · ${fmtMoedaCtr(g.totais.vencido)} vencido` : ""}
+                      </span>
+                    </button>
+                    {!oculto && (
+                      <div>
+                        {g.itens.map(c => {
+                          const st = SITUACAO_CONTA[situacaoConta(c, hojeIso)] || SITUACAO_CONTA.aberto;
+                          const detalhe = detalheConta(c);
+                          return (
+                            <div key={c.id} style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center",
+                              padding: "9px 11px", borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{tituloConta(c)}{c.estimada ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · estimada</span> : null}</div>
+                                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
+                                  {[detalhe, nomeConta(c.contaId), c.observacao].filter(Boolean).join(" · ")}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: 12.5, color: "#111827" }}>{c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}</div>
+                              <div style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500 }}>{st.label}</div>
+                              <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
+                              {perm.podeEditar ? (
+                                <div style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                  <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
+                                  {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
+                                  {c.origem === "avulsa" && (
+                                    <button onClick={() => { dialogo.confirmar({ titulo: "Remover conta?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) gravarContas(contasDaObra.filter(x => x.id !== c.id)); }); }}
+                                      style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
+                                  )}
+                                </div>
+                              ) : <div />}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
         <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px 14px", marginTop: 16, background: "#fafafa", fontSize: 12.5, color: "#4b5563", lineHeight: 1.55 }}>
           As parcelas vêm dos contratos salvos e se atualizam quando o contrato muda — o que já foi pago fica como está. O que é pago entra no realizado da obra, ao lado da estimativa do Planejamento.
@@ -17463,7 +17630,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               return (
                 <div key={contrato.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{contrato.nomeContratado}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>
+                      {contrato.numeroContrato ? <span style={{ color: "#4b5563", fontWeight: 500 }}>{`Contrato ${contrato.numeroContrato} · `}</span> : null}
+                      {contrato.nomeContratado}
+                    </div>
                     <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 12, color: "#111827", fontWeight: 600 }}>{sts.label}</span>
                       {tipoProfissional(contrato.tipoProfissional) && <span>{tipoProfissional(contrato.tipoProfissional).nome}</span>}

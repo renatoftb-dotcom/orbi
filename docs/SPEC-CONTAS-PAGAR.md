@@ -50,6 +50,40 @@ gestão de obra → `mo_diversos` —, o prestador e o nome do favorecido.
 Remover o contrato (`removerContasDoContrato`) leva junto o que está em
 aberto e mantém o que foi pago.
 
+## Número do contrato
+
+Ao salvar um contrato pela primeira vez ele recebe um **número sequencial de
+4 dígitos**, único no escritório (`proximoNumeroContrato` varre os contratos
+de todas as obras e soma 1 ao maior). O número nunca muda depois, aparece no
+topo do documento ("Contrato nº 0007"), na lista de contratos da obra e em
+cada conta a pagar.
+
+## Como a conta se identifica
+
+`tituloConta` monta a linha principal:
+
+> **Contrato 0007 · Serralheria · MB Viezzer · Parcela 2/6**
+
+— número do contrato, serviço (o ofício do prestador, ou o objeto digitado),
+empresa contratada e a parcela no total. `detalheConta` cuida da linha de
+apoio (periodicidade, conta do plano de contas, observação) sem repetir o que
+o título já disse.
+
+## A tela: fluxo agrupado
+
+A lista não é mais fatura atrás de fatura. Há um cabeçalho de colunas
+(**Documento · Vencimento · Status · Valor**) e as contas vêm agrupadas, cada
+grupo com o total em aberto e o vencido, podendo abrir e fechar. Os meses a
+partir do atual já vêm abertos.
+
+- **Agrupar por** (`VISOES_CONTAS`): Mês · Ano · Fornecedor · Contrato. Mês e
+  ano saem em ordem cronológica; fornecedor e contrato, do maior valor para o
+  menor. O que não tem vencimento (ou fornecedor) fecha a lista.
+- **Mostrar** (`FILTROS_CONTAS`): Todas · A pagar · Vencidas · Pagas.
+
+Os quatro totais do topo (a pagar, vencido, pago, total) somam sempre a obra
+inteira, independentemente do filtro.
+
 ## Situação e realizado
 
 `situacaoConta` classifica em vencida, vence em 7 dias, em aberto, sem data

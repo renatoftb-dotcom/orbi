@@ -315,6 +315,25 @@ function opcaoAtiva(c, id) {
   return op ? opcaoPadrao(op, o.modelo) : false;
 }
 
+// Número do contrato — sequencial, único no escritório, com 4 dígitos. É o
+// que identifica o contrato nas contas a pagar ("Contrato 0007").
+function proximoNumeroContrato(obras) {
+  let maior = 0;
+  for (const o of obras || []) {
+    for (const c of (o && o.contratos) || []) {
+      const n = parseInt(String((c && c.numeroContrato) || "").replace(/\D/g, ""), 10);
+      if (Number.isFinite(n) && n > maior) maior = n;
+    }
+  }
+  return String(maior + 1).padStart(4, "0");
+}
+// Rótulo do serviço contratado: o ofício do prestador, ou o objeto digitado.
+function servicoDoContrato(c) {
+  const t = tipoProfissional(c && c.tipoProfissional);
+  if (t && t.servico) return tituloServicoCtr(t.servico);
+  return String((c && c.objeto) || "").trim() || "Serviços";
+}
+
 // Grava a fatia de um cliente (suas obras, seus contratos) de volta na coleção
 // inteira, preservando os registros dos demais clientes. Sem isso, salvar um
 // contrato apagava os contratos de todos os outros clientes.
@@ -373,6 +392,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     gerado: true,
     modelo: m.id,
     tipoProfissional: t ? t.id : "",
+    numeroContrato: "",
     escopoFornecimento: esc.id,
     prestadorId: "",
     nomeContratado: "",
@@ -744,6 +764,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     titulo: "CONTRATO DE PRESTAÇÃO DE SERVIÇOS",
     subtitulo: objetoTexto,
     nomeDoContrato,
+    numeroContrato: c.numeroContrato || "",
     escopoFornecimento: escId,
     preambulo, clausulas, tabelaItens, tabelaParcelas,
     anexo,
@@ -876,6 +897,7 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
   return (
     <div style={CTR_S.doc} data-vk-contrato="1" ref={alvo}>
       <h1 style={CTR_S.h1}>{(d.nomeDoContrato || d.titulo).toUpperCase()}</h1>
+      {d.numeroContrato ? <div style={{ ...CTR_S.h2, margin: "2px 0 0" }}>{`Contrato nº ${d.numeroContrato}`}</div> : null}
       <div style={CTR_S.h2}>{d.subtitulo}</div>
       {d.preambulo.map((t, i) => <p key={i} style={CTR_S.p}>{t}</p>)}
       {d.clausulas.map((cl, i) => (

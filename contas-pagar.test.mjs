@@ -20,7 +20,9 @@ const modulo = new Function(`
   return { PLANO_CONTAS, contratoVazio, valorContrato,
            parcelasAPagar, contasDoContrato, sincronizarContasDoContrato, removerContasDoContrato,
            situacaoConta, totaisContas, realizadoPorConta, realizadoPorPrestador,
-           contaDoTipo, contaAvulsaVazia, somarDias, somarMeses, vencimentoFinal, medicoesPrevistas };
+           contaDoTipo, contaAvulsaVazia, somarDias, somarMeses, vencimentoFinal, medicoesPrevistas,
+           tituloConta, detalheConta, agruparContas, filtrarContas, rotuloMes,
+           VISOES_CONTAS, FILTROS_CONTAS, proximoNumeroContrato, servicoDoContrato };
 `)();
 
 let passou = 0, falhou = 0;
@@ -189,6 +191,93 @@ teste("conta avulsa nasce válida", () => {
   assert.ok(modulo.PLANO_CONTAS.some(c => c.id === a.contaId));
   assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(a.vencimento));
   assert.strictEqual(a.pago, false);
+});
+
+teste("número do contrato é sequencial e único no escritório", () => {
+  assert.strictEqual(modulo.proximoNumeroContrato([]), "0001");
+  assert.strictEqual(modulo.proximoNumeroContrato([{ contratos: [] }]), "0001");
+  const obras = [
+    { id: "o1", contratos: [{ id: "a", numeroContrato: "0001" }, { id: "b", numeroContrato: "0007" }] },
+    { id: "o2", contratos: [{ id: "c", numeroContrato: "0003" }] },
+    { id: "o3" },
+  ];
+  assert.strictEqual(modulo.proximoNumeroContrato(obras), "0008", "conta a partir do maior de todas as obras");
+  // contrato antigo sem número não atrapalha
+  assert.strictEqual(modulo.proximoNumeroContrato([{ contratos: [{ id: "x" }, { id: "y", numeroContrato: "0012" }] }]), "0013");
+  assert.strictEqual(modulo.proximoNumeroContrato([{ contratos: [{ numeroContrato: "0099" }] }]), "0100");
+});
+
+teste("a conta se identifica por contrato, serviço, empresa e parcela", () => {
+  const c = { ...base({ id: "ctr1", numeroContrato: "0007", valor: 60000, modalidade: "parcelado",
+    parcelas: 6, dataInicio: "2026-09-01" }), tipoProfissional: "serralheiro", nomeContratado: "MB Viezzer" };
+  const contas = modulo.contasDoContrato(c);
+  assert.strictEqual(contas.length, 6);
+  assert.strictEqual(contas[1].numeroContrato, "0007");
+  assert.strictEqual(contas[1].servico, "Serralheria");
+  assert.strictEqual(contas[1].parcela, 2);
+  assert.strictEqual(contas[1].totalParcelas, 6);
+  assert.strictEqual(modulo.tituloConta(contas[1]), "Contrato 0007 · Serralheria · MB Viezzer · Parcela 2/6");
+  // entrada + saldo também numera as parcelas
+  const ef = modulo.contasDoContrato(base({ id: "c2", numeroContrato: "0008", valor: 10000,
+    modalidade: "entradaFinal", entradaEscopo: "contrato", entradaPct: 40, dataAssinatura: "2026-09-07",
+    prazoQtd: 2, prazoUnidade: "meses", dataInicio: "2026-09-10" }));
+  assert.strictEqual(ef[0].totalParcelas, 2);
+  assert.ok(modulo.tituloConta(ef[0]).includes("Parcela 1/2"));
+  // conta avulsa cai na descrição
+  assert.strictEqual(modulo.tituloConta({ origem: "avulsa", descricao: "Caçamba", favorecido: "" }), "Caçamba");
+  // a linha de apoio não repete o que o título já diz
+  assert.strictEqual(modulo.detalheConta(contas[1]), "quinzenal", "o contrato deste teste é quinzenal");
+  assert.strictEqual(modulo.detalheConta({ origem: "avulsa", descricao: "Caçamba" }), "Caçamba");
+  assert.strictEqual(modulo.detalheConta({ origem: "contrato", descricao: "Entrada" }), "Entrada");
+});
+
+teste("visão por mês agrupa e ordena o fluxo", () => {
+  const contas = [
+    { id: "1", vencimento: "2026-10-01", valor: 1000 },
+    { id: "2", vencimento: "2026-09-15", valor: 500 },
+    { id: "3", vencimento: "2026-10-20", valor: 700, pago: true, valorPago: 700 },
+    { id: "4", vencimento: "", valor: 300 },
+  ];
+  const g = modulo.agruparContas(contas, "mes", { hoje: "2026-09-07" });
+  assert.deepStrictEqual(g.map(x => x.titulo), ["Setembro de 2026", "Outubro de 2026", "Sem vencimento"]);
+  assert.deepStrictEqual(g[1].itens.map(x => x.id), ["1", "3"], "dentro do mês, por data");
+  assert.strictEqual(g[1].totais.total, 1700);
+  assert.strictEqual(g[1].totais.aberto, 1000);
+  assert.strictEqual(modulo.rotuloMes("2026-03"), "Março de 2026");
+  assert.strictEqual(modulo.rotuloMes(""), "Sem vencimento");
+  // ano
+  assert.deepStrictEqual(modulo.agruparContas(contas, "ano", {}).map(x => x.titulo), ["2026", "Sem vencimento"]);
+});
+
+teste("visões por fornecedor e por contrato usam os nomes de fora", () => {
+  const contas = [
+    { id: "1", prestadorId: "p1", valor: 1000, contratoId: "ctr1" },
+    { id: "2", prestadorId: "p2", valor: 5000, contratoId: "ctr2" },
+    { id: "3", prestadorId: "p1", valor: 200, contratoId: "ctr1" },
+    { id: "4", favorecido: "", valor: 50, origem: "avulsa" },
+  ];
+  const ctx = { nomePrestador: (id) => ({ p1: "Zé Empreiteiro", p2: "MB Viezzer" }[id] || ""),
+                nomeContrato: (id) => ({ ctr1: "Contrato 0001 · Obra Civil", ctr2: "Contrato 0002 · Serralheria" }[id] || "") };
+  const f = modulo.agruparContas(contas, "fornecedor", ctx);
+  assert.deepStrictEqual(f.map(x => x.titulo), ["MB Viezzer", "Zé Empreiteiro", "Sem fornecedor"], "maior valor primeiro");
+  assert.strictEqual(f[1].totais.total, 1200);
+  const k = modulo.agruparContas(contas, "contrato", ctx);
+  assert.deepStrictEqual(k.map(x => x.titulo), ["Contrato 0002 · Serralheria", "Contrato 0001 · Obra Civil", "Contas avulsas"]);
+});
+
+teste("filtros: a pagar, vencidas e pagas", () => {
+  const hoje = "2026-09-07";
+  const contas = [
+    { id: "1", vencimento: "2026-09-01", valor: 100 },
+    { id: "2", vencimento: "2026-10-01", valor: 200 },
+    { id: "3", vencimento: "2026-08-01", valor: 300, pago: true },
+  ];
+  assert.deepStrictEqual(modulo.filtrarContas(contas, "todas", hoje).map(c => c.id), ["1", "2", "3"]);
+  assert.deepStrictEqual(modulo.filtrarContas(contas, "aPagar", hoje).map(c => c.id), ["1", "2"]);
+  assert.deepStrictEqual(modulo.filtrarContas(contas, "vencidas", hoje).map(c => c.id), ["1"]);
+  assert.deepStrictEqual(modulo.filtrarContas(contas, "pagas", hoje).map(c => c.id), ["3"]);
+  assert.deepStrictEqual(modulo.VISOES_CONTAS.map(v => v.id), ["mes", "ano", "fornecedor", "contrato"]);
+  assert.deepStrictEqual(modulo.FILTROS_CONTAS.map(f => f.id), ["todas", "aPagar", "vencidas", "pagas"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
