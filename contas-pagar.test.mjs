@@ -22,7 +22,7 @@ const modulo = new Function(`
            situacaoConta, totaisContas, realizadoPorConta, realizadoPorPrestador,
            contaDoTipo, contaAvulsaVazia, somarDias, somarMeses, vencimentoFinal, medicoesPrevistas,
            tituloConta, detalheConta, agruparContas, filtrarContas, rotuloMes,
-           VISOES_CONTAS, FILTROS_CONTAS, proximoNumeroContrato, servicoDoContrato };
+           VISOES_CONTAS, FILTROS_CONTAS, proximoNumeroContrato, servicoDoContrato, fluxoMensal };
 `)();
 
 let passou = 0, falhou = 0;
@@ -278,6 +278,33 @@ teste("filtros: a pagar, vencidas e pagas", () => {
   assert.deepStrictEqual(modulo.filtrarContas(contas, "pagas", hoje).map(c => c.id), ["3"]);
   assert.deepStrictEqual(modulo.VISOES_CONTAS.map(v => v.id), ["mes", "ano", "fornecedor", "contrato"]);
   assert.deepStrictEqual(modulo.FILTROS_CONTAS.map(f => f.id), ["todas", "aPagar", "vencidas", "pagas"]);
+});
+
+teste("fluxo mensal: uma barra por mês, separando pago, a pagar e vencido", () => {
+  const hoje = "2026-09-07";
+  const contas = [
+    { id: "1", vencimento: "2026-09-01", valor: 1000 },                       // vencida
+    { id: "2", vencimento: "2026-09-20", valor: 500 },                        // a pagar
+    { id: "3", vencimento: "2026-09-05", valor: 300, pago: true, valorPago: 280 },
+    { id: "4", vencimento: "2026-10-10", valor: 2000 },
+    { id: "5", vencimento: "", valor: 700 },                                  // fora do gráfico
+  ];
+  const f = modulo.fluxoMensal(contas, hoje);
+  assert.deepStrictEqual(f.meses.map(m => m.chave), ["2026-09", "2026-10"], "em ordem cronológica");
+  assert.deepStrictEqual(f.meses.map(m => m.rotulo), ["set/26", "out/26"]);
+  const set = f.meses[0];
+  assert.strictEqual(set.qtd, 3);
+  assert.strictEqual(set.vencido, 1000);
+  assert.strictEqual(set.aberto, 500);
+  assert.strictEqual(set.pago, 280, "o pago entra pelo valor efetivamente pago");
+  assert.strictEqual(set.total, 1780);
+  assert.strictEqual(set.vencido + set.aberto + set.pago, set.total, "as três faixas fecham o total do mês");
+  assert.strictEqual(f.maior, 2000, "a escala vem do maior mês");
+  // o que não tem vencimento fica de fora e é contado à parte
+  assert.strictEqual(f.semData, 1);
+  assert.strictEqual(f.semDataValor, 700);
+  // sem contas, o gráfico não existe
+  assert.deepStrictEqual(modulo.fluxoMensal([], hoje), { meses: [], semData: 0, semDataValor: 0, maior: 0 });
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

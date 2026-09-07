@@ -69,6 +69,18 @@ empresa contratada e a parcela no total. `detalheConta` cuida da linha de
 apoio (periodicidade, conta do plano de contas, observação) sem repetir o que
 o título já disse.
 
+## O gráfico
+
+A tela abre com o **fluxo por mês**: uma barra por mês com vencimento, em
+ordem cronológica, com o total escrito em cima (em milhares quando passa de
+mil) e o mês atual em negrito no eixo. Cada barra é empilhada em três faixas
+(`fluxoMensal`): **vencido** (preto), **a pagar** (azul) e **pago** (cinza),
+que somadas fecham o total do mês. Clicar num mês abre as contas dele na
+lista abaixo.
+
+É SVG desenhado à mão, sem biblioteca. Contas sem vencimento ficam fora do
+gráfico e são contadas na nota de rodapé.
+
 ## A tela: fluxo agrupado
 
 A lista não é mais fatura atrás de fatura. Há um cabeçalho de colunas

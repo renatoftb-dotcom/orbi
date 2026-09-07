@@ -374,3 +374,30 @@ function agruparContas(contas, visao, ctx) {
   });
   return grupos;
 }
+
+// ── Fluxo mensal (gráfico) ──────────────────────────────────────
+const MESES_CURTO_CP = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+// Uma barra por mês com vencimento, em ordem cronológica, separando o que já
+// foi pago do que está em aberto e do que venceu. Contas sem vencimento ficam
+// de fora do gráfico e são devolvidas à parte, para a tela poder avisar.
+function fluxoMensal(contas, hoje) {
+  const porMes = new Map();
+  let semData = 0, semDataValor = 0;
+  for (const c of contas || []) {
+    const v = Number(c.pago ? (Number(c.valorPago) || c.valor) : c.valor) || 0;
+    if (!c.vencimento) { semData++; semDataValor += v; continue; }
+    const k = String(c.vencimento).slice(0, 7);
+    if (!porMes.has(k)) porMes.set(k, { chave: k, total: 0, pago: 0, aberto: 0, vencido: 0, qtd: 0 });
+    const m = porMes.get(k);
+    m.qtd++; m.total += v;
+    if (c.pago) m.pago += v;
+    else if (situacaoConta(c, hoje) === "vencido") m.vencido += v;
+    else m.aberto += v;
+  }
+  const red = (x) => Math.round(x * 100) / 100;
+  const meses = [...porMes.values()]
+    .map((m) => ({ ...m, total: red(m.total), pago: red(m.pago), aberto: red(m.aberto), vencido: red(m.vencido),
+      rotulo: `${MESES_CURTO_CP[Number(m.chave.slice(5, 7)) - 1]}/${m.chave.slice(2, 4)}` }))
+    .sort((a, b) => a.chave.localeCompare(b.chave));
+  return { meses, semData, semDataValor: red(semDataValor), maior: meses.reduce((a, m) => Math.max(a, m.total), 0) };
+}
