@@ -180,6 +180,38 @@ tiverem.
 
 ## Modelos
 
+São três. `gerenciamentoObra` é escolhido automaticamente pelo tipo **Gestão
+de obra** (o tipo traz `modeloFixo`, que vence o escopo); os outros dois saem
+do escopo escolhido.
+
+### Gerenciamento de obra
+
+Reproduz o contrato de gerenciamento do escritório, cláusula por cláusula:
+objeto, referência da obra, a descrição do serviço em oito itens (mão de
+obra, materiais, locação de equipamentos, prestação de contas,
+operacionalização dos pagamentos, autorização prévia, pagamentos dos insumos
+e vínculo empregatício), valores e forma de pagamento, despesas não
+contempladas, prazo de validade, rescisão por inadimplência e por
+interrupção, regência e fecho com o foro.
+
+O texto é fixo; o gerador pede só o que muda: **referência da obra**, **valor
+total**, **nº de parcelas**, **dia do boleto**, **locadora de equipamentos
+preferida** (em branco, a cláusula não cita nenhuma), **dias de interrupção
+que rescindem**, **multa por inadimplência**, **juros ao mês** e **honorários
+advocatícios**. Blocos que não valem para ele — modalidade de pagamento,
+itens, cláusulas marcáveis, exclusões e ANEXO I — somem da tela.
+
+Diferenças de forma, declaradas no próprio modelo: título próprio
+(`titulo`), numeração "1 OBJETO DO CONTRATO" em vez de "CLÁUSULA PRIMEIRA"
+(`numeracao: "simples"`, com cláusula de item único saindo como parágrafo
+corrido), preâmbulo curto com as duas partes qualificadas em uma linha cada
+(`preambuloSimples`) e fecho próprio na última cláusula (`fechoProprio`, que
+suprime o "E, por estarem assim justas e contratadas"). O gênero do
+contratado passa a vir do modelo (`generoContratado`), não do regime — por
+isso o escritório é "a CONTRATADA" mesmo sem fornecer material.
+
+### Empreitadas
+
 Tirados de dois contratos reais do escritório (COBOP, set/2026):
 
 | | `empreitadaMaoDeObra` | `empreitadaGlobal` |

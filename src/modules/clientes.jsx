@@ -1536,6 +1536,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const modo = modalidadeContrato(g);
     const pz = prazoContrato(g);
     const escopo = escopoContrato(g);
+    const gerenciamento = g.modelo === "gerenciamentoObra";
     // O objeto só é reescrito automaticamente enquanto estiver no texto padrão.
     const objetoEditado = String(g.objeto || "").trim() !== objetoPadrao(g.tipoProfissional, escopo);
     const setG = (campo, valor) => setContratoGerando({ ...g, [campo]: valor });
@@ -1635,7 +1636,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]}. Use ＋ Novo para cadastrar.</div>
             )}
           </div>
-          <div>
+          <div style={{ display: gerenciamento ? "none" : undefined }}>
             <label style={C.label}>3. O que o contrato inclui</label>
             <select style={{ ...C.input, cursor: "pointer" }} value={escopo} onChange={e => {
               const base = contratoVazio(null, cliente.id, obraSelecionada.id, g.tipoProfissional, e.target.value);
@@ -1744,8 +1745,40 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={g.status} onChange={e => setG("status", e.target.value)}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
         </div>
 
+        {gerenciamento && (
+          <div style={bloco}>
+            <div style={tituloBloco}>Gerenciamento de obra</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>
+              O texto do contrato é o modelo do escritório. Aqui você preenche só o que muda.
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={C.label}>Referência da obra</label>
+              <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.referenciaObra || ""} onChange={e => setG("referenciaObra", e.target.value)}
+                placeholder="ex.: Reforma comercial com aproximadamente 435,86 metros quadrados entre áreas de ampliação e existente" />
+              <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Entra na cláusula 2, seguida do endereço da obra.</div>
+            </div>
+            <div style={{ ...grade("1fr 1fr 1fr"), marginBottom: 12 }}>
+              <div><label style={C.label}>Valor total (R$)</label><CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" /></div>
+              <div><label style={C.label}>Nº de parcelas</label><CampoCtrNum tipo="inteiro" valor={g.parcelas} onChange={v => setG("parcelas", v)} style={C.input} placeholder="0" /></div>
+              <div><label style={C.label}>Boleto todo dia</label><CampoCtrNum tipo="inteiro" valor={g.diaVencimento} onChange={v => setG("diaVencimento", v)} style={C.input} placeholder="05" /></div>
+            </div>
+            <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
+              <div>
+                <label style={C.label}>Locadora de equipamentos preferida</label>
+                <input style={C.input} value={g.locadoraEquipamentos || ""} onChange={e => setG("locadoraEquipamentos", e.target.value)} placeholder="em branco, a cláusula não cita nenhuma" />
+              </div>
+              <div><label style={C.label}>Interrupção que rescinde (dias)</label><CampoCtrNum tipo="inteiro" valor={g.diasInterrupcao} onChange={v => setG("diasInterrupcao", v)} style={C.input} placeholder="90" /></div>
+            </div>
+            <div style={grade("1fr 1fr 1fr")}>
+              <div><label style={C.label}>Multa por inadimplência (%)</label><CampoCtrNum tipo="pct" valor={g.multaInadimplenciaPct} onChange={v => setG("multaInadimplenciaPct", v)} style={C.input} placeholder="0,00%" /></div>
+              <div><label style={C.label}>Juros ao mês (%)</label><CampoCtrNum tipo="pct" valor={g.jurosMesPct} onChange={v => setG("jurosMesPct", v)} style={C.input} placeholder="0,00%" /></div>
+              <div><label style={C.label}>Honorários advocatícios (%)</label><CampoCtrNum tipo="pct" valor={g.honorariosPct} onChange={v => setG("honorariosPct", v)} style={C.input} placeholder="0,00%" /></div>
+            </div>
+          </div>
+        )}
+
         {/* Valor: itens discriminados ou valor único — vale o que for preenchido */}
-        <div style={bloco}>
+        {!gerenciamento && <div style={bloco}>
           <div style={tituloBloco}>Valor do contrato</div>
           <div style={{ ...grade("240px 1fr"), marginBottom: 10 }}>
             <div>
@@ -1765,10 +1798,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             </div>
           ))}
           <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>
-        </div>
+        </div>}
 
         {/* Modalidade de pagamento */}
-        <div style={bloco}>
+        {!gerenciamento && <div style={bloco}>
           <div style={tituloBloco}>Modalidade de pagamento</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {MODALIDADES_PAGAMENTO.map(mp => (
@@ -1820,10 +1853,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           {modo === "entradaFinal" && (g.entradaEscopo || "contrato") === "item" && !(g.itens || []).some(i => Number(i.valor) > 0) && (
             <div style={{ fontSize: 12, color: "#4b5563", marginTop: 8 }}>Pagamento item a item precisa de itens com valor — sem eles, o contrato sai como entrada + saldo no final.</div>
           )}
-        </div>
+        </div>}
 
         {/* Cláusulas opcionais */}
-        <div style={bloco}>
+        {!gerenciamento && <div style={bloco}>
           <div style={tituloBloco}>Cláusulas do contrato</div>
           <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>Marque o que entra neste contrato. O texto e a numeração se ajustam sozinhos.</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
@@ -1873,15 +1906,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 12, display: gerenciamento ? "none" : undefined }}>
           <label style={C.label}>Exclusões do objeto (o que não entra)</label>
           <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: o lixamento do concreto e a montagem hidráulica da piscina" />
           <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Comece em minúscula para o contrato abrir com "Não integram o objeto deste contrato:". Começando em maiúscula, o seu texto entra como está.</div>
         </div>
 
-        <div style={bloco}>
+        {!gerenciamento && <div style={bloco}>
           <div style={tituloBloco}>ANEXO I — descritivo dos serviços (opcional)</div>
           {(g.escopo || []).map((e2, idx) => (
             <div key={idx} style={{ border: "1px solid #eee", borderRadius: 8, padding: 10, marginBottom: 8, background: "#fafafa" }}>
@@ -1893,7 +1926,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             </div>
           ))}
           <button type="button" style={C.btnSec} onClick={() => addLinha("escopo", { titulo: "", texto: "" })}>＋ Adicionar bloco do descritivo</button>
-        </div>
+        </div>}
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button style={C.btn} onClick={salvar}>Salvar</button>

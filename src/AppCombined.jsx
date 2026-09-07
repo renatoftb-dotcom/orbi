@@ -14245,6 +14245,23 @@ const CONTRATO_MODELOS = [
       entradaPct: 50, materialPorContaDo: "contratado",
     },
   },
+  {
+    id: "gerenciamentoObra",
+    nome: "Gerenciamento de obra",
+    subtitulo: "Gerenciamento de obra",
+    resumo: "O escritório gerencia: compra de materiais, contratação de prestadores, locação de equipamentos e prestação de contas. Tudo em nome do contratante.",
+    generoContratado: "a CONTRATADA",
+    titulo: "CONTRATO DE GERENCIAMENTO DE OBRA",
+    numeracao: "simples",      // "1 OBJETO DO CONTRATO", e não "CLÁUSULA PRIMEIRA"
+    preambuloSimples: true,    // as partes abrem o documento, sem "pelo presente instrumento"
+    fechoProprio: true,        // a última cláusula já é o fecho com o foro
+    padrao: {
+      parcelas: 12, periodicidade: "mensais", diaVencimento: 5,
+      multaInadimplenciaPct: 20, jurosMesPct: 1, honorariosPct: 20, diasInterrupcao: 90,
+      garantiaMeses: 0, toleranciaDias: 0, multaDiaPct: 0, multaTetoPct: 0,
+      materialPorContaDo: "contratante",
+    },
+  },
 ];
 function contratoModelo(id) { return CONTRATO_MODELOS.find((m) => m.id === id) || CONTRATO_MODELOS[0]; }
 
@@ -14265,7 +14282,8 @@ const TIPOS_PROFISSIONAL = [
   { id: "empreiteiro", nome: "Empreiteiro", categorias: ["Empreiteiro", "Pedreiro"], servico: "obra civil", modelo: "empreitadaMaoDeObra", insumos: ["PRE-001", "PRE-009", "PRE-010", "PRE-011", "PRE-012"] },
   { id: "encanador", nome: "Encanador", categorias: ["Encanador"], servico: "instalações hidrossanitárias", modelo: "empreitadaMaoDeObra", insumos: ["PRE-004"] },
   { id: "gesseiro", nome: "Gesseiro", categorias: ["Gesseiro"], servico: "forro e revestimento em gesso", modelo: "empreitadaGlobal", insumos: [] },
-  { id: "gestaoObra", nome: "Gestão de obra", categorias: ["Gestão de Obra"], servico: "gestão e acompanhamento de obra", modelo: "empreitadaMaoDeObra", insumos: ["PRE-017"] },
+  { id: "gestaoObra", nome: "Gestão de obra", categorias: ["Gestão de Obra"], servico: "gerenciamento de obra",
+    modelo: "gerenciamentoObra", modeloFixo: "gerenciamentoObra", insumos: ["PRE-017"] },
   { id: "impermeabilizador", nome: "Impermeabilizador", categorias: ["Impermeabilizador"], servico: "impermeabilização", modelo: "empreitadaGlobal", insumos: ["PRE-006"] },
   { id: "instaladorAquecedores", nome: "Instalador de aquecedores", categorias: ["Instalador de Aquecedores"], servico: "instalação de aquecedores", modelo: "empreitadaGlobal", insumos: ["PRE-014"] },
   { id: "instaladorAr", nome: "Instalador de ar condicionado", categorias: ["Instalador de Ar Condicionado"], servico: "instalação de ar condicionado", modelo: "empreitadaGlobal", insumos: ["PRE-013"] },
@@ -14400,6 +14418,18 @@ function qualificarParte(p) {
   }
   return partes.join(", ");
 }
+// Qualificação enxuta, como abre o contrato de gerenciamento:
+// "COBOP …, inscrita no CNPJ 44.945.459/0001-33, sediada na Avenida …".
+function qualificarCurto(p) {
+  const o = p || {};
+  const pj = (o.tipo || "PJ") === "PJ";
+  const partes = [String(o.nome || "").toUpperCase()];
+  if (o.cnpjCpf) partes.push(pj ? `inscrita no CNPJ ${o.cnpjCpf}` : `inscrito no CPF ${o.cnpjCpf}`);
+  const end = enderecoLinha(o);
+  if (end) partes.push(pj ? `sediada na ${end}` : `residente na ${end}`);
+  return partes.join(", ") + ".";
+}
+
 function enderecoLinha(o) {
   const x = o || {};
   return [x.logradouro, x.numero && `nº ${x.numero}`, x.bairro, [x.cidade, x.estado].filter(Boolean).join("/"), x.cep && `CEP ${x.cep}`].filter(Boolean).join(", ");
@@ -14628,7 +14658,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
   // Sem escopo e sem tipo (chamada antiga, só com o modelo), é o modelo que
   // diz qual escopo o contrato tem.
   const escolhido = escopoFornecimento(escopoId) || (t ? escopoFornecimento(escopoDoTipo(tipoId)) : null);
-  const m = contratoModelo(escolhido ? escolhido.modelo : modeloId);
+  const m = contratoModelo((t && t.modeloFixo) || (escolhido ? escolhido.modelo : modeloId));
   const esc = escolhido || escopoFornecimento(m.id === "empreitadaGlobal" ? "ambos" : "maoDeObra");
   return {
     id: (typeof uid === "function" ? uid() : String(Date.now())),
@@ -14651,12 +14681,21 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     // prazo em branco de propósito — quem escolhe a unidade e o número é o usuário
     prazoQtd: "", prazoUnidade: "",
     modalidade: m.id === "empreitadaGlobal" ? "entradaFinal" : "parcelado",
-    parcelas: "",
-    periodicidade: "quinzenais",
+    // o número de parcelas só vem pronto no gerenciamento, onde 12 é a praxe
+    parcelas: m.id === "gerenciamentoObra" ? (m.padrao.parcelas || "") : "",
+    periodicidade: m.padrao.periodicidade || "quinzenais",
     entradaPct: m.id === "empreitadaGlobal" ? 50 : "",
     entradaEscopo: m.id === "empreitadaGlobal" ? "item" : "contrato",
     medicaoPeriodicidade: "mensal",
     medicaoPrazoDias: "",
+    // gerenciamento de obra
+    referenciaObra: "",
+    diaVencimento: m.padrao.diaVencimento || "",
+    locadoraEquipamentos: "",
+    multaInadimplenciaPct: m.padrao.multaInadimplenciaPct || "",
+    jurosMesPct: m.padrao.jurosMesPct || "",
+    honorariosPct: m.padrao.honorariosPct || "",
+    diasInterrupcao: m.padrao.diasInterrupcao || "",
     opcoes: opcoesPadrao(m.id),
     ...valoresPadraoOpcoes(m.id),
     foro: "",
@@ -14722,6 +14761,63 @@ function vencimentoTexto(p) {
   return "Os pagamentos serão realizados sempre às sextas-feiras, em quinzenas alternadas e no período da manhã, vencendo-se a primeira parcela na segunda sexta-feira contada do início dos serviços e as demais a cada 15 (quinze) dias subsequentes.";
 }
 
+
+// ── Cláusulas do contrato de gerenciamento de obra ──────────────
+// Texto do modelo do escritório: o que muda vem dos campos do gerador
+// (referência da obra, valor, parcelas, dia do boleto, locadora preferida,
+// multa, juros, honorários e prazo de interrupção). O resto é fixo.
+function clausulasGerenciamento(c, ctx) {
+  const { enderecoObra, total, foro, add } = ctx;
+  const parcelas = Math.max(0, Math.floor(Number(c.parcelas) || 0));
+  const p = parcelasContrato(total, parcelas || 1);
+  const dia = Number(c.diaVencimento) || 0;
+  const locadora = String(c.locadoraEquipamentos || "").trim();
+
+  add("objeto", "OBJETO DO CONTRATO", [
+    "O presente contrato tem como objeto a prestação de serviços de gerenciamento de obra, o qual compreenderá a gestão da compra de materiais, intermediação na contratação de empreiteiros e prestadores de serviços.",
+  ]);
+
+  add("referencia", "REFERÊNCIA", [
+    `${String(c.referenciaObra || "").trim() || "Obra"} no endereço: ${enderecoObra}.`,
+  ]);
+
+  add("gestao", "GESTÃO DA OBRA", [
+    "MÃO DE OBRA: Levantamento da equipe de execução, elaboração de contratos de trabalho, contratos de empreita, contratos de serviços especializados, gestão e execução dos pagamentos. Caso haja algum problema na qualidade da execução dos serviços, a CONTRATADA irá atuar na intermediação entre os prestadores e a CONTRATANTE a fim de solucionar tais questões, de modo a minimizar ou eliminar eventuais custos de reparos gerados em função de má execução de serviços de terceiros. Todos os contratos serão realizados em nome da CONTRATANTE.",
+    "MATERIAIS: Cotação e compra dos materiais a serem utilizados na obra; as compras serão efetuadas em nome da CONTRATANTE, seguindo análises como preço, qualidade do material e prazo de entrega, a fim de se atingir a necessidade da obra. Serão disponibilizados comprovantes de compras e/ou notas fiscais, que podem estar em nome da CONTRATADA ou da CONTRATANTE. Dependendo da simplicidade do fornecedor, registros de conversas por aplicativo de mensagens poderão ser utilizados como comprovante. A CONTRATADA decidirá pelas marcas dos materiais, desde que todos sigam as normas técnicas e sejam aprovados pela ABNT; havendo problemas na performance dos materiais, a CONTRATADA apenas intermediará a resolução entre o fornecedor e a CONTRATANTE, de modo que não garante a performance dos materiais e equipamentos utilizados na obra.",
+    `LOCAÇÃO DE EQUIPAMENTOS E FERRAMENTAS ESPECIALIZADAS: Todas as locações serão solicitadas pela CONTRATADA${locadora ? `, geralmente na ${locadora}, por apresentar bom custo-benefício entre preço e agilidade logística` : ""}, podendo a CONTRATANTE indicar local de sua preferência. Assim como os materiais e a mão de obra, a CONTRATADA apenas faz a gestão da locação, sendo o custo arcado pela CONTRATANTE; havendo eventuais atrasos de mão de obra que acarretem prazos maiores de locação, este custo adicional continua sendo de responsabilidade da CONTRATANTE, cabendo à CONTRATADA atuar na gestão dos prestadores no sentido de minimizar atrasos.`,
+    "PRESTAÇÃO DE CONTAS: Confecção e apresentação de planilhas financeiras demonstrando gastos e pagamentos ocorridos; os saldos serão conferidos com o extrato bancário mês a mês, se for o caso. Serão disponibilizadas notas fiscais e contratos; na ausência de nota fiscal será apresentado outro comprovante que dê suporte à despesa realizada, tudo reunido e disponibilizado à CONTRATANTE.",
+    "OPERACIONALIZAÇÃO DOS PAGAMENTOS: Sugere-se que seja disponibilizado à CONTRATADA o acesso a conta corrente exclusiva para a obra, em nome da CONTRATANTE, onde serão depositados os recursos financeiros para a execução da obra, de modo a facilitar a conferência dos gastos.",
+    "AUTORIZAÇÃO PRÉVIA: Fica a CONTRATADA previamente autorizada a abrir cadastros em lojas e fornecedores ligados à construção civil em nome da CONTRATANTE, única e exclusivamente para compras de insumos vinculadas à execução da obra objeto deste contrato, bem como fica autorizada a assinar pela CONTRATANTE documentos relacionados à obra, como contratações, compras, memoriais descritivos e laudos de vistoria para instituições financeiras, entre outros, desde que única e exclusivamente relacionados à obra e necessários ao seu andamento.",
+    "DOS PAGAMENTOS DOS INSUMOS E SERVIÇOS UTILIZADOS NA OBRA: Todo gasto feito para a execução da obra, mesmo que em nome da CONTRATADA, é de obrigação da CONTRATANTE, sendo o débito devido por ela ainda que os fornecedores apresentem as faturas ou notas de compra logo após o término da obra.",
+    "VÍNCULO EMPREGATÍCIO: Não se estabelece vínculo empregatício entre a CONTRATANTE e a CONTRATADA, bem como toda a mão de obra empregada na obra não terá vínculo empregatício com a CONTRATADA, visto que se trata de contrato de prestação de serviço.",
+  ], { subtitulo: "DESCRIÇÃO DO SERVIÇO CONTRATADO:" });
+
+  add("pagamento", "VALORES E FORMA DE PAGAMENTO", [
+    `O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${parcelas ? `, parcelado em ${numExtensoCtr(parcelas)} parcelas de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)})${p.iguais ? "" : `, sendo a última de ${fmtMoedaCtr(p.ultima)}`}` : ""}${dia ? `. Serão gerados boletos com vencimento todo dia ${String(dia).padStart(2, "0")} de cada mês` : ""}. Caso a obra seja concluída antes do prazo das parcelas, a quitação do saldo devedor será antecipada; caso o prazo seja extrapolado, o valor deste contrato não se altera, ou seja, não será cobrado nenhum valor adicional de gerenciamento de obra.`,
+  ]);
+
+  add("naoContempladas", "DESPESAS NÃO CONTEMPLADAS NESTE CONTRATO", [
+    "Não estão inclusas despesas de impressão de plantas, emissão de ARTs e RRTs, taxas de órgãos públicos e de fiscalização de qualquer espécie, incluindo taxas notariais e cartoriais. Caso se faça necessário que a CONTRATADA execute essas atividades, fica desde já autorizada pela CONTRATANTE a proceder com elas, tendo a CONTRATANTE a obrigação de reembolsá-la mediante apresentação dos comprovantes de pagamento.",
+  ]);
+
+  add("validade", "PRAZO DE VALIDADE DO CONTRATO", [
+    "O presente contrato se inicia na data de sua assinatura, vigorando até o término da obra.",
+  ]);
+
+  add("rescisao", "RESCISÃO", [
+    `POR INADIMPLÊNCIA: Caso a CONTRATANTE deixe de pagar alguma das parcelas pactuadas, o presente contrato será rescindido de imediato, tornando-se vencidas as demais parcelas, independentemente de aviso prévio ou notificação extrajudicial, ficando a CONTRATANTE constituída em mora, com multa aqui pactuada em ${pctCtr(c.multaInadimplenciaPct)} sobre o valor do contrato, acrescida de juros de ${pctCtr(c.jurosMesPct)} ao mês e correção monetária, além de responder pelos honorários advocatícios de ${pctCtr(c.honorariosPct)} sobre o valor do contrato.`,
+    `POR INTERRUPÇÃO DA OBRA: Caso a obra seja interrompida por mais de ${numCtr(c.diasInterrupcao, "dias")}, seja por desejo da CONTRATANTE ou por qualquer outra questão de sua responsabilidade, fica rescindido o contrato. Todas as parcelas, vencidas ou a vencer, serão consideradas devidas. Custos adicionais em função de tal interrupção serão de responsabilidade da CONTRATANTE, sejam despesas de mão de obra, material, aluguel de equipamentos, entre outros.`,
+  ]);
+
+  add("regencia", "DA REGÊNCIA", [
+    "O presente contrato está regulado pelas normas do Código de Processo Civil, constituindo-se em título executivo extrajudicial para os efeitos da lei.",
+  ]);
+
+  add("foro", "DO FECHO E DO FORO", [
+    `E por estarem de acordo com todas as cláusulas deste contrato, as partes envolvidas assinam o presente e elegem o foro da Comarca de ${foro || "______________________"}, mesmo em detrimento de qualquer outro, por mais privilegiado que seja, para dirimir possíveis dúvidas.`,
+  ]);
+}
+
 function montarContrato(contrato, { cliente, obra, prestador }) {
   const c = contrato || {};
   const m = contratoModelo(c.modelo);
@@ -14741,12 +14837,15 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     representanteCpf: (cliente && cliente.representanteCpf) || "",
   };
   const contratado = prestador || { nome: c.nomeContratado || "" };
-  const rotuloContratado = global ? "CONTRATADA" : "CONTRATADO";
-  const ela = global ? "a CONTRATADA" : "o CONTRATADO";      // sujeito
-  const aEla = global ? "à CONTRATADA" : "ao CONTRATADO";    // objeto indireto
-  const dela = global ? "da CONTRATADA" : "do CONTRATADO";
-  const a_o = global ? "a" : "o";
-  const pelaEla = global ? "pela CONTRATADA" : "pelo CONTRATADO";
+  // O gênero do contratado vem do modelo, não do regime: no gerenciamento de
+  // obra o escritório é "a CONTRATADA" mesmo sem fornecimento de material.
+  const fem = String(m.generoContratado || "").trim().startsWith("a ");
+  const rotuloContratado = fem ? "CONTRATADA" : "CONTRATADO";
+  const ela = fem ? "a CONTRATADA" : "o CONTRATADO";      // sujeito
+  const aEla = fem ? "à CONTRATADA" : "ao CONTRATADO";    // objeto indireto
+  const dela = fem ? "da CONTRATADA" : "do CONTRATADO";
+  const a_o = fem ? "a" : "o";
+  const pelaEla = fem ? "pela CONTRATADA" : "pelo CONTRATADO";
   // Tipo de profissional + o que o contrato inclui escrevem o objeto e o nome
   // do contrato — o mesmo racional para qualquer prestador.
   const tipo = tipoProfissional(c.tipoProfissional);
@@ -14766,7 +14865,10 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const temItens = tabelaItens.length > 0;
   const temAnexo = anexo.length > 0;
 
-  const preambulo = [
+  const preambulo = m.preambuloSimples ? [
+    `CONTRATANTE: ${qualificarCurto(contratante)}`,
+    `${rotuloContratado}: ${qualificarCurto(contratado)}`,
+  ] : [
     "Pelo presente instrumento particular, de um lado:",
     `CONTRATANTE: ${qualificarParte(contratante)}, doravante denominada simplesmente CONTRATANTE;`,
     "e, de outro lado:",
@@ -14777,6 +14879,15 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const cl = [];
   const marcas = {};
   const add = (id, nome, itens, extra) => cl.push({ id, nome, itens: itens.filter(Boolean), ...(extra || {}) });
+
+  // O gerenciamento de obra tem corpo próprio, tirado do modelo do escritório.
+  const escId = esc ? esc.id : (global ? "ambos" : "maoDeObra");
+  let modo = modalidadeContrato(c), tabelaParcelas = [], parcelasApos = null;
+  if (m.id === "gerenciamentoObra") {
+    // gerenciamento é sempre mensal e parcelado — é o que alimenta as contas a pagar
+    modo = "parcelado";
+    clausulasGerenciamento(c, { enderecoObra, total, foro, add });
+  } else {
 
   // ── Objeto ──
   const objeto = [];
@@ -14802,7 +14913,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
 
   // ── Regime ──
   const ferramentasTodas = (c.ferramentasEscopo || "basicas") === "todas";
-  const escId = esc ? esc.id : (global ? "ambos" : "maoDeObra");
+  // (definido antes do corpo das cláusulas)
   const regime = escId === "material" ? [
     `O objeto compreende exclusivamente o fornecimento do material especificado, incluídos o transporte e a descarga no local da OBRA, cabendo à CONTRATANTE a respectiva aplicação ou montagem.`,
     "A CONTRATADA responde pela procedência, pela qualidade e pela adequação do material fornecido à finalidade contratada.",
@@ -14828,7 +14939,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   } else {
     regime.push("Os equipamentos de maior porte serão fornecidos pelo CONTRATANTE, às suas expensas, tais como andaimes, marteletes, escoras metálicas e caçambas de entulho.");
   }
-  if (lig("epi")) regime.push(`Os equipamentos de proteção individual (EPI) utilizados pela equipe ${dela} serão por el${global ? "a" : "e"} fornecidos, observadas as normas de segurança e medicina do trabalho.`);
+  if (lig("epi")) regime.push(`Os equipamentos de proteção individual (EPI) utilizados pela equipe ${dela} serão por el${fem ? "a" : "e"} fornecidos, observadas as normas de segurança e medicina do trabalho.`);
   regime.push("Os serviços observarão as normas técnicas aplicáveis.");
   add("regime", "DO REGIME DE EXECUÇÃO", regime);
 
@@ -14847,10 +14958,8 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   add("prazo", "DO PRAZO DE EXECUÇÃO", prazo);
 
   // ── Preço e pagamento ──
-  const modo = modalidadeContrato(c);
   const per = periodicidadeAdj(c.periodicidade);
   const pag = [`Pela integral execução dos serviços, a CONTRATANTE pagará ${aEla} o valor total de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${temItens ? ", correspondente à soma dos itens discriminados no item {{it:itens}}" : ""}.`];
-  let tabelaParcelas = [], parcelasApos = null;
 
   if (modo === "parcelado") {
     const p = parcelasContrato(total, c.parcelas);
@@ -14979,6 +15088,8 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     `As partes elegem o foro da Comarca de ${foro || "______________________"}, Estado de ${(cliente && cliente.estado) || "São Paulo"}, para dirimir quaisquer dúvidas ou controvérsias oriundas deste contrato, com renúncia a qualquer outro, por mais privilegiado que seja.`,
   ]);
 
+  }
+
   // ── Numeração e referências cruzadas ──
   const indices = {};
   cl.forEach((x, i) => { indices[x.id] = i; });
@@ -14991,10 +15102,13 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const resolver = (t) => String(t)
     .replace(/\{\{cl:(\w+)\}\}/g, (_, id) => refCl(id))
     .replace(/\{\{it:(\w+)\}\}/g, (_, marca) => refIt(marca));
+  const simples = m.numeracao === "simples";
   const clausulas = cl.map((x, i) => ({
     id: x.id,
-    titulo: `CLÁUSULA ${CTR_ORDINAIS[i] || `${i + 1}ª`} — ${x.nome}`,
-    itens: x.itens.map((t, j) => `${i + 1}.${j + 1}. ${resolver(t)}`),
+    titulo: simples ? `${i + 1} ${x.nome}` : `CLÁUSULA ${CTR_ORDINAIS[i] || `${i + 1}ª`} — ${x.nome}`,
+    subtitulo: x.subtitulo || "",
+    // no estilo simples, cláusula de um item só é parágrafo corrido
+    itens: x.itens.map((t, j) => (simples && x.itens.length === 1 ? resolver(t) : `${i + 1}.${j + 1}${simples ? "" : "."} ${resolver(t)}`)),
     tabelaItens: !!x.tabelaItens,
     tabelaParcelas: !!x.tabelaParcelas,
     // índice do item que anuncia a tabela — ela é desenhada logo abaixo dele
@@ -15005,7 +15119,9 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   return {
     modelo: m, global, total,
     modalidade: modo,
-    titulo: "CONTRATO DE PRESTAÇÃO DE SERVIÇOS",
+    titulo: m.titulo || "CONTRATO DE PRESTAÇÃO DE SERVIÇOS",
+    mostrarFecho: !m.fechoProprio,
+    mostrarSubtitulo: !m.preambuloSimples,
     subtitulo: objetoTexto,
     nomeDoContrato,
     numeroContrato: c.numeroContrato || "",
@@ -15140,12 +15256,13 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
 
   return (
     <div style={CTR_S.doc} data-vk-contrato="1" ref={alvo}>
-      <h1 style={CTR_S.h1}>{(d.nomeDoContrato || d.titulo).toUpperCase()}</h1>
+      <h1 style={CTR_S.h1}>{(d.mostrarSubtitulo === false ? d.titulo : (d.nomeDoContrato || d.titulo)).toUpperCase()}</h1>
       {d.numeroContrato ? <div style={{ ...CTR_S.h2, margin: "2px 0 0" }}>{`Contrato nº ${d.numeroContrato}`}</div> : null}
-      <div style={CTR_S.h2}>{d.subtitulo}</div>
+      {d.mostrarSubtitulo === false ? <div style={{ height: 14 }} /> : <div style={CTR_S.h2}>{d.subtitulo}</div>}
       {d.preambulo.map((t, i) => <p key={i} style={CTR_S.p}>{t}</p>)}
       {d.clausulas.map((cl, i) => (
         <div key={i}>
+          {cl.subtitulo ? <div style={{ ...CTR_S.clausula, marginTop: 20 }}>{cl.subtitulo}</div> : null}
           <div style={CTR_S.clausula}>{cl.titulo}</div>
           {cl.itens.flatMap((t, j) => {
             // A tabela é desenhada logo abaixo do item que a anuncia — não no
@@ -15160,7 +15277,9 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
         </div>
       ))}
 
-      <p style={{ ...CTR_S.p, marginTop: 18 }}>E, por estarem assim justas e contratadas, as partes assinam o presente instrumento em 2 (duas) vias de igual teor e forma, na presença das 2 (duas) testemunhas abaixo.</p>
+      {d.mostrarFecho === false ? null : (
+        <p style={{ ...CTR_S.p, marginTop: 18 }}>E, por estarem assim justas e contratadas, as partes assinam o presente instrumento em 2 (duas) vias de igual teor e forma, na presença das 2 (duas) testemunhas abaixo.</p>
+      )}
       <p style={{ ...CTR_S.p, textAlign: "center", marginTop: 14 }}>{`${d.cidadeAssinatura || "______________________"}, ${d.dataAssinaturaExtenso || "______ de ____________________ de __________"}.`}</p>
       {d.assinaturas.map((a, i) => (
         <div key={i} style={CTR_S.assinatura}>
@@ -17234,6 +17353,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const modo = modalidadeContrato(g);
     const pz = prazoContrato(g);
     const escopo = escopoContrato(g);
+    const gerenciamento = g.modelo === "gerenciamentoObra";
     // O objeto só é reescrito automaticamente enquanto estiver no texto padrão.
     const objetoEditado = String(g.objeto || "").trim() !== objetoPadrao(g.tipoProfissional, escopo);
     const setG = (campo, valor) => setContratoGerando({ ...g, [campo]: valor });
@@ -17333,7 +17453,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]}. Use ＋ Novo para cadastrar.</div>
             )}
           </div>
-          <div>
+          <div style={{ display: gerenciamento ? "none" : undefined }}>
             <label style={C.label}>3. O que o contrato inclui</label>
             <select style={{ ...C.input, cursor: "pointer" }} value={escopo} onChange={e => {
               const base = contratoVazio(null, cliente.id, obraSelecionada.id, g.tipoProfissional, e.target.value);
@@ -17442,8 +17562,40 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={g.status} onChange={e => setG("status", e.target.value)}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
         </div>
 
+        {gerenciamento && (
+          <div style={bloco}>
+            <div style={tituloBloco}>Gerenciamento de obra</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>
+              O texto do contrato é o modelo do escritório. Aqui você preenche só o que muda.
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={C.label}>Referência da obra</label>
+              <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.referenciaObra || ""} onChange={e => setG("referenciaObra", e.target.value)}
+                placeholder="ex.: Reforma comercial com aproximadamente 435,86 metros quadrados entre áreas de ampliação e existente" />
+              <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Entra na cláusula 2, seguida do endereço da obra.</div>
+            </div>
+            <div style={{ ...grade("1fr 1fr 1fr"), marginBottom: 12 }}>
+              <div><label style={C.label}>Valor total (R$)</label><CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" /></div>
+              <div><label style={C.label}>Nº de parcelas</label><CampoCtrNum tipo="inteiro" valor={g.parcelas} onChange={v => setG("parcelas", v)} style={C.input} placeholder="0" /></div>
+              <div><label style={C.label}>Boleto todo dia</label><CampoCtrNum tipo="inteiro" valor={g.diaVencimento} onChange={v => setG("diaVencimento", v)} style={C.input} placeholder="05" /></div>
+            </div>
+            <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
+              <div>
+                <label style={C.label}>Locadora de equipamentos preferida</label>
+                <input style={C.input} value={g.locadoraEquipamentos || ""} onChange={e => setG("locadoraEquipamentos", e.target.value)} placeholder="em branco, a cláusula não cita nenhuma" />
+              </div>
+              <div><label style={C.label}>Interrupção que rescinde (dias)</label><CampoCtrNum tipo="inteiro" valor={g.diasInterrupcao} onChange={v => setG("diasInterrupcao", v)} style={C.input} placeholder="90" /></div>
+            </div>
+            <div style={grade("1fr 1fr 1fr")}>
+              <div><label style={C.label}>Multa por inadimplência (%)</label><CampoCtrNum tipo="pct" valor={g.multaInadimplenciaPct} onChange={v => setG("multaInadimplenciaPct", v)} style={C.input} placeholder="0,00%" /></div>
+              <div><label style={C.label}>Juros ao mês (%)</label><CampoCtrNum tipo="pct" valor={g.jurosMesPct} onChange={v => setG("jurosMesPct", v)} style={C.input} placeholder="0,00%" /></div>
+              <div><label style={C.label}>Honorários advocatícios (%)</label><CampoCtrNum tipo="pct" valor={g.honorariosPct} onChange={v => setG("honorariosPct", v)} style={C.input} placeholder="0,00%" /></div>
+            </div>
+          </div>
+        )}
+
         {/* Valor: itens discriminados ou valor único — vale o que for preenchido */}
-        <div style={bloco}>
+        {!gerenciamento && <div style={bloco}>
           <div style={tituloBloco}>Valor do contrato</div>
           <div style={{ ...grade("240px 1fr"), marginBottom: 10 }}>
             <div>
@@ -17463,10 +17615,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             </div>
           ))}
           <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>
-        </div>
+        </div>}
 
         {/* Modalidade de pagamento */}
-        <div style={bloco}>
+        {!gerenciamento && <div style={bloco}>
           <div style={tituloBloco}>Modalidade de pagamento</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {MODALIDADES_PAGAMENTO.map(mp => (
@@ -17518,10 +17670,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           {modo === "entradaFinal" && (g.entradaEscopo || "contrato") === "item" && !(g.itens || []).some(i => Number(i.valor) > 0) && (
             <div style={{ fontSize: 12, color: "#4b5563", marginTop: 8 }}>Pagamento item a item precisa de itens com valor — sem eles, o contrato sai como entrada + saldo no final.</div>
           )}
-        </div>
+        </div>}
 
         {/* Cláusulas opcionais */}
-        <div style={bloco}>
+        {!gerenciamento && <div style={bloco}>
           <div style={tituloBloco}>Cláusulas do contrato</div>
           <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>Marque o que entra neste contrato. O texto e a numeração se ajustam sozinhos.</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
@@ -17571,15 +17723,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </div>
             ))}
           </div>
-        </div>
+        </div>}
 
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 12, display: gerenciamento ? "none" : undefined }}>
           <label style={C.label}>Exclusões do objeto (o que não entra)</label>
           <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: o lixamento do concreto e a montagem hidráulica da piscina" />
           <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Comece em minúscula para o contrato abrir com "Não integram o objeto deste contrato:". Começando em maiúscula, o seu texto entra como está.</div>
         </div>
 
-        <div style={bloco}>
+        {!gerenciamento && <div style={bloco}>
           <div style={tituloBloco}>ANEXO I — descritivo dos serviços (opcional)</div>
           {(g.escopo || []).map((e2, idx) => (
             <div key={idx} style={{ border: "1px solid #eee", borderRadius: 8, padding: 10, marginBottom: 8, background: "#fafafa" }}>
@@ -17591,7 +17743,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             </div>
           ))}
           <button type="button" style={C.btnSec} onClick={() => addLinha("escopo", { titulo: "", texto: "" })}>＋ Adicionar bloco do descritivo</button>
-        </div>
+        </div>}
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center", marginTop: 8 }}>
           <button style={C.btn} onClick={salvar}>Salvar</button>

@@ -189,8 +189,8 @@ teste("sem prestador escolhido o contrato sai com o nome digitado e sem qualific
   assert.strictEqual(d.assinaturas[1].nome, "Fulano Empreiteira");
 });
 
-teste("dois modelos disponíveis, cada um com o seu padrão", () => {
-  assert.deepStrictEqual(modulo.CONTRATO_MODELOS.map((m) => m.id), ["empreitadaMaoDeObra", "empreitadaGlobal"]);
+teste("três modelos disponíveis, cada um com o seu padrão", () => {
+  assert.deepStrictEqual(modulo.CONTRATO_MODELOS.map((m) => m.id), ["empreitadaMaoDeObra", "empreitadaGlobal", "gerenciamentoObra"]);
   assert.strictEqual(modulo.contratoModelo("empreitadaGlobal").padrao.garantiaMeses, 12);
   assert.strictEqual(modulo.contratoModelo("empreitadaMaoDeObra").padrao.garantiaMeses, 6);
   assert.strictEqual(modulo.contratoModelo("inexistente").id, "empreitadaMaoDeObra"); // fallback
@@ -585,12 +585,13 @@ teste("o escritório entra como contratado, lendo o próprio cadastro", () => {
   const c = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra", "maoDeObra"),
     prestadorId: modulo.ID_PRESTADOR_ESCRITORIO, valor: 60000, modalidade: "parcelado", parcelas: 12 };
   const d = modulo.montarContrato(c, { cliente, obra, prestador: p });
-  assert.strictEqual(d.nomeDoContrato, "Contrato de Prestação de Serviços de Gestão e Acompanhamento de Obra");
+  assert.strictEqual(d.titulo, "CONTRATO DE GERENCIAMENTO DE OBRA", "gestão de obra usa o modelo do escritório");
   const t = texto(d);
-  assert.ok(t.includes("CONTRATADO: PADOVAN ARQUITETOS"));
+  assert.ok(t.includes("CONTRATADA: PADOVAN ARQUITETOS"));
   assert.ok(t.includes("CONTRATANTE: COBOP COMÉRCIO DE BOMBAS E PISCINAS LTDA"));
   assert.strictEqual(d.assinaturas[1].nome, "Padovan Arquitetos");
   assert.strictEqual(d.assinaturas[1].representante, "Leonardo Padovan");
+  assert.strictEqual(d.assinaturas[1].papel, "CONTRATADA");
 
   // o escritório aparece na lista de contratados do tipo gestão de obra
   const lista = modulo.prestadoresDoTipo([{ id: "p1", nome: "Outro", categoria: "Pintor" }], "gestaoObra", escritorio);
@@ -607,6 +608,59 @@ teste("aponta o que falta no cadastro do escritório para o contrato sair comple
     responsaveis: [{ nome: "Leonardo Padovan" }] };
   assert.deepStrictEqual(modulo.faltaNoEscritorio(quaseCompleto), ["CPF do responsável"]);
   assert.deepStrictEqual(modulo.faltaNoEscritorio({ ...quaseCompleto, responsaveis: [{ nome: "Leonardo Padovan", cpf: "111.222.333-44" }] }), []);
+});
+
+teste("gerenciamento de obra segue o modelo do escritório", () => {
+  const escritorio = { nome: "Leo Padovan Projetos e Construções", cnpj: "36.122.417/0001-74",
+    endereco: "Rua Augusto Fernandes Alonso, 344 – Jardim Paulista", cidade: "Ourinhos", estado: "SP", cep: "19.906-450",
+    responsaveis: [{ nome: "Leonardo Padovan", cpf: "111.222.333-44" }] };
+  const p = modulo.prestadorDoEscritorio(escritorio);
+  // o tipo "gestão de obra" fixa o modelo, qualquer que seja o escopo
+  const c = modulo.contratoVazio(null, "c1", "o1", "gestaoObra", "ambos");
+  assert.strictEqual(c.modelo, "gerenciamentoObra");
+  assert.strictEqual(c.parcelas, 12);
+  assert.strictEqual(c.diaVencimento, 5);
+  assert.strictEqual(c.multaInadimplenciaPct, 20);
+  assert.strictEqual(c.diasInterrupcao, 90);
+
+  const d = modulo.montarContrato({ ...c, prestadorId: modulo.ID_PRESTADOR_ESCRITORIO, valor: 130000, parcelas: 12,
+    referenciaObra: "Reforma comercial com aproximadamente 435,86 metros quadrados entre áreas de ampliação e existente",
+    locadoraEquipamentos: "FERMAC Locação de Equipamentos", dataAssinatura: "2026-07-20" },
+    { cliente, obra, prestador: p });
+
+  assert.strictEqual(d.titulo, "CONTRATO DE GERENCIAMENTO DE OBRA");
+  assert.strictEqual(d.mostrarFecho, false, "a última cláusula já é o fecho");
+  // preâmbulo curto, no formato do documento
+  assert.ok(d.preambulo[0].startsWith("CONTRATANTE: COBOP COMÉRCIO DE BOMBAS E PISCINAS LTDA, inscrita no CNPJ 44.945.459/0001-33, sediada na Avenida"));
+  assert.ok(d.preambulo[1].startsWith("CONTRATADA: LEO PADOVAN PROJETOS E CONSTRUÇÕES, inscrita no CNPJ 36.122.417/0001-74"));
+  assert.strictEqual(d.preambulo.length, 2);
+
+  // numeração simples: cláusula de um item é parágrafo; a de vários numera 3.1, 3.2…
+  assert.deepStrictEqual(d.clausulas.map(x => x.titulo), [
+    "1 OBJETO DO CONTRATO", "2 REFERÊNCIA", "3 GESTÃO DA OBRA", "4 VALORES E FORMA DE PAGAMENTO",
+    "5 DESPESAS NÃO CONTEMPLADAS NESTE CONTRATO", "6 PRAZO DE VALIDADE DO CONTRATO", "7 RESCISÃO",
+    "8 DA REGÊNCIA", "9 DO FECHO E DO FORO"]);
+  const gestao = d.clausulas.find(x => x.id === "gestao");
+  assert.strictEqual(gestao.subtitulo, "DESCRIÇÃO DO SERVIÇO CONTRATADO:");
+  assert.strictEqual(gestao.itens.length, 8);
+  assert.ok(gestao.itens[0].startsWith("3.1 MÃO DE OBRA:"));
+  assert.ok(gestao.itens[7].startsWith("3.8 VÍNCULO EMPREGATÍCIO:"));
+  assert.ok(d.clausulas[0].itens[0].startsWith("O presente contrato tem como objeto"), "cláusula de um item não numera");
+
+  const t = texto(d);
+  assert.ok(t.includes("Reforma comercial com aproximadamente 435,86 metros quadrados"));
+  assert.ok(t.includes("no endereço: Avenida Doutor Altino Arantes"));
+  assert.ok(t.includes("R$ 130.000,00 (cento e trinta mil reais), parcelado em 12 (doze) parcelas de R$ 10.833,33"));
+  assert.ok(t.includes("boletos com vencimento todo dia 05 de cada mês"));
+  assert.ok(t.includes("geralmente na FERMAC Locação de Equipamentos"));
+  assert.ok(t.includes("multa aqui pactuada em 20% sobre o valor do contrato, acrescida de juros de 1% ao mês"));
+  assert.ok(t.includes("honorários advocatícios de 20%"));
+  assert.ok(t.includes("interrompida por mais de 90 (noventa) dias"));
+  assert.ok(t.includes("foro da Comarca de Ourinhos"));
+  // sem locadora, a cláusula não cita nenhuma
+  const semLocadora = texto(modulo.montarContrato({ ...c, valor: 1000, locadoraEquipamentos: "" }, { cliente, obra, prestador: p }));
+  assert.ok(!semLocadora.includes("geralmente na"));
+  assert.ok(semLocadora.includes("Todas as locações serão solicitadas pela CONTRATADA, podendo a CONTRATANTE indicar local"));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
