@@ -51,7 +51,7 @@ const {
 const HOJE = "2026-09-05T12:00:00Z";
 
 // ── semente ──────────────────────────────────────────────────
-t("semente tem 191 insumos", () => eq(INSUMOS_SEED.length, 191));
+t("semente tem 192 insumos", () => eq(INSUMOS_SEED.length, 192));
 
 t("todo código da semente é único", () => {
   const s = new Set(INSUMOS_SEED.map(x => x.codigo));
@@ -63,8 +63,8 @@ t("todo insumo da semente tem preço, exceto os 2 prestadores em aberto", () => 
   eq(semPreco.map(x => x.nome).sort(), ["Gestão Obra", "Serralheiro"]);
 });
 
-t("semente tem 174 materiais e 17 prestadores", () => {
-  eq(INSUMOS_SEED.filter(x => x.tipo === "material").length, 174);
+t("semente tem 175 materiais e 17 prestadores", () => {
+  eq(INSUMOS_SEED.filter(x => x.tipo === "material").length, 175);
   eq(INSUMOS_SEED.filter(x => x.tipo === "prestador").length, 17);
 });
 
@@ -207,10 +207,10 @@ t("compra normal vira novo preço de referência", () => {
 
 t("compra 5x acima vai para precoPendente e não altera o preço", () => {
   const r = atualizarPrecoReferencia(cimento, {
-    tipo: "custo", quantidade: 1, total: 191, dataPagamento: "2026-09-01",
+    tipo: "custo", quantidade: 1, total: 192, dataPagamento: "2026-09-01",
   });
   eq(r.precoReferencia, 38);
-  eq(r.precoPendente.valor, 191);
+  eq(r.precoPendente.valor, 192);
 });
 
 t("nota retroativa não rebaixa preço mais novo", () => {
@@ -258,10 +258,10 @@ t("migração é idempotente", () => {
 });
 
 // ── semeadura ────────────────────────────────────────────────
-t("semeadura em base vazia cria os 191", () => {
+t("semeadura em base vazia cria os 192", () => {
   const r = semearInsumos([], INSUMOS_SEED);
-  eq(r.criados, 191);
-  eq(r.materiais.length, 191);
+  eq(r.criados, 192);
+  eq(r.materiais.length, 192);
 });
 
 t("semeadura é idempotente — segunda vez não cria nem altera", () => {
@@ -269,7 +269,7 @@ t("semeadura é idempotente — segunda vez não cria nem altera", () => {
   const b = semearInsumos(a.materiais, INSUMOS_SEED);
   eq(b.criados, 0);
   eq(b.atualizados, 0);
-  eq(b.materiais.length, 191);
+  eq(b.materiais.length, 192);
 });
 
 t("semeadura não sobrescreve preço definido à mão", () => {
@@ -297,7 +297,7 @@ t("semeadura casa material legado por nome e não duplica", () => {
   const r = semearInsumos(legado, INSUMOS_SEED);
   const cimentos = r.materiais.filter(x => normalizarTexto(x.nome) === "sacos de cimento 50kg");
   eq(cimentos.length, 1);
-  eq(r.materiais.length, 191);
+  eq(r.materiais.length, 192);
 });
 
 t("todo insumo semeado resolve por si mesmo", () => {

@@ -619,3 +619,32 @@ No sobrado, o bloco Geral recebe o m² de parede e o perímetro da casa inteira;
 cada pavimento entra com **50%** disso (`autosPavimentos`), editável em cada
 bloco — digitou, o digitado vence. A área construída do Pav. 1 parte da área
 da laje do térreo. Em obra térrea não há rateio: o pavimento recebe o total.
+
+## Forros (módulo novo, set/2026)
+
+Nem o VBA nem a primeira entrega do VICKE quantificavam forro — o cronograma
+já contava as horas do gesseiro, mas o orçamento não comprava o material.
+
+Cada forro é uma linha `{ pavimento, tipo, area, produto }` em
+`projeto.forros`, editada no bloco **Forros e Cobertura**. Em branco, vale a
+lista automática (`autosForros`): obra térrea gera um forro com a área da
+laje; sobrado gera dois, cada um com a área da sua laje. Dá para trocar o
+tipo por trecho (parte em gesso, parte em madeira) e acrescentar trechos até
+`FORROS_MAX`.
+
+Tipos e consumos em `FORRO_TIPOS` / `FORRO_CONSUMO` (referência: SINAPI 96110
+para o acartonado, prática do escritório para os demais):
+
+- **Gesso acartonado**: placa + perfil F530 (2,2 m/m², barra de 3 m),
+  parafuso 3,5×25 (15/m², caixa de 1.000), fita telada (1,5 m/m², rolo de
+  90 m), arame galvanizado (0,15 kg/m²), tabica na borda.
+- **Gesso em placa**: placa + arame (0,25 kg/m²), gesso de rejunte
+  (0,5 kg/m²), sisal (0,05 kg/m²), tabica na borda.
+- **Madeira** e **PVC**: régua + sarrafo de barroteamento (2,2 m/m²), pregos,
+  meia-cana na borda.
+
+A borda (tabica ou meia-cana) usa o **perímetro dos cômodos** do bloco Geral,
+rateado entre os forros pela área de cada um. O material de fixação é somado
+entre os trechos e sai numa linha só por insumo, na sub-etapa "Fixação e
+acabamento". A etapa `FORROS` do cronograma recebeu `custoOrdens: [26]`, então
+esse custo agora aparece no físico-financeiro.

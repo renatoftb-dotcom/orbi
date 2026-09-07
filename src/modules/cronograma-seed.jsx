@@ -122,7 +122,7 @@ var ETAPAS_CRONOGRAMA_SEED = [
   { id: "MURO_DIVISA",       nome: "Muro de divisa",                          grupo: "Externa", duracaoBase: 2, condicao: "muro", predecessoras: [{ id: "FUNDACAO", tipo: "FS" }], custoOrdens: [14] },
   { id: "PISCINA",           nome: "Piscina",                                 grupo: "Externa", duracaoBase: 3, condicao: "piscina", predecessoras: [{ id: "TERRAPLANAGEM", tipo: "FS" }], custoOrdens: [16] },
   { id: "REVESTIMENTOS",     nome: "Revestimentos cerâmicos (azulejos e pisos)", grupo: "Acabamento", duracaoBase: 2, predecessoras: [{ id: "IMPERM_MOLHADAS", tipo: "FS" }, { id: "CONTRAPISO_PAV1", tipo: "FS" }], custoOrdens: [25] },
-  { id: "FORROS",            nome: "Forros",                                  grupo: "Acabamento", duracaoBase: 1, predecessoras: [{ id: "REVESTIMENTOS", tipo: "SS", avanco: 0.5 }] },
+  { id: "FORROS",            nome: "Forros",                                  grupo: "Acabamento", duracaoBase: 1, predecessoras: [{ id: "REVESTIMENTOS", tipo: "SS", avanco: 0.5 }], custoOrdens: [26] },
   { id: "ESQUADRIAS",        nome: "Esquadrias, vidros, soleiras e peitoris", grupo: "Acabamento", duracaoBase: 1.5, predecessoras: [{ id: "REBOCO", tipo: "FS" }], custoOrdens: [17] },
   { id: "PINTURA",           nome: "Pintura",                                 grupo: "Acabamento", duracaoBase: 3, predecessoras: [{ id: "FORROS", tipo: "FS" }, { id: "ESQUADRIAS", tipo: "SS", avanco: 0.5 }], custoOrdens: [12] },
   { id: "PORTAS",            nome: "Portas internas e marcenaria",            grupo: "Acabamento", duracaoBase: 1, predecessoras: [{ id: "PINTURA", tipo: "SS", avanco: 0.6 }], custoOrdens: [24] },

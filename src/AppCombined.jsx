@@ -5235,6 +5235,8 @@ var INSUMOS_SEED = [
   { codigo:"ESQ-001", nome:"Alumínio linha Gold - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["CM060", "CM174", "CM200", "CM223", "DS238", "GN001", "GN003", "GN004", "GN005", "GN006", "GN007", "GN008", "GN009", "GN010", "GN011", "GN012", "GN013", "GN014", "GN018", "GN019", "GN020", "GN021", "GN022", "GN023", "GN024", "GN025", "GN026", "GN032", "GN033", "GN035", "GN037", "GN038", "GN039", "GN052", "GN053", "GN055", "GN061", "GN063", "GN070", "GN074", "GUA483", "MH006", "MN015", "MN055", "RM005", "RM038", "RM039", "VZC122", "VZP04"], observacao:"Preço por kg de perfil Alcoa Gold — referência da planilha (S_ESQUADRIAS.bas)" },
   { codigo:"ESQ-002", nome:"Alumínio linha Suprema - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["SU-001", "SU-002", "SU-003", "SU-039", "SU-040", "SU-041", "SU-044", "SU-047", "SU-049", "SU-053", "SU-102", "SU-225", "SU-227", "SU-228", "SU-291"], observacao:"Preço por kg de perfil Alcoa Suprema — mesma referência da Gold até haver compra" },
   { codigo:"ESQ-003", nome:"Vidro 8mm", grupo:"Esquadrias", unidade:"m2", tipo:"material", precoReferencia:166.63, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Vidro 8mm", "Vidro incolor 8mm", "Vidro temperado 8mm"], observacao:"Referência da planilha (S_ESQUADRIAS.bas)" },
+  // Forros — genérico de PVC (o cadastro do escritório já tem gesso e madeira)
+  { codigo:"FOR-901", nome:"Forro - PVC", grupo:"Forros e gesso", unidade:"m2", tipo:"material", precoReferencia:55, precoFonte:"mercado", precoData:"2026-09-07", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Forro - PVC","Forro PVC"], observacao:"Régua de PVC branca 200 mm para forro — referência de mercado; a compra real atualiza o preço" },
   // Elétrica — ponto de ar condicionado: infra (eletroduto, cabo, dreno,
   // tomada de circuito próprio) mais a instalação, cobrados por ponto.
   { codigo:"ELE-901", nome:"Elétrica - Ponto de ar condicionado (infra + instalação)", grupo:"Elétrica e iluminação", unidade:"Unidades", tipo:"material", precoReferencia:1200, precoFonte:"mercado", precoData:"2026-09-07", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Elétrica - Ponto de ar condicionado (infra + instalação)","Ponto de ar condicionado"], observacao:"Custo por ponto de ar condicionado (infraestrutura e instalação) — valor definido pelo escritório" },
@@ -5949,7 +5951,7 @@ var ETAPAS_CRONOGRAMA_SEED = [
   { id: "MURO_DIVISA",       nome: "Muro de divisa",                          grupo: "Externa", duracaoBase: 2, condicao: "muro", predecessoras: [{ id: "FUNDACAO", tipo: "FS" }], custoOrdens: [14] },
   { id: "PISCINA",           nome: "Piscina",                                 grupo: "Externa", duracaoBase: 3, condicao: "piscina", predecessoras: [{ id: "TERRAPLANAGEM", tipo: "FS" }], custoOrdens: [16] },
   { id: "REVESTIMENTOS",     nome: "Revestimentos cerâmicos (azulejos e pisos)", grupo: "Acabamento", duracaoBase: 2, predecessoras: [{ id: "IMPERM_MOLHADAS", tipo: "FS" }, { id: "CONTRAPISO_PAV1", tipo: "FS" }], custoOrdens: [25] },
-  { id: "FORROS",            nome: "Forros",                                  grupo: "Acabamento", duracaoBase: 1, predecessoras: [{ id: "REVESTIMENTOS", tipo: "SS", avanco: 0.5 }] },
+  { id: "FORROS",            nome: "Forros",                                  grupo: "Acabamento", duracaoBase: 1, predecessoras: [{ id: "REVESTIMENTOS", tipo: "SS", avanco: 0.5 }], custoOrdens: [26] },
   { id: "ESQUADRIAS",        nome: "Esquadrias, vidros, soleiras e peitoris", grupo: "Acabamento", duracaoBase: 1.5, predecessoras: [{ id: "REBOCO", tipo: "FS" }], custoOrdens: [17] },
   { id: "PINTURA",           nome: "Pintura",                                 grupo: "Acabamento", duracaoBase: 3, predecessoras: [{ id: "FORROS", tipo: "FS" }, { id: "ESQUADRIAS", tipo: "SS", avanco: 0.5 }], custoOrdens: [12] },
   { id: "PORTAS",            nome: "Portas internas e marcenaria",            grupo: "Acabamento", duracaoBase: 1, predecessoras: [{ id: "PINTURA", tipo: "SS", avanco: 0.6 }], custoOrdens: [24] },
@@ -7491,6 +7493,7 @@ const ORD = {
   esquadrias: 17,
   itensProjeto: 18, // hidráulica, esgoto, elétrica, louças, aquecimento — lidos do projeto de engenharia (18–24)
   pisos: 25,        // pisos e revestimentos (módulo novo, sem equivalente no VBA)
+  forros: 26,       // forros (módulo novo, sem equivalente no VBA)
 };
 
 // ── Classificação geral da obra (bloco "Geral" do formulário) ──
@@ -10637,7 +10640,7 @@ function autosPisos(projeto) {
 function estimarPelosComodos(projeto) {
   const p = projeto || {};
   const ambientes = migrarAmbientes(p.ambientes || {});
-  const r = { tamanho: TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio", pisoInterno: 0, revestimentoInterno: 0, rodapeM: 0, soleirasM: 0, bancadas: [], detalhes: [] };
+  const r = { tamanho: TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio", pisoInterno: 0, revestimentoInterno: 0, rodapeM: 0, soleirasM: 0, perimetroComodos: 0, bancadas: [], detalhes: [] };
   const r1 = (x) => Math.round(x * 10) / 10;
   for (const id of Object.keys(COMODO_OBRA_PROJETO)) {
     const n = Math.max(0, Math.round(numOrZero(ambientes[id])));
@@ -10648,6 +10651,7 @@ function estimarPelosComodos(projeto) {
     r.pisoInterno += n * c.area;
     r.revestimentoInterno += n * c.revestimento;
     r.rodapeM += n * c.rodape;
+    r.perimetroComodos += n * c.perimetro;
     r.soleirasM += n * PORTA_LARGURA;
     for (let k = 0; k < n; k++) {
       const sufixo = n > 1 ? ` ${k + 1}` : "";
@@ -10659,7 +10663,7 @@ function estimarPelosComodos(projeto) {
   for (const e of (Array.isArray(p.esquadrias) ? p.esquadrias : [])) {
     if (/JANELA|MAXIM|FIXO/.test(String(e && e.familia || ""))) r.soleirasM += numOrZero(e.qtd) * numOrZero(e.largura);
   }
-  r.pisoInterno = r1(r.pisoInterno); r.revestimentoInterno = r1(r.revestimentoInterno); r.rodapeM = r1(r.rodapeM); r.soleirasM = r1(r.soleirasM);
+  r.pisoInterno = r1(r.pisoInterno); r.revestimentoInterno = r1(r.revestimentoInterno); r.rodapeM = r1(r.rodapeM); r.soleirasM = r1(r.soleirasM); r.perimetroComodos = r1(r.perimetroComodos);
   return r;
 }
 
@@ -10811,6 +10815,113 @@ function pisosRevestimentos(cp, out, data) {
     MEM.conta("Rolos, com 10% de perda", "área ÷ 25 × 1,10", [["área", m2PisoInterno]], m2PisoInterno / 25 * PERDA, "rolos"),
     MEM.teto(m2PisoInterno / 25 * PERDA, teto(m2PisoInterno / 25 * PERDA), "rolos", "Arredonda para cima (rolo inteiro)"),
   ] });
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// FORROS — módulo novo (não existia no VBA)
+// ═══════════════════════════════════════════════════════════════
+// O modelo antigo nunca quantificou forro: o cronograma já contava o tempo
+// do gesseiro, mas o orçamento não comprava o material. Aqui cada forro é
+// uma linha (pavimento + tipo + área); no sobrado a lista já vem com os
+// dois pavimentos, cada um com a área da sua laje, e o usuário edita ou
+// acrescenta trechos de outro tipo (parte em gesso, parte em madeira).
+const FORRO_TIPOS = [
+  { id: "gessoAcartonado", nome: "Gesso acartonado (drywall)", produto: "Gesso - Drywall" },
+  { id: "gessoPlaca",      nome: "Gesso em placa (liso)",      produto: "Gesso - Placas 12,5mm  0,60x2,00" },
+  { id: "madeira",         nome: "Madeira (pinus)",            produto: "Forro - Forro Pinus 3mts" },
+  { id: "pvc",             nome: "PVC",                        produto: "Forro - PVC" },
+];
+const FORRO_TIPO_PADRAO = "gessoAcartonado";
+// Consumo por m² de forro, por tipo. Referência: composição SINAPI 96110
+// (forro de gesso acartonado) e prática do escritório para os demais.
+// `borda` é por metro de acabamento no encontro com a parede.
+const FORRO_CONSUMO = {
+  gessoAcartonado: {
+    itens: [
+      { nome: "Gesso - PERFIL F530 X 3,00m", porM2: 2.2 / 3, unidade: "Unidades", nota: "perfis a cada 45 cm, em barras de 3 m" },
+      { nome: "Gesso - PARAFUSO 3,5X25mm PA - CX/1000Q", porM2: 15 / 1000, unidade: "Unidades", nota: "15 parafusos por m², caixa de 1.000" },
+      { nome: "Gesso - FITA TELADA 90M", porM2: 1.5 / 90, unidade: "Unidades", nota: "1,5 m de junta por m², rolo de 90 m" },
+      { nome: "Gesso - Arame Galvanizado 20", porM2: 0.15, unidade: "Kg", nota: "penduais de fixação na laje" },
+    ],
+    borda: { nome: "Gesso - Tabica 3mts", porMetro: 1 / 3, unidade: "Unidades", nota: "tabica em barras de 3 m no encontro com a parede" },
+  },
+  gessoPlaca: {
+    itens: [
+      { nome: "Gesso - Arame Galvanizado 20", porM2: 0.25, unidade: "Kg", nota: "amarração das placas na laje" },
+      { nome: "Gesso - Saco Gesso 4kg", porM2: 0.5 / 4, unidade: "Unidades", nota: "gesso de rejunte, 0,5 kg por m²" },
+      { nome: "Gesso - Sisal 1kg", porM2: 0.05, unidade: "Unidades", nota: "sisal das juntas" },
+    ],
+    borda: { nome: "Gesso - Tabica 3mts", porMetro: 1 / 3, unidade: "Unidades", nota: "tabica em barras de 3 m no encontro com a parede" },
+  },
+  madeira: {
+    itens: [
+      { nome: "Forro - Sarrafo 5cm Cedrinho", porM2: 2.2, unidade: "Mts", nota: "barroteamento a cada 45 cm" },
+      { nome: "Aço - Pregos 17x21", porM2: 0.05, unidade: "KG", nota: "pregos de fixação" },
+    ],
+    borda: { nome: "Forro - Meia Cana Pinus", porMetro: 1, unidade: "Mts", nota: "meia-cana no encontro com a parede" },
+  },
+  pvc: {
+    itens: [
+      { nome: "Forro - Sarrafo 5cm Cedrinho", porM2: 2.2, unidade: "Mts", nota: "barroteamento a cada 45 cm" },
+      { nome: "Aço - Pregos 17x21", porM2: 0.03, unidade: "KG", nota: "pregos de fixação" },
+    ],
+    borda: { nome: "Forro - Meia Cana Pinus", porMetro: 1, unidade: "Mts", nota: "acabamento de borda" },
+  },
+};
+const FORROS_MAX = 8;
+function forroTipo(id) { return FORRO_TIPOS.find((t) => t.id === id) || FORRO_TIPOS[0]; }
+// Lista automática de forros: um por pavimento, com a área da sua laje.
+function autosForros(projeto) {
+  const p = projeto || {};
+  const terreo = p.terreo || {}, pav1 = p.pav1 || {};
+  const sobrado = p.tipologia === "Sobrado";
+  const r1 = (x) => Math.round(numOrZero(x) * 10) / 10;
+  const lista = [{ pavimento: sobrado ? "Térreo" : "Forro da casa", tipo: FORRO_TIPO_PADRAO, area: r1(terreo.areaLoje) }];
+  if (sobrado) lista.push({ pavimento: "Pav. 1", tipo: FORRO_TIPO_PADRAO, area: r1(pav1.areaLoje) });
+  return lista.filter((f) => f.area > 0);
+}
+function forros(cp, out) {
+  const lista = Array.isArray(cp.forros) ? cp.forros.filter((f) => numOrZero(f.area) > 0) : [];
+  if (!lista.length) return;
+  const areaTotal = lista.reduce((acc, f) => acc + numOrZero(f.area), 0);
+  const perimetroTotal = numOrZero(cp.perimetroComodos);
+  const base = { ordem: ORD.forros, tipo: "Acabamento", etapa: "Forros" };
+  // Consumíveis somados entre os forros, para não repetir a mesma linha
+  const somados = {};
+  const somar = (nome, unidade, qtd, origem) => {
+    const k = nome + "|" + unidade;
+    const a = somados[k] || (somados[k] = { nome, unidade, qtd: 0, origens: [] });
+    a.qtd += qtd;
+    a.origens.push({ origem, qtd });
+  };
+  for (const f of lista) {
+    const t = forroTipo(f.tipo);
+    const c = FORRO_CONSUMO[t.id] || FORRO_CONSUMO[FORRO_TIPO_PADRAO];
+    const area = numOrZero(f.area);
+    const produto = String(f.produto || "").trim() || t.produto;
+    const rotulo = f.pavimento || t.nome;
+    // Borda: o perímetro dos cômodos rateado pela área deste forro
+    const borda = areaTotal > 0 ? perimetroTotal * (area / areaTotal) : 0;
+    emitir(out, { ...base, subEtapa: rotulo, item: produto, unidade: "m2", qtd: ceil2(area * PERDA), memoria: [
+      MEM.nota(`Forro de ${t.nome.toLowerCase()} em ${rotulo}. A área vem do bloco Forros e Cobertura — no sobrado, cada pavimento já entra com a área da sua laje.`),
+      MEM.dado("Área de forro", area, "m²", "bloco Forros e Cobertura"),
+      MEM.conta("Com 10% de perda (recortes)", "área × 1,10", [["área", area]], area * PERDA, "m²"),
+      MEM.teto(area * PERDA, ceil2(area * PERDA), "m²", "Arredonda em centésimos de m²"),
+    ] });
+    for (const it of c.itens) somar(it.nome, it.unidade, area * it.porM2, `${rotulo}: ${numMem(area)} m² × ${numMem(it.porM2)} (${it.nota})`);
+    if (borda > 0 && c.borda) somar(c.borda.nome, c.borda.unidade, borda * c.borda.porMetro, `${rotulo}: ${numMem(borda)} m de borda × ${numMem(c.borda.porMetro)} (${c.borda.nota})`);
+  }
+  for (const a of Object.values(somados)) {
+    const bruto = a.qtd * PERDA;
+    emitir(out, { ...base, subEtapa: "Fixação e acabamento", item: a.nome, unidade: a.unidade, qtd: teto(bruto), memoria: [
+      MEM.nota("Material de fixação e acabamento do forro, somado entre os trechos. O perímetro do acabamento de borda vem dos cômodos do bloco Geral, rateado pela área de cada forro."),
+      ...a.origens.map((o) => MEM.dado(o.origem, o.qtd, a.unidade, "consumo do tipo de forro")),
+      MEM.conta("Soma dos trechos", a.origens.map((_, i) => `trecho ${i + 1}`).join(" + "), a.origens.map((o, i) => [`trecho ${i + 1}`, o.qtd]), a.qtd, a.unidade),
+      MEM.conta("Com 10% de perda", "quantidade × 1,10", [["quantidade", a.qtd]], bruto, a.unidade),
+      MEM.teto(bruto, teto(bruto), a.unidade),
+    ] });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -11324,6 +11435,16 @@ function normalizarProjeto(projeto) {
       deckM2: numOrZero(pisosIn.deckM2), deckProduto: pisosIn.deckProduto || "",
     },
 
+    // cp.forros — lista de forros (pavimento + tipo + área); em branco, um
+    // por pavimento com a área da respectiva laje
+    forros: ((Array.isArray(p.forros) && p.forros.length) ? p.forros : autosForros(p)).slice(0, FORROS_MAX).map((f) => ({
+      pavimento: String((f && f.pavimento) || "").trim(),
+      tipo: FORRO_TIPOS.some((t) => t.id === (f && f.tipo)) ? f.tipo : FORRO_TIPO_PADRAO,
+      area: numOrZero(f && f.area),
+      produto: (f && f.produto) || "",
+    })),
+    perimetroComodos: estimativaComodos.perimetroComodos,
+
     // cp.itensProjeto — lista digitada do projeto de engenharia
     itensProjeto: itensProjetoIn.slice(0, ITENS_PROJETO_MAX).map((it) => ({
       etapa: (it && it.etapa) || "OUTROS",
@@ -11430,6 +11551,7 @@ function gerarOrcamentoObra(projeto, data) {
   if (cp.temPiscina) piscina(cp, out);
   esquadrias(cp, out, data);
   pisosRevestimentos(cp, out, data);
+  forros(cp, out);
   instalacoesPorAmbiente(cp, out, data);
   itensProjeto(cp, out, data);
   prestadores(cp, out, data);
@@ -12026,6 +12148,22 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     set("cobertura", coberturas.filter((_, i) => i !== idx));
   }
 
+  // Forros: lista com pavimento, tipo e área. Em branco, a lista automática
+  // (um por pavimento, com a área da laje) — a primeira edição materializa.
+  const forrosAuto = autosForros(projetoDraft);
+  const forrosLista = (Array.isArray(projetoDraft.forros) && projetoDraft.forros.length) ? projetoDraft.forros : forrosAuto;
+  const forrosDigitados = Array.isArray(projetoDraft.forros) && projetoDraft.forros.length > 0;
+  function addForro() {
+    if (forrosLista.length >= FORROS_MAX) return;
+    set("forros", [...forrosLista, { pavimento: "", tipo: FORRO_TIPO_PADRAO, area: "" }]);
+  }
+  function updateForro(idx, campo, valor) {
+    set("forros", forrosLista.map((f, i) => (i === idx ? { ...f, [campo]: valor } : f)));
+  }
+  function removeForro(idx) {
+    set("forros", forrosLista.filter((_, i) => i !== idx));
+  }
+
   const bancadasLista = (projetoDraft.pisos && projetoDraft.pisos.bancadas) || [];
   function addBancada() {
     if (bancadasLista.length >= BANCADAS_MAX) return;
@@ -12264,8 +12402,43 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </>
         )}
 
-        <BlocoColapsavel titulo="Cobertura" subtitulo={`${coberturas.length} telhado${coberturas.length !== 1 ? "s" : ""}`} aberto={!!blocosAbertos.cobertura} onToggle={() => toggleBloco("cobertura")}>
+        <BlocoColapsavel titulo="Forros e Cobertura" subtitulo={`${forrosLista.length} forro${forrosLista.length !== 1 ? "s" : ""} · ${coberturas.length} telhado${coberturas.length !== 1 ? "s" : ""}`} aberto={!!blocosAbertos.cobertura} onToggle={() => toggleBloco("cobertura")}>
           <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Forros</div>
+            {forrosLista.map((f, idx) => (
+              <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1.2fr 1.6fr 1fr 1.6fr auto", gap: 8, alignItems: "end", padding: 10, background: "#fafafa", borderRadius: 8 }}>
+                <CampoTexto label="Onde" valor={f.pavimento} onChange={(v) => updateForro(idx, "pavimento", v)} placeholder={forrosAuto[idx] ? forrosAuto[idx].pavimento : "trecho"} />
+                <CampoSelect label="Tipo de forro" valor={f.tipo || FORRO_TIPO_PADRAO} onChange={(v) => updateForro(idx, "tipo", v)}
+                  opcoes={FORRO_TIPOS.map((t) => ({ value: t.id, label: t.nome }))} />
+                <div style={CAMPO_CELULA}>
+                  <label style={C.label}>Área (m²)</label>
+                  <input style={C.input} type="number" step="0.01" value={f.area ?? ""}
+                    placeholder={forrosAuto[idx] ? `auto: ${forrosAuto[idx].area} (laje)` : ""}
+                    onChange={(e) => updateForro(idx, "area", e.target.value === "" ? "" : Number(e.target.value))} />
+                </div>
+                <div style={CAMPO_CELULA}>
+                  <label style={C.label}>Produto (Insumos)</label>
+                  <input style={C.input} list="vk-insumos-forros" value={f.produto ?? ""} placeholder={forroTipo(f.tipo).produto}
+                    onChange={(e) => updateForro(idx, "produto", e.target.value)} />
+                </div>
+                <button type="button" onClick={() => removeForro(idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>Remover</button>
+              </div>
+            ))}
+            <datalist id="vk-insumos-forros">
+              {(data.materiais || []).filter((m) => /forros e gesso/i.test(String(m.grupo || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
+            </datalist>
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              {forrosLista.length < FORROS_MAX && (
+                <button type="button" style={C.btnSec} onClick={addForro}>＋ Adicionar forro</button>
+              )}
+              <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+                {forrosDigitados
+                  ? "Lista sua. Para voltar ao automático, remova todos os trechos."
+                  : `Automático: ${ehTerrea ? "a área da laje" : "cada pavimento com a área da sua laje"}. Edite ou acrescente trechos de outro tipo (parte em gesso, parte em madeira).`}
+                {" "}O acabamento de borda (tabica ou meia-cana) sai do perímetro dos cômodos do bloco Geral.
+              </span>
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginTop: 4 }}>Cobertura</div>
             {coberturas.map((t, idx) => (
               <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr 1fr auto", gap: 8, alignItems: "end", padding: 10, background: "#fafafa", borderRadius: 8 }}>
                 <CampoSelect label="Tipo de telha" valor={t.tipo} onChange={(v) => updateTelhado(idx, "tipo", v)} opcoes={TIPOS_TELHA_UI} />

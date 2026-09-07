@@ -39,7 +39,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto,
+    consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
 `)();
 
@@ -699,6 +699,43 @@ teste("memória de cálculo: instalações pré obra e fundação, com o último
   assert.deepStrictEqual(poste.memoria.map((x) => x.tipo), ["nota"]);
   // a memória não é gravada com o orçamento: quem grava tira o campo
   assert.ok(!("memoria" in JSON.parse(JSON.stringify({ ...poste, memoria: undefined }))));
+});
+
+teste("forros: um por pavimento com a área da laje, tipos diferentes e material de fixação somado", () => {
+  const sobrado = { tipologia: "Sobrado", arquitetura: { areaConstruida: 260, m2ParedesTotal: 400, perimetroParedes: 100 },
+    terreo: { areaLoje: 130 }, pav1: { areaLoje: 120 }, ambientes: { cozinha: 1, wc: 2, dormitorio: 3, salaTV: 1 } };
+  // automático: dois forros, cada um com a área da sua laje
+  assert.deepStrictEqual(modulo.autosForros(sobrado).map((f) => [f.pavimento, f.area]), [["Térreo", 130], ["Pav. 1", 120]]);
+  assert.deepStrictEqual(modulo.autosForros({ tipologia: "Térrea", terreo: { areaLoje: 90 } }).map((f) => [f.pavimento, f.area]), [["Forro da casa", 90]]);
+  assert.deepStrictEqual(modulo.autosForros({ tipologia: "Térrea", terreo: {} }), []); // sem laje, sem forro
+
+  const r = gerarOrcamentoObra(sobrado, { materiais: [] });
+  const f = r.itens.filter((i) => i.etapa === "Forros");
+  assert.strictEqual(f.find((i) => i.subEtapa === "Térreo").qtd, 143); // 130 × 1,1
+  assert.strictEqual(f.find((i) => i.subEtapa === "Pav. 1").qtd, 132); // 120 × 1,1
+  assert.ok(f.every((i) => i.ordem === 26));
+  // consumíveis somados entre os dois trechos, numa linha só por material
+  const perfil = f.find((i) => i.item === "Gesso - PERFIL F530 X 3,00m");
+  assert.strictEqual(perfil.subEtapa, "Fixação e acabamento");
+  assert.strictEqual(perfil.qtd, modulo.teto(250 * (2.2 / 3) * 1.1));
+  assert.ok(f.some((i) => i.item === "Gesso - Tabica 3mts")); // borda pelo perímetro dos cômodos
+
+  // tipos diferentes por trecho: gesso embaixo, madeira em cima
+  const misto = gerarOrcamentoObra({ ...sobrado, forros: [
+    { pavimento: "Térreo", tipo: "gessoAcartonado", area: 130 },
+    { pavimento: "Pav. 1", tipo: "madeira", area: 120 },
+  ] }, { materiais: [] }).itens.filter((i) => i.etapa === "Forros");
+  assert.ok(misto.some((i) => i.subEtapa === "Térreo" && i.item === "Gesso - Drywall"));
+  assert.ok(misto.some((i) => i.subEtapa === "Pav. 1" && i.item === "Forro - Forro Pinus 3mts"));
+  assert.ok(misto.some((i) => i.item === "Forro - Sarrafo 5cm Cedrinho")); // barroteamento da madeira
+  assert.ok(misto.some((i) => i.item === "Forro - Meia Cana Pinus"));      // borda da madeira
+  assert.ok(misto.some((i) => i.item === "Gesso - Tabica 3mts"));          // borda do gesso
+  // PVC e os quatro tipos disponíveis
+  assert.deepStrictEqual(modulo.FORRO_TIPOS.map((t) => t.id), ["gessoAcartonado", "gessoPlaca", "madeira", "pvc"]);
+  const pvc = gerarOrcamentoObra({ ...sobrado, forros: [{ pavimento: "Térreo", tipo: "pvc", area: 100 }] }, { materiais: [] });
+  assert.strictEqual(pvc.itens.find((i) => i.etapa === "Forros" && i.subEtapa === "Térreo").item, "Forro - PVC");
+  // sem laje lançada, nenhuma linha de forro
+  assert.ok(!gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 100 } }, { materiais: [] }).itens.some((i) => i.etapa === "Forros"));
 });
 
 teste("ponto de ar condicionado por cômodo e prestador Instalador AR", () => {
