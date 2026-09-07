@@ -221,6 +221,11 @@ contrato sai como "Ourinhos/SP, 7 de setembro de 2026." (`dataExtensoCtr`, que
 lê a string ISO na mão para não escorregar de dia por fuso). Em branco, volta
 a lacuna para preencher à caneta.
 
+## Contas a pagar
+
+Salvar o contrato gera, na mesma gravação, as contas a pagar da obra — uma
+por parcela da modalidade escolhida. Ver `SPEC-CONTAS-PAGAR.md`.
+
 ## Salvar e gerar PDF
 
 São dois botões separados no gerador:

@@ -1,0 +1,62 @@
+# SPEC — Contas a pagar da obra
+
+Salvar um contrato alimenta o fluxo de contas a pagar da obra: cada parcela
+da modalidade de pagamento vira uma conta com vencimento, valor e status.
+Fora dos contratos, dá para lançar contas avulsas (caçamba, frete, taxa).
+Marcar uma conta como paga registra o realizado da obra, que aparece ao lado
+da estimativa no Planejamento.
+
+Fica em **Gestão de Obra → obra → Contas a pagar**, com o valor em aberto no
+próprio botão do menu da obra.
+
+## Onde mora
+
+Dentro da obra (`obra.contasPagar`), como os contratos e a estimativa — a
+obra é o documento JSON que o backend grava.
+
+## Como a parcela é gerada
+
+`parcelasAPagar(contrato)` traduz a modalidade de pagamento do contrato
+(`SPEC-CONTRATOS.md`) em parcelas. É o mesmo racional do texto do contrato:
+quem mexer num, mexe no outro.
+
+| modalidade | contas geradas | vencimento |
+| --- | --- | --- |
+| `parcelado` | uma por parcela | âncora + 7/15/30 dias × n, conforme a periodicidade |
+| `entradaParcelas` | entrada + uma por parcela | entrada na assinatura; parcelas a partir da âncora |
+| `entradaFinal` (contrato) | entrada + saldo | entrada na assinatura; saldo no fim do prazo |
+| `entradaFinal` (item a item) | duas por item (entrada e conclusão) | sem data — dependem da liberação de cada item |
+| `medicao` | uma por medição que couber no prazo | âncora + período × n + prazo de pagamento; marcadas como **estimadas** |
+
+A **âncora** é o início previsto do contrato; sem ele, a data de assinatura.
+Sem nenhuma das duas, as parcelas saem sem vencimento (a definir).
+"Mensais" anda de 30 em 30 dias, como diz a cláusula de pagamento.
+
+Cada conta nasce com o `contaId` do plano de contas (`obra-financeiro.jsx`)
+correspondente ao tipo de profissional — serralheiro → `serralheiro`,
+gestão de obra → `mo_diversos` —, o prestador e o nome do favorecido.
+
+## Regravar o contrato
+
+`sincronizarContasDoContrato(contas, contrato)`:
+
+- contas avulsas e de outros contratos ficam intactas;
+- o que já foi pago é preservado como está, inclusive o valor pago;
+- o resto é regerado a partir do contrato atual (mudou o valor, mudaram as
+  parcelas em aberto);
+- parcela paga que não existe mais no contrato **continua na lista**: o
+  dinheiro saiu, e escondê-la esconderia um pagamento real.
+
+Remover o contrato (`removerContasDoContrato`) leva junto o que está em
+aberto e mantém o que foi pago.
+
+## Situação e realizado
+
+`situacaoConta` classifica em vencida, vence em 7 dias, em aberto, sem data
+ou paga; `totaisContas` soma a pagar, vencido, pago e total.
+
+Pagar grava `pago`, `pagoEm` e `valorPago` na própria conta — ela é o
+registro do realizado. `realizadoPorConta` e `realizadoPorPrestador` somam o
+que foi pago e alimentam o Planejamento, que mostra "pago R$ x (+/− diferença)"
+ao lado de cada conta e de cada prestador, mais o total "Já pago" no
+cabeçalho.

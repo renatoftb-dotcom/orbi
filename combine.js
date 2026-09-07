@@ -38,6 +38,7 @@ const ORDER = [
   // contratos-obra.jsx vem antes de clientes.jsx: é lá (aba Contratos da
   // obra) que o gerador e o documento são renderizados.
   "contratos-obra.jsx",
+  "contas-pagar.jsx",
   "clientes.jsx",
   "resultado-pdf.jsx",
   // shared-textos.jsx vem antes de quem o consome (modelo-padrao.jsx,

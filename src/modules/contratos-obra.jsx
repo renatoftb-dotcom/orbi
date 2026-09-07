@@ -403,13 +403,13 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     criadoEm: new Date().toISOString(),
   };
 }
-// Valor total: no modelo global é a soma dos itens; no de mão de obra, o
-// valor digitado.
+// Valor total: havendo itens com valor, é a soma deles; senão, é o valor
+// digitado. Não depende do modelo — o formulário é o mesmo para todos, e uma
+// linha de item em branco não pode zerar o contrato.
 function valorContrato(c) {
   const o = c || {};
-  if (o.modelo === "empreitadaGlobal" && Array.isArray(o.itens) && o.itens.length) {
-    return o.itens.reduce((acc, i) => acc + (Number(i && i.valor) || 0), 0);
-  }
+  const itens = (o.itens || []).filter((i) => i && Number(i.valor) > 0);
+  if (itens.length) return itens.reduce((acc, i) => acc + Number(i.valor), 0);
   return Number(o.valor) || 0;
 }
 // Parcelas: divide o total e joga o resíduo de arredondamento na última,
