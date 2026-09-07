@@ -15558,7 +15558,9 @@ function fluxoMensal(contas, hoje) {
   return { meses, semData, semDataValor: red(semDataValor), maior: meses.reduce((a, m) => Math.max(a, m.total), 0) };
 }
 
-// ── Gráfico do fluxo mensal ─────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+// UI — gráfico do fluxo mensal
+// ═══════════════════════════════════════════════════════════════
 // Barras empilhadas: pago embaixo, vencido no meio, a pagar no topo — o que
 // falta pagar fica na ponta, que é o que se olha. O topo é arredondado pela
 // barra inteira (clipPath), não faixa a faixa, senão apareceriam entalhes.

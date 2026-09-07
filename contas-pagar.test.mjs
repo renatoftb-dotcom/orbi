@@ -16,7 +16,9 @@ const modulo = new Function(`
   var uid = () => "id1";
   ${plano}
   ${contratosSrc.slice(0, corte)}
-  ${mod("contas-pagar.jsx")}
+  ${(() => { const cp = mod("contas-pagar.jsx"); const i = cp.indexOf("// UI — gráfico do fluxo mensal");
+             if (i < 0) throw new Error("Marcador de início da UI não encontrado em contas-pagar.jsx");
+             return cp.slice(0, cp.lastIndexOf("// ═", i)); })()}
   return { PLANO_CONTAS, contratoVazio, valorContrato,
            parcelasAPagar, contasDoContrato, sincronizarContasDoContrato, removerContasDoContrato,
            situacaoConta, totaisContas, realizadoPorConta, realizadoPorPrestador,
