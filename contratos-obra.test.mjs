@@ -17,7 +17,10 @@ const modulo = new Function(`
   ${src.slice(0, corte)}
   return { CONTRATO_MODELOS, contratoModelo, contratoVazio, valorContrato, parcelasContrato,
            porExtensoCtr, moedaExtensoCtr, qualificarParte, montarContrato, fmtMoedaCtr,
-           TIPOS_PROFISSIONAL, tipoProfissional, prestadoresDoTipo, enderecoDaObra };
+           TIPOS_PROFISSIONAL, tipoProfissional, prestadoresDoTipo, enderecoDaObra,
+           MODALIDADES_PAGAMENTO, modalidadeContrato, entradaESaldo, prazoContrato,
+           CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
+           textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero };
 `)();
 
 let passou = 0, falhou = 0;
@@ -135,9 +138,13 @@ teste("empreitada de mão de obra: material do contratante, parcelas quinzenais,
   assert.ok(t.includes("o lixamento do concreto"), "exclusões entram na cláusula do objeto");
   assert.strictEqual(d.anexo.length, 1);
   assert.strictEqual(d.anexo[0].titulo, "Preparação do contrapiso");
-  // sem retenção, a cláusula some
-  const semRetencao = modulo.montarContrato({ ...c, retemUltima: false }, { cliente, obra, prestador: serralheiro });
+  // desmarcada a retenção, a cláusula some
+  const semRetencao = modulo.montarContrato({ ...c, opcoes: { ...c.opcoes, retencao: false } }, { cliente, obra, prestador: serralheiro });
   assert.ok(!texto(semRetencao).includes("ficará retida"));
+  // contrato antigo, sem o mapa de opções, ainda obedece ao campo retemUltima
+  const { opcoes, ...antigo } = c;
+  assert.ok(!texto(modulo.montarContrato({ ...antigo, retemUltima: false }, { cliente, obra, prestador: serralheiro })).includes("ficará retida"));
+  assert.ok(texto(modulo.montarContrato({ ...antigo, retemUltima: true }, { cliente, obra, prestador: serralheiro })).includes("ficará retida"));
 });
 
 teste("endereço da obra, foro e cidade caem no cadastro do cliente quando não informados", () => {
@@ -184,12 +191,20 @@ teste("dois modelos disponíveis, cada um com o seu padrão", () => {
   assert.strictEqual(modulo.contratoModelo("empreitadaGlobal").padrao.garantiaMeses, 12);
   assert.strictEqual(modulo.contratoModelo("empreitadaMaoDeObra").padrao.garantiaMeses, 6);
   assert.strictEqual(modulo.contratoModelo("inexistente").id, "empreitadaMaoDeObra"); // fallback
-  // contrato novo já nasce com os padrões do modelo
+  // contrato novo nasce com os padrões do modelo, mas o prazo vem em branco
   const novo = modulo.contratoVazio("empreitadaGlobal", "c1", "o1");
-  assert.strictEqual(novo.prazoDias, 120);
+  assert.strictEqual(novo.prazoQtd, "");
+  assert.strictEqual(novo.prazoUnidade, "");
+  assert.strictEqual(novo.modalidade, "entradaFinal");
   assert.strictEqual(novo.entradaPct, 50);
+  assert.strictEqual(novo.garantiaMeses, 12);
+  // o formulário é o mesmo para todo mundo: itens e anexo sempre disponíveis
   assert.strictEqual(novo.itens.length, 1);
-  assert.strictEqual(novo.escopo.length, 0);
+  assert.strictEqual(novo.escopo.length, 1);
+  const mo = modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1");
+  assert.strictEqual(mo.modalidade, "parcelado");
+  assert.strictEqual(mo.itens.length, 1);
+  assert.strictEqual(mo.escopo.length, 1);
 });
 
 teste("tipos de profissional cobrem os prestadores do catálogo e sugerem regime e objeto", () => {
@@ -241,6 +256,112 @@ teste("a lista de prestadores é filtrada pela categoria do tipo, com queda para
   // "Outro" e ausência de tipo mostram todos
   assert.strictEqual(modulo.prestadoresDoTipo(lista, "outro").length, 3);
   assert.strictEqual(modulo.prestadoresDoTipo(lista, "").length, 3);
+});
+
+teste("modalidade parcelada aceita semanal, quinzenal e mensal", () => {
+  const base = { ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), valor: 12000, modalidade: "parcelado", parcelas: 12 };
+  const t = (per) => texto(modulo.montarContrato({ ...base, periodicidade: per }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(t("semanais").includes("12 (doze) parcelas semanais"));
+  assert.ok(t("semanais").includes("a cada 7 (sete) dias"));
+  assert.ok(t("quinzenais").includes("12 (doze) parcelas quinzenais"));
+  assert.ok(t("quinzenais").includes("a cada 15 (quinze) dias"));
+  assert.ok(t("mensais").includes("12 (doze) parcelas mensais"));
+  assert.ok(t("mensais").includes("a cada 30 (trinta) dias"));
+  assert.ok(t("mensais").includes("R$ 1.000,00"));
+});
+
+teste("modalidade por medição escreve a apuração periódica e o prazo de pagamento", () => {
+  const c = { ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), valor: 50000,
+    modalidade: "medicao", medicaoPeriodicidade: "quinzenal", medicaoPrazoDias: 10 };
+  const t = texto(modulo.montarContrato(c, { cliente, obra, prestador: serralheiro }));
+  assert.ok(t.includes("por medição quinzenal"));
+  assert.ok(t.includes("percentual medido do valor total"));
+  assert.ok(t.includes("em até 10 (dez) dias"));
+  assert.ok(!t.includes("parcelas"), "medição não fala em parcelas");
+});
+
+teste("entrada + parcelas separa a entrada do saldo e fecha a conta", () => {
+  const c = { ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), valor: 100000,
+    modalidade: "entradaParcelas", entradaPct: 30, parcelas: 7, periodicidade: "mensais" };
+  const e = modulo.entradaESaldo(100000, 30, 7);
+  assert.strictEqual(e.entrada, 30000);
+  assert.strictEqual(e.saldo, 70000);
+  assert.ok(Math.abs(e.parcelas.base * 6 + e.parcelas.ultima - 70000) < 0.005);
+  const t = texto(modulo.montarContrato(c, { cliente, obra, prestador: serralheiro }));
+  assert.ok(t.includes("30% do valor total, correspondentes a R$ 30.000,00"));
+  assert.ok(t.includes("saldo remanescente de R$ 70.000,00"));
+  assert.ok(t.includes("7 (sete) parcelas mensais"));
+});
+
+teste("entrada + saldo no final: contrato todo ou item a item", () => {
+  const itens = [{ descricao: "Portão", valor: 60000 }, { descricao: "Guarda-corpo", valor: 40000 }];
+  const base = { ...modulo.contratoVazio("empreitadaGlobal", "c1", "o1"), itens, modalidade: "entradaFinal", entradaPct: 40 };
+  // item a item monta o quadro de parcelas
+  const porItem = modulo.montarContrato({ ...base, entradaEscopo: "item" }, { cliente, obra, prestador: serralheiro });
+  assert.strictEqual(porItem.tabelaParcelas.length, 2);
+  assert.strictEqual(porItem.tabelaParcelas[0].p1, 24000);
+  assert.ok(texto(porItem).includes("item a item, na proporção de 40%"));
+  // contrato todo: entrada única e saldo no aceite final, sem quadro
+  const todo = modulo.montarContrato({ ...base, entradaEscopo: "contrato" }, { cliente, obra, prestador: serralheiro });
+  assert.strictEqual(todo.tabelaParcelas.length, 0);
+  const t = texto(todo);
+  assert.ok(t.includes("40% do valor total, correspondentes a R$ 40.000,00"));
+  assert.ok(t.includes("saldo de R$ 60.000,00"));
+  assert.ok(t.includes("mediante o aceite final"));
+});
+
+teste("prazo não vem preenchido e aceita dias ou meses", () => {
+  const c = modulo.contratoVazio("empreitadaGlobal", "c1", "o1");
+  assert.deepStrictEqual(modulo.prazoContrato(c), { qtd: "", unidade: "" });
+  // em branco, o contrato sai com a lacuna para preencher à mão
+  assert.ok(texto(modulo.montarContrato(c, { cliente, obra, prestador: serralheiro })).includes("é de ______ dias ou meses"));
+  assert.ok(texto(modulo.montarContrato({ ...c, prazoQtd: 90, prazoUnidade: "dias" }, { cliente, obra, prestador: serralheiro })).includes("90 (noventa) dias corridos"));
+  assert.ok(texto(modulo.montarContrato({ ...c, prazoQtd: 9, prazoUnidade: "meses" }, { cliente, obra, prestador: serralheiro })).includes("9 (nove) meses"));
+  // contrato antigo mantém o que tinha
+  assert.deepStrictEqual(modulo.prazoContrato({ prazoDias: 120 }), { qtd: 120, unidade: "dias" });
+  assert.deepStrictEqual(modulo.prazoContrato({ prazoMeses: 6 }), { qtd: 6, unidade: "meses" });
+});
+
+teste("cláusulas opcionais entram e saem sem quebrar a numeração", () => {
+  const c = { ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), valor: 10000, parcelas: 4 };
+  const tudoNao = {};
+  for (const op of modulo.CONTRATO_OPCOES) tudoNao[op.id] = false;
+  const magro = modulo.montarContrato({ ...c, opcoes: tudoNao }, { cliente, obra, prestador: serralheiro });
+  const gordo = modulo.montarContrato({ ...c, opcoes: Object.fromEntries(modulo.CONTRATO_OPCOES.map(o => [o.id, true])), retencaoPct: "" }, { cliente, obra, prestador: serralheiro });
+  // a garantia é a única opção que tira uma cláusula inteira
+  assert.ok(!magro.clausulas.some(x => x.id === "garantia"));
+  assert.ok(gordo.clausulas.some(x => x.id === "garantia"));
+  // a numeração é sempre contínua e bate com a posição da cláusula
+  for (const d of [magro, gordo]) {
+    d.clausulas.forEach((x, i) => {
+      x.itens.forEach((it, j) => assert.ok(it.startsWith(`${i + 1}.${j + 1}. `), `numeração fora de ordem: ${it.slice(0, 12)}`));
+    });
+    assert.ok(!texto(d).includes("{{"), "sobrou marcador de referência sem resolver");
+  }
+  // a referência cruzada acompanha a cláusula que sobrou
+  const iPag = magro.clausulas.findIndex(x => x.id === "pagamento");
+  assert.ok(texto(magro).includes(`ajustados na Cláusula ${["Primeira","Segunda","Terceira","Quarta","Quinta"][iPag]}`));
+  // conteúdo que só existe quando a opção está ligada
+  const tg = texto(gordo), tm = texto(magro);
+  assert.ok(tg.includes("Anotação de Responsabilidade Técnica") && !tm.includes("Anotação de Responsabilidade Técnica"));
+  assert.ok(tg.includes("seguro de responsabilidade civil") && !tm.includes("seguro de responsabilidade civil"));
+  assert.ok(tg.includes("multa de 0,5%") && !tm.includes("por dia de atraso"));
+  assert.ok(tg.includes("nota fiscal") && !tm.includes("nota fiscal"));
+  assert.ok(tm.includes("Os equipamentos de maior porte serão fornecidos pelo CONTRATANTE"));
+});
+
+teste("máscaras formatam o que a pessoa digita e o backspace apaga dígito", () => {
+  assert.strictEqual(modulo.textoMoedaCampo(9142.86), "9.142,86");
+  assert.strictEqual(modulo.textoMoedaCampo(""), "");
+  assert.strictEqual(modulo.textoPctCampo(0.5), "0,50%");
+  assert.strictEqual(modulo.textoInteiroCampo(12), "12");
+  // dígitos entram pela direita, como no aplicativo do banco
+  assert.strictEqual(modulo.digitandoNumero("", "9", 2), 0.09);
+  assert.strictEqual(modulo.digitandoNumero("0,09", "0,099", 2), 0.99);
+  assert.strictEqual(modulo.digitandoNumero("99,00", "9.900", 0), 9900);
+  // apagar o "%" ou a vírgula apaga um dígito de verdade
+  assert.strictEqual(modulo.digitandoNumero("0,50%", "0,50", 2), 0.05);
+  assert.strictEqual(modulo.digitandoNumero("0,09", "0,0", 2), 0);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

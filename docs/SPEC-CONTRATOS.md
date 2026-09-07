@@ -40,6 +40,73 @@ Cada tipo carrega três coisas:
 essa lista. Contratos gravados antes desta versão ficam com
 `tipoProfissional: ""` e continuam abrindo normalmente.
 
+## Formulário único
+
+O gerador é o **mesmo para qualquer prestador**: escolher Empreiteiro ou
+Serralheiro muda o texto do contrato, nunca os campos da tela. Todo contrato
+tem valor total, itens discriminados (opcionais — havendo itens com valor, o
+total é a soma deles e o campo de valor total trava), descritivo do ANEXO I
+(opcional), modalidade de pagamento, prazo e a lista de cláusulas marcáveis.
+
+No passo do prestador há **＋ Novo**, que abre o cadastro rápido dentro do
+próprio gerador — nome, PJ/PF, CNPJ/CPF, categoria (já vem a do tipo
+escolhido), endereço com ViaCEP e representante legal, exatamente os dados
+que o preâmbulo usa. Ao salvar, o prestador entra em `data.fornecedores` e já
+fica selecionado. A lista de prestadores mostra só o nome — a categoria não
+aparece mais colada nele.
+
+## Modalidade de pagamento
+
+`MODALIDADES_PAGAMENTO`, escolhida por rádio no gerador:
+
+| id | O que escreve | Campos |
+| --- | --- | --- |
+| `parcelado` | valor total dividido em parcelas iguais e sucessivas | nº de parcelas, periodicidade |
+| `medicao` | apuração periódica do executado e pagamento do percentual medido | periodicidade da medição, prazo de pagamento após a aprovação |
+| `entradaParcelas` | entrada em % na assinatura e o saldo parcelado | entrada %, nº de parcelas, periodicidade |
+| `entradaFinal` | entrada em % e o restante na conclusão | entrada %, saldo do contrato todo ou item a item |
+
+Periodicidade aceita **semanal, quinzenal e mensal**, cada uma com a sua
+regra de vencimento. `entradaFinal` + *item a item* é o pagamento 50/50 dos
+contratos de fornecimento e monta o quadro de parcelas; sem itens com valor
+ele cai para entrada + saldo no final. Contratos gravados antes disso caem no
+comportamento antigo do seu modelo (`modalidadeContrato`).
+
+## Prazo
+
+Nada vem pré-preenchido: o usuário digita o número e escolhe **dias corridos
+ou meses** (`prazoQtd` + `prazoUnidade`). Em branco, o contrato sai com a
+lacuna `______` para preencher à mão. Contratos antigos migram de
+`prazoDias`/`prazoMeses` por `prazoContrato()`.
+
+## Cláusulas marcáveis
+
+`CONTRATO_OPCOES` — cada uma entra ou sai do contrato por um checkbox, e as
+que pedem número trazem o campo junto:
+
+multa por atraso (% ao dia + teto) · tolerância no atraso (dias) · garantia
+(meses) · retenção de garantia (% ou a última parcela) · fornecer ART/RRT ·
+contratado fornece ferramentas (só as básicas ou todas) · contratado fornece
+todos os equipamentos · fornecer EPI · seguro de responsabilidade civil ·
+remoção de entulho · responder por danos · proibir subcontratação · emitir
+nota fiscal · relatório de avanço (semanal/quinzenal/mensal) · alimentação,
+transporte e alojamento · água e energia por conta do contratante · preço
+fixo e irreajustável.
+
+As cláusulas são **numeradas na montagem, não na mão**: o texto é escrito sem
+número e `montarContrato` numera no final, resolvendo `{{cl:id}}` para
+"Cláusula Quarta" e `{{it:marca}}` para "1.3". Assim uma opção pode sair sem
+desalinhar o resto nem quebrar uma referência cruzada. Só a garantia remove
+uma cláusula inteira; as demais entram como itens das cláusulas existentes.
+
+## Campos numéricos
+
+Todo campo de número usa `CampoCtrNum`, que formata enquanto se digita — os
+dígitos entram pela direita, como no aplicativo do banco: moeda vira
+`9.142,86`, percentual vira `0,50%`, inteiro vira `1.200`. O contrato guarda
+sempre o número puro. Apagar o `%` ou a vírgula apaga um dígito de verdade
+(`digitandoNumero`), senão o campo pareceria travado.
+
 ## Endereço da obra
 
 O cadastro da obra (Gestão de Obra → nova/editar obra) tem a marcação

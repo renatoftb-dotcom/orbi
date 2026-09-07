@@ -14372,6 +14372,116 @@ function enderecoLinha(o) {
   return [x.logradouro, x.numero && `nº ${x.numero}`, x.bairro, [x.cidade, x.estado].filter(Boolean).join("/"), x.cep && `CEP ${x.cep}`].filter(Boolean).join(", ");
 }
 
+// ── Máscaras de digitação ───────────────────────────────────────
+// Todo campo numérico do gerador é formatado enquanto se digita: os
+// dígitos entram pela direita, como no aplicativo do banco. O contrato
+// guarda o número puro; a máscara é só a apresentação.
+function numeroDosDigitos(txt, casas) {
+  const d = String(txt == null ? "" : txt).replace(/\D/g, "");
+  if (!d) return "";
+  return Number(d) / Math.pow(10, casas);
+}
+function textoNumeroCtr(v, casas) {
+  const n = Number(v);
+  if (v === "" || v == null || !Number.isFinite(n)) return "";
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: casas, maximumFractionDigits: casas });
+}
+function textoMoedaCampo(v) { return textoNumeroCtr(v, 2); }
+function textoPctCampo(v) { const t = textoNumeroCtr(v, 2); return t ? t + "%" : ""; }
+function textoInteiroCampo(v) { return textoNumeroCtr(v, 0); }
+// Digitação: apaga o último dígito quando o usuário dá backspace em cima
+// de um separador (o "%" ou a vírgula), senão o campo parece travado.
+function digitandoNumero(textoAtual, textoNovo, casas) {
+  const antes = String(textoAtual || "").replace(/\D/g, "");
+  let d = String(textoNovo || "").replace(/\D/g, "");
+  if (String(textoNovo || "").length < String(textoAtual || "").length && d === antes) d = d.slice(0, -1);
+  return d ? Number(d) / Math.pow(10, casas) : "";
+}
+
+// ── Modalidades de pagamento ────────────────────────────────────
+const MODALIDADES_PAGAMENTO = [
+  { id: "parcelado", nome: "Parcelado", resumo: "Valor total dividido em parcelas iguais e sucessivas.",
+    campos: ["parcelas", "periodicidade"] },
+  { id: "medicao", nome: "Por medição", resumo: "Paga-se o que foi efetivamente executado, medido de tempos em tempos.",
+    campos: ["medicaoPeriodicidade", "medicaoPrazoDias"] },
+  { id: "entradaParcelas", nome: "Entrada + parcelas", resumo: "Entrada em percentual do valor e o saldo dividido em parcelas.",
+    campos: ["entradaPct", "parcelas", "periodicidade"] },
+  { id: "entradaFinal", nome: "Entrada + saldo no final", resumo: "Entrada em percentual e o restante na conclusão — do contrato todo ou item a item.",
+    campos: ["entradaPct", "entradaEscopo"] },
+];
+const PERIODICIDADES = [["semanais", "Semanal"], ["quinzenais", "Quinzenal"], ["mensais", "Mensal"]];
+function modalidadePagamento(id) { return MODALIDADES_PAGAMENTO.find((m) => m.id === id) || null; }
+// Contratos gravados antes das modalidades caem no comportamento antigo de
+// cada modelo: mão de obra em parcelas, global com entrada item a item.
+function modalidadeContrato(c) {
+  const o = c || {};
+  if (modalidadePagamento(o.modalidade)) return o.modalidade;
+  return o.modelo === "empreitadaGlobal" ? "entradaFinal" : "parcelado";
+}
+
+// ── Cláusulas opcionais ─────────────────────────────────────────
+// Marcáveis no gerador. `padrao` pode variar conforme o modelo; `campos`
+// são os valores que a opção pede quando ligada.
+const CONTRATO_OPCOES = [
+  { id: "multa", label: "Multa por atraso", ajuda: "percentual do valor do contrato por dia de atraso, com teto",
+    campos: [{ k: "multaDiaPct", l: "% por dia", tipo: "pct" }, { k: "multaTetoPct", l: "Teto (%)", tipo: "pct" }],
+    valores: { multaDiaPct: 0.5, multaTetoPct: 10 }, padrao: true },
+  { id: "tolerancia", label: "Tolerância no atraso", ajuda: "dias corridos antes de a multa passar a correr",
+    campos: [{ k: "toleranciaDias", l: "Dias", tipo: "inteiro" }], valores: { toleranciaDias: 45 }, padrao: true },
+  { id: "garantia", label: "Garantia dos serviços", ajuda: "prazo para corrigir defeito de execução",
+    campos: [{ k: "garantiaMeses", l: "Meses", tipo: "inteiro" }], valores: {}, padrao: true },
+  { id: "retencao", label: "Retenção de garantia", ajuda: "em branco, retém a última parcela; com percentual, retém de cada pagamento",
+    campos: [{ k: "retencaoPct", l: "% retido", tipo: "pct" }], valores: {},
+    padrao: (modelo) => modelo === "empreitadaMaoDeObra" },
+  { id: "art", label: "Fornecer ART / RRT", ajuda: "anotação de responsabilidade técnica do serviço", padrao: false },
+  { id: "ferramentas", label: "Contratado fornece as ferramentas",
+    campos: [{ k: "ferramentasEscopo", l: "Quais", tipo: "select", opcoes: [["basicas", "Somente as básicas"], ["todas", "Todas as ferramentas"]] }],
+    valores: { ferramentasEscopo: "basicas" },
+    padrao: true, padraoValores: (modelo) => ({ ferramentasEscopo: modelo === "empreitadaGlobal" ? "todas" : "basicas" }) },
+  { id: "equipamentos", label: "Contratado fornece todos os equipamentos", ajuda: "andaimes, içamento, marteletes, escoras, caçambas",
+    padrao: (modelo) => modelo === "empreitadaGlobal" },
+  { id: "epi", label: "Fornecer EPI e cumprir as normas de segurança", padrao: true },
+  { id: "seguro", label: "Manter seguro de responsabilidade civil", padrao: false },
+  { id: "limpeza", label: "Remover entulho e entregar limpo", padrao: true },
+  { id: "danos", label: "Responder por danos ao contratante e a terceiros", padrao: true },
+  { id: "subcontratacao", label: "Proibir subcontratação sem autorização", padrao: true },
+  { id: "nf", label: "Emitir nota fiscal a cada pagamento", padrao: true },
+  { id: "diario", label: "Entregar relatório de avanço da obra",
+    campos: [{ k: "diarioPeriodicidade", l: "A cada", tipo: "select", opcoes: [["semanal", "Semana"], ["quinzenal", "Quinzena"], ["mensal", "Mês"]] }],
+    valores: { diarioPeriodicidade: "semanal" }, padrao: false },
+  { id: "alimentacao", label: "Alimentação, transporte e alojamento por conta do contratado", padrao: false },
+  { id: "aguaEnergia", label: "Água e energia por conta do contratante", padrao: true },
+  { id: "irreajustavel", label: "Preço fixo e irreajustável", padrao: true },
+];
+function contratoOpcao(id) { return CONTRATO_OPCOES.find((o) => o.id === id) || null; }
+function opcaoPadrao(op, modeloId) { return typeof op.padrao === "function" ? !!op.padrao(modeloId) : !!op.padrao; }
+function opcoesPadrao(modeloId) {
+  const r = {};
+  for (const op of CONTRATO_OPCOES) r[op.id] = opcaoPadrao(op, modeloId);
+  return r;
+}
+function valoresPadraoOpcoes(modeloId) {
+  const m = contratoModelo(modeloId);
+  const r = {};
+  for (const op of CONTRATO_OPCOES) {
+    Object.assign(r, op.valores || {});
+    if (op.padraoValores) Object.assign(r, op.padraoValores(modeloId));
+  }
+  // a garantia continua vindo do modelo, que é onde ela sempre esteve
+  r.garantiaMeses = m.padrao.garantiaMeses;
+  return r;
+}
+// Uma opção está ligada quando o contrato diz que sim. Contratos antigos
+// não têm o mapa `opcoes`: valem o padrão do modelo e, no caso da retenção,
+// o antigo campo `retemUltima`.
+function opcaoAtiva(c, id) {
+  const o = c || {};
+  if (o.opcoes && Object.prototype.hasOwnProperty.call(o.opcoes, id)) return !!o.opcoes[id];
+  if (id === "retencao" && typeof o.retemUltima === "boolean") return o.retemUltima;
+  const op = contratoOpcao(id);
+  return op ? opcaoPadrao(op, o.modelo) : false;
+}
+
 // Endereço da obra. O cadastro da obra só guarda endereço próprio quando o
 // usuário marca "Endereço diferente"; do contrário a obra fica no endereço
 // do cliente. Obras antigas (sem a marcação) usam o endereço que tiverem.
@@ -14380,6 +14490,16 @@ function enderecoDaObra(obra, cliente) {
   const propria = enderecoLinha(o);
   if (propria && (o.enderecoProprio || o.enderecoProprio === undefined)) return propria;
   return enderecoLinha(cliente);
+}
+
+// Prazo: quantidade + unidade, escolhidas pelo usuário e sem pré-preenchimento.
+// Contratos antigos guardavam prazoDias (global) ou prazoMeses (mão de obra).
+function prazoContrato(c) {
+  const o = c || {};
+  if (o.prazoUnidade || Number(o.prazoQtd) > 0) return { qtd: o.prazoQtd, unidade: o.prazoUnidade || "" };
+  if (Number(o.prazoDias) > 0) return { qtd: Number(o.prazoDias), unidade: "dias" };
+  if (Number(o.prazoMeses) > 0) return { qtd: Number(o.prazoMeses), unidade: "meses" };
+  return { qtd: "", unidade: "" };
 }
 
 // ── Dados de partida de um contrato novo ────────────────────────
@@ -14397,19 +14517,22 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId) {
     objeto: t ? t.objeto : "",
     enderecoObra: "",
     exclusoes: "",
-    itens: m.id === "empreitadaGlobal" ? [{ descricao: "", valor: "" }] : [],
-    escopo: m.id === "empreitadaMaoDeObra" ? [{ titulo: "", texto: "" }] : [],
+    // o formulário é o mesmo para qualquer prestador: itens e descritivo
+    // estão sempre disponíveis, e vale o que for preenchido
+    itens: [{ descricao: "", valor: "" }],
+    escopo: [{ titulo: "", texto: "" }],
     valor: "",
-    prazoMeses: m.padrao.prazoMeses || "",
-    prazoDias: m.padrao.prazoDias || "",
-    parcelas: m.padrao.parcelas || "",
-    periodicidade: m.padrao.periodicidade || "quinzenais",
-    retemUltima: !!m.padrao.retemUltima,
-    entradaPct: m.padrao.entradaPct || "",
-    garantiaMeses: m.padrao.garantiaMeses,
-    toleranciaDias: m.padrao.toleranciaDias,
-    multaDiaPct: m.padrao.multaDiaPct,
-    multaTetoPct: m.padrao.multaTetoPct,
+    // prazo em branco de propósito — quem escolhe a unidade e o número é o usuário
+    prazoQtd: "", prazoUnidade: "",
+    modalidade: m.id === "empreitadaGlobal" ? "entradaFinal" : "parcelado",
+    parcelas: "",
+    periodicidade: "quinzenais",
+    entradaPct: m.id === "empreitadaGlobal" ? 50 : "",
+    entradaEscopo: m.id === "empreitadaGlobal" ? "item" : "contrato",
+    medicaoPeriodicidade: "mensal",
+    medicaoPrazoDias: "",
+    opcoes: opcoesPadrao(m.id),
+    ...valoresPadraoOpcoes(m.id),
     foro: "",
     cidadeAssinatura: "",
     status: "pendente",
@@ -14427,25 +14550,58 @@ function valorContrato(c) {
   }
   return Number(o.valor) || 0;
 }
-// Parcelas do modelo de mão de obra: divide o total e joga o resíduo de
-// arredondamento na última, como nos contratos do escritório.
+// Parcelas: divide o total e joga o resíduo de arredondamento na última,
+// como nos contratos do escritório.
 function parcelasContrato(total, n) {
   const qtd = Math.max(1, Math.floor(Number(n) || 1));
-  // Arredonda ao centavo (não trunca) e joga a diferença na última parcela —
-  // é como o escritório fecha: 128.000 ÷ 14 = 13 × 9.142,86 + 9.142,82.
-  const base = Math.round((total / qtd) * 100) / 100;
-  const ultima = Math.round((total - base * (qtd - 1)) * 100) / 100;
+  const bruto = Math.round((Number(total) || 0) * 100) / 100;
+  const base = Math.round((bruto / qtd) * 100) / 100;
+  const ultima = Math.round((bruto - base * (qtd - 1)) * 100) / 100;
   return { qtd, base, ultima, iguais: Math.abs(base - ultima) < 0.005 };
+}
+// Entrada + saldo parcelado: a entrada sai do percentual e o resto é dividido.
+function entradaESaldo(total, pct, n) {
+  const bruto = Math.round((Number(total) || 0) * 100) / 100;
+  const entrada = Math.round(bruto * ((Number(pct) || 0) / 100) * 100) / 100;
+  const saldo = Math.round((bruto - entrada) * 100) / 100;
+  return { entrada, saldo, parcelas: parcelasContrato(saldo, n) };
 }
 
 // ── Montagem do documento ───────────────────────────────────────
-// Devolve { titulo, subtitulo, preambulo, clausulas: [{ titulo, itens }],
-// tabelaItens, tabelaParcelas, anexo, assinaturas } — a tela só desenha.
+// As cláusulas são numeradas no final, não na mão: assim uma cláusula
+// opcional pode entrar ou sair sem desalinhar o resto. Dentro do texto,
+// {{cl:id}} vira "Cláusula Quarta" e {{it:marca}} vira "1.3".
+const CTR_ORDINAIS = ["PRIMEIRA", "SEGUNDA", "TERCEIRA", "QUARTA", "QUINTA", "SEXTA", "SÉTIMA", "OITAVA", "NONA", "DÉCIMA",
+  "DÉCIMA PRIMEIRA", "DÉCIMA SEGUNDA", "DÉCIMA TERCEIRA", "DÉCIMA QUARTA", "DÉCIMA QUINTA", "DÉCIMA SEXTA",
+  "DÉCIMA SÉTIMA", "DÉCIMA OITAVA", "DÉCIMA NONA", "VIGÉSIMA"];
+function ordinalCapCtr(i) {
+  const o = CTR_ORDINAIS[i] || `${i + 1}ª`;
+  return o.split(" ").map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(" ");
+}
+// Número por extenso quando preenchido; traço quando o campo está em branco.
+function numCtr(v, sufixo) {
+  const n = Number(v);
+  const corpo = Number.isFinite(n) && n > 0 ? numExtensoCtr(n) : "______";
+  return sufixo ? `${corpo} ${sufixo}` : corpo;
+}
+function pctCtr(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return "____%";
+  return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
+}
+function periodicidadeAdj(p) { return p === "semanais" ? "semanais" : p === "mensais" ? "mensais" : "quinzenais"; }
+function vencimentoTexto(p) {
+  if (p === "semanais") return "Os pagamentos serão realizados semanalmente, sempre às sextas-feiras, vencendo-se a primeira parcela na primeira sexta-feira posterior ao início dos serviços e as demais a cada 7 (sete) dias subsequentes.";
+  if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços e as demais a cada 30 (trinta) dias subsequentes.";
+  return "Os pagamentos serão realizados sempre às sextas-feiras, em quinzenas alternadas e no período da manhã, vencendo-se a primeira parcela na segunda sexta-feira contada do início dos serviços e as demais a cada 15 (quinze) dias subsequentes.";
+}
+
 function montarContrato(contrato, { cliente, obra, prestador }) {
   const c = contrato || {};
   const m = contratoModelo(c.modelo);
   const global = m.id === "empreitadaGlobal";
   const total = valorContrato(c);
+  const lig = (id) => opcaoAtiva(c, id);
   const contratante = {
     tipo: (cliente && cliente.tipo) || "PJ",
     nome: (cliente && cliente.nome) || "",
@@ -14461,9 +14617,18 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const ela = global ? "a CONTRATADA" : "o CONTRATADO";      // sujeito
   const aEla = global ? "à CONTRATADA" : "ao CONTRATADO";    // objeto indireto
   const dela = global ? "da CONTRATADA" : "do CONTRATADO";
+  const a_o = global ? "a" : "o";
+  const pelaEla = global ? "pela CONTRATADA" : "pelo CONTRATADO";
   const enderecoObra = c.enderecoObra || enderecoDaObra(obra, cliente);
   const foro = c.foro || (cliente && cliente.cidade) || "";
   const cidadeAss = c.cidadeAssinatura || (cliente && cliente.cidade ? `${cliente.cidade}/${cliente.estado || "SP"}` : "");
+
+  // Itens e anexo valem para qualquer prestador: o que estiver preenchido entra.
+  const tabelaItens = (c.itens || []).filter((i) => i && (String(i.descricao || "").trim() || Number(i.valor)))
+    .map((i, idx) => ({ n: idx + 1, descricao: i.descricao || "", valor: Number(i.valor) || 0 }));
+  const anexo = (c.escopo || []).filter((e) => e && (String(e.titulo || "").trim() || String(e.texto || "").trim()));
+  const temItens = tabelaItens.length > 0;
+  const temAnexo = anexo.length > 0;
 
   const preambulo = [
     "Pelo presente instrumento particular, de um lado:",
@@ -14473,170 +14638,223 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     `têm entre si justo e contratado o presente Contrato de Prestação de Serviços de ${global ? "Fornecimento e Montagem" : "Empreitada de Mão de Obra"}, que se regerá pelas cláusulas e condições a seguir estabelecidas.`,
   ];
 
-  const clausulas = [];
-  // 1 — Objeto
+  const cl = [];
+  const marcas = {};
+  const add = (id, nome, itens, extra) => cl.push({ id, nome, itens: itens.filter(Boolean), ...(extra || {}) });
+
+  // ── Objeto ──
   const objeto = [];
+  const ondeEstaOEscopo = temItens ? "no item {{it:itens}}" : temAnexo ? "no ANEXO I" : "";
   if (global) {
-    objeto.push(`1.1. O presente contrato tem por objeto o fornecimento, a fabricação, o transporte e a montagem, pela CONTRATADA, dos serviços discriminados no item 1.3, a serem executados no imóvel situado na ${enderecoObra}, doravante denominado simplesmente OBRA.`);
-    objeto.push("1.2. Os serviços serão executados de forma autônoma e coordenada com as demais frentes da obra.");
-    objeto.push("1.3. Compõem o objeto deste contrato os seguintes itens e respectivos valores:");
+    objeto.push(`O presente contrato tem por objeto o fornecimento, a fabricação, o transporte e a montagem, pela CONTRATADA, ${temItens ? "dos serviços discriminados no item {{it:itens}}" : `dos serviços de ${c.objeto || "______________"}`}, a serem executados no imóvel situado na ${enderecoObra}, doravante denominado simplesmente OBRA.`);
+    objeto.push("Os serviços serão executados de forma autônoma e coordenada com as demais frentes da obra.");
   } else {
-    objeto.push(`1.1. O presente contrato tem por objeto a execução, pelo CONTRATADO, dos serviços ${c.objeto ? `de ${c.objeto}` : "discriminados no Descritivo dos Serviços"}, que integra este instrumento como ANEXO I.`);
-    objeto.push(`1.2. Os serviços serão executados no imóvel situado na ${enderecoObra}, doravante denominado simplesmente OBRA.`);
+    objeto.push(`O presente contrato tem por objeto a execução, pelo CONTRATADO, dos serviços ${c.objeto ? `de ${c.objeto}` : "contratados"}${temAnexo ? ", descritos no ANEXO I, que integra este instrumento" : temItens ? ", discriminados no item {{it:itens}}" : ""}.`);
+    objeto.push(`Os serviços serão executados no imóvel situado na ${enderecoObra}, doravante denominado simplesmente OBRA.`);
   }
-  if (c.exclusoes) objeto.push(`1.${global ? 4 : 3}. Não integram o objeto deste contrato: ${c.exclusoes}`);
-  clausulas.push({ titulo: "CLÁUSULA PRIMEIRA — DO OBJETO", itens: objeto, tabelaItens: global });
+  if (temItens) {
+    objeto.push("Compõem o objeto deste contrato os seguintes itens e respectivos valores:");
+    marcas.itens = { id: "objeto", i: objeto.length - 1 };
+  }
+  if (c.exclusoes) objeto.push(`Não integram o objeto deste contrato: ${c.exclusoes}`);
+  add("objeto", "DO OBJETO", objeto, { tabelaItens: temItens });
 
-  // 2 — Regime
+  // ── Regime ──
+  const ferramentasTodas = (c.ferramentasEscopo || "basicas") === "todas";
   const regime = global ? [
-    "2.1. Os serviços serão executados sob o regime de empreitada global, compreendendo o fornecimento de todo o material, os consumíveis e os acessórios, bem como a fabricação, o transporte, a descarga e a montagem no local da OBRA.",
-    "2.2. Correm por conta exclusiva da CONTRATADA a locação ou a compra de quaisquer ferramentas e equipamentos necessários à execução dos serviços, incluindo os meios de içamento e acesso, bem como os equipamentos de proteção individual e coletiva de sua equipe, sem qualquer custo adicional para a CONTRATANTE.",
-    "2.3. A CONTRATADA é responsável pelo dimensionamento dos elementos objeto deste contrato, respondendo pela sua adequação às cargas e às condições de uso previstas.",
-    "2.4. Os serviços observarão as normas técnicas aplicáveis.",
+    "Os serviços serão executados sob o regime de empreitada global, compreendendo o fornecimento de todo o material, os consumíveis e os acessórios, bem como a fabricação, o transporte, a descarga e a montagem no local da OBRA.",
+    `A CONTRATADA é responsável pelo dimensionamento dos elementos objeto deste contrato, respondendo pela sua adequação às cargas e às condições de uso previstas.`,
   ] : [
-    "2.1. Os serviços serão executados sob o regime de empreitada de mão de obra, cabendo ao CONTRATADO o fornecimento da mão de obra necessária à integral execução do objeto.",
-    "2.2. Todo o material de construção necessário à execução dos serviços será fornecido pelo CONTRATANTE, às suas expensas.",
-    "2.3. As ferramentas básicas necessárias à execução dos serviços serão fornecidas pelo CONTRATADO, por sua conta, assim como os equipamentos de proteção individual (EPI) utilizados por sua equipe.",
-    "2.4. As demais ferramentas e equipamentos serão fornecidos pelo CONTRATANTE, às suas expensas, tais como andaimes, marteletes, escoras metálicas, caçambas de entulho, entre outros de natureza semelhante.",
+    "Os serviços serão executados sob o regime de empreitada de mão de obra, cabendo ao CONTRATADO o fornecimento da mão de obra necessária à integral execução do objeto.",
+    "Todo o material de construção necessário à execução dos serviços será fornecido pelo CONTRATANTE, às suas expensas.",
   ];
-  clausulas.push({ titulo: "CLÁUSULA SEGUNDA — DO REGIME DE EXECUÇÃO", itens: regime });
+  if (lig("ferramentas")) {
+    regime.push(ferramentasTodas
+      ? `Todas as ferramentas necessárias à execução dos serviços serão fornecidas ${pelaEla}, por sua conta, sem qualquer custo adicional para a CONTRATANTE.`
+      : `As ferramentas básicas necessárias à execução dos serviços serão fornecidas ${pelaEla}, por sua conta.`);
+  }
+  if (lig("equipamentos")) {
+    regime.push(`Correm por conta exclusiva ${dela} todos os demais equipamentos necessários à execução dos serviços, tais como andaimes, meios de içamento e acesso, marteletes, escoras metálicas e caçambas de entulho.`);
+  } else {
+    regime.push("Os equipamentos de maior porte serão fornecidos pelo CONTRATANTE, às suas expensas, tais como andaimes, marteletes, escoras metálicas e caçambas de entulho.");
+  }
+  if (lig("epi")) regime.push(`Os equipamentos de proteção individual (EPI) utilizados pela equipe ${dela} serão por el${global ? "a" : "e"} fornecidos, observadas as normas de segurança e medicina do trabalho.`);
+  regime.push("Os serviços observarão as normas técnicas aplicáveis.");
+  add("regime", "DO REGIME DE EXECUÇÃO", regime);
 
-  // 3 — Prazo
+  // ── Prazo ──
+  const pz = prazoContrato(c);
+  const unidadeTxt = pz.unidade === "meses" ? "meses" : pz.unidade === "dias" ? "dias corridos" : "dias ou meses";
   const prazo = [];
   if (global) {
-    prazo.push(`3.1. O prazo para a execução integral dos serviços é de ${numExtensoCtr(Number(c.prazoDias) || 0)} dias corridos, contados da data em que a CONTRATANTE comunicar formalmente à CONTRATADA que a OBRA está liberada para o início dos trabalhos.`);
-    prazo.push("3.2. A comunicação de liberação da OBRA será feita por escrito, admitido o meio eletrônico, e a respectiva data será considerada o marco inicial do prazo.");
-    prazo.push("3.3. O prazo será prorrogado, por período equivalente ao da paralisação, nas seguintes hipóteses: (a) atraso da CONTRATANTE ou de seus demais contratados na liberação das frentes de trabalho; (b) condições climáticas que impeçam a execução; (c) alterações ou acréscimos de escopo solicitados pela CONTRATANTE; e (d) caso fortuito ou força maior.");
+    prazo.push(`O prazo para a execução integral dos serviços é de ${numCtr(pz.qtd, unidadeTxt)}, contados da data em que a CONTRATANTE comunicar formalmente à CONTRATADA que a OBRA está liberada para o início dos trabalhos.`);
+    prazo.push("A comunicação de liberação da OBRA será feita por escrito, admitido o meio eletrônico, e a respectiva data será considerada o marco inicial do prazo.");
   } else {
-    prazo.push(`3.1. O prazo para a execução integral dos serviços é de ${numExtensoCtr(Number(c.prazoMeses) || 0)} meses, contados de ${c.dataInicio ? fmtDataCtr(c.dataInicio) : "______/______/__________"}, data prevista para o início dos trabalhos.`);
-    prazo.push("3.2. O prazo será prorrogado, por período equivalente ao da paralisação, nas seguintes hipóteses: (a) chuvas ou condições climáticas que impeçam a execução dos serviços; (b) atraso na entrega dos materiais a cargo do CONTRATANTE; (c) alterações ou acréscimos de escopo solicitados pelo CONTRATANTE; e (d) caso fortuito ou força maior.");
-    prazo.push("3.3. As prorrogações e as paralisações deverão ser registradas por escrito entre as partes, admitido o meio eletrônico.");
+    prazo.push(`O prazo para a execução integral dos serviços é de ${numCtr(pz.qtd, unidadeTxt)}, contados de ${c.dataInicio ? fmtDataCtr(c.dataInicio) : "______/______/__________"}, data prevista para o início dos trabalhos.`);
   }
-  clausulas.push({ titulo: "CLÁUSULA TERCEIRA — DO PRAZO DE EXECUÇÃO", itens: prazo });
+  prazo.push(`O prazo será prorrogado, por período equivalente ao da paralisação, nas seguintes hipóteses: (a) chuvas ou condições climáticas que impeçam a execução dos serviços; (b) atraso ${global ? "da CONTRATANTE ou de seus demais contratados na liberação das frentes de trabalho" : "na entrega dos materiais a cargo do CONTRATANTE"}; (c) alterações ou acréscimos de escopo solicitados pela CONTRATANTE; e (d) caso fortuito ou força maior.`);
+  prazo.push("As prorrogações e as paralisações deverão ser registradas por escrito entre as partes, admitido o meio eletrônico.");
+  add("prazo", "DO PRAZO DE EXECUÇÃO", prazo);
 
-  // 4 — Preço e pagamento
-  const pag = [`4.1. Pela integral execução dos serviços, a CONTRATANTE pagará ${aEla} o valor total de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${global ? ", correspondente à soma dos itens discriminados no item 1.3" : ""}.`];
-  if (global) {
-    pag.push(`4.2. O pagamento será realizado item a item, na proporção de ${numExtensoCtr(Number(c.entradaPct) || 50)}% do valor do respectivo item a título de entrada, na liberação de cada item para produção, e o restante na conclusão da montagem do mesmo item, conforme o quadro abaixo:`);
-    pag.push("4.3. A conclusão de cada item será verificada pela CONTRATANTE em até 5 (cinco) dias úteis da comunicação da CONTRATADA, liberando-se o respectivo saldo caso não haja pendências apontadas por escrito.");
-    pag.push("4.4. Os pagamentos serão efetuados por transferência bancária ou PIX, em conta de titularidade da CONTRATADA, informada por escrito.");
-    pag.push(`4.5. O atraso no pagamento de qualquer parcela sujeitará a CONTRATANTE à multa de 2% (dois por cento) sobre o valor em atraso, acrescida de juros de 1% (um por cento) ao mês, calculados pro rata die.`);
-    pag.push("4.6. Os valores acima são fixos e irreajustáveis pelo prazo deste contrato e compreendem todos os custos diretos e indiretos, materiais, transporte, mão de obra, tributos e encargos incidentes sobre os serviços.");
-  } else {
+  // ── Preço e pagamento ──
+  const modo = modalidadeContrato(c);
+  const per = periodicidadeAdj(c.periodicidade);
+  const pag = [`Pela integral execução dos serviços, a CONTRATANTE pagará ${aEla} o valor total de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${temItens ? ", correspondente à soma dos itens discriminados no item {{it:itens}}" : ""}.`];
+  let tabelaParcelas = [];
+
+  if (modo === "parcelado") {
     const p = parcelasContrato(total, c.parcelas);
-    pag.push(p.iguais
-      ? `4.2. O valor total será dividido em ${numExtensoCtr(p.qtd)} parcelas ${c.periodicidade || "quinzenais"} e sucessivas, no valor de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)}) cada.`
-      : `4.2. O valor total será dividido em ${numExtensoCtr(p.qtd)} parcelas ${c.periodicidade || "quinzenais"} e sucessivas, sendo ${numExtensoCtr(p.qtd - 1)} parcelas no valor de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)}) cada e a última no valor de ${fmtMoedaCtr(p.ultima)} (${moedaExtensoCtr(p.ultima)}), ajustada em razão de arredondamento.`);
-    if ((c.periodicidade || "quinzenais") === "quinzenais") {
-      pag.push("4.3. Os pagamentos serão realizados sempre às sextas-feiras, em quinzenas alternadas e no período da manhã, vencendo-se a primeira parcela na segunda sexta-feira contada do início dos serviços e as demais a cada 15 (quinze) dias subsequentes.");
+    pag.push(Number(c.parcelas) > 0
+      ? (p.iguais
+        ? `O valor total será dividido em ${numCtr(p.qtd)} parcelas ${per} e sucessivas, no valor de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)}) cada.`
+        : `O valor total será dividido em ${numCtr(p.qtd)} parcelas ${per} e sucessivas, sendo ${numCtr(p.qtd - 1)} parcelas no valor de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)}) cada e a última no valor de ${fmtMoedaCtr(p.ultima)} (${moedaExtensoCtr(p.ultima)}), ajustada em razão de arredondamento.`)
+      : `O valor total será dividido em ______ parcelas ${per} e sucessivas.`);
+    pag.push(vencimentoTexto(c.periodicidade));
+  } else if (modo === "medicao") {
+    const perMed = c.medicaoPeriodicidade === "semanal" ? "semanal" : c.medicaoPeriodicidade === "quinzenal" ? "quinzenal" : "mensal";
+    pag.push(`O pagamento será feito por medição ${perMed}: ao final de cada período as partes apurarão, em conjunto, os serviços efetivamente executados, e ${ela} receberá o valor correspondente ao percentual medido do valor total deste contrato.`);
+    pag.push(`A medição será formalizada por escrito, admitido o meio eletrônico, e o respectivo pagamento será realizado em até ${numCtr(c.medicaoPrazoDias, "dias")} contados da aprovação da medição pela CONTRATANTE.`);
+    pag.push("Divergências apontadas na medição serão discriminadas por escrito, liberando-se de imediato a parcela incontroversa.");
+  } else if (modo === "entradaParcelas") {
+    const e = entradaESaldo(total, c.entradaPct, c.parcelas);
+    pag.push(`A título de entrada, a CONTRATANTE pagará ${aEla} ${pctCtr(c.entradaPct)} do valor total, correspondentes a ${fmtMoedaCtr(e.entrada)} (${moedaExtensoCtr(e.entrada)}), na assinatura deste contrato.`);
+    pag.push(Number(c.parcelas) > 0
+      ? (e.parcelas.iguais
+        ? `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ${numCtr(e.parcelas.qtd)} parcelas ${per} e sucessivas, no valor de ${fmtMoedaCtr(e.parcelas.base)} (${moedaExtensoCtr(e.parcelas.base)}) cada.`
+        : `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ${numCtr(e.parcelas.qtd)} parcelas ${per} e sucessivas, sendo ${numCtr(e.parcelas.qtd - 1)} no valor de ${fmtMoedaCtr(e.parcelas.base)} (${moedaExtensoCtr(e.parcelas.base)}) cada e a última no valor de ${fmtMoedaCtr(e.parcelas.ultima)} (${moedaExtensoCtr(e.parcelas.ultima)}), ajustada em razão de arredondamento.`)
+      : `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ______ parcelas ${per} e sucessivas.`);
+    pag.push(vencimentoTexto(c.periodicidade));
+  } else {
+    // entrada + saldo no final — do contrato todo ou item a item
+    const porItem = (c.entradaEscopo || (global ? "item" : "contrato")) === "item" && temItens;
+    if (porItem) {
+      pag.push(`O pagamento será realizado item a item, na proporção de ${pctCtr(c.entradaPct)} do valor do respectivo item a título de entrada, na liberação de cada item para produção, e o restante na conclusão daquele mesmo item, conforme o quadro abaixo:`);
+      pag.push(`A conclusão de cada item será verificada pela CONTRATANTE em até 5 (cinco) dias úteis da comunicação ${dela}, liberando-se o respectivo saldo caso não haja pendências apontadas por escrito.`);
+      const pct = (Number(c.entradaPct) || 0) / 100;
+      tabelaParcelas = tabelaItens.map((i) => {
+        const p1 = Math.floor(i.valor * pct * 100) / 100;
+        return { n: i.n, descricao: i.descricao, p1, p2: Math.round((i.valor - p1) * 100) / 100 };
+      });
     } else {
-      pag.push("4.3. Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços e as demais a cada 30 (trinta) dias subsequentes.");
+      const e = entradaESaldo(total, c.entradaPct, 1);
+      pag.push(`A título de entrada, a CONTRATANTE pagará ${aEla} ${pctCtr(c.entradaPct)} do valor total, correspondentes a ${fmtMoedaCtr(e.entrada)} (${moedaExtensoCtr(e.entrada)}), na assinatura deste contrato.`);
+      pag.push(`O saldo de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será pago na conclusão integral dos serviços, mediante o aceite final da CONTRATANTE, que será dado em até 5 (cinco) dias úteis da comunicação de término, caso não haja pendências apontadas por escrito.`);
     }
-    if (c.retemUltima) pag.push("4.4. A última parcela ficará retida pelo CONTRATANTE, a título de garantia de execução, e será paga somente após a conclusão total da obra e o respectivo aceite final do CONTRATANTE.");
-    pag.push("4.5. Os pagamentos serão efetuados por transferência bancária ou PIX, em conta de titularidade do CONTRATADO, informada por escrito.");
-    pag.push("4.6. O atraso no pagamento de qualquer parcela sujeitará o CONTRATANTE à multa de 2% (dois por cento) sobre o valor em atraso, acrescida de juros de 1% (um por cento) ao mês, calculados pro rata die.");
-    pag.push("4.7. O preço ajustado remunera exclusivamente a mão de obra, nele não se incluindo qualquer material, locação de equipamentos ou serviço de terceiros.");
   }
-  clausulas.push({ titulo: "CLÁUSULA QUARTA — DO PREÇO E DA FORMA DE PAGAMENTO", itens: pag, tabelaParcelas: global });
 
-  // 5 e 6 — obrigações
-  clausulas.push({
-    titulo: `CLÁUSULA QUINTA — DAS OBRIGAÇÕES ${global ? "DA CONTRATADA" : "DO CONTRATADO"}`,
-    itens: [
-      "5.1. Executar os serviços com zelo, técnica e qualidade, em observância ao objeto contratado e às boas práticas aplicáveis.",
-      "5.2. Manter na OBRA equipe própria, qualificada e em número suficiente ao cumprimento do prazo pactuado.",
-      "5.3. Fornecer e exigir o uso de EPI por toda a sua equipe, observando as normas de segurança e medicina do trabalho.",
-      "5.4. Responsabilizar-se integralmente pelos encargos trabalhistas, previdenciários, fiscais e securitários relativos aos seus empregados e prepostos.",
-      global
-        ? "5.5. Fornecer materiais novos, de primeira qualidade e adequados à finalidade, respondendo por sua procedência."
-        : "5.5. Zelar pelos materiais colocados à sua disposição pelo CONTRATANTE, respondendo por perdas decorrentes de desperdício, mau uso ou negligência de sua equipe.",
-      "5.6. Manter a obra organizada, promover a remoção do entulho gerado e entregar os ambientes limpos ao término de cada etapa.",
-      `5.7. Refazer ou corrigir, sem ônus ${global ? "" : "de mão de obra "}para a CONTRATANTE, os serviços executados em desacordo com o contratado ou com as boas práticas técnicas.`,
-      "5.8. Responder pelos danos que causar à CONTRATANTE, à OBRA ou a terceiros, por ação ou omissão de sua equipe.",
-      "5.9. Não subcontratar, no todo ou em parte, os serviços objeto deste contrato sem prévia e expressa autorização escrita da CONTRATANTE.",
-    ],
-  });
-  clausulas.push({
-    titulo: "CLÁUSULA SEXTA — DAS OBRIGAÇÕES DA CONTRATANTE",
-    itens: [
-      global
-        ? "6.1. Comunicar formalmente a liberação da OBRA para o início dos serviços e manter as frentes de trabalho disponíveis e desimpedidas, inclusive as bases e fundações de apoio."
-        : "6.1. Fornecer, em tempo hábil e em quantidade suficiente, todo o material necessário à execução dos serviços, bem como as ferramentas e os equipamentos a seu cargo.",
-      `6.2. Franquear ${aEla} o livre acesso à OBRA e disponibilizar água e energia elétrica para a execução dos trabalhos.`,
-      "6.3. Efetuar os pagamentos nas condições e nos prazos ajustados na Cláusula Quarta.",
-      "6.4. Acompanhar e fiscalizar a execução dos serviços, apontando por escrito eventuais inconformidades para correção.",
-    ],
-  });
+  if (lig("retencao")) {
+    pag.push(Number(c.retencaoPct) > 0
+      ? `De cada pagamento será retido o percentual de ${pctCtr(c.retencaoPct)}, a título de garantia de execução, liberado após a conclusão total dos serviços e o respectivo aceite final da CONTRATANTE.`
+      : `A última parcela ficará retida pela CONTRATANTE, a título de garantia de execução, e será paga somente após a conclusão total dos serviços e o respectivo aceite final da CONTRATANTE.`);
+  }
+  pag.push(`Os pagamentos serão efetuados por transferência bancária ou PIX, em conta de titularidade ${dela}, informada por escrito.`);
+  pag.push("O atraso no pagamento de qualquer parcela sujeitará a CONTRATANTE à multa de 2% (dois por cento) sobre o valor em atraso, acrescida de juros de 1% (um por cento) ao mês, calculados pro rata die.");
+  if (lig("irreajustavel")) {
+    pag.push(global
+      ? "Os valores acima são fixos e irreajustáveis pelo prazo deste contrato e compreendem todos os custos diretos e indiretos, materiais, transporte, mão de obra, tributos e encargos incidentes sobre os serviços."
+      : "Os valores acima são fixos e irreajustáveis pelo prazo deste contrato e remuneram exclusivamente a mão de obra, nele não se incluindo qualquer material, locação de equipamentos ou serviço de terceiros.");
+  }
+  add("pagamento", "DO PREÇO E DA FORMA DE PAGAMENTO", pag, { tabelaParcelas: tabelaParcelas.length > 0 });
 
-  // 7 a 13 — comuns
-  clausulas.push({
-    titulo: "CLÁUSULA SÉTIMA — DOS SERVIÇOS EXTRAORDINÁRIOS",
-    itens: [
-      `7.1. Qualquer serviço não previsto ${global ? "no item 1.3" : "no ANEXO I"} somente será executado mediante acordo prévio e escrito entre as partes, com a definição do respectivo valor e do impacto no prazo, por meio de termo aditivo.`,
-      `7.2. A execução de serviço extraordinário sem o correspondente aditivo escrito não gerará ${aEla} direito a pagamento adicional.`,
-    ],
-  });
-  clausulas.push({
-    titulo: "CLÁUSULA OITAVA — DA GARANTIA",
-    itens: [
-      `8.1. ${global ? "A CONTRATADA garante os serviços e os materiais fornecidos" : "O CONTRATADO garante os serviços executados"} pelo prazo de ${numExtensoCtr(Number(c.garantiaMeses) || 6)} meses, contados ${global ? "da conclusão da montagem de cada item" : "da data do aceite final da obra"}, obrigando-se a corrigir, sem qualquer custo ${global ? "" : "de mão de obra "}para a CONTRATANTE, os defeitos decorrentes de falha de execução.`,
-      `8.2. A garantia não abrange defeitos decorrentes de: (a) ${global ? "intervenções de terceiros nos serviços executados" : "qualidade ou inadequação dos materiais fornecidos pela CONTRATANTE"}; (b) desgaste natural, mau uso ou ausência de manutenção; e (c) ${global ? "eventos climáticos extremos" : "intervenções realizadas por terceiros nos serviços executados"}.`,
-    ],
-  });
-  clausulas.push({
-    titulo: "CLÁUSULA NONA — DO ATRASO E DAS PENALIDADES",
-    itens: [
-      `9.1. Ultrapassado o prazo da Cláusula Terceira sem causa justificada, a multa por atraso somente será exigível após decorridos ${numExtensoCtr(Number(c.toleranciaDias) || 45)} dias corridos do término do prazo contratual, não incidindo qualquer penalidade dentro desse período de tolerância.`,
-      `9.2. Decorrido o prazo de tolerância previsto no item anterior, ${ela} ficará sujeit${global ? "a" : "o"} à multa de ${String(c.multaDiaPct ?? 0.5).replace(".", ",")}% do valor total do contrato por dia de atraso, limitada a ${String(c.multaTetoPct ?? 10).replace(".", ",")}% do valor total.`,
-      `9.3. A paralisação dos serviços por prazo superior a 10 (dez) dias corridos, sem justificativa aceita pela CONTRATANTE, caracteriza inadimplemento contratual.`,
-    ],
-  });
-  clausulas.push({
-    titulo: "CLÁUSULA DÉCIMA — DA RESCISÃO",
-    itens: [
-      "10.1. O contrato poderá ser rescindido por qualquer das partes, em caso de descumprimento de suas cláusulas, mediante notificação escrita com prazo de 10 (dez) dias para a correção da falha apontada.",
-      "10.2. É facultada a rescisão imotivada por qualquer das partes, mediante aviso prévio escrito de 15 (quinze) dias.",
-      `10.3. Em qualquer hipótese de rescisão, as partes apurarão de comum acordo o valor correspondente aos serviços efetivamente executados até a data, que será pago ${aEla}, deduzidos eventuais valores devidos à CONTRATANTE.`,
-    ],
-  });
-  clausulas.push({
-    titulo: "CLÁUSULA DÉCIMA PRIMEIRA — DA AUSÊNCIA DE VÍNCULO",
-    itens: [
-      `11.1. O presente contrato não gera vínculo empregatício, societário ou de qualquer outra natureza entre as partes, tampouco entre a CONTRATANTE e os empregados, prepostos ou auxiliares ${dela}.`,
-      `11.2. Caso a CONTRATANTE venha a ser demandada judicial ou administrativamente em razão de obrigação de responsabilidade ${dela}, est${global ? "a" : "e"} se obriga a assumir a defesa e a reembolsar integralmente os valores que a CONTRATANTE for compelida a desembolsar, inclusive custas e honorários.`,
-    ],
-  });
-  clausulas.push({
-    titulo: "CLÁUSULA DÉCIMA SEGUNDA — DAS DISPOSIÇÕES GERAIS",
-    itens: [
-      global
-        ? "12.1. O quadro de itens do item 1.3 é parte integrante e inseparável deste contrato."
-        : "12.1. O ANEXO I — Descritivo dos Serviços é parte integrante e inseparável deste contrato.",
-      "12.2. Qualquer alteração deste contrato somente terá validade se formalizada por escrito e assinada por ambas as partes.",
-      "12.3. A tolerância de qualquer das partes quanto ao descumprimento de obrigação da outra constitui mera liberalidade, não implicando novação, renúncia ou alteração do pactuado.",
-      "12.4. As comunicações entre as partes serão feitas por escrito, admitidos os meios eletrônicos usualmente utilizados por elas.",
-    ],
-  });
-  clausulas.push({
-    titulo: "CLÁUSULA DÉCIMA TERCEIRA — DO FORO",
-    itens: [`13.1. As partes elegem o foro da Comarca de ${foro || "______________________"}, Estado de ${(cliente && cliente.estado) || "São Paulo"}, para dirimir quaisquer dúvidas ou controvérsias oriundas deste contrato, com renúncia a qualquer outro, por mais privilegiado que seja.`],
-  });
+  // ── Obrigações ──
+  const obrC = [
+    "Executar os serviços com zelo, técnica e qualidade, em observância ao objeto contratado e às boas práticas aplicáveis.",
+    "Manter na OBRA equipe própria, qualificada e em número suficiente ao cumprimento do prazo pactuado.",
+    "Responsabilizar-se integralmente pelos encargos trabalhistas, previdenciários, fiscais e securitários relativos aos seus empregados e prepostos.",
+    lig("art") && "Emitir e recolher, às suas expensas, a Anotação de Responsabilidade Técnica (ART) ou o Registro de Responsabilidade Técnica (RRT) referente aos serviços contratados, entregando cópia à CONTRATANTE antes do início dos trabalhos.",
+    lig("seguro") && "Manter, durante toda a vigência deste contrato, seguro de responsabilidade civil e contra acidentes de trabalho que cubra sua equipe e eventuais danos decorrentes dos serviços.",
+    global
+      ? "Fornecer materiais novos, de primeira qualidade e adequados à finalidade, respondendo por sua procedência."
+      : "Zelar pelos materiais colocados à sua disposição pela CONTRATANTE, respondendo por perdas decorrentes de desperdício, mau uso ou negligência de sua equipe.",
+    lig("limpeza") && "Manter a obra organizada, promover a remoção do entulho gerado e entregar os ambientes limpos ao término de cada etapa.",
+    `Refazer ou corrigir, sem ônus ${global ? "" : "de mão de obra "}para a CONTRATANTE, os serviços executados em desacordo com o contratado ou com as boas práticas técnicas.`,
+    lig("danos") && "Responder pelos danos que causar à CONTRATANTE, à OBRA ou a terceiros, por ação ou omissão de sua equipe.",
+    lig("subcontratacao") && "Não subcontratar, no todo ou em parte, os serviços objeto deste contrato sem prévia e expressa autorização escrita da CONTRATANTE.",
+    lig("alimentacao") && "Arcar com a alimentação, o transporte e, se for o caso, o alojamento de sua equipe.",
+    lig("diario") && `Entregar à CONTRATANTE relatório ${c.diarioPeriodicidade === "mensal" ? "mensal" : c.diarioPeriodicidade === "quinzenal" ? "quinzenal" : "semanal"} de avanço dos serviços, admitido o meio eletrônico.`,
+    lig("nf") && "Emitir a nota fiscal correspondente a cada pagamento, na forma da legislação aplicável.",
+  ];
+  add("obrigacoesContratado", `DAS OBRIGAÇÕES ${global ? "DA CONTRATADA" : "DO CONTRATADO"}`, obrC);
 
-  const tabelaItens = global ? (c.itens || []).filter((i) => i && (i.descricao || Number(i.valor))).map((i, idx) => ({
-    n: idx + 1, descricao: i.descricao || "", valor: Number(i.valor) || 0,
-  })) : [];
-  const pct = (Number(c.entradaPct) || 50) / 100;
-  const tabelaParcelas = global ? tabelaItens.map((i) => {
-    const p1 = Math.floor(i.valor * pct * 100) / 100;
-    return { n: i.n, descricao: i.descricao, p1, p2: Math.round((i.valor - p1) * 100) / 100 };
-  }) : [];
+  add("obrigacoesContratante", "DAS OBRIGAÇÕES DA CONTRATANTE", [
+    global
+      ? "Comunicar formalmente a liberação da OBRA para o início dos serviços e manter as frentes de trabalho disponíveis e desimpedidas, inclusive as bases e fundações de apoio."
+      : "Fornecer, em tempo hábil e em quantidade suficiente, todo o material necessário à execução dos serviços, bem como as ferramentas e os equipamentos a seu cargo.",
+    lig("aguaEnergia")
+      ? `Franquear ${aEla} o livre acesso à OBRA e disponibilizar água e energia elétrica para a execução dos trabalhos.`
+      : `Franquear ${aEla} o livre acesso à OBRA.`,
+    "Efetuar os pagamentos nas condições e nos prazos ajustados na {{cl:pagamento}}.",
+    "Acompanhar e fiscalizar a execução dos serviços, apontando por escrito eventuais inconformidades para correção.",
+  ]);
+
+  add("extraordinarios", "DOS SERVIÇOS EXTRAORDINÁRIOS", [
+    `Qualquer serviço não previsto ${ondeEstaOEscopo || "neste contrato"} somente será executado mediante acordo prévio e escrito entre as partes, com a definição do respectivo valor e do impacto no prazo, por meio de termo aditivo.`,
+    `A execução de serviço extraordinário sem o correspondente aditivo escrito não gerará ${aEla} direito a pagamento adicional.`,
+  ]);
+
+  if (lig("garantia")) {
+    add("garantia", "DA GARANTIA", [
+      `${global ? "A CONTRATADA garante os serviços e os materiais fornecidos" : "O CONTRATADO garante os serviços executados"} pelo prazo de ${numCtr(c.garantiaMeses, "meses")}, contados ${global && temItens ? "da conclusão da montagem de cada item" : "da data do aceite final da obra"}, obrigando-se a corrigir, sem qualquer custo ${global ? "" : "de mão de obra "}para a CONTRATANTE, os defeitos decorrentes de falha de execução.`,
+      `A garantia não abrange defeitos decorrentes de: (a) ${global ? "intervenções de terceiros nos serviços executados" : "qualidade ou inadequação dos materiais fornecidos pela CONTRATANTE"}; (b) desgaste natural, mau uso ou ausência de manutenção; e (c) ${global ? "eventos climáticos extremos" : "intervenções realizadas por terceiros nos serviços executados"}.`,
+    ]);
+  }
+
+  const atraso = [];
+  if (lig("tolerancia")) atraso.push(`Ultrapassado o prazo da {{cl:prazo}} sem causa justificada, a multa por atraso somente será exigível após decorridos ${numCtr(c.toleranciaDias, "dias corridos")} do término do prazo contratual, não incidindo qualquer penalidade dentro desse período de tolerância.`);
+  if (lig("multa")) atraso.push(`${lig("tolerancia") ? "Decorrido o prazo de tolerância previsto no item anterior, " : `Ultrapassado o prazo da {{cl:prazo}} sem causa justificada, `}${ela} ficará sujeit${a_o} à multa de ${pctCtr(c.multaDiaPct)} do valor total do contrato por dia de atraso, limitada a ${pctCtr(c.multaTetoPct)} do valor total.`);
+  atraso.push("A paralisação dos serviços por prazo superior a 10 (dez) dias corridos, sem justificativa aceita pela CONTRATANTE, caracteriza inadimplemento contratual.");
+  add("atraso", "DO ATRASO E DAS PENALIDADES", atraso);
+
+  add("rescisao", "DA RESCISÃO", [
+    "O contrato poderá ser rescindido por qualquer das partes, em caso de descumprimento de suas cláusulas, mediante notificação escrita com prazo de 10 (dez) dias para a correção da falha apontada.",
+    "É facultada a rescisão imotivada por qualquer das partes, mediante aviso prévio escrito de 15 (quinze) dias.",
+    `Em qualquer hipótese de rescisão, as partes apurarão de comum acordo o valor correspondente aos serviços efetivamente executados até a data, que será pago ${aEla}, deduzidos eventuais valores devidos à CONTRATANTE.`,
+  ]);
+
+  add("vinculo", "DA AUSÊNCIA DE VÍNCULO", [
+    `O presente contrato não gera vínculo empregatício, societário ou de qualquer outra natureza entre as partes, tampouco entre a CONTRATANTE e os empregados, prepostos ou auxiliares ${dela}.`,
+    `Caso a CONTRATANTE venha a ser demandada judicial ou administrativamente em razão de obrigação de responsabilidade ${dela}, est${a_o} se obriga a assumir a defesa e a reembolsar integralmente os valores que a CONTRATANTE for compelida a desembolsar, inclusive custas e honorários.`,
+  ]);
+
+  add("gerais", "DAS DISPOSIÇÕES GERAIS", [
+    temItens && "O quadro de itens do item {{it:itens}} é parte integrante e inseparável deste contrato.",
+    temAnexo && "O ANEXO I — Descritivo dos Serviços é parte integrante e inseparável deste contrato.",
+    "Qualquer alteração deste contrato somente terá validade se formalizada por escrito e assinada por ambas as partes.",
+    "A tolerância de qualquer das partes quanto ao descumprimento de obrigação da outra constitui mera liberalidade, não implicando novação, renúncia ou alteração do pactuado.",
+    "As comunicações entre as partes serão feitas por escrito, admitidos os meios eletrônicos usualmente utilizados por elas.",
+  ]);
+
+  add("foro", "DO FORO", [
+    `As partes elegem o foro da Comarca de ${foro || "______________________"}, Estado de ${(cliente && cliente.estado) || "São Paulo"}, para dirimir quaisquer dúvidas ou controvérsias oriundas deste contrato, com renúncia a qualquer outro, por mais privilegiado que seja.`,
+  ]);
+
+  // ── Numeração e referências cruzadas ──
+  const indices = {};
+  cl.forEach((x, i) => { indices[x.id] = i; });
+  const refCl = (id) => (indices[id] === undefined ? "" : `Cláusula ${ordinalCapCtr(indices[id])}`);
+  const refIt = (marca) => {
+    const m2 = marcas[marca];
+    if (!m2 || indices[m2.id] === undefined) return "";
+    return `${indices[m2.id] + 1}.${m2.i + 1}`;
+  };
+  const resolver = (t) => String(t)
+    .replace(/\{\{cl:(\w+)\}\}/g, (_, id) => refCl(id))
+    .replace(/\{\{it:(\w+)\}\}/g, (_, marca) => refIt(marca));
+  const clausulas = cl.map((x, i) => ({
+    id: x.id,
+    titulo: `CLÁUSULA ${CTR_ORDINAIS[i] || `${i + 1}ª`} — ${x.nome}`,
+    itens: x.itens.map((t, j) => `${i + 1}.${j + 1}. ${resolver(t)}`),
+    tabelaItens: !!x.tabelaItens,
+    tabelaParcelas: !!x.tabelaParcelas,
+  }));
 
   return {
     modelo: m, global, total,
+    modalidade: modo,
     titulo: "CONTRATO DE PRESTAÇÃO DE SERVIÇOS",
     subtitulo: c.objeto || m.subtitulo,
     preambulo, clausulas, tabelaItens, tabelaParcelas,
-    anexo: !global ? (c.escopo || []).filter((e) => e && (e.titulo || e.texto)) : [],
+    anexo,
     cidadeAssinatura: cidadeAss,
     assinaturas: [
       { nome: contratante.nome, papel: "CONTRATANTE", representante: contratante.representanteNome, cpf: contratante.representanteCpf },
@@ -14672,6 +14890,18 @@ const CTR_PRINT_CSS = `
   @page { size: A4; margin: 18mm 16mm; }
 }
 `;
+// Campo numérico com máscara ao digitar: moeda (1.234,56), percentual
+// (0,50%) ou inteiro (1.200). O contrato guarda o número puro; a máscara é
+// só o que aparece na tela.
+function CampoCtrNum({ tipo, valor, onChange, style, placeholder, disabled }) {
+  const casas = tipo === "inteiro" ? 0 : 2;
+  const texto = tipo === "moeda" ? textoMoedaCampo(valor) : tipo === "pct" ? textoPctCampo(valor) : textoInteiroCampo(valor);
+  return (
+    <input style={style} disabled={disabled} inputMode="decimal" placeholder={placeholder} value={texto}
+      onChange={(e) => onChange(digitandoNumero(texto, e.target.value, casas))} />
+  );
+}
+
 function ContratoDocumento({ contrato, cliente, obra, prestador }) {
   const d = montarContrato(contrato, { cliente, obra, prestador });
   useEffect(() => {
@@ -15760,6 +15990,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // `contratoAberto` é o contrato salvo que está sendo lido/impresso.
   const [contratoGerando, setContratoGerando] = useState(null);
   const [contratoAberto, setContratoAberto] = useState(null);
+  // Cadastro rápido de prestador, aberto de dentro do gerador.
+  const [novoPrestador, setNovoPrestador] = useState(null);
   const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
@@ -15817,6 +16049,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   function editarObra(obra) {
     setFormObra({ ...obra });
     setView("form");
+  }
+
+  async function buscarCepPrestador(cepBruto) {
+    const clean = String(cepBruto || "").replace(/\D/g, "");
+    if (clean.length !== 8) return;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${clean}/json/`);
+      const d = await r.json();
+      if (!d.erro) setNovoPrestador(f => f && ({ ...f, logradouro: d.logradouro || f.logradouro, bairro: d.bairro || f.bairro, cidade: d.localidade || f.cidade, estado: d.uf || f.estado }));
+    } catch {}
   }
 
   // ViaCEP, igual ao cadastro do cliente — preenche o endereço próprio da obra.
@@ -16113,43 +16355,61 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   if (view === "gerarContrato" && contratoGerando && obraSelecionada) {
     const g = contratoGerando;
     const modelo = contratoModelo(g.modelo);
-    const global = modelo.id === "empreitadaGlobal";
     const prest = prestadores.find(p => p.id === g.prestadorId) || null;
     const tipoP = tipoProfissional(g.tipoProfissional);
     const prestadoresDisponiveis = prestadoresDoTipo(prestadores, g.tipoProfissional);
     const total = valorContrato(g);
+    const modo = modalidadeContrato(g);
+    const pz = prazoContrato(g);
     const setG = (campo, valor) => setContratoGerando({ ...g, [campo]: valor });
     const setLista = (campo, idx, chave, valor) => setContratoGerando({ ...g, [campo]: (g[campo] || []).map((x, i) => i === idx ? { ...x, [chave]: valor } : x) });
     const addLinha = (campo, vazio) => setContratoGerando({ ...g, [campo]: [...(g[campo] || []), vazio] });
     const delLinha = (campo, idx) => setContratoGerando({ ...g, [campo]: (g[campo] || []).filter((_, i) => i !== idx) });
+    const setOpcao = (id, ligada) => setContratoGerando({ ...g, opcoes: { ...(g.opcoes || opcoesPadrao(g.modelo)), [id]: ligada } });
+    const ligada = (id) => opcaoAtiva(g, id);
     const salvar = () => {
       if (!g.tipoProfissional) { dialogo.alertar({ titulo: "Escolha o tipo de profissional", mensagem: "O contrato começa pelo tipo de profissional — é ele que define o regime e o objeto.", tipo: "aviso" }); return; }
-      if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado ou digite o nome do contratado.", tipo: "aviso" }); return; }
+      if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado, cadastre um novo ou digite o nome do contratado.", tipo: "aviso" }); return; }
       const novo = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total, geradoEm: new Date().toISOString() };
       const existe = contratos.some(c => c.id === novo.id);
       save({ ...data, contratos: existe ? contratos.map(c => c.id === novo.id ? novo : c) : [...contratos, novo] });
       setContratoGerando(null); setContratoAberto(novo); setView("verContrato");
     };
+    // Cadastro rápido de prestador, sem sair do gerador — os campos são os
+    // que o preâmbulo do contrato usa.
+    const salvarNovoPrestador = () => {
+      const np = novoPrestador;
+      if (!np.nome?.trim()) { dialogo.alertar({ titulo: "Informe o nome do prestador", tipo: "aviso" }); return; }
+      const registro = { ...np, id: uid(), ativo: true, criadoEm: new Date().toISOString() };
+      save({ ...data, fornecedores: [...prestadores, registro] });
+      setContratoGerando({ ...g, prestadorId: registro.id, nomeContratado: registro.nome });
+      setNovoPrestador(null);
+    };
+    const bloco = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 12 };
+    const tituloBloco = { fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 8 };
+    const grade = (cols) => ({ display: "grid", gridTemplateColumns: isMobile ? "1fr" : cols, gap: 12 });
+
     return (
       <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
-        <button onClick={() => { setContratoGerando(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+        <button onClick={() => { setContratoGerando(null); setNovoPrestador(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", marginBottom: 2 }}>Gerar contrato</div>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>{obraSelecionada.nome} · contratante: {cliente.nome}</div>
 
+        {/* 1 — quem é o profissional. O formulário abaixo é o mesmo para todos. */}
         <div style={{ marginBottom: 12 }}>
           <label style={C.label}>1. Tipo de profissional</label>
           <select style={{ ...C.input, cursor: "pointer" }} value={g.tipoProfissional || ""} onChange={e => {
             const t = tipoProfissional(e.target.value);
             if (!t) { setG("tipoProfissional", ""); return; }
-            // O tipo escolhe o regime — reconstrói com os padrões do modelo dele.
+            // O tipo sugere o regime — troca o modelo, mas preserva o que já foi digitado.
             const base = contratoVazio(t.modelo, cliente.id, obraSelecionada.id, t.id);
-            // Objeto só é sobrescrito se ainda estiver no texto sugerido pelo tipo anterior.
             const objetoAtual = (g.objeto || "").trim();
             const sugestaoAnterior = (tipoProfissional(g.tipoProfissional)?.objeto || "").trim();
             const objeto = (!objetoAtual || objetoAtual === sugestaoAnterior) ? t.objeto : g.objeto;
-            // Mantém o prestador só se ele continuar compatível com o novo tipo.
             const compat = prestadoresDoTipo(prestadores, t.id).some(p => p.id === g.prestadorId);
             setContratoGerando({ ...base, id: g.id, objeto, enderecoObra: g.enderecoObra, status: g.status,
+              itens: g.itens, escopo: g.escopo, valor: g.valor, exclusoes: g.exclusoes,
+              prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade, dataInicio: g.dataInicio,
               prestadorId: compat ? g.prestadorId : "", nomeContratado: compat ? g.nomeContratado : "" });
           }}>
             <option value="">— escolher o tipo de profissional —</option>
@@ -16158,14 +16418,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
           <div>
             <label style={C.label}>2. Prestador (contratado)</label>
-            <select style={{ ...C.input, cursor: "pointer" }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
-              <option value="">{tipoP ? "— escolher um prestador cadastrado —" : "— escolha o tipo primeiro —"}</option>
-              {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}{p.categoria ? ` · ${p.categoria}` : ""}</option>)}
-            </select>
-            {tipoP && tipoP.categorias.length > 0 && prestadoresDisponiveis.length > 0 && !prestadoresDisponiveis.some(p => tipoP.categorias.map(c => c.toLowerCase()).includes(String(p.categoria || "").toLowerCase())) && (
+            <div style={{ display: "flex", gap: 8 }}>
+              <select style={{ ...C.input, cursor: "pointer", flex: 1 }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
+                <option value="">{tipoP ? "— escolher um prestador cadastrado —" : "— escolha o tipo primeiro —"}</option>
+                {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+              <button type="button" disabled={!tipoP} style={{ ...C.btnSec, whiteSpace: "nowrap", opacity: tipoP ? 1 : 0.5 }}
+                onClick={() => setNovoPrestador({ nome: "", tipo: "PJ", categoria: (tipoP && tipoP.categorias[0]) || "Outro", cnpjCpf: "", cep: "", logradouro: "", numero: "", bairro: "", cidade: "", estado: "SP", representanteNome: "", representanteCpf: "", telefone: "", email: "" })}>
+                ＋ Novo
+              </button>
+            </div>
+            {tipoP && tipoP.categorias.length > 0 && prestadoresDisponiveis.length > 0 && !prestadoresDisponiveis.some(p => tipoP.categorias.map(x => x.toLowerCase()).includes(String(p.categoria || "").toLowerCase())) && (
               <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]} — a lista mostra todos.</div>
             )}
           </div>
@@ -16173,16 +16439,61 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <label style={C.label}>3. Modelo do contrato</label>
             <select style={{ ...C.input, cursor: "pointer" }} value={g.modelo} onChange={e => {
               const base = contratoVazio(e.target.value, cliente.id, obraSelecionada.id, g.tipoProfissional);
-              setContratoGerando({ ...base, id: g.id, prestadorId: g.prestadorId, nomeContratado: g.nomeContratado, objeto: g.objeto, enderecoObra: g.enderecoObra, status: g.status });
+              setContratoGerando({ ...base, id: g.id, prestadorId: g.prestadorId, nomeContratado: g.nomeContratado,
+                objeto: g.objeto, enderecoObra: g.enderecoObra, status: g.status, itens: g.itens, escopo: g.escopo,
+                valor: g.valor, exclusoes: g.exclusoes, prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade, dataInicio: g.dataInicio });
             }}>
               {CONTRATO_MODELOS.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
+            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>{modelo.resumo}</div>
           </div>
         </div>
-        <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 14 }}>{modelo.resumo}</div>
-        {tipoP && !prest && (
+
+        {novoPrestador && (
+          <div style={{ ...bloco, background: "#fdf6f0", borderColor: "#e7d3c2" }}>
+            <div style={tituloBloco}>Novo prestador de serviço</div>
+            <div style={{ ...grade("2fr 1fr 1.2fr"), marginBottom: 12 }}>
+              <div><label style={C.label}>Nome / razão social *</label><input style={C.input} value={novoPrestador.nome} onChange={e => setNovoPrestador({ ...novoPrestador, nome: e.target.value })} /></div>
+              <div>
+                <label style={C.label}>Pessoa</label>
+                <select style={{ ...C.input, cursor: "pointer" }} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
+                  <option value="PJ">Jurídica</option><option value="PF">Física</option>
+                </select>
+              </div>
+              <div><label style={C.label}>{novoPrestador.tipo === "PF" ? "CPF" : "CNPJ"}</label><input style={C.input} value={novoPrestador.cnpjCpf} onChange={e => setNovoPrestador({ ...novoPrestador, cnpjCpf: e.target.value })} /></div>
+              <div>
+                <label style={C.label}>Categoria</label>
+                <select style={{ ...C.input, cursor: "pointer" }} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
+                  {CATEGORIAS_PRESTADOR.map(c2 => <option key={c2} value={c2}>{c2}</option>)}
+                </select>
+              </div>
+              <div><label style={C.label}>Telefone</label><input style={C.input} value={novoPrestador.telefone} onChange={e => setNovoPrestador({ ...novoPrestador, telefone: e.target.value })} /></div>
+              <div><label style={C.label}>E-mail</label><input style={C.input} value={novoPrestador.email} onChange={e => setNovoPrestador({ ...novoPrestador, email: e.target.value })} /></div>
+            </div>
+            <div style={{ ...grade("1fr 2fr 0.8fr"), marginBottom: 12 }}>
+              <div><label style={C.label}>CEP</label><input style={C.input} value={novoPrestador.cep} onChange={e => { setNovoPrestador({ ...novoPrestador, cep: e.target.value }); buscarCepPrestador(e.target.value); }} placeholder="00000-000" /></div>
+              <div><label style={C.label}>Logradouro</label><input style={C.input} value={novoPrestador.logradouro} onChange={e => setNovoPrestador({ ...novoPrestador, logradouro: e.target.value })} /></div>
+              <div><label style={C.label}>Número</label><input style={C.input} value={novoPrestador.numero} onChange={e => setNovoPrestador({ ...novoPrestador, numero: e.target.value })} /></div>
+              <div><label style={C.label}>Bairro</label><input style={C.input} value={novoPrestador.bairro} onChange={e => setNovoPrestador({ ...novoPrestador, bairro: e.target.value })} /></div>
+              <div><label style={C.label}>Cidade</label><input style={C.input} value={novoPrestador.cidade} onChange={e => setNovoPrestador({ ...novoPrestador, cidade: e.target.value })} /></div>
+              <div><label style={C.label}>UF</label><input style={C.input} maxLength={2} value={novoPrestador.estado} onChange={e => setNovoPrestador({ ...novoPrestador, estado: e.target.value.toUpperCase().slice(0, 2) })} /></div>
+            </div>
+            {novoPrestador.tipo === "PJ" && (
+              <div style={{ ...grade("2fr 1fr"), marginBottom: 12 }}>
+                <div><label style={C.label}>Representante legal</label><input style={C.input} value={novoPrestador.representanteNome} onChange={e => setNovoPrestador({ ...novoPrestador, representanteNome: e.target.value })} placeholder="quem assina pela empresa" /></div>
+                <div><label style={C.label}>CPF do representante</label><input style={C.input} value={novoPrestador.representanteCpf} onChange={e => setNovoPrestador({ ...novoPrestador, representanteCpf: e.target.value })} /></div>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button type="button" style={C.btnSec} onClick={() => setNovoPrestador(null)}>Cancelar</button>
+              <button type="button" style={C.btn} onClick={salvarNovoPrestador}>Salvar prestador</button>
+            </div>
+          </div>
+        )}
+
+        {tipoP && !prest && !novoPrestador && (
           <div style={{ fontSize: 12, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
-            Sem prestador escolhido o contrato sai sem CNPJ, endereço e representante do contratado. Cadastre em Prestadores para o preâmbulo vir completo.
+            Sem prestador escolhido o contrato sai sem CNPJ, endereço e representante do contratado.
             <div style={{ marginTop: 6 }}>
               <label style={C.label}>Nome do contratado (provisório)</label>
               <input style={C.input} value={g.nomeContratado || ""} onChange={e => setG("nomeContratado", e.target.value)} placeholder="Nome da empresa ou pessoa" />
@@ -16190,7 +16501,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
+        {/* Objeto, local e prazo */}
+        <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
             <label style={C.label}>Objeto (subtítulo do contrato)</label>
             <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={modelo.subtitulo} />
@@ -16200,78 +16512,156 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <input style={C.input} value={g.enderecoObra || ""} onChange={e => setG("enderecoObra", e.target.value)} placeholder={enderecoDaObra(obraSelecionada, cliente) || "em branco, usa o endereço do cadastro"} />
             <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Em branco, o contrato usa o endereço do cadastro da obra — ou o do cliente, quando a obra está marcada como "Endereço do cliente".</div>
           </div>
-          {global ? (
-            <div>
-              <label style={C.label}>Prazo (dias corridos)</label>
-              <input style={C.input} type="number" value={g.prazoDias} onChange={e => setG("prazoDias", e.target.value)} />
+          <div>
+            <label style={C.label}>Prazo de execução</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <CampoCtrNum tipo="inteiro" valor={pz.qtd} onChange={v => setContratoGerando({ ...g, prazoQtd: v, prazoDias: "", prazoMeses: "" })} style={{ ...C.input, flex: 1 }} placeholder="quantidade" />
+              <select style={{ ...C.input, cursor: "pointer", flex: 1 }} value={pz.unidade} onChange={e => setContratoGerando({ ...g, prazoUnidade: e.target.value, prazoDias: "", prazoMeses: "" })}>
+                <option value="">— dias ou meses —</option>
+                <option value="dias">Dias corridos</option>
+                <option value="meses">Meses</option>
+              </select>
             </div>
-          ) : (
-            <>
-              <div><label style={C.label}>Prazo (meses)</label><input style={C.input} type="number" value={g.prazoMeses} onChange={e => setG("prazoMeses", e.target.value)} /></div>
-              <div><label style={C.label}>Início previsto</label><input style={C.input} type="date" value={g.dataInicio || ""} onChange={e => setG("dataInicio", e.target.value)} /></div>
-            </>
-          )}
-          <div><label style={C.label}>Garantia (meses)</label><input style={C.input} type="number" value={g.garantiaMeses} onChange={e => setG("garantiaMeses", e.target.value)} /></div>
+          </div>
+          <div><label style={C.label}>Início previsto</label><input style={C.input} type="date" value={g.dataInicio || ""} onChange={e => setG("dataInicio", e.target.value)} /></div>
           <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={g.status} onChange={e => setG("status", e.target.value)}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
         </div>
 
-        {global ? (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Itens do objeto (com valor)</div>
-            {(g.itens || []).map((it, idx) => (
-              <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 160px auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
-                <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do serviço" />
-                <input style={C.input} type="number" step="0.01" value={it.valor} onChange={e => setLista("itens", idx, "valor", e.target.value)} placeholder="Valor (R$)" />
-                <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
+        {/* Valor: itens discriminados ou valor único — vale o que for preenchido */}
+        <div style={bloco}>
+          <div style={tituloBloco}>Valor do contrato</div>
+          <div style={{ ...grade("240px 1fr"), marginBottom: 10 }}>
+            <div>
+              <label style={C.label}>Valor total (R$)</label>
+              <CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" disabled={(g.itens || []).some(i => Number(i.valor) > 0)} />
+              <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "flex-end", fontSize: 14, fontWeight: 700, color: "#262421" }}>
+              Total: {fmtMoedaCtr(total)}
+            </div>
+          </div>
+          {(g.itens || []).map((it, idx) => (
+            <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 160px auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
+              <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do item (opcional)" />
+              <CampoCtrNum tipo="moeda" valor={it.valor} onChange={v => setLista("itens", idx, "valor", v)} style={C.input} placeholder="0,00" />
+              <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
+            </div>
+          ))}
+          <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>
+        </div>
+
+        {/* Modalidade de pagamento */}
+        <div style={bloco}>
+          <div style={tituloBloco}>Modalidade de pagamento</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
+            {MODALIDADES_PAGAMENTO.map(mp => (
+              <label key={mp.id} style={{ display: "flex", gap: 8, alignItems: "start", border: `1.5px solid ${modo === mp.id ? "#b5652f" : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: modo === mp.id ? "#fdf6f0" : "#fff" }}>
+                <input type="radio" name="ctr-modalidade" checked={modo === mp.id} onChange={() => setG("modalidade", mp.id)} style={{ marginTop: 2, cursor: "pointer" }} />
+                <span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{mp.nome}</span>
+                  <span style={{ display: "block", fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>{mp.resumo}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          <div style={grade("1fr 1fr 1fr")}>
+            {(modo === "entradaParcelas" || modo === "entradaFinal") && (
+              <div><label style={C.label}>Entrada (%)</label><CampoCtrNum tipo="pct" valor={g.entradaPct} onChange={v => setG("entradaPct", v)} style={C.input} placeholder="0,00%" /></div>
+            )}
+            {modo === "entradaFinal" && (
+              <div>
+                <label style={C.label}>Saldo pago</label>
+                <select style={{ ...C.input, cursor: "pointer" }} value={g.entradaEscopo || "contrato"} onChange={e => setG("entradaEscopo", e.target.value)}>
+                  <option value="contrato">Na conclusão do contrato todo</option>
+                  <option value="item">Na conclusão de cada item</option>
+                </select>
+              </div>
+            )}
+            {(modo === "parcelado" || modo === "entradaParcelas") && (
+              <>
+                <div><label style={C.label}>Nº de parcelas</label><CampoCtrNum tipo="inteiro" valor={g.parcelas} onChange={v => setG("parcelas", v)} style={C.input} placeholder="0" /></div>
+                <div>
+                  <label style={C.label}>Periodicidade</label>
+                  <select style={{ ...C.input, cursor: "pointer" }} value={g.periodicidade || "quinzenais"} onChange={e => setG("periodicidade", e.target.value)}>
+                    {PERIODICIDADES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+              </>
+            )}
+            {modo === "medicao" && (
+              <>
+                <div>
+                  <label style={C.label}>Medição</label>
+                  <select style={{ ...C.input, cursor: "pointer" }} value={g.medicaoPeriodicidade || "mensal"} onChange={e => setG("medicaoPeriodicidade", e.target.value)}>
+                    <option value="semanal">Semanal</option><option value="quinzenal">Quinzenal</option><option value="mensal">Mensal</option>
+                  </select>
+                </div>
+                <div><label style={C.label}>Pagar em até (dias)</label><CampoCtrNum tipo="inteiro" valor={g.medicaoPrazoDias} onChange={v => setG("medicaoPrazoDias", v)} style={C.input} placeholder="0" /></div>
+              </>
+            )}
+          </div>
+          {modo === "entradaFinal" && (g.entradaEscopo || "contrato") === "item" && !(g.itens || []).some(i => Number(i.valor) > 0) && (
+            <div style={{ fontSize: 11.5, color: "#92400e", marginTop: 8 }}>Pagamento item a item precisa de itens com valor — sem eles, o contrato sai como entrada + saldo no final.</div>
+          )}
+        </div>
+
+        {/* Cláusulas opcionais */}
+        <div style={bloco}>
+          <div style={tituloBloco}>Cláusulas do contrato</div>
+          <div style={{ fontSize: 11.5, color: "#9ca3af", marginBottom: 10 }}>Marque o que entra neste contrato. O texto e a numeração se ajustam sozinhos.</div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+            {CONTRATO_OPCOES.map(op => (
+              <div key={op.id} style={{ border: "1px solid rgba(38,36,33,0.10)", borderRadius: 10, padding: "9px 11px", background: ligada(op.id) ? "#fff" : "#fafafa" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "start", cursor: "pointer" }}>
+                  <input type="checkbox" checked={ligada(op.id)} onChange={e => setOpcao(op.id, e.target.checked)} style={{ marginTop: 3, cursor: "pointer" }} />
+                  <span>
+                    <span style={{ fontSize: 12.5, color: "#262421", fontWeight: 600 }}>{op.label}</span>
+                    {op.ajuda && <span style={{ display: "block", fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{op.ajuda}</span>}
+                  </span>
+                </label>
+                {ligada(op.id) && op.campos && (
+                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                    {op.campos.map(cp => (
+                      <div key={cp.k} style={{ flex: "1 1 120px" }}>
+                        <label style={C.label}>{cp.l}</label>
+                        {cp.tipo === "select" ? (
+                          <select style={{ ...C.input, cursor: "pointer" }} value={g[cp.k] || cp.opcoes[0][0]} onChange={e => setG(cp.k, e.target.value)}>
+                            {cp.opcoes.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                          </select>
+                        ) : (
+                          <CampoCtrNum tipo={cp.tipo} valor={g[cp.k]} onChange={v => setG(cp.k, v)} style={C.input} placeholder={cp.tipo === "pct" ? "0,00%" : "0"} />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
-            <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>
-              <span style={{ fontSize: 12, color: "#262421", fontWeight: 600 }}>Total: {fmtMoedaCtr(total)}</span>
-              <span style={{ fontSize: 11.5, color: "#6b7280" }}>pagamento {g.entradaPct || 50}% na liberação + saldo na conclusão, por item</span>
-            </div>
           </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 12, marginBottom: 14 }}>
-            <div><label style={C.label}>Valor total (R$)</label><input style={C.input} type="number" step="0.01" value={g.valor} onChange={e => setG("valor", e.target.value)} /></div>
-            <div><label style={C.label}>Nº de parcelas</label><input style={C.input} type="number" value={g.parcelas} onChange={e => setG("parcelas", e.target.value)} /></div>
-            <div>
-              <label style={C.label}>Periodicidade</label>
-              <select style={{ ...C.input, cursor: "pointer" }} value={g.periodicidade} onChange={e => setG("periodicidade", e.target.value)}>
-                <option value="quinzenais">Quinzenais</option><option value="mensais">Mensais</option>
-              </select>
-            </div>
-            <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#374151", display: "flex", alignItems: "center", gap: 8 }}>
-              <input type="checkbox" checked={!!g.retemUltima} onChange={e => setG("retemUltima", e.target.checked)} id="ctr-retem" />
-              <label htmlFor="ctr-retem">Reter a última parcela como garantia de execução, paga no aceite final</label>
-            </div>
-          </div>
-        )}
+        </div>
 
         <div style={{ marginBottom: 12 }}>
           <label style={C.label}>Exclusões do objeto (o que não entra)</label>
           <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: lixamento do concreto, montagem hidráulica e elétrica da piscina" />
         </div>
 
-        {!global && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>ANEXO I — descritivo dos serviços</div>
-            {(g.escopo || []).map((e2, idx) => (
-              <div key={idx} style={{ border: "1px solid #eee", borderRadius: 8, padding: 10, marginBottom: 8, background: "#fafafa" }}>
-                <div style={{ display: "flex", gap: 8, alignItems: "end", marginBottom: 6 }}>
-                  <div style={{ flex: 1 }}><label style={C.label}>Título do bloco</label><input style={C.input} value={e2.titulo} onChange={ev => setLista("escopo", idx, "titulo", ev.target.value)} placeholder="ex.: Preparação do contrapiso" /></div>
-                  <button type="button" onClick={() => delLinha("escopo", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
-                </div>
-                <textarea style={{ ...C.input, resize: "vertical" }} rows={4} value={e2.texto} onChange={ev => setLista("escopo", idx, "texto", ev.target.value)} placeholder="Descrição do que será executado. Cada linha vira um parágrafo." />
+        <div style={bloco}>
+          <div style={tituloBloco}>ANEXO I — descritivo dos serviços (opcional)</div>
+          {(g.escopo || []).map((e2, idx) => (
+            <div key={idx} style={{ border: "1px solid #eee", borderRadius: 8, padding: 10, marginBottom: 8, background: "#fafafa" }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "end", marginBottom: 6 }}>
+                <div style={{ flex: 1 }}><label style={C.label}>Título do bloco</label><input style={C.input} value={e2.titulo} onChange={ev => setLista("escopo", idx, "titulo", ev.target.value)} placeholder="ex.: Preparação do contrapiso" /></div>
+                <button type="button" onClick={() => delLinha("escopo", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
               </div>
-            ))}
-            <button type="button" style={C.btnSec} onClick={() => addLinha("escopo", { titulo: "", texto: "" })}>＋ Adicionar bloco do descritivo</button>
-          </div>
-        )}
+              <textarea style={{ ...C.input, resize: "vertical" }} rows={4} value={e2.texto} onChange={ev => setLista("escopo", idx, "texto", ev.target.value)} placeholder="Descrição do que será executado. Cada linha vira um parágrafo." />
+            </div>
+          ))}
+          <button type="button" style={C.btnSec} onClick={() => addLinha("escopo", { titulo: "", texto: "" })}>＋ Adicionar bloco do descritivo</button>
+        </div>
 
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
           <button style={C.btn} onClick={salvar}>Salvar e ver contrato</button>
-          <button style={C.btnSec} onClick={() => { setContratoGerando(null); setView("contratosDaObra"); }}>Cancelar</button>
+          <button style={C.btnSec} onClick={() => { setContratoGerando(null); setNovoPrestador(null); setView("contratosDaObra"); }}>Cancelar</button>
         </div>
 
         <details style={{ marginTop: 18 }}>
