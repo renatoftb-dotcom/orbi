@@ -14652,7 +14652,9 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     logradouro: cliente && cliente.logradouro, numero: cliente && cliente.numero,
     bairro: cliente && cliente.bairro, cidade: cliente && cliente.cidade,
     estado: cliente && cliente.estado, cep: cliente && cliente.cep,
-    representanteNome: (cliente && cliente.representanteNome) || ((cliente && cliente.contatos && cliente.contatos[0] && cliente.contatos[0].nome) || ""),
+    // Só o representante legal do cadastro — um contato qualquer da agenda não
+    // serve para assinar o contrato.
+    representanteNome: (cliente && cliente.representanteNome) || "",
     representanteCpf: (cliente && cliente.representanteCpf) || "",
   };
   const contratado = prestador || { nome: c.nomeContratado || "" };
@@ -15360,7 +15362,8 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
         <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: isMobile ? 20 : 28 }}>
           <div>
             <div style={secTit}>Endereço</div>
-            {[["CEP",cliente.cep],["Logradouro",`${cliente.logradouro||""}${cliente.numero?", "+cliente.numero:""}${cliente.complemento?" - "+cliente.complemento:""}`],["Bairro",cliente.bairro],["Cidade",`${cliente.cidade||""} — ${cliente.estado||""}`]].map(([l,v])=>(
+            {[["CEP",cliente.cep],["Logradouro",`${cliente.logradouro||""}${cliente.numero?", "+cliente.numero:""}${cliente.complemento?" - "+cliente.complemento:""}`],["Bairro",cliente.bairro],["Cidade",`${cliente.cidade||""} — ${cliente.estado||""}`],
+              ...(cliente.representanteNome ? [["Representante", `${cliente.representanteNome}${cliente.representanteCpf?` · CPF ${cliente.representanteCpf}`:""}`]] : [])].map(([l,v])=>(
               <div key={l} style={{ display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid rgba(38,36,33,0.06)" }}><span style={{fontSize:12,color:VK.inkSoft}}>{l}</span><span style={{fontSize:13,color:VK.grafite}}>{v||"—"}</span></div>
             ))}
           </div>
@@ -15449,6 +15452,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       setForm({
         tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
         complemento:"", bairro:"", cidade:"", estado:"SP",
+        representanteNome:"", representanteCpf:"",
         contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
         observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
         status:"",
@@ -15464,6 +15468,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   const emptyCliente = {
     tipo:"PF", nome:"", cpfCnpj:"", email:"", cep:"", logradouro:"", numero:"",
     complemento:"", bairro:"", cidade:"", estado:"SP",
+    representanteNome:"", representanteCpf:"",
     contatos:[{ id:uid(), nome:"", telefone:"", cargo:"", whatsapp:false }],
     observacoes:"", ativo:true, desde: new Date().toISOString().slice(0,10),
     status:"",
@@ -15995,6 +16000,18 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             <div><label style={FC.label}>E-mail</label><input className="vk-fc-input" style={FC.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} /></div>
             <div><label style={FC.label}>Cliente desde</label><input className="vk-fc-input" style={FC.input} type="date" value={form.desde} onChange={e=>setForm({...form,desde:e.target.value})} /></div>
           </div>
+          {/* Quem assina pelo cliente — é o que sai no preâmbulo dos contratos. */}
+          <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap:12, marginBottom:12 }}>
+            <div>
+              <label style={FC.label}>Representante legal</label>
+              <input className="vk-fc-input" style={FC.input} value={form.representanteNome || ""} onChange={e=>setForm({...form,representanteNome:e.target.value})} placeholder={form.tipo==="PJ" ? "quem assina pela empresa" : "deixe em branco se assina o próprio"} />
+            </div>
+            <div>
+              <label style={FC.label}>CPF do representante</label>
+              <input className="vk-fc-input" style={FC.input} value={form.representanteCpf || ""} onChange={e=>setForm({...form,representanteCpf:e.target.value})} placeholder="000.000.000-00" />
+            </div>
+          </div>
+          <div style={{ fontSize:11.5, color:"#9ca3af", marginBottom:12 }}>Usado no preâmbulo e na assinatura dos contratos gerados.</div>
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
             <input className="vk-fc-check" type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
           </label>

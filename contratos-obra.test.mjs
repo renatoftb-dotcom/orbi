@@ -512,5 +512,21 @@ teste("salvar a fatia de um cliente não apaga os registros dos outros", () => {
   assert.deepStrictEqual(modulo.mesclarPorCliente(todos, "c9", []).length, 4);
 });
 
+teste("o representante legal do cliente sai no preâmbulo e na assinatura", () => {
+  const d = modulo.montarContrato(modulo.contratoVazio(null, "c1", "o1", "serralheiro", "ambos"), { cliente, obra, prestador: serralheiro });
+  assert.ok(texto(d).includes("neste ato representada por ALEXANDRE MARTINS RIBEIRO, inscrito no CPF sob o nº 354.518.208-80"));
+  assert.strictEqual(d.assinaturas[0].representante, "Alexandre Martins Ribeiro");
+  assert.strictEqual(d.assinaturas[0].cpf, "354.518.208-80");
+  // sem representante cadastrado, a assinatura sai só com o nome da parte —
+  // um contato qualquer da agenda não entra no lugar dele
+  const { representanteNome, representanteCpf, ...semRep } = cliente;
+  const d2 = modulo.montarContrato(modulo.contratoVazio(null, "c1", "o1", "serralheiro", "ambos"),
+    { cliente: { ...semRep, contatos: [{ nome: "Recepção" }] }, obra, prestador: serralheiro });
+  assert.strictEqual(d2.assinaturas[0].representante, "");
+  assert.ok(!texto(d2).includes("Recepção"));
+  const linhaContratante = d2.preambulo.find(l => l.startsWith("CONTRATANTE:"));
+  assert.ok(!linhaContratante.includes("neste ato representada por"), "sem representante, o preâmbulo do contratante não inventa um");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

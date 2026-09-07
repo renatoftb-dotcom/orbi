@@ -454,7 +454,9 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     logradouro: cliente && cliente.logradouro, numero: cliente && cliente.numero,
     bairro: cliente && cliente.bairro, cidade: cliente && cliente.cidade,
     estado: cliente && cliente.estado, cep: cliente && cliente.cep,
-    representanteNome: (cliente && cliente.representanteNome) || ((cliente && cliente.contatos && cliente.contatos[0] && cliente.contatos[0].nome) || ""),
+    // Só o representante legal do cadastro — um contato qualquer da agenda não
+    // serve para assinar o contrato.
+    representanteNome: (cliente && cliente.representanteNome) || "",
     representanteCpf: (cliente && cliente.representanteCpf) || "",
   };
   const contratado = prestador || { nome: c.nomeContratado || "" };

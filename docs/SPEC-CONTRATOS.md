@@ -7,6 +7,11 @@ o prestador; o escritório redige). O CONTRATADO vem do cadastro de
 **Prestadores** (`data.fornecedores`), que já tem CNPJ/CPF, endereço,
 representante e CPF do representante.
 
+O cadastro do cliente tem **Representante legal** (nome + CPF), logo abaixo
+dos dados principais: é quem assina pelo cliente, e sai no preâmbulo ("neste
+ato representada por …") e sob a linha de assinatura. Em branco, o contrato
+sai só com o nome da parte — nenhum contato da agenda entra no lugar dele.
+
 ## Tipo de profissional (primeira escolha)
 
 O gerador começa pelo **tipo de profissional**, não pelo modelo. A lista
