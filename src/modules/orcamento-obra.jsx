@@ -475,17 +475,13 @@ function prestadores(cp, out, data) {
   // Sem taxa padrão no .frm — só o valor digitado.
   emitirPrestadorVerba(out, base, "Impermeabilizador", "impermeabilizador", cp, data);
 
-  // [BUG VBA — divergência com a spec §4.4, reportada e preservada]
-  // P_PRESTADORES.bas testa `If CCALC_PRESTADORES_INSTALADOR_AR <> 0` — note
-  // o "CCALC" com C duplicado. Essa variável nunca é declarada nem
-  // preenchida em lugar nenhum do módulo (a de verdade, usada dentro do
-  // bloco, é CALC_PRESTADORES_INSTALADOR_AR, sem o C extra). Em VBA, uma
-  // Variant implícita nunca atribuída vale Empty, e `Empty <> 0` avalia como
-  // False — então essa condição nunca é verdadeira e a linha "Instalador AR"
-  // JAMAIS é emitida na planilha real, não importa o que o usuário digite.
-  // Preservado de propósito (dead code fiel ao original); não corrigido
-  // nesta entrega — reportado ao usuário como possível bug do VBA original.
-  // (nenhuma chamada a emitir() aqui, de propósito)
+  // No VBA, esta linha testava `CCALC_PRESTADORES_INSTALADOR_AR` (com "C"
+  // duplicado) — uma variável que nunca era atribuída, então o Instalador AR
+  // nunca era emitido, por mais que o usuário digitasse o valor. Corrigido
+  // em set/2026: entra como verba, igual aos outros prestadores sem taxa
+  // padrão. A infra dos pontos de ar (eletroduto, cabo, dreno, tomada) já
+  // vem pelo ponto elétrico de ar condicionado, na etapa de Elétrica.
+  emitirPrestadorVerba(out, base, "Instalador AR", "instaladorAr", cp, data);
 
   // Sem taxa padrão no .frm — só o valor digitado.
   emitirPrestadorVerba(out, base, "Marceneiro Portas Internas", "marceneiroPortas", cp, data);

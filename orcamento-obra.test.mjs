@@ -701,6 +701,23 @@ teste("memória de cálculo: instalações pré obra e fundação, com o último
   assert.ok(!("memoria" in JSON.parse(JSON.stringify({ ...poste, memoria: undefined }))));
 });
 
+teste("ponto de ar condicionado por cômodo e prestador Instalador AR", () => {
+  const r = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 200 },
+    ambientes: { dormitorio: 2, suite: 1, suiteMaster: 1, living: 1, salaTV: 1, areaLazer: 1, cozinha: 1, wc: 1 },
+    prestadores: { instaladorAr: 6000 } }, { materiais: [] });
+  // 1 ponto em cada: 2 dormitórios + suíte + suíte master + living + sala TV + área de lazer = 7
+  const ponto = r.itens.find((i) => i.item === "Elétrica - Ponto de ar condicionado (infra + instalação)");
+  assert.strictEqual(ponto.qtd, 7);
+  assert.strictEqual(ponto.etapa, "Elétrica e iluminação");
+  // cozinha e WC não levam ponto de ar
+  const so = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 }, ambientes: { cozinha: 1, wc: 2 } }, { materiais: [] });
+  assert.ok(!so.itens.some((i) => /ar condicionado/i.test(i.item)));
+  // o Instalador AR, que o VBA nunca emitia, entra como verba
+  const inst = r.itens.find((i) => i.item === "Instalador AR");
+  assert.strictEqual(inst.qtd, 1);
+  assert.strictEqual(inst.preco, 6000);
+});
+
 teste("correções das heranças do VBA: pav. 1 (área, paredes 50%, tábuas de 30, CA60 4,2), rótulo da telha e pedra do contrapiso externo", () => {
   // rateio 50/50 entre pavimentos a partir do bloco Geral
   const base = { tipologia: "Sobrado", arquitetura: { areaConstruida: 260, m2ParedesTotal: 400, perimetroParedes: 100 }, terreo: { areaLoje: 130 } };

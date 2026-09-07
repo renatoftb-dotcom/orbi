@@ -5235,6 +5235,9 @@ var INSUMOS_SEED = [
   { codigo:"ESQ-001", nome:"Alumínio linha Gold - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["CM060", "CM174", "CM200", "CM223", "DS238", "GN001", "GN003", "GN004", "GN005", "GN006", "GN007", "GN008", "GN009", "GN010", "GN011", "GN012", "GN013", "GN014", "GN018", "GN019", "GN020", "GN021", "GN022", "GN023", "GN024", "GN025", "GN026", "GN032", "GN033", "GN035", "GN037", "GN038", "GN039", "GN052", "GN053", "GN055", "GN061", "GN063", "GN070", "GN074", "GUA483", "MH006", "MN015", "MN055", "RM005", "RM038", "RM039", "VZC122", "VZP04"], observacao:"Preço por kg de perfil Alcoa Gold — referência da planilha (S_ESQUADRIAS.bas)" },
   { codigo:"ESQ-002", nome:"Alumínio linha Suprema - perfis (kg)", grupo:"Esquadrias", unidade:"Kg", tipo:"material", precoReferencia:39.80, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["SU-001", "SU-002", "SU-003", "SU-039", "SU-040", "SU-041", "SU-044", "SU-047", "SU-049", "SU-053", "SU-102", "SU-225", "SU-227", "SU-228", "SU-291"], observacao:"Preço por kg de perfil Alcoa Suprema — mesma referência da Gold até haver compra" },
   { codigo:"ESQ-003", nome:"Vidro 8mm", grupo:"Esquadrias", unidade:"m2", tipo:"material", precoReferencia:166.63, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Vidro 8mm", "Vidro incolor 8mm", "Vidro temperado 8mm"], observacao:"Referência da planilha (S_ESQUADRIAS.bas)" },
+  // Elétrica — ponto de ar condicionado: infra (eletroduto, cabo, dreno,
+  // tomada de circuito próprio) mais a instalação, cobrados por ponto.
+  { codigo:"ELE-901", nome:"Elétrica - Ponto de ar condicionado (infra + instalação)", grupo:"Elétrica e iluminação", unidade:"Unidades", tipo:"material", precoReferencia:1200, precoFonte:"mercado", precoData:"2026-09-07", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Elétrica - Ponto de ar condicionado (infra + instalação)","Ponto de ar condicionado"], observacao:"Custo por ponto de ar condicionado (infraestrutura e instalação) — valor definido pelo escritório" },
   // Louças e metais — genéricos por padrão da obra (MCMV/Baixo/Médio/Alto/
   // Altíssimo), usados pelos kits por ambiente (Insumos → Composições) através
   // do marcador {padrão} no nome do item. Preços de referência de mercado SP
@@ -5384,82 +5387,82 @@ var COMPOSICOES_DISCIPLINAS = [
 var AMBIENTES_TIPOS = [
   { id: "garagem", nome: "Garagem", grupo: "Áreas Sociais", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "hallEntrada", nome: "Hall de entrada", grupo: "Áreas Sociais", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 1 } },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 1 } },
   { id: "salaTV", nome: "Sala TV", grupo: "Áreas Sociais", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 1 } },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 2, arCondicionado: 1, iluminacaoParalela: 1 } },
   { id: "living", nome: "Living", grupo: "Áreas Sociais", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 5, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 3, iluminacaoParalela: 1 } },
+    pontos: { tomadaGeral: 5, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 3, arCondicionado: 1, iluminacaoParalela: 1 } },
   { id: "salaJantar", nome: "Sala de jantar", grupo: "Áreas Sociais", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 3, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 3, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "escritorio", nome: "Escritório", grupo: "Áreas Sociais", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "lavabo", nome: "Lavabo", grupo: "Áreas Sociais", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_LAVABO"], ESGOTO: ["ESGOTO_LAVABO"], LOUCAS: ["LOUCAS_LAVABO"], PORTAS: ["PORTA_BANHEIRO"] },
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "cozinha", nome: "Cozinha", grupo: "Serviço", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_COZINHA", "AGUA_QUENTE_COZINHA"], ESGOTO: ["ESGOTO_COZINHA"], LOUCAS: ["LOUCAS_COZINHA"], PORTAS: [] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 3, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 3, chuveiro: 0, iluminacao: 2, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "lavanderia", nome: "Lavanderia", grupo: "Serviço", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_LAVANDERIA", "AGUA_QUENTE_LAVANDERIA"], ESGOTO: ["ESGOTO_LAVANDERIA"], LOUCAS: ["LOUCAS_LAVANDERIA"], PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "deposito", nome: "Depósito", grupo: "Serviço", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "areaLazer", nome: "Área de lazer", grupo: "Lazer", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_COZINHA"], ESGOTO: ["ESGOTO_COZINHA"], LOUCAS: ["LOUCAS_COZINHA"], PORTAS: [] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 3, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 2, chuveiro: 0, iluminacao: 3, arCondicionado: 1, iluminacaoParalela: 0 } },
   { id: "lavaboLazer", nome: "Lavabo Lazer", grupo: "Lazer", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_LAVABO"], ESGOTO: ["ESGOTO_LAVABO"], LOUCAS: ["LOUCAS_LAVABO"], PORTAS: ["PORTA_BANHEIRO"] },
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "sauna", nome: "Sauna", grupo: "Lazer", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 0, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 0, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "academia", nome: "Academia", grupo: "Lazer", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 2, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "brinquedoteca", nome: "Brinquedoteca", grupo: "Lazer", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 3, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 3, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "louceiro", nome: "Louceiro", grupo: "Lazer", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "jardim", nome: "Jardim", grupo: "Lazer", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_TORNEIRA_EXTERNA"], ESGOTO: [], LOUCAS: ["LOUCAS_TORNEIRA_EXTERNA"], PORTAS: [] },
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 2, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "dormitorio", nome: "Dormitório", grupo: "Dormitórios", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 1 } },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, arCondicionado: 1, iluminacaoParalela: 1 } },
   { id: "closet", nome: "Closet", grupo: "Dormitórios", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "wcSuiteMaster", nome: "WC Suíte Master", grupo: "Dormitórios", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "wcSuite", nome: "WC Suítes", grupo: "Dormitórios", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "wc", nome: "WC", grupo: "Dormitórios", molhado: true,
     kits: { HIDRAULICA: ["AGUA_FRIA_BANHEIRO", "AGUA_QUENTE_BANHEIRO"], ESGOTO: ["ESGOTO_BANHEIRO"], LOUCAS: ["LOUCAS_BANHEIRO"], PORTAS: ["PORTA_BANHEIRO"] },
-    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 2, tomadaEspecifica: 0, chuveiro: 1, iluminacao: 2, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "suite", nome: "Suíte", grupo: "Dormitórios", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 1 } },
+    pontos: { tomadaGeral: 4, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, arCondicionado: 1, iluminacaoParalela: 1 } },
   { id: "closetSuite", nome: "Closet Suíte", grupo: "Dormitórios", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 0 } },
+    pontos: { tomadaGeral: 1, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 0 } },
   { id: "suiteMaster", nome: "Suíte Master", grupo: "Dormitórios", molhado: false,
     kits: { PORTAS: ["PORTA_INTERNA"] },
-    pontos: { tomadaGeral: 6, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, iluminacaoParalela: 1 } },
+    pontos: { tomadaGeral: 6, tomadaEspecifica: 1, chuveiro: 0, iluminacao: 0, arCondicionado: 1, iluminacaoParalela: 1 } },
   { id: "escada", nome: "Escada", grupo: "Outros", molhado: false,
     kits: {},
-    pontos: { tomadaGeral: 0, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, iluminacaoParalela: 1 } },
+    pontos: { tomadaGeral: 0, tomadaEspecifica: 0, chuveiro: 0, iluminacao: 1, arCondicionado: 0, iluminacaoParalela: 1 } },
 ];
 
 // Kits por ponto elétrico (um ponto = eletroduto + cabo + caixa + dispositivo)
@@ -5473,6 +5476,7 @@ var PONTOS_ELETRICOS = [
   { id: "chuveiro",           nome: "Ponto de chuveiro",              kit: "PONTO_CHUVEIRO" },
   { id: "iluminacao",         nome: "Ponto de luz (interruptor simples)", kit: "PONTO_ILUMINACAO" },
   { id: "iluminacaoParalela", nome: "Ponto de luz (interruptor paralelo)", kit: "PONTO_ILUMINACAO_PARALELA" },
+  { id: "arCondicionado",     nome: "Ponto de ar condicionado",       kit: "PONTO_AR_CONDICIONADO" },
 ];
 
 // Sistemas por obra
@@ -5719,6 +5723,9 @@ var COMPOSICOES_SEED = {
     { nome: "Elétrica - Interruptores e placas - Tomada hexagonal (NBR 14136) 2P+T 20A", qtd: 1, unidade: "Unidades" },
     { nome: "Elétrica - Interruptores e placas - Placa p/ 1 função", qtd: 1, unidade: "Unidades" },
     { nome: "Elétrica - Disjuntor Unipolar 20A - 10kA", qtd: 1, unidade: "Unidades" },
+  ] },
+  PONTO_AR_CONDICIONADO: { nome: "Ponto de ar condicionado (infra + instalação)", disciplina: "ELETRICA", base: "ponto", fonte: "prática do escritório", itens: [
+    { nome: "Elétrica - Ponto de ar condicionado (infra + instalação)", qtd: 1, unidade: "Unidades" },
   ] },
   PONTO_CHUVEIRO: { nome: "Ponto de chuveiro (circuito próprio 4 mm²)", disciplina: "ELETRICA", base: "ponto", fonte: "SINAPI 104481", itens: [
     { nome: "PVC – Elétrica - Corrugado amarelo ¾”", qtd: 7.7, unidade: "Mts" },
@@ -7902,17 +7909,13 @@ function prestadores(cp, out, data) {
   // Sem taxa padrão no .frm — só o valor digitado.
   emitirPrestadorVerba(out, base, "Impermeabilizador", "impermeabilizador", cp, data);
 
-  // [BUG VBA — divergência com a spec §4.4, reportada e preservada]
-  // P_PRESTADORES.bas testa `If CCALC_PRESTADORES_INSTALADOR_AR <> 0` — note
-  // o "CCALC" com C duplicado. Essa variável nunca é declarada nem
-  // preenchida em lugar nenhum do módulo (a de verdade, usada dentro do
-  // bloco, é CALC_PRESTADORES_INSTALADOR_AR, sem o C extra). Em VBA, uma
-  // Variant implícita nunca atribuída vale Empty, e `Empty <> 0` avalia como
-  // False — então essa condição nunca é verdadeira e a linha "Instalador AR"
-  // JAMAIS é emitida na planilha real, não importa o que o usuário digite.
-  // Preservado de propósito (dead code fiel ao original); não corrigido
-  // nesta entrega — reportado ao usuário como possível bug do VBA original.
-  // (nenhuma chamada a emitir() aqui, de propósito)
+  // No VBA, esta linha testava `CCALC_PRESTADORES_INSTALADOR_AR` (com "C"
+  // duplicado) — uma variável que nunca era atribuída, então o Instalador AR
+  // nunca era emitido, por mais que o usuário digitasse o valor. Corrigido
+  // em set/2026: entra como verba, igual aos outros prestadores sem taxa
+  // padrão. A infra dos pontos de ar (eletroduto, cabo, dreno, tomada) já
+  // vem pelo ponto elétrico de ar condicionado, na etapa de Elétrica.
+  emitirPrestadorVerba(out, base, "Instalador AR", "instaladorAr", cp, data);
 
   // Sem taxa padrão no .frm — só o valor digitado.
   emitirPrestadorVerba(out, base, "Marceneiro Portas Internas", "marceneiroPortas", cp, data);
