@@ -192,6 +192,108 @@ function emitBarras(out, base, barras, memoriaDaBitola) {
     emitir(out, { ...base, item: LABEL_BARRA[k], unidade: "Barras 12mts", qtd: barras[k], memoria: memoriaDaBitola ? memoriaDaBitola(k) : undefined });
   }
 }
+// Memória de uma bitola lançada como um número só de metros.
+function memoriaBitolaSimples(k, metros, barras, ondeVem) {
+  const bruto = numOrZero(metros) / BARRA_FERRO_MTS * PERDA;
+  return [
+    MEM.nota(`Metros de ${LABEL_BARRA[k]} lançados ${ondeVem}.`),
+    MEM.dado("Metros lançados no projeto", metros, "m", "bloco de engenharia"),
+    MEM.conta("Barras de 12 m, com 10% de perda", "metros ÷ 12 × 1,10", [["metros", metros]], bruto, "barras"),
+    MEM.teto(bruto, barras, "barras", "Arredonda para cima (barra inteira)"),
+  ];
+}
+// ── Memórias reaproveitadas por térreo, pav. 1, muros e piscina ──
+// As fórmulas de alvenaria e de concreto se repetem em vários módulos do
+// VBA; os textos ficam aqui uma vez só, parametrizados pelo lugar da obra.
+const MEMB = {
+  tijolo6: (onde, m20, bruto, valor) => [
+    MEM.nota("Bloco de 6 furos é o tijolo da parede de 20 cm: 40 tijolos por m² de parede."),
+    MEM.dado(`Paredes de 20 cm ${onde}`, m20, "m²", "bloco de medidas do pavimento"),
+    MEM.conta("Tijolos, com 10% de quebra", "parede 20 cm × 40 × 1,10", [["parede 20 cm", m20]], bruto, "tijolos"),
+    MEM.teto(bruto, valor, "tijolos"),
+  ],
+  tijolo8: (onde, m25, m15, bruto, valor) => [
+    MEM.nota("Bloco de 8 furos atende dois casos: parede de 25 cm (40 por m²) e parede de 15 cm (20 por m², assentado deitado)."),
+    MEM.dado(`Paredes de 25 cm ${onde}`, m25, "m²", "bloco de medidas do pavimento"),
+    MEM.dado(`Paredes de 15 cm ${onde}`, m15, "m²", "bloco de medidas do pavimento"),
+    MEM.conta("Tijolos, com 10% de quebra", "(parede 25 cm × 40 + parede 15 cm × 20) × 1,10", [["parede 25 cm", m25], ["parede 15 cm", m15]], bruto, "tijolos"),
+    MEM.teto(bruto, valor, "tijolos"),
+  ],
+  areiaAssentamento: (t6, t8, bruto, valor) => [
+    MEM.nota("Argamassa de assentamento: 0,001638 m³ de areia por tijolo de 6 furos e 0,002223 por tijolo de 8 furos (o de 8 tem junta maior)."),
+    MEM.dado("Tijolos de 6 furos", t6, "tijolos", "passo anterior"),
+    MEM.dado("Tijolos de 8 furos", t8, "tijolos", "passo anterior"),
+    MEM.conta("Areia, com 10% de perda", "6 furos × 0,001638 × 1,10 + 8 furos × 0,002223 × 1,10", [["6 furos", t6], ["8 furos", t8]], bruto, "m³"),
+    MEM.teto(bruto, valor, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
+  ],
+  vedalitAssentamento: (areia, bruto, valor) => [
+    MEM.nota("Vedalit na argamassa de assentamento: um balde para cada 25 m³ de areia."),
+    MEM.dado("Areia fina do assentamento", areia, "m³", "passo anterior"),
+    MEM.conta("Baldes, com 10% de perda", "areia ÷ 25 × 1,10", [["areia", areia]], bruto, "baldes"),
+    MEM.teto(bruto, valor, "baldes", "Arredonda para cima (balde fechado)"),
+  ],
+  cimentoAssentamento: (areia, bruto, valor) => [
+    MEM.nota("Cimento da argamassa de assentamento: 2 sacos por m³ de areia."),
+    MEM.dado("Areia fina do assentamento", areia, "m³", "passo anterior"),
+    MEM.conta("Sacos, com 10% de perda", "areia × 2 × 1,10", [["areia", areia]], bruto, "sacos"),
+    MEM.teto(bruto, valor, "sacos de 50 kg", "Arredonda para cima (saco fechado)"),
+  ],
+  trelicaVergas: (onde, vao, bruto, valor) => [
+    MEM.nota("Treliça das vergas e contravergas. O VICKE soma sozinho: cada porta interna de 0,80 m leva uma verga, cada janela leva verga e contraverga, cada porta externa leva uma verga. Metade desse total é o vão equivalente usado aqui."),
+    MEM.dado(`Vão equivalente de portas e janelas ${onde}`, vao, "m", "calculado das esquadrias e dos cômodos"),
+    MEM.conta("Barras de 12 m, com 10% de perda", "vão × 2 ÷ 12 × 1,10", [["vão", vao]], bruto, "barras"),
+    MEM.teto(bruto, valor, "barras", "Arredonda para cima (barra inteira)"),
+  ],
+  tabuaColuna: (onde, larguraCm, colunas, bruto, valor) => [
+    MEM.nota(`Fôrma das colunas ${onde}: duas tábuas por face, 2,80 m de altura, em peças de 3 m.`),
+    MEM.dado(`Colunas de ${larguraCm} cm`, colunas, "colunas", "bloco Engenharia — Pilares e vigas"),
+    MEM.conta("Tábuas de 3 m, com 10% de perda", "colunas × 2,80 × 2 ÷ 3 × 1,10", [["colunas", colunas]], bruto, "tábuas"),
+    MEM.teto(bruto, valor, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ],
+  sarrafoColunas: (c15, c20, c30, bruto, valor) => [
+    MEM.nota("Gravatas que apertam a fôrma das colunas, uma a cada 50 cm de altura, nas duas faces. Cada gravata acompanha a largura da coluna (0,20 / 0,25 / 0,35 m)."),
+    MEM.dado("Colunas de 15 cm", c15, "colunas", "bloco Engenharia — Pilares e vigas"),
+    MEM.dado("Colunas de 20 cm", c20, "colunas", "bloco Engenharia — Pilares e vigas"),
+    MEM.dado("Colunas de 30 cm", c30, "colunas", "bloco Engenharia — Pilares e vigas"),
+    MEM.conta("Sarrafos de 3 m, com 10% de perda", "(c15 × 2,80 × 2 ÷ 0,50 × 0,20 + c20 × 2,80 × 2 ÷ 0,50 × 0,25 + c30 × 2,80 × 2 ÷ 0,50 × 0,35) × 1,10 ÷ 3",
+      [["c15", c15], ["c20", c20], ["c30", c30]], bruto, "sarrafos"),
+    MEM.teto(bruto, valor, "sarrafos de 3 m", "Arredonda para cima (sarrafo inteiro)"),
+  ],
+  madeirite: (area, bruto, valor) => [
+    MEM.nota("Coluna com mais de 25 cm sai de fôrma de madeirite, não de tábua. Cada chapa de 2,10 × 1,10 m dá 2,42 m² de fôrma."),
+    MEM.dado("Área de fôrma das colunas acima de 25 cm", area, "m²", "bloco Engenharia — Pilares e vigas"),
+    MEM.conta("Chapas, com 10% de perda", "área ÷ 2,42 × 1,10", [["área", area]], bruto, "chapas"),
+    MEM.teto(bruto, valor, "chapas", "Arredonda para cima (chapa inteira)"),
+  ],
+  areiaConcreto: (rotulo, concreto, bruto, valor) => [
+    MEM.nota("Traço do concreto: 60% de areia por volume."),
+    MEM.dado(rotulo, concreto, "m³", "bloco de engenharia"),
+    MEM.conta("Areia, com 10% de perda", "concreto × 0,60 × 1,10", [["concreto", concreto]], bruto, "m³"),
+    MEM.teto(bruto, valor, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
+  ],
+  pedraConcreto: (rotulo, concreto, bruto, valor) => [
+    MEM.dado(rotulo, concreto, "m³", "bloco de engenharia"),
+    MEM.conta("Pedra, com 10% de perda", "concreto × 1,10", [["concreto", concreto]], bruto, "m³"),
+    MEM.teto(bruto, valor, "m³", "Arredonda para cima (a pedra vem em m³ inteiro)"),
+  ],
+  cimentoDaPedra: (pedra, bruto, valor) => [
+    MEM.dado("Pedra do concreto", pedra, "m³", "passo anterior"),
+    MEM.conta("Cimento: 6 sacos por m³ de pedra, com 10% de perda", "pedra × 6 × 1,10", [["pedra", pedra]], bruto, "sacos"),
+    MEM.teto(bruto, valor, "sacos de 50 kg", "Arredonda para cima (saco fechado)"),
+  ],
+  arameDoPeso: (peso, bruto, valor) => [
+    MEM.nota("Arame para amarrar as armaduras: 0,06 kg por quilo de ferro comprado (barras inteiras × peso da barra)."),
+    MEM.conta("Peso do ferro", "soma das bitolas", [], peso, "kg"),
+    MEM.conta("Arame, com 10% de perda", "peso × 0,06 × 1,10", [["peso", peso]], bruto, "kg"),
+    MEM.teto(bruto, valor, "kg"),
+  ],
+  pregoDoArame: (arame, bruto, valor) => [
+    MEM.nota("Pregos da fôrma, proporcionais ao arame."),
+    MEM.dado("Arame recozido", arame, "kg", "passo anterior"),
+    MEM.conta("Pregos", "arame × 0,55", [["arame", arame]], bruto, "kg"),
+    MEM.teto(bruto, valor, "kg"),
+  ],
+};
 // Memória padrão de uma bitola: metros por elemento → total → barras de 12 m
 // com 10% de perda → arredonda. `partes` são pares [elemento, metros].
 function memoriaBitola(k, partes, barras) {
@@ -401,27 +503,40 @@ function prestadores(cp, out, data) {
 // F_PAREDES_TERREO.bas — paredes e colunas do pavimento térreo
 // ═══════════════════════════════════════════════════════════════
 function paredesTerreo(cp, out) {
-  const tijolos6F = Math.ceil(cp.m2Paredes20Terreo * 40 * PERDA);
-  const tijolos8F = Math.ceil((cp.m2Paredes25Terreo * 40 + cp.m2Paredes15Terreo * 20) * PERDA);
+  const tijolos6FBruto = cp.m2Paredes20Terreo * 40 * PERDA;
+  const tijolos6F = Math.ceil(tijolos6FBruto);
+  const tijolos8FBruto = (cp.m2Paredes25Terreo * 40 + cp.m2Paredes15Terreo * 20) * PERDA;
+  const tijolos8F = Math.ceil(tijolos8FBruto);
   // [VBA] aqui o *1.1 já está embutido em cada parcela — não há um *PERDA
   // extra por fora da soma, exatamente como no .bas.
-  const areiaFinaAssent = Math.ceil(tijolos6F * 0.001638 * PERDA + tijolos8F * 0.002223 * PERDA);
-  const vedalitFinaAssent = Math.ceil(areiaFinaAssent / 25 * PERDA);
-  const cimentoFinaAssent = Math.ceil(areiaFinaAssent * 2 * PERDA);
-  const contraverga = Math.ceil(cp.vaoPortasJanelasTerreo * 2 / 12 * PERDA);
+  const areiaFinaAssentBruto = tijolos6F * 0.001638 * PERDA + tijolos8F * 0.002223 * PERDA;
+  const areiaFinaAssent = Math.ceil(areiaFinaAssentBruto);
+  const vedalitFinaAssentBruto = areiaFinaAssent / 25 * PERDA;
+  const vedalitFinaAssent = Math.ceil(vedalitFinaAssentBruto);
+  const cimentoFinaAssentBruto = areiaFinaAssent * 2 * PERDA;
+  const cimentoFinaAssent = Math.ceil(cimentoFinaAssentBruto);
+  const contravergaBruto = cp.vaoPortasJanelasTerreo * 2 / 12 * PERDA;
+  const contraverga = Math.ceil(contravergaBruto);
 
-  const tabuas15Colun = Math.ceil(cp.colunas15Terreo * 2.8 * 2 / 3 * PERDA);
-  const tabuas20Colun = Math.ceil(cp.colunas20Terreo * 2.8 * 2 / 3 * PERDA);
-  const tabuas30Colun = Math.ceil(cp.colunas30Terreo * 2.8 * 2 / 3 * PERDA);
-  const sarrafo5Colun = Math.ceil(
+  const tabuas15ColunBruto = cp.colunas15Terreo * 2.8 * 2 / 3 * PERDA;
+  const tabuas15Colun = Math.ceil(tabuas15ColunBruto);
+  const tabuas20ColunBruto = cp.colunas20Terreo * 2.8 * 2 / 3 * PERDA;
+  const tabuas20Colun = Math.ceil(tabuas20ColunBruto);
+  const tabuas30ColunBruto = cp.colunas30Terreo * 2.8 * 2 / 3 * PERDA;
+  const tabuas30Colun = Math.ceil(tabuas30ColunBruto);
+  const sarrafo5ColunBruto =
     ((cp.colunas15Terreo * 2.8 * 2 / 0.5 * 0.2) +
       (cp.colunas20Terreo * 2.8 * 2 / 0.5 * 0.25) +
-      (cp.colunas30Terreo * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3
-  );
-  const maderitesColun = Math.ceil(cp.areaFormaColunaMaior25cmTerreo / 2.42 * PERDA);
-  const areiaGrossaColunas = Math.ceil(cp.concrColunaTerreo * 0.6 * PERDA);
-  const pedraColunas = Math.ceil(cp.concrColunaTerreo * PERDA);
-  const cimentoColunas = Math.ceil(pedraColunas * 6 * PERDA);
+      (cp.colunas30Terreo * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3;
+  const sarrafo5Colun = Math.ceil(sarrafo5ColunBruto);
+  const maderitesColunBruto = cp.areaFormaColunaMaior25cmTerreo / 2.42 * PERDA;
+  const maderitesColun = Math.ceil(maderitesColunBruto);
+  const areiaGrossaColunasBruto = cp.concrColunaTerreo * 0.6 * PERDA;
+  const areiaGrossaColunas = Math.ceil(areiaGrossaColunasBruto);
+  const pedraColunasBruto = cp.concrColunaTerreo * PERDA;
+  const pedraColunas = Math.ceil(pedraColunasBruto);
+  const cimentoColunasBruto = pedraColunas * 6 * PERDA;
+  const cimentoColunas = Math.ceil(cimentoColunasBruto);
 
   const ca60_4mm = Math.ceil(cp.ca60_4mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
   const ca50_5mm = Math.ceil(cp.ca50_5mmColunaTerreo / BARRA_FERRO_MTS * PERDA);
@@ -444,10 +559,12 @@ function paredesTerreo(cp, out) {
     ca50_16mm * PESOS_FERRO.CA50_16MM +
     ca60_5mm * PESOS_FERRO.CA60_5MM;
 
-  const arameColunas = Math.ceil(pesoFerroColunas * 0.06 * PERDA);
+  const arameColunasBruto = pesoFerroColunas * 0.06 * PERDA;
+  const arameColunas = Math.ceil(arameColunasBruto);
   // [VBA] sem *PERDA aqui — só o arame leva perda, o cálculo de pregos a
   // partir do arame não, confirmado contra o original.
-  const pregos18x27 = Math.ceil(arameColunas * 0.55);
+  const pregos18x27Bruto = arameColunas * 0.55;
+  const pregos18x27 = Math.ceil(pregos18x27Bruto);
 
   const base = { ordem: ORD.paredesTerreo, tipo: "Bruto", etapa: "Supra estrutura e paredes" };
   const subParedes = "Paredes Pav. Térreo";
@@ -457,30 +574,30 @@ function paredesTerreo(cp, out) {
   // bitolas "20cm"/"25cm" nas tábuas que na verdade vêm de
   // CP_COLUNAS_15/20) são copiados ao pé da letra do .bas — não são erro de
   // digitação meu, são do sistema original, preservados por instrução.
-  emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco  6 Furos", unidade: "Unidade", qtd: tijolos6F });
-  emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco 8 Furos", unidade: "Unidade", qtd: tijolos8F });
-  emitir(out, { ...base, subEtapa: subParedes, item: "Areia Fina", unidade: "m3", qtd: areiaFinaAssent });
-  emitir(out, { ...base, subEtapa: subParedes, item: "Impermeabilizantes - Vedalit 18L", unidade: "Baldes 18L", qtd: vedalitFinaAssent });
-  emitir(out, { ...base, subEtapa: subParedes, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoFinaAssent });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Treliça H8 Barras 12mts", unidade: "Barras 12mts", qtd: contraverga });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas15Colun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20Colun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30Colun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5Colun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderitesColun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaColunas });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Pedra", unidade: "m3", qtd: pedraColunas });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoColunas });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 4.2mm 12mts", unidade: "Barras 12mts", qtd: ca60_4mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Arame Recozido", unidade: "KG", qtd: arameColunas });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Pregos 18x27", unidade: "KG", qtd: pregos18x27 });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco  6 Furos", unidade: "Unidade", qtd: tijolos6F, memoria: MEMB.tijolo6("no térreo", cp.m2Paredes20Terreo, tijolos6FBruto, tijolos6F) });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco 8 Furos", unidade: "Unidade", qtd: tijolos8F, memoria: MEMB.tijolo8("no térreo", cp.m2Paredes25Terreo, cp.m2Paredes15Terreo, tijolos8FBruto, tijolos8F) });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Areia Fina", unidade: "m3", qtd: areiaFinaAssent, memoria: MEMB.areiaAssentamento(tijolos6F, tijolos8F, areiaFinaAssentBruto, areiaFinaAssent) });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Impermeabilizantes - Vedalit 18L", unidade: "Baldes 18L", qtd: vedalitFinaAssent, memoria: MEMB.vedalitAssentamento(areiaFinaAssent, vedalitFinaAssentBruto, vedalitFinaAssent) });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoFinaAssent, memoria: MEMB.cimentoAssentamento(areiaFinaAssent, cimentoFinaAssentBruto, cimentoFinaAssent) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Treliça H8 Barras 12mts", unidade: "Barras 12mts", qtd: contraverga, memoria: MEMB.trelicaVergas("do térreo", cp.vaoPortasJanelasTerreo, contravergaBruto, contraverga) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas15Colun, memoria: MEMB.tabuaColuna("do térreo", 15, cp.colunas15Terreo, tabuas15ColunBruto, tabuas15Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20Colun, memoria: MEMB.tabuaColuna("do térreo", 20, cp.colunas20Terreo, tabuas20ColunBruto, tabuas20Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30Colun, memoria: MEMB.tabuaColuna("do térreo", 30, cp.colunas30Terreo, tabuas30ColunBruto, tabuas30Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5Colun, memoria: MEMB.sarrafoColunas(cp.colunas15Terreo, cp.colunas20Terreo, cp.colunas30Terreo, sarrafo5ColunBruto, sarrafo5Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderitesColun, memoria: MEMB.madeirite(cp.areaFormaColunaMaior25cmTerreo, maderitesColunBruto, maderitesColun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaColunas, memoria: MEMB.areiaConcreto("Concreto das colunas do térreo", cp.concrColunaTerreo, areiaGrossaColunasBruto, areiaGrossaColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Pedra", unidade: "m3", qtd: pedraColunas, memoria: MEMB.pedraConcreto("Concreto das colunas do térreo", cp.concrColunaTerreo, pedraColunasBruto, pedraColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoColunas, memoria: MEMB.cimentoDaPedra(pedraColunas, cimentoColunasBruto, cimentoColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 4.2mm 12mts", unidade: "Barras 12mts", qtd: ca60_4mm, memoria: memoriaBitolaSimples("CA60_4MM", cp.ca60_4mmColunaTerreo, ca60_4mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm, memoria: memoriaBitolaSimples("CA50_5MM", cp.ca50_5mmColunaTerreo, ca50_5mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm, memoria: memoriaBitolaSimples("CA50_6MM", cp.ca50_6mmColunaTerreo, ca50_6mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm, memoria: memoriaBitolaSimples("CA50_8MM", cp.ca50_8mmColunaTerreo, ca50_8mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm, memoria: memoriaBitolaSimples("CA50_10MM", cp.ca50_10mmColunaTerreo, ca50_10mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm, memoria: memoriaBitolaSimples("CA50_12MM", cp.ca50_12mmColunaTerreo, ca50_12mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm, memoria: memoriaBitolaSimples("CA50_16MM", cp.ca50_16mmColunaTerreo, ca50_16mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memoriaBitolaSimples("CA60_5MM", cp.ca60_5mmColunaTerreo, ca60_5mm, "nas colunas do térreo") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Arame Recozido", unidade: "KG", qtd: arameColunas, memoria: MEMB.arameDoPeso(pesoFerroColunas, arameColunasBruto, arameColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Pregos 18x27", unidade: "KG", qtd: pregos18x27, memoria: MEMB.pregoDoArame(arameColunas, pregos18x27Bruto, pregos18x27) });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -675,23 +792,65 @@ function fundacao(cp, out) {
 // ═══════════════════════════════════════════════════════════════
 function contrapisoInternoTerreo(cp, out) {
   const area = cp.areaTerreo;
-  const areiaGrossaContrap = Math.ceil(area * 0.6 * 0.1 * PERDA);
-  const pedraContrap = Math.ceil(area * 0.1 * PERDA);
-  const cimentoContrap = Math.ceil(pedraContrap * 6 * PERDA);
-  const malhaPop = Math.ceil(area / (2.9 * 1.9 * PERDA));
-  const cimentoMassiam = Math.ceil(area * 0.05 * 0.25 * 1200 / 50 * PERDA);
-  const areiaGrossaMassiam = Math.ceil(area * 0.05 * 0.75 * PERDA);
-  const biancoMassiam = Math.ceil(area / 60 * PERDA);
+  const areiaGrossaContrapBruto = area * 0.6 * 0.1 * PERDA;
+  const areiaGrossaContrap = Math.ceil(areiaGrossaContrapBruto);
+  const pedraContrapBruto = area * 0.1 * PERDA;
+  const pedraContrap = Math.ceil(pedraContrapBruto);
+  const cimentoContrapBruto = pedraContrap * 6 * PERDA;
+  const cimentoContrap = Math.ceil(cimentoContrapBruto);
+  const malhaPopBruto = area / (2.9 * 1.9 * PERDA);
+  const malhaPop = Math.ceil(malhaPopBruto);
+  const cimentoMassiamBruto = area * 0.05 * 0.25 * 1200 / 50 * PERDA;
+  const cimentoMassiam = Math.ceil(cimentoMassiamBruto);
+  const areiaGrossaMassiamBruto = area * 0.05 * 0.75 * PERDA;
+  const areiaGrossaMassiam = Math.ceil(areiaGrossaMassiamBruto);
+  const biancoMassiamBruto = area / 60 * PERDA;
+  const biancoMassiam = Math.ceil(biancoMassiamBruto);
+
+  const memArea = MEM.dado("Área do pavimento térreo", area, "m²", "bloco Pav. Térreo");
+  const notaContrap = MEM.nota("Contrapiso do térreo: 10 cm de concreto magro sobre o solo compactado, traço com 60% de areia por volume de pedra.");
+  const notaMassiam = MEM.nota("Massiamento: a camada fina de 5 cm de argamassa que nivela o contrapiso para receber o piso.");
 
   const base = { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno" };
-  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Locação Ferramentas -  Compactador", unidade: "Dias", qtd: 2 });
-  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaContrap });
-  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Pedra", unidade: "m3", qtd: pedraContrap });
-  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoContrap });
-  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Aço - Malha Pop EQ061 3.4mm 15x15", unidade: "Unidade", qtd: malhaPop });
-  emitir(out, { ...base, subEtapa: "Massiamento contrap Pav. Térreo", item: "Sacos de cimento 50kg", unidade: "Unidade", qtd: cimentoMassiam });
-  emitir(out, { ...base, subEtapa: "Massiamento contrap Pav. Térreo", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaMassiam });
-  emitir(out, { ...base, subEtapa: "Massiamento contrap Pav. Térreo", item: "Impermeabilizantes - Bianco 18KG", unidade: "Unidades", qtd: biancoMassiam });
+  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Locação Ferramentas -  Compactador", unidade: "Dias", qtd: 2, memoria: MEM_CANTEIRO("Dois dias de compactador alugado para apiloar o solo antes de concretar o contrapiso. Terreno mole ou obra grande pede mais dias — ajuste no item.") });
+  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaContrap, memoria: [
+    notaContrap, memArea,
+    MEM.conta("Areia do concreto magro, com 10% de perda", "área × 0,60 × 0,10 × 1,10", [["área", area]], areiaGrossaContrapBruto, "m³"),
+    MEM.teto(areiaGrossaContrapBruto, areiaGrossaContrap, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Pedra", unidade: "m3", qtd: pedraContrap, memoria: [
+    notaContrap, memArea,
+    MEM.conta("Pedra da camada de 10 cm, com 10% de perda", "área × 0,10 × 1,10", [["área", area]], pedraContrapBruto, "m³"),
+    MEM.teto(pedraContrapBruto, pedraContrap, "m³", "Arredonda para cima (a pedra vem em m³ inteiro)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoContrap, memoria: [
+    notaContrap,
+    MEM.dado("Pedra do contrapiso", pedraContrap, "m³", "passo anterior"),
+    MEM.conta("Cimento: 6 sacos por m³ de pedra, com 10% de perda", "pedra × 6 × 1,10", [["pedra", pedraContrap]], cimentoContrapBruto, "sacos"),
+    MEM.teto(cimentoContrapBruto, cimentoContrap, "sacos de 50 kg", "Arredonda para cima (saco fechado)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Aço - Malha Pop EQ061 3.4mm 15x15", unidade: "Unidade", qtd: malhaPop, memoria: [
+    MEM.nota("Tela soldada do contrapiso. Cada painel tem 2,90 × 1,90 m; a perda de 10% entra dividindo (as telas se sobrepõem, então cobrem menos área que a nominal)."),
+    memArea,
+    MEM.conta("Painéis de tela", "área ÷ (2,90 × 1,90 × 1,10)", [["área", area]], malhaPopBruto, "painéis"),
+    MEM.teto(malhaPopBruto, malhaPop, "painéis", "Arredonda para cima (painel inteiro)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Massiamento contrap Pav. Térreo", item: "Sacos de cimento 50kg", unidade: "Unidade", qtd: cimentoMassiam, memoria: [
+    notaMassiam, memArea,
+    MEM.conta("Cimento: 5 cm de camada, 25% de cimento, 1.200 kg/m³, saco de 50 kg, 10% de perda", "área × 0,05 × 0,25 × 1.200 ÷ 50 × 1,10", [["área", area]], cimentoMassiamBruto, "sacos"),
+    MEM.teto(cimentoMassiamBruto, cimentoMassiam, "sacos de 50 kg", "Arredonda para cima (saco fechado)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Massiamento contrap Pav. Térreo", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaMassiam, memoria: [
+    notaMassiam, memArea,
+    MEM.conta("Areia: 5 cm de camada, 75% de areia, com 10% de perda", "área × 0,05 × 0,75 × 1,10", [["área", area]], areiaGrossaMassiamBruto, "m³"),
+    MEM.teto(areiaGrossaMassiamBruto, areiaGrossaMassiam, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Massiamento contrap Pav. Térreo", item: "Impermeabilizantes - Bianco 18KG", unidade: "Unidades", qtd: biancoMassiam, memoria: [
+    MEM.nota("Bianco (aditivo impermeabilizante) na argamassa do massiamento: um balde de 18 kg rende 60 m²."),
+    memArea,
+    MEM.conta("Baldes, com 10% de perda", "área ÷ 60 × 1,10", [["área", area]], biancoMassiamBruto, "baldes"),
+    MEM.teto(biancoMassiamBruto, biancoMassiam, "baldes", "Arredonda para cima (balde fechado)"),
+  ] });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -706,9 +865,12 @@ function vigaRespaldoLajeTerreo(cp, out) {
   // faz no original (Concat(tipologia, tipoLoje)).
   const tipologiaVba = cp.tipologia === "Sobrado" ? "Sobrado" : "Térreo";
 
-  const tabuas10 = Math.ceil((((t.perimetroLoje * 2 / 3) + t.perimetroLoje * 2 / 3 * 0.45 / 3)) * PERDA);
-  const tabuas30 = Math.ceil((((cp.perimetroParedesTerreo * 2 / 3) + cp.perimetroParedesTerreo * 2 / 3 * 0.45 / 3)) * PERDA);
-  const sarrafo5 = Math.ceil(((cp.perimetroParedesTerreo * 2 / 0.7 * 0.45) + (cp.perimetroParedesTerreo / 0.75 * 0.3)) / 3 * PERDA);
+  const tabuas10Bruto = (((t.perimetroLoje * 2 / 3) + t.perimetroLoje * 2 / 3 * 0.45 / 3)) * PERDA;
+  const tabuas10 = Math.ceil(tabuas10Bruto);
+  const tabuas30Bruto = (((cp.perimetroParedesTerreo * 2 / 3) + cp.perimetroParedesTerreo * 2 / 3 * 0.45 / 3)) * PERDA;
+  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const sarrafo5Bruto = ((cp.perimetroParedesTerreo * 2 / 0.7 * 0.45) + (cp.perimetroParedesTerreo / 0.75 * 0.3)) / 3 * PERDA;
+  const sarrafo5 = Math.ceil(sarrafo5Bruto);
 
   const ferro = normalizarFerro(t.vigaRespaldo);
   const ca60_4mm = Math.ceil(ferro.CA60_4MM / BARRA_FERRO_MTS * PERDA);
@@ -722,11 +884,15 @@ function vigaRespaldoLajeTerreo(cp, out) {
   const peso = ca60_4mm * PESOS_FERRO.CA60_4MM + ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM +
     ca50_8mm * PESOS_FERRO.CA50_8MM + ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM +
     ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
-  const arame = Math.ceil(peso * 0.06 * PERDA);
-  const prego = Math.ceil(arame * 0.55);
+  const arameBruto = peso * 0.06 * PERDA;
+  const arame = Math.ceil(arameBruto);
+  const pregoBruto = arame * 0.55;
+  const prego = Math.ceil(pregoBruto);
 
-  const volumeConcretoLoje = Math.ceil(((t.areaLoje * 0.1) + t.concretoVigaRespaldo) * PERDA);
-  const malhaPop = Math.ceil((t.areaLoje / (2.9 * 1.9)) * PERDA);
+  const volumeConcretoLojeBruto = ((t.areaLoje * 0.1) + t.concretoVigaRespaldo) * PERDA;
+  const volumeConcretoLoje = Math.ceil(volumeConcretoLojeBruto);
+  const malhaPopBruto = (t.areaLoje / (2.9 * 1.9)) * PERDA;
+  const malhaPop = Math.ceil(malhaPopBruto);
 
   const tipoConcat = tipologiaVba + t.tipoLoje;
   let nomeModelo = "";
@@ -735,38 +901,94 @@ function vigaRespaldoLajeTerreo(cp, out) {
   else if (tipoConcat === "TérreoTreliça") nomeModelo = "Laje Pré Moldada Treliça Forro";
   else if (tipoConcat === "SobradoTreliça") nomeModelo = "Laje Pré Moldada Treliça Piso";
 
-  const qtdLoje = Math.ceil(t.areaLoje * PERDA);
-  const qtdEscoras = t.tipoLoje === "Protendida"
-    ? Math.ceil(t.areaLoje * 0.6 * mesesEscoras * PERDA)
-    : Math.ceil(t.areaLoje * mesesEscoras * PERDA);
+  const qtdLojeBruto = t.areaLoje * PERDA;
+  const qtdLoje = Math.ceil(qtdLojeBruto);
+  const qtdEscorasBruto = t.tipoLoje === "Protendida" ? t.areaLoje * 0.6 * mesesEscoras * PERDA : t.areaLoje * mesesEscoras * PERDA;
+  const qtdEscoras = Math.ceil(qtdEscorasBruto);
 
-  const lojeMacica = Math.ceil(t.areaLojeMacica * 0.15 * PERDA);
-  const maderiteLojeMacica = Math.ceil(t.areaLojeMacica / 2.42 * PERDA);
-  const escorasLojeMacica = Math.ceil(t.areaLojeMacica * mesesEscoras * PERDA);
+  const lojeMacicaBruto = t.areaLojeMacica * 0.15 * PERDA;
+  const lojeMacica = Math.ceil(lojeMacicaBruto);
+  const maderiteLojeMacicaBruto = t.areaLojeMacica / 2.42 * PERDA;
+  const maderiteLojeMacica = Math.ceil(maderiteLojeMacicaBruto);
+  const escorasLojeMacicaBruto = t.areaLojeMacica * mesesEscoras * PERDA;
+  const escorasLojeMacica = Math.ceil(escorasLojeMacicaBruto);
 
+  const memViga = (k) => memoriaBitolaSimples(k, ferro[k], { CA60_4MM: ca60_4mm, CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do térreo");
+  const memEscoras = (area, bruto, valor) => [
+    MEM.nota(`Escoras alugadas por mês: ${mesesEscoras} ${mesesEscoras === 1 ? "mês" : "meses"} de escoramento (${cp.tipologia === "Sobrado" ? "sobrado: a laje fica escorada mais tempo" : "obra térrea"}).${t.tipoLoje === "Protendida" ? " Laje protendida usa 0,6 escora por m², menos que a treliçada." : ""}`),
+    MEM.dado("Área da laje", area, "m²", "bloco Laje Térreo"),
+    MEM.conta("Escoras, com 10% de perda", t.tipoLoje === "Protendida" ? "área × 0,60 × meses × 1,10" : "área × meses × 1,10", [["área", area], ["meses", mesesEscoras]], bruto, "escoras"),
+    MEM.teto(bruto, valor, "escoras"),
+  ];
   const etapa = "Viga Respaldo e Laje";
   const o = ORD.vigaLajeTerreo;
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas10 });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30 });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5 });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA60 4.2mm 12mts", unidade: "Barras 12mts", qtd: ca60_4mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: t.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: volumeConcretoLoje });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Aço - Malha pop EQ092 4.2mm 15x15", unidade: "Unidades", qtd: malhaPop });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: nomeModelo, unidade: "m2", qtd: qtdLoje });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: qtdEscoras });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Concreto - Bomba", unidade: "Unidade", qtd: 1 });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: t.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: lojeMacica });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderiteLojeMacica });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: escorasLojeMacica });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas10, memoria: [
+    MEM.nota("Fôrma do fundo da viga de respaldo, que acompanha o perímetro da laje."),
+    MEM.dado("Perímetro da laje do térreo", t.perimetroLoje, "m", "bloco Laje (forro)"),
+    MEM.conta("Tábuas de 3 m, com 10% de perda", "(perímetro × 2 ÷ 3 + perímetro × 2 ÷ 3 × 0,45 ÷ 3) × 1,10", [["perímetro", t.perimetroLoje]], tabuas10Bruto, "tábuas"),
+    MEM.teto(tabuas10Bruto, tabuas10, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30, memoria: [
+    MEM.nota("Laterais da fôrma da viga de respaldo, duas por trecho, ao longo do perímetro das paredes."),
+    MEM.dado("Perímetro das paredes do térreo", cp.perimetroParedesTerreo, "m", "bloco Pav. Térreo"),
+    MEM.conta("Tábuas de 3 m, com 10% de perda", "(perímetro × 2 ÷ 3 + perímetro × 2 ÷ 3 × 0,45 ÷ 3) × 1,10", [["perímetro", cp.perimetroParedesTerreo]], tabuas30Bruto, "tábuas"),
+    MEM.teto(tabuas30Bruto, tabuas30, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5, memoria: [
+    MEM.nota("Gravatas a cada 70 cm nas duas faces (0,45 m cada) e escoras a cada 75 cm (0,30 m cada) da fôrma da viga."),
+    MEM.dado("Perímetro das paredes do térreo", cp.perimetroParedesTerreo, "m", "bloco Pav. Térreo"),
+    MEM.conta("Sarrafos de 3 m, com 10% de perda", "(perímetro × 2 ÷ 0,70 × 0,45 + perímetro ÷ 0,75 × 0,30) ÷ 3 × 1,10", [["perímetro", cp.perimetroParedesTerreo]], sarrafo5Bruto, "sarrafos"),
+    MEM.teto(sarrafo5Bruto, sarrafo5, "sarrafos de 3 m", "Arredonda para cima (sarrafo inteiro)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA60 4.2mm 12mts", unidade: "Barras 12mts", qtd: ca60_4mm, memoria: memViga("CA60_4MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm, memoria: memViga("CA50_5MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm, memoria: memViga("CA50_6MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm, memoria: memViga("CA50_8MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm, memoria: memViga("CA50_10MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm, memoria: memViga("CA50_12MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm, memoria: memViga("CA50_16MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memViga("CA60_5MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: MEMB.arameDoPeso(peso, arameBruto, arame) });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: t.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: volumeConcretoLoje, memoria: [
+    MEM.nota("Capa de concreto da laje pré-moldada (10 cm) somada ao volume da viga de respaldo."),
+    MEM.dado("Área da laje do térreo", t.areaLoje, "m²", "bloco Laje (forro)"),
+    MEM.dado("Concreto da viga de respaldo", t.concretoVigaRespaldo, "m³", "bloco Laje (forro)"),
+    MEM.conta("Volume com 10% de perda", "(área × 0,10 + viga) × 1,10", [["área", t.areaLoje], ["viga", t.concretoVigaRespaldo]], volumeConcretoLojeBruto, "m³"),
+    MEM.teto(volumeConcretoLojeBruto, volumeConcretoLoje, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Aço - Malha pop EQ092 4.2mm 15x15", unidade: "Unidades", qtd: malhaPop, memoria: [
+    MEM.nota("Tela da capa da laje. Cada painel tem 2,90 × 1,90 m."),
+    MEM.dado("Área da laje do térreo", t.areaLoje, "m²", "bloco Laje (forro)"),
+    MEM.conta("Painéis, com 10% de perda", "área ÷ (2,90 × 1,90) × 1,10", [["área", t.areaLoje]], malhaPopBruto, "painéis"),
+    MEM.teto(malhaPopBruto, malhaPop, "painéis", "Arredonda para cima (painel inteiro)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: nomeModelo, unidade: "m2", qtd: qtdLoje, memoria: [
+    MEM.nota(`Laje pré-moldada escolhida no projeto: ${nomeModelo || "(modelo não definido)"} — o tipo (${t.tipoLoje || "—"}) e a tipologia da casa definem se é laje de forro ou de piso.`),
+    MEM.dado("Área da laje do térreo", t.areaLoje, "m²", "bloco Laje (forro)"),
+    MEM.conta("Área com 10% de perda", "área × 1,10", [["área", t.areaLoje]], qtdLojeBruto, "m²"),
+    MEM.teto(qtdLojeBruto, qtdLoje, "m²"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: qtdEscoras, memoria: memEscoras(t.areaLoje, qtdEscorasBruto, qtdEscoras) });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Concreto - Bomba", unidade: "Unidade", qtd: 1, memoria: MEM_CANTEIRO("Uma bombeada de concreto para a laje do térreo. Concretagem em mais de um dia pede mais — ajuste no item.") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: t.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: lojeMacica, memoria: [
+    MEM.nota("Trecho de laje maciça (concretada no lugar), com 15 cm de espessura."),
+    MEM.dado("Área de laje maciça no térreo", t.areaLojeMacica, "m²", "bloco Laje (forro)"),
+    MEM.conta("Volume com 10% de perda", "área × 0,15 × 1,10", [["área", t.areaLojeMacica]], lojeMacicaBruto, "m³"),
+    MEM.teto(lojeMacicaBruto, lojeMacica, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderiteLojeMacica, memoria: [
+    MEM.nota("Fundo de fôrma da laje maciça, em chapas de 2,10 × 1,10 m (2,42 m² cada)."),
+    MEM.dado("Área de laje maciça no térreo", t.areaLojeMacica, "m²", "bloco Laje (forro)"),
+    MEM.conta("Chapas, com 10% de perda", "área ÷ 2,42 × 1,10", [["área", t.areaLojeMacica]], maderiteLojeMacicaBruto, "chapas"),
+    MEM.teto(maderiteLojeMacicaBruto, maderiteLojeMacica, "chapas", "Arredonda para cima (chapa inteira)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: escorasLojeMacica, memoria: [
+    MEM.nota(`Escoras da laje maciça: ${mesesEscoras} ${mesesEscoras === 1 ? "mês" : "meses"} de aluguel, uma por m².`),
+    MEM.dado("Área de laje maciça no térreo", t.areaLojeMacica, "m²", "bloco Laje (forro)"),
+    MEM.conta("Escoras, com 10% de perda", "área × meses × 1,10", [["área", t.areaLojeMacica], ["meses", mesesEscoras]], escorasLojeMacicaBruto, "escoras"),
+    MEM.teto(escorasLojeMacicaBruto, escorasLojeMacica, "escoras"),
+  ] });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -777,27 +999,40 @@ function vigaRespaldoLajeTerreo(cp, out) {
 // ═══════════════════════════════════════════════════════════════
 function paredesPav1(cp, out) {
   const p1 = cp.pav1;
-  const tijolos6F = Math.ceil(p1.m2Parede20 * 40 * PERDA);
-  const tijolos8F = Math.ceil((p1.m2Parede25 * 40 + p1.m2Parede15 * 20) * PERDA);
-  const areiaFinaAssent = Math.ceil(tijolos6F * 0.001638 * PERDA + tijolos8F * 0.002223 * PERDA);
-  const vedalitFinaAssent = Math.ceil(areiaFinaAssent / 25 * PERDA);
-  const cimentoFinaAssent = Math.ceil(areiaFinaAssent * 2 * PERDA);
-  const contraverga = Math.ceil(p1.vaoPortasJanelas * 2 / 12 * PERDA);
+  const tijolos6FBruto = p1.m2Parede20 * 40 * PERDA;
+  const tijolos6F = Math.ceil(tijolos6FBruto);
+  const tijolos8FBruto = (p1.m2Parede25 * 40 + p1.m2Parede15 * 20) * PERDA;
+  const tijolos8F = Math.ceil(tijolos8FBruto);
+  const areiaFinaAssentBruto = tijolos6F * 0.001638 * PERDA + tijolos8F * 0.002223 * PERDA;
+  const areiaFinaAssent = Math.ceil(areiaFinaAssentBruto);
+  const vedalitFinaAssentBruto = areiaFinaAssent / 25 * PERDA;
+  const vedalitFinaAssent = Math.ceil(vedalitFinaAssentBruto);
+  const cimentoFinaAssentBruto = areiaFinaAssent * 2 * PERDA;
+  const cimentoFinaAssent = Math.ceil(cimentoFinaAssentBruto);
+  const contravergaBruto = p1.vaoPortasJanelas * 2 / 12 * PERDA;
+  const contraverga = Math.ceil(contravergaBruto);
 
-  const tabuas15Colun = Math.ceil(p1.colunas15 * 2.8 * 2 / 3 * PERDA);
-  const tabuas20Colun = Math.ceil(p1.colunas20 * 2.8 * 2 / 3 * PERDA);
+  const tabuas15ColunBruto = p1.colunas15 * 2.8 * 2 / 3 * PERDA;
+  const tabuas15Colun = Math.ceil(tabuas15ColunBruto);
+  const tabuas20ColunBruto = p1.colunas20 * 2.8 * 2 / 3 * PERDA;
+  const tabuas20Colun = Math.ceil(tabuas20ColunBruto);
   // [VBA] usa CP_COLUNAS_25 aqui (não 30) — divergência real do original em
   // relação ao F_PAREDES_TERREO, preservada de propósito.
-  const tabuas30Colun = Math.ceil(p1.colunas25 * 2.8 * 2 / 3 * PERDA);
-  const sarrafo5Colun = Math.ceil(
+  const tabuas30ColunBruto = p1.colunas25 * 2.8 * 2 / 3 * PERDA;
+  const tabuas30Colun = Math.ceil(tabuas30ColunBruto);
+  const sarrafo5ColunBruto =
     ((p1.colunas15 * 2.8 * 2 / 0.5 * 0.2) +
       (p1.colunas20 * 2.8 * 2 / 0.5 * 0.25) +
-      (p1.colunas30 * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3
-  );
-  const maderitesColun = Math.ceil(p1.areaFormaColunaMaior25cm / 2.42 * PERDA);
-  const areiaGrossaColunas = Math.ceil(p1.concrColuna * 0.6 * PERDA);
-  const pedraColunas = Math.ceil(p1.concrColuna * PERDA);
-  const cimentoColunas = Math.ceil(pedraColunas * 6 * PERDA);
+      (p1.colunas30 * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3;
+  const sarrafo5Colun = Math.ceil(sarrafo5ColunBruto);
+  const maderitesColunBruto = p1.areaFormaColunaMaior25cm / 2.42 * PERDA;
+  const maderitesColun = Math.ceil(maderitesColunBruto);
+  const areiaGrossaColunasBruto = p1.concrColuna * 0.6 * PERDA;
+  const areiaGrossaColunas = Math.ceil(areiaGrossaColunasBruto);
+  const pedraColunasBruto = p1.concrColuna * PERDA;
+  const pedraColunas = Math.ceil(pedraColunasBruto);
+  const cimentoColunasBruto = pedraColunas * 6 * PERDA;
+  const cimentoColunas = Math.ceil(cimentoColunasBruto);
 
   const ferro = normalizarFerro(p1.ferro);
   // [VBA] CA60_4mm nunca é calculado neste módulo (só declarado/emitido no
@@ -814,37 +1049,39 @@ function paredesPav1(cp, out) {
   const pesoFerroColunas = ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM +
     ca50_8mm * PESOS_FERRO.CA50_8MM + ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM +
     ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
-  const arameColunas = Math.ceil(pesoFerroColunas * 0.06 * PERDA);
-  const pregos18x27 = Math.ceil(arameColunas * 0.55);
+  const arameColunasBruto = pesoFerroColunas * 0.06 * PERDA;
+  const arameColunas = Math.ceil(arameColunasBruto);
+  const pregos18x27Bruto = arameColunas * 0.55;
+  const pregos18x27 = Math.ceil(pregos18x27Bruto);
 
   const base = { ordem: ORD.paredesPav1, tipo: "Bruto", etapa: "Supra estrutura e paredes" };
   const subParedes = "Paredes Pav 1";
   // [VBA] rótulo copiado do módulo do Térreo, preservado do original.
   const subSupra = "Supra estrutura Pav. Térreo";
 
-  emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco  6 Furos", unidade: "Unidade", qtd: tijolos6F });
-  emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco 8 Furos", unidade: "Unidade", qtd: tijolos8F });
-  emitir(out, { ...base, subEtapa: subParedes, item: "Areia Fina", unidade: "m3", qtd: areiaFinaAssent });
-  emitir(out, { ...base, subEtapa: subParedes, item: "Impermeabilizantes - Vedalit 18L", unidade: "Baldes 18L", qtd: vedalitFinaAssent });
-  emitir(out, { ...base, subEtapa: subParedes, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoFinaAssent });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Treliça H8 Barras 12mts", unidade: "Barras 12mts", qtd: contraverga });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas15Colun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20Colun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30Colun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5Colun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderitesColun });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaColunas });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Pedra", unidade: "m3", qtd: pedraColunas });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoColunas });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Arame Recozido", unidade: "KG", qtd: arameColunas });
-  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Pregos 18x27", unidade: "KG", qtd: pregos18x27 });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco  6 Furos", unidade: "Unidade", qtd: tijolos6F, memoria: MEMB.tijolo6("no pav. 1", p1.m2Parede20, tijolos6FBruto, tijolos6F) });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Cerâmicas - Tijolo - Bloco 8 Furos", unidade: "Unidade", qtd: tijolos8F, memoria: MEMB.tijolo8("no pav. 1", p1.m2Parede25, p1.m2Parede15, tijolos8FBruto, tijolos8F) });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Areia Fina", unidade: "m3", qtd: areiaFinaAssent, memoria: MEMB.areiaAssentamento(tijolos6F, tijolos8F, areiaFinaAssentBruto, areiaFinaAssent) });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Impermeabilizantes - Vedalit 18L", unidade: "Baldes 18L", qtd: vedalitFinaAssent, memoria: MEMB.vedalitAssentamento(areiaFinaAssent, vedalitFinaAssentBruto, vedalitFinaAssent) });
+  emitir(out, { ...base, subEtapa: subParedes, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoFinaAssent, memoria: MEMB.cimentoAssentamento(areiaFinaAssent, cimentoFinaAssentBruto, cimentoFinaAssent) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Treliça H8 Barras 12mts", unidade: "Barras 12mts", qtd: contraverga, memoria: MEMB.trelicaVergas("do pav. 1", p1.vaoPortasJanelas, contravergaBruto, contraverga) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas15Colun, memoria: MEMB.tabuaColuna("do pav. 1", 15, p1.colunas15, tabuas15ColunBruto, tabuas15Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20Colun, memoria: MEMB.tabuaColuna("do pav. 1", 20, p1.colunas20, tabuas20ColunBruto, tabuas20Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30Colun, memoria: MEMB.tabuaColuna("do pav. 1", 25, p1.colunas25, tabuas30ColunBruto, tabuas30Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5Colun, memoria: MEMB.sarrafoColunas(p1.colunas15, p1.colunas20, p1.colunas30, sarrafo5ColunBruto, sarrafo5Colun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderitesColun, memoria: MEMB.madeirite(p1.areaFormaColunaMaior25cm, maderitesColunBruto, maderitesColun) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaColunas, memoria: MEMB.areiaConcreto("Concreto das colunas do pav. 1", p1.concrColuna, areiaGrossaColunasBruto, areiaGrossaColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Pedra", unidade: "m3", qtd: pedraColunas, memoria: MEMB.pedraConcreto("Concreto das colunas do pav. 1", p1.concrColuna, pedraColunasBruto, pedraColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoColunas, memoria: MEMB.cimentoDaPedra(pedraColunas, cimentoColunasBruto, cimentoColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm, memoria: memoriaBitolaSimples("CA50_5MM", ferro.CA50_5MM, ca50_5mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm, memoria: memoriaBitolaSimples("CA50_6MM", ferro.CA50_6MM, ca50_6mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm, memoria: memoriaBitolaSimples("CA50_8MM", ferro.CA50_8MM, ca50_8mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm, memoria: memoriaBitolaSimples("CA50_10MM", ferro.CA50_10MM, ca50_10mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm, memoria: memoriaBitolaSimples("CA50_12MM", ferro.CA50_12MM, ca50_12mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm, memoria: memoriaBitolaSimples("CA50_16MM", ferro.CA50_16MM, ca50_16mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memoriaBitolaSimples("CA60_5MM", ferro.CA60_5MM, ca60_5mm, "nas colunas do pav. 1") });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Arame Recozido", unidade: "KG", qtd: arameColunas, memoria: MEMB.arameDoPeso(pesoFerroColunas, arameColunasBruto, arameColunas) });
+  emitir(out, { ...base, subEtapa: subSupra, item: "Aço - Pregos 18x27", unidade: "KG", qtd: pregos18x27, memoria: MEMB.pregoDoArame(arameColunas, pregos18x27Bruto, pregos18x27) });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -854,9 +1091,12 @@ function vigaRespaldoLajePav1(cp, out) {
   const p1 = cp.pav1;
   const tipologiaVba = cp.tipologia === "Sobrado" ? "Sobrado" : "Térreo";
 
-  const tabuas10 = Math.ceil((((p1.perimetroLoje * 2 / 3) + p1.perimetroLoje * 2 / 3 * 0.45 / 3)) * PERDA);
-  const tabuas30 = Math.ceil((((p1.perimetroParedes * 2 / 3) + p1.perimetroParedes * 2 / 3 * 0.45 / 3)) * PERDA);
-  const sarrafo5 = Math.ceil(((p1.perimetroParedes * 2 / 0.7 * 0.45) + (p1.perimetroParedes / 0.75 * 0.3)) / 3 * PERDA);
+  const tabuas10Bruto = (((p1.perimetroLoje * 2 / 3) + p1.perimetroLoje * 2 / 3 * 0.45 / 3)) * PERDA;
+  const tabuas10 = Math.ceil(tabuas10Bruto);
+  const tabuas30Bruto = (((p1.perimetroParedes * 2 / 3) + p1.perimetroParedes * 2 / 3 * 0.45 / 3)) * PERDA;
+  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const sarrafo5Bruto = ((p1.perimetroParedes * 2 / 0.7 * 0.45) + (p1.perimetroParedes / 0.75 * 0.3)) / 3 * PERDA;
+  const sarrafo5 = Math.ceil(sarrafo5Bruto);
 
   const ferro = normalizarFerro(p1.vigaRespaldo);
   const ca50_5mm = Math.ceil(ferro.CA50_5MM / BARRA_FERRO_MTS * PERDA);
@@ -868,11 +1108,15 @@ function vigaRespaldoLajePav1(cp, out) {
   const ca60_5mm = Math.ceil(ferro.CA60_5MM / BARRA_FERRO_MTS * PERDA);
   const peso = ca50_5mm * PESOS_FERRO.CA50_5MM + ca50_6mm * PESOS_FERRO.CA50_6MM + ca50_8mm * PESOS_FERRO.CA50_8MM +
     ca50_10mm * PESOS_FERRO.CA50_10MM + ca50_12mm * PESOS_FERRO.CA50_12MM + ca50_16mm * PESOS_FERRO.CA50_16MM + ca60_5mm * PESOS_FERRO.CA60_5MM;
-  const arame = Math.ceil(peso * 0.06 * PERDA);
-  const prego = Math.ceil(arame * 0.55);
+  const arameBruto = peso * 0.06 * PERDA;
+  const arame = Math.ceil(arameBruto);
+  const pregoBruto = arame * 0.55;
+  const prego = Math.ceil(pregoBruto);
 
-  const volumeConcretoLoje = Math.ceil(((p1.areaLoje * 0.1) + p1.concretoVigaRespaldo) * PERDA);
-  const malhaPop = Math.ceil((p1.areaLoje / (2.9 * 1.9)) * PERDA);
+  const volumeConcretoLojeBruto = ((p1.areaLoje * 0.1) + p1.concretoVigaRespaldo) * PERDA;
+  const volumeConcretoLoje = Math.ceil(volumeConcretoLojeBruto);
+  const malhaPopBruto = (p1.areaLoje / (2.9 * 1.9)) * PERDA;
+  const malhaPop = Math.ceil(malhaPopBruto);
 
   const tipoConcat = tipologiaVba + p1.tipoLoje;
   let nomeModelo = "";
@@ -881,49 +1125,123 @@ function vigaRespaldoLajePav1(cp, out) {
   else if (tipoConcat === "TérreoTreliça") nomeModelo = "Laje Pré Moldada Treliça Forro";
   else if (tipoConcat === "SobradoTreliça") nomeModelo = "Laje Pré Moldada Treliça Piso";
 
-  const qtdLoje = Math.ceil(p1.areaLoje * PERDA);
+  const qtdLojeBruto = p1.areaLoje * PERDA;
+  const qtdLoje = Math.ceil(qtdLojeBruto);
   // [VBA] meses de escora fixo em 1.5 aqui (não usa a variável de meses do
   // módulo do Térreo) — preservado literalmente.
-  const qtdEscoras = p1.tipoLoje === "Protendida"
-    ? Math.ceil(p1.areaLoje * 0.6 * 1.5 * PERDA)
-    : Math.ceil(p1.areaLoje * 1.5 * PERDA);
+  const qtdEscorasBruto = p1.tipoLoje === "Protendida" ? p1.areaLoje * 0.6 * 1.5 * PERDA : p1.areaLoje * 1.5 * PERDA;
+  const qtdEscoras = Math.ceil(qtdEscorasBruto);
 
-  const lojeMacica = Math.ceil(p1.areaLojeMacica * 0.15 * PERDA);
-  const maderiteLojeMacica = Math.ceil(p1.areaLojeMacica / 2.42 * PERDA);
-  const escorasLojeMacica = Math.ceil(p1.areaLojeMacica * 1.5 * PERDA);
+  const lojeMacicaBruto = p1.areaLojeMacica * 0.15 * PERDA;
+  const lojeMacica = Math.ceil(lojeMacicaBruto);
+  const maderiteLojeMacicaBruto = p1.areaLojeMacica / 2.42 * PERDA;
+  const maderiteLojeMacica = Math.ceil(maderiteLojeMacicaBruto);
+  const escorasLojeMacicaBruto = p1.areaLojeMacica * 1.5 * PERDA;
+  const escorasLojeMacica = Math.ceil(escorasLojeMacicaBruto);
 
   // [VBA] bug real de copy-paste no original: usa a área de laje do TÉRREO
   // (não do Pav 1) para o massiamento do contrapiso do Pav 1. Preservado.
   const areaBase = cp.terreo.areaLoje;
-  const cimentoMassiam = Math.ceil(areaBase * 0.05 * 0.25 * 1200 / 50 * PERDA);
-  const areiaGrossaMassiam = Math.ceil(areaBase * 0.05 * 0.75 * PERDA);
-  const biancoMassiam = Math.ceil(areaBase / 60 * PERDA);
+  const cimentoMassiamBruto = areaBase * 0.05 * 0.25 * 1200 / 50 * PERDA;
+  const cimentoMassiam = Math.ceil(cimentoMassiamBruto);
+  const areiaGrossaMassiamBruto = areaBase * 0.05 * 0.75 * PERDA;
+  const areiaGrossaMassiam = Math.ceil(areiaGrossaMassiamBruto);
+  const biancoMassiamBruto = areaBase / 60 * PERDA;
+  const biancoMassiam = Math.ceil(biancoMassiamBruto);
 
+  const memVigaP1 = (k) => memoriaBitolaSimples(k, ferro[k], { CA50_5MM: ca50_5mm, CA50_6MM: ca50_6mm, CA50_8MM: ca50_8mm, CA50_10MM: ca50_10mm, CA50_12MM: ca50_12mm, CA50_16MM: ca50_16mm, CA60_5MM: ca60_5mm }[k], "na viga de respaldo do pav. 1");
+  const notaMassiamP1 = MEM.nota("Massiamento do contrapiso do pav. 1: camada de 5 cm que nivela a laje para o piso. A planilha original usa aqui a área da laje do TÉRREO — o VICKE preserva a conta como está no sistema antigo.");
   const etapa = "Viga Respaldo e Laje";
   const o = ORD.vigaLajePav1;
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas10 });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30 });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5 });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: p1.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: volumeConcretoLoje });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Aço - Malha pop EQ092 4.2mm 15x15", unidade: "Unidades", qtd: malhaPop });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: nomeModelo, unidade: "m2", qtd: qtdLoje });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: qtdEscoras });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Concreto - Bomba", unidade: "Unidade", qtd: 1 });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: p1.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: lojeMacica });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderiteLojeMacica });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: escorasLojeMacica });
-  emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Sacos de cimento 50kg", unidade: "Unidade", qtd: cimentoMassiam });
-  emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaMassiam });
-  emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Impermeabilizantes - Bianco 18KG", unidade: "Unidade", qtd: biancoMassiam });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas10, memoria: [
+    MEM.nota("Fôrma do fundo da viga de respaldo do pav. 1, ao longo do perímetro da laje."),
+    MEM.dado("Perímetro da laje do pav. 1", p1.perimetroLoje, "m", "bloco Laje Pav. 1"),
+    MEM.conta("Tábuas de 3 m, com 10% de perda", "(perímetro × 2 ÷ 3 + perímetro × 2 ÷ 3 × 0,45 ÷ 3) × 1,10", [["perímetro", p1.perimetroLoje]], tabuas10Bruto, "tábuas"),
+    MEM.teto(tabuas10Bruto, tabuas10, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30, memoria: [
+    MEM.nota("Laterais da fôrma da viga de respaldo do pav. 1."),
+    MEM.dado("Perímetro das paredes do pav. 1", p1.perimetroParedes, "m", "bloco Pav. 1"),
+    MEM.conta("Tábuas de 3 m, com 10% de perda", "(perímetro × 2 ÷ 3 + perímetro × 2 ÷ 3 × 0,45 ÷ 3) × 1,10", [["perímetro", p1.perimetroParedes]], tabuas30Bruto, "tábuas"),
+    MEM.teto(tabuas30Bruto, tabuas30, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5, memoria: [
+    MEM.nota("Gravatas a cada 70 cm nas duas faces e escoras a cada 75 cm da fôrma da viga do pav. 1."),
+    MEM.dado("Perímetro das paredes do pav. 1", p1.perimetroParedes, "m", "bloco Pav. 1"),
+    MEM.conta("Sarrafos de 3 m, com 10% de perda", "(perímetro × 2 ÷ 0,70 × 0,45 + perímetro ÷ 0,75 × 0,30) ÷ 3 × 1,10", [["perímetro", p1.perimetroParedes]], sarrafo5Bruto, "sarrafos"),
+    MEM.teto(sarrafo5Bruto, sarrafo5, "sarrafos de 3 m", "Arredonda para cima (sarrafo inteiro)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_5mm, memoria: memVigaP1("CA50_5MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: ca50_6mm, memoria: memVigaP1("CA50_6MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_8mm, memoria: memVigaP1("CA50_8MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: ca50_10mm, memoria: memVigaP1("CA50_10MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: ca50_12mm, memoria: memVigaP1("CA50_12MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: ca50_16mm, memoria: memVigaP1("CA50_16MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memVigaP1("CA60_5MM") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: MEMB.arameDoPeso(peso, arameBruto, arame) });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: p1.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: volumeConcretoLoje, memoria: [
+    MEM.nota("Capa de concreto da laje pré-moldada do pav. 1 (10 cm) somada ao volume da viga de respaldo."),
+    MEM.dado("Área da laje do pav. 1", p1.areaLoje, "m²", "bloco Laje Pav. 1"),
+    MEM.dado("Concreto da viga de respaldo", p1.concretoVigaRespaldo, "m³", "bloco Laje Pav. 1"),
+    MEM.conta("Volume com 10% de perda", "(área × 0,10 + viga) × 1,10", [["área", p1.areaLoje], ["viga", p1.concretoVigaRespaldo]], volumeConcretoLojeBruto, "m³"),
+    MEM.teto(volumeConcretoLojeBruto, volumeConcretoLoje, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Aço - Malha pop EQ092 4.2mm 15x15", unidade: "Unidades", qtd: malhaPop, memoria: [
+    MEM.nota("Tela da capa da laje do pav. 1. Cada painel tem 2,90 × 1,90 m."),
+    MEM.dado("Área da laje do pav. 1", p1.areaLoje, "m²", "bloco Laje Pav. 1"),
+    MEM.conta("Painéis, com 10% de perda", "área ÷ (2,90 × 1,90) × 1,10", [["área", p1.areaLoje]], malhaPopBruto, "painéis"),
+    MEM.teto(malhaPopBruto, malhaPop, "painéis", "Arredonda para cima (painel inteiro)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: nomeModelo, unidade: "m2", qtd: qtdLoje, memoria: [
+    MEM.nota(`Laje pré-moldada do pav. 1: ${nomeModelo || "(modelo não definido)"}.`),
+    MEM.dado("Área da laje do pav. 1", p1.areaLoje, "m²", "bloco Laje Pav. 1"),
+    MEM.conta("Área com 10% de perda", "área × 1,10", [["área", p1.areaLoje]], qtdLojeBruto, "m²"),
+    MEM.teto(qtdLojeBruto, qtdLoje, "m²"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: qtdEscoras, memoria: [
+    MEM.nota(`Escoras da laje do pav. 1: 1,5 mês de aluguel.${p1.tipoLoje === "Protendida" ? " Laje protendida usa 0,6 escora por m², menos que a treliçada." : ""}`),
+    MEM.dado("Área da laje do pav. 1", p1.areaLoje, "m²", "bloco Laje Pav. 1"),
+    MEM.conta("Escoras, com 10% de perda", p1.tipoLoje === "Protendida" ? "área × 0,60 × 1,50 × 1,10" : "área × 1,50 × 1,10", [["área", p1.areaLoje]], qtdEscorasBruto, "escoras"),
+    MEM.teto(qtdEscorasBruto, qtdEscoras, "escoras"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Concreto - Bomba", unidade: "Unidade", qtd: 1, memoria: MEM_CANTEIRO("Uma bombeada de concreto para a laje do pav. 1.") });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: p1.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: lojeMacica, memoria: [
+    MEM.nota("Trecho de laje maciça do pav. 1, com 15 cm de espessura."),
+    MEM.dado("Área de laje maciça no pav. 1", p1.areaLojeMacica, "m²", "bloco Laje Pav. 1"),
+    MEM.conta("Volume com 10% de perda", "área × 0,15 × 1,10", [["área", p1.areaLojeMacica]], lojeMacicaBruto, "m³"),
+    MEM.teto(lojeMacicaBruto, lojeMacica, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderiteLojeMacica, memoria: [
+    MEM.nota("Fundo de fôrma da laje maciça do pav. 1, em chapas de 2,42 m²."),
+    MEM.dado("Área de laje maciça no pav. 1", p1.areaLojeMacica, "m²", "bloco Laje Pav. 1"),
+    MEM.conta("Chapas, com 10% de perda", "área ÷ 2,42 × 1,10", [["área", p1.areaLojeMacica]], maderiteLojeMacicaBruto, "chapas"),
+    MEM.teto(maderiteLojeMacicaBruto, maderiteLojeMacica, "chapas", "Arredonda para cima (chapa inteira)"),
+  ] });
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: escorasLojeMacica, memoria: [
+    MEM.nota("Escoras da laje maciça do pav. 1: 1,5 mês de aluguel, uma por m²."),
+    MEM.dado("Área de laje maciça no pav. 1", p1.areaLojeMacica, "m²", "bloco Laje Pav. 1"),
+    MEM.conta("Escoras, com 10% de perda", "área × 1,50 × 1,10", [["área", p1.areaLojeMacica]], escorasLojeMacicaBruto, "escoras"),
+    MEM.teto(escorasLojeMacicaBruto, escorasLojeMacica, "escoras"),
+  ] });
+  emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Sacos de cimento 50kg", unidade: "Unidade", qtd: cimentoMassiam, memoria: [
+    notaMassiamP1,
+    MEM.dado("Área da laje do térreo (base da conta original)", areaBase, "m²", "bloco Laje (forro)"),
+    MEM.conta("Cimento: 5 cm, 25% de cimento, 1.200 kg/m³, saco de 50 kg, 10% de perda", "área × 0,05 × 0,25 × 1.200 ÷ 50 × 1,10", [["área", areaBase]], cimentoMassiamBruto, "sacos"),
+    MEM.teto(cimentoMassiamBruto, cimentoMassiam, "sacos de 50 kg", "Arredonda para cima (saco fechado)"),
+  ] });
+  emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaMassiam, memoria: [
+    notaMassiamP1,
+    MEM.dado("Área da laje do térreo (base da conta original)", areaBase, "m²", "bloco Laje (forro)"),
+    MEM.conta("Areia: 5 cm de camada, 75% de areia, com 10% de perda", "área × 0,05 × 0,75 × 1,10", [["área", areaBase]], areiaGrossaMassiamBruto, "m³"),
+    MEM.teto(areiaGrossaMassiamBruto, areiaGrossaMassiam, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
+  ] });
+  emitir(out, { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno Pav 1", subEtapa: "Massiamento contrap Pav 1", item: "Impermeabilizantes - Bianco 18KG", unidade: "Unidade", qtd: biancoMassiam, memoria: [
+    notaMassiamP1,
+    MEM.dado("Área da laje do térreo (base da conta original)", areaBase, "m²", "bloco Laje (forro)"),
+    MEM.conta("Baldes de Bianco (rende 60 m²), com 10% de perda", "área ÷ 60 × 1,10", [["área", areaBase]], biancoMassiamBruto, "baldes"),
+    MEM.teto(biancoMassiamBruto, biancoMassiam, "baldes", "Arredonda para cima (balde fechado)"),
+  ] });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -934,46 +1252,76 @@ function supraCobertura(cp, out) {
   const somaFerro = somarFerro(c.vigaFerro, c.colunaFerro); // nenhum dos dois tem CA60_4MM (fica 0)
   const barras = barrasPorBitola(somaFerro);
   const peso = pesoTotalFerro(barras);
-  const arame = Math.ceil(peso * 0.06 * PERDA);
-  const prego = Math.ceil(arame * 0.55);
+  const arameBruto = peso * 0.06 * PERDA;
+  const arame = Math.ceil(arameBruto);
+  const pregoBruto = arame * 0.55;
+  const prego = Math.ceil(pregoBruto);
 
   const volumeConcreto = numOrZero(c.volumeConcretoColunaRespaldo) + numOrZero(c.volumeConcretoVigaRespaldo); // [VBA] soma crua, sem ceil
-  const areiaGrossa = Math.ceil(volumeConcreto * 0.6 * PERDA);
-  const pedra = Math.ceil(volumeConcreto * PERDA);
-  const cimento = Math.ceil(pedra * 6 * PERDA);
+  const areiaGrossaBruto = volumeConcreto * 0.6 * PERDA;
+  const areiaGrossa = Math.ceil(areiaGrossaBruto);
+  const pedraBruto = volumeConcreto * PERDA;
+  const pedra = Math.ceil(pedraBruto);
+  const cimentoBruto = pedra * 6 * PERDA;
+  const cimento = Math.ceil(cimentoBruto);
 
-  const tabuas20 = Math.ceil(c.colunas15 * 0.6 * 2 / 3 * PERDA);
-  const tabuas25 = Math.ceil(c.colunas20 * 0.6 * 2 / 3 * PERDA);
+  const tabuas20Bruto = c.colunas15 * 0.6 * 2 / 3 * PERDA;
+  const tabuas20 = Math.ceil(tabuas20Bruto);
+  const tabuas25Bruto = c.colunas20 * 0.6 * 2 / 3 * PERDA;
+  const tabuas25 = Math.ceil(tabuas25Bruto);
   // [VBA] soma o perímetro da laje do Pav 1 aqui mesmo quando a tipologia é
   // Térrea — preservado literalmente do original.
-  const tabuas30 = Math.ceil(((c.colunas25 * 0.6 * 2) + (cp.pav1.perimetroLoje * 2)) / 3 * PERDA);
-  const maderites = Math.ceil(c.areaFormaColunaMaior25cm / 2.42 * PERDA);
-  const sarrafo5 = Math.ceil(
+  const tabuas30Bruto = ((c.colunas25 * 0.6 * 2) + (cp.pav1.perimetroLoje * 2)) / 3 * PERDA;
+  const tabuas30 = Math.ceil(tabuas30Bruto);
+  const maderitesBruto = c.areaFormaColunaMaior25cm / 2.42 * PERDA;
+  const maderites = Math.ceil(maderitesBruto);
+  const sarrafo5Bruto =
     ((c.colunas15 * 0.6 * 2 / 0.5 * 0.2) +
       (c.colunas20 * 0.6 * 2 / 0.5 * 0.25) +
       (c.colunas25 * 0.6 * 2 / 0.5 * 0.35) +
       (cp.pav1.perimetroLoje * 2 / 0.7 * 0.45) +
-      (cp.pav1.perimetroLoje / 0.75 * 0.3)) * PERDA / 3
-  );
+      (cp.pav1.perimetroLoje / 0.75 * 0.3)) * PERDA / 3;
+  const sarrafo5 = Math.ceil(sarrafo5Bruto);
 
+  const memSupra = (k) => memoriaBitola(k, [["vigas de respaldo", c.vigaFerro[k]], ["pilaretes", c.colunaFerro[k]]], barras);
+  const notaSupra = MEM.nota("Supra cobertura: as vigas de respaldo e os pilaretes de 60 cm que fecham a alvenaria e apoiam o telhado.");
+  const memTabuaPilarete = (larguraCm, colunas, bruto, valor) => [
+    notaSupra,
+    MEM.dado(`Pilaretes de ${larguraCm} cm`, colunas, "pilaretes", "bloco Engenharia — Pilares e vigas"),
+    MEM.conta("Tábuas de 3 m, com 10% de perda", "pilaretes × 0,60 × 2 ÷ 3 × 1,10", [["pilaretes", colunas]], bruto, "tábuas"),
+    MEM.teto(bruto, valor, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ];
   const base = { ordem: ORD.supraCobertura, tipo: "Bruto", etapa: "Supra estrutura e paredes", subEtapa: "Supra Cobertura" };
-  emitir(out, { ...base, item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_5MM });
-  emitir(out, { ...base, item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_6MM });
-  emitir(out, { ...base, item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_8MM });
-  emitir(out, { ...base, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_10MM });
-  emitir(out, { ...base, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_12MM });
-  emitir(out, { ...base, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_16MM });
-  emitir(out, { ...base, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA60_5MM });
-  emitir(out, { ...base, item: "Aço - Arame Recozido", unidade: "KG", qtd: arame });
-  emitir(out, { ...base, item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego });
-  emitir(out, { ...base, item: "Areia Grossa", unidade: "m3", qtd: areiaGrossa });
-  emitir(out, { ...base, item: "Pedra", unidade: "m3", qtd: pedra });
-  emitir(out, { ...base, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimento });
-  emitir(out, { ...base, item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20 });
-  emitir(out, { ...base, item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas25 });
-  emitir(out, { ...base, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30 });
-  emitir(out, { ...base, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5 });
-  emitir(out, { ...base, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderites });
+  emitir(out, { ...base, item: "Aço - Barras de CA50 5.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_5MM, memoria: memSupra("CA50_5MM") });
+  emitir(out, { ...base, item: "Aço - Barras de CA50 6.3mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_6MM, memoria: memSupra("CA50_6MM") });
+  emitir(out, { ...base, item: "Aço - Barras de CA50 8.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_8MM, memoria: memSupra("CA50_8MM") });
+  emitir(out, { ...base, item: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_10MM, memoria: memSupra("CA50_10MM") });
+  emitir(out, { ...base, item: "Aço - Barras de CA50 12.5mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_12MM, memoria: memSupra("CA50_12MM") });
+  emitir(out, { ...base, item: "Aço - Barras de CA50 16mm 12mts", unidade: "Barras 12mts", qtd: barras.CA50_16MM, memoria: memSupra("CA50_16MM") });
+  emitir(out, { ...base, item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: barras.CA60_5MM, memoria: memSupra("CA60_5MM") });
+  emitir(out, { ...base, item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: MEMB.arameDoPeso(peso, arameBruto, arame) });
+  emitir(out, { ...base, item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
+  emitir(out, { ...base, item: "Areia Grossa", unidade: "m3", qtd: areiaGrossa, memoria: MEMB.areiaConcreto("Concreto das vigas de respaldo e pilaretes", volumeConcreto, areiaGrossaBruto, areiaGrossa) });
+  emitir(out, { ...base, item: "Pedra", unidade: "m3", qtd: pedra, memoria: MEMB.pedraConcreto("Concreto das vigas de respaldo e pilaretes", volumeConcreto, pedraBruto, pedra) });
+  emitir(out, { ...base, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimento, memoria: MEMB.cimentoDaPedra(pedra, cimentoBruto, cimento) });
+  emitir(out, { ...base, item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20, memoria: memTabuaPilarete(15, c.colunas15, tabuas20Bruto, tabuas20) });
+  emitir(out, { ...base, item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas25, memoria: memTabuaPilarete(20, c.colunas20, tabuas25Bruto, tabuas25) });
+  emitir(out, { ...base, item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas30, memoria: [
+    notaSupra,
+    MEM.dado("Pilaretes de 25 cm", c.colunas25, "pilaretes", "bloco Engenharia — Pilares e vigas"),
+    MEM.dado("Perímetro da laje do pav. 1", cp.pav1.perimetroLoje, "m", "bloco Laje Pav. 1"),
+    MEM.conta("Tábuas de 3 m, com 10% de perda", "(pilaretes × 0,60 × 2 + perímetro da laje × 2) ÷ 3 × 1,10", [["pilaretes", c.colunas25], ["perímetro da laje", cp.pav1.perimetroLoje]], tabuas30Bruto, "tábuas"),
+    MEM.teto(tabuas30Bruto, tabuas30, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ] });
+  emitir(out, { ...base, item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3 mts", qtd: sarrafo5, memoria: [
+    MEM.nota("Gravatas dos pilaretes (uma a cada 50 cm) mais as gravatas e escoras da fôrma da viga de respaldo, que acompanha o perímetro da laje."),
+    MEM.dado("Pilaretes de 15 / 20 / 25 cm", c.colunas15 + c.colunas20 + c.colunas25, "pilaretes", "bloco Engenharia — Pilares e vigas"),
+    MEM.dado("Perímetro da laje do pav. 1", cp.pav1.perimetroLoje, "m", "bloco Laje Pav. 1"),
+    MEM.conta("Sarrafos de 3 m, com 10% de perda", "(p15 × 0,60 × 2 ÷ 0,50 × 0,20 + p20 × 0,60 × 2 ÷ 0,50 × 0,25 + p25 × 0,60 × 2 ÷ 0,50 × 0,35 + perímetro × 2 ÷ 0,70 × 0,45 + perímetro ÷ 0,75 × 0,30) × 1,10 ÷ 3",
+      [["p15", c.colunas15], ["p20", c.colunas20], ["p25", c.colunas25], ["perímetro", cp.pav1.perimetroLoje]], sarrafo5Bruto, "sarrafos"),
+    MEM.teto(sarrafo5Bruto, sarrafo5, "sarrafos de 3 m", "Arredonda para cima (sarrafo inteiro)"),
+  ] });
+  emitir(out, { ...base, item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidade", qtd: maderites, memoria: MEMB.madeirite(c.areaFormaColunaMaior25cm, maderitesBruto, maderites) });
 }
 
 // ═══════════════════════════════════════════════════════════════
