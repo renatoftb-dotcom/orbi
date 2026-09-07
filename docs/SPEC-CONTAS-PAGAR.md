@@ -74,8 +74,9 @@ o título já disse.
 A tela abre com o **fluxo por mês**: uma barra por mês com vencimento, em
 ordem cronológica, com o total escrito em cima (em milhares quando passa de
 mil) e o mês atual em negrito no eixo. Cada barra é empilhada em três faixas
-(`fluxoMensal`): **vencido** (preto), **a pagar** (azul) e **pago** (cinza),
-que somadas fecham o total do mês. Clicar num mês abre as contas dele na
+(`fluxoMensal`), de baixo para cima: **pago** (cinza), **vencido** (preto) e,
+no topo, **a pagar** (azul) — o que falta pagar fica na ponta, que é o que se
+olha. As três somadas fecham o total do mês. Clicar num mês abre as contas dele na
 lista abaixo.
 
 As barras têm o topo levemente arredondado — cada uma é recortada por um
@@ -98,10 +99,12 @@ partir do atual já vêm abertos.
 - **Agrupar por** (`VISOES_CONTAS`): Mês · Ano · Fornecedor · Contrato. Mês e
   ano saem em ordem cronológica; fornecedor e contrato, do maior valor para o
   menor. O que não tem vencimento (ou fornecedor) fecha a lista.
-- **Mostrar** (`FILTROS_CONTAS`): Todas · A pagar · Vencidas · Pagas.
+- **Filtrar**: são os próprios quadros do topo. Clicar em *A pagar*, *Vencido*
+  ou *Pago* filtra a lista (`FILTROS_CONTAS`); o quadro ativo fica azul, e
+  clicar nele de novo — ou em *Total* — volta para todas. Não há linha de
+  chips: a informação já estava nos quadros.
 
-Os quatro totais do topo (a pagar, vencido, pago, total) somam sempre a obra
-inteira, independentemente do filtro.
+Os quatro totais somam sempre a obra inteira, independentemente do filtro.
 
 ## Situação e realizado
 

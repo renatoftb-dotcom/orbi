@@ -1906,13 +1906,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const fechado = (g) => (gruposFechados[`${visaoContas}:${g.chave}`] ?? !abertoPadrao(g));
     const alternarGrupo = (g) => setGruposFechados({ ...gruposFechados, [`${visaoContas}:${g.chave}`]: !fechado(g) });
 
-    const tile = (rot, valor, sub) => (
-      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "12px 14px", background: "#fff" }}>
-        <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 4 }}>{rot}</div>
-        <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtMoedaCtr(valor)}</div>
-        {sub ? <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>{sub}</div> : null}
-      </div>
-    );
+    // Os quadros do topo são o filtro da lista: clicar em "A pagar" mostra só
+    // o que está em aberto; clicar de novo volta para todas.
+    const tile = (rot, valor, sub, filtro) => {
+      const ativo = filtroContas === filtro;
+      return (
+        <button type="button" onClick={() => setFiltroContas(ativo && filtro !== "todas" ? "todas" : filtro)}
+          style={{ border: `1.5px solid ${ativo ? AZUL_VK : "rgba(38,36,33,0.14)"}`, borderRadius: 14, padding: "12px 14px",
+            background: "#fff", cursor: "pointer", fontFamily: "inherit", textAlign: "left", width: "100%" }}>
+          <div style={{ fontSize: 11.5, color: ativo ? AZUL_VK : "#4b5563", marginBottom: 4, fontWeight: ativo ? 700 : 400 }}>{rot}</div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: ativo ? AZUL_VK : "#111827" }}>{fmtMoedaCtr(valor)}</div>
+          {sub ? <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>{sub}</div> : null}
+        </button>
+      );
+    };
     const chip = (ativo, texto, onClick) => (
       <button key={texto} type="button" onClick={onClick}
         style={{ border: `1.5px solid ${ativo ? AZUL_VK : "rgba(38,36,33,0.16)"}`, background: "#fff",
@@ -1931,7 +1938,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const altura = (v) => (fluxo.maior > 0 ? Math.max(v > 0 ? 3 : 0, (v / fluxo.maior) * ALT_BARRA) : 0);
     const curto = (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v > 0 ? String(Math.round(v)) : "");
     const irParaMes = (chave) => { setVisaoContas("mes"); setGruposFechados({ ...gruposFechados, [`mes:${chave}`]: false }); };
-    const FAIXAS = [["vencido", "#111827", "Vencido"], ["aberto", AZUL_VK, "A pagar"], ["pago", "#cbd5e1", "Pago"]];
+    // De baixo para cima: o que já saiu, o que venceu e, no topo, o que falta
+    // pagar — é o que interessa olhar.
+    const FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", AZUL_VK, "A pagar"]];
 
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -1942,10 +1951,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 16 }}>
-          {tile("A pagar", t.aberto, `${t.qtdAberto} ${t.qtdAberto === 1 ? "conta" : "contas"}`)}
-          {tile("Vencido", t.vencido, `${t.qtdVencido} em atraso`)}
-          {tile("Pago", t.pago, "realizado da obra")}
-          {tile("Total", t.total, "contratado + avulsas")}
+          {tile("A pagar", t.aberto, `${t.qtdAberto} ${t.qtdAberto === 1 ? "conta" : "contas"}`, "aPagar")}
+          {tile("Vencido", t.vencido, `${t.qtdVencido} em atraso`, "vencidas")}
+          {tile("Pago", t.pago, "realizado da obra", "pagas")}
+          {tile("Total", t.total, "contratado + avulsas", "todas")}
         </div>
 
         {/* Fluxo mensal */}
@@ -1954,7 +1963,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Fluxo por mês</div>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {FAIXAS.map(([k, cor, rot]) => (
+                {[...FAIXAS].reverse().map(([k, cor, rot]) => (
                   <span key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#4b5563" }}>
                     <span style={{ width: 9, height: 9, borderRadius: 2, background: cor, display: "inline-block" }} />{rot}
                   </span>
@@ -2021,10 +2030,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <span style={{ fontSize: 11.5, color: "#6b7280", marginRight: 2 }}>Agrupar por</span>
           {VISOES_CONTAS.map(v => chip(visaoContas === v.id, v.nome, () => setVisaoContas(v.id)))}
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
-          <span style={{ fontSize: 11.5, color: "#6b7280", marginRight: 2 }}>Mostrar</span>
-          {FILTROS_CONTAS.map(f => chip(filtroContas === f.id, f.nome, () => setFiltroContas(f.id)))}
-        </div>
+
+        {filtroContas !== "todas" && (
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 16 }}>
+            Mostrando só {(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()} ·{" "}
+            <button type="button" onClick={() => setFiltroContas("todas")} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>ver todas</button>
+          </div>
+        )}
 
         {/* Nova conta avulsa */}
         {perm.podeEditar && (formConta ? (
