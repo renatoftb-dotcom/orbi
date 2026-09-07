@@ -246,9 +246,11 @@ const CONTRATO_OPCOES = [
   { id: "art", label: "Fornecer ART / RRT", ajuda: "anotação de responsabilidade técnica do serviço", padrao: false },
   { id: "ferramentas", label: "Contratado fornece as ferramentas",
     campos: [{ k: "ferramentasEscopo", l: "Quais", tipo: "select", opcoes: [["basicas", "Somente as básicas"], ["todas", "Todas as ferramentas"]] }],
+    especifica: { k: "ferramentasDetalhe", placeholder: "ex.: colher, desempenadeira, prumo, nível, betoneira" },
     valores: { ferramentasEscopo: "basicas" },
     padrao: true, padraoValores: (modelo) => ({ ferramentasEscopo: modelo === "empreitadaGlobal" ? "todas" : "basicas" }) },
   { id: "equipamentos", label: "Contratado fornece todos os equipamentos", ajuda: "andaimes, içamento, marteletes, escoras, caçambas",
+    especifica: { k: "equipamentosDetalhe", placeholder: "ex.: andaimes, martelete, escoras metálicas, caçamba" },
     padrao: (modelo) => modelo === "empreitadaGlobal" },
   { id: "epi", label: "Fornecer EPI e cumprir as normas de segurança", padrao: true },
   { id: "seguro", label: "Manter seguro de responsabilidade civil", padrao: false },
@@ -480,13 +482,17 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     "Os serviços serão executados sob o regime de empreitada de mão de obra, cabendo ao CONTRATADO o fornecimento da mão de obra necessária à integral execução do objeto.",
     "Todo o material de construção necessário à execução dos serviços será fornecido pelo CONTRATANTE, às suas expensas.",
   ];
+  const detalhe = (t) => { const x = String(t || "").trim().replace(/\.$/, ""); return x || ""; };
   if (lig("ferramentas")) {
-    regime.push(ferramentasTodas
+    const df = detalhe(c.ferramentasDetalhe);
+    regime.push((ferramentasTodas
       ? `Todas as ferramentas necessárias à execução dos serviços serão fornecidas ${pelaEla}, por sua conta, sem qualquer custo adicional para a CONTRATANTE.`
-      : `As ferramentas básicas necessárias à execução dos serviços serão fornecidas ${pelaEla}, por sua conta.`);
+      : `As ferramentas básicas necessárias à execução dos serviços serão fornecidas ${pelaEla}, por sua conta.`)
+      + (df ? ` ${ferramentasTodas ? "Compreendem-se" : "Consideram-se ferramentas básicas, para os fins deste contrato"}, entre outras: ${df}.` : ""));
   }
   if (lig("equipamentos")) {
-    regime.push(`Correm por conta exclusiva ${dela} todos os demais equipamentos necessários à execução dos serviços, tais como andaimes, meios de içamento e acesso, marteletes, escoras metálicas e caçambas de entulho.`);
+    const de = detalhe(c.equipamentosDetalhe);
+    regime.push(`Correm por conta exclusiva ${dela} todos os demais equipamentos necessários à execução dos serviços, tais como ${de || "andaimes, meios de içamento e acesso, marteletes, escoras metálicas e caçambas de entulho"}.`);
   } else {
     regime.push("Os equipamentos de maior porte serão fornecidos pelo CONTRATANTE, às suas expensas, tais como andaimes, marteletes, escoras metálicas e caçambas de entulho.");
   }

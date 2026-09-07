@@ -94,6 +94,14 @@ nota fiscal · relatório de avanço (semanal/quinzenal/mensal) · alimentação
 transporte e alojamento · água e energia por conta do contratante · preço
 fixo e irreajustável.
 
+Duas delas — *ferramentas* e *equipamentos* — trazem um botão discreto
+**Especificar**, que abre um campo livre para listar quais. O texto entra na
+própria cláusula do regime: nas ferramentas como "Consideram-se ferramentas
+básicas, para os fins deste contrato, entre outras: …" (ou "Compreendem-se,
+entre outras: …" quando são todas); nos equipamentos, a lista digitada
+substitui os exemplos padrão. Em branco, o botão fica lá e o texto padrão
+segue intacto.
+
 As cláusulas são **numeradas na montagem, não na mão**: o texto é escrito sem
 número e `montarContrato` numera no final, resolvendo `{{cl:id}}` para
 "Cláusula Quarta" e `{{it:marca}}` para "1.3". Assim uma opção pode sair sem

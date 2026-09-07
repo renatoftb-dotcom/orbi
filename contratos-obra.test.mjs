@@ -396,5 +396,28 @@ teste("data de assinatura vem do dia e sai por extenso no fecho", () => {
   assert.strictEqual(modulo.montarContrato({ ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), dataAssinatura: "" }, { cliente, obra, prestador: serralheiro }).dataAssinaturaExtenso, "");
 });
 
+teste("'Especificar' entra na cláusula do regime, e sem ele o texto padrão continua", () => {
+  const base = { ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1", "empreiteiro"), valor: 1000 };
+  const t = (extra) => texto(modulo.montarContrato({ ...base, ...extra }, { cliente, obra, prestador: serralheiro }));
+  // ferramentas básicas, especificadas
+  assert.ok(t({ ferramentasDetalhe: "colher, desempenadeira, prumo e nível" })
+    .includes("Consideram-se ferramentas básicas, para os fins deste contrato, entre outras: colher, desempenadeira, prumo e nível."));
+  // todas as ferramentas muda a abertura da frase
+  assert.ok(t({ ferramentasEscopo: "todas", ferramentasDetalhe: "betoneira e serra circular" })
+    .includes("Compreendem-se, entre outras: betoneira e serra circular."));
+  // ponto final duplicado não passa
+  assert.ok(!t({ ferramentasDetalhe: "colher e prumo." }).includes("prumo.."));
+  // em branco, o texto padrão fica intacto
+  const semDetalhe = t({});
+  assert.ok(semDetalhe.includes("As ferramentas básicas necessárias à execução dos serviços serão fornecidas pelo CONTRATADO, por sua conta."));
+  assert.ok(!semDetalhe.includes("Consideram-se ferramentas básicas"));
+  // equipamentos: o detalhe substitui a lista de exemplo
+  const eq = { opcoes: { ...base.opcoes, equipamentos: true }, equipamentosDetalhe: "andaimes e balancim" };
+  assert.ok(t(eq).includes("todos os demais equipamentos necessários à execução dos serviços, tais como andaimes e balancim."));
+  assert.ok(t({ opcoes: eq.opcoes }).includes("tais como andaimes, meios de içamento e acesso"));
+  // a opção desmarcada ignora o que foi especificado
+  assert.ok(!t({ opcoes: { ...base.opcoes, ferramentas: false }, ferramentasDetalhe: "colher e prumo" }).includes("colher e prumo"));
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

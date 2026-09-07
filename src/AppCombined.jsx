@@ -14444,9 +14444,11 @@ const CONTRATO_OPCOES = [
   { id: "art", label: "Fornecer ART / RRT", ajuda: "anotação de responsabilidade técnica do serviço", padrao: false },
   { id: "ferramentas", label: "Contratado fornece as ferramentas",
     campos: [{ k: "ferramentasEscopo", l: "Quais", tipo: "select", opcoes: [["basicas", "Somente as básicas"], ["todas", "Todas as ferramentas"]] }],
+    especifica: { k: "ferramentasDetalhe", placeholder: "ex.: colher, desempenadeira, prumo, nível, betoneira" },
     valores: { ferramentasEscopo: "basicas" },
     padrao: true, padraoValores: (modelo) => ({ ferramentasEscopo: modelo === "empreitadaGlobal" ? "todas" : "basicas" }) },
   { id: "equipamentos", label: "Contratado fornece todos os equipamentos", ajuda: "andaimes, içamento, marteletes, escoras, caçambas",
+    especifica: { k: "equipamentosDetalhe", placeholder: "ex.: andaimes, martelete, escoras metálicas, caçamba" },
     padrao: (modelo) => modelo === "empreitadaGlobal" },
   { id: "epi", label: "Fornecer EPI e cumprir as normas de segurança", padrao: true },
   { id: "seguro", label: "Manter seguro de responsabilidade civil", padrao: false },
@@ -14678,13 +14680,17 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     "Os serviços serão executados sob o regime de empreitada de mão de obra, cabendo ao CONTRATADO o fornecimento da mão de obra necessária à integral execução do objeto.",
     "Todo o material de construção necessário à execução dos serviços será fornecido pelo CONTRATANTE, às suas expensas.",
   ];
+  const detalhe = (t) => { const x = String(t || "").trim().replace(/\.$/, ""); return x || ""; };
   if (lig("ferramentas")) {
-    regime.push(ferramentasTodas
+    const df = detalhe(c.ferramentasDetalhe);
+    regime.push((ferramentasTodas
       ? `Todas as ferramentas necessárias à execução dos serviços serão fornecidas ${pelaEla}, por sua conta, sem qualquer custo adicional para a CONTRATANTE.`
-      : `As ferramentas básicas necessárias à execução dos serviços serão fornecidas ${pelaEla}, por sua conta.`);
+      : `As ferramentas básicas necessárias à execução dos serviços serão fornecidas ${pelaEla}, por sua conta.`)
+      + (df ? ` ${ferramentasTodas ? "Compreendem-se" : "Consideram-se ferramentas básicas, para os fins deste contrato"}, entre outras: ${df}.` : ""));
   }
   if (lig("equipamentos")) {
-    regime.push(`Correm por conta exclusiva ${dela} todos os demais equipamentos necessários à execução dos serviços, tais como andaimes, meios de içamento e acesso, marteletes, escoras metálicas e caçambas de entulho.`);
+    const de = detalhe(c.equipamentosDetalhe);
+    regime.push(`Correm por conta exclusiva ${dela} todos os demais equipamentos necessários à execução dos serviços, tais como ${de || "andaimes, meios de içamento e acesso, marteletes, escoras metálicas e caçambas de entulho"}.`);
   } else {
     regime.push("Os equipamentos de maior porte serão fornecidos pelo CONTRATANTE, às suas expensas, tais como andaimes, marteletes, escoras metálicas e caçambas de entulho.");
   }
@@ -16059,6 +16065,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contratoAberto, setContratoAberto] = useState(null);
   // Cadastro rápido de prestador, aberto de dentro do gerador.
   const [novoPrestador, setNovoPrestador] = useState(null);
+  // Cláusulas cujo campo livre "Especificar" está aberto no gerador.
+  const [especificando, setEspecificando] = useState({});
   const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
@@ -16691,6 +16699,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     {op.ajuda && <span style={{ display: "block", fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{op.ajuda}</span>}
                   </span>
                 </label>
+                {ligada(op.id) && op.especifica && (
+                  (especificando[op.id] || String(g[op.especifica.k] || "").trim())
+                    ? (
+                      <textarea
+                        style={{ ...C.input, resize: "vertical", marginTop: 8, fontSize: 12.5 }}
+                        rows={2}
+                        value={g[op.especifica.k] || ""}
+                        onChange={e => setG(op.especifica.k, e.target.value)}
+                        placeholder={op.especifica.placeholder}
+                        autoFocus={!!especificando[op.id]}
+                      />
+                    ) : (
+                      <button type="button" onClick={() => setEspecificando({ ...especificando, [op.id]: true })}
+                        style={{ background: "none", border: "none", padding: "6px 0 0 24px", margin: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>
+                        Especificar
+                      </button>
+                    )
+                )}
                 {ligada(op.id) && op.campos && (
                   <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                     {op.campos.map(cp => (

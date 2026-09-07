@@ -1001,6 +1001,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [contratoAberto, setContratoAberto] = useState(null);
   // Cadastro rápido de prestador, aberto de dentro do gerador.
   const [novoPrestador, setNovoPrestador] = useState(null);
+  // Cláusulas cujo campo livre "Especificar" está aberto no gerador.
+  const [especificando, setEspecificando] = useState({});
   const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
@@ -1633,6 +1635,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     {op.ajuda && <span style={{ display: "block", fontSize: 11, color: "#9ca3af", marginTop: 2 }}>{op.ajuda}</span>}
                   </span>
                 </label>
+                {ligada(op.id) && op.especifica && (
+                  (especificando[op.id] || String(g[op.especifica.k] || "").trim())
+                    ? (
+                      <textarea
+                        style={{ ...C.input, resize: "vertical", marginTop: 8, fontSize: 12.5 }}
+                        rows={2}
+                        value={g[op.especifica.k] || ""}
+                        onChange={e => setG(op.especifica.k, e.target.value)}
+                        placeholder={op.especifica.placeholder}
+                        autoFocus={!!especificando[op.id]}
+                      />
+                    ) : (
+                      <button type="button" onClick={() => setEspecificando({ ...especificando, [op.id]: true })}
+                        style={{ background: "none", border: "none", padding: "6px 0 0 24px", margin: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>
+                        Especificar
+                      </button>
+                    )
+                )}
                 {ligada(op.id) && op.campos && (
                   <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
                     {op.campos.map(cp => (
