@@ -82,8 +82,10 @@ total é a soma deles e o campo de valor total trava), descritivo do ANEXO I
 ### O próprio escritório como contratado
 
 A gestão da obra costuma ser do escritório. Ele aparece **no topo da lista de
-contratados**, marcado "(meu escritório)", sempre que o tipo escolhido for
-compatível — Gestão de obra, pela categoria. Não é preciso cadastrá-lo como
+contratados**, pelo próprio nome, sempre que o tipo escolhido for compatível
+— Gestão de obra, pela categoria. Sem marcação de "meu escritório": este
+módulo será aberto ao cliente, e para ele o escritório é um contratado como
+qualquer outro. Não é preciso cadastrá-lo como
 prestador: `prestadorDoEscritorio(data.escritorio)` monta o contratado a
 partir do cadastro do escritório, então corrigir um dado lá corrige os
 contratos.
