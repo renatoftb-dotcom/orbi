@@ -76,8 +76,12 @@ ordem cronológica, com o total escrito em cima (em milhares quando passa de
 mil) e o mês atual em negrito no eixo. Cada barra é empilhada em três faixas
 (`fluxoMensal`), de baixo para cima: **pago** (cinza), **vencido** (preto) e,
 no topo, **a pagar** (azul) — o que falta pagar fica na ponta, que é o que se
-olha. As três somadas fecham o total do mês. Clicar num mês abre as contas dele na
-lista abaixo.
+olha. As três somadas fecham o total do mês. **Clicar numa barra filtra a
+lista** por aquele mês: as outras barras esmaecem, o mês escolhido ganha um
+traço azul no eixo e a lista mostra só as contas dele. Clicar na mesma barra
+de novo, no "ver todas" ou **em qualquer lugar fora do gráfico** volta a
+mostrar tudo — só os botões da própria lista (pagar, editar) não desfazem a
+escolha, para não atrapalhar quem está dando baixa.
 
 As barras têm o topo levemente arredondado — cada uma é recortada por um
 `clipPath` de raio 5, de modo que o arredondamento seja da barra inteira e
