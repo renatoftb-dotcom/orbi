@@ -14259,37 +14259,57 @@ function contratoModelo(id) { return CONTRATO_MODELOS.find((m) => m.id === id) |
 //   objeto     — o subtítulo/objeto já escrito, ainda editável;
 //   insumos    — os códigos do catálogo, só para rastreabilidade.
 const TIPOS_PROFISSIONAL = [
-  { id: "carpinteiro", nome: "Carpinteiro", categorias: ["Carpinteiro"], modelo: "empreitadaMaoDeObra",
-    objeto: "Formas e madeiramento — mão de obra", insumos: ["PRE-005"] },
-  { id: "eletricista", nome: "Eletricista", categorias: ["Eletricista"], modelo: "empreitadaMaoDeObra",
-    objeto: "Instalações elétricas — mão de obra", insumos: ["PRE-003"] },
-  { id: "empreiteiro", nome: "Empreiteiro", categorias: ["Empreiteiro", "Pedreiro"], modelo: "empreitadaMaoDeObra",
-    objeto: "Empreitada de mão de obra — obra civil", insumos: ["PRE-001", "PRE-009", "PRE-010", "PRE-011", "PRE-012"] },
-  { id: "encanador", nome: "Encanador", categorias: ["Encanador"], modelo: "empreitadaMaoDeObra",
-    objeto: "Instalações hidrossanitárias — mão de obra", insumos: ["PRE-004"] },
-  { id: "gesseiro", nome: "Gesseiro", categorias: ["Gesseiro"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e execução de forro e revestimento em gesso", insumos: [] },
-  { id: "gestaoObra", nome: "Gestão de obra", categorias: ["Gestão de Obra"], modelo: "empreitadaMaoDeObra",
-    objeto: "Prestação de serviços de gestão e acompanhamento de obra", insumos: ["PRE-017"] },
-  { id: "impermeabilizador", nome: "Impermeabilizador", categorias: ["Impermeabilizador"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e aplicação de impermeabilização", insumos: ["PRE-006"] },
-  { id: "instaladorAquecedores", nome: "Instalador de aquecedores", categorias: ["Instalador de Aquecedores"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e instalação de aquecedores", insumos: ["PRE-014"] },
-  { id: "instaladorAr", nome: "Instalador de ar condicionado", categorias: ["Instalador de Ar Condicionado"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e instalação de equipamentos de ar condicionado", insumos: ["PRE-013"] },
-  { id: "equipPiscina", nome: "Instalador de equipamentos de piscina", categorias: ["Instalador de Equipamentos de Piscina"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e instalação de equipamentos de piscina", insumos: ["PRE-015"] },
-  { id: "marceneiro", nome: "Marceneiro", categorias: ["Marceneiro"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e instalação de marcenaria", insumos: ["PRE-007"] },
-  { id: "pintor", nome: "Pintor", categorias: ["Pintor"], modelo: "empreitadaMaoDeObra",
-    objeto: "Pintura — mão de obra", insumos: ["PRE-002"] },
-  { id: "serralheiro", nome: "Serralheiro", categorias: ["Serralheiro", "Esquadria de Alumínio"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e montagem de estruturas e esquadrias metálicas", insumos: ["PRE-008"] },
-  { id: "terraplanagem", nome: "Terraplanagem", categorias: ["Terraplanagem"], modelo: "empreitadaGlobal",
-    objeto: "Serviços de terraplanagem e movimentação de terra", insumos: ["PRE-016"] },
+  { id: "carpinteiro", nome: "Carpinteiro", categorias: ["Carpinteiro"], servico: "carpintaria e formas", modelo: "empreitadaMaoDeObra", insumos: ["PRE-005"] },
+  { id: "eletricista", nome: "Eletricista", categorias: ["Eletricista"], servico: "instalações elétricas", modelo: "empreitadaMaoDeObra", insumos: ["PRE-003"] },
+  { id: "empreiteiro", nome: "Empreiteiro", categorias: ["Empreiteiro", "Pedreiro"], servico: "obra civil", modelo: "empreitadaMaoDeObra", insumos: ["PRE-001", "PRE-009", "PRE-010", "PRE-011", "PRE-012"] },
+  { id: "encanador", nome: "Encanador", categorias: ["Encanador"], servico: "instalações hidrossanitárias", modelo: "empreitadaMaoDeObra", insumos: ["PRE-004"] },
+  { id: "gesseiro", nome: "Gesseiro", categorias: ["Gesseiro"], servico: "forro e revestimento em gesso", modelo: "empreitadaGlobal", insumos: [] },
+  { id: "gestaoObra", nome: "Gestão de obra", categorias: ["Gestão de Obra"], servico: "gestão e acompanhamento de obra", modelo: "empreitadaMaoDeObra", insumos: ["PRE-017"] },
+  { id: "impermeabilizador", nome: "Impermeabilizador", categorias: ["Impermeabilizador"], servico: "impermeabilização", modelo: "empreitadaGlobal", insumos: ["PRE-006"] },
+  { id: "instaladorAquecedores", nome: "Instalador de aquecedores", categorias: ["Instalador de Aquecedores"], servico: "instalação de aquecedores", modelo: "empreitadaGlobal", insumos: ["PRE-014"] },
+  { id: "instaladorAr", nome: "Instalador de ar condicionado", categorias: ["Instalador de Ar Condicionado"], servico: "instalação de ar condicionado", modelo: "empreitadaGlobal", insumos: ["PRE-013"] },
+  { id: "equipPiscina", nome: "Instalador de equipamentos de piscina", categorias: ["Instalador de Equipamentos de Piscina"], servico: "instalação de equipamentos de piscina", modelo: "empreitadaGlobal", insumos: ["PRE-015"] },
+  { id: "marceneiro", nome: "Marceneiro", categorias: ["Marceneiro"], servico: "marcenaria", modelo: "empreitadaGlobal", insumos: ["PRE-007"] },
+  { id: "pintor", nome: "Pintor", categorias: ["Pintor"], servico: "pintura", modelo: "empreitadaMaoDeObra", insumos: ["PRE-002"] },
+  { id: "serralheiro", nome: "Serralheiro", categorias: ["Serralheiro", "Esquadria de Alumínio"], servico: "serralheria", modelo: "empreitadaGlobal", insumos: ["PRE-008"] },
+  { id: "terraplanagem", nome: "Terraplanagem", categorias: ["Terraplanagem"], servico: "terraplanagem e movimentação de terra", modelo: "empreitadaGlobal", insumos: ["PRE-016"] },
   // "Outro" fecha a lista de propósito — é a saída para o que não tem tipo.
-  { id: "outro", nome: "Outro", categorias: [], modelo: "empreitadaMaoDeObra", objeto: "", insumos: [] },
+  { id: "outro", nome: "Outro", categorias: [], servico: "", modelo: "empreitadaMaoDeObra", insumos: [] },
 ];
+
+// ── O que o contrato inclui ─────────────────────────────────────
+// Segundo eixo do objeto: junto com o tipo de profissional, ele escreve o
+// texto padrão. "Serralheiro" + "Material e mão de obra" dá "fornecimento de
+// serviços de serralheria incluindo mão de obra e fornecimento de material".
+const ESCOPOS_FORNECIMENTO = [
+  { id: "ambos", nome: "Material e mão de obra", trecho: "incluindo mão de obra e fornecimento de material", modelo: "empreitadaGlobal" },
+  { id: "maoDeObra", nome: "Somente mão de obra", trecho: "incluindo somente a mão de obra, sendo o material fornecido pelo CONTRATANTE", modelo: "empreitadaMaoDeObra" },
+  { id: "material", nome: "Somente material", trecho: "incluindo somente o fornecimento de material, sem mão de obra", modelo: "empreitadaGlobal" },
+];
+function escopoFornecimento(id) { return ESCOPOS_FORNECIMENTO.find((e) => e.id === id) || null; }
+// Contratos gravados antes deste campo tinham a informação no modelo.
+function escopoContrato(c) {
+  const o = c || {};
+  if (escopoFornecimento(o.escopoFornecimento)) return o.escopoFornecimento;
+  return o.modelo === "empreitadaGlobal" ? "ambos" : "maoDeObra";
+}
+function escopoDoTipo(tipoId) {
+  const t = tipoProfissional(tipoId);
+  return t && t.modelo === "empreitadaGlobal" ? "ambos" : "maoDeObra";
+}
+// Texto padrão do objeto — o mesmo racional para todo prestador.
+function objetoPadrao(tipoId, escopoId) {
+  const t = tipoProfissional(tipoId), e = escopoFornecimento(escopoId);
+  if (!t || !t.servico || !e) return "";
+  return `Fornecimento de serviços de ${t.servico} ${e.trecho}`;
+}
+const CTR_MINUSCULAS = ["de", "da", "do", "das", "dos", "e", "em", "para", "a", "o"];
+// "instalações elétricas" → "Instalações Elétricas", para o nome do contrato.
+function tituloServicoCtr(servico) {
+  return String(servico || "").split(" ")
+    .map((w, i) => (i > 0 && CTR_MINUSCULAS.includes(w) ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+    .join(" ");
+}
 function tipoProfissional(id) { return TIPOS_PROFISSIONAL.find((t) => t.id === id) || null; }
 // Prestadores compatíveis com o tipo escolhido: escolhido "Encanador", só
 // aparecem os encanadores. Quem não é daquela categoria fica fora da lista,
@@ -14513,18 +14533,24 @@ function prazoContrato(c) {
 }
 
 // ── Dados de partida de um contrato novo ────────────────────────
-function contratoVazio(modeloId, clienteId, obraId, tipoId) {
-  const m = contratoModelo(modeloId);
+function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
   const t = tipoProfissional(tipoId);
+  // O escopo manda no modelo: quem fornece material entra no regime global.
+  // Sem escopo e sem tipo (chamada antiga, só com o modelo), é o modelo que
+  // diz qual escopo o contrato tem.
+  const escolhido = escopoFornecimento(escopoId) || (t ? escopoFornecimento(escopoDoTipo(tipoId)) : null);
+  const m = contratoModelo(escolhido ? escolhido.modelo : modeloId);
+  const esc = escolhido || escopoFornecimento(m.id === "empreitadaGlobal" ? "ambos" : "maoDeObra");
   return {
     id: (typeof uid === "function" ? uid() : String(Date.now())),
     clienteId, obraId,
     gerado: true,
     modelo: m.id,
     tipoProfissional: t ? t.id : "",
+    escopoFornecimento: esc.id,
     prestadorId: "",
     nomeContratado: "",
-    objeto: t ? t.objeto : "",
+    objeto: objetoPadrao(tipoId, esc.id),
     enderecoObra: "",
     exclusoes: "",
     // o formulário é o mesmo para qualquer prestador: itens e descritivo
@@ -14629,6 +14655,14 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const dela = global ? "da CONTRATADA" : "do CONTRATADO";
   const a_o = global ? "a" : "o";
   const pelaEla = global ? "pela CONTRATADA" : "pelo CONTRATADO";
+  // Tipo de profissional + o que o contrato inclui escrevem o objeto e o nome
+  // do contrato — o mesmo racional para qualquer prestador.
+  const tipo = tipoProfissional(c.tipoProfissional);
+  const esc = escopoFornecimento(escopoContrato(c));
+  const objetoTexto = String(c.objeto || "").trim() || objetoPadrao(c.tipoProfissional, escopoContrato(c)) || m.subtitulo;
+  const nomeDoContrato = tipo && tipo.servico
+    ? `Contrato de Prestação de Serviços de ${tituloServicoCtr(tipo.servico)}`
+    : "Contrato de Prestação de Serviços";
   const enderecoObra = c.enderecoObra || enderecoDaObra(obra, cliente);
   const foro = c.foro || (cliente && cliente.cidade) || "";
   const cidadeAss = c.cidadeAssinatura || (cliente && cliente.cidade ? `${cliente.cidade}/${cliente.estado || "SP"}` : "");
@@ -14645,7 +14679,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     `CONTRATANTE: ${qualificarParte(contratante)}, doravante denominada simplesmente CONTRATANTE;`,
     "e, de outro lado:",
     `${rotuloContratado}: ${qualificarParte(contratado)}, doravante denominada simplesmente ${rotuloContratado};`,
-    `têm entre si justo e contratado o presente Contrato de Prestação de Serviços de ${global ? "Fornecimento e Montagem" : "Empreitada de Mão de Obra"}, que se regerá pelas cláusulas e condições a seguir estabelecidas.`,
+    `têm entre si justo e contratado o presente ${nomeDoContrato}, que se regerá pelas cláusulas e condições a seguir estabelecidas.`,
   ];
 
   const cl = [];
@@ -14655,13 +14689,8 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   // ── Objeto ──
   const objeto = [];
   const ondeEstaOEscopo = temItens ? "no item {{it:itens}}" : temAnexo ? "no ANEXO I" : "";
-  if (global) {
-    objeto.push(`O presente contrato tem por objeto o fornecimento, a fabricação, o transporte e a montagem, pela CONTRATADA, ${temItens ? "dos serviços discriminados no item {{it:itens}}" : `dos serviços de ${c.objeto || "______________"}`}, a serem executados no imóvel situado na ${enderecoObra}, doravante denominado simplesmente OBRA.`);
-    objeto.push("Os serviços serão executados de forma autônoma e coordenada com as demais frentes da obra.");
-  } else {
-    objeto.push(`O presente contrato tem por objeto a execução, pelo CONTRATADO, dos serviços ${c.objeto ? `de ${c.objeto}` : "contratados"}${temAnexo ? ", descritos no ANEXO I, que integra este instrumento" : temItens ? ", discriminados no item {{it:itens}}" : ""}.`);
-    objeto.push(`Os serviços serão executados no imóvel situado na ${enderecoObra}, doravante denominado simplesmente OBRA.`);
-  }
+  objeto.push(`O presente contrato tem por objeto a prestação, ${pelaEla}, dos serviços a seguir descritos: ${objetoTexto}${/[.!?]$/.test(objetoTexto) ? "" : "."}`);
+  objeto.push(`Os serviços serão executados no imóvel situado na ${enderecoObra}, doravante denominado simplesmente OBRA${temAnexo ? ", conforme o descritivo do ANEXO I, que integra este instrumento" : ""}.`);
   let itensApos = null;
   if (temItens) {
     objeto.push("Compõem o objeto deste contrato os seguintes itens e respectivos valores:");
@@ -14681,13 +14710,18 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
 
   // ── Regime ──
   const ferramentasTodas = (c.ferramentasEscopo || "basicas") === "todas";
-  const regime = global ? [
-    "Os serviços serão executados sob o regime de empreitada global, compreendendo o fornecimento de todo o material, os consumíveis e os acessórios, bem como a fabricação, o transporte, a descarga e a montagem no local da OBRA.",
-    `A CONTRATADA é responsável pelo dimensionamento dos elementos objeto deste contrato, respondendo pela sua adequação às cargas e às condições de uso previstas.`,
+  const escId = esc ? esc.id : (global ? "ambos" : "maoDeObra");
+  const regime = escId === "material" ? [
+    `O objeto compreende exclusivamente o fornecimento do material especificado, incluídos o transporte e a descarga no local da OBRA, cabendo à CONTRATANTE a respectiva aplicação ou montagem.`,
+    "A CONTRATADA responde pela procedência, pela qualidade e pela adequação do material fornecido à finalidade contratada.",
+  ] : escId === "ambos" ? [
+    "Os serviços serão executados sob o regime de empreitada global, compreendendo o fornecimento de todo o material, dos consumíveis e dos acessórios, bem como a mão de obra, o transporte, a descarga e a execução no local da OBRA.",
+    "A CONTRATADA é responsável pelo dimensionamento e pela especificação dos elementos objeto deste contrato, respondendo pela sua adequação às condições de uso previstas.",
   ] : [
     "Os serviços serão executados sob o regime de empreitada de mão de obra, cabendo ao CONTRATADO o fornecimento da mão de obra necessária à integral execução do objeto.",
-    "Todo o material de construção necessário à execução dos serviços será fornecido pelo CONTRATANTE, às suas expensas.",
+    "Todo o material necessário à execução dos serviços será fornecido pelo CONTRATANTE, às suas expensas.",
   ];
+  if (escId !== "material") regime.push("Os serviços serão executados de forma autônoma e coordenada com as demais frentes da obra.");
   const detalhe = (t) => { const x = String(t || "").trim().replace(/\.$/, ""); return x || ""; };
   if (lig("ferramentas")) {
     const df = detalhe(c.ferramentasDetalhe);
@@ -14880,7 +14914,9 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     modelo: m, global, total,
     modalidade: modo,
     titulo: "CONTRATO DE PRESTAÇÃO DE SERVIÇOS",
-    subtitulo: c.objeto || m.subtitulo,
+    subtitulo: objetoTexto,
+    nomeDoContrato,
+    escopoFornecimento: escId,
     preambulo, clausulas, tabelaItens, tabelaParcelas,
     anexo,
     cidadeAssinatura: cidadeAss,
@@ -15011,7 +15047,7 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
 
   return (
     <div style={CTR_S.doc} data-vk-contrato="1" ref={alvo}>
-      <h1 style={CTR_S.h1}>{d.titulo}</h1>
+      <h1 style={CTR_S.h1}>{(d.nomeDoContrato || d.titulo).toUpperCase()}</h1>
       <div style={CTR_S.h2}>{d.subtitulo}</div>
       {d.preambulo.map((t, i) => <p key={i} style={CTR_S.p}>{t}</p>)}
       {d.clausulas.map((cl, i) => (
@@ -16444,6 +16480,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const total = valorContrato(g);
     const modo = modalidadeContrato(g);
     const pz = prazoContrato(g);
+    const escopo = escopoContrato(g);
+    // O objeto só é reescrito automaticamente enquanto estiver no texto padrão.
+    const objetoEditado = String(g.objeto || "").trim() !== objetoPadrao(g.tipoProfissional, escopo);
     const setG = (campo, valor) => setContratoGerando({ ...g, [campo]: valor });
     const setLista = (campo, idx, chave, valor) => setContratoGerando({ ...g, [campo]: (g[campo] || []).map((x, i) => i === idx ? { ...x, [chave]: valor } : x) });
     const addLinha = (campo, vazio) => setContratoGerando({ ...g, [campo]: [...(g[campo] || []), vazio] });
@@ -16484,15 +16523,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <select style={{ ...C.input, cursor: "pointer" }} value={g.tipoProfissional || ""} onChange={e => {
             const t = tipoProfissional(e.target.value);
             if (!t) { setG("tipoProfissional", ""); return; }
-            // O tipo sugere o regime — troca o modelo, mas preserva o que já foi digitado.
-            const base = contratoVazio(t.modelo, cliente.id, obraSelecionada.id, t.id);
-            const objetoAtual = (g.objeto || "").trim();
-            const sugestaoAnterior = (tipoProfissional(g.tipoProfissional)?.objeto || "").trim();
-            const objeto = (!objetoAtual || objetoAtual === sugestaoAnterior) ? t.objeto : g.objeto;
+            // Trocar o tipo reescreve o objeto padrão e o regime, mas preserva
+            // o que já foi digitado à mão.
+            const novoEscopo = escopoContrato(g) && tipoProfissional(g.tipoProfissional) ? escopoContrato(g) : escopoDoTipo(t.id);
+            const base = contratoVazio(null, cliente.id, obraSelecionada.id, t.id, novoEscopo);
             const compat = prestadoresDoTipo(prestadores, t.id).some(p => p.id === g.prestadorId);
-            setContratoGerando({ ...base, id: g.id, objeto, enderecoObra: g.enderecoObra, status: g.status,
+            setContratoGerando({ ...base, id: g.id, objeto: objetoEditado ? g.objeto : base.objeto,
+              enderecoObra: g.enderecoObra, status: g.status,
               itens: g.itens, escopo: g.escopo, valor: g.valor, exclusoes: g.exclusoes,
-              prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade, dataInicio: g.dataInicio,
+              prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade, dataInicio: g.dataInicio, dataAssinatura: g.dataAssinatura,
               prestadorId: compat ? g.prestadorId : "", nomeContratado: compat ? g.nomeContratado : "" });
           }}>
             <option value="">— escolher o tipo de profissional —</option>
@@ -16519,14 +16558,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             )}
           </div>
           <div>
-            <label style={C.label}>3. Modelo do contrato</label>
-            <select style={{ ...C.input, cursor: "pointer" }} value={g.modelo} onChange={e => {
-              const base = contratoVazio(e.target.value, cliente.id, obraSelecionada.id, g.tipoProfissional);
+            <label style={C.label}>3. O que o contrato inclui</label>
+            <select style={{ ...C.input, cursor: "pointer" }} value={escopo} onChange={e => {
+              const base = contratoVazio(null, cliente.id, obraSelecionada.id, g.tipoProfissional, e.target.value);
               setContratoGerando({ ...base, id: g.id, prestadorId: g.prestadorId, nomeContratado: g.nomeContratado,
-                objeto: g.objeto, enderecoObra: g.enderecoObra, status: g.status, itens: g.itens, escopo: g.escopo,
-                valor: g.valor, exclusoes: g.exclusoes, prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade, dataInicio: g.dataInicio });
+                objeto: objetoEditado ? g.objeto : base.objeto,
+                enderecoObra: g.enderecoObra, status: g.status, itens: g.itens, escopo: g.escopo,
+                valor: g.valor, exclusoes: g.exclusoes, prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade,
+                dataInicio: g.dataInicio, dataAssinatura: g.dataAssinatura });
             }}>
-              {CONTRATO_MODELOS.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              {ESCOPOS_FORNECIMENTO.map(e2 => <option key={e2.id} value={e2.id}>{e2.nome}</option>)}
             </select>
             <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>{modelo.resumo}</div>
           </div>
@@ -16587,8 +16628,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Objeto, local e prazo */}
         <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
-            <label style={C.label}>Objeto (subtítulo do contrato)</label>
-            <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={modelo.subtitulo} />
+            <label style={C.label}>Objeto do contrato</label>
+            <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={objetoPadrao(g.tipoProfissional, escopo) || modelo.subtitulo} />
+            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>
+              {objetoEditado
+                ? <>Texto editado à mão — não é mais reescrito quando você troca o tipo. <button type="button" onClick={() => setG("objeto", objetoPadrao(g.tipoProfissional, escopo))} style={{ background: "none", border: "none", padding: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>Voltar ao padrão</button></>
+                : "Escrito a partir do tipo de profissional e do que o contrato inclui. Pode ser editado."}
+            </div>
           </div>
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
             <label style={C.label}>Endereço da obra</label>

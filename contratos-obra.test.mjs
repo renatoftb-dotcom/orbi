@@ -19,6 +19,7 @@ const modulo = new Function(`
            porExtensoCtr, moedaExtensoCtr, qualificarParte, montarContrato, fmtMoedaCtr,
            TIPOS_PROFISSIONAL, tipoProfissional, prestadoresDoTipo, enderecoDaObra,
            MODALIDADES_PAGAMENTO, modalidadeContrato, entradaESaldo, prazoContrato,
+           ESCOPOS_FORNECIMENTO, escopoContrato, escopoDoTipo, objetoPadrao, tituloServicoCtr,
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
            textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr };
 `)();
@@ -131,7 +132,7 @@ teste("empreitada de mão de obra: material do contratante, parcelas quinzenais,
   assert.ok(t.includes("13 (treze) parcelas no valor de R$ 9.142,86"));
   assert.ok(t.includes("R$ 9.142,82"));
   assert.ok(t.includes("A última parcela ficará retida"));
-  assert.ok(t.includes("Todo o material de construção necessário à execução dos serviços será fornecido pelo CONTRATANTE"));
+  assert.ok(t.includes("Todo o material necessário à execução dos serviços será fornecido pelo CONTRATANTE"));
   assert.ok(t.includes("7 (sete) meses"));
   assert.ok(t.includes("6 (seis) meses"), "garantia padrão do modelo de mão de obra");
   assert.ok(t.includes("45 (quarenta e cinco) dias corridos"), "tolerância antes da multa");
@@ -227,18 +228,64 @@ teste("tipos de profissional cobrem os prestadores do catálogo e sugerem regime
   assert.strictEqual(modulo.tipoProfissional("serralheiro").modelo, "empreitadaGlobal");
   assert.strictEqual(modulo.tipoProfissional("marceneiro").modelo, "empreitadaGlobal");
   assert.strictEqual(modulo.tipoProfissional("inexistente"), null);
+  // todo tipo (menos "Outro") nomeia o seu serviço, que é o que escreve o objeto
+  for (const t of modulo.TIPOS_PROFISSIONAL) {
+    if (t.id !== "outro") assert.ok(t.servico, `${t.id} sem nome de serviço`);
+  }
 });
 
-teste("o tipo escolhido já preenche o objeto e o regime do contrato novo", () => {
-  const c = modulo.contratoVazio("empreitadaGlobal", "c1", "o1", "serralheiro");
-  assert.strictEqual(c.tipoProfissional, "serralheiro");
-  assert.strictEqual(c.objeto, "Fornecimento e montagem de estruturas e esquadrias metálicas");
-  const d = modulo.montarContrato({ ...c, itens: [{ descricao: "Portão", valor: 1000 }] }, { cliente, obra, prestador: serralheiro });
-  assert.strictEqual(d.total, 1000);
-  // sem tipo, nada é sugerido (compatível com os contratos já gravados)
-  const semTipo = modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1");
-  assert.strictEqual(semTipo.tipoProfissional, "");
-  assert.strictEqual(semTipo.objeto, "");
+teste("o objeto é o mesmo racional para todo prestador: tipo + o que inclui", () => {
+  // o exemplo do escritório
+  assert.strictEqual(modulo.objetoPadrao("serralheiro", "ambos"),
+    "Fornecimento de serviços de serralheria incluindo mão de obra e fornecimento de material");
+  assert.strictEqual(modulo.objetoPadrao("pintor", "maoDeObra"),
+    "Fornecimento de serviços de pintura incluindo somente a mão de obra, sendo o material fornecido pelo CONTRATANTE");
+  assert.strictEqual(modulo.objetoPadrao("marceneiro", "material"),
+    "Fornecimento de serviços de marcenaria incluindo somente o fornecimento de material, sem mão de obra");
+  assert.strictEqual(modulo.objetoPadrao("eletricista", "ambos"),
+    "Fornecimento de serviços de instalações elétricas incluindo mão de obra e fornecimento de material");
+  // "Outro" não tem serviço: o objeto fica em branco para ser escrito à mão
+  assert.strictEqual(modulo.objetoPadrao("outro", "ambos"), "");
+
+  // o contrato novo já nasce com esse texto e com o regime do escopo
+  const c = modulo.contratoVazio(null, "c1", "o1", "serralheiro", "ambos");
+  assert.strictEqual(c.escopoFornecimento, "ambos");
+  assert.strictEqual(c.modelo, "empreitadaGlobal");
+  assert.strictEqual(c.objeto, "Fornecimento de serviços de serralheria incluindo mão de obra e fornecimento de material");
+  // somente mão de obra derruba o contrato para o regime de mão de obra
+  assert.strictEqual(modulo.contratoVazio(null, "c1", "o1", "serralheiro", "maoDeObra").modelo, "empreitadaMaoDeObra");
+  // sem escopo, o tipo escolhe o mais comum do ofício
+  assert.strictEqual(modulo.escopoDoTipo("serralheiro"), "ambos");
+  assert.strictEqual(modulo.escopoDoTipo("empreiteiro"), "maoDeObra");
+  // contrato antigo, sem o campo, herda do modelo
+  assert.strictEqual(modulo.escopoContrato({ modelo: "empreitadaGlobal" }), "ambos");
+  assert.strictEqual(modulo.escopoContrato({ modelo: "empreitadaMaoDeObra" }), "maoDeObra");
+});
+
+teste("o preâmbulo e a cláusula do objeto saem genéricos, com o nome do serviço", () => {
+  const doc = (tipoId, escopoId, extra) => modulo.montarContrato(
+    { ...modulo.contratoVazio(null, "c1", "o1", tipoId, escopoId), ...(extra || {}) },
+    { cliente, obra, prestador: serralheiro });
+  const dS = doc("serralheiro", "ambos");
+  assert.strictEqual(dS.nomeDoContrato, "Contrato de Prestação de Serviços de Serralheria");
+  const tS = texto(dS);
+  assert.ok(tS.includes("o presente Contrato de Prestação de Serviços de Serralheria"));
+  assert.ok(tS.includes("dos serviços a seguir descritos: Fornecimento de serviços de serralheria incluindo mão de obra e fornecimento de material."));
+  assert.ok(!tS.includes("Fornecimento e Montagem"), "o nome antigo era específico demais");
+  assert.ok(!tS.includes("a fabricação, o transporte e a montagem"), "a cláusula 1.1 era específica de serralheria");
+  // outro ofício, mesmo racional
+  const tE = texto(doc("eletricista", "maoDeObra"));
+  assert.ok(tE.includes("Contrato de Prestação de Serviços de Instalações Elétricas"));
+  assert.ok(tE.includes("Fornecimento de serviços de instalações elétricas incluindo somente a mão de obra"));
+  // regime acompanha o escopo
+  assert.ok(texto(doc("marceneiro", "material")).includes("compreende exclusivamente o fornecimento do material especificado"));
+  assert.ok(texto(doc("marceneiro", "ambos")).includes("compreendendo o fornecimento de todo o material"));
+  assert.ok(texto(doc("pintor", "maoDeObra")).includes("Todo o material necessário à execução dos serviços será fornecido pelo CONTRATANTE"));
+  // "Outro" cai no nome genérico e usa o objeto digitado
+  const dO = doc("outro", "maoDeObra", { objeto: "Serviços de dedetização" });
+  assert.strictEqual(dO.nomeDoContrato, "Contrato de Prestação de Serviços");
+  assert.ok(texto(dO).includes("a seguir descritos: Serviços de dedetização."));
+  assert.strictEqual(modulo.tituloServicoCtr("forro e revestimento em gesso"), "Forro e Revestimento em Gesso");
 });
 
 teste("a lista de prestadores mostra só os do tipo escolhido", () => {

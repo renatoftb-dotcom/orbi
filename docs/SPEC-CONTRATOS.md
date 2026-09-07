@@ -33,13 +33,38 @@ Cada tipo carrega três coisas:
   nasce em `empreitadaMaoDeObra`; quem fornece material (serralheiro,
   marceneiro, impermeabilizador, instaladores, terraplanagem) nasce em
   `empreitadaGlobal`. O usuário pode trocar depois — o tipo sugere, não trava.
-- `objeto` — o subtítulo já escrito, ainda editável. Trocar o tipo só
-  sobrescreve o objeto se ele ainda estiver no texto sugerido pelo tipo
-  anterior.
+- `servico` — o nome do ofício ("serralheria", "instalações elétricas",
+  "obra civil"), que escreve o objeto e batiza o contrato.
 
 `CATEGORIAS_PRESTADOR` (cadastro de Prestadores, `outros.jsx`) foi alinhada a
 essa lista. Contratos gravados antes desta versão ficam com
 `tipoProfissional: ""` e continuam abrindo normalmente.
+
+## O objeto, genérico para qualquer prestador
+
+O objeto sai de dois campos, com o mesmo racional para todo ofício: o **tipo
+de profissional** e **o que o contrato inclui** (`ESCOPOS_FORNECIMENTO`):
+
+| escopo | texto | regime |
+| --- | --- | --- |
+| `ambos` | *Fornecimento de serviços de **serralheria** incluindo mão de obra e fornecimento de material* | empreitada global |
+| `maoDeObra` | *… incluindo somente a mão de obra, sendo o material fornecido pelo CONTRATANTE* | empreitada de mão de obra |
+| `material` | *… incluindo somente o fornecimento de material, sem mão de obra* | fornecimento |
+
+`objetoPadrao(tipo, escopo)` monta a frase; o campo continua editável e, uma
+vez editado à mão, deixa de ser reescrito quando o tipo muda (há um "Voltar
+ao padrão"). O escopo é quem decide o modelo por baixo — por isso o antigo
+select de "Modelo do contrato" virou **"O que o contrato inclui"**.
+
+O nome do contrato acompanha: *Contrato de Prestação de Serviços de
+Serralheria*, de *Instalações Elétricas*, de *Obra Civil* — e, no tipo
+"Outro", só *Contrato de Prestação de Serviços*. A cláusula 1.1 é a mesma
+para todos ("tem por objeto a prestação, pela CONTRATADA, dos serviços a
+seguir descritos: …"), e a cláusula do regime muda conforme o escopo. Nada
+disso é mais específico de serralheria, como era antes.
+
+Contratos gravados antes do campo herdam o escopo do modelo
+(`escopoContrato`).
 
 ## Formulário único
 

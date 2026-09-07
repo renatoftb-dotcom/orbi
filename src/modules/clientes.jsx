@@ -1372,6 +1372,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const total = valorContrato(g);
     const modo = modalidadeContrato(g);
     const pz = prazoContrato(g);
+    const escopo = escopoContrato(g);
+    // O objeto só é reescrito automaticamente enquanto estiver no texto padrão.
+    const objetoEditado = String(g.objeto || "").trim() !== objetoPadrao(g.tipoProfissional, escopo);
     const setG = (campo, valor) => setContratoGerando({ ...g, [campo]: valor });
     const setLista = (campo, idx, chave, valor) => setContratoGerando({ ...g, [campo]: (g[campo] || []).map((x, i) => i === idx ? { ...x, [chave]: valor } : x) });
     const addLinha = (campo, vazio) => setContratoGerando({ ...g, [campo]: [...(g[campo] || []), vazio] });
@@ -1412,15 +1415,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <select style={{ ...C.input, cursor: "pointer" }} value={g.tipoProfissional || ""} onChange={e => {
             const t = tipoProfissional(e.target.value);
             if (!t) { setG("tipoProfissional", ""); return; }
-            // O tipo sugere o regime — troca o modelo, mas preserva o que já foi digitado.
-            const base = contratoVazio(t.modelo, cliente.id, obraSelecionada.id, t.id);
-            const objetoAtual = (g.objeto || "").trim();
-            const sugestaoAnterior = (tipoProfissional(g.tipoProfissional)?.objeto || "").trim();
-            const objeto = (!objetoAtual || objetoAtual === sugestaoAnterior) ? t.objeto : g.objeto;
+            // Trocar o tipo reescreve o objeto padrão e o regime, mas preserva
+            // o que já foi digitado à mão.
+            const novoEscopo = escopoContrato(g) && tipoProfissional(g.tipoProfissional) ? escopoContrato(g) : escopoDoTipo(t.id);
+            const base = contratoVazio(null, cliente.id, obraSelecionada.id, t.id, novoEscopo);
             const compat = prestadoresDoTipo(prestadores, t.id).some(p => p.id === g.prestadorId);
-            setContratoGerando({ ...base, id: g.id, objeto, enderecoObra: g.enderecoObra, status: g.status,
+            setContratoGerando({ ...base, id: g.id, objeto: objetoEditado ? g.objeto : base.objeto,
+              enderecoObra: g.enderecoObra, status: g.status,
               itens: g.itens, escopo: g.escopo, valor: g.valor, exclusoes: g.exclusoes,
-              prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade, dataInicio: g.dataInicio,
+              prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade, dataInicio: g.dataInicio, dataAssinatura: g.dataAssinatura,
               prestadorId: compat ? g.prestadorId : "", nomeContratado: compat ? g.nomeContratado : "" });
           }}>
             <option value="">— escolher o tipo de profissional —</option>
@@ -1447,14 +1450,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             )}
           </div>
           <div>
-            <label style={C.label}>3. Modelo do contrato</label>
-            <select style={{ ...C.input, cursor: "pointer" }} value={g.modelo} onChange={e => {
-              const base = contratoVazio(e.target.value, cliente.id, obraSelecionada.id, g.tipoProfissional);
+            <label style={C.label}>3. O que o contrato inclui</label>
+            <select style={{ ...C.input, cursor: "pointer" }} value={escopo} onChange={e => {
+              const base = contratoVazio(null, cliente.id, obraSelecionada.id, g.tipoProfissional, e.target.value);
               setContratoGerando({ ...base, id: g.id, prestadorId: g.prestadorId, nomeContratado: g.nomeContratado,
-                objeto: g.objeto, enderecoObra: g.enderecoObra, status: g.status, itens: g.itens, escopo: g.escopo,
-                valor: g.valor, exclusoes: g.exclusoes, prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade, dataInicio: g.dataInicio });
+                objeto: objetoEditado ? g.objeto : base.objeto,
+                enderecoObra: g.enderecoObra, status: g.status, itens: g.itens, escopo: g.escopo,
+                valor: g.valor, exclusoes: g.exclusoes, prazoQtd: g.prazoQtd, prazoUnidade: g.prazoUnidade,
+                dataInicio: g.dataInicio, dataAssinatura: g.dataAssinatura });
             }}>
-              {CONTRATO_MODELOS.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
+              {ESCOPOS_FORNECIMENTO.map(e2 => <option key={e2.id} value={e2.id}>{e2.nome}</option>)}
             </select>
             <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>{modelo.resumo}</div>
           </div>
@@ -1515,8 +1520,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Objeto, local e prazo */}
         <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
-            <label style={C.label}>Objeto (subtítulo do contrato)</label>
-            <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={modelo.subtitulo} />
+            <label style={C.label}>Objeto do contrato</label>
+            <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={objetoPadrao(g.tipoProfissional, escopo) || modelo.subtitulo} />
+            <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>
+              {objetoEditado
+                ? <>Texto editado à mão — não é mais reescrito quando você troca o tipo. <button type="button" onClick={() => setG("objeto", objetoPadrao(g.tipoProfissional, escopo))} style={{ background: "none", border: "none", padding: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>Voltar ao padrão</button></>
+                : "Escrito a partir do tipo de profissional e do que o contrato inclui. Pode ser editado."}
+            </div>
           </div>
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
             <label style={C.label}>Endereço da obra</label>
