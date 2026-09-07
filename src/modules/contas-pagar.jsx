@@ -415,12 +415,15 @@ function fluxoMensal(contas, hoje) {
 // sempre tem um valor inicial e um final para interpolar.
 const CP_FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", "#0474f4", "A pagar"]];
 function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico }) {
+  // A revelação é por estado, como no gráfico da calibragem: a barra só ganha
+  // a animação quando `pronto` vira true, o que garante que o navegador veja
+  // o elemento antes de animar. A escala é aplicada no próprio desenho (path),
+  // com a origem em coordenadas do gráfico — animar um <g> com transform-box
+  // não funciona em todos os navegadores.
   const [pronto, setPronto] = useState(false);
   useEffect(() => {
-    // dois quadros: o primeiro pinta as barras zeradas, o segundo dispara a transição
-    let q2 = 0;
-    const q1 = requestAnimationFrame(() => { q2 = requestAnimationFrame(() => setPronto(true)); });
-    return () => { cancelAnimationFrame(q1); cancelAnimationFrame(q2); };
+    const t = setTimeout(() => setPronto(true), 30);
+    return () => clearTimeout(t);
   }, []);
   if (!fluxo || !fluxo.meses.length) return null;
 
@@ -429,49 +432,50 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
   const altura = (v) => (fluxo.maior > 0 && v > 0 ? Math.max(3, (v / fluxo.maior) * ALT) : 0);
   const curto = (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v > 0 ? String(Math.round(v)) : "");
   const mesAtual = String(hojeIso || "").slice(0, 7);
+  // Caminho da faixa: cantos de cima arredondados só na faixa do topo da
+  // barra — o resto é reto, para as faixas encostarem sem entalhe.
+  const caminho = (x, y, w, h, arredondaTopo) => {
+    const r = arredondaTopo ? Math.min(w * 0.14, h * 0.5, 6) : 0;
+    if (!r) return `M ${x},${y} L ${x + w},${y} L ${x + w},${y + h} L ${x},${y + h} Z`;
+    return `M ${x + r},${y} L ${x + w - r},${y} Q ${x + w},${y} ${x + w},${y + r} L ${x + w},${y + h} L ${x},${y + h} L ${x},${y + r} Q ${x},${y} ${x + r},${y} Z`;
+  };
 
   return (
     <div style={{ overflowX: "auto" }}>
-      <style>{`@media (prefers-reduced-motion: reduce) { .vk-cp-anim { transition: none !important; } }`}</style>
+      <style>{`
+        @keyframes vk-cp-crescer { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+        @keyframes vk-cp-subir { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @media (prefers-reduced-motion: reduce) {
+          .vk-cp-barra, .vk-cp-valor { animation: none !important; }
+        }
+      `}</style>
       <svg width={largura} height={ALT + 46} role="img" style={{ display: "block" }}>
-        <defs>
-          {fluxo.meses.map((m, i) => {
-            const x = i * (LARG + ESPACO) + ESPACO / 2;
-            const h = CP_FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
-            return (
-              <clipPath key={m.chave} id={`vk-cp-${idGrafico}-${i}`}>
-                <rect x={x} y={BASE - h} width={LARG} height={Math.max(h, 1)} rx={5} ry={5} />
-              </clipPath>
-            );
-          })}
-        </defs>
         {fluxo.meses.map((m, i) => {
           const x = i * (LARG + ESPACO) + ESPACO / 2;
-          const hTotal = CP_FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
-          const atraso = i * 60;
+          const faixas = CP_FAIXAS.map(([k, cor]) => ({ k, cor, h: altura(m[k]) })).filter((f) => f.h > 0);
+          const hTotal = faixas.reduce((a, f) => a + f.h, 0);
+          const atraso = i * 70;
+          const apagada = !!mesSelecionado && mesSelecionado !== m.chave;
           let y = BASE;
-            const apagada = !!mesSelecionado && mesSelecionado !== m.chave;
-            return (
+          return (
             <g key={m.chave} onClick={() => onEscolherMes && onEscolherMes(m.chave)}
               style={{ cursor: onEscolherMes ? "pointer" : "default", opacity: apagada ? 0.38 : 1, transition: "opacity 180ms ease-out" }}>
               <title>{`${rotuloMes(m.chave)} — ${fmtMoedaCtr(m.total)}`}</title>
-              <g className="vk-cp-anim" clipPath={`url(#vk-cp-${idGrafico}-${i})`}
-                style={{
-                  transform: pronto ? "scaleY(1)" : "scaleY(0)",
-                  transformOrigin: `${x + LARG / 2}px ${BASE}px`,
-                  transformBox: "view-box",
-                  transition: `transform 620ms cubic-bezier(0.2,0.75,0.3,1) ${atraso}ms`,
-                }}>
-                {CP_FAIXAS.map(([k, cor]) => {
-                  const h = altura(m[k]);
-                  if (!h) return null;
-                  y -= h;
-                  return <rect key={k} x={x} y={y} width={LARG} height={h} fill={cor} />;
-                })}
-              </g>
-              <text className="vk-cp-anim" x={x + LARG / 2} y={BASE - 5 - hTotal} textAnchor="middle"
+              {faixas.map((f, j) => {
+                y -= f.h;
+                return (
+                  <path key={f.k} d={caminho(x, y, LARG, f.h, j === faixas.length - 1)} fill={f.cor}
+                    className="vk-cp-barra"
+                    style={{
+                      transformOrigin: `${x + LARG / 2}px ${BASE}px`,
+                      animation: pronto ? `vk-cp-crescer 0.7s cubic-bezier(0.34, 1.4, 0.64, 1) ${atraso}ms both` : "none",
+                      opacity: pronto ? 1 : 0,
+                    }} />
+                );
+              })}
+              <text className="vk-cp-valor" x={x + LARG / 2} y={BASE - 5 - hTotal} textAnchor="middle"
                 fontSize="10.5" fontWeight="700" fill="#111827"
-                style={{ opacity: pronto ? 1 : 0, transition: `opacity 320ms ease-out ${atraso + 380}ms` }}>{curto(m.total)}</text>
+                style={{ animation: pronto ? `vk-cp-subir 0.4s ease-out ${atraso + 420}ms both` : "none", opacity: pronto ? undefined : 0 }}>{curto(m.total)}</text>
               <text x={x + LARG / 2} y={BASE + 16} textAnchor="middle" fontSize="11"
                 fill={m.chave === mesSelecionado ? "#0474f4" : m.chave === mesAtual ? "#111827" : "#4b5563"}
                 fontWeight={m.chave === mesSelecionado || m.chave === mesAtual ? 700 : 400}>{m.rotulo}</text>
