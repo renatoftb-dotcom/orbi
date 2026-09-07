@@ -121,6 +121,17 @@ contratos de fornecimento e monta o quadro de parcelas; sem itens com valor
 ele cai para entrada + saldo no final. Contratos gravados antes disso caem no
 comportamento antigo do seu modelo (`modalidadeContrato`).
 
+## Condição de pagamento
+
+`MEIOS_PAGAMENTO` — como o dinheiro sai: **PIX ou transferência** (padrão),
+PIX, transferência bancária, boleto, cheque, dinheiro ou cartão. Cada um tem
+a sua frase na cláusula de pagamento, com o gênero do contratado ajustado
+("em conta de titularidade **do CONTRATADO**" / "**da CONTRATADA**").
+
+No gerenciamento de obra o padrão é **boleto**, e a condição muda a frase do
+vencimento: "Serão gerados boletos com vencimento todo dia 05 de cada mês" ou
+"Os pagamentos serão feitos por PIX, com vencimento todo dia 05 de cada mês".
+
 ## Prazo
 
 Nada vem pré-preenchido: o usuário digita o número e escolhe **dias corridos

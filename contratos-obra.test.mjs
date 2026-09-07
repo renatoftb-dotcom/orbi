@@ -19,6 +19,7 @@ const modulo = new Function(`
            porExtensoCtr, moedaExtensoCtr, qualificarParte, montarContrato, fmtMoedaCtr,
            TIPOS_PROFISSIONAL, tipoProfissional, prestadoresDoTipo, enderecoDaObra,
            MODALIDADES_PAGAMENTO, modalidadeContrato, entradaESaldo, prazoContrato,
+           MEIOS_PAGAMENTO, meioPagamento,
            ESCOPOS_FORNECIMENTO, escopoContrato, escopoDoTipo, objetoPadrao, tituloServicoCtr,
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
            textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr,
@@ -661,6 +662,38 @@ teste("gerenciamento de obra segue o modelo do escritório", () => {
   const semLocadora = texto(modulo.montarContrato({ ...c, valor: 1000, locadoraEquipamentos: "" }, { cliente, obra, prestador: p }));
   assert.ok(!semLocadora.includes("geralmente na"));
   assert.ok(semLocadora.includes("Todas as locações serão solicitadas pela CONTRATADA, podendo a CONTRATANTE indicar local"));
+});
+
+teste("condição de pagamento entra na cláusula, com o gênero certo", () => {
+  const base = { ...modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1"), valor: 12000, parcelas: 12 };
+  const t = (meio, extra) => texto(modulo.montarContrato({ ...base, meioPagamento: meio, ...(extra || {}) }, { cliente, obra, prestador: serralheiro }));
+  // padrão dos modelos de empreitada
+  assert.strictEqual(base.meioPagamento, "pixOuTransferencia");
+  assert.ok(t("pixOuTransferencia").includes("por transferência bancária ou PIX, em conta de titularidade do CONTRATADO"));
+  assert.ok(t("pix").includes("por PIX, em chave de titularidade do CONTRATADO"));
+  assert.ok(t("transferencia").includes("por transferência bancária, em conta de titularidade do CONTRATADO"));
+  assert.ok(t("boleto").includes("por boleto bancário emitido pelo CONTRATADO"));
+  assert.ok(t("cheque").includes("por cheque nominal ao CONTRATADO"));
+  assert.ok(t("dinheiro").includes("em espécie, mediante recibo"));
+  assert.ok(t("cartao").includes("cartão de crédito ou de débito"));
+  // no modelo com fornecimento o gênero acompanha
+  const global = texto(modulo.montarContrato({ ...modulo.contratoVazio("empreitadaGlobal", "c1", "o1"), itens: [{ descricao: "x", valor: 100 }], meioPagamento: "pix" }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(global.includes("em chave de titularidade da CONTRATADA"));
+  // id desconhecido cai no padrão
+  assert.strictEqual(modulo.meioPagamento("inexistente").id, "pixOuTransferencia");
+  assert.deepStrictEqual(modulo.MEIOS_PAGAMENTO.map(m => m.id),
+    ["pixOuTransferencia", "pix", "transferencia", "boleto", "cheque", "dinheiro", "cartao"]);
+});
+
+teste("no gerenciamento, a condição de pagamento muda a frase do vencimento", () => {
+  const c = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra"), valor: 130000, parcelas: 12, diaVencimento: 5 };
+  assert.strictEqual(c.meioPagamento, "boleto", "gerenciamento nasce em boleto, como no modelo do escritório");
+  const t = (meio) => texto(modulo.montarContrato({ ...c, meioPagamento: meio }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(t("boleto").includes("Serão gerados boletos com vencimento todo dia 05 de cada mês"));
+  assert.ok(t("pix").includes("Os pagamentos serão feitos por PIX, com vencimento todo dia 05 de cada mês"));
+  assert.ok(t("transferencia").includes("por transferência bancária, com vencimento todo dia 05"));
+  // sem dia informado, a frase some
+  assert.ok(!texto(modulo.montarContrato({ ...c, diaVencimento: "" }, { cliente, obra, prestador: serralheiro })).includes("todo dia"));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

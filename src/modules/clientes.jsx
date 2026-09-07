@@ -1760,7 +1760,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ ...grade("1fr 1fr 1fr"), marginBottom: 12 }}>
               <div><label style={C.label}>Valor total (R$)</label><CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" /></div>
               <div><label style={C.label}>Nº de parcelas</label><CampoCtrNum tipo="inteiro" valor={g.parcelas} onChange={v => setG("parcelas", v)} style={C.input} placeholder="0" /></div>
-              <div><label style={C.label}>Boleto todo dia</label><CampoCtrNum tipo="inteiro" valor={g.diaVencimento} onChange={v => setG("diaVencimento", v)} style={C.input} placeholder="05" /></div>
+              <div><label style={C.label}>Vencimento todo dia</label><CampoCtrNum tipo="inteiro" valor={g.diaVencimento} onChange={v => setG("diaVencimento", v)} style={C.input} placeholder="05" /></div>
+            </div>
+            <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
+              <div>
+                <label style={C.label}>Condição de pagamento</label>
+                <select style={{ ...C.input, cursor: "pointer" }} value={g.meioPagamento || "boleto"} onChange={e => setG("meioPagamento", e.target.value)}>
+                  {MEIOS_PAGAMENTO.map(mp => <option key={mp.id} value={mp.id}>{mp.nome}</option>)}
+                </select>
+              </div>
+              <div />
             </div>
             <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
               <div>
@@ -1838,6 +1847,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
               </>
             )}
+            <div>
+              <label style={C.label}>Condição de pagamento</label>
+              <select style={{ ...C.input, cursor: "pointer" }} value={g.meioPagamento || "pixOuTransferencia"} onChange={e => setG("meioPagamento", e.target.value)}>
+                {MEIOS_PAGAMENTO.map(mp => <option key={mp.id} value={mp.id}>{mp.nome}</option>)}
+              </select>
+            </div>
             {modo === "medicao" && (
               <>
                 <div>

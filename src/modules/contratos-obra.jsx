@@ -275,6 +275,27 @@ const MODALIDADES_PAGAMENTO = [
     campos: ["entradaPct", "entradaEscopo"] },
 ];
 const PERIODICIDADES = [["semanais", "Semanal"], ["quinzenais", "Quinzenal"], ["mensais", "Mensal"]];
+
+// ── Condição de pagamento ───────────────────────────────────────
+// Como o dinheiro sai. `frase` monta a cláusula; `curto` é o que aparece no
+// contrato de gerenciamento, que já fala em vencimento mensal.
+const MEIOS_PAGAMENTO = [
+  { id: "pixOuTransferencia", nome: "PIX ou transferência", curto: "PIX ou transferência bancária",
+    frase: (dela) => `Os pagamentos serão efetuados por transferência bancária ou PIX, em conta de titularidade ${dela}, informada por escrito.` },
+  { id: "pix", nome: "PIX", curto: "PIX",
+    frase: (dela) => `Os pagamentos serão efetuados por PIX, em chave de titularidade ${dela}, informada por escrito.` },
+  { id: "transferencia", nome: "Transferência bancária", curto: "transferência bancária",
+    frase: (dela) => `Os pagamentos serão efetuados por transferência bancária, em conta de titularidade ${dela}, informada por escrito.` },
+  { id: "boleto", nome: "Boleto bancário", curto: "boleto bancário",
+    frase: (dela) => `Os pagamentos serão efetuados por boleto bancário emitido ${dela.replace("da ", "pela ").replace("do ", "pelo ")}, enviado com antecedência mínima de 3 (três) dias úteis do vencimento.` },
+  { id: "cheque", nome: "Cheque", curto: "cheque",
+    frase: (dela, aEla) => `Os pagamentos serão efetuados por cheque nominal ${aEla}.` },
+  { id: "dinheiro", nome: "Dinheiro", curto: "dinheiro",
+    frase: () => "Os pagamentos serão efetuados em espécie, mediante recibo." },
+  { id: "cartao", nome: "Cartão", curto: "cartão",
+    frase: () => "Os pagamentos serão efetuados por cartão de crédito ou de débito, correndo por conta da CONTRATANTE eventuais taxas da operadora." },
+];
+function meioPagamento(id) { return MEIOS_PAGAMENTO.find((m) => m.id === id) || MEIOS_PAGAMENTO[0]; }
 function modalidadePagamento(id) { return MODALIDADES_PAGAMENTO.find((m) => m.id === id) || null; }
 // Contratos gravados antes das modalidades caem no comportamento antigo de
 // cada modelo: mão de obra em parcelas, global com entrada item a item.
@@ -490,6 +511,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     entradaEscopo: m.id === "empreitadaGlobal" ? "item" : "contrato",
     medicaoPeriodicidade: "mensal",
     medicaoPrazoDias: "",
+    meioPagamento: m.id === "gerenciamentoObra" ? "boleto" : "pixOuTransferencia",
     // gerenciamento de obra
     referenciaObra: "",
     diaVencimento: m.padrao.diaVencimento || "",
@@ -574,6 +596,7 @@ function clausulasGerenciamento(c, ctx) {
   const p = parcelasContrato(total, parcelas || 1);
   const dia = Number(c.diaVencimento) || 0;
   const locadora = String(c.locadoraEquipamentos || "").trim();
+  const meio = meioPagamento(c.meioPagamento);
 
   add("objeto", "OBJETO DO CONTRATO", [
     "O presente contrato tem como objeto a prestação de serviços de gerenciamento de obra, o qual compreenderá a gestão da compra de materiais, intermediação na contratação de empreiteiros e prestadores de serviços.",
@@ -595,7 +618,7 @@ function clausulasGerenciamento(c, ctx) {
   ], { subtitulo: "DESCRIÇÃO DO SERVIÇO CONTRATADO:" });
 
   add("pagamento", "VALORES E FORMA DE PAGAMENTO", [
-    `O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${parcelas ? `, parcelado em ${numExtensoCtr(parcelas)} parcelas de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)})${p.iguais ? "" : `, sendo a última de ${fmtMoedaCtr(p.ultima)}`}` : ""}${dia ? `. Serão gerados boletos com vencimento todo dia ${String(dia).padStart(2, "0")} de cada mês` : ""}. Caso a obra seja concluída antes do prazo das parcelas, a quitação do saldo devedor será antecipada; caso o prazo seja extrapolado, o valor deste contrato não se altera, ou seja, não será cobrado nenhum valor adicional de gerenciamento de obra.`,
+    `O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${parcelas ? `, parcelado em ${numExtensoCtr(parcelas)} parcelas de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)})${p.iguais ? "" : `, sendo a última de ${fmtMoedaCtr(p.ultima)}`}` : ""}${dia ? `. ${meio.id === "boleto" ? `Serão gerados boletos com vencimento` : `Os pagamentos serão feitos por ${meio.curto}, com vencimento`} todo dia ${String(dia).padStart(2, "0")} de cada mês` : ""}. Caso a obra seja concluída antes do prazo das parcelas, a quitação do saldo devedor será antecipada; caso o prazo seja extrapolado, o valor deste contrato não se altera, ou seja, não será cobrado nenhum valor adicional de gerenciamento de obra.`,
   ]);
 
   add("naoContempladas", "DESPESAS NÃO CONTEMPLADAS NESTE CONTRATO", [
@@ -809,7 +832,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
       ? `De cada pagamento será retido o percentual de ${pctCtr(c.retencaoPct)}, a título de garantia de execução, liberado após a conclusão total dos serviços e o respectivo aceite final da CONTRATANTE.`
       : `A última parcela ficará retida pela CONTRATANTE, a título de garantia de execução, e será paga somente após a conclusão total dos serviços e o respectivo aceite final da CONTRATANTE.`);
   }
-  pag.push(`Os pagamentos serão efetuados por transferência bancária ou PIX, em conta de titularidade ${dela}, informada por escrito.`);
+  pag.push(meioPagamento(c.meioPagamento).frase(dela, aEla));
   pag.push("O atraso no pagamento de qualquer parcela sujeitará a CONTRATANTE à multa de 2% (dois por cento) sobre o valor em atraso, acrescida de juros de 1% (um por cento) ao mês, calculados pro rata die.");
   if (lig("irreajustavel")) {
     pag.push(global
