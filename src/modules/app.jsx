@@ -1525,8 +1525,8 @@ export default function ModuloClientesFornecedores() {
     justifyContent: colapsadaEf ? "center" : "space-between",
     padding: colapsadaEf ? "10px 8px" : (isMobile ? "12px 14px" : "8px 12px"), // touch target maior em mobile
     borderRadius:7, cursor:"pointer", fontSize:13,
-    fontWeight: ativo ? 600 : 400, color: ativo ? "#b5652f" : "#78716c",
-    background: ativo ? "#fdf6f0" : "transparent",
+    fontWeight: ativo ? 600 : 400, color: ativo ? "#0474f4" : "#4b5563",
+    background: ativo ? "#eef5ff" : "transparent",
     border:"none", fontFamily:"'Inter', system-ui, sans-serif",
     width:"100%", textAlign:"left",
   });
@@ -1607,7 +1607,7 @@ export default function ModuloClientesFornecedores() {
               display:"flex", alignItems:"center", justifyContent:"center",
               borderRadius:6, fontFamily:"inherit",
             }}
-            onMouseEnter={e => { if (!isMobile) { e.currentTarget.style.background="#fdf6f0"; e.currentTarget.style.color="#b5652f"; } }}
+            onMouseEnter={e => { if (!isMobile) { e.currentTarget.style.background="#eef5ff"; e.currentTarget.style.color="#0474f4"; } }}
             onMouseLeave={e => { if (!isMobile) { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; } }}>
             {isMobile ? (
               // X de fechar em mobile
@@ -1660,11 +1660,11 @@ export default function ModuloClientesFornecedores() {
                         ...itemStyle(ativoNeleMesmoOuSubitem),
                         justifyContent: colapsadaEf ? "center" : "flex-start",
                         gap: 6,
-                        background: aba === k ? "#fdf6f0" : "transparent",
+                        background: aba === k ? "#eef5ff" : "transparent",
                         fontWeight: ativoNeleMesmoOuSubitem ? 600 : 400,
-                        color: ativoNeleMesmoOuSubitem ? "#b5652f" : "#78716c",
+                        color: ativoNeleMesmoOuSubitem ? "#0474f4" : "#4b5563",
                       }}
-                      onMouseEnter={e => { if (aba !== k) e.currentTarget.style.background="#faf9f7"; }}
+                      onMouseEnter={e => { if (aba !== k) e.currentTarget.style.background="#eef5ff"; }}
                       onMouseLeave={e => { if (aba !== k) e.currentTarget.style.background="transparent"; }}
                       onClick={(ev) => {
                         if (colapsadaEf) {
@@ -1679,7 +1679,7 @@ export default function ModuloClientesFornecedores() {
                       }}
                     >
                       <span style={{ display:"flex", alignItems:"center", gap:10, flex:1, justifyContent: colapsadaEf ? "center" : "flex-start" }}>
-                        {icon && <IconeMaster nome={icon} tamanho={16} cor={ativoNeleMesmoOuSubitem ? "#b5652f" : "#78716c"} />}
+                        {icon && <IconeMaster nome={icon} tamanho={16} cor={ativoNeleMesmoOuSubitem ? "#0474f4" : "#4b5563"} />}
                         {!colapsadaEf && label}
                       </span>
                       {!colapsadaEf && (
@@ -1704,9 +1704,9 @@ export default function ModuloClientesFornecedores() {
                               style={{
                                 padding:"6px 10px", borderRadius:6,
                                 fontSize:12.5,
-                                color: ativoSub ? "#b5652f" : "#9ca3af",
+                                color: ativoSub ? "#0474f4" : "#4b5563",
                                 fontWeight: ativoSub ? 600 : 400,
-                                background: ativoSub ? "#fdf6f0" : "transparent",
+                                background: ativoSub ? "#eef5ff" : "transparent",
                                 cursor:"pointer", border:"none",
                                 fontFamily:"'Inter', system-ui, sans-serif",
                                 textAlign:"left", transition:"all 0.12s",
@@ -1723,7 +1723,7 @@ export default function ModuloClientesFornecedores() {
                               }}
                             >
                               <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#b5652f" : "#9ca3af"} />}
+                                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#0474f4" : "#4b5563"} />}
                                 {s.label}
                               </span>
                             </button>
@@ -1751,7 +1751,7 @@ export default function ModuloClientesFornecedores() {
                     });
                   }}>
                   <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#b5652f" : "#78716c"} />}
+                    {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#0474f4" : "#4b5563"} />}
                     {!colapsadaEf && label}
                   </span>
                   {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius: 12 }}>{count}</span>}
@@ -1774,7 +1774,7 @@ export default function ModuloClientesFornecedores() {
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#b5652f" : "#78716c"} />
+                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#0474f4" : "#4b5563"} />
                   {!colapsadaEf && "Escritório"}
                 </span>
               </button>
@@ -1788,7 +1788,7 @@ export default function ModuloClientesFornecedores() {
               onMouseLeave={e => { if(aba!=="orcamento") e.currentTarget.style.background="transparent"; }}
               onClick={() => { tentarTrocar(() => { setAba("orcamento"); setOrcamentoTelaCheia(null); }); }}>
               <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                <IconeMaster nome="orcamento" tamanho={16} cor={aba==="orcamento" ? "#b5652f" : "#78716c"} />
+                <IconeMaster nome="orcamento" tamanho={16} cor={aba==="orcamento" ? "#0474f4" : "#4b5563"} />
                 {!colapsadaEf && "Orçamento"}
               </span>
             </button>
@@ -1801,7 +1801,7 @@ export default function ModuloClientesFornecedores() {
                 onMouseLeave={e => { if(aba!=="escritorio") e.currentTarget.style.background="transparent"; }}
                 onClick={() => { tentarTrocar(() => { setAba("escritorio"); setOrcamentoTelaCheia(null); setEscritorioKey(n=>n+1); }); }}>
                 <span style={{ display:"flex", alignItems:"center", gap:10 }}>
-                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#b5652f" : "#78716c"} />
+                  <IconeMaster nome="escritorio" tamanho={16} cor={aba==="escritorio" ? "#0474f4" : "#4b5563"} />
                   {!colapsadaEf && (
                     <>
                       Escritório
@@ -2050,14 +2050,14 @@ export default function ModuloClientesFornecedores() {
                 style={{
                   display:"flex", alignItems:"center", gap:10,
                   padding:"7px 10px", borderRadius:6, fontSize:12.5,
-                  border:"none", background: ativoSub ? "#fdf6f0" : "transparent",
-                  color: ativoSub ? "#b5652f" : "#374151",
+                  border:"none", background: ativoSub ? "#eef5ff" : "transparent",
+                  color: ativoSub ? "#0474f4" : "#111827",
                   fontWeight: ativoSub ? 600 : 400,
                   fontFamily:"inherit", cursor:"pointer", textAlign:"left",
                 }}
                 onMouseEnter={e => { if (!ativoSub) e.currentTarget.style.background="#faf9f7"; }}
                 onMouseLeave={e => { if (!ativoSub) e.currentTarget.style.background="transparent"; }}>
-                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#b5652f" : "#9ca3af"} />}
+                {s.icon && <IconeMaster nome={s.icon} tamanho={14} cor={ativoSub ? "#0474f4" : "#4b5563"} />}
                 {s.label}
               </button>
             );
