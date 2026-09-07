@@ -23,10 +23,11 @@ Serralheiro · Terraplanagem · Outro.
 Cada tipo carrega três coisas:
 
 - `categorias` — como o prestador aparece no cadastro (`fornecedor.categoria`).
-  O select de contratado é filtrado por elas; se ninguém estiver cadastrado
-  naquela categoria, a lista cai para todos os prestadores ativos em vez de
-  ficar vazia (`prestadoresDoTipo`). Serralheiro puxa também *Esquadria de
-  Alumínio*; Empreiteiro puxa também *Pedreiro*.
+  O select de contratado mostra **só** os prestadores dessas categorias
+  (`prestadoresDoTipo`): escolhido Encanador, quem não é encanador não
+  aparece, e se não houver nenhum cadastrado a lista sai vazia e o caminho é
+  ＋ Novo. Serralheiro puxa também *Esquadria de Alumínio*; Empreiteiro puxa
+  também *Pedreiro*; o tipo *Outro*, sem categoria, mostra todos.
 - `modelo` — o regime que costuma valer para o ofício. Quem só põe mão de
   obra (empreiteiro, eletricista, pintor, carpinteiro, encanador, gestão)
   nasce em `empreitadaMaoDeObra`; quem fornece material (serralheiro,

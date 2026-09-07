@@ -241,7 +241,7 @@ teste("o tipo escolhido já preenche o objeto e o regime do contrato novo", () =
   assert.strictEqual(semTipo.objeto, "");
 });
 
-teste("a lista de prestadores é filtrada pela categoria do tipo, com queda para todos", () => {
+teste("a lista de prestadores mostra só os do tipo escolhido", () => {
   const lista = [
     { id: "p1", nome: "MB Viezzer", categoria: "Serralheiro" },
     { id: "p2", nome: "Elétrica Sol", categoria: "Eletricista" },
@@ -250,9 +250,11 @@ teste("a lista de prestadores é filtrada pela categoria do tipo, com queda para
   ];
   // serralheiro puxa também esquadria de alumínio, e ignora inativos
   assert.deepStrictEqual(modulo.prestadoresDoTipo(lista, "serralheiro").map((p) => p.id), ["p1", "p3"]);
+  assert.ok(!modulo.prestadoresDoTipo(lista, "serralheiro").some((p) => p.categoria === "Eletricista"));
   assert.deepStrictEqual(modulo.prestadoresDoTipo(lista, "eletricista").map((p) => p.id), ["p2"]);
-  // ninguém cadastrado naquela categoria: mostra todos em vez de um select vazio
-  assert.strictEqual(modulo.prestadoresDoTipo(lista, "terraplanagem").length, 3);
+  // ninguém cadastrado naquela categoria: a lista sai vazia, não mistura ofícios
+  assert.deepStrictEqual(modulo.prestadoresDoTipo(lista, "terraplanagem"), []);
+  assert.deepStrictEqual(modulo.prestadoresDoTipo(lista, "encanador"), []);
   // "Outro" e ausência de tipo mostram todos
   assert.strictEqual(modulo.prestadoresDoTipo(lista, "outro").length, 3);
   assert.strictEqual(modulo.prestadoresDoTipo(lista, "").length, 3);

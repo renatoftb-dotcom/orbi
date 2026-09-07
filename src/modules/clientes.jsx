@@ -1432,7 +1432,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <label style={C.label}>2. Prestador (contratado)</label>
             <div style={{ display: "flex", gap: 8 }}>
               <select style={{ ...C.input, cursor: "pointer", flex: 1 }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
-                <option value="">{tipoP ? "— escolher um prestador cadastrado —" : "— escolha o tipo primeiro —"}</option>
+                <option value="">{!tipoP ? "— escolha o tipo primeiro —" : prestadoresDisponiveis.length ? "— escolher um prestador cadastrado —" : `— nenhum ${tipoP.nome.toLowerCase()} cadastrado —`}</option>
                 {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
               </select>
               <button type="button" disabled={!tipoP} style={{ ...C.btnSec, whiteSpace: "nowrap", opacity: tipoP ? 1 : 0.5 }}
@@ -1440,8 +1440,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 ＋ Novo
               </button>
             </div>
-            {tipoP && tipoP.categorias.length > 0 && prestadoresDisponiveis.length > 0 && !prestadoresDisponiveis.some(p => tipoP.categorias.map(x => x.toLowerCase()).includes(String(p.categoria || "").toLowerCase())) && (
-              <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]} — a lista mostra todos.</div>
+            {tipoP && tipoP.categorias.length > 0 && prestadoresDisponiveis.length === 0 && (
+              <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]}. Use ＋ Novo para cadastrar.</div>
             )}
           </div>
           <div>
