@@ -7619,6 +7619,25 @@ function emitBarras(out, base, barras, memoriaDaBitola) {
     emitir(out, { ...base, item: LABEL_BARRA[k], unidade: "Barras 12mts", qtd: barras[k], memoria: memoriaDaBitola ? memoriaDaBitola(k) : undefined });
   }
 }
+// Memória de um prestador: valor total (digitado ou sugerido pela taxa do
+// escritório) dividido pela base de medida, para virar preço unitário.
+function memoriaPrestador(chave, rotuloBase, base, valorTotal, cp, data) {
+  const digitado = numOrZero(cp.prestadores && cp.prestadores[chave]);
+  const taxa = typeof taxaPrestador === "function" ? taxaPrestador(chave, data) : null;
+  const passos = [
+    MEM.nota(digitado !== 0
+      ? "Valor digitado por você no bloco Prestadores — é ele que vale, a sugestão do escritório fica de lado."
+      : `Valor sugerido pelo escritório (tabela de prestadores em Insumos${taxa && taxa.confianca ? `, confiança ${taxa.confianca}` : ""}), porque nada foi digitado no bloco Prestadores.`),
+  ];
+  if (digitado === 0 && taxa && taxa.valor > 0) {
+    passos.push(MEM.dado("Taxa de referência", taxa.valor, "R$ por unidade da base", "tabela de prestadores"));
+  }
+  passos.push(MEM.dado(rotuloBase, base, "", "medidas do projeto"));
+  passos.push(MEM.conta("Valor total do serviço", digitado !== 0 ? "valor digitado" : "taxa × base", digitado !== 0 ? [] : [["taxa", taxa ? taxa.valor : 0], ["base", base]], valorTotal, "R$"));
+  passos.push(MEM.conta("Preço unitário que entra na tabela", "valor ÷ base", [["valor", valorTotal], ["base", base]], base > 0 ? valorTotal / base : 0, "R$ por unidade"));
+  passos.push(MEM.dado("Quantidade no orçamento", base, "", "a própria base de medida"));
+  return passos;
+}
 // Memória de uma bitola lançada como um número só de metros.
 function memoriaBitolaSimples(k, metros, barras, ondeVem) {
   const bruto = numOrZero(metros) / BARRA_FERRO_MTS * PERDA;
@@ -7823,12 +7842,20 @@ function valorPadraoPrestador(chave, cp, data) {
 function emitirPrestadorVerba(out, base, item, chave, cp, data) {
   const digitado = numOrZero(cp.prestadores && cp.prestadores[chave]);
   if (digitado !== 0) {
-    emitir(out, { ...base, item, unidade: "Verba", qtd: 1, preco: digitado });
+    emitir(out, { ...base, item, unidade: "Verba", qtd: 1, preco: digitado, memoria: [
+      MEM.nota(`${item}: serviço sem taxa de referência no escritório — entra como verba fechada, com o valor que você digitou no bloco Prestadores.`),
+      MEM.conta("Valor da verba", "valor digitado", [], digitado, "R$"),
+      MEM.dado("Quantidade no orçamento", 1, "verba", "serviço fechado"),
+    ] });
     return;
   }
   const taxa = taxaPrestador(chave, data);
   if (taxa && taxa.valor > 0 && cp.areaConstruida > 0) {
-    emitir(out, { ...base, item, unidade: "m2", qtd: cp.areaConstruida, preco: taxa.valor, confianca: taxa.confianca });
+    emitir(out, { ...base, item, unidade: "m2", qtd: cp.areaConstruida, preco: taxa.valor, confianca: taxa.confianca, memoria: [
+      MEM.nota(`${item}: nada digitado no bloco Prestadores, então entra a taxa de referência do escritório, medida por m² de área construída.`),
+      MEM.dado("Taxa de referência", taxa.valor, "R$/m²", "tabela de prestadores"),
+      MEM.dado("Quantidade no orçamento", cp.areaConstruida, "m²", "bloco Geral"),
+    ] });
   }
 }
 
@@ -7855,22 +7882,22 @@ function prestadores(cp, out, data) {
   };
 
   const valorPedreiros = valorPrestador("equipePedreiros", cp, data);
-  emitir(out, { ...base, item: "Pedreiros Casa", unidade: "m2", qtd: cp.areaConstruida, preco: valorPedreiros / cp.areaConstruida });
+  emitir(out, { ...base, item: "Pedreiros Casa", unidade: "m2", qtd: cp.areaConstruida, preco: valorPedreiros / cp.areaConstruida, memoria: memoriaPrestador("equipePedreiros", "Área construída da casa (m²)", cp.areaConstruida, valorPedreiros, cp, data) });
 
   const valorEletricista = valorPrestador("eletricista", cp, data);
-  emitir(out, { ...base, item: "Eletricista", unidade: "m2", qtd: cp.areaConstruida, preco: valorEletricista / cp.areaConstruida });
+  emitir(out, { ...base, item: "Eletricista", unidade: "m2", qtd: cp.areaConstruida, preco: valorEletricista / cp.areaConstruida, memoria: memoriaPrestador("eletricista", "Área construída da casa (m²)", cp.areaConstruida, valorEletricista, cp, data) });
 
   const valorEncanador = valorPrestador("encanador", cp, data);
-  emitir(out, { ...base, item: "Encanador", unidade: "m2", qtd: cp.areaConstruida, preco: valorEncanador / cp.areaConstruida });
+  emitir(out, { ...base, item: "Encanador", unidade: "m2", qtd: cp.areaConstruida, preco: valorEncanador / cp.areaConstruida, memoria: memoriaPrestador("encanador", "Área construída da casa (m²)", cp.areaConstruida, valorEncanador, cp, data) });
 
   const valorPintor = valorPrestador("pintor", cp, data);
-  emitir(out, { ...base, item: "Pintor", unidade: "m2", qtd: cp.areaConstruida, preco: valorPintor / cp.areaConstruida });
+  emitir(out, { ...base, item: "Pintor", unidade: "m2", qtd: cp.areaConstruida, preco: valorPintor / cp.areaConstruida, memoria: memoriaPrestador("pintor", "Área construída da casa (m²)", cp.areaConstruida, valorPintor, cp, data) });
 
   // Carpinteiro: base é a área TOTAL de cobertura (CALC_AREA_COBERTURA_TOTAL
   // no .bas), não a área construída — ainda 0 aqui porque cobertura() é um
   // módulo futuro (passo 4 da spec, §10). Sem taxa padrão no .frm.
   const valorCarpinteiro = numOrZero(cp.prestadores && cp.prestadores.carpinteiro) || valorPadraoPrestador("carpinteiro", cp, data);
-  if (cp.areaCoberturaTotal > 0) emitir(out, { ...base, item: "Carpinteiro", unidade: "m2", qtd: cp.areaCoberturaTotal, preco: valorCarpinteiro / cp.areaCoberturaTotal });
+  if (cp.areaCoberturaTotal > 0) emitir(out, { ...base, item: "Carpinteiro", unidade: "m2", qtd: cp.areaCoberturaTotal, preco: valorCarpinteiro / cp.areaCoberturaTotal, memoria: memoriaPrestador("carpinteiro", "Área inclinada total dos telhados (m²)", cp.areaCoberturaTotal, valorCarpinteiro, cp, data) });
 
   // Sem taxa padrão no .frm — só o valor digitado.
   emitirPrestadorVerba(out, base, "Impermeabilizador", "impermeabilizador", cp, data);
@@ -7894,33 +7921,52 @@ function prestadores(cp, out, data) {
     const override = numOrZero(cp.prestadores && cp.prestadores.gestaoObra);
     return override !== 0 ? override : taxaGestaoObra(cp.areaConstruida) * cp.areaConstruida;
   })();
-  emitir(out, { ...base, item: "Gestão Obra", unidade: "m2", qtd: cp.areaConstruida, preco: valorGestao / cp.areaConstruida });
+  emitir(out, { ...base, item: "Gestão Obra", unidade: "m2", qtd: cp.areaConstruida, preco: valorGestao / cp.areaConstruida, memoria: [
+    MEM.nota("Gestão de obra: o escritório cobra por m² numa escada regressiva — quanto maior a obra, menor o valor por metro. Valor digitado no bloco Prestadores vence a escada."),
+    MEM.dado("Área construída da casa", cp.areaConstruida, "m²", "bloco Geral"),
+    MEM.conta("Taxa da escada para esta área", "tabela de gestão de obra", [], taxaGestaoObra(cp.areaConstruida), "R$/m²"),
+    MEM.conta("Valor total da gestão", "taxa × área", [["taxa", taxaGestaoObra(cp.areaConstruida)], ["área", cp.areaConstruida]], valorGestao, "R$"),
+    MEM.conta("Preço unitário na tabela", "valor ÷ área", [["valor", valorGestao], ["área", cp.areaConstruida]], cp.areaConstruida > 0 ? valorGestao / cp.areaConstruida : 0, "R$/m²"),
+    MEM.dado("Quantidade no orçamento", cp.areaConstruida, "m²", "a própria área construída"),
+  ] });
 
   // [VBA] emitia sempre; aqui só quando a obra tem piscina (campo "Piscina" do bloco Geral).
   if (cp.temPiscina !== false) {
     const valorInstaladorEquipPiscina = valorPrestador("instaladorEquipPiscina", cp, data);
-    emitir(out, { ...base, item: "Instalador Equip. Piscina", unidade: "Unidades", qtd: 1, preco: valorInstaladorEquipPiscina });
+    emitir(out, { ...base, item: "Instalador Equip. Piscina", unidade: "Unidades", qtd: 1, preco: valorInstaladorEquipPiscina, memoria: [
+    MEM.nota("Instalação dos equipamentos da piscina (bomba, filtro, aquecimento): valor fechado, uma vez por obra."),
+    MEM.conta("Valor do serviço", numOrZero(cp.prestadores && cp.prestadores.instaladorEquipPiscina) !== 0 ? "valor digitado" : "sugestão do escritório", [], valorInstaladorEquipPiscina, "R$"),
+    MEM.dado("Quantidade no orçamento", 1, "verba", "serviço fechado"),
+  ] });
   }
 
   const valorPedreirosPiscina = valorPrestador("pedreirosPiscina", cp, data);
-  emitir(out, { ...base, item: "Pedreiros Piscina", unidade: "m2", qtd: cp.areaConstruidaPiscina, preco: valorPedreirosPiscina / cp.areaConstruidaPiscina });
+  emitir(out, { ...base, item: "Pedreiros Piscina", unidade: "m2", qtd: cp.areaConstruidaPiscina, preco: valorPedreirosPiscina / cp.areaConstruidaPiscina, memoria: memoriaPrestador("pedreirosPiscina", "Área construída da piscina (m²)", cp.areaConstruidaPiscina, valorPedreirosPiscina, cp, data) });
 
   const valorMuroArrimo = valorPrestador("muroArrimo", cp, data);
   const baseMuroArrimo = cp.alturaArrimo * cp.comprimentoArrimo;
-  emitir(out, { ...base, item: "Pedreiros Muro Arrimo", unidade: "m2", qtd: baseMuroArrimo, preco: valorMuroArrimo / baseMuroArrimo });
+  emitir(out, { ...base, item: "Pedreiros Muro Arrimo", unidade: "m2", qtd: baseMuroArrimo, preco: valorMuroArrimo / baseMuroArrimo, memoria: memoriaPrestador("muroArrimo", "Área do muro de arrimo (altura × comprimento, m²)", baseMuroArrimo, valorMuroArrimo, cp, data) });
 
   const valorMuroDivisa = valorPrestador("muroDivisa", cp, data);
   const baseMuroDivisa = cp.comprimentoMuroDivisa * cp.alturaMuroDivisa;
-  emitir(out, { ...base, item: "Pedreiros Muro Divisa", unidade: "m2", qtd: baseMuroDivisa, preco: valorMuroDivisa / baseMuroDivisa });
+  emitir(out, { ...base, item: "Pedreiros Muro Divisa", unidade: "m2", qtd: baseMuroDivisa, preco: valorMuroDivisa / baseMuroDivisa, memoria: memoriaPrestador("muroDivisa", "Área do muro de divisa (comprimento × altura, m²)", baseMuroDivisa, valorMuroDivisa, cp, data) });
 
   const valorPavimentacaoExterna = valorPrestador("pavimentacaoExterna", cp, data);
-  emitir(out, { ...base, item: "Pedreiros Pavim. Externa", unidade: "m2", qtd: cp.pavimentacaoExterna, preco: valorPavimentacaoExterna / cp.pavimentacaoExterna });
+  emitir(out, { ...base, item: "Pedreiros Pavim. Externa", unidade: "m2", qtd: cp.pavimentacaoExterna, preco: valorPavimentacaoExterna / cp.pavimentacaoExterna, memoria: memoriaPrestador("pavimentacaoExterna", "Área de pavimentação externa (m²)", cp.pavimentacaoExterna, valorPavimentacaoExterna, cp, data) });
 
   const valorTerraplanagem = valorPrestador("terraplanagem", cp, data);
-  emitir(out, { ...base, item: "Terraplanagem", unidade: "Unidades", qtd: 1, preco: valorTerraplanagem });
+  emitir(out, { ...base, item: "Terraplanagem", unidade: "Unidades", qtd: 1, preco: valorTerraplanagem, memoria: [
+    MEM.nota("Terraplanagem: valor fechado para a obra, não medido por m²."),
+    MEM.conta("Valor do serviço", numOrZero(cp.prestadores && cp.prestadores.terraplanagem) !== 0 ? "valor digitado" : "sugestão do escritório", [], valorTerraplanagem, "R$"),
+    MEM.dado("Quantidade no orçamento", 1, "verba", "serviço fechado"),
+  ] });
 
   const valorInstaladorAquecedores = valorPrestador("instaladorAquecedores", cp, data);
-  emitir(out, { ...base, item: "Instalador Aquecedores", unidade: "Unidades", qtd: 1, preco: valorInstaladorAquecedores });
+  emitir(out, { ...base, item: "Instalador Aquecedores", unidade: "Unidades", qtd: 1, preco: valorInstaladorAquecedores, memoria: [
+    MEM.nota("Instalação dos aquecedores: valor fechado, uma vez por obra."),
+    MEM.conta("Valor do serviço", numOrZero(cp.prestadores && cp.prestadores.instaladorAquecedores) !== 0 ? "valor digitado" : "sugestão do escritório", [], valorInstaladorAquecedores, "R$"),
+    MEM.dado("Quantidade no orçamento", 1, "verba", "serviço fechado"),
+  ] });
 
   // Sem taxa padrão no .frm — só o valor digitado.
   emitirPrestadorVerba(out, base, "Serralheiro", "serralheiro", cp, data);
@@ -10792,6 +10838,10 @@ function itensProjeto(cp, out, data) {
       ordem: etapa.ordem, item: nome, tipo: etapa.tipo, etapa: etapa.nome, subEtapa: "Projeto de engenharia",
       unidade, qtd: it.qtd, preco, confianca,
       insumoCodigo: insumo ? insumo.codigo : null,
+      memoria: [
+        MEM.nota(`Item lançado à mão no bloco Itens do projeto de engenharia — a quantidade vem da leitura do projeto, o VICKE não calcula. ${insumo ? `Casou com ${insumo.codigo} no catálogo de Insumos${preco != null ? "" : " (sem preço cadastrado)"}.` : "Não achou correspondente no catálogo de Insumos, então entra sem preço."}`),
+        MEM.dado("Quantidade lançada", it.qtd, unidade, "bloco Itens do projeto de engenharia"),
+      ],
     });
   }
 }
@@ -10854,18 +10904,20 @@ function instalacoesPorAmbiente(cp, out, data) {
   if (!tipos.length || !Object.keys(kits).length) return;
 
   const acumulado = {};
-  const add = (disc, nome, qtd, unidade) => {
+  const add = (disc, nome, qtd, unidade, origem) => {
     const k = disc + "|" + nome;
-    const a = acumulado[k] || (acumulado[k] = { disc, nome, qtd: 0, unidade: unidade || "Unidades" });
+    const a = acumulado[k] || (acumulado[k] = { disc, nome, qtd: 0, unidade: unidade || "Unidades", origens: [] });
     a.qtd += qtd;
+    if (origem) a.origens.push({ origem, qtd });
   };
   const padraoDaObra = PADROES_OBRA.includes(cp.padrao) ? cp.padrao : "Médio";
-  const aplicarKit = (kit, vezes, disc) => {
+  const aplicarKit = (kit, vezes, disc, origem) => {
     if (!kit || !(vezes > 0)) return;
     for (const it of kit.itens || []) {
       if (!it || !it.nome || !(Number(it.qtd) > 0)) continue;
       // "{padrão}" no nome do item = genérico por padrão da obra (louças e metais)
-      add(disc || kit.disciplina, nomeItemKit(it.nome, padraoDaObra), Number(it.qtd) * vezes, it.unidade);
+      add(disc || kit.disciplina, nomeItemKit(it.nome, padraoDaObra), Number(it.qtd) * vezes, it.unidade,
+        `${origem || kit.nome || "conjunto"} — ${numMem(it.qtd)} por conjunto × ${numMem(vezes)}`);
     }
   };
   const temAquecimento = !!inst.aquecimento && inst.aquecimento !== "nenhum" && inst.aquecimento !== "eletrico";
@@ -10886,7 +10938,7 @@ function instalacoesPorAmbiente(cp, out, data) {
           continue;
         }
         if (base.requer === "aquecimento" && !temAquecimento) continue;
-        aplicarKit(escolherKit(kits, kitId, inst.padrao), n, disc);
+        aplicarKit(escolherKit(kits, kitId, inst.padrao), n, disc, `${t.nome} (${numMem(n)}×) · ${(escolherKit(kits, kitId, inst.padrao) || {}).nome || kitId}`);
       }
     }
     if (!doProjeto.ELETRICA) for (const p of pontosDef) totalPontos[p.id] += numOrZero(t.pontos && t.pontos[p.id]) * n;
@@ -10894,24 +10946,29 @@ function instalacoesPorAmbiente(cp, out, data) {
   if (!algumAmbiente) return;
 
   if (!doProjeto.ELETRICA) {
-    for (const p of pontosDef) aplicarKit(escolherKit(kits, p.kit, inst.padrao), totalPontos[p.id], "ELETRICA");
-    aplicarKit(escolherKit(kits, "ELETRICA_POR_OBRA", inst.padrao), 1, "ELETRICA");
+    for (const p of pontosDef) aplicarKit(escolherKit(kits, p.kit, inst.padrao), totalPontos[p.id], "ELETRICA", `${p.nome} (${numMem(totalPontos[p.id])} pontos somados nos cômodos)`);
+    aplicarKit(escolherKit(kits, "ELETRICA_POR_OBRA", inst.padrao), 1, "ELETRICA", "Uma vez por obra (quadro, entrada e aterramento)");
     const luz = numOrZero(totalPontos.iluminacao) + numOrZero(totalPontos.iluminacaoParalela);
-    if (luz > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 10A - 10kA", Math.ceil(luz / 8), "Unidades");
-    if (totalPontos.tomadaGeral > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 20A - 10kA", Math.ceil(totalPontos.tomadaGeral / 6), "Unidades");
+    if (luz > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 10A - 10kA", Math.ceil(luz / 8), "Unidades", `Um circuito de iluminação a cada 8 pontos de luz (${numMem(luz)} pontos)`);
+    if (totalPontos.tomadaGeral > 0) add("ELETRICA", "Elétrica - Disjuntor Unipolar 20A - 10kA", Math.ceil(totalPontos.tomadaGeral / 6), "Unidades", `Um circuito de tomadas a cada 6 tomadas de uso geral (${numMem(totalPontos.tomadaGeral)} tomadas)`);
   }
-  if (!doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO");
+  if (!doProjeto.ESGOTO) aplicarKit(escolherKit(kits, "ESGOTO_POR_OBRA", inst.padrao), 1, "ESGOTO", "Uma vez por obra (caixas, ramal de saída e ventilação)");
   if (!doProjeto.AQUECIMENTO) {
     const sis = sistemas.find((x) => x.id === inst.aquecimento);
-    if (sis && sis.kit) aplicarKit(escolherKit(kits, sis.kit, inst.padrao), 1, "AQUECIMENTO");
-    if (inst.pressurizador) aplicarKit(escolherKit(kits, "PRESSURIZADOR", inst.padrao), 1, "AQUECIMENTO");
+    if (sis && sis.kit) aplicarKit(escolherKit(kits, sis.kit, inst.padrao), 1, "AQUECIMENTO", `Sistema de aquecimento escolhido: ${sis.nome || inst.aquecimento}`);
+    if (inst.pressurizador) aplicarKit(escolherKit(kits, "PRESSURIZADOR", inst.padrao), 1, "AQUECIMENTO", "Pressurizador marcado no bloco Instalações");
   }
 
   for (const a of Object.values(acumulado)) {
     const etapa = ETAPAS_PROJETO.find((e) => e.id === a.disc) || ETAPAS_PROJETO.find((e) => e.id === "OUTROS");
     const metros = /^m(ts|etros)?$/i.test(String(a.unidade || ""));
     const qtd = metros ? Math.ceil(a.qtd * 10 - 1e-9) / 10 : Math.ceil(a.qtd - 1e-9);
-    emitir(out, { ordem: etapa.ordem, item: a.nome, tipo: etapa.tipo, etapa: etapa.nome, subEtapa: "Estimativa por ambientes", unidade: a.unidade, qtd });
+    emitir(out, { ordem: etapa.ordem, item: a.nome, tipo: etapa.tipo, etapa: etapa.nome, subEtapa: "Estimativa por ambientes", unidade: a.unidade, qtd, memoria: [
+      MEM.nota(`Estimativa por conjuntos: sem projeto de engenharia lançado, o VICKE monta a lista a partir dos cômodos marcados no bloco Geral e dos pontos elétricos de cada um. Os conjuntos são editáveis em Insumos → Composições. Padrão da obra: ${padraoDaObra}.`),
+      ...a.origens.map((o) => MEM.dado(o.origem, o.qtd, a.unidade, "conjunto por cômodo")),
+      MEM.conta("Soma de todos os conjuntos", a.origens.map((_, i) => `parcela ${i + 1}`).join(" + "), a.origens.map((o, i) => [`parcela ${i + 1}`, o.qtd]), a.qtd, a.unidade),
+      MEM.teto(a.qtd, qtd, a.unidade, metros ? "Arredonda para cima em décimos de metro" : "Arredonda para cima (peça inteira)"),
+    ] });
   }
   cp._pontosEletricos = totalPontos;
 }

@@ -562,6 +562,11 @@ canteiro usam `MEM_CANTEIRO(texto)`. Para as barras de ferro há
 `memoriaBitola(k, partes, barras)`, e `emitBarras` aceita a função que a
 monta por bitola.
 
+Textos que se repetem entre módulos (alvenaria, traço do concreto, fôrma de
+coluna, arame e prego, assentamento) ficam em `MEMB.*`, parametrizados pelo
+lugar da obra; `memoriaPrestador` monta a memória de um prestador (valor
+digitado ou taxa do escritório → preço unitário).
+
 Regra que os testes cobrem: **o último passo com número tem de ser
 exatamente a quantidade emitida**. Se a conta mudar e a memória não, o teste
 quebra.
@@ -573,5 +578,8 @@ campo antes de salvar) — dobrariam o tamanho do registro da obra e ficariam
 desatualizados. Orçamento antigo continua abrindo: a memória é recalculada a
 partir do `projeto` gravado.
 
-Etapas já escritas: **Instalações pré obra e projetos** e **Fundação**. As
-demais aparecem sem engrenagem até serem instrumentadas.
+Cobertura: **todas as 21 etapas do motor**, item a item — do gabarito de
+marcação aos prestadores. O teste monta um projeto que aciona as 21 etapas
+de uma vez e exige, para cada uma das ~275 linhas: memória presente, último
+passo numérico igual à quantidade, e nenhuma conta com `undefined`, `NaN` ou
+marcador `{padrão}` cru.

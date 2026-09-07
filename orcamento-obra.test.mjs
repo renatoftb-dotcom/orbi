@@ -701,6 +701,64 @@ teste("memória de cálculo: instalações pré obra e fundação, com o último
   assert.ok(!("memoria" in JSON.parse(JSON.stringify({ ...poste, memoria: undefined }))));
 });
 
+teste("memória de cálculo: toda linha do orçamento tem os passos, e o último bate com a quantidade", () => {
+  // Projeto que aciona todas as 21 etapas do motor de uma vez.
+  const completo = {
+    tipologia: "Sobrado", padrao: "Alto", tamanhoComodos: "Médio", temPiscina: true,
+    arquitetura: { areaConstruida: 260, areaTerreo: 130, gabarito: 60, m2ParedesTotal: 420, m2ParedesInternas: 260, m2ParedesExternas: 160 },
+    terreo: { perimetroParedes: 48, perimetroLoje: 50, m2Parede20: 180, m2Parede15: 20, area: 130, vaoPortasJanelas: 12, peDireito: 2.8, m2Laje: 130 },
+    pav1: { perimetroParedes: 44, perimetroLoje: 46, m2Parede20: 160, area: 130, m2Laje: 130 },
+    ambientes: { cozinha: 1, lavanderia: 1, wc: 2, wcSuite: 1, lavabo: 1, dormitorio: 3, suite: 1, salaTV: 1, areaLazer: 1, garagem: 1 },
+    esquadrias: [{ familia: "JANELA_CORRER", linha: "GOLD", folhas: 2, qtd: 4, largura: 1.5, altura: 1.2 }],
+    cobertura: [{ tipo: "Telha Barro Portuguesa", comprimento: 12, largura: 10, aguas: 4, inclinacao: 0.3 },
+                { tipo: "Telha Fibrocimento 6mm", comprimento: 6, largura: 4, aguas: 2, inclinacao: 0.15 }],
+    pisos: { pisoInterno: { m2: 130 }, revestimentoInterno: { m2: 60 }, soleirasM: 10, deckM2: 20 },
+    externa: { pavimentacao: 80, perimetroPavimentacao: 40, muroDivisa: { comprimento: 40, altura: 2.5 } },
+    arrimo: { comprimento: 20, altura: 2, numeroVigas: 2, qtdEstacas: 8, profEstacas: 3, areaFormaColunaMaior25cm: 10,
+      resistenciaConcreto: "Concreto - FCK25", colunas: { "15": 4, "20": 4, "30": 2 },
+      ferro: { estacas: { CA50_10MM: 200 }, colunas: { CA50_8MM: 120 }, vigas: { CA50_10MM: 90 } },
+      concreto: { estacas: 2, colunas: 3, vigas: 3 } },
+    engenharia: {
+      fundacao: { qtdEstacas: 20, profEstacas: 4, resistenciaConcreto: "Concreto - FCK25", ferro: { baldrames: { CA50_8MM: 600 }, estacas: { CA50_8MM: 240 } }, concreto: { estacas: 3, baldrames: 5 } },
+      colunasTerreo: { qtd: 20, ferro: { CA50_10MM: 400 }, concreto: 6 },
+      colunasPav1: { qtd: 18, ferro: { CA50_10MM: 360 }, concreto: 5 },
+    },
+    piscina: { areaConstruida: 32, comprimento: 8, largura: 4, profundidade: 1.5, paredesM2Total: 60, perimetroParedes: 24, gabaritoObra: 30, m2Parede20: 60, ferro: { CA50_8MM: 200 }, concreto: 10 },
+    prestadores: { pedreirosObra: 90000, terraplanagem: 8000, impermeabilizador: 5000, marceneiroPortas: 12000, serralheiro: 9000 },
+    instalacoes: { aquecimento: "boiler", pressurizador: true, doProjeto: {} },
+    itensProjeto: [{ etapa: "HIDRAULICA", nome: "PVC -  Alimentação - Marrom - Tubo 25mm", qtd: 60, unidade: "Barras 6mts" }],
+  };
+  const r = gerarOrcamentoObra(completo, { materiais: [] });
+  assert.ok(r.itens.length > 250, `orçamento pequeno demais para o teste: ${r.itens.length} itens`);
+  const etapas = [...new Set(r.itens.map((i) => i.etapa))];
+  assert.ok(etapas.length >= 20, `poucas etapas acionadas: ${etapas.length}`);
+
+  // 1) toda linha tem memória
+  const sem = [...new Set(r.itens.filter((i) => !i.memoria || !i.memoria.length).map((i) => `${i.etapa}/${i.item}`))];
+  assert.deepStrictEqual(sem, [], `itens sem memória: ${sem.slice(0, 5).join(" · ")}`);
+
+  // 2) o último passo com número é exatamente a quantidade da tabela
+  for (const i of r.itens) {
+    const passos = i.memoria.filter((x) => x.tipo !== "nota");
+    if (!passos.length) continue; // item de canteiro: só a explicação
+    assert.strictEqual(passos[passos.length - 1].valor, modulo.numMem(i.qtd),
+      `${i.etapa}/${i.item}: memória termina em ${passos[passos.length - 1].valor}, tabela diz ${modulo.numMem(i.qtd)}`);
+  }
+
+  // 3) nada de marcador cru ou passo malformado na memória
+  for (const i of r.itens) {
+    for (const passo of i.memoria) {
+      if (passo.tipo === "nota") { assert.ok(passo.texto && passo.texto.length > 10, `${i.item}: nota vazia`); continue; }
+      assert.ok(passo.rotulo, `${i.item}: passo sem rótulo`);
+      assert.ok(passo.valor !== undefined && passo.valor !== "", `${i.item}/${passo.rotulo}: passo sem valor`);
+      if (passo.tipo === "conta") {
+        assert.ok(passo.formula && passo.conta, `${i.item}/${passo.rotulo}: conta sem fórmula`);
+        assert.ok(!/undefined|NaN|\{padr/.test(passo.conta + passo.formula), `${i.item}/${passo.rotulo}: conta suja — ${passo.conta}`);
+      }
+    }
+  }
+});
+
 teste("ilha (cozinha e área de lazer): 1 m menor que a parede maior, laterais de granito, só onde é permitida", () => {
   // Cozinha Médio 4 × 3: bancada 10% de 4 = 0,4 m; ilha 4 − 1 = 3 m
   const semIlha = modulo.calcularComodo(modulo.comodoConfig({ tamanhoComodos: "Médio" }, "cozinha"));
