@@ -16179,15 +16179,18 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     const corAv = cliente.tipo==="PJ"?"#7c3aed":"#2563eb";
     const col = COLUNAS.find(x=>x.key===colunaDoCliente(cliente))||COLUNAS[0];
 
-    const VKD = { fundo:"#fafafb", grafite:"#1a1a1a", cobre:"#1e3a5f", cobreClaro:"#fafafa", inkSoft:"#8a8a8a" };
+    const VKD = { fundo:"#fafafb", grafite:"#111827", cobre:AZUL_VK, cobreClaro:"#eef5ff", inkSoft:"#4b5563" };
     const SYS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
     return (
       <div className="vk-client-detail" data-vk-ui="1" style={{ padding: isMobile ? "16px" : "28px 32px", background:VKD.fundo, minHeight:"100%", fontFamily:SYS_FONT }}>
         <style>{`
+          .vk-client-detail input:hover, .vk-client-detail select:hover, .vk-client-detail textarea:hover {
+            border-color:${AZUL_VK} !important;
+          }
           .vk-client-detail input:focus, .vk-client-detail select:focus, .vk-client-detail textarea:focus,
           .vk-client-detail button:focus-visible {
-            border-color:#2a78d6 !important;
-            box-shadow:0 0 0 3px rgba(42,120,214,0.18);
+            border-color:${AZUL_VK} !important;
+            box-shadow:0 0 0 3px rgba(4,116,244,0.18);
             outline:none;
           }
         `}</style>
@@ -16218,7 +16221,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                   borderRadius: 16,
                   padding: "20px",
                   background: abaCliente === aba.id ? VKD.cobreClaro : "#fff",
-                  boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(30,58,95,0.16)" : "none",
+                  boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(4,116,244,0.16)" : "none",
                   cursor: "pointer",
                   fontFamily: SYS_FONT,
                   display: "flex",
@@ -16228,7 +16231,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                 }}
                 onMouseEnter={e => {
                   if (abaCliente !== aba.id) {
-                    e.currentTarget.style.borderColor = "rgba(38,36,33,0.35)";
+                    e.currentTarget.style.borderColor = AZUL_VK;
                     e.currentTarget.style.boxShadow = "0 1px 3px rgba(38,36,33,0.08)";
                   }
                 }}
@@ -16427,7 +16430,7 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
                 key={orc.id}
                 onClick={() => onAbrirOrcamento(cliente, orc, "editar")}
                 style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, cursor: "pointer", transition: "border-color 0.15s, box-shadow 0.15s", backgroundColor: "#fff" }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = "#b5652f"; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(181,101,47,0.12)"; }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = AZUL_VK; e.currentTarget.style.boxShadow = "0 0 0 3px rgba(4,116,244,0.12)"; }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color:"#111827" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
