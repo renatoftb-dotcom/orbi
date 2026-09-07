@@ -1120,7 +1120,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Também moram dentro da obra (obra.contasPagar). As de contrato são
   // geradas ao salvar o contrato; as avulsas, à mão.
   const hojeIso = new Date().toISOString().slice(0, 10);
-  const contasDaObra = (obraSelecionada && (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada).contasPagar) || [];
+  // `obraSelecionada` é uma CÓPIA guardada no estado quando a obra foi aberta:
+  // ela envelhece assim que um contrato, uma conta ou um item do P&L é salvo.
+  // Para ler qualquer coisa da obra (contas, cronograma, estimativa) use
+  // `obraAtual`, o registro fresco da coleção; a cópia do estado é só reserva.
+  const obraAtual = obraSelecionada ? (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada) : null;
+  const contasDaObra = (obraAtual && obraAtual.contasPagar) || [];
   const gravarContas = (novasContas, obraId) => {
     const alvo = obraId || (obraSelecionada && obraSelecionada.id);
     if (!alvo) return;
@@ -1170,12 +1175,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const valorNum = parseFloat(String(formItemPL.valor).replace(",", "."));
     if (!valorNum || valorNum <= 0) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     const itemFinal = { ...formItemPL, valor: valorNum };
-    const itensAtuais = obraSelecionada.estimativaPL || [];
+    const itensAtuais = obraAtual.estimativaPL || [];
     const ehNovo = !itensAtuais.find(i => i.id === itemFinal.id);
     const novosItens = ehNovo ? [...itensAtuais, itemFinal] : itensAtuais.map(i => i.id === itemFinal.id ? itemFinal : i);
     // parte do registro fresco da obra: obraSelecionada pode ter uma cópia
     // antiga de `contratos` e apagaria o que foi salvo desde então
-    const obraAtualizada = { ...(obras.find(o => o.id === obraSelecionada.id) || obraSelecionada), estimativaPL: novosItens };
+    const obraAtualizada = { ...obraAtual, estimativaPL: novosItens };
     gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
     setObraSelecionada(obraAtualizada);
     setFormItemPL(null);
@@ -1184,8 +1189,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   async function removerItemPL(itemId) {
     const ok = await dialogo.confirmar({ titulo: "Remover item da estimativa?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
     if (!ok) return;
-    const novosItens = (obraSelecionada.estimativaPL || []).filter(i => i.id !== itemId);
-    const obraAtualizada = { ...(obras.find(o => o.id === obraSelecionada.id) || obraSelecionada), estimativaPL: novosItens };
+    const novosItens = (obraAtual.estimativaPL || []).filter(i => i.id !== itemId);
+    const obraAtualizada = { ...obraAtual, estimativaPL: novosItens };
     gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
     setObraSelecionada(obraAtualizada);
   }
@@ -1346,7 +1351,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   }
 
   if (view === "planejamento" && obraSelecionada) {
-    const itensPL = obraSelecionada.estimativaPL || [];
+    const itensPL = obraAtual.estimativaPL || [];
     const totalPL = itensPL.reduce((s, i) => s + (Number(i.valor) || 0), 0);
     const fmtBRL = v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -2379,13 +2384,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <button onClick={() => setView("cronogramaObra")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Cronograma</div>
-            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>{obraSelecionada.cronograma?.prazoMeses ? `${obraSelecionada.cronograma.prazoMeses} meses` : "Prazo, etapas e equipe"}</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>{obraAtual.cronograma?.prazoMeses ? `${obraAtual.cronograma.prazoMeses} meses` : "Prazo, etapas e equipe"}</div>
           </button>
           <button onClick={() => setView("contasPagar")}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Contas a pagar</div>
             <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
-              {(() => { const t = totaisContas((obraSelecionada.contasPagar || []), hojeIso);
+              {(() => { const t = totaisContas((obraAtual.contasPagar || []), hojeIso);
                 return t.aberto > 0 ? `${fmtMoedaCtr(t.aberto)} em aberto` : "Parcelas dos contratos"; })()}
             </div>
           </button>

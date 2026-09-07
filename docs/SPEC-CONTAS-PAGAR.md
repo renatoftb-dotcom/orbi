@@ -149,3 +149,23 @@ obra, contas a pagar inclusive:
 
 As únicas cores que restam são o vermelho de "Remover" e o cobre dos links de
 ação, que são o padrão do app inteiro.
+
+## Ler sempre o registro fresco da obra
+
+`obraSelecionada` é uma **cópia** guardada no estado quando a obra foi aberta.
+Ela envelhece na hora em que um contrato, uma conta ou um item do P&L é salvo:
+o que muda é `data.obras`, não a cópia. Ler dela deixava o quadro **Contas a
+pagar** do menu da obra parado no valor antigo — um contrato novo gerava as
+parcelas, gravava certo, e o quadro continuava mostrando o total anterior até
+sair da obra e entrar de novo.
+
+Por isso o painel calcula uma vez
+
+```js
+const obraAtual = obraSelecionada ? (obras.find(o => o.id === obraSelecionada.id) || obraSelecionada) : null;
+```
+
+e **toda leitura** de dado da obra (contas, cronograma, `estimativaPL`) sai de
+`obraAtual`; a cópia do estado serve só de reserva enquanto a obra não estiver
+na coleção. Toda escrita continua partindo de `obraAtual` também — foi o que
+já impedia que salvar a estimativa apagasse contratos salvos depois.
