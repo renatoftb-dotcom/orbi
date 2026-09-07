@@ -1931,16 +1931,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     // grade das colunas — a mesma no cabeçalho e nas linhas
     const COLS = isMobile ? "1fr" : "1fr 104px 96px 116px 150px";
 
-    // ── Gráfico do fluxo mensal ──
+    // ── Gráfico do fluxo mensal (desenho em contas-pagar.jsx) ──
     const fluxo = fluxoMensal(contasDaObra, hojeIso);
-    const LARG_BARRA = 40, ESPACO = 16, ALT_BARRA = 130;
-    const largGrafico = Math.max(1, fluxo.meses.length) * (LARG_BARRA + ESPACO);
-    const altura = (v) => (fluxo.maior > 0 ? Math.max(v > 0 ? 3 : 0, (v / fluxo.maior) * ALT_BARRA) : 0);
-    const curto = (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v > 0 ? String(Math.round(v)) : "");
     const irParaMes = (chave) => { setVisaoContas("mes"); setGruposFechados({ ...gruposFechados, [`mes:${chave}`]: false }); };
-    // De baixo para cima: o que já saiu, o que venceu e, no topo, o que falta
-    // pagar — é o que interessa olhar.
-    const FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", AZUL_VK, "A pagar"]];
 
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -1963,61 +1956,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Fluxo por mês</div>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {[...FAIXAS].reverse().map(([k, cor, rot]) => (
+                {[...CP_FAIXAS].reverse().map(([k, cor, rot]) => (
                   <span key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#4b5563" }}>
                     <span style={{ width: 9, height: 9, borderRadius: 2, background: cor, display: "inline-block" }} />{rot}
                   </span>
                 ))}
               </div>
             </div>
-            <div style={{ overflowX: "auto" }}>
-              {/* As barras surgem crescendo da linha de base, em cascata. */}
-              <style>{`
-                @keyframes vkCpSurgir { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-                @keyframes vkCpAparecer { from { opacity: 0; } to { opacity: 1; } }
-                .vk-cp-barra { transform-box: fill-box; transform-origin: bottom; animation: vkCpSurgir 0.5s cubic-bezier(0.2,0.7,0.3,1) backwards; }
-                .vk-cp-valor { animation: vkCpAparecer 0.4s ease-out backwards; }
-                @media (prefers-reduced-motion: reduce) {
-                  .vk-cp-barra, .vk-cp-valor { animation: none; }
-                }
-              `}</style>
-              <svg width={Math.max(largGrafico, 220)} height={ALT_BARRA + 46} role="img" style={{ display: "block" }}>
-                <defs>
-                  {fluxo.meses.map((m, i) => {
-                    const x = i * (LARG_BARRA + ESPACO) + ESPACO / 2;
-                    const h = FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
-                    return (
-                      <clipPath key={m.chave} id={`vk-cp-barra-${obraSelecionada.id}-${i}`}>
-                        <rect x={x} y={ALT_BARRA + 16 - h} width={LARG_BARRA} height={Math.max(h, 1)} rx={5} ry={5} />
-                      </clipPath>
-                    );
-                  })}
-                </defs>
-                {fluxo.meses.map((m, i) => {
-                  const x = i * (LARG_BARRA + ESPACO) + ESPACO / 2;
-                  const hTotal = FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
-                  let y = ALT_BARRA + 16;
-                  const atraso = `${i * 55}ms`;
-                  return (
-                    <g key={m.chave} onClick={() => irParaMes(m.chave)} style={{ cursor: "pointer" }}>
-                      <title>{`${rotuloMes(m.chave)} — ${fmtMoedaCtr(m.total)}`}</title>
-                      <g className="vk-cp-barra" style={{ animationDelay: atraso }} clipPath={`url(#vk-cp-barra-${obraSelecionada.id}-${i})`}>
-                        {FAIXAS.map(([k, cor]) => {
-                          const h = altura(m[k]);
-                          if (!h) return null;
-                          y -= h;
-                          return <rect key={k} x={x} y={y} width={LARG_BARRA} height={h} fill={cor} />;
-                        })}
-                      </g>
-                      <text className="vk-cp-valor" style={{ animationDelay: `${i * 55 + 260}ms` }}
-                        x={x + LARG_BARRA / 2} y={ALT_BARRA + 11 - hTotal} textAnchor="middle" fontSize="10.5" fontWeight="700" fill="#111827">{curto(m.total)}</text>
-                      <text x={x + LARG_BARRA / 2} y={ALT_BARRA + 32} textAnchor="middle" fontSize="11" fill={m.chave === hojeIso.slice(0, 7) ? "#111827" : "#4b5563"} fontWeight={m.chave === hojeIso.slice(0, 7) ? 700 : 400}>{m.rotulo}</text>
-                    </g>
-                  );
-                })}
-                <line x1="0" y1={ALT_BARRA + 16.5} x2={Math.max(largGrafico, 220)} y2={ALT_BARRA + 16.5} stroke="rgba(38,36,33,0.14)" strokeWidth="1" />
-              </svg>
-            </div>
+            <GraficoFluxoMensal fluxo={fluxo} hojeIso={hojeIso} uid={obraSelecionada.id} onEscolherMes={irParaMes} />
             <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
               Valores em milhares quando passam de mil. Clique num mês para abrir as contas dele.
               {fluxo.semData > 0 ? ` ${fluxo.semData} ${fluxo.semData === 1 ? "conta" : "contas"} sem vencimento (${fmtMoedaCtr(fluxo.semDataValor)}) fora do gráfico.` : ""}

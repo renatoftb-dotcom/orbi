@@ -401,3 +401,80 @@ function fluxoMensal(contas, hoje) {
     .sort((a, b) => a.chave.localeCompare(b.chave));
   return { meses, semData, semDataValor: red(semDataValor), maior: meses.reduce((a, m) => Math.max(a, m.total), 0) };
 }
+
+// ── Gráfico do fluxo mensal ─────────────────────────────────────
+// Barras empilhadas: pago embaixo, vencido no meio, a pagar no topo — o que
+// falta pagar fica na ponta, que é o que se olha. O topo é arredondado pela
+// barra inteira (clipPath), não faixa a faixa, senão apareceriam entalhes.
+//
+// A entrada é uma transição disparada depois da montagem, e não uma animação
+// CSS: `transform-box: fill-box` num <g> não é respeitado por todos os
+// navegadores, e a barra ficava parada. Com estado + transition, o navegador
+// sempre tem um valor inicial e um final para interpolar.
+const CP_FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", "#0474f4", "A pagar"]];
+function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, uid: idGrafico }) {
+  const [pronto, setPronto] = useState(false);
+  useEffect(() => {
+    // dois quadros: o primeiro pinta as barras zeradas, o segundo dispara a transição
+    let q2 = 0;
+    const q1 = requestAnimationFrame(() => { q2 = requestAnimationFrame(() => setPronto(true)); });
+    return () => { cancelAnimationFrame(q1); cancelAnimationFrame(q2); };
+  }, []);
+  if (!fluxo || !fluxo.meses.length) return null;
+
+  const LARG = 40, ESPACO = 16, ALT = 130, BASE = ALT + 16;
+  const largura = Math.max(fluxo.meses.length * (LARG + ESPACO), 220);
+  const altura = (v) => (fluxo.maior > 0 && v > 0 ? Math.max(3, (v / fluxo.maior) * ALT) : 0);
+  const curto = (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v > 0 ? String(Math.round(v)) : "");
+  const mesAtual = String(hojeIso || "").slice(0, 7);
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      <style>{`@media (prefers-reduced-motion: reduce) { .vk-cp-anim { transition: none !important; } }`}</style>
+      <svg width={largura} height={ALT + 46} role="img" style={{ display: "block" }}>
+        <defs>
+          {fluxo.meses.map((m, i) => {
+            const x = i * (LARG + ESPACO) + ESPACO / 2;
+            const h = CP_FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
+            return (
+              <clipPath key={m.chave} id={`vk-cp-${idGrafico}-${i}`}>
+                <rect x={x} y={BASE - h} width={LARG} height={Math.max(h, 1)} rx={5} ry={5} />
+              </clipPath>
+            );
+          })}
+        </defs>
+        {fluxo.meses.map((m, i) => {
+          const x = i * (LARG + ESPACO) + ESPACO / 2;
+          const hTotal = CP_FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
+          const atraso = i * 60;
+          let y = BASE;
+          return (
+            <g key={m.chave} onClick={() => onEscolherMes && onEscolherMes(m.chave)} style={{ cursor: onEscolherMes ? "pointer" : "default" }}>
+              <title>{`${rotuloMes(m.chave)} — ${fmtMoedaCtr(m.total)}`}</title>
+              <g className="vk-cp-anim" clipPath={`url(#vk-cp-${idGrafico}-${i})`}
+                style={{
+                  transform: pronto ? "scaleY(1)" : "scaleY(0)",
+                  transformOrigin: `${x + LARG / 2}px ${BASE}px`,
+                  transformBox: "view-box",
+                  transition: `transform 620ms cubic-bezier(0.2,0.75,0.3,1) ${atraso}ms`,
+                }}>
+                {CP_FAIXAS.map(([k, cor]) => {
+                  const h = altura(m[k]);
+                  if (!h) return null;
+                  y -= h;
+                  return <rect key={k} x={x} y={y} width={LARG} height={h} fill={cor} />;
+                })}
+              </g>
+              <text className="vk-cp-anim" x={x + LARG / 2} y={BASE - 5 - hTotal} textAnchor="middle"
+                fontSize="10.5" fontWeight="700" fill="#111827"
+                style={{ opacity: pronto ? 1 : 0, transition: `opacity 320ms ease-out ${atraso + 380}ms` }}>{curto(m.total)}</text>
+              <text x={x + LARG / 2} y={BASE + 16} textAnchor="middle" fontSize="11"
+                fill={m.chave === mesAtual ? "#111827" : "#4b5563"} fontWeight={m.chave === mesAtual ? 700 : 400}>{m.rotulo}</text>
+            </g>
+          );
+        })}
+        <line x1="0" y1={BASE + 0.5} x2={largura} y2={BASE + 0.5} stroke="rgba(38,36,33,0.14)" strokeWidth="1" />
+      </svg>
+    </div>
+  );
+}

@@ -82,8 +82,14 @@ lista abaixo.
 As barras têm o topo levemente arredondado — cada uma é recortada por um
 `clipPath` de raio 5, de modo que o arredondamento seja da barra inteira e
 não de cada faixa. Ao abrir a tela elas surgem crescendo da linha de base,
-em cascata (55 ms entre uma e outra), com o valor aparecendo logo depois;
+em cascata (60 ms entre uma e outra), com o valor aparecendo logo depois;
 quem tem `prefers-reduced-motion` ligado vê o gráfico parado.
+
+A entrada é uma **transição disparada depois da montagem** (`GraficoFluxoMensal`
+pinta as barras zeradas, espera dois quadros e liga o `scaleY(1)`), não uma
+animação CSS com `transform-box: fill-box`: essa propriedade não é respeitada
+num `<g>` por todos os navegadores, e a barra ficava parada. A origem da
+escala é dada em coordenadas do desenho, com `transform-box: view-box`.
 
 É SVG desenhado à mão, sem biblioteca — no mesmo espírito do gráfico de
 calibragem de preço do insumo. Contas sem vencimento ficam fora do gráfico e
