@@ -4477,6 +4477,17 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const [espessuraTerreaAberta, setEspessuraTerreaAberta] = useState(false);
   const [comodoAberto, setComodoAberto] = useState(null);
   const [memoriaAberta, setMemoriaAberta] = useState(null);
+  // Prazo estimado da obra, do mesmo motor da tela Cronograma — para o
+  // cabeçalho do resultado ficar com prazo e custo lado a lado.
+  const prazoObra = useMemo(() => {
+    if (viewInterna !== "resultado" || !obra.orcamento || !obra.projeto) return null;
+    try {
+      if (typeof gerarCronogramaObra !== "function") return null;
+      const r = gerarCronogramaObra(obra.projeto, obra.orcamento, data, obra.cronograma || {});
+      return r && r.ativo && r.ativo.meses > 0 ? r.ativo : null;
+    } catch (e) { return null; }
+  }, [viewInterna, obra.projeto, obra.orcamento, obra.cronograma, data]);
+
   const memorias = useMemo(() => (viewInterna === "resultado" && obra.orcamento ? mapaMemorias(obra.projeto, data) : {}), [viewInterna, obra.projeto, obra.orcamento, data]);
 
   function toggleBloco(k) { setBlocosAbertos((b) => ({ ...b, [k]: !b[k] })); }
@@ -5195,17 +5206,19 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     <div style={wrap}>
       <button onClick={onVoltar} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
 
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : `repeat(${prazoObra ? 6 : 5}, 1fr)`, gap: 12, marginBottom: 16 }}>
         {[
-          ["Total geral", orc.totais.geral],
-          ["Bruto", orc.totais.bruto],
-          ["Acabamento", orc.totais.acabamento],
-          ["Prestadores", orc.totais.prestadores],
-          ["Custo por m²", custoPorM2],
-        ].map(([label, valor]) => (
+          ...(prazoObra ? [["Prazo", `${Number(prazoObra.meses).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} meses`, prazoObra.dataFim ? `entrega ${fmtDataCrono(prazoObra.dataFim)}` : ""]] : []),
+          ["Total geral", formatoBRL(orc.totais.geral)],
+          ["Bruto", formatoBRL(orc.totais.bruto)],
+          ["Acabamento", formatoBRL(orc.totais.acabamento)],
+          ["Prestadores", formatoBRL(orc.totais.prestadores)],
+          ["Custo por m²", formatoBRL(custoPorM2)],
+        ].map(([label, valor, rodape]) => (
           <div key={label} style={{ background: "#fafafa", border: "1px solid #f3f4f6", borderRadius: 12, padding: "12px 14px" }}>
             <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>{formatoBRL(valor)}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>{valor}</div>
+            {rodape ? <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{rodape}</div> : null}
           </div>
         ))}
       </div>

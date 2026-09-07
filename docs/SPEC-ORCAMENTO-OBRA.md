@@ -583,3 +583,39 @@ marcação aos prestadores. O teste monta um projeto que aciona as 21 etapas
 de uma vez e exige, para cada uma das ~275 linhas: memória presente, último
 passo numérico igual à quantidade, e nenhuma conta com `undefined`, `NaN` ou
 marcador `{padrão}` cru.
+
+## Correções sobre o VBA (set/2026)
+
+O motor é uma transcrição do `NOVO MODELO ORÇAMENTO.xlsm` e, até set/2026, a
+regra era preservar até os defeitos do original. A memória de cálculo tornou
+esses defeitos visíveis linha a linha, e estes foram corrigidos — cada um com
+comentário no ponto do código e teste em `orcamento-obra.test.mjs`:
+
+| O que o VBA fazia | O que o VICKE faz agora |
+| --- | --- |
+| Massiamento do contrapiso do Pav. 1 usava a área da laje do **térreo** (copy-paste) | Usa a área construída do próprio Pav. 1 (campo novo, pré-preenchido com a laje do térreo) |
+| Colunas de 30 cm do Pav. 1 não geravam fôrma nenhuma | A tábua de 30 cm atende as colunas de 25 e de 30 (sarrafo idem) |
+| Ferro CA60 4,2 mm do Pav. 1 nunca era emitido (variável nunca atribuída) | Calculado e emitido como as demais bitolas |
+| Prestador "Instalador AR" nunca era emitido (`CCALC_…`, com C duplicado) | Entra como verba, igual aos outros prestadores sem taxa padrão |
+| Telha do primeiro slot saía com o nome do primeiro telhado cadastrado — e puxava o preço do insumo errado | Cada linha usa o nome da sua própria telha |
+| Pedra do contrapiso externo era a única a não arredondar (8,8 m³) | Arredonda como o resto do modelo |
+| Itens do Pav. 1 apareciam sob a sub-etapa "Supra estrutura Pav. Térreo" | "Supra estrutura Pav 1" |
+| `Math.ceil` sobre ruído de ponto flutuante inflava quantidades em 1 unidade | `teto(x) = Math.ceil(x - 1e-9)` em todo o motor |
+
+Mantido de propósito, porque está certo: as escoras do térreo ficam 2,5 meses
+em sobrado (o térreo é escorado durante a sua concretagem e a do pavimento de
+cima) e 1,5 mês em obra térrea; as do Pav. 1 ficam sempre 1,5 mês.
+
+**Regra da fôrma de coluna:** a tábua é sempre um degrau mais larga que a
+coluna (15 → 20, 20 → 25, 25 → 30), para o concreto não vazar pelas laterais.
+A exceção é a coluna de 30 cm, que no térreo e no arrimo recebe tábua de 30 —
+mesma largura. Pelo próprio modelo, coluna acima de 25 cm deveria sair de
+madeirite (campo "Área de fôrma das colunas acima de 25 cm"); fica registrado
+como decisão pendente.
+
+## Rateio entre pavimentos (sobrado)
+
+No sobrado, o bloco Geral recebe o m² de parede e o perímetro da casa inteira;
+cada pavimento entra com **50%** disso (`autosPavimentos`), editável em cada
+bloco — digitou, o digitado vence. A área construída do Pav. 1 parte da área
+da laje do térreo. Em obra térrea não há rateio: o pavimento recebe o total.
