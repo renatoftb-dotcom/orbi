@@ -1830,55 +1830,122 @@ function muroDivisa(cp, out) {
 function muroArrimo(cp, out) {
   const a = cp.arrimo;
 
-  const tijolos8F = Math.ceil((a.altura * a.comprimento * 40) * PERDA);
-  const areiaFinaAssent = Math.ceil((tijolos8F * 0.002223 * PERDA));
-  const vedalitFinaAssent = Math.ceil(areiaFinaAssent / 25 * PERDA);
-  const cimentoFinaAssent = Math.ceil(areiaFinaAssent * 2 * PERDA);
+  const tijolos8FBruto = (a.altura * a.comprimento * 40) * PERDA;
+  const tijolos8F = Math.ceil(tijolos8FBruto);
+  const areiaFinaAssentBruto = tijolos8F * 0.002223 * PERDA;
+  const areiaFinaAssent = Math.ceil(areiaFinaAssentBruto);
+  const vedalitFinaAssentBruto = areiaFinaAssent / 25 * PERDA;
+  const vedalitFinaAssent = Math.ceil(vedalitFinaAssentBruto);
+  const cimentoFinaAssentBruto = areiaFinaAssent * 2 * PERDA;
+  const cimentoFinaAssent = Math.ceil(cimentoFinaAssentBruto);
 
-  const tabuas15Colun = Math.ceil(a.colunas15 * 2.8 * 2 / 3 * PERDA);
-  const tabuas20Colun = Math.ceil(a.colunas20 * 2.8 * 2 / 3 * PERDA);
-  const tabuas30Colun = Math.ceil(a.colunas30 * 2.8 * 2 / 3 * PERDA);
-  const sarrafo5Colun = Math.ceil(
+  const tabuas15ColunBruto = a.colunas15 * 2.8 * 2 / 3 * PERDA;
+  const tabuas15Colun = Math.ceil(tabuas15ColunBruto);
+  const tabuas20ColunBruto = a.colunas20 * 2.8 * 2 / 3 * PERDA;
+  const tabuas20Colun = Math.ceil(tabuas20ColunBruto);
+  const tabuas30ColunBruto = a.colunas30 * 2.8 * 2 / 3 * PERDA;
+  const tabuas30Colun = Math.ceil(tabuas30ColunBruto);
+  const sarrafo5ColunBruto =
     ((a.colunas15 * 2.8 * 2 / 0.5 * 0.2) +
       (a.colunas20 * 2.8 * 2 / 0.5 * 0.25) +
-      (a.colunas30 * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3
-  );
-  const maderitesColun = Math.ceil(a.areaFormaColunaMaior25cm / 2.42 * PERDA);
+      (a.colunas30 * 2.8 * 2 / 0.5 * 0.35)) * PERDA / 3;
+  const sarrafo5Colun = Math.ceil(sarrafo5ColunBruto);
+  const maderitesColunBruto = a.areaFormaColunaMaior25cm / 2.42 * PERDA;
+  const maderitesColun = Math.ceil(maderitesColunBruto);
 
-  const tabuas30Arrimo = Math.ceil(((a.comprimento * 2 / 3) + a.comprimento * 2 / 3 * 0.45 / 3) * a.numeroVigas * PERDA);
-  const sarrafo5Arrimo = Math.ceil(((a.comprimento * 2 / 0.7 * 0.45) + (a.comprimento / 0.75 * 0.3)) / 3 * a.numeroVigas * PERDA);
+  const tabuas30ArrimoBruto = ((a.comprimento * 2 / 3) + a.comprimento * 2 / 3 * 0.45 / 3) * a.numeroVigas * PERDA;
+  const tabuas30Arrimo = Math.ceil(tabuas30ArrimoBruto);
+  const sarrafo5ArrimoBruto = ((a.comprimento * 2 / 0.7 * 0.45) + (a.comprimento / 0.75 * 0.3)) / 3 * a.numeroVigas * PERDA;
+  const sarrafo5Arrimo = Math.ceil(sarrafo5ArrimoBruto);
   const perfuracaoEstacas = a.qtdEstacas * a.profEstacas * 1.15;
 
   const soma = somarFerro(a.ferro.estacas, a.ferro.sapatas, a.ferro.arranques, a.ferro.baldrame, a.ferro.gigante, a.ferro.colunas, a.ferro.vigas);
   const barras = barrasPorBitola(soma);
   const peso = pesoTotalFerro(barras);
-  const concreto = Math.ceil(somaN(a.concreto.estacas, a.concreto.sapatas, a.concreto.arranques, a.concreto.baldrame, a.concreto.gigante, a.concreto.colunas, a.concreto.vigas) * PERDA);
+  const partesConcretoArrimo = [["estacas", a.concreto.estacas], ["sapatas", a.concreto.sapatas], ["arranques", a.concreto.arranques], ["baldrame", a.concreto.baldrame], ["gigante", a.concreto.gigante], ["colunas", a.concreto.colunas], ["vigas", a.concreto.vigas]].filter(([, v]) => numOrZero(v) > 0);
+  const concretoBruto = somaN(a.concreto.estacas, a.concreto.sapatas, a.concreto.arranques, a.concreto.baldrame, a.concreto.gigante, a.concreto.colunas, a.concreto.vigas) * PERDA;
+  const concreto = Math.ceil(concretoBruto);
 
-  const discoFerro = Math.ceil(peso * 0.01);
-  const arame = Math.ceil(peso * 0.06);
-  const prego = Math.ceil(0.55 * arame);
-  const vedatop = Math.ceil(((a.altura * a.comprimento) * 3 * PERDA) / 18);
+  const discoFerroBruto = peso * 0.01;
+  const discoFerro = Math.ceil(discoFerroBruto);
+  const arameBruto = peso * 0.06;
+  const arame = Math.ceil(arameBruto);
+  const pregoBruto = 0.55 * arame;
+  const prego = Math.ceil(pregoBruto);
+  const vedatopBruto = ((a.altura * a.comprimento) * 3 * PERDA) / 18;
+  const vedatop = Math.ceil(vedatopBruto);
 
   const tabuas30Total = tabuas30Arrimo + tabuas30Colun;
   const sarrafo5Total = sarrafo5Arrimo + sarrafo5Colun;
 
+  const memArrimo = [MEM.dado("Comprimento do muro de arrimo", a.comprimento, "m", "bloco Muro de arrimo"), MEM.dado("Altura do muro de arrimo", a.altura, "m", "bloco Muro de arrimo")];
+  const memPesoArrimo = [
+    MEM.nota("Disco e arame saem do peso do ferro comprado (barras inteiras × peso por barra)."),
+    MEM.conta("Peso do ferro do arrimo", "soma das bitolas", [], peso, "kg"),
+  ];
   const base = { ordem: ORD.muroArrimo, tipo: "Bruto", etapa: "Muro Arrimo" };
-  emitir(out, { ...base, subEtapa: "Assentamento", item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoFinaAssent });
-  emitir(out, { ...base, subEtapa: "Assentamento", item: "Areia fina", unidade: "m3", qtd: areiaFinaAssent });
-  emitir(out, { ...base, subEtapa: "Perfuração", item: "Maquinário - Perfuração", unidade: "Mts", qtd: perfuracaoEstacas });
-  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas15Colun });
-  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20Colun });
-  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3mts", qtd: tabuas30Total });
-  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3mts", qtd: sarrafo5Total });
-  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidades", qtd: maderitesColun });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Disco Ferro", unidade: "Unidades", qtd: discoFerro });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame });
-  emitir(out, { ...base, subEtapa: "Caixaria", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego });
-  emitBarras(out, { ...base, subEtapa: "Supra Estrutura" }, barras);
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: a.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto });
-  emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Vedatop 18KG", unidade: "Unidades", qtd: vedatop });
-  emitir(out, { ...base, subEtapa: "Paredes", item: "Cerâmicas - Tijolo - Bloco 8 Furos", unidade: "Unidades", qtd: tijolos8F });
-  emitir(out, { ...base, subEtapa: "Paredes", item: "Impermeabilizantes - Vedalit 18L", unidade: "Unidades", qtd: vedalitFinaAssent });
+  emitir(out, { ...base, subEtapa: "Assentamento", item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoFinaAssent, memoria: MEMB.cimentoAssentamento(areiaFinaAssent, cimentoFinaAssentBruto, cimentoFinaAssent) });
+  emitir(out, { ...base, subEtapa: "Assentamento", item: "Areia fina", unidade: "m3", qtd: areiaFinaAssent, memoria: [
+    MEM.nota("Argamassa de assentamento do arrimo: 0,002223 m³ de areia por tijolo de 8 furos."),
+    MEM.dado("Tijolos do arrimo", tijolos8F, "tijolos", "passo dos tijolos"),
+    MEM.conta("Areia, com 10% de perda", "tijolos × 0,002223 × 1,10", [["tijolos", tijolos8F]], areiaFinaAssentBruto, "m³"),
+    MEM.teto(areiaFinaAssentBruto, areiaFinaAssent, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Perfuração", item: "Maquinário - Perfuração", unidade: "Mts", qtd: perfuracaoEstacas, memoria: [
+    MEM.nota("Metros perfurados das estacas do arrimo, com 15% de folga de perfuração."),
+    MEM.dado("Quantidade de estacas", a.qtdEstacas, "estacas", "bloco Muro de arrimo"),
+    MEM.dado("Profundidade de cada estaca", a.profEstacas, "m", "bloco Muro de arrimo"),
+    MEM.conta("Metros perfurados", "estacas × profundidade × 1,15", [["estacas", a.qtdEstacas], ["profundidade", a.profEstacas]], perfuracaoEstacas, "m"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas15Colun, memoria: MEMB.tabuaColuna("do arrimo", 15, a.colunas15, tabuas15ColunBruto, tabuas15Colun) });
+  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Barras 3 mts", qtd: tabuas20Colun, memoria: MEMB.tabuaColuna("do arrimo", 20, a.colunas20, tabuas20ColunBruto, tabuas20Colun) });
+  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Barras 3mts", qtd: tabuas30Total, memoria: [
+    MEM.nota("Tábuas de 30 cm somam duas fôrmas: a das vigas do arrimo (uma por viga, ao longo do comprimento) e a das colunas de 30 cm."),
+    ...memArrimo,
+    MEM.dado("Número de vigas do arrimo", a.numeroVigas, "vigas", "bloco Muro de arrimo"),
+    MEM.conta("Tábuas das vigas", "(comprimento × 2 ÷ 3 + comprimento × 2 ÷ 3 × 0,45 ÷ 3) × vigas × 1,10 → arredonda", [["comprimento", a.comprimento], ["vigas", a.numeroVigas]], tabuas30Arrimo, "tábuas"),
+    MEM.conta("Tábuas das colunas de 30 cm", "colunas × 2,80 × 2 ÷ 3 × 1,10 → arredonda", [["colunas", a.colunas30]], tabuas30Colun, "tábuas"),
+    MEM.conta("Total de tábuas de 30 cm", "vigas + colunas", [["vigas", tabuas30Arrimo], ["colunas", tabuas30Colun]], tabuas30Total, "tábuas de 3 m"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Sarrafos de 05cm x 3mts", unidade: "Barras 3mts", qtd: sarrafo5Total, memoria: [
+    MEM.nota("Sarrafos somam as gravatas e escoras das vigas do arrimo e as gravatas das colunas."),
+    ...memArrimo,
+    MEM.conta("Sarrafos das vigas", "(comprimento × 2 ÷ 0,70 × 0,45 + comprimento ÷ 0,75 × 0,30) ÷ 3 × vigas × 1,10 → arredonda", [["comprimento", a.comprimento], ["vigas", a.numeroVigas]], sarrafo5Arrimo, "sarrafos"),
+    MEM.conta("Sarrafos das colunas", "(c15 × 2,80 × 2 ÷ 0,50 × 0,20 + c20 × … + c30 × …) × 1,10 ÷ 3 → arredonda", [["c15", a.colunas15], ["c20", a.colunas20], ["c30", a.colunas30]], sarrafo5Colun, "sarrafos"),
+    MEM.conta("Total de sarrafos", "vigas + colunas", [["vigas", sarrafo5Arrimo], ["colunas", sarrafo5Colun]], sarrafo5Total, "sarrafos de 3 m"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Caixaria", item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidades", qtd: maderitesColun, memoria: MEMB.madeirite(a.areaFormaColunaMaior25cm, maderitesColunBruto, maderitesColun) });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Disco Ferro", unidade: "Unidades", qtd: discoFerro, memoria: [
+    ...memPesoArrimo,
+    MEM.conta("Discos de corte", "peso × 0,01", [["peso", peso]], discoFerroBruto, "discos"),
+    MEM.teto(discoFerroBruto, discoFerro, "discos"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: [
+    ...memPesoArrimo,
+    MEM.conta("Arame", "peso × 0,06", [["peso", peso]], arameBruto, "kg"),
+    MEM.teto(arameBruto, arame, "kg"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Caixaria", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
+  emitBarras(out, { ...base, subEtapa: "Supra Estrutura" }, barras, (k) => memoriaBitola(k, [["estacas", a.ferro.estacas[k]], ["sapatas", a.ferro.sapatas[k]], ["arranques", a.ferro.arranques[k]], ["baldrame", a.ferro.baldrame[k]], ["gigante", a.ferro.gigante[k]], ["colunas", a.ferro.colunas[k]], ["vigas", a.ferro.vigas[k]]], barras));
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: a.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto, memoria: [
+    MEM.nota(`Concreto do arrimo lançado no bloco Muro de arrimo, elemento por elemento. Resistência: ${a.resistenciaConcreto || "Concreto"}.`),
+    ...partesConcretoArrimo.map(([nome, v]) => MEM.dado(nome[0].toUpperCase() + nome.slice(1), v, "m³", "bloco Muro de arrimo")),
+    MEM.conta("Volume com 10% de perda", `(${partesConcretoArrimo.map(([nome]) => nome).join(" + ")}) × 1,10`, partesConcretoArrimo, concretoBruto, "m³"),
+    MEM.teto(concretoBruto, concreto, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Vedatop 18KG", unidade: "Unidades", qtd: vedatop, memoria: [
+    MEM.nota("Impermeabilização da face de terra do arrimo: 3 kg por m², balde de 18 kg."),
+    ...memArrimo,
+    MEM.conta("Baldes, com 10% de perda", "altura × comprimento × 3 × 1,10 ÷ 18", [["altura", a.altura], ["comprimento", a.comprimento]], vedatopBruto, "baldes"),
+    MEM.teto(vedatopBruto, vedatop, "baldes", "Arredonda para cima (balde fechado)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Paredes", item: "Cerâmicas - Tijolo - Bloco 8 Furos", unidade: "Unidades", qtd: tijolos8F, memoria: [
+    MEM.nota("Fechamento do arrimo em bloco de 8 furos: 40 tijolos por m² de muro."),
+    ...memArrimo,
+    MEM.conta("Tijolos, com 10% de quebra", "altura × comprimento × 40 × 1,10", [["altura", a.altura], ["comprimento", a.comprimento]], tijolos8FBruto, "tijolos"),
+    MEM.teto(tijolos8FBruto, tijolos8F, "tijolos"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Paredes", item: "Impermeabilizantes - Vedalit 18L", unidade: "Unidades", qtd: vedalitFinaAssent, memoria: MEMB.vedalitAssentamento(areiaFinaAssent, vedalitFinaAssentBruto, vedalitFinaAssent) });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1887,7 +1954,8 @@ function muroArrimo(cp, out) {
 function piscina(cp, out) {
   const p = cp.piscina;
 
-  const tabua10Marcacao = Math.ceil(p.gabaritoObra / 3 * 1.2);
+  const tabua10MarcacaoBruto = p.gabaritoObra / 3 * 1.2;
+  const tabua10Marcacao = Math.ceil(tabua10MarcacaoBruto);
   // [DIVERGÊNCIA COM A SPEC §9 — reportada, preservada de propósito]
   // Esta fórmula tem um "+20" fixo, então nunca zera mesmo com
   // gabaritoObra=0 — e PISCINA() roda incondicionalmente em todo orçamento
@@ -1899,22 +1967,28 @@ function piscina(cp, out) {
   // pra piscina por causa deste "+20". Não suprimido aqui — é o que a
   // planilha real produziria.
   const sarrafo5Marcacao = Math.ceil((p.gabaritoObra * 1.2 / 1.3 * 0.6 / 3) + 20);
-  const prego18x27Marcacao = Math.ceil(0.05 * tabua10Marcacao / 2);
+  const prego18x27MarcacaoBruto = 0.05 * tabua10Marcacao / 2;
+  const prego18x27Marcacao = Math.ceil(prego18x27MarcacaoBruto);
   const prego17x21Marcacao = prego18x27Marcacao;
 
   const perfuracaoEstacas = p.qtdEstacas * p.profundidadeEstacas * 1.15;
 
-  const pedraContrap = Math.ceil(p.areaConstruida * 0.1 * PERDA);
+  const pedraContrapBruto = p.areaConstruida * 0.1 * PERDA;
+  const pedraContrap = Math.ceil(pedraContrapBruto);
   const cimentoContrap = Math.ceil(pedraContrap * 6 * PERDA);
-  const malhaPopContrap = Math.ceil(p.areaConstruida / (2.9 * 1.9 * PERDA));
+  const malhaPopContrapBruto = p.areaConstruida / (2.9 * 1.9 * PERDA);
+  const malhaPopContrap = Math.ceil(malhaPopContrapBruto);
   const areiaGrossaContrap = Math.ceil(p.areaConstruida * 0.6 * 0.1 * PERDA);
 
-  const tijolinhoMacico = Math.ceil(p.paredesM2Total * 84.2 * PERDA);
+  const tijolinhoMacicoBruto = p.paredesM2Total * 84.2 * PERDA;
+  const tijolinhoMacico = Math.ceil(tijolinhoMacicoBruto);
   const areiaFinaAssent = Math.ceil(tijolinhoMacico * 0.0291 * PERDA);
   const cimentoFinaAssent = Math.ceil(areiaFinaAssent * 2 * PERDA);
 
-  const tabuas15Colun = Math.ceil(p.colunas15 * p.profundidade * 2 / 3 * PERDA);
-  const tabuas20Colun = Math.ceil(p.colunas20 * p.profundidade * 2 / 3 * PERDA);
+  const tabuas15ColunBruto = p.colunas15 * p.profundidade * 2 / 3 * PERDA;
+  const tabuas15Colun = Math.ceil(tabuas15ColunBruto);
+  const tabuas20ColunBruto = p.colunas20 * p.profundidade * 2 / 3 * PERDA;
+  const tabuas20Colun = Math.ceil(tabuas20ColunBruto);
   const tabuas30Colun = Math.ceil(p.colunas25 * p.profundidade * 2 / 3 * PERDA);
   const QTD_NUMERO_VIGAS_PISCINA = 3;
   const tabuas30Vigas = Math.ceil(((p.perimetroParedes * 2 / 3) + p.perimetroParedes * 2 / 3 * 0.45 / 3) * QTD_NUMERO_VIGAS_PISCINA * PERDA);
@@ -1928,21 +2002,28 @@ function piscina(cp, out) {
   const sarrafo5Vigas = Math.ceil(((p.perimetroParedes * 2 / 0.7 * 0.45) + (p.perimetroParedes / 0.75 * 0.3)) / 3 * QTD_NUMERO_VIGAS_PISCINA * PERDA);
   const sarrafo5Total = sarrafo5Colun + sarrafo5Vigas + sarrafo5Marcacao;
 
-  const maderitesColun = Math.ceil(p.areaFormaColunaMaior25cm / 2.42 * PERDA);
+  const maderitesColunBruto = p.areaFormaColunaMaior25cm / 2.42 * PERDA;
+  const maderitesColun = Math.ceil(maderitesColunBruto);
 
   const soma = somarFerro(p.ferro.estacas, p.ferro.sapatas, p.ferro.arranques, p.ferro.baldrame, p.ferro.contrapiso, p.ferro.colunas, p.ferro.vigas);
   const barras = barrasPorBitola(soma);
   const peso = pesoTotalFerro(barras);
-  const concreto = Math.ceil(somaN(p.concreto.estacas, p.concreto.sapatas, p.concreto.arranques, p.concreto.baldrame, p.concreto.contrapiso, p.concreto.colunas, p.concreto.vigas) * PERDA);
+  const partesConcPisc = [["estacas", p.concreto.estacas], ["sapatas", p.concreto.sapatas], ["arranques", p.concreto.arranques], ["baldrame", p.concreto.baldrame], ["contrapiso", p.concreto.contrapiso], ["colunas", p.concreto.colunas], ["vigas", p.concreto.vigas]].filter(([, v]) => numOrZero(v) > 0);
+  const concretoBruto = somaN(p.concreto.estacas, p.concreto.sapatas, p.concreto.arranques, p.concreto.baldrame, p.concreto.contrapiso, p.concreto.colunas, p.concreto.vigas) * PERDA;
+  const concreto = Math.ceil(concretoBruto);
 
-  const discoFerro = Math.ceil(peso * 0.01);
-  const arame = Math.ceil(peso * 0.06);
-  const prego18x27 = Math.ceil((0.55 * arame) + prego18x27Marcacao);
+  const discoFerroBruto = peso * 0.01;
+  const discoFerro = Math.ceil(discoFerroBruto);
+  const arameBruto = peso * 0.06;
+  const arame = Math.ceil(arameBruto);
+  const prego18x27Bruto = (0.55 * arame) + prego18x27Marcacao;
+  const prego18x27 = Math.ceil(prego18x27Bruto);
 
   const vedatopBaldrames = Math.ceil((((p.perimetroParedes * 2 * 0.3) + (p.perimetroParedes * 0.15)) * 3 * PERDA) / 18);
   const vedatopParedesContrapiso = Math.ceil(((p.paredesM2Total + p.areaConstruida) * 3 * PERDA) / 18);
   const vedatopTotal = vedatopBaldrames + vedatopParedesContrapiso;
-  const telaPoliester = Math.ceil((p.paredesM2Total + p.areaConstruida) * PERDA);
+  const telaPoliesterBruto = (p.paredesM2Total + p.areaConstruida) * PERDA;
+  const telaPoliester = Math.ceil(telaPoliesterBruto);
 
   const volumeChapisco = p.paredesM2Total * PERDA * 2 * 0.005;
   const cimentoChapisco = (volumeChapisco * 0.2 * 1200 / 50) * PERDA;
@@ -1957,45 +2038,180 @@ function piscina(cp, out) {
   const cimentoMassiamentoPiso = Math.ceil(p.areaConstruida * 0.05 * 0.25 * 1200 / 50 * PERDA);
   const areiaGrossaMassiamentoPiso = Math.ceil(p.areaConstruida * 0.05 * 0.75 * PERDA);
 
-  const cimentoTotal = Math.ceil(cimentoContrap + cimentoFinaAssent + cimentoChapisco + cimentoReboco);
+  const cimentoTotalBruto = cimentoContrap + cimentoFinaAssent + cimentoChapisco + cimentoReboco;
+  const cimentoTotal = Math.ceil(cimentoTotalBruto);
   const aguaTotal = aguaChapisco + aguaReboco;
-  const vedalit = Math.ceil((0.3 * cimentoTotal / 18) * PERDA);
+  const vedalitBruto = (0.3 * cimentoTotal / 18) * PERDA;
+  const vedalit = Math.ceil(vedalitBruto);
   const areiaGrossaTotal = areiaGrossaContrap + areiaGrossaChapisco + areiaGrossaMassiamentoPiso;
   const areiaFinaTotal = areiaFinaAssent + areiaFinaReboco;
 
-  const revestimento = Math.ceil(p.paredesM2Total + p.areaConstruida * 1.2);
-  const rejuntes = Math.ceil(revestimento * 0.095 / 5 * PERDA);
-  const argamassas = Math.ceil(revestimento * 7.5 / 20 * PERDA);
-  const discoPorcelanato = Math.ceil(revestimento * 0.005 * PERDA);
+  const revestimentoBruto = p.paredesM2Total + p.areaConstruida * 1.2;
+  const revestimento = Math.ceil(revestimentoBruto);
+  const rejuntesBruto = revestimento * 0.095 / 5 * PERDA;
+  const rejuntes = Math.ceil(rejuntesBruto);
+  const argamassasBruto = revestimento * 7.5 / 20 * PERDA;
+  const argamassas = Math.ceil(argamassasBruto);
+  const discoPorcelanatoBruto = revestimento * 0.005 * PERDA;
+  const discoPorcelanato = Math.ceil(discoPorcelanatoBruto);
 
+  const memPiscina = [
+    MEM.dado("Área construída da piscina (fundo)", p.areaConstruida, "m²", "bloco Piscina"),
+    MEM.dado("Paredes da piscina", p.paredesM2Total, "m²", "bloco Piscina"),
+  ];
+  const memTabuaPiscina = (larguraCm, colunas, bruto, valor) => [
+    MEM.nota("Fôrma das colunas da piscina, com a altura igual à profundidade da piscina."),
+    MEM.dado(`Colunas de ${larguraCm} cm`, colunas, "colunas", "bloco Piscina"),
+    MEM.dado("Profundidade da piscina", p.profundidade, "m", "bloco Piscina"),
+    MEM.conta("Tábuas de 3 m, com 10% de perda", "colunas × profundidade × 2 ÷ 3 × 1,10", [["colunas", colunas], ["profundidade", p.profundidade]], bruto, "tábuas"),
+    MEM.teto(bruto, valor, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ];
   const base = { ordem: ORD.piscina, tipo: "Bruto", etapa: "Piscina" };
-  emitir(out, { ...base, subEtapa: "Brocas", item: "Maquinário - Perfuração", unidade: "Mts", qtd: perfuracaoEstacas });
-  emitir(out, { ...base, subEtapa: "Contrapiso", item: "Locação Ferramentas -  Compactador", unidade: "Unidades", qtd: 2 });
-  emitir(out, { ...base, subEtapa: "Contrapiso", item: "Pedra", unidade: "m3", qtd: pedraContrap });
-  emitir(out, { ...base, subEtapa: "Paredes", item: "Cerâmicas - Tijolo - Tijolinho Maciço", unidade: "Unidades", qtd: tijolinhoMacico });
-  emitir(out, { ...base, subEtapa: "Diversas", item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoTotal });
-  emitir(out, { ...base, subEtapa: "Diversas", item: "Água", unidade: "m3", qtd: aguaTotal });
-  emitir(out, { ...base, subEtapa: "Diversas", item: "Impermeabilizantes - Vedalit 18L", unidade: "Unidades", qtd: vedalit });
-  emitir(out, { ...base, subEtapa: "Diversas", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaTotal });
-  emitir(out, { ...base, subEtapa: "Diversas", item: "Areia Fina", unidade: "m3", qtd: areiaFinaTotal });
-  emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Vedatop Flexível 18KG", unidade: "Unidades", qtd: vedatopTotal });
-  emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Tela Poliester 50mts", unidade: "Unidades", qtd: telaPoliester });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Unidades", qtd: tabua10Marcacao });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Unidades", qtd: tabuas15Colun });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Unidades", qtd: tabuas20Colun });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Unidades", qtd: tabuas30Total });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidades", qtd: maderitesColun });
-  emitir(out, { ...base, subEtapa: "Contrapiso", item: "Aço - Malha pop EQ092 4.2mm 15x15", unidade: "Unidades", qtd: malhaPopContrap });
-  emitBarras(out, { ...base, subEtapa: "Supra Estrutura" }, barras);
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: p.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Disco Ferro", unidade: "Unidades", qtd: discoFerro });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Aço - Arame Recozido", unidade: "Kg", qtd: arame });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Aço - Pregos 18x27", unidade: "Kg", qtd: prego18x27 });
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Aço - Pregos 17x21", unidade: "Kg", qtd: prego17x21Marcacao });
-  emitir(out, { ...base, tipo: "Acabamento", subEtapa: "Revestimento", item: "Revestimento", unidade: "m2", qtd: revestimento });
-  emitir(out, { ...base, tipo: "Acabamento", subEtapa: "Revestimento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: rejuntes });
-  emitir(out, { ...base, tipo: "Acabamento", subEtapa: "Revestimento", item: "Argamassa AC 3 GF - 20kg", unidade: "Unidades", qtd: argamassas });
-  emitir(out, { ...base, tipo: "Acabamento", subEtapa: "Revestimento", item: "Disco Porcelanato", unidade: "Unidades", qtd: discoPorcelanato });
+  emitir(out, { ...base, subEtapa: "Brocas", item: "Maquinário - Perfuração", unidade: "Mts", qtd: perfuracaoEstacas, memoria: [
+    MEM.nota("Metros perfurados das estacas da piscina, com 15% de folga de perfuração."),
+    MEM.dado("Quantidade de estacas", p.qtdEstacas, "estacas", "bloco Piscina"),
+    MEM.dado("Profundidade de cada estaca", p.profundidadeEstacas, "m", "bloco Piscina"),
+    MEM.conta("Metros perfurados", "estacas × profundidade × 1,15", [["estacas", p.qtdEstacas], ["profundidade", p.profundidadeEstacas]], perfuracaoEstacas, "m"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Contrapiso", item: "Locação Ferramentas -  Compactador", unidade: "Unidades", qtd: 2, memoria: MEM_CANTEIRO("Dois dias de compactador para apiloar o fundo da cava antes de concretar o contrapiso da piscina.") });
+  emitir(out, { ...base, subEtapa: "Contrapiso", item: "Pedra", unidade: "m3", qtd: pedraContrap, memoria: [
+    MEM.nota("Contrapiso do fundo da piscina: 10 cm de concreto."),
+    ...memPiscina,
+    MEM.conta("Pedra, com 10% de perda", "área × 0,10 × 1,10", [["área", p.areaConstruida]], pedraContrapBruto, "m³"),
+    MEM.teto(pedraContrapBruto, pedraContrap, "m³", "Arredonda para cima (a pedra vem em m³ inteiro)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Paredes", item: "Cerâmicas - Tijolo - Tijolinho Maciço", unidade: "Unidades", qtd: tijolinhoMacico, memoria: [
+    MEM.nota("Parede da piscina em tijolinho maciço: 84,2 tijolos por m² (medida da planilha do escritório)."),
+    ...memPiscina,
+    MEM.conta("Tijolos, com 10% de quebra", "paredes × 84,2 × 1,10", [["paredes", p.paredesM2Total]], tijolinhoMacicoBruto, "tijolos"),
+    MEM.teto(tijolinhoMacicoBruto, tijolinhoMacico, "tijolos"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Diversas", item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimentoTotal, memoria: [
+    MEM.nota("Cimento da piscina numa linha só: contrapiso, assentamento dos tijolinhos, chapisco e reboco."),
+    MEM.conta("Cimento do contrapiso", "pedra × 6 × 1,10 → arredonda", [["pedra", pedraContrap]], cimentoContrap, "sacos"),
+    MEM.conta("Cimento do assentamento", "areia do assentamento × 2 × 1,10 → arredonda", [["areia do assentamento", areiaFinaAssent]], cimentoFinaAssent, "sacos"),
+    MEM.conta("Cimento do chapisco", "volume de chapisco × 0,20 × 1.200 ÷ 50 × 1,10", [["volume de chapisco", volumeChapisco]], cimentoChapisco, "sacos"),
+    MEM.conta("Cimento do reboco", "volume de reboco × 0,125 × 1.200 ÷ 50 × 1,10", [["volume de reboco", volumeReboco]], cimentoReboco, "sacos"),
+    MEM.conta("Cimento total", "contrapiso + assentamento + chapisco + reboco", [["contrapiso", cimentoContrap], ["assentamento", cimentoFinaAssent], ["chapisco", cimentoChapisco], ["reboco", cimentoReboco]], cimentoTotalBruto, "sacos"),
+    MEM.teto(cimentoTotalBruto, cimentoTotal, "sacos de 50 kg", "Arredonda para cima (saco fechado)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Diversas", item: "Água", unidade: "m3", qtd: aguaTotal, memoria: [
+    MEM.nota("Água de amassamento do chapisco e do reboco da piscina: 0,36 m³ por m³ de massa. Não arredonda."),
+    MEM.conta("Água do chapisco", "volume de chapisco × 0,36 × 1,10", [["volume de chapisco", volumeChapisco]], aguaChapisco, "m³"),
+    MEM.conta("Água do reboco", "volume de reboco × 0,36 × 1,10", [["volume de reboco", volumeReboco]], aguaReboco, "m³"),
+    MEM.conta("Água total", "chapisco + reboco", [["chapisco", aguaChapisco], ["reboco", aguaReboco]], aguaTotal, "m³"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Diversas", item: "Impermeabilizantes - Vedalit 18L", unidade: "Unidades", qtd: vedalit, memoria: [
+    MEM.nota("Vedalit na massa da piscina: 0,3 litro por saco de cimento, em baldes de 18 litros."),
+    MEM.dado("Cimento total da piscina", cimentoTotal, "sacos", "passo anterior"),
+    MEM.conta("Baldes, com 10% de perda", "cimento × 0,30 ÷ 18 × 1,10", [["cimento", cimentoTotal]], vedalitBruto, "baldes"),
+    MEM.teto(vedalitBruto, vedalit, "baldes", "Arredonda para cima (balde fechado)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Diversas", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaTotal, memoria: [
+    MEM.nota("Areia grossa da piscina numa linha só: contrapiso, chapisco e massiamento do piso. Cada parcela já vem arredondada."),
+    MEM.conta("Areia do contrapiso", "área × 0,60 × 0,10 × 1,10 → arredonda", [["área", p.areaConstruida]], areiaGrossaContrap, "m³"),
+    MEM.conta("Areia do chapisco", "volume de chapisco × 0,80 × 1,10 → arredonda", [["volume de chapisco", volumeChapisco]], areiaGrossaChapisco, "m³"),
+    MEM.conta("Areia do massiamento do piso", "área × 0,05 × 0,75 × 1,10 → arredonda", [["área", p.areaConstruida]], areiaGrossaMassiamentoPiso, "m³"),
+    MEM.conta("Areia grossa total", "contrapiso + chapisco + massiamento", [["contrapiso", areiaGrossaContrap], ["chapisco", areiaGrossaChapisco], ["massiamento", areiaGrossaMassiamentoPiso]], areiaGrossaTotal, "m³"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Diversas", item: "Areia Fina", unidade: "m3", qtd: areiaFinaTotal, memoria: [
+    MEM.nota("Areia fina da piscina: a do assentamento dos tijolinhos mais a do reboco."),
+    MEM.conta("Areia do assentamento", "tijolinhos × 0,0291 × 1,10 → arredonda", [["tijolinhos", tijolinhoMacico]], areiaFinaAssent, "m³"),
+    MEM.conta("Areia do reboco", "volume de reboco × 0,875 × 1,10 → arredonda", [["volume de reboco", volumeReboco]], areiaFinaReboco, "m³"),
+    MEM.conta("Areia fina total", "assentamento + reboco", [["assentamento", areiaFinaAssent], ["reboco", areiaFinaReboco]], areiaFinaTotal, "m³"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Vedatop Flexível 18KG", unidade: "Unidades", qtd: vedatopTotal, memoria: [
+    MEM.nota("Impermeabilização da piscina: baldrames (faixa de 30 cm nas duas faces mais 15 cm de topo) e toda a superfície molhada (paredes + fundo), a 3 kg/m², balde de 18 kg."),
+    ...memPiscina,
+    MEM.dado("Perímetro das paredes da piscina", p.perimetroParedes, "m", "bloco Piscina"),
+    MEM.conta("Baldes dos baldrames", "(perímetro × 2 × 0,30 + perímetro × 0,15) × 3 × 1,10 ÷ 18 → arredonda", [["perímetro", p.perimetroParedes]], vedatopBaldrames, "baldes"),
+    MEM.conta("Baldes das paredes e do fundo", "(paredes + fundo) × 3 × 1,10 ÷ 18 → arredonda", [["paredes", p.paredesM2Total], ["fundo", p.areaConstruida]], vedatopParedesContrapiso, "baldes"),
+    MEM.conta("Total", "baldrames + paredes e fundo", [["baldrames", vedatopBaldrames], ["paredes e fundo", vedatopParedesContrapiso]], vedatopTotal, "baldes"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Tela Poliester 50mts", unidade: "Unidades", qtd: telaPoliester, memoria: [
+    MEM.nota("Tela de poliéster que estrutura a impermeabilização, sobre toda a superfície molhada."),
+    ...memPiscina,
+    MEM.conta("Metros, com 10% de perda", "(paredes + fundo) × 1,10", [["paredes", p.paredesM2Total], ["fundo", p.areaConstruida]], telaPoliesterBruto, "m"),
+    MEM.teto(telaPoliesterBruto, telaPoliester, "m"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Tábuas de 10cm x 3mts", unidade: "Unidades", qtd: tabua10Marcacao, memoria: [
+    MEM.nota("Gabarito de marcação da piscina, igual ao da casa: cavalete de tábuas em volta da cava."),
+    MEM.dado("Gabarito da obra da piscina", p.gabaritoObra, "m", "bloco Piscina"),
+    MEM.conta("Tábuas de 3 m, com 20% de emendas", "gabarito ÷ 3 × 1,20", [["gabarito", p.gabaritoObra]], tabua10MarcacaoBruto, "tábuas"),
+    MEM.teto(tabua10MarcacaoBruto, tabua10Marcacao, "tábuas de 3 m", "Arredonda para cima (tábua inteira)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Tábuas de 20cm x 3mts", unidade: "Unidades", qtd: tabuas15Colun, memoria: memTabuaPiscina(15, p.colunas15, tabuas15ColunBruto, tabuas15Colun) });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Tábuas de 25cm x 3mts", unidade: "Unidades", qtd: tabuas20Colun, memoria: memTabuaPiscina(20, p.colunas20, tabuas20ColunBruto, tabuas20Colun) });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Unidades", qtd: tabuas30Total, memoria: [
+    MEM.nota("Tábuas de 30 cm somam a fôrma das colunas de 25 cm e a das três vigas que cintam a piscina."),
+    MEM.dado("Perímetro das paredes da piscina", p.perimetroParedes, "m", "bloco Piscina"),
+    MEM.conta("Tábuas das colunas", "colunas × profundidade × 2 ÷ 3 × 1,10 → arredonda", [["colunas", p.colunas25], ["profundidade", p.profundidade]], tabuas30Colun, "tábuas"),
+    MEM.conta("Tábuas das 3 vigas", "(perímetro × 2 ÷ 3 + perímetro × 2 ÷ 3 × 0,45 ÷ 3) × 3 × 1,10 → arredonda", [["perímetro", p.perimetroParedes]], tabuas30Vigas, "tábuas"),
+    MEM.conta("Total", "colunas + vigas", [["colunas", tabuas30Colun], ["vigas", tabuas30Vigas]], tabuas30Total, "tábuas de 3 m"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", unidade: "Unidades", qtd: maderitesColun, memoria: MEMB.madeirite(p.areaFormaColunaMaior25cm, maderitesColunBruto, maderitesColun) });
+  emitir(out, { ...base, subEtapa: "Contrapiso", item: "Aço - Malha pop EQ092 4.2mm 15x15", unidade: "Unidades", qtd: malhaPopContrap, memoria: [
+    MEM.nota("Tela do contrapiso da piscina. Painel de 2,90 × 1,90 m; a perda entra dividindo (as telas se sobrepõem)."),
+    ...memPiscina,
+    MEM.conta("Painéis", "área ÷ (2,90 × 1,90 × 1,10)", [["área", p.areaConstruida]], malhaPopContrapBruto, "painéis"),
+    MEM.teto(malhaPopContrapBruto, malhaPopContrap, "painéis", "Arredonda para cima (painel inteiro)"),
+  ] });
+  emitBarras(out, { ...base, subEtapa: "Supra Estrutura" }, barras, (k) => memoriaBitola(k, [["estacas", p.ferro.estacas[k]], ["sapatas", p.ferro.sapatas[k]], ["arranques", p.ferro.arranques[k]], ["baldrame", p.ferro.baldrame[k]], ["contrapiso", p.ferro.contrapiso[k]], ["colunas", p.ferro.colunas[k]], ["vigas", p.ferro.vigas[k]]], barras));
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: p.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto, memoria: [
+    MEM.nota(`Concreto da piscina lançado no bloco Piscina, elemento por elemento. Resistência: ${p.resistenciaConcreto || "Concreto"}.`),
+    ...partesConcPisc.map(([nome, v]) => MEM.dado(nome[0].toUpperCase() + nome.slice(1), v, "m³", "bloco Piscina")),
+    MEM.conta("Volume com 10% de perda", `(${partesConcPisc.map(([nome]) => nome).join(" + ")}) × 1,10`, partesConcPisc, concretoBruto, "m³"),
+    MEM.teto(concretoBruto, concreto, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Disco Ferro", unidade: "Unidades", qtd: discoFerro, memoria: [
+    MEM.nota("Disco de corte do ferro da piscina: 0,01 por quilo de ferro comprado."),
+    MEM.conta("Peso do ferro da piscina", "soma das bitolas", [], peso, "kg"),
+    MEM.conta("Discos", "peso × 0,01", [["peso", peso]], discoFerroBruto, "discos"),
+    MEM.teto(discoFerroBruto, discoFerro, "discos"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Aço - Arame Recozido", unidade: "Kg", qtd: arame, memoria: [
+    MEM.nota("Arame para amarrar as armaduras da piscina: 0,06 kg por quilo de ferro."),
+    MEM.conta("Peso do ferro da piscina", "soma das bitolas", [], peso, "kg"),
+    MEM.conta("Arame", "peso × 0,06", [["peso", peso]], arameBruto, "kg"),
+    MEM.teto(arameBruto, arame, "kg"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Aço - Pregos 18x27", unidade: "Kg", qtd: prego18x27, memoria: [
+    MEM.nota("Pregos 18x27 da piscina: os da fôrma (proporcionais ao arame) mais os do gabarito de marcação."),
+    MEM.conta("Pregos da fôrma", "arame × 0,55", [["arame", arame]], 0.55 * arame, "kg"),
+    MEM.dado("Pregos do gabarito", prego18x27Marcacao, "kg", "passo do gabarito"),
+    MEM.conta("Total", "fôrma + gabarito", [["fôrma", 0.55 * arame], ["gabarito", prego18x27Marcacao]], prego18x27Bruto, "kg"),
+    MEM.teto(prego18x27Bruto, prego18x27, "kg"),
+  ] });
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: "Aço - Pregos 17x21", unidade: "Kg", qtd: prego17x21Marcacao, memoria: [
+    MEM.nota("Pregos 17x21: a outra metade do consumo do gabarito de marcação da piscina."),
+    MEM.dado("Tábuas de 10 cm do gabarito", tabua10Marcacao, "tábuas", "passo do gabarito"),
+    MEM.conta("Pregos", "tábuas × 0,05 ÷ 2", [["tábuas", tabua10Marcacao]], prego18x27MarcacaoBruto, "kg"),
+    MEM.teto(prego18x27MarcacaoBruto, prego17x21Marcacao, "kg"),
+  ] });
+  emitir(out, { ...base, tipo: "Acabamento", subEtapa: "Revestimento", item: "Revestimento", unidade: "m2", qtd: revestimento, memoria: [
+    MEM.nota("Revestimento da piscina: as paredes inteiras mais o fundo com 20% a mais (recortes em volta dos dispositivos e do ralo)."),
+    ...memPiscina,
+    MEM.conta("Área a revestir", "paredes + fundo × 1,20", [["paredes", p.paredesM2Total], ["fundo", p.areaConstruida]], revestimentoBruto, "m²"),
+    MEM.teto(revestimentoBruto, revestimento, "m²"),
+  ] });
+  emitir(out, { ...base, tipo: "Acabamento", subEtapa: "Revestimento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: rejuntes, memoria: [
+    MEM.nota("Rejunte da pastilha da piscina: 0,095 kg por m², embalagem de 5 kg."),
+    MEM.dado("Área revestida", revestimento, "m²", "passo anterior"),
+    MEM.conta("Embalagens, com 10% de perda", "área × 0,095 ÷ 5 × 1,10", [["área", revestimento]], rejuntesBruto, "embalagens"),
+    MEM.teto(rejuntesBruto, rejuntes, "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
+  ] });
+  emitir(out, { ...base, tipo: "Acabamento", subEtapa: "Revestimento", item: "Argamassa AC 3 GF - 20kg", unidade: "Unidades", qtd: argamassas, memoria: [
+    MEM.nota("Argamassa AC-III (área submersa): 7,5 kg por m², saco de 20 kg."),
+    MEM.dado("Área revestida", revestimento, "m²", "passo anterior"),
+    MEM.conta("Sacos, com 10% de perda", "área × 7,5 ÷ 20 × 1,10", [["área", revestimento]], argamassasBruto, "sacos"),
+    MEM.teto(argamassasBruto, argamassas, "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
+  ] });
+  emitir(out, { ...base, tipo: "Acabamento", subEtapa: "Revestimento", item: "Disco Porcelanato", unidade: "Unidades", qtd: discoPorcelanato, memoria: [
+    MEM.nota("Disco de corte das peças da piscina: 0,005 por m² revestido."),
+    MEM.dado("Área revestida", revestimento, "m²", "passo do revestimento"),
+    MEM.conta("Discos, com 10% de perda", "área × 0,005 × 1,10", [["área", revestimento]], discoPorcelanatoBruto, "discos"),
+    MEM.teto(discoPorcelanatoBruto, discoPorcelanato, "discos"),
+  ] });
 }
 
 // ═══════════════════════════════════════════════════════════════
