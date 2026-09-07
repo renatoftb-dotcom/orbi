@@ -1309,12 +1309,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const modelo = contratoModelo(g.modelo);
     const global = modelo.id === "empreitadaGlobal";
     const prest = prestadores.find(p => p.id === g.prestadorId) || null;
+    const tipoP = tipoProfissional(g.tipoProfissional);
+    const prestadoresDisponiveis = prestadoresDoTipo(prestadores, g.tipoProfissional);
     const total = valorContrato(g);
     const setG = (campo, valor) => setContratoGerando({ ...g, [campo]: valor });
     const setLista = (campo, idx, chave, valor) => setContratoGerando({ ...g, [campo]: (g[campo] || []).map((x, i) => i === idx ? { ...x, [chave]: valor } : x) });
     const addLinha = (campo, vazio) => setContratoGerando({ ...g, [campo]: [...(g[campo] || []), vazio] });
     const delLinha = (campo, idx) => setContratoGerando({ ...g, [campo]: (g[campo] || []).filter((_, i) => i !== idx) });
     const salvar = () => {
+      if (!g.tipoProfissional) { dialogo.alertar({ titulo: "Escolha o tipo de profissional", mensagem: "O contrato começa pelo tipo de profissional — é ele que define o regime e o objeto.", tipo: "aviso" }); return; }
       if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado ou digite o nome do contratado.", tipo: "aviso" }); return; }
       const novo = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total, geradoEm: new Date().toISOString() };
       const existe = contratos.some(c => c.id === novo.id);
@@ -1327,26 +1330,51 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", marginBottom: 2 }}>Gerar contrato</div>
         <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>{obraSelecionada.nome} · contratante: {cliente.nome}</div>
 
+        <div style={{ marginBottom: 12 }}>
+          <label style={C.label}>1. Tipo de profissional</label>
+          <select style={{ ...C.input, cursor: "pointer" }} value={g.tipoProfissional || ""} onChange={e => {
+            const t = tipoProfissional(e.target.value);
+            if (!t) { setG("tipoProfissional", ""); return; }
+            // O tipo escolhe o regime — reconstrói com os padrões do modelo dele.
+            const base = contratoVazio(t.modelo, cliente.id, obraSelecionada.id, t.id);
+            // Objeto só é sobrescrito se ainda estiver no texto sugerido pelo tipo anterior.
+            const objetoAtual = (g.objeto || "").trim();
+            const sugestaoAnterior = (tipoProfissional(g.tipoProfissional)?.objeto || "").trim();
+            const objeto = (!objetoAtual || objetoAtual === sugestaoAnterior) ? t.objeto : g.objeto;
+            // Mantém o prestador só se ele continuar compatível com o novo tipo.
+            const compat = prestadoresDoTipo(prestadores, t.id).some(p => p.id === g.prestadorId);
+            setContratoGerando({ ...base, id: g.id, objeto, enderecoObra: g.enderecoObra, status: g.status,
+              prestadorId: compat ? g.prestadorId : "", nomeContratado: compat ? g.nomeContratado : "" });
+          }}>
+            <option value="">— escolher o tipo de profissional —</option>
+            {TIPOS_PROFISSIONAL.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
+          <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div>
-            <label style={C.label}>Modelo</label>
+            <label style={C.label}>2. Prestador (contratado)</label>
+            <select style={{ ...C.input, cursor: "pointer" }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
+              <option value="">{tipoP ? "— escolher um prestador cadastrado —" : "— escolha o tipo primeiro —"}</option>
+              {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}{p.categoria ? ` · ${p.categoria}` : ""}</option>)}
+            </select>
+            {tipoP && tipoP.categorias.length > 0 && prestadoresDisponiveis.length > 0 && !prestadoresDisponiveis.some(p => tipoP.categorias.map(c => c.toLowerCase()).includes(String(p.categoria || "").toLowerCase())) && (
+              <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]} — a lista mostra todos.</div>
+            )}
+          </div>
+          <div>
+            <label style={C.label}>3. Modelo do contrato</label>
             <select style={{ ...C.input, cursor: "pointer" }} value={g.modelo} onChange={e => {
-              const base = contratoVazio(e.target.value, cliente.id, obraSelecionada.id);
+              const base = contratoVazio(e.target.value, cliente.id, obraSelecionada.id, g.tipoProfissional);
               setContratoGerando({ ...base, id: g.id, prestadorId: g.prestadorId, nomeContratado: g.nomeContratado, objeto: g.objeto, enderecoObra: g.enderecoObra, status: g.status });
             }}>
               {CONTRATO_MODELOS.map(m => <option key={m.id} value={m.id}>{m.nome}</option>)}
             </select>
           </div>
-          <div>
-            <label style={C.label}>Prestador (contratado)</label>
-            <select style={{ ...C.input, cursor: "pointer" }} value={g.prestadorId} onChange={e => setG("prestadorId", e.target.value)}>
-              <option value="">— escolher um prestador cadastrado —</option>
-              {prestadores.filter(p => p.ativo !== false).map(p => <option key={p.id} value={p.id}>{p.nome}{p.categoria ? ` · ${p.categoria}` : ""}</option>)}
-            </select>
-          </div>
         </div>
         <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 14 }}>{modelo.resumo}</div>
-        {!prest && (
+        {tipoP && !prest && (
           <div style={{ fontSize: 12, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 12px", marginBottom: 12 }}>
             Sem prestador escolhido o contrato sai sem CNPJ, endereço e representante do contratado. Cadastre em Prestadores para o preâmbulo vir completo.
             <div style={{ marginTop: 6 }}>
@@ -1476,6 +1504,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#262421" }}>{contrato.nomeContratado}</div>
                     <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ ...C.tag(sts.cor) }}>{sts.label}</span>
+                      {tipoProfissional(contrato.tipoProfissional) && <span>{tipoProfissional(contrato.tipoProfissional).nome}</span>}
                       {contrato.valor && <span>R$ {parseFloat(contrato.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
                       {contrato.dataVencimento && <span>Vence: {new Date(contrato.dataVencimento).toLocaleDateString("pt-BR")}</span>}
                     </div>
@@ -1496,7 +1525,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {perm.podeEditar && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
-            <button style={{ ...C.btn, flex: 1, minWidth: 200 }} onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }}>📄 Gerar contrato</button>
+            <button style={{ ...C.btn, flex: 1, minWidth: 200 }} onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id, "")); setView("gerarContrato"); }}>📄 Gerar contrato</button>
             <button style={{ ...C.btnSec, flex: 1, minWidth: 160 }} onClick={() => { setFormContrato({ id: uid(), clienteId: cliente.id, obraId: obraSelecionada.id, nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" }); setView("formContrato"); }}>+ Só registrar contrato</button>
           </div>
         )}

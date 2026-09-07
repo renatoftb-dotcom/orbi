@@ -974,9 +974,15 @@ function Financeiro({ data, save }) {
 // ImportarNF, que já vincula fornecedor automaticamente por nome),
 // mas o cadastro em si foi refeito do zero com campos mais simples.
 // ═══════════════════════════════════════════════════════════════
+// Espelha os prestadores de serviço do catálogo de insumos (grupo
+// "Prestadores de serviços") — é por essa categoria que o gerador de
+// contratos filtra a lista de contratados.
 const CATEGORIAS_PRESTADOR = [
-  "Empreiteiro", "Eletricista", "Pintor", "Encanador", "Gesseiro",
-  "Esquadria de Alumínio", "Marceneiro", "Serralheiro", "Pedreiro",
+  "Empreiteiro", "Pedreiro", "Eletricista", "Encanador", "Pintor",
+  "Carpinteiro", "Impermeabilizador", "Serralheiro", "Marceneiro",
+  "Gesseiro", "Esquadria de Alumínio", "Terraplanagem",
+  "Instalador de Ar Condicionado", "Instalador de Aquecedores",
+  "Instalador de Equipamentos de Piscina", "Gestão de Obra",
   "Loja / Comércio", "Outro",
 ];
 

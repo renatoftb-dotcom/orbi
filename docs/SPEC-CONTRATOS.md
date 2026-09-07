@@ -7,6 +7,38 @@ o prestador; o escritório redige). O CONTRATADO vem do cadastro de
 **Prestadores** (`data.fornecedores`), que já tem CNPJ/CPF, endereço,
 representante e CPF do representante.
 
+## Tipo de profissional (primeira escolha)
+
+O gerador começa pelo **tipo de profissional**, não pelo modelo. A lista
+(`TIPOS_PROFISSIONAL`) espelha os prestadores de serviço do catálogo de
+insumos (grupo *Prestadores de serviços*, códigos `PRE-001`…`PRE-017`) — é
+por eles que a obra é orçada, então é por eles que ela é contratada:
+
+Empreiteiro · Eletricista · Serralheiro · Pintor · Carpinteiro · Encanador ·
+Impermeabilizador · Instalador de ar condicionado · Marceneiro ·
+Terraplanagem · Gesseiro · Instalador de aquecedores · Instalador de
+equipamentos de piscina · Gestão de obra · Outro.
+
+Cada tipo carrega três coisas:
+
+- `categorias` — como o prestador aparece no cadastro (`fornecedor.categoria`).
+  O select de contratado é filtrado por elas; se ninguém estiver cadastrado
+  naquela categoria, a lista cai para todos os prestadores ativos em vez de
+  ficar vazia (`prestadoresDoTipo`). Serralheiro puxa também *Esquadria de
+  Alumínio*; Empreiteiro puxa também *Pedreiro*.
+- `modelo` — o regime que costuma valer para o ofício. Quem só põe mão de
+  obra (empreiteiro, eletricista, pintor, carpinteiro, encanador, gestão)
+  nasce em `empreitadaMaoDeObra`; quem fornece material (serralheiro,
+  marceneiro, impermeabilizador, instaladores, terraplanagem) nasce em
+  `empreitadaGlobal`. O usuário pode trocar depois — o tipo sugere, não trava.
+- `objeto` — o subtítulo já escrito, ainda editável. Trocar o tipo só
+  sobrescreve o objeto se ele ainda estiver no texto sugerido pelo tipo
+  anterior.
+
+`CATEGORIAS_PRESTADOR` (cadastro de Prestadores, `outros.jsx`) foi alinhada a
+essa lista. Contratos gravados antes desta versão ficam com
+`tipoProfissional: ""` e continuam abrindo normalmente.
+
 ## Modelos
 
 Tirados de dois contratos reais do escritório (COBOP, set/2026):

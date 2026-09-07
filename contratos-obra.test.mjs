@@ -16,7 +16,8 @@ const modulo = new Function(`
   var uid = () => "id1";
   ${src.slice(0, corte)}
   return { CONTRATO_MODELOS, contratoModelo, contratoVazio, valorContrato, parcelasContrato,
-           porExtensoCtr, moedaExtensoCtr, qualificarParte, montarContrato, fmtMoedaCtr };
+           porExtensoCtr, moedaExtensoCtr, qualificarParte, montarContrato, fmtMoedaCtr,
+           TIPOS_PROFISSIONAL, tipoProfissional, prestadoresDoTipo };
 `)();
 
 let passou = 0, falhou = 0;
@@ -169,6 +170,53 @@ teste("dois modelos disponíveis, cada um com o seu padrão", () => {
   assert.strictEqual(novo.entradaPct, 50);
   assert.strictEqual(novo.itens.length, 1);
   assert.strictEqual(novo.escopo.length, 0);
+});
+
+teste("tipos de profissional cobrem os prestadores do catálogo e sugerem regime e objeto", () => {
+  const nomes = modulo.TIPOS_PROFISSIONAL.map((t) => t.nome);
+  for (const n of ["Empreiteiro", "Eletricista", "Serralheiro", "Pintor", "Carpinteiro", "Encanador",
+                   "Impermeabilizador", "Instalador de ar condicionado", "Marceneiro", "Terraplanagem"]) {
+    assert.ok(nomes.includes(n), `falta o tipo ${n}`);
+  }
+  // ids únicos e todo tipo aponta para um modelo que existe
+  assert.strictEqual(new Set(modulo.TIPOS_PROFISSIONAL.map((t) => t.id)).size, modulo.TIPOS_PROFISSIONAL.length);
+  for (const t of modulo.TIPOS_PROFISSIONAL) {
+    assert.ok(modulo.CONTRATO_MODELOS.some((m) => m.id === t.modelo), `${t.id} aponta para modelo inexistente`);
+  }
+  // mão de obra para quem só põe mão de obra; global para quem fornece
+  assert.strictEqual(modulo.tipoProfissional("empreiteiro").modelo, "empreitadaMaoDeObra");
+  assert.strictEqual(modulo.tipoProfissional("serralheiro").modelo, "empreitadaGlobal");
+  assert.strictEqual(modulo.tipoProfissional("marceneiro").modelo, "empreitadaGlobal");
+  assert.strictEqual(modulo.tipoProfissional("inexistente"), null);
+});
+
+teste("o tipo escolhido já preenche o objeto e o regime do contrato novo", () => {
+  const c = modulo.contratoVazio("empreitadaGlobal", "c1", "o1", "serralheiro");
+  assert.strictEqual(c.tipoProfissional, "serralheiro");
+  assert.strictEqual(c.objeto, "Fornecimento e montagem de estruturas e esquadrias metálicas");
+  const d = modulo.montarContrato({ ...c, itens: [{ descricao: "Portão", valor: 1000 }] }, { cliente, obra, prestador: serralheiro });
+  assert.strictEqual(d.total, 1000);
+  // sem tipo, nada é sugerido (compatível com os contratos já gravados)
+  const semTipo = modulo.contratoVazio("empreitadaMaoDeObra", "c1", "o1");
+  assert.strictEqual(semTipo.tipoProfissional, "");
+  assert.strictEqual(semTipo.objeto, "");
+});
+
+teste("a lista de prestadores é filtrada pela categoria do tipo, com queda para todos", () => {
+  const lista = [
+    { id: "p1", nome: "MB Viezzer", categoria: "Serralheiro" },
+    { id: "p2", nome: "Elétrica Sol", categoria: "Eletricista" },
+    { id: "p3", nome: "Alumínios SP", categoria: "Esquadria de Alumínio" },
+    { id: "p4", nome: "Inativo", categoria: "Serralheiro", ativo: false },
+  ];
+  // serralheiro puxa também esquadria de alumínio, e ignora inativos
+  assert.deepStrictEqual(modulo.prestadoresDoTipo(lista, "serralheiro").map((p) => p.id), ["p1", "p3"]);
+  assert.deepStrictEqual(modulo.prestadoresDoTipo(lista, "eletricista").map((p) => p.id), ["p2"]);
+  // ninguém cadastrado naquela categoria: mostra todos em vez de um select vazio
+  assert.strictEqual(modulo.prestadoresDoTipo(lista, "terraplanagem").length, 3);
+  // "Outro" e ausência de tipo mostram todos
+  assert.strictEqual(modulo.prestadoresDoTipo(lista, "outro").length, 3);
+  assert.strictEqual(modulo.prestadoresDoTipo(lista, "").length, 3);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
