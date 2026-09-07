@@ -414,7 +414,7 @@ function fluxoMensal(contas, hoje) {
 // navegadores, e a barra ficava parada. Com estado + transition, o navegador
 // sempre tem um valor inicial e um final para interpolar.
 const CP_FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", "#0474f4", "A pagar"]];
-function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, uid: idGrafico }) {
+function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico }) {
   const [pronto, setPronto] = useState(false);
   useEffect(() => {
     // dois quadros: o primeiro pinta as barras zeradas, o segundo dispara a transição
@@ -450,8 +450,10 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, uid: idGrafico }) {
           const hTotal = CP_FAIXAS.reduce((a, [k]) => a + altura(m[k]), 0);
           const atraso = i * 60;
           let y = BASE;
-          return (
-            <g key={m.chave} onClick={() => onEscolherMes && onEscolherMes(m.chave)} style={{ cursor: onEscolherMes ? "pointer" : "default" }}>
+            const apagada = !!mesSelecionado && mesSelecionado !== m.chave;
+            return (
+            <g key={m.chave} onClick={() => onEscolherMes && onEscolherMes(m.chave)}
+              style={{ cursor: onEscolherMes ? "pointer" : "default", opacity: apagada ? 0.38 : 1, transition: "opacity 180ms ease-out" }}>
               <title>{`${rotuloMes(m.chave)} — ${fmtMoedaCtr(m.total)}`}</title>
               <g className="vk-cp-anim" clipPath={`url(#vk-cp-${idGrafico}-${i})`}
                 style={{
@@ -471,7 +473,9 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, uid: idGrafico }) {
                 fontSize="10.5" fontWeight="700" fill="#111827"
                 style={{ opacity: pronto ? 1 : 0, transition: `opacity 320ms ease-out ${atraso + 380}ms` }}>{curto(m.total)}</text>
               <text x={x + LARG / 2} y={BASE + 16} textAnchor="middle" fontSize="11"
-                fill={m.chave === mesAtual ? "#111827" : "#4b5563"} fontWeight={m.chave === mesAtual ? 700 : 400}>{m.rotulo}</text>
+                fill={m.chave === mesSelecionado ? "#0474f4" : m.chave === mesAtual ? "#111827" : "#4b5563"}
+                fontWeight={m.chave === mesSelecionado || m.chave === mesAtual ? 700 : 400}>{m.rotulo}</text>
+              {m.chave === mesSelecionado && <rect x={x} y={BASE + 22} width={LARG} height={2} rx={1} fill="#0474f4" />}
             </g>
           );
         })}

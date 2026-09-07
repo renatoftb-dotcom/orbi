@@ -1052,6 +1052,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [visaoContas, setVisaoContas] = useState("mes");
   const [filtroContas, setFiltroContas] = useState("todas");
   const [gruposFechados, setGruposFechados] = useState({});
+  // Mês escolhido no gráfico: filtra a lista até clicarem fora do gráfico.
+  const [mesSelecionado, setMesSelecionado] = useState("");
+  const refGrafico = useRef(null);
+  useEffect(() => {
+    if (!mesSelecionado || typeof document === "undefined") return;
+    const fora = (ev) => {
+      const alvo = ev.target;
+      if (refGrafico.current && refGrafico.current.contains(alvo)) return;
+      // botões da própria lista (pagar, editar) não desfazem a escolha
+      if (alvo && alvo.closest && alvo.closest("[data-vk-mantem-mes]")) return;
+      setMesSelecionado("");
+    };
+    document.addEventListener("mousedown", fora);
+    return () => document.removeEventListener("mousedown", fora);
+  }, [mesSelecionado]);
   const [imprimirAoAbrir, setImprimirAoAbrir] = useState(false);
   const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
@@ -1899,7 +1914,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return `${ct.numeroContrato ? `Contrato ${ct.numeroContrato} · ` : ""}${servicoDoContrato(ct)} · ${ct.nomeContratado || "Contratado"}`;
     };
     const t = totaisContas(contasDaObra, hojeIso);
-    const lista = filtrarContas(contasDaObra, filtroContas, hojeIso);
+    // o mês escolhido no gráfico entra antes dos demais filtros
+    const doMes = mesSelecionado
+      ? contasDaObra.filter(c => String(c.vencimento || "").slice(0, 7) === mesSelecionado)
+      : contasDaObra;
+    const lista = filtrarContas(doMes, filtroContas, hojeIso);
     const grupos = agruparContas(lista, visaoContas, { hoje: hojeIso, nomePrestador, nomeContrato });
     const mesAtual = hojeIso.slice(0, 7);
     const abertoPadrao = (g) => (visaoContas === "mes" ? g.chave >= mesAtual : true);
@@ -1933,7 +1952,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
     // ── Gráfico do fluxo mensal (desenho em contas-pagar.jsx) ──
     const fluxo = fluxoMensal(contasDaObra, hojeIso);
-    const irParaMes = (chave) => { setVisaoContas("mes"); setGruposFechados({ ...gruposFechados, [`mes:${chave}`]: false }); };
+    // Clicar na barra filtra a lista por aquele mês; clicar de novo desfaz.
+    const irParaMes = (chave) => {
+      setMesSelecionado(mesSelecionado === chave ? "" : chave);
+      setGruposFechados({ ...gruposFechados, [`mes:${chave}`]: false });
+    };
 
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -1952,7 +1975,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {/* Fluxo mensal */}
         {fluxo.meses.length > 0 && (
-          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "14px 16px", marginBottom: 16, background: "#fff" }}>
+          <div ref={refGrafico} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "14px 16px", marginBottom: 16, background: "#fff" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Fluxo por mês</div>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
@@ -1963,9 +1986,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 ))}
               </div>
             </div>
-            <GraficoFluxoMensal fluxo={fluxo} hojeIso={hojeIso} uid={obraSelecionada.id} onEscolherMes={irParaMes} />
+            <GraficoFluxoMensal fluxo={fluxo} hojeIso={hojeIso} uid={obraSelecionada.id} onEscolherMes={irParaMes} mesSelecionado={mesSelecionado} />
             <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
-              Valores em milhares quando passam de mil. Clique num mês para abrir as contas dele.
+              Valores em milhares quando passam de mil. Clique num mês para ver só as contas dele; clique fora do gráfico para voltar a todas.
               {fluxo.semData > 0 ? ` ${fluxo.semData} ${fluxo.semData === 1 ? "conta" : "contas"} sem vencimento (${fmtMoedaCtr(fluxo.semDataValor)}) fora do gráfico.` : ""}
             </div>
           </div>
@@ -1977,10 +2000,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           {VISOES_CONTAS.map(v => chip(visaoContas === v.id, v.nome, () => setVisaoContas(v.id)))}
         </div>
 
-        {filtroContas !== "todas" && (
-          <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 16 }}>
-            Mostrando só {(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()} ·{" "}
-            <button type="button" onClick={() => setFiltroContas("todas")} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>ver todas</button>
+        {(filtroContas !== "todas" || mesSelecionado) && (
+          <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 16 }}>
+            {`Mostrando ${mesSelecionado ? rotuloMes(mesSelecionado).toLowerCase() : ""}${mesSelecionado && filtroContas !== "todas" ? " · " : ""}${filtroContas !== "todas" ? `só ${(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()}` : ""} · `}
+            <button type="button" onClick={() => { setFiltroContas("todas"); setMesSelecionado(""); }} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>ver todas</button>
           </div>
         )}
 
@@ -2077,7 +2100,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               <div style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500 }}>{st.label}</div>
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                               {perm.podeEditar ? (
-                                <div style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                <div data-vk-mantem-mes="1" style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                   <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
                                   {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                                   {c.origem === "avulsa" && (
