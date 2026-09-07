@@ -118,8 +118,12 @@ function tipoProfissional(id) { return TIPOS_PROFISSIONAL.find((t) => t.id === i
 // aparecem os encanadores. Quem não é daquela categoria fica fora da lista,
 // mesmo que não sobre ninguém — nesse caso o caminho é cadastrar um novo.
 // Sem tipo, ou no tipo "Outro" (que não tem categoria), aparecem todos.
-function prestadoresDoTipo(prestadores, tipoId) {
-  const ativos = (prestadores || []).filter((p) => p.ativo !== false);
+function prestadoresDoTipo(prestadores, tipoId, escritorio) {
+  const doEscritorio = prestadorDoEscritorio(escritorio);
+  const ativos = [
+    ...(doEscritorio ? [doEscritorio] : []),
+    ...(prestadores || []).filter((p) => p.ativo !== false),
+  ];
   const t = tipoProfissional(tipoId);
   if (!t || !t.categorias.length) return ativos;
   const alvo = t.categorias.map((c) => c.toLowerCase());
@@ -194,7 +198,7 @@ function qualificarParte(p) {
   // Representante só faz sentido em pessoa jurídica; a pessoa física assina
   // por si.
   if (pj && o.representanteNome) {
-    partes.push(`neste ato representada por ${String(o.representanteNome).toUpperCase()}${o.representanteCpf ? `, inscrito no CPF sob o nº ${o.representanteCpf}` : ""}`);
+    partes.push(`neste ato representada por ${String(o.representanteNome).toUpperCase()}${o.representanteCpf ? `, inscrito no CPF sob o nº ${o.representanteCpf}` : ""}${o.representanteCau ? `, CAU nº ${o.representanteCau}` : ""}`);
   }
   return partes.join(", ");
 }
@@ -332,6 +336,48 @@ function servicoDoContrato(c) {
   const t = tipoProfissional(c && c.tipoProfissional);
   if (t && t.servico) return tituloServicoCtr(t.servico);
   return String((c && c.objeto) || "").trim() || "Serviços";
+}
+
+// ── O próprio escritório como contratado ────────────────────────
+// A gestão da obra costuma ser do escritório. Em vez de cadastrá-lo como
+// prestador (dado repetido, que envelhece), o contrato lê o cadastro do
+// escritório e o apresenta no formato de prestador.
+const ID_PRESTADOR_ESCRITORIO = "__escritorio__";
+function prestadorDoEscritorio(escritorio) {
+  const e = escritorio || {};
+  if (!String(e.nome || "").trim()) return null;
+  const resp = (e.responsaveis && e.responsaveis[0]) || null;
+  return {
+    id: ID_PRESTADOR_ESCRITORIO,
+    escritorio: true,
+    nome: e.nome,
+    tipo: "PJ",
+    categoria: "Gestão de Obra",
+    cnpjCpf: e.cnpj || "",
+    // o cadastro guarda o logradouro numa linha só, com o número junto
+    logradouro: e.endereco || "",
+    numero: "", bairro: "",
+    cidade: e.cidade || "", estado: e.estado || "", cep: e.cep || "",
+    representanteNome: (resp && resp.nome) || e.responsavel || "",
+    representanteCpf: (resp && resp.cpf) || e.cpfResponsavel || "",
+    representanteCau: (resp && resp.cau) || e.cau || "",
+    telefone: e.telefone || "", email: e.email || "",
+    ativo: true,
+  };
+}
+// O que ainda falta preencher no cadastro do escritório para o contrato sair
+// completo. Devolve os rótulos que faltam, na ordem em que aparecem lá.
+function faltaNoEscritorio(escritorio) {
+  const p = prestadorDoEscritorio(escritorio);
+  if (!p) return ["Nome do escritório"];
+  const falta = [];
+  if (!p.cnpjCpf) falta.push("CNPJ");
+  if (!p.logradouro) falta.push("Endereço");
+  if (!p.cidade) falta.push("Cidade");
+  if (!p.cep) falta.push("CEP");
+  if (!p.representanteNome) falta.push("Responsável técnico");
+  if (!p.representanteCpf) falta.push("CPF do responsável");
+  return falta;
 }
 
 // Grava a fatia de um cliente (suas obras, seus contratos) de volta na coleção

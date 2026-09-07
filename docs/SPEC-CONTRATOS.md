@@ -79,6 +79,22 @@ tem valor total, itens discriminados (opcionais — havendo itens com valor, o
 total é a soma deles e o campo de valor total trava), descritivo do ANEXO I
 (opcional), modalidade de pagamento, prazo e a lista de cláusulas marcáveis.
 
+### O próprio escritório como contratado
+
+A gestão da obra costuma ser do escritório. Ele aparece **no topo da lista de
+contratados**, marcado "(meu escritório)", sempre que o tipo escolhido for
+compatível — Gestão de obra, pela categoria. Não é preciso cadastrá-lo como
+prestador: `prestadorDoEscritorio(data.escritorio)` monta o contratado a
+partir do cadastro do escritório, então corrigir um dado lá corrige os
+contratos.
+
+O que o cadastro do escritório fornece: **nome** → razão social, **CNPJ**,
+**endereço + cidade/UF + CEP** → sede (o cadastro guarda o logradouro numa
+linha só, com o número junto), e o primeiro **responsável técnico** → nome,
+CPF e CAU do representante, que sai no preâmbulo ("neste ato representada por
+LEONARDO PADOVAN, inscrito no CPF sob o nº …, CAU nº …"). Faltando algo,
+`faltaNoEscritorio()` lista os campos e o gerador avisa antes de gerar.
+
 No passo do prestador há **＋ Novo**, que abre o cadastro rápido dentro do
 próprio gerador — nome, PJ/PF, CNPJ/CPF, categoria (já vem a do tipo
 escolhido), endereço com ViaCEP e representante legal, exatamente os dados

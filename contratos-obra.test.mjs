@@ -22,7 +22,8 @@ const modulo = new Function(`
            ESCOPOS_FORNECIMENTO, escopoContrato, escopoDoTipo, objetoPadrao, tituloServicoCtr,
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
            textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr,
-           mesclarPorCliente, contratosDasObras, contratosNasObras };
+           mesclarPorCliente, contratosDasObras, contratosNasObras,
+           prestadorDoEscritorio, faltaNoEscritorio, ID_PRESTADOR_ESCRITORIO };
 `)();
 
 let passou = 0, falhou = 0;
@@ -554,6 +555,58 @@ teste("o contrato mora dentro da obra, que é o que o backend grava", () => {
   // e o ciclo fecha: gravar e ler de volta dá a mesma coisa
   const ida = modulo.contratosNasObras(obras, [...lidos, { id: "k2", obraId: "o2" }], "c1", "o2");
   assert.deepStrictEqual(modulo.contratosDasObras(ida, "c1").map(c => c.id).sort(), ["k1", "k2"]);
+});
+
+teste("o escritório entra como contratado, lendo o próprio cadastro", () => {
+  const escritorio = {
+    nome: "Padovan Arquitetos", cnpj: "20.205.619/0001-40",
+    endereco: "Rua Expedicionários do Brasil, 1.234", cidade: "Ourinhos", estado: "SP", cep: "19900-000",
+    telefone: "14 99601-5466", email: "contato@padovan.com.br",
+    responsaveis: [{ id: "r1", nome: "Leonardo Padovan", cau: "A123456-7", cpf: "111.222.333-44" }],
+  };
+  const p = modulo.prestadorDoEscritorio(escritorio);
+  assert.strictEqual(p.id, modulo.ID_PRESTADOR_ESCRITORIO);
+  assert.strictEqual(p.escritorio, true);
+  assert.strictEqual(p.categoria, "Gestão de Obra");
+  assert.strictEqual(p.cnpjCpf, "20.205.619/0001-40");
+  assert.strictEqual(p.representanteNome, "Leonardo Padovan");
+  assert.strictEqual(p.representanteCau, "A123456-7");
+  // sem nome de escritório não há contratado
+  assert.strictEqual(modulo.prestadorDoEscritorio({}), null);
+
+  // o preâmbulo sai completo, com CAU
+  const q = modulo.qualificarParte(p);
+  assert.ok(q.startsWith("PADOVAN ARQUITETOS, pessoa jurídica de direito privado"));
+  assert.ok(q.includes("inscrita no CNPJ sob o nº 20.205.619/0001-40"));
+  assert.ok(q.includes("com sede na Rua Expedicionários do Brasil, 1.234, Ourinhos/SP, CEP 19900-000"));
+  assert.ok(q.includes("neste ato representada por LEONARDO PADOVAN, inscrito no CPF sob o nº 111.222.333-44, CAU nº A123456-7"));
+
+  // contrato de gestão de obra com o escritório
+  const c = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra", "maoDeObra"),
+    prestadorId: modulo.ID_PRESTADOR_ESCRITORIO, valor: 60000, modalidade: "parcelado", parcelas: 12 };
+  const d = modulo.montarContrato(c, { cliente, obra, prestador: p });
+  assert.strictEqual(d.nomeDoContrato, "Contrato de Prestação de Serviços de Gestão e Acompanhamento de Obra");
+  const t = texto(d);
+  assert.ok(t.includes("CONTRATADO: PADOVAN ARQUITETOS"));
+  assert.ok(t.includes("CONTRATANTE: COBOP COMÉRCIO DE BOMBAS E PISCINAS LTDA"));
+  assert.strictEqual(d.assinaturas[1].nome, "Padovan Arquitetos");
+  assert.strictEqual(d.assinaturas[1].representante, "Leonardo Padovan");
+
+  // o escritório aparece na lista de contratados do tipo gestão de obra
+  const lista = modulo.prestadoresDoTipo([{ id: "p1", nome: "Outro", categoria: "Pintor" }], "gestaoObra", escritorio);
+  assert.deepStrictEqual(lista.map(x => x.id), [modulo.ID_PRESTADOR_ESCRITORIO]);
+  // e continua fora dos tipos que não são dele
+  assert.deepStrictEqual(modulo.prestadoresDoTipo([{ id: "p1", nome: "Outro", categoria: "Pintor" }], "pintor", escritorio).map(x => x.id), ["p1"]);
+});
+
+teste("aponta o que falta no cadastro do escritório para o contrato sair completo", () => {
+  assert.deepStrictEqual(modulo.faltaNoEscritorio({}), ["Nome do escritório"]);
+  assert.deepStrictEqual(modulo.faltaNoEscritorio({ nome: "Padovan Arquitetos" }),
+    ["CNPJ", "Endereço", "Cidade", "CEP", "Responsável técnico", "CPF do responsável"]);
+  const quaseCompleto = { nome: "Padovan Arquitetos", cnpj: "20.205.619/0001-40", endereco: "Rua X, 1", cidade: "Ourinhos", cep: "19900-000",
+    responsaveis: [{ nome: "Leonardo Padovan" }] };
+  assert.deepStrictEqual(modulo.faltaNoEscritorio(quaseCompleto), ["CPF do responsável"]);
+  assert.deepStrictEqual(modulo.faltaNoEscritorio({ ...quaseCompleto, responsaveis: [{ nome: "Leonardo Padovan", cpf: "111.222.333-44" }] }), []);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

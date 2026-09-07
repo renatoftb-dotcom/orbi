@@ -14316,8 +14316,12 @@ function tipoProfissional(id) { return TIPOS_PROFISSIONAL.find((t) => t.id === i
 // aparecem os encanadores. Quem não é daquela categoria fica fora da lista,
 // mesmo que não sobre ninguém — nesse caso o caminho é cadastrar um novo.
 // Sem tipo, ou no tipo "Outro" (que não tem categoria), aparecem todos.
-function prestadoresDoTipo(prestadores, tipoId) {
-  const ativos = (prestadores || []).filter((p) => p.ativo !== false);
+function prestadoresDoTipo(prestadores, tipoId, escritorio) {
+  const doEscritorio = prestadorDoEscritorio(escritorio);
+  const ativos = [
+    ...(doEscritorio ? [doEscritorio] : []),
+    ...(prestadores || []).filter((p) => p.ativo !== false),
+  ];
   const t = tipoProfissional(tipoId);
   if (!t || !t.categorias.length) return ativos;
   const alvo = t.categorias.map((c) => c.toLowerCase());
@@ -14392,7 +14396,7 @@ function qualificarParte(p) {
   // Representante só faz sentido em pessoa jurídica; a pessoa física assina
   // por si.
   if (pj && o.representanteNome) {
-    partes.push(`neste ato representada por ${String(o.representanteNome).toUpperCase()}${o.representanteCpf ? `, inscrito no CPF sob o nº ${o.representanteCpf}` : ""}`);
+    partes.push(`neste ato representada por ${String(o.representanteNome).toUpperCase()}${o.representanteCpf ? `, inscrito no CPF sob o nº ${o.representanteCpf}` : ""}${o.representanteCau ? `, CAU nº ${o.representanteCau}` : ""}`);
   }
   return partes.join(", ");
 }
@@ -14530,6 +14534,48 @@ function servicoDoContrato(c) {
   const t = tipoProfissional(c && c.tipoProfissional);
   if (t && t.servico) return tituloServicoCtr(t.servico);
   return String((c && c.objeto) || "").trim() || "Serviços";
+}
+
+// ── O próprio escritório como contratado ────────────────────────
+// A gestão da obra costuma ser do escritório. Em vez de cadastrá-lo como
+// prestador (dado repetido, que envelhece), o contrato lê o cadastro do
+// escritório e o apresenta no formato de prestador.
+const ID_PRESTADOR_ESCRITORIO = "__escritorio__";
+function prestadorDoEscritorio(escritorio) {
+  const e = escritorio || {};
+  if (!String(e.nome || "").trim()) return null;
+  const resp = (e.responsaveis && e.responsaveis[0]) || null;
+  return {
+    id: ID_PRESTADOR_ESCRITORIO,
+    escritorio: true,
+    nome: e.nome,
+    tipo: "PJ",
+    categoria: "Gestão de Obra",
+    cnpjCpf: e.cnpj || "",
+    // o cadastro guarda o logradouro numa linha só, com o número junto
+    logradouro: e.endereco || "",
+    numero: "", bairro: "",
+    cidade: e.cidade || "", estado: e.estado || "", cep: e.cep || "",
+    representanteNome: (resp && resp.nome) || e.responsavel || "",
+    representanteCpf: (resp && resp.cpf) || e.cpfResponsavel || "",
+    representanteCau: (resp && resp.cau) || e.cau || "",
+    telefone: e.telefone || "", email: e.email || "",
+    ativo: true,
+  };
+}
+// O que ainda falta preencher no cadastro do escritório para o contrato sair
+// completo. Devolve os rótulos que faltam, na ordem em que aparecem lá.
+function faltaNoEscritorio(escritorio) {
+  const p = prestadorDoEscritorio(escritorio);
+  if (!p) return ["Nome do escritório"];
+  const falta = [];
+  if (!p.cnpjCpf) falta.push("CNPJ");
+  if (!p.logradouro) falta.push("Endereço");
+  if (!p.cidade) falta.push("Cidade");
+  if (!p.cep) falta.push("CEP");
+  if (!p.representanteNome) falta.push("Responsável técnico");
+  if (!p.representanteCpf) falta.push("CPF do responsável");
+  return falta;
 }
 
 // Grava a fatia de um cliente (suas obras, seus contratos) de volta na coleção
@@ -17156,7 +17202,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   // ── Documento pronto: leitura e impressão ────────────────────
   if (view === "verContrato" && contratoAberto) {
-    const prest = prestadores.find(p => p.id === contratoAberto.prestadorId) || null;
+    const prest = (contratoAberto.prestadorId === ID_PRESTADOR_ESCRITORIO
+      ? prestadorDoEscritorio(data.escritorio)
+      : prestadores.find(p => p.id === contratoAberto.prestadorId)) || null;
     const obraDoContrato = obras.find(o => o.id === contratoAberto.obraId) || obraSelecionada;
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -17177,9 +17225,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   if (view === "gerarContrato" && contratoGerando && obraSelecionada) {
     const g = contratoGerando;
     const modelo = contratoModelo(g.modelo);
-    const prest = prestadores.find(p => p.id === g.prestadorId) || null;
+    const doEscritorio = prestadorDoEscritorio(data.escritorio);
+    const prest = (g.prestadorId === ID_PRESTADOR_ESCRITORIO ? doEscritorio : prestadores.find(p => p.id === g.prestadorId)) || null;
     const tipoP = tipoProfissional(g.tipoProfissional);
-    const prestadoresDisponiveis = prestadoresDoTipo(prestadores, g.tipoProfissional);
+    const prestadoresDisponiveis = prestadoresDoTipo(prestadores, g.tipoProfissional, data.escritorio);
+    const faltaEscritorio = prest && prest.escritorio ? faltaNoEscritorio(data.escritorio) : [];
     const total = valorContrato(g);
     const modo = modalidadeContrato(g);
     const pz = prazoContrato(g);
@@ -17253,7 +17303,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             // o que já foi digitado à mão.
             const novoEscopo = escopoContrato(g) && tipoProfissional(g.tipoProfissional) ? escopoContrato(g) : escopoDoTipo(t.id);
             const base = contratoVazio(null, cliente.id, obraSelecionada.id, t.id, novoEscopo);
-            const compat = prestadoresDoTipo(prestadores, t.id).some(p => p.id === g.prestadorId);
+            const compat = prestadoresDoTipo(prestadores, t.id, data.escritorio).some(p => p.id === g.prestadorId);
             setContratoGerando({ ...base, id: g.id, objeto: objetoEditado ? g.objeto : base.objeto,
               enderecoObra: g.enderecoObra, status: g.status,
               itens: g.itens, escopo: g.escopo, valor: g.valor, exclusoes: g.exclusoes,
@@ -17272,7 +17322,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ display: "flex", gap: 8 }}>
               <select style={{ ...C.input, cursor: "pointer", flex: 1 }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
                 <option value="">{!tipoP ? "— escolha o tipo primeiro —" : prestadoresDisponiveis.length ? "— escolher um prestador cadastrado —" : `— nenhum ${tipoP.nome.toLowerCase()} cadastrado —`}</option>
-                {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}{p.escritorio ? " (meu escritório)" : ""}</option>)}
               </select>
               <button type="button" disabled={!tipoP} style={{ ...C.btnSec, whiteSpace: "nowrap", opacity: tipoP ? 1 : 0.5 }}
                 onClick={() => setNovoPrestador({ nome: "", tipo: "PJ", categoria: (tipoP && tipoP.categorias[0]) || "Outro", cnpjCpf: "", cep: "", logradouro: "", numero: "", bairro: "", cidade: "", estado: "SP", representanteNome: "", representanteCpf: "", telefone: "", email: "" })}>
@@ -17341,6 +17391,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
+        {faltaEscritorio.length > 0 && (
+          <div style={{ fontSize: 12.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+            O contrato usa o cadastro do escritório. Falta preencher lá: <strong style={{ color: "#111827" }}>{faltaEscritorio.join(" · ")}</strong>.
+          </div>
+        )}
         {tipoP && !prest && !novoPrestador && (
           <div style={{ fontSize: 12.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
             Sem prestador escolhido o contrato sai sem CNPJ, endereço e representante do contratado.

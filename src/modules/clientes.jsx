@@ -1504,7 +1504,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   // ── Documento pronto: leitura e impressão ────────────────────
   if (view === "verContrato" && contratoAberto) {
-    const prest = prestadores.find(p => p.id === contratoAberto.prestadorId) || null;
+    const prest = (contratoAberto.prestadorId === ID_PRESTADOR_ESCRITORIO
+      ? prestadorDoEscritorio(data.escritorio)
+      : prestadores.find(p => p.id === contratoAberto.prestadorId)) || null;
     const obraDoContrato = obras.find(o => o.id === contratoAberto.obraId) || obraSelecionada;
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
@@ -1525,9 +1527,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   if (view === "gerarContrato" && contratoGerando && obraSelecionada) {
     const g = contratoGerando;
     const modelo = contratoModelo(g.modelo);
-    const prest = prestadores.find(p => p.id === g.prestadorId) || null;
+    const doEscritorio = prestadorDoEscritorio(data.escritorio);
+    const prest = (g.prestadorId === ID_PRESTADOR_ESCRITORIO ? doEscritorio : prestadores.find(p => p.id === g.prestadorId)) || null;
     const tipoP = tipoProfissional(g.tipoProfissional);
-    const prestadoresDisponiveis = prestadoresDoTipo(prestadores, g.tipoProfissional);
+    const prestadoresDisponiveis = prestadoresDoTipo(prestadores, g.tipoProfissional, data.escritorio);
+    const faltaEscritorio = prest && prest.escritorio ? faltaNoEscritorio(data.escritorio) : [];
     const total = valorContrato(g);
     const modo = modalidadeContrato(g);
     const pz = prazoContrato(g);
@@ -1601,7 +1605,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             // o que já foi digitado à mão.
             const novoEscopo = escopoContrato(g) && tipoProfissional(g.tipoProfissional) ? escopoContrato(g) : escopoDoTipo(t.id);
             const base = contratoVazio(null, cliente.id, obraSelecionada.id, t.id, novoEscopo);
-            const compat = prestadoresDoTipo(prestadores, t.id).some(p => p.id === g.prestadorId);
+            const compat = prestadoresDoTipo(prestadores, t.id, data.escritorio).some(p => p.id === g.prestadorId);
             setContratoGerando({ ...base, id: g.id, objeto: objetoEditado ? g.objeto : base.objeto,
               enderecoObra: g.enderecoObra, status: g.status,
               itens: g.itens, escopo: g.escopo, valor: g.valor, exclusoes: g.exclusoes,
@@ -1620,7 +1624,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ display: "flex", gap: 8 }}>
               <select style={{ ...C.input, cursor: "pointer", flex: 1 }} value={g.prestadorId} disabled={!tipoP} onChange={e => setG("prestadorId", e.target.value)}>
                 <option value="">{!tipoP ? "— escolha o tipo primeiro —" : prestadoresDisponiveis.length ? "— escolher um prestador cadastrado —" : `— nenhum ${tipoP.nome.toLowerCase()} cadastrado —`}</option>
-                {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}</option>)}
+                {prestadoresDisponiveis.map(p => <option key={p.id} value={p.id}>{p.nome}{p.escritorio ? " (meu escritório)" : ""}</option>)}
               </select>
               <button type="button" disabled={!tipoP} style={{ ...C.btnSec, whiteSpace: "nowrap", opacity: tipoP ? 1 : 0.5 }}
                 onClick={() => setNovoPrestador({ nome: "", tipo: "PJ", categoria: (tipoP && tipoP.categorias[0]) || "Outro", cnpjCpf: "", cep: "", logradouro: "", numero: "", bairro: "", cidade: "", estado: "SP", representanteNome: "", representanteCpf: "", telefone: "", email: "" })}>
@@ -1689,6 +1693,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
+        {faltaEscritorio.length > 0 && (
+          <div style={{ fontSize: 12.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
+            O contrato usa o cadastro do escritório. Falta preencher lá: <strong style={{ color: "#111827" }}>{faltaEscritorio.join(" · ")}</strong>.
+          </div>
+        )}
         {tipoP && !prest && !novoPrestador && (
           <div style={{ fontSize: 12.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10, padding: "10px 12px", marginBottom: 12 }}>
             Sem prestador escolhido o contrato sai sem CNPJ, endereço e representante do contratado.
