@@ -178,6 +178,10 @@ teste("tipos de profissional cobrem os prestadores do catálogo e sugerem regime
                    "Impermeabilizador", "Instalador de ar condicionado", "Marceneiro", "Terraplanagem"]) {
     assert.ok(nomes.includes(n), `falta o tipo ${n}`);
   }
+  // a lista sai em ordem alfabética, com "Outro" fechando
+  const semOutro = nomes.slice(0, -1);
+  assert.strictEqual(nomes[nomes.length - 1], "Outro");
+  assert.deepStrictEqual(semOutro, [...semOutro].sort((a, b) => a.localeCompare(b, "pt-BR")));
   // ids únicos e todo tipo aponta para um modelo que existe
   assert.strictEqual(new Set(modulo.TIPOS_PROFISSIONAL.map((t) => t.id)).size, modulo.TIPOS_PROFISSIONAL.length);
   for (const t of modulo.TIPOS_PROFISSIONAL) {

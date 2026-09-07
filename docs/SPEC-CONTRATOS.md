@@ -14,10 +14,11 @@ O gerador começa pelo **tipo de profissional**, não pelo modelo. A lista
 insumos (grupo *Prestadores de serviços*, códigos `PRE-001`…`PRE-017`) — é
 por eles que a obra é orçada, então é por eles que ela é contratada:
 
-Empreiteiro · Eletricista · Serralheiro · Pintor · Carpinteiro · Encanador ·
-Impermeabilizador · Instalador de ar condicionado · Marceneiro ·
-Terraplanagem · Gesseiro · Instalador de aquecedores · Instalador de
-equipamentos de piscina · Gestão de obra · Outro.
+Em ordem alfabética, com *Outro* fechando a lista: Carpinteiro ·
+Eletricista · Empreiteiro · Encanador · Gesseiro · Gestão de obra ·
+Impermeabilizador · Instalador de aquecedores · Instalador de ar
+condicionado · Instalador de equipamentos de piscina · Marceneiro · Pintor ·
+Serralheiro · Terraplanagem · Outro.
 
 Cada tipo carrega três coisas:
 

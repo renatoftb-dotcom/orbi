@@ -50,9 +50,10 @@ const CONTRATO_MODELOS = [
 function contratoModelo(id) { return CONTRATO_MODELOS.find((m) => m.id === id) || CONTRATO_MODELOS[0]; }
 
 // ── Tipos de profissional ───────────────────────────────────────
-// A primeira escolha do gerador. A lista espelha os prestadores de
-// serviço do catálogo de insumos (grupo "Prestadores de serviços") — é
-// por eles que a obra é orçada, então é por eles que ela é contratada.
+// A primeira escolha do gerador. A lista, em ordem alfabética, espelha os
+// prestadores de serviço do catálogo de insumos (grupo "Prestadores de
+// serviços") — é por eles que a obra é orçada, então é por eles que ela é
+// contratada.
 // Cada tipo carrega:
 //   categorias — como o prestador aparece no cadastro (fornecedor.categoria),
 //                usado para filtrar a lista de contratados;
@@ -60,34 +61,35 @@ function contratoModelo(id) { return CONTRATO_MODELOS.find((m) => m.id === id) |
 //   objeto     — o subtítulo/objeto já escrito, ainda editável;
 //   insumos    — os códigos do catálogo, só para rastreabilidade.
 const TIPOS_PROFISSIONAL = [
-  { id: "empreiteiro", nome: "Empreiteiro", categorias: ["Empreiteiro", "Pedreiro"], modelo: "empreitadaMaoDeObra",
-    objeto: "Empreitada de mão de obra — obra civil", insumos: ["PRE-001", "PRE-009", "PRE-010", "PRE-011", "PRE-012"] },
-  { id: "eletricista", nome: "Eletricista", categorias: ["Eletricista"], modelo: "empreitadaMaoDeObra",
-    objeto: "Instalações elétricas — mão de obra", insumos: ["PRE-003"] },
-  { id: "serralheiro", nome: "Serralheiro", categorias: ["Serralheiro", "Esquadria de Alumínio"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e montagem de estruturas e esquadrias metálicas", insumos: ["PRE-008"] },
-  { id: "pintor", nome: "Pintor", categorias: ["Pintor"], modelo: "empreitadaMaoDeObra",
-    objeto: "Pintura — mão de obra", insumos: ["PRE-002"] },
   { id: "carpinteiro", nome: "Carpinteiro", categorias: ["Carpinteiro"], modelo: "empreitadaMaoDeObra",
     objeto: "Formas e madeiramento — mão de obra", insumos: ["PRE-005"] },
+  { id: "eletricista", nome: "Eletricista", categorias: ["Eletricista"], modelo: "empreitadaMaoDeObra",
+    objeto: "Instalações elétricas — mão de obra", insumos: ["PRE-003"] },
+  { id: "empreiteiro", nome: "Empreiteiro", categorias: ["Empreiteiro", "Pedreiro"], modelo: "empreitadaMaoDeObra",
+    objeto: "Empreitada de mão de obra — obra civil", insumos: ["PRE-001", "PRE-009", "PRE-010", "PRE-011", "PRE-012"] },
   { id: "encanador", nome: "Encanador", categorias: ["Encanador"], modelo: "empreitadaMaoDeObra",
     objeto: "Instalações hidrossanitárias — mão de obra", insumos: ["PRE-004"] },
-  { id: "impermeabilizador", nome: "Impermeabilizador", categorias: ["Impermeabilizador"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e aplicação de impermeabilização", insumos: ["PRE-006"] },
-  { id: "instaladorAr", nome: "Instalador de ar condicionado", categorias: ["Instalador de Ar Condicionado"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e instalação de equipamentos de ar condicionado", insumos: ["PRE-013"] },
-  { id: "marceneiro", nome: "Marceneiro", categorias: ["Marceneiro"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e instalação de marcenaria", insumos: ["PRE-007"] },
-  { id: "terraplanagem", nome: "Terraplanagem", categorias: ["Terraplanagem"], modelo: "empreitadaGlobal",
-    objeto: "Serviços de terraplanagem e movimentação de terra", insumos: ["PRE-016"] },
   { id: "gesseiro", nome: "Gesseiro", categorias: ["Gesseiro"], modelo: "empreitadaGlobal",
     objeto: "Fornecimento e execução de forro e revestimento em gesso", insumos: [] },
-  { id: "instaladorAquecedores", nome: "Instalador de aquecedores", categorias: ["Instalador de Aquecedores"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e instalação de aquecedores", insumos: ["PRE-014"] },
-  { id: "equipPiscina", nome: "Instalador de equipamentos de piscina", categorias: ["Instalador de Equipamentos de Piscina"], modelo: "empreitadaGlobal",
-    objeto: "Fornecimento e instalação de equipamentos de piscina", insumos: ["PRE-015"] },
   { id: "gestaoObra", nome: "Gestão de obra", categorias: ["Gestão de Obra"], modelo: "empreitadaMaoDeObra",
     objeto: "Prestação de serviços de gestão e acompanhamento de obra", insumos: ["PRE-017"] },
+  { id: "impermeabilizador", nome: "Impermeabilizador", categorias: ["Impermeabilizador"], modelo: "empreitadaGlobal",
+    objeto: "Fornecimento e aplicação de impermeabilização", insumos: ["PRE-006"] },
+  { id: "instaladorAquecedores", nome: "Instalador de aquecedores", categorias: ["Instalador de Aquecedores"], modelo: "empreitadaGlobal",
+    objeto: "Fornecimento e instalação de aquecedores", insumos: ["PRE-014"] },
+  { id: "instaladorAr", nome: "Instalador de ar condicionado", categorias: ["Instalador de Ar Condicionado"], modelo: "empreitadaGlobal",
+    objeto: "Fornecimento e instalação de equipamentos de ar condicionado", insumos: ["PRE-013"] },
+  { id: "equipPiscina", nome: "Instalador de equipamentos de piscina", categorias: ["Instalador de Equipamentos de Piscina"], modelo: "empreitadaGlobal",
+    objeto: "Fornecimento e instalação de equipamentos de piscina", insumos: ["PRE-015"] },
+  { id: "marceneiro", nome: "Marceneiro", categorias: ["Marceneiro"], modelo: "empreitadaGlobal",
+    objeto: "Fornecimento e instalação de marcenaria", insumos: ["PRE-007"] },
+  { id: "pintor", nome: "Pintor", categorias: ["Pintor"], modelo: "empreitadaMaoDeObra",
+    objeto: "Pintura — mão de obra", insumos: ["PRE-002"] },
+  { id: "serralheiro", nome: "Serralheiro", categorias: ["Serralheiro", "Esquadria de Alumínio"], modelo: "empreitadaGlobal",
+    objeto: "Fornecimento e montagem de estruturas e esquadrias metálicas", insumos: ["PRE-008"] },
+  { id: "terraplanagem", nome: "Terraplanagem", categorias: ["Terraplanagem"], modelo: "empreitadaGlobal",
+    objeto: "Serviços de terraplanagem e movimentação de terra", insumos: ["PRE-016"] },
+  // "Outro" fecha a lista de propósito — é a saída para o que não tem tipo.
   { id: "outro", nome: "Outro", categorias: [], modelo: "empreitadaMaoDeObra", objeto: "", insumos: [] },
 ];
 function tipoProfissional(id) { return TIPOS_PROFISSIONAL.find((t) => t.id === id) || null; }

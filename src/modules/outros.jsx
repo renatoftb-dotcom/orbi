@@ -978,12 +978,12 @@ function Financeiro({ data, save }) {
 // "Prestadores de serviços") — é por essa categoria que o gerador de
 // contratos filtra a lista de contratados.
 const CATEGORIAS_PRESTADOR = [
-  "Empreiteiro", "Pedreiro", "Eletricista", "Encanador", "Pintor",
-  "Carpinteiro", "Impermeabilizador", "Serralheiro", "Marceneiro",
-  "Gesseiro", "Esquadria de Alumínio", "Terraplanagem",
-  "Instalador de Ar Condicionado", "Instalador de Aquecedores",
-  "Instalador de Equipamentos de Piscina", "Gestão de Obra",
-  "Loja / Comércio", "Outro",
+  "Carpinteiro", "Eletricista", "Empreiteiro", "Encanador",
+  "Esquadria de Alumínio", "Gesseiro", "Gestão de Obra",
+  "Impermeabilizador", "Instalador de Aquecedores",
+  "Instalador de Ar Condicionado", "Instalador de Equipamentos de Piscina",
+  "Loja / Comércio", "Marceneiro", "Pedreiro", "Pintor", "Serralheiro",
+  "Terraplanagem", "Outro",
 ];
 
 // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
