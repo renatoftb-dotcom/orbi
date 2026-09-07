@@ -1486,9 +1486,11 @@ function cobertura(cp, out) {
   const telhasPorTipo = {};
   const cumeeiraPorTipo = {};
 
+  const det = [];
   for (const t of cp.coberturas) {
     if (!t || !t.tipo) continue;
     const r = calcularTelhado(t);
+    det.push({ t, r });
     vigasTotal += r.vigas + r.espigao + r.maoFrancesa;
     caibrosTotal += r.caibros;
     ripasTotal += r.ripas;
@@ -1516,26 +1518,54 @@ function cobertura(cp, out) {
   const labelPrimeiroSlot = (cp.coberturas[0] && cp.coberturas[0].tipo) || "";
   const ORDEM_TIPOS_TELHA = Object.keys(AREA_TELHA);
 
+  // Memória: cada telhado entra com a sua parcela (já arredondada dentro de
+  // calcularTelhado) e a linha do orçamento é a soma das parcelas.
+  const rotuloTelhado = (d, i) => `Telhado ${i + 1} — ${d.t.tipo}, ${numMem(d.t.comprimento)} × ${numMem(d.t.largura)} m, ${numMem(d.t.aguas)} água${numOrZero(d.t.aguas) === 1 ? "" : "s"}, inclinação ${numMem(numOrZero(d.t.inclinacao) * 100)}%`;
+  const memSoma = (nota, pega, total, unidade, lista) => {
+    const usa = lista || det;
+    return [
+      MEM.nota(nota),
+      ...usa.map((d, i) => MEM.dado(rotuloTelhado(d, det.indexOf(d)), pega(d.r), unidade, "cálculo do telhado")),
+      MEM.conta("Total da obra", usa.map((d) => `telhado ${det.indexOf(d) + 1}`).join(" + "), usa.map((d) => [`telhado ${det.indexOf(d) + 1}`, pega(d.r)]), total, unidade),
+    ];
+  };
   const base = { ordem: ORD.cobertura, tipo: "Bruto", etapa: "Cobertura", subEtapa: "Telhas" };
   for (const tipoTelha of ORDEM_TIPOS_TELHA) {
     const rotulo = tipoTelha === "Telha Barro Portuguesa" ? labelPrimeiroSlot : tipoTelha;
-    emitir(out, { ...base, item: rotulo, unidade: "Unidades", qtd: telhasPorTipo[tipoTelha] || 0 });
-    emitir(out, { ...base, item: `Cumeeira ${rotulo}`, unidade: "Unidades", qtd: cumeeiraPorTipo[tipoTelha] || 0 });
+    const doTipo = det.filter((d) => d.r.tipo === tipoTelha);
+    emitir(out, { ...base, item: rotulo, unidade: "Unidades", qtd: telhasPorTipo[tipoTelha] || 0,
+      memoria: memSoma(`Telhas de ${tipoTelha}: a área inclinada de cada telhado dividida pela área útil da peça, com 10% de quebra.${rotulo !== tipoTelha ? ` (O rótulo desta linha sai como "${rotulo}" — a planilha original troca o nome do primeiro slot pelo tipo do primeiro telhado cadastrado; a quantidade é a de ${tipoTelha}.)` : ""}`,
+        (r) => r.telhas, telhasPorTipo[tipoTelha] || 0, "telhas", doTipo) });
+    emitir(out, { ...base, item: `Cumeeira ${rotulo}`, unidade: "Unidades", qtd: cumeeiraPorTipo[tipoTelha] || 0,
+      memoria: memSoma(`Cumeeiras de ${tipoTelha}: peças da linha de topo e dos espigões de cada telhado.`, (r) => r.cumeeira, cumeeiraPorTipo[tipoTelha] || 0, "peças", doTipo) });
   }
-  emitir(out, { ...base, item: "Manta dupla face", unidade: "m2", qtd: mantaTotal });
+  emitir(out, { ...base, item: "Manta dupla face", unidade: "m2", qtd: mantaTotal, memoria: memSoma("Manta dupla face sob as telhas: a área inclinada de cada telhado, com perda.", (r) => r.manta, mantaTotal, "m²") });
 
   const baseMad = { ordem: ORD.cobertura, tipo: "Bruto", etapa: "Cobertura", subEtapa: "Madeiramento" };
-  emitir(out, { ...baseMad, item: "Telhado - Estrutura - Eucalipto S/ Tratar - Vigas 5x15", unidade: "Mts", qtd: vigasTotal });
-  emitir(out, { ...baseMad, item: "Telhado - Estrutura - Eucalipto S/ Tratar - Caibros 5x5", unidade: "Mts", qtd: caibrosTotal });
-  emitir(out, { ...baseMad, item: "Telhado - Estrutura - Eucalipto S/ Tratar - Ripas 2,5x5", unidade: "Mts", qtd: ripasTotal });
-  emitir(out, { ...baseMad, item: "Telhado - Estrutura - Eucalipto S/ Tratar - Vigas 5x20", unidade: "Mts", qtd: bercoTotal });
-  emitir(out, { ...baseMad, item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego1Total });
-  emitir(out, { ...baseMad, item: "Aço - Pregos 20x42", unidade: "KG", qtd: prego2Total });
+  emitir(out, { ...baseMad, item: "Telhado - Estrutura - Eucalipto S/ Tratar - Vigas 5x15", unidade: "Mts", qtd: vigasTotal, memoria: [
+    MEM.nota("Vigas 5×15: as terças (uma a cada 1,50 m ao longo da largura), mais os espigões dos telhados de 4 águas e as mãos-francesas."),
+    ...det.map((d, i) => MEM.dado(rotuloTelhado(d, i), d.r.vigas + d.r.espigao + d.r.maoFrancesa, "m", "terças + espigão + mão-francesa")),
+    MEM.conta("Total da obra", det.map((_, i) => `telhado ${i + 1}`).join(" + "), det.map((d, i) => [`telhado ${i + 1}`, d.r.vigas + d.r.espigao + d.r.maoFrancesa]), vigasTotal, "m"),
+  ] });
+  emitir(out, { ...baseMad, item: "Telhado - Estrutura - Eucalipto S/ Tratar - Caibros 5x5", unidade: "Mts", qtd: caibrosTotal, memoria: memSoma("Caibros 5×5: correm no sentido da inclinação, espaçados conforme o tipo de telha (0,50 m em barro e concreto, 1 m em fibrocimento, 1,50 m em metálica).", (r) => r.caibros, caibrosTotal, "m") });
+  emitir(out, { ...baseMad, item: "Telhado - Estrutura - Eucalipto S/ Tratar - Ripas 2,5x5", unidade: "Mts", qtd: ripasTotal, memoria: memSoma("Ripas 2,5×5: só em telha de barro e concreto, espaçadas pelo passo da telha (0,34 m na portuguesa e nas de concreto, 0,30 m na americana). Fibrocimento e metálica não levam ripa.", (r) => r.ripas, ripasTotal, "m") });
+  emitir(out, { ...baseMad, item: "Telhado - Estrutura - Eucalipto S/ Tratar - Vigas 5x20", unidade: "Mts", qtd: bercoTotal, memoria: [
+    MEM.nota("Vigas 5×20: o berço (viga de apoio no respaldo) mais os apoios extras que fibrocimento e metálica exigem."),
+    ...det.map((d, i) => MEM.dado(rotuloTelhado(d, i), d.r.berco + d.r.apoios, "m", "berço + apoios")),
+    MEM.conta("Total da obra", det.map((_, i) => `telhado ${i + 1}`).join(" + "), det.map((d, i) => [`telhado ${i + 1}`, d.r.berco + d.r.apoios]), bercoTotal, "m"),
+  ] });
+  emitir(out, { ...baseMad, item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego1Total, memoria: memSoma("Pregos 18x27 do madeiramento, proporcionais aos metros de madeira de cada telhado.", (r) => r.prego1, prego1Total, "kg") });
+  emitir(out, { ...baseMad, item: "Aço - Pregos 20x42", unidade: "KG", qtd: prego2Total, memoria: memSoma("Pregos 20x42 do madeiramento (peças mais grossas), proporcionais aos metros de madeira de cada telhado.", (r) => r.prego2, prego2Total, "kg") });
 
   const baseCalha = { ordem: ORD.cobertura, tipo: "Bruto", etapa: "Cobertura", subEtapa: "Calha" };
-  emitir(out, { ...baseCalha, item: "Telhado - Calha", unidade: "Mts", qtd: perimetroTotal2 });
-  emitir(out, { ...baseCalha, item: "Telhado - Pingadeira", unidade: "Mts", qtd: perimetroTotal1 - perimetroTotal2 });
-  emitir(out, { ...baseCalha, item: "Telhado - Rufo", unidade: "Mts", qtd: perimetroTotal1 });
+  emitir(out, { ...baseCalha, item: "Telhado - Calha", unidade: "Mts", qtd: perimetroTotal2, memoria: memSoma("Calha: os metros de beiral de cada telhado que recebem calha (nos telhados de barro, a planilha zera o perímetro de rufo e conta só a calha).", (r) => r.perimetro2, perimetroTotal2, "m") });
+  emitir(out, { ...baseCalha, item: "Telhado - Pingadeira", unidade: "Mts", qtd: perimetroTotal1 - perimetroTotal2, memoria: [
+    MEM.nota("Pingadeira: o que sobra do perímetro do telhado depois de descontar o que já é calha."),
+    MEM.conta("Perímetro total dos telhados", "soma dos telhados", [], perimetroTotal1, "m"),
+    MEM.conta("Metros de calha", "soma dos telhados", [], perimetroTotal2, "m"),
+    MEM.conta("Pingadeira", "perímetro − calha", [["perímetro", perimetroTotal1], ["calha", perimetroTotal2]], perimetroTotal1 - perimetroTotal2, "m"),
+  ] });
+  emitir(out, { ...baseCalha, item: "Telhado - Rufo", unidade: "Mts", qtd: perimetroTotal1, memoria: memSoma("Rufo: acompanha todo o perímetro do telhado.", (r) => r.perimetro1, perimetroTotal1, "m") });
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2796,6 +2826,12 @@ function esquadrias(cp, out, data) {
       ordem: ORD.esquadrias, item: rotuloEsquadria(e), tipo: "Acabamento", etapa: "Esquadrias",
       subEtapa: linha ? `Linha ${linha.nome}` : e.linha, unidade: "Unidades", qtd: numOrZero(e.qtd),
       preco: Math.round(precoUnitario * 100) / 100, composicao, confianca: semPreco.length ? "parcial" : "modulo",
+      memoria: [
+        MEM.nota(`Esquadria cadastrada no bloco Esquadrias. A quantidade é a que você digitou; o preço unitário é fechado pelo VICKE somando os perfis de alumínio da linha ${linha ? linha.nome : e.linha}, o vidro e os acessórios — a lista completa aparece na composição do item, na própria tabela.`),
+        MEM.dado("Medidas da peça", `${numMem(e.largura)} × ${numMem(e.altura)} m, ${numMem(e.folhas)} folha${numOrZero(e.folhas) === 1 ? "" : "s"}`, "", "bloco Esquadrias"),
+        MEM.dado("Componentes que formam o preço", composicao.length, "itens", "catálogo de perfis da linha"),
+        MEM.dado("Quantidade no orçamento", numOrZero(e.qtd), "unidades", "bloco Esquadrias"),
+      ],
     });
   }
 }
@@ -3125,7 +3161,17 @@ function pisosRevestimentos(cp, out, data) {
     const formatoId = (ps[sup.id] && ps[sup.id].formato) || FORMATO_PADRAO[sup.id][padrao] || "60x60";
     const c = consumoRevestimento(formatoId, sup.externo, numOrZero(ps[sup.id] && ps[sup.id].juntaMm));
     const produto = String((ps[sup.id] && ps[sup.id].produto) || "").trim() || PISOS_GENERICOS[sup.id][padrao] || PISOS_GENERICOS[sup.id]["Médio"];
-    emitir(out, { ...base, subEtapa: sup.subEtapa, item: produto, unidade: "m2", qtd: ceil2(area * PERDA_PECAS) });
+    emitir(out, { ...base, subEtapa: sup.subEtapa, item: produto, unidade: "m2", qtd: ceil2(area * PERDA_PECAS), memoria: [
+      MEM.nota(`${sup.nome}: ${String((ps[sup.id] && ps[sup.id].produto) || "").trim() ? "produto escolhido no projeto" : `sem produto escolhido, entra o genérico do padrão ${padrao}`}. Formato ${c.formato.nome}${(ps[sup.id] && ps[sup.id].formato) ? "" : " (padrão da obra)"}.${sup.id === "pisoInterno" ? " O rodapé é recorte do próprio piso: entra somado aqui, não como item separado." : ""}`),
+      MEM.dado(`${sup.nome} informado`, numOrZero(ps[sup.id] && ps[sup.id].m2), "m²", "bloco Pisos e revestimentos"),
+      ...(sup.id === "pisoInterno" && rodapeM > 0 ? [
+        MEM.dado("Rodapé", rodapeM, "m", "bloco Pisos e revestimentos"),
+        MEM.conta("Rodapé em m² de piso (faixa de 10 cm)", "rodapé × 0,10", [["rodapé", rodapeM]], rodapeM2, "m²"),
+        MEM.conta("Área a assentar", "piso + rodapé", [["piso", numOrZero(ps[sup.id] && ps[sup.id].m2)], ["rodapé", rodapeM2]], area, "m²"),
+      ] : []),
+      MEM.conta(`Peças com ${Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras)`, "área × 1,20", [["área", area]], area * PERDA_PECAS, "m²"),
+      MEM.teto(area * PERDA_PECAS, ceil2(area * PERDA_PECAS), "m²", "Arredonda em centésimos de m²"),
+    ] });
     totais[c.argamassa] += area * c.argamassaKg;
     totais.rejunteKg += area * c.rejunteKg;
     totais.clips += area * c.clipsM2;
@@ -3139,7 +3185,13 @@ function pisosRevestimentos(cp, out, data) {
   const soleirasM = numOrZero(ps.soleirasM);
   if (soleirasM > 0) {
     const m2 = soleirasM * SOLEIRA_LARGURA_M;
-    emitir(out, { ...base, subEtapa: "Soleiras e peitoris", item: String(ps.soleirasProduto || "").trim() || soleiraPadrao(padrao), unidade: "m2", qtd: ceil2(m2 * PERDA) });
+    emitir(out, { ...base, subEtapa: "Soleiras e peitoris", item: String(ps.soleirasProduto || "").trim() || soleiraPadrao(padrao), unidade: "m2", qtd: ceil2(m2 * PERDA), memoria: [
+      MEM.nota(`Soleiras e peitoris em pedra, faixa de ${SOLEIRA_LARGURA_M * 100} cm. Em branco, os metros vêm do vão das esquadrias e das portas internas; a pedra é a do padrão ${padrao} quando você não escolhe outra.`),
+      MEM.dado("Metros de soleira e peitoril", soleirasM, "m", "bloco Pisos e revestimentos"),
+      MEM.conta("Metros quadrados de pedra", `metros × ${numMem(SOLEIRA_LARGURA_M)}`, [["metros", soleirasM]], m2, "m²"),
+      MEM.conta("Com 10% de perda", "m² × 1,10", [["m²", m2]], m2 * PERDA, "m²"),
+      MEM.teto(m2 * PERDA, ceil2(m2 * PERDA), "m²", "Arredonda em centésimos de m²"),
+    ] });
     totais.AC3 += m2 * ARGAMASSA_KG_M2.AC3;
   }
 
@@ -3160,29 +3212,87 @@ function pisosRevestimentos(cp, out, data) {
       : { bancada: b.nome || "Bancada", m2: m.total, tampo: m.tampo, saia: m.saia, fundo: m.fundo, sapatas: m.sapatas });
   }
   for (const [produto, acc] of Object.entries(porPedra)) {
-    emitir(out, { ...base, subEtapa: "Bancadas", item: produto, unidade: "m2", qtd: Math.round(acc.m2 * 100) / 100, composicao: acc.composicao });
+    emitir(out, { ...base, subEtapa: "Bancadas", item: produto, unidade: "m2", qtd: Math.round(acc.m2 * 100) / 100, composicao: acc.composicao, memoria: [
+      MEM.nota("Pedra pronta de marmoraria: some o tampo, a saia da frente, o fundo (rodabanca) e as sapatas de apoio de cada bancada. Não há perda — a peça vem cortada na medida. A ilha entra com as quatro laterais no lugar da saia e do fundo."),
+      ...acc.composicao.map((x) => MEM.dado(x.bancada, x.m2, "m²", x.laterais != null ? `tampo ${numMem(x.tampo)} + laterais ${numMem(x.laterais)}` : `tampo ${numMem(x.tampo)} + saia ${numMem(x.saia)} + fundo ${numMem(x.fundo)} + sapatas ${numMem(x.sapatas)}`)),
+      MEM.conta("Total nesta pedra", acc.composicao.map((x) => x.bancada).join(" + "), acc.composicao.map((x) => [x.bancada, x.m2]), Math.round(acc.m2 * 100) / 100, "m²"),
+    ] });
   }
   const bancadasM2 = numOrZero(ps.bancadasM2);
-  if (!Object.keys(porPedra).length && bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || granitoPadrao(padrao), unidade: "m2", qtd: ceil2(bancadasM2) });
+  if (!Object.keys(porPedra).length && bancadasM2 > 0) emitir(out, { ...base, subEtapa: "Bancadas", item: String(ps.bancadasProduto || "").trim() || granitoPadrao(padrao), unidade: "m2", qtd: ceil2(bancadasM2), memoria: [
+    MEM.nota("Bancadas informadas como um m² total, sem a lista peça a peça. Para ver tampo, saia, fundo e sapatas de cada uma, cadastre as bancadas no bloco Pisos e revestimentos ou marque a bancada no cômodo."),
+    MEM.dado("Metros quadrados de bancada", bancadasM2, "m²", "bloco Pisos e revestimentos"),
+    MEM.teto(bancadasM2, ceil2(bancadasM2), "m²", "Arredonda em centésimos de m²"),
+  ] });
 
   // Deck
   const deckM2 = numOrZero(ps.deckM2);
   if (deckM2 > 0) {
-    emitir(out, { ...base, subEtapa: "Deck", item: String(ps.deckProduto || "").trim() || "Piso - Deck", unidade: "m2", qtd: ceil2(deckM2 * PERDA) });
-    emitir(out, { ...base, subEtapa: "Deck", item: "tintas - Cetol Deck", unidade: "Unidades", qtd: Math.ceil(deckM2 / 20) });
+    emitir(out, { ...base, subEtapa: "Deck", item: String(ps.deckProduto || "").trim() || "Piso - Deck", unidade: "m2", qtd: ceil2(deckM2 * PERDA), memoria: [
+      MEM.nota("Deck de madeira, com 10% de perda de recortes."),
+      MEM.dado("Área de deck", deckM2, "m²", "bloco Pisos e revestimentos"),
+      MEM.conta("Com 10% de perda", "área × 1,10", [["área", deckM2]], deckM2 * PERDA, "m²"),
+      MEM.teto(deckM2 * PERDA, ceil2(deckM2 * PERDA), "m²", "Arredonda em centésimos de m²"),
+    ] });
+    emitir(out, { ...base, subEtapa: "Deck", item: "tintas - Cetol Deck", unidade: "Unidades", qtd: Math.ceil(deckM2 / 20), memoria: [
+      MEM.nota("Cetol para o deck: uma lata rende 20 m²."),
+      MEM.dado("Área de deck", deckM2, "m²", "bloco Pisos e revestimentos"),
+      MEM.conta("Latas", "área ÷ 20", [["área", deckM2]], deckM2 / 20, "latas"),
+      MEM.teto(deckM2 / 20, Math.ceil(deckM2 / 20), "latas", "Arredonda para cima (lata fechada)"),
+    ] });
   }
 
   // Consumíveis somados
-  if (totais.AC3 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 3 GF - 20kg", unidade: "Unidades", qtd: Math.ceil(totais.AC3 / 20 * PERDA) });
-  if (totais.AC2 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 2 - 20kg", unidade: "Unidades", qtd: Math.ceil(totais.AC2 / 20 * PERDA) });
-  if (totais.rejunteKg > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: Math.ceil(totais.rejunteKg / 5) });
+  if (totais.AC3 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 3 GF - 20kg", unidade: "Unidades", qtd: Math.ceil(totais.AC3 / 20 * PERDA), memoria: [
+    MEM.nota(`Argamassa AC-III: usada em porcelanato e em tudo que é externo, a ${numMem(ARGAMASSA_KG_M2.AC3)} kg por m². Soma todas as superfícies desse tipo mais as soleiras. Saco de 20 kg.`),
+    MEM.conta("Argamassa necessária", "soma das superfícies em AC-III", [], totais.AC3, "kg"),
+    MEM.conta("Sacos, com 10% de perda", "kg ÷ 20 × 1,10", [["kg", totais.AC3]], totais.AC3 / 20 * PERDA, "sacos"),
+    MEM.teto(totais.AC3 / 20 * PERDA, Math.ceil(totais.AC3 / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
+  ] });
+  if (totais.AC2 > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Argamassa AC 2 - 20kg", unidade: "Unidades", qtd: Math.ceil(totais.AC2 / 20 * PERDA), memoria: [
+    MEM.nota(`Argamassa AC-II: cerâmica em área interna, a ${numMem(ARGAMASSA_KG_M2.AC2)} kg por m². Saco de 20 kg.`),
+    MEM.conta("Argamassa necessária", "soma das superfícies em AC-II", [], totais.AC2, "kg"),
+    MEM.conta("Sacos, com 10% de perda", "kg ÷ 20 × 1,10", [["kg", totais.AC2]], totais.AC2 / 20 * PERDA, "sacos"),
+    MEM.teto(totais.AC2 / 20 * PERDA, Math.ceil(totais.AC2 / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
+  ] });
+  if (totais.rejunteKg > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Rejunte - 5kg", unidade: "Unidades", qtd: Math.ceil(totais.rejunteKg / 5), memoria: [
+    MEM.nota("Rejunte pela geometria da junta de cada superfície: metros de junta por m² × largura da junta × espessura da peça × densidade 1.600 kg/m³, com fator 1,5 de acomodação. Embalagem de 5 kg."),
+    MEM.conta("Rejunte necessário", "soma das superfícies", [], totais.rejunteKg, "kg"),
+    MEM.conta("Embalagens", "kg ÷ 5", [["kg", totais.rejunteKg]], totais.rejunteKg / 5, "embalagens"),
+    MEM.teto(totais.rejunteKg / 5, Math.ceil(totais.rejunteKg / 5), "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
+  ] });
   if (totais.clips > 0) {
-    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador", unidade: "Unidades", qtd: Math.ceil(totais.clips * PERDA) });
-    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Cunha Niveladora", unidade: "Unidades", qtd: Math.ceil(totais.clips / 3) });
+    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador", unidade: "Unidades", qtd: Math.ceil(totais.clips * PERDA), memoria: [
+    MEM.nota("Clips niveladores: só em peça de 60 cm ou maior, 3 por peça."),
+    MEM.conta("Clips necessários", "3 × peças das superfícies com peça ≥ 60 cm", [], totais.clips, "clips"),
+    MEM.conta("Com 10% de perda", "clips × 1,10", [["clips", totais.clips]], totais.clips * PERDA, "clips"),
+    MEM.teto(totais.clips * PERDA, Math.ceil(totais.clips * PERDA), "clips"),
+  ] });
+    emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Cunha Niveladora", unidade: "Unidades", qtd: Math.ceil(totais.clips / 3), memoria: [
+    MEM.nota("Cunhas do sistema de nivelamento: uma para cada 3 clips (a cunha é reutilizada)."),
+    MEM.dado("Clips niveladores", totais.clips, "clips", "passo anterior"),
+    MEM.conta("Cunhas", "clips ÷ 3", [["clips", totais.clips]], totais.clips / 3, "cunhas"),
+    MEM.teto(totais.clips / 3, Math.ceil(totais.clips / 3), "cunhas"),
+  ] });
   }
-  if (totais.cruzetas > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador Cruzeta", unidade: "Pacotes 100 un", qtd: Math.ceil(totais.cruzetas * PERDA / 100) });
-  if (m2Porcelanato > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Disco Porcelanato", unidade: "Unidades", qtd: Math.max(1, Math.ceil(m2Porcelanato * 0.005 * PERDA)) });
-  if (m2PisoInterno > 0) emitir(out, { ...base, subEtapa: "Proteção", item: "Salva Piso 1,00m x 25mts", unidade: "Rolos", qtd: Math.ceil(m2PisoInterno / 25 * PERDA) });
+  if (totais.cruzetas > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Pisos e revestimentos - Espaçador Cruzeta", unidade: "Pacotes 100 un", qtd: Math.ceil(totais.cruzetas * PERDA / 100), memoria: [
+    MEM.nota("Cruzetas: nas peças menores que 60 cm, uma por peça. Pacote de 100."),
+    MEM.conta("Cruzetas necessárias", "peças das superfícies com peça < 60 cm", [], totais.cruzetas, "cruzetas"),
+    MEM.conta("Pacotes, com 10% de perda", "cruzetas × 1,10 ÷ 100", [["cruzetas", totais.cruzetas]], totais.cruzetas * PERDA / 100, "pacotes"),
+    MEM.teto(totais.cruzetas * PERDA / 100, Math.ceil(totais.cruzetas * PERDA / 100), "pacotes de 100", "Arredonda para cima (pacote fechado)"),
+  ] });
+  if (m2Porcelanato > 0) emitir(out, { ...base, subEtapa: "Assentamento", item: "Disco Porcelanato", unidade: "Unidades", qtd: Math.max(1, Math.ceil(m2Porcelanato * 0.005 * PERDA)), memoria: [
+    MEM.nota("Disco de corte de porcelanato: 0,005 por m² de porcelanato, no mínimo um."),
+    MEM.conta("Área em porcelanato", "soma das superfícies", [], m2Porcelanato, "m²"),
+    MEM.conta("Discos, com 10% de perda", "área × 0,005 × 1,10", [["área", m2Porcelanato]], m2Porcelanato * 0.005 * PERDA, "discos"),
+    MEM.teto(m2Porcelanato * 0.005 * PERDA, Math.max(1, Math.ceil(m2Porcelanato * 0.005 * PERDA)), "discos", "Arredonda para cima (mínimo de 1 disco)"),
+  ] });
+  if (m2PisoInterno > 0) emitir(out, { ...base, subEtapa: "Proteção", item: "Salva Piso 1,00m x 25mts", unidade: "Rolos", qtd: Math.ceil(m2PisoInterno / 25 * PERDA), memoria: [
+    MEM.nota("Salva-piso para proteger o piso assentado até o fim da obra: rolo de 1 m × 25 m."),
+    MEM.conta("Área de piso interno", "piso interno + rodapé", [], m2PisoInterno, "m²"),
+    MEM.conta("Rolos, com 10% de perda", "área ÷ 25 × 1,10", [["área", m2PisoInterno]], m2PisoInterno / 25 * PERDA, "rolos"),
+    MEM.teto(m2PisoInterno / 25 * PERDA, Math.ceil(m2PisoInterno / 25 * PERDA), "rolos", "Arredonda para cima (rolo inteiro)"),
+  ] });
 }
 
 // ═══════════════════════════════════════════════════════════════
