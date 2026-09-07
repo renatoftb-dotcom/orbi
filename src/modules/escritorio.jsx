@@ -368,44 +368,44 @@ function Escritorio({ data, save }) {
   }
 
   const E = {
-    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#262421", maxWidth:1200, margin:"0 auto" },
+    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111827", maxWidth:1200, margin:"0 auto" },
     header: { borderBottom:"1.5px solid rgba(38,36,33,0.14)", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
-    titulo: { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
-    sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
+    titulo: { fontSize:18, fontWeight:700, color:"#111827", margin:0 },
+    sub: { fontSize:13, color:"#4b5563", marginTop:3 },
     abas: { display:"flex", gap:0, borderBottom:"1.5px solid rgba(38,36,33,0.14)", padding:"0 32px" },
-    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #b5652f" : "2px solid transparent", color: ativa ? "#b5652f" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
+    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #0474f4" : "2px solid transparent", color: ativa ? "#0474f4" : "#4b5563", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body: { padding:"32px", maxWidth:760 },
     secao: { marginBottom:32 },
-    secTitulo: { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
+    secTitulo: { fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     grid2: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 },
     grid3: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 },
     campo: { display:"flex", flexDirection:"column", gap:5 },
-    label: { fontSize:12, color:"#6b7280", fontWeight:500 },
-    input: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-    select: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
+    label: { fontSize:12, color:"#4b5563", fontWeight:500 },
+    input: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+    select: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
     divisor: { border:"none", borderTop:"1px solid #f3f4f6", margin:"24px 0" },
     btn: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-    btnAdd: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
+    btnSec: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnAdd: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
     btnSalvo: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
     // Equipe
     membroCard: { border:"1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
-    membroNome: { fontSize:14, fontWeight:600, color:"#262421", marginBottom:2 },
-    membroCargo: { fontSize:12, color:"#9ca3af" },
-    membroInfo: { fontSize:12, color:"#6b7280", marginTop:6, display:"flex", gap:16 },
+    membroNome: { fontSize:14, fontWeight:600, color:"#111827", marginBottom:2 },
+    membroCargo: { fontSize:12, color:"#4b5563" },
+    membroInfo: { fontSize:12, color:"#4b5563", marginTop:6, display:"flex", gap:16 },
     // Modal
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.3)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
     modal: { background:"#fff", borderRadius:14, padding:"28px", width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 40px rgba(0,0,0,0.15)" },
-    modalTitulo: { fontSize:16, fontWeight:700, color:"#262421", marginBottom:20 },
+    modalTitulo: { fontSize:16, fontWeight:700, color:"#111827", marginBottom:20 },
     // View
-    viewVal: { fontSize:14, color:"#262421", marginBottom:2 },
-    viewLabel: { fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
+    viewVal: { fontSize:14, color:"#111827", marginBottom:2 },
+    viewLabel: { fontSize:11, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
     viewBloco: { display:"flex", flexDirection:"column", gap:3 },
     // Modo visualização vs edição (item 4)
     secaoHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 },
-    btnEditar: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
+    btnEditar: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
     // Valor "vazio" — aparece quando campo não preenchido em modo visualização
-    viewVazio: { fontSize:14, color:"#9ca3af", fontStyle:"italic", marginBottom:2 },
+    viewVazio: { fontSize:14, color:"#4b5563", fontStyle:"italic", marginBottom:2 },
   };
 
   // Tag de nível de usuário (reusável)
@@ -453,13 +453,13 @@ function Escritorio({ data, save }) {
               <img src={form.logo} alt="Logo"
                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
             ) : (
-              <span style={{ fontSize: 12, color: "#9ca3af" }}>Sem logo</span>
+              <span style={{ fontSize: 12, color: "#6b7280" }}>Sem logo</span>
             )}
           </div>
 
           {/* Ações */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 10, lineHeight: 1.5 }}>
               Aparece no cabeçalho das propostas em PDF.<br/>
               Formatos: PNG, JPG ou SVG · Máximo 1MB.
             </div>
@@ -562,7 +562,7 @@ function Escritorio({ data, save }) {
               <Campo label="Nome do escritório" valor={form.nome} />
               <Campo label="CNPJ / CPF"         valor={form.cnpj} />
             </div>
-            <div style={{ fontSize:12, color:"#6b7280", fontWeight:500, marginBottom:10 }}>Responsáveis técnicos</div>
+            <div style={{ fontSize:12, color:"#4b5563", fontWeight:500, marginBottom:10 }}>Responsáveis técnicos</div>
             {responsaveis.length === 0 ? (
               <div style={E.viewVazio}>Nenhum responsável cadastrado</div>
             ) : (
@@ -590,13 +590,13 @@ function Escritorio({ data, save }) {
               </div>
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <span style={{ fontSize:12, color:"#6b7280", fontWeight:500 }}>Responsáveis técnicos</span>
+              <span style={{ fontSize:12, color:"#4b5563", fontWeight:500 }}>Responsáveis técnicos</span>
               <button style={E.btnAdd} onClick={() => setResponsaveis(r => [...r, { id:uid(), nome:"", cau:"", cpf:"" }])}>
                 + Adicionar
               </button>
             </div>
             {responsaveis.length === 0 && (
-              <div style={{ fontSize:13, color:"#9ca3af", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
+              <div style={{ fontSize:13, color:"#4b5563", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
             )}
             {responsaveis.map((r, idx) => (
               <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:10, marginBottom:10, alignItems:"end" }}>
@@ -608,7 +608,7 @@ function Escritorio({ data, save }) {
                   </div>
                 ))}
                 <button onClick={() => setResponsaveis(rs => rs.filter((_,i) => i!==idx))}
-                  style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
+                  style={{ background:"none", border:"none", color:"#4b5563", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
               </div>
             ))}
           </>
@@ -681,7 +681,7 @@ function Escritorio({ data, save }) {
                   maxLength={9}
                 />
                 {cepLoading && (
-                  <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>Buscando endereço…</div>
+                  <div style={{ fontSize:11, color:"#4b5563", marginTop:4 }}>Buscando endereço…</div>
                 )}
               </div>
               <div style={E.campo}>
@@ -765,7 +765,7 @@ function Escritorio({ data, save }) {
       {!perm.podeAlterarConfig && (
         <div style={{
           padding:"12px 14px", background:"#f9fafb", border:"1px solid #f3f4f6",
-          borderRadius: 12, color:"#6b7280", fontSize:12.5, textAlign:"center", marginTop:24,
+          borderRadius: 12, color:"#4b5563", fontSize:12.5, textAlign:"center", marginTop:24,
         }}>
           Somente administradores podem alterar estes dados.
         </div>
@@ -778,14 +778,14 @@ function Escritorio({ data, save }) {
     <div style={E.body}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
         <div>
-          <div style={{ fontSize:14, color:"#262421", fontWeight:600 }}>{equipe.length} membro{equipe.length !== 1 ? "s" : ""}</div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>Gerencie os membros da equipe</div>
+          <div style={{ fontSize:14, color:"#111827", fontWeight:600 }}>{equipe.length} membro{equipe.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>Gerencie os membros da equipe</div>
         </div>
         <button style={E.btn} onClick={() => setNovoMembro({...emptyMembro, id:uid()})}>+ Adicionar membro</button>
       </div>
 
       {equipe.length === 0 ? (
-        <div style={{ textAlign:"center", padding:"60px 0", color:"#9ca3af", fontSize:14 }}>
+        <div style={{ textAlign:"center", padding:"60px 0", color:"#4b5563", fontSize:14 }}>
           Nenhum membro cadastrado ainda.
         </div>
       ) : (
@@ -802,11 +802,11 @@ function Escritorio({ data, save }) {
             </div>
             <div style={{ display:"flex", gap:6 }}>
               <button onClick={() => setNovoMembro(m)}
-                style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#4b5563", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                 Editar
               </button>
               <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
-                style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
+                style={{ background:"none", border:"none", color:"#4b5563", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
             </div>
           </div>
         ))
@@ -819,7 +819,7 @@ function Escritorio({ data, save }) {
           <div style={E.modal}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
               <div style={E.modalTitulo}>{novoMembro.nome ? "Editar membro" : "Novo membro"}</div>
-              <button onClick={() => setNovoMembro(null)} style={{ background:"none", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
+              <button onClick={() => setNovoMembro(null)} style={{ background:"none", border:"none", color:"#4b5563", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:20 }}>
               {[["Nome completo","nome"],["Cargo","cargo"],["E-mail","email"],["Telefone","telefone"],["CAU / CREA","cau"],["CPF","cpf"]].map(([lbl,key]) => (
@@ -870,10 +870,10 @@ function Escritorio({ data, save }) {
       <div style={E.body}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
           <div>
-            <div style={{ fontSize:14, color:"#262421", fontWeight:600 }}>
+            <div style={{ fontSize:14, color:"#111827", fontWeight:600 }}>
               {usuarios.length} {usuarios.length === 1 ? "usuário" : "usuários"}
             </div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+            <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>
               Controle quem acessa o sistema e em qual nível de permissão
             </div>
           </div>
@@ -887,7 +887,7 @@ function Escritorio({ data, save }) {
         {/* Legenda dos níveis */}
         <div style={{
           background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 14,
-          padding:"12px 14px", marginBottom:20, fontSize:12, lineHeight:1.7, color:"#6b7280",
+          padding:"12px 14px", marginBottom:20, fontSize:12, lineHeight:1.7, color:"#4b5563",
         }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4 }}>
             <span style={{ ...tagBase, background: corNivel.admin.bg, color: corNivel.admin.color }}>Admin</span>
@@ -904,7 +904,7 @@ function Escritorio({ data, save }) {
         </div>
 
         {loadingUsuarios && (
-          <div style={{ textAlign:"center", padding:"40px 0", color:"#9ca3af", fontSize:13 }}>
+          <div style={{ textAlign:"center", padding:"40px 0", color:"#4b5563", fontSize:13 }}>
             Carregando usuários…
           </div>
         )}
@@ -921,7 +921,7 @@ function Escritorio({ data, save }) {
         )}
 
         {!loadingUsuarios && !erroUsuarios && usuarios.length === 0 && (
-          <div style={{ textAlign:"center", padding:"60px 0", color:"#9ca3af", fontSize:14 }}>
+          <div style={{ textAlign:"center", padding:"60px 0", color:"#4b5563", fontSize:14 }}>
             Nenhum usuário cadastrado ainda.
           </div>
         )}
@@ -952,14 +952,14 @@ function Escritorio({ data, save }) {
                   {u.ativo === false && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#f3f4f6", color:"#6b7280", fontWeight:600,
+                      background:"#f3f4f6", color:"#4b5563", fontWeight:600,
                       textTransform:"uppercase", letterSpacing:0.5,
                     }}>Inativo</span>
                   )}
                   {u.precisa_trocar_senha && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#fafafa", color:"#374151", fontWeight:600,
+                      background:"#fafafa", color:"#111827", fontWeight:600,
                       border:"1.5px solid rgba(38,36,33,0.16)",
                       textTransform:"uppercase", letterSpacing:0.5,
                     }} title="Senha foi resetada — usuário precisa trocá-la no próximo login">
@@ -969,9 +969,9 @@ function Escritorio({ data, save }) {
                 </div>
                 <div style={E.membroCargo}>{u.email}</div>
                 {membroVinculado && (
-                  <div style={{ fontSize:11.5, color:"#6b7280", marginTop:4 }}>
-                    Vinculado a: <strong style={{ color:"#374151" }}>{membroVinculado.nome}</strong>
-                    {membroVinculado.cargo && <span style={{ color:"#9ca3af" }}> · {membroVinculado.cargo}</span>}
+                  <div style={{ fontSize:11.5, color:"#4b5563", marginTop:4 }}>
+                    Vinculado a: <strong style={{ color:"#111827" }}>{membroVinculado.nome}</strong>
+                    {membroVinculado.cargo && <span style={{ color:"#4b5563" }}> · {membroVinculado.cargo}</span>}
                   </div>
                 )}
               </div>
@@ -988,7 +988,7 @@ function Escritorio({ data, save }) {
                     });
                     setConfirmSenha("");
                   }}
-                  style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                  style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#4b5563", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                   Editar
                 </button>
                 {/* Reset de senha — só admin de empresa pode, não pra si mesmo,
@@ -997,7 +997,7 @@ function Escritorio({ data, save }) {
                   <button
                     onClick={() => setUsuarioParaResetar(u)}
                     title="Resetar senha do usuário"
-                    style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#4b5563", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                     Resetar senha
                   </button>
                 )}
@@ -1005,7 +1005,7 @@ function Escritorio({ data, save }) {
                   <button
                     onClick={() => pedirConfirmacaoExcluir(u)}
                     title="Excluir usuário"
-                    style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
+                    style={{ background:"none", border:"none", color:"#4b5563", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
                 )}
               </div>
             </div>
@@ -1022,7 +1022,7 @@ function Escritorio({ data, save }) {
                 </div>
                 <button
                   onClick={() => { setNovoUsuario(null); setConfirmSenha(""); }}
-                  style={{ background:"none", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
+                  style={{ background:"none", border:"none", color:"#4b5563", fontSize:20, cursor:"pointer" }}>×</button>
               </div>
 
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
@@ -1090,7 +1090,7 @@ function Escritorio({ data, save }) {
                     </select>
                   </div>
                   {equipe.length === 0 && (
-                    <div style={{ fontSize:11, color:"#9ca3af", marginTop:5 }}>
+                    <div style={{ fontSize:11, color:"#4b5563", marginTop:5 }}>
                       Nenhum membro cadastrado ainda. Use a opção acima ou a aba Equipe.
                     </div>
                   )}
@@ -1098,7 +1098,7 @@ function Escritorio({ data, save }) {
               </div>
 
               <div style={{ marginBottom:20 }}>
-                <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#374151", cursor:"pointer" }}>
+                <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#111827", cursor:"pointer" }}>
                   <input
                     type="checkbox"
                     checked={novoUsuario.ativo !== false}
@@ -1108,7 +1108,7 @@ function Escritorio({ data, save }) {
                   />
                   Usuário ativo
                   {novoUsuario._editando && novoUsuario.id === usuarioLogadoId && (
-                    <span style={{ fontSize:11, color:"#9ca3af" }}>· não é possível desativar a si mesmo</span>
+                    <span style={{ fontSize:11, color:"#4b5563" }}>· não é possível desativar a si mesmo</span>
                   )}
                 </label>
               </div>
@@ -1136,10 +1136,10 @@ function Escritorio({ data, save }) {
           <div style={E.overlay}>
             <div style={{ ...E.modal, maxWidth: 420 }}>
               <div style={{ ...E.modalTitulo, marginBottom: 12 }}>Excluir usuário</div>
-              <div style={{ fontSize:14, color:"#374151", lineHeight:1.5, marginBottom:8 }}>
+              <div style={{ fontSize:14, color:"#111827", lineHeight:1.5, marginBottom:8 }}>
                 Tem certeza que deseja excluir <strong>{confirmarExcluir.nome}</strong>?
               </div>
-              <div style={{ fontSize:13, color:"#9ca3af", marginBottom:24 }}>
+              <div style={{ fontSize:13, color:"#4b5563", marginBottom:24 }}>
                 Esta ação não pode ser desfeita.
               </div>
               <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -1169,7 +1169,7 @@ function Escritorio({ data, save }) {
             btn:     E.btn,
             btnSec:  E.btnSec,
             input:   E.input,
-            label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
+            label:   { display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
           };
           return (
             <>
@@ -1242,7 +1242,7 @@ function Escritorio({ data, save }) {
     <div style={E.body}>
       <div style={E.secao}>
         <div style={E.secTitulo}>Manutenção automática</div>
-        <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
+        <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.6, marginBottom:16 }}>
           O sistema executa automaticamente, todo dia às 3h da manhã:
           <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
             <li>Expira propostas com mais de 30 dias (marca como "Perdido" e remove imagens salvas)</li>
@@ -1260,7 +1260,7 @@ function Escritorio({ data, save }) {
             <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, padding:"8px 14px" }}>
               ✓ Executado em {new Date(manutResult.executadoEm).toLocaleString("pt-BR")}
               <br/>
-              <span style={{ color:"#374151" }}>
+              <span style={{ color:"#111827" }}>
                 {manutResult.orcamentosExpirados} orçamento(s) expirado(s) · {manutResult.clientesInativados} cliente(s) inativado(s)
               </span>
             </div>

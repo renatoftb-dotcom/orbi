@@ -152,8 +152,8 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   return (
     <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", maxWidth:1100, margin:"0 auto" }}>
       <div style={{ marginBottom: isMobile ? 18 : 28 }}>
-        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#262421", letterSpacing:-0.3 }}>Dashboard</div>
-        <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
+        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#111827", letterSpacing:-0.3 }}>Dashboard</div>
+        <div style={{ fontSize:13, color:"#4b5563", marginTop:4 }}>Visão geral da plataforma VICKE</div>
       </div>
 
       {erro && (
@@ -170,7 +170,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
           navegação primária no topo, atividade/feed embaixo. Com volume de
           empresas crescendo, feed pode esticar muito — não pode empurrar
           os cards de navegação pra fora da tela. */}
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8 }}>Acesso rápido</div>
+      <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8 }}>Acesso rápido</div>
       {/* Mobile: 2 colunas fixas (cabe 2 cards de ~150px em 375px de viewport).
           Desktop: auto-fill com mínimo 200px (3-6 colunas conforme largura). */}
       <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: isMobile ? 8 : 12, marginBottom:32 }}>
@@ -181,10 +181,10 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
             onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
               <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#262421" }}>{m.label}</div>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#111827" }}>{m.label}</div>
             </div>
             {!isMobile && (
-              <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
+              <div style={{ fontSize:11.5, color:"#4b5563", marginLeft:28 }}>{m.desc}</div>
             )}
           </button>
         ))}
@@ -255,14 +255,14 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
           }}
           onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#b5652f"; }}
           onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
-          <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {it.label}
           </div>
-          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#262421", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
+          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#111827", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
             {it.value}
           </div>
           {it.sub && (
-            <div style={{ fontSize: isMobile ? 10.5 : 11.5, color:"#9ca3af", marginTop:4, lineHeight:1.3 }}>{it.sub}</div>
+            <div style={{ fontSize: isMobile ? 10.5 : 11.5, color:"#4b5563", marginTop:4, lineHeight:1.3 }}>{it.sub}</div>
           )}
         </div>
       ))}
@@ -280,12 +280,12 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
 function DashboardFeed({ feed, loading, isMobile }) {
   return (
     <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "12px 14px" : "16px 18px" }}>
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
         Atividade recente
       </div>
-      {loading && <div style={{ fontSize:13, color:"#9ca3af" }}>Carregando…</div>}
+      {loading && <div style={{ fontSize:13, color:"#4b5563" }}>Carregando…</div>}
       {!loading && (!feed || feed.length === 0) && (
-        <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 0" }}>
+        <div style={{ fontSize:13, color:"#4b5563", padding:"12px 0" }}>
           Nenhuma atividade ainda.
         </div>
       )}
@@ -322,10 +322,10 @@ function FeedItem({ ev, primeiro }) {
         background: meta.cor, marginTop:6,
       }} />
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, color:"#262421", lineHeight:1.4 }}>
+        <div style={{ fontSize:13, color:"#111827", lineHeight:1.4 }}>
           {meta.descricao}
         </div>
-        <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:2 }}>
+        <div style={{ fontSize:11.5, color:"#4b5563", marginTop:2 }}>
           {ev.empresa_nome && ev.empresa_nome !== "—" ? `${ev.empresa_nome} · ` : ""}
           {ev.usuario_email || "anônimo"} · {tempoRelativo(ev.criado_em)}
         </div>
@@ -516,7 +516,7 @@ function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus 
           position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
           background:"none", border:"none", cursor: disabled ? "not-allowed" : "pointer",
           padding:"6px 8px", lineHeight:0,
-          color:"#9ca3af", fontFamily:"inherit",
+          color:"#4b5563", fontFamily:"inherit",
           display:"flex", alignItems:"center", justifyContent:"center",
         }}
         onMouseEnter={e => { if (!disabled) e.currentTarget.style.color = "#374151"; }}
@@ -593,15 +593,15 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           padding:"32px 32px 24px", maxWidth:420, width:"100%",
           boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
         }}>
-        <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginBottom:6, letterSpacing:-0.3 }}>
+        <div style={{ fontSize:18, fontWeight:700, color:"#111827", marginBottom:6, letterSpacing:-0.3 }}>
           Trocar senha
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.5 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.5 }}>
           Sua senha foi resetada por um administrador. Para continuar, escolha uma senha nova que só você saiba.
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Senha temporária recebida
           </label>
           <CampoSenha
@@ -615,7 +615,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Nova senha (mínimo 6 caracteres)
           </label>
           <CampoSenha
@@ -628,7 +628,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
         </div>
 
         <div style={{ marginBottom:18 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Confirme a nova senha
           </label>
           <CampoSenha
@@ -658,13 +658,13 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 
         <button type="button" onClick={onLogout} disabled={loading}
           style={{
-            background:"transparent", color:"#6b7280", border:"none",
+            background:"transparent", color:"#4b5563", border:"none",
             padding:"8px", fontSize:12, cursor:"pointer", fontFamily:"inherit", width:"100%",
           }}>
           Sair sem trocar
         </button>
 
-        <div style={{ fontSize:11, color:"#9ca3af", marginTop:12, textAlign:"center" }}>
+        <div style={{ fontSize:11, color:"#4b5563", marginTop:12, textAlign:"center" }}>
           Logado como {usuario?.email || ""}
         </div>
       </form>
@@ -790,8 +790,8 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
               <IconeMaster nome="check" tamanho={22} cor="#fff" />
             </div>
           </div>
-          <div style={{ fontSize:16, fontWeight:600, color:"#262421", marginBottom:6 }}>Recebido</div>
-          <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
+          <div style={{ fontSize:16, fontWeight:600, color:"#111827", marginBottom:6 }}>Recebido</div>
+          <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.5 }}>
             Obrigado pelo feedback.
           </div>
         </div>
@@ -811,15 +811,15 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         maxWidth:480, width:"100%", maxHeight:"90vh", overflowY:"auto",
         boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
       }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Enviar feedback
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:18, lineHeight:1.5 }}>
           Sua mensagem chega direto pro time da Vicke. Pode mandar bugs, ideias, perguntas — tudo serve.
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
             Tipo
           </label>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:6 }}>
@@ -835,7 +835,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
                   cursor: enviando ? "not-allowed" : "pointer",
                   border: categoria === c.id ? "1.5px solid #111" : "2px solid #d1d5db",
                   background: categoria === c.id ? "#fafbfc" : "#fff",
-                  color:"#262421",
+                  color:"#111827",
                   fontWeight: categoria === c.id ? 600 : 400,
                 }}>
                 {c.label}
@@ -845,7 +845,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Mensagem
           </label>
           <textarea
@@ -872,15 +872,15 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
           </div>
         )}
 
-        <div style={{ fontSize:11, color:"#9ca3af", marginBottom:14, lineHeight:1.5 }}>
-          Enviado por: <strong style={{ color:"#6b7280" }}>{usuario?.nome}</strong> · {usuario?.email}
+        <div style={{ fontSize:11, color:"#4b5563", marginBottom:14, lineHeight:1.5 }}>
+          Enviado por: <strong style={{ color:"#4b5563" }}>{usuario?.nome}</strong> · {usuario?.email}
         </div>
 
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
           <button onClick={onFechar} disabled={enviando}
             style={{
               background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
-              padding:"9px 14px", fontSize:13, color:"#6b7280", cursor: enviando ? "not-allowed" : "pointer",
+              padding:"9px 14px", fontSize:13, color:"#4b5563", cursor: enviando ? "not-allowed" : "pointer",
               fontFamily:"inherit",
             }}>
             Cancelar
@@ -1320,10 +1320,10 @@ export default function ModuloClientesFornecedores() {
   const conflitoModal = conflitoSessao && (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:100050, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
       <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:8 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:8 }}>
           {conflitoSessao === "logout" ? "Sessão encerrada" : "Sessão alterada em outra aba"}
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.55 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.55 }}>
           {conflitoSessao === "logout"
             ? "Você foi desconectado em outra aba. Esta página será atualizada para voltar à tela de login."
             : "Outra aba acabou de logar com um usuário diferente. Por segurança, esta página será atualizada para refletir a nova sessão."}
@@ -1451,7 +1451,7 @@ export default function ModuloClientesFornecedores() {
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ width:20, height:20, border:"2px solid #e5e7eb", borderTop:"2px solid #111", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 12px" }} />
-        <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Carregando...</p>
+        <p style={{ color:"#4b5563", fontSize:13, margin:0 }}>Carregando...</p>
       </div>
     </div>
     <DialogosHost />
@@ -1465,10 +1465,10 @@ export default function ModuloClientesFornecedores() {
       <>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
-          <div style={{ fontSize:15, color:"#262421", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
-          <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
+          <div style={{ fontSize:15, color:"#111827", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
+          <div style={{ fontSize:13, color:"#4b5563", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
           <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
-          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
+          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#4b5563", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
       <DialogosHost />
@@ -1534,7 +1534,21 @@ export default function ModuloClientesFornecedores() {
   return (
     <>
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", overflow:"hidden" }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        /* Interação em azul: borda do campo, do botão e do cartão em hover e foco.
+           Escopado por data-vk-ui, que a área de conteúdo aplica em todos os
+           módulos menos o de orçamento de projeto. */
+        [data-vk-ui="1"] input:hover,
+        [data-vk-ui="1"] select:hover,
+        [data-vk-ui="1"] textarea:hover,
+        [data-vk-ui="1"] button:hover { border-color:#0474f4 !important; }
+        [data-vk-ui="1"] input:focus,
+        [data-vk-ui="1"] select:focus,
+        [data-vk-ui="1"] textarea:focus {
+          border-color:#0474f4 !important; box-shadow:0 0 0 3px rgba(4,116,244,0.18); outline:none;
+        }
+      `}</style>
 
       {/* ── Backdrop mobile: fundo escurecido por trás do drawer.
           Aparece SÓ em mobile quando sidebar está aberta. Toque fecha. */}
@@ -1586,8 +1600,8 @@ export default function ModuloClientesFornecedores() {
         }}>
           {(isMobile || !colapsadaEf) && (
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:15, fontWeight:700, color:"#262421", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
-              <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>Vicke</div>
+              <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:15, fontWeight:700, color:"#111827", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
+              <div style={{ fontSize:11, color:"#4b5563", marginTop:2 }}>Vicke</div>
             </div>
           )}
           {/* Botão de toggle: muda comportamento conforme dispositivo.
@@ -1603,7 +1617,7 @@ export default function ModuloClientesFornecedores() {
             style={{
               background:"none", border:"none", cursor:"pointer",
               padding: isMobile ? 10 : 6, // touch target maior em mobile
-              color:"#9ca3af", lineHeight:0,
+              color:"#4b5563", lineHeight:0,
               display:"flex", alignItems:"center", justifyContent:"center",
               borderRadius:6, fontFamily:"inherit",
             }}
@@ -1684,7 +1698,7 @@ export default function ModuloClientesFornecedores() {
                       </span>
                       {!colapsadaEf && (
                         <span style={{
-                          color:"#9ca3af", fontSize:9,
+                          color:"#4b5563", fontSize:9,
                           transition:"transform 0.2s",
                           transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
                           display:"inline-block",
@@ -1754,7 +1768,7 @@ export default function ModuloClientesFornecedores() {
                     {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#0474f4" : "#4b5563"} />}
                     {!colapsadaEf && label}
                   </span>
-                  {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius: 12 }}>{count}</span>}
+                  {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#4b5563", fontSize:11, padding:"1px 7px", borderRadius: 12 }}>{count}</span>}
                 </button>
               );
             })}
@@ -1762,7 +1776,7 @@ export default function ModuloClientesFornecedores() {
           <div style={{ padding:"8px 8px 12px", borderTop:"1px solid rgba(38,36,33,0.08)", display:"flex", flexDirection:"column", gap:2 }}>
             {/* Header da seção — esconde quando sidebar colapsada (não cabe). */}
             {!isMaster && !colapsadaEf && (
-              <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 12px 2px" }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 12px 2px" }}>
                 Configuração
               </div>
             )}
@@ -1814,15 +1828,15 @@ export default function ModuloClientesFornecedores() {
             <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
               {!colapsadaEf && (
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:"#374151", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
-                  <div style={{ fontSize:11, color:"#9ca3af" }}>{usuario?.perfil || ""}</div>
+                  <div style={{ fontSize:12, fontWeight:600, color:"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
+                  <div style={{ fontSize:11, color:"#4b5563" }}>{usuario?.perfil || ""}</div>
                 </div>
               )}
               <button
                 onClick={handleLogout}
                 title="Sair"
                 style={{
-                  background:"none", border:"none", color:"#9ca3af",
+                  background:"none", border:"none", color:"#4b5563",
                   fontSize:12, cursor:"pointer", fontFamily:"inherit",
                   padding: colapsadaEf ? "6px" : "4px 8px",
                   borderRadius:6, lineHeight:0,
@@ -1842,14 +1856,14 @@ export default function ModuloClientesFornecedores() {
             {/* Importar/Exportar — só master. Discreto, no rodapé. */}
             {isMaster && !colapsadaEf && (
               <div style={{ padding:"4px 12px 8px", display:"flex", gap:6, fontSize:11 }}>
-                <label style={{ flex:1, textAlign:"center", color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px" }}
+                <label style={{ flex:1, textAlign:"center", color:"#4b5563", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
                   Importar
                   <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
                 </label>
                 <button onClick={exportarDados}
-                  style={{ flex:1, color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px", background:"transparent", fontFamily:"inherit", fontSize:11 }}
+                  style={{ flex:1, color:"#4b5563", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px", background:"transparent", fontFamily:"inherit", fontSize:11 }}
                   onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
                   Exportar
@@ -1876,7 +1890,7 @@ export default function ModuloClientesFornecedores() {
               style={{
                 background:"none", border:"none",
                 padding:8, lineHeight:0,
-                cursor:"pointer", color:"#374151",
+                cursor:"pointer", color:"#111827",
                 borderRadius:6,
                 display:"flex", alignItems:"center", justifyContent:"center",
               }}>
@@ -1888,7 +1902,7 @@ export default function ModuloClientesFornecedores() {
               </svg>
             </button>
             <div style={{
-              fontSize:14, fontWeight:600, color:"#262421",
+              fontSize:14, fontWeight:600, color:"#111827",
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1,
             }}>
               {nomeEscritorio}
@@ -1906,7 +1920,9 @@ export default function ModuloClientesFornecedores() {
             </button>
           </div>
         )}
-        <div style={{ flex:1, overflowY:"auto" }}>
+        {/* O formato visual do app (hover/foco em azul) vale para toda a área de
+            conteúdo, menos o módulo de orçamento de projeto, que tem visual próprio. */}
+        <div data-vk-ui={aba === "projetos:orcamentos" ? undefined : "1"} style={{ flex:1, overflowY:"auto" }}>
           <>
           {orcamentoTelaCheia ? (
             <FormOrcamentoProjetoTeste
@@ -1991,17 +2007,17 @@ export default function ModuloClientesFornecedores() {
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
           <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:14, padding:24, width:"100%", maxWidth:600, maxHeight:"85vh", display:"flex", flexDirection:"column", gap:16 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontWeight:700, fontSize:15, color:"#262421" }}>Backup dos dados</div>
-              <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
+              <div style={{ fontWeight:700, fontSize:15, color:"#111827" }}>Backup dos dados</div>
+              <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#4b5563", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
-            <div style={{ color:"#6b7280", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
+            <div style={{ color:"#4b5563", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
             <textarea readOnly value={backupJson} onClick={e => e.target.select()}
-              style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius: 12, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
+              style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius: 12, color:"#111827", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button onClick={() => navigator.clipboard?.writeText(backupJson).catch(()=>{})}
                 style={{ background:"#262421", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Copiar tudo</button>
               <button onClick={() => setShowBackup(false)}
-                style={{ background:"#fff", color:"#6b7280", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>
+                style={{ background:"#fff", color:"#4b5563", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>
             </div>
           </div>
         </div>
@@ -2030,7 +2046,7 @@ export default function ModuloClientesFornecedores() {
             fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
             display:"flex", flexDirection:"column", gap:1,
           }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 10px 4px" }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 10px 4px" }}>
             {projetosItem.label}
           </div>
           {projetosItem.sub.map(s => {

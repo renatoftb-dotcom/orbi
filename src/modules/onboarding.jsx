@@ -424,7 +424,7 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
       <div style={tela}>
         <div style={card}>
           <div style={{ fontSize:15, fontWeight:600, color:"#991b1b", marginBottom:8 }}>Erro ao carregar configuração</div>
-          <div style={{ fontSize:13, color:"#6b7280", marginBottom:14 }}>{matrizErro}</div>
+          <div style={{ fontSize:13, color:"#4b5563", marginBottom:14 }}>{matrizErro}</div>
           <button onClick={() => location.reload()} style={btnPrimario}>Tentar novamente</button>
           <button onClick={onLogout} style={btnSecundario}>Sair</button>
         </div>
@@ -434,7 +434,7 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
   if (!matriz) {
     return (
       <div style={tela}>
-        <div style={{ fontSize:13, color:"#9ca3af" }}>Carregando…</div>
+        <div style={{ fontSize:13, color:"#4b5563" }}>Carregando…</div>
       </div>
     );
   }
@@ -564,11 +564,11 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
         {/* ── Cabeçalho — só aparece enquanto questionário ativo ── */}
         {!todasRespondidas && (
           <div style={{ marginBottom:32 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>VICKE</div>
-            <div style={{ fontSize:24, fontWeight:300, color:"#262421", letterSpacing:-0.5, marginBottom:6 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>VICKE</div>
+            <div style={{ fontSize:24, fontWeight:300, color:"#111827", letterSpacing:-0.5, marginBottom:6 }}>
               Bem-vindo, {(usuario?.nome || "").split(" ")[0]}!
             </div>
-            <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.5 }}>
+            <div style={{ fontSize:14, color:"#4b5563", lineHeight:1.5 }}>
               Configure seu perfil profissional para personalizar seus orçamentos. Vai levar 2 minutos.
             </div>
           </div>
@@ -788,11 +788,11 @@ function PerguntaBlock({ pergunta, sub, children }) {
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <div style={{ fontSize:15, fontWeight:500, color:"#262421", marginBottom: sub ? 4 : 12, lineHeight:1.4 }}>
+      <div style={{ fontSize:15, fontWeight:500, color:"#111827", marginBottom: sub ? 4 : 12, lineHeight:1.4 }}>
         {pergunta}
       </div>
       {sub && (
-        <div style={{ fontSize:12.5, color:"#9ca3af", marginBottom:12, lineHeight:1.5 }}>
+        <div style={{ fontSize:12.5, color:"#4b5563", marginBottom:12, lineHeight:1.5 }}>
           {sub}
         </div>
       )}
@@ -820,7 +820,7 @@ function Opcao({ label, selecionada, onClick }) {
         textAlign:"left",
         fontFamily:"inherit",
         fontSize:13.5,
-        color:"#262421",
+        color:"#111827",
         fontWeight: selecionada ? 600 : 400,
         transition:"all 0.12s",
       }}
@@ -904,7 +904,7 @@ function InputMoedaBR({ valor, setValor, onConfirmar }) {
       <span style={{
         position:"absolute", left:14, top:"50%",
         transform:"translateY(-50%)",
-        fontSize:13, color:"#9ca3af",
+        fontSize:13, color:"#4b5563",
         pointerEvents:"none",
         fontVariantNumeric:"tabular-nums",
       }}>R$</span>
@@ -996,7 +996,7 @@ function BlocoResultado({
   }
   if (!cubEstado || honorarioCalculado === null || !casaCalc) {
     return (
-      <div style={{ marginTop:32, fontSize:13, color:"#9ca3af" }}>Calculando…</div>
+      <div style={{ marginTop:32, fontSize:13, color:"#4b5563" }}>Calculando…</div>
     );
   }
 
@@ -1012,15 +1012,15 @@ function BlocoResultado({
         marginLeft: etapa === 2 ? 232 : 0,
         transition: "margin-left 0.3s ease-out",
       }} className="vk-onb-header">
-        <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, flexShrink:0 }}>
+        <div style={{ fontSize:10.5, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1.2, flexShrink:0 }}>
           VICKE · Análise Inteligente
         </div>
-        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#262421", letterSpacing:-0.4, lineHeight:1.2, display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#111827", letterSpacing:-0.4, lineHeight:1.2, display:"flex", alignItems:"center", gap:10 }}>
           Resultado da sua calibragem
           {/* Indicador sutil quando troca de estado e CUB recarrega — evita
               flash em branco. Spinner pequeno + texto delicado. */}
           {cubLoading && etapa === 2 && (
-            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:"#9ca3af", fontStyle:"italic", fontWeight:400 }}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:"#4b5563", fontStyle:"italic", fontWeight:400 }}>
               <span style={{
                 display:"inline-block",
                 width:10, height:10,
@@ -1077,11 +1077,11 @@ function BlocoResultado({
 
             {aceitouCalculado === false && (
               <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
-                <div style={{ fontSize:13, color:"#262421", marginBottom:4 }}>
+                <div style={{ fontSize:13, color:"#111827", marginBottom:4 }}>
                   Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
                 </div>
-                <div style={{ fontSize:11.5, color:"#9ca3af", marginBottom:10, lineHeight:1.4 }}>
-                  Insira novo valor e aperte <strong style={{ color:"#6b7280", fontWeight:600 }}>ENTER</strong>
+                <div style={{ fontSize:11.5, color:"#4b5563", marginBottom:10, lineHeight:1.4 }}>
+                  Insira novo valor e aperte <strong style={{ color:"#4b5563", fontWeight:600 }}>ENTER</strong>
                 </div>
                 <InputMoedaBR
                   valor={valorCalibragem}
@@ -1102,10 +1102,10 @@ function BlocoResultado({
                     <div style={{ fontSize:12.5, fontWeight:600, color: analiseCalibragem.muitoAlto ? "#92400e" : "#991b1b", marginBottom:6 }}>
                       {analiseCalibragem.muitoAlto ? "Valor parece muito alto" : "Valor parece muito baixo"}
                     </div>
-                    <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5, marginBottom:10 }}>
+                    <div style={{ fontSize:12, color:"#4b5563", lineHeight:1.5, marginBottom:10 }}>
                       {moeda(analiseCalibragem.valor)} é {analiseCalibragem.ratio.toFixed(1)}× {analiseCalibragem.muitoAlto ? "maior" : "menor"} que o sugerido pela análise ({moeda(honorarioCalculado)}).
                     </div>
-                    <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#262421", cursor:"pointer" }}>
+                    <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#111827", cursor:"pointer" }}>
                       <input
                         type="checkbox"
                         checked={confirmandoAbsurdo}
@@ -1118,7 +1118,7 @@ function BlocoResultado({
                 )}
 
                 {analiseCalibragem && !analiseCalibragem.invalido && !analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto && (
-                  <div style={{ marginTop:12, fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
+                  <div style={{ marginTop:12, fontSize:12, color:"#4b5563", lineHeight:1.5 }}>
                     {moeda(analiseCalibragem.valor)} será o seu novo preço de referência.
                   </div>
                 )}
@@ -1149,8 +1149,8 @@ function BlocoResultado({
                         <polyline points="5 12 12 19 19 12"/>
                       </svg>
                     </button>
-                    <div style={{ marginTop: 10, fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
-                      Quer ajustar mais? Edite o valor acima e aperte <strong style={{ color: "#6b7280", fontWeight: 600 }}>Enter</strong>.
+                    <div style={{ marginTop: 10, fontSize: 12, color: "#6b7280", lineHeight: 1.5 }}>
+                      Quer ajustar mais? Edite o valor acima e aperte <strong style={{ color: "#4b5563", fontWeight: 600 }}>Enter</strong>.
                     </div>
                   </div>
                 )}
@@ -1224,7 +1224,7 @@ function EtapaTexto({ casaCalc, onProximo }) {
       <div
         onClick={handleSkip}
         style={{
-          fontSize:16, color:"#262421", lineHeight:1.7,
+          fontSize:16, color:"#111827", lineHeight:1.7,
           maxWidth: 760,
           textAlign:"justify",
           textAlignLast:"left",
@@ -1376,7 +1376,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
           simulação...") pra ficarem alinhados horizontalmente no topo das
           colunas do grid. */}
       <div style={{
-        fontSize: 12, fontWeight: 600, color: "#9ca3af",
+        fontSize: 12, fontWeight: 600, color: "#6b7280",
         textTransform: "uppercase", letterSpacing: 0.8,
         lineHeight: 1.5,
         marginBottom: 10, paddingLeft: 2,
@@ -1424,20 +1424,20 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 title="Clique pra alterar">
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontSize: 9.5, fontWeight: 700, color: "#9ca3af",
+                    fontSize: 9.5, fontWeight: 700, color: "#6b7280",
                     textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4,
                   }}>
                     {l.label}
                   </div>
                   <div style={{
-                    fontSize: 12.5, color: "#262421", fontWeight: 500, lineHeight: 1.25,
+                    fontSize: 12.5, color: "#111827", fontWeight: 500, lineHeight: 1.25,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
                     {l.valor}
                   </div>
                 </div>
                 <div style={{
-                  fontSize: 12, color: "#9ca3af", flexShrink: 0,
+                  fontSize: 12, color: "#6b7280", flexShrink: 0,
                   display: "inline-block", lineHeight: 1,
                   transform: aberto ? "rotate(180deg)" : "rotate(0deg)",
                   transition: "transform 0.15s ease-out",
@@ -1459,7 +1459,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                   minWidth: 200,
                   animation: "vk-fade-up 0.15s ease-out",
                 }}>
-                  <div style={{ fontSize: 9, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, padding: "4px 8px 6px" }}>
+                  <div style={{ fontSize: 9, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, padding: "4px 8px 6px" }}>
                     Alterar {l.label.toLowerCase()}
                   </div>
                   {l.opcoes.map(opt => {
@@ -1479,7 +1479,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                           borderRadius: 6,
                           cursor: "pointer",
                           background: selecionada ? "#fdf6f0" : "transparent",
-                          color: selecionada ? "#b5652f" : "#374151",
+                          color: selecionada ? "#0474f4" : "#374151",
                           fontWeight: selecionada ? 600 : 400,
                           transition: "background 0.1s",
                         }}
@@ -1602,10 +1602,10 @@ function FluxogramaCasa({ casaCalc }) {
         transition: "opacity 0.3s ease-out, transform 0.3s ease-out",
         marginBottom: 24,
       }}>
-        <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
+        <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.5 }}>
           Em uma simulação com as seguintes características:
         </div>
-        <div style={{ fontSize: 14, color: "#262421", fontWeight: 500, marginTop: 4 }}>
+        <div style={{ fontSize: 14, color: "#111827", fontWeight: 500, marginTop: 4 }}>
           Casa de padrão {padraoLabel} com ambientes médios
         </div>
       </div>
@@ -1628,7 +1628,7 @@ function FluxogramaCasa({ casaCalc }) {
           transition: "opacity 0.35s ease-out, transform 0.35s ease-out",
         }}>
           <div style={{
-            fontSize: 11, fontWeight: 600, color: "#9ca3af",
+            fontSize: 11, fontWeight: 600, color: "#6b7280",
             textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 16,
           }}>
             Composição dos ambientes
@@ -1646,8 +1646,8 @@ function FluxogramaCasa({ casaCalc }) {
                 transform: revealed ? "translateX(0)" : "translateX(-4px)",
                 transition: "opacity 0.25s ease-out, transform 0.25s ease-out",
               }}>
-                <span style={{ color: "#374151" }}>{displayName(c.nome, c.qtd)}</span>
-                <span style={{ color: "#262421", fontWeight: 500 }}>
+                <span style={{ color: "#111827" }}>{displayName(c.nome, c.qtd)}</span>
+                <span style={{ color: "#111827", fontWeight: 500 }}>
                   {total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
                 </span>
               </div>
@@ -1665,8 +1665,8 @@ function FluxogramaCasa({ casaCalc }) {
             transform: showSubtotal ? "scale(1)" : "scale(0.96)",
             transition: "opacity 0.3s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
           }}>
-            <span style={{ color: "#6b7280", fontWeight: 500 }}>Subtotal área útil</span>
-            <span style={{ color: "#262421", fontWeight: 600 }}>
+            <span style={{ color: "#4b5563", fontWeight: 500 }}>Subtotal área útil</span>
+            <span style={{ color: "#111827", fontWeight: 600 }}>
               {casaCalc.areaBruta.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
             </span>
           </div>
@@ -1678,7 +1678,7 @@ function FluxogramaCasa({ casaCalc }) {
         }}>
           {/* Label "+25% paredes e circulação" */}
           <div style={{
-            fontSize: 11, color: "#374151", textAlign: "center", lineHeight: 1.35,
+            fontSize: 11, color: "#111827", textAlign: "center", lineHeight: 1.35,
             opacity: showLabelOp ? 1 : 0,
             transform: showLabelOp ? "translateY(0)" : "translateY(-4px)",
             transition: "opacity 0.3s ease-out, transform 0.3s ease-out",
@@ -1729,7 +1729,7 @@ function FluxogramaCasa({ casaCalc }) {
 
           {/* Annotation "+44.78 m²" embaixo */}
           <div style={{
-            fontSize: 11, color: "#374151", textAlign: "center",
+            fontSize: 11, color: "#111827", textAlign: "center",
             fontVariantNumeric: "tabular-nums", fontWeight: 500,
             opacity: arrowDone ? 1 : 0,
             transform: arrowDone ? "translateY(0)" : "translateY(-4px)",
@@ -1751,19 +1751,19 @@ function FluxogramaCasa({ casaCalc }) {
           transition: "opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}>
           <div style={{
-            fontSize: 11, fontWeight: 600, color: "#9ca3af",
+            fontSize: 11, fontWeight: 600, color: "#6b7280",
             textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8,
           }}>
             Área total
           </div>
           <div style={{
-            fontSize: 30, fontWeight: 500, color: "#262421",
+            fontSize: 30, fontWeight: 500, color: "#111827",
             letterSpacing: -0.5, fontVariantNumeric: "tabular-nums",
             lineHeight: 1.1,
           }}>
             {areaCountValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>m²</div>
+          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 4 }}>m²</div>
         </div>
       </div>
     </div>
@@ -1863,7 +1863,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
     }}>
       {/* Título — mesma tipografia dos cards do fluxograma */}
       <div style={{
-        fontSize:11, fontWeight:600, color:"#9ca3af",
+        fontSize:11, fontWeight:600, color:"#4b5563",
         textTransform:"uppercase", letterSpacing:0.5,
         marginBottom:16,
       }}>
@@ -2184,12 +2184,12 @@ function BlocoCadastroEscritorio({
   const inputBase = {
     width: "100%", boxSizing: "border-box",
     border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12,
-    padding: "10px 12px", fontSize: 13, color: "#262421",
+    padding: "10px 12px", fontSize: 13, color: "#111827",
     outline: "none", background: "#fff", fontFamily: "inherit",
     transition: "border-color 0.12s",
   };
   const labelBase = {
-    fontSize: 11.5, color: "#6b7280", fontWeight: 500,
+    fontSize: 11.5, color: "#4b5563", fontWeight: 500,
     marginBottom: 5, display: "block",
   };
   const campoWrap = { display: "flex", flexDirection: "column", marginBottom: 16 };
@@ -2210,19 +2210,19 @@ function BlocoCadastroEscritorio({
       `}</style>
 
       <div style={{
-        fontSize: 10.5, fontWeight: 700, color: "#9ca3af",
+        fontSize: 10.5, fontWeight: 700, color: "#6b7280",
         textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8,
       }}>
         VICKE · Cadastro do Escritório
       </div>
       <div style={{
-        fontSize: 22, fontWeight: 300, color: "#262421",
+        fontSize: 22, fontWeight: 300, color: "#111827",
         letterSpacing: -0.4, lineHeight: 1.2, marginBottom: 12,
       }}>
         Quase lá — vamos completar o cadastro
       </div>
       <div style={{
-        fontSize: 14, color: "#6b7280", lineHeight: 1.6, maxWidth: 700, marginBottom: 28,
+        fontSize: 14, color: "#4b5563", lineHeight: 1.6, maxWidth: 700, marginBottom: 28,
       }}>
         Reserve alguns minutos para preencher os dados do seu escritório. Essas informações aparecem automaticamente no cabeçalho, no rodapé e na área de aceite de todas as propostas, orçamentos e PDFs que você gerar — preenchendo agora, você não precisa editar em cada proposta enviada ao cliente.
       </div>
@@ -2232,9 +2232,9 @@ function BlocoCadastroEscritorio({
         {/* ── Logo do escritório ─────────────────────────────────── */}
         <div style={{ marginBottom: 8 }}>
           <div style={{
-            fontSize: 11, fontWeight: 700, color: "#9ca3af",
+            fontSize: 11, fontWeight: 700, color: "#6b7280",
             textTransform: "uppercase", letterSpacing: 1, marginBottom: 12,
-          }}>Logo do escritório <span style={{ fontWeight: 400, color: "#9ca3af" }}>· opcional</span></div>
+          }}>Logo do escritório <span style={{ fontWeight: 400, color: "#6b7280" }}>· opcional</span></div>
           <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             {/* Preview com drag & drop */}
             <label
@@ -2256,7 +2256,7 @@ function BlocoCadastroEscritorio({
               {logo ? (
                 <img src={logo} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
               ) : (
-                <span style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "0 8px" }}>
+                <span style={{ fontSize: 12, color: "#6b7280", textAlign: "center", padding: "0 8px" }}>
                   {arrastando ? "Solte aqui" : "Clique ou arraste"}
                 </span>
               )}
@@ -2270,7 +2270,7 @@ function BlocoCadastroEscritorio({
 
             {/* Descrição + ações */}
             <div style={{ flex: 1, minWidth: 220 }}>
-              <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 10 }}>
+              <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.55, marginBottom: 10 }}>
                 Aparece no cabeçalho das propostas em PDF.<br/>
                 PNG, JPG ou SVG · Máximo 1MB.
               </div>
@@ -2293,7 +2293,7 @@ function BlocoCadastroEscritorio({
                     type="button"
                     onClick={() => { setLogo(null); setLogoErro(null); }}
                     style={{
-                      background: "#fff", color: "#374151",
+                      background: "#fff", color: "#111827",
                       border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 7,
                       padding: "7px 14px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit",
                     }}>
@@ -2308,12 +2308,12 @@ function BlocoCadastroEscritorio({
               )}
               {!logo && !logoErro && (
                 <div style={{
-                  fontSize: 11.5, color: "#9ca3af", marginTop: 10,
+                  fontSize: 11.5, color: "#6b7280", marginTop: 10,
                   lineHeight: 1.5, display: "flex", alignItems: "flex-start", gap: 6,
                 }}>
                   <span style={{ flexShrink: 0, fontSize: 12 }}>ⓘ</span>
                   <span>
-                    Sem o logo, o cabeçalho das propostas usa só o nome do escritório. Pode adicionar depois na aba <strong style={{ color: "#6b7280", fontWeight: 600 }}>Escritório</strong>.
+                    Sem o logo, o cabeçalho das propostas usa só o nome do escritório. Pode adicionar depois na aba <strong style={{ color: "#4b5563", fontWeight: 600 }}>Escritório</strong>.
                   </span>
                 </div>
               )}
@@ -2401,10 +2401,10 @@ function BlocoCadastroEscritorio({
 
         {/* ── Responsável Técnico ────────────────────────────────── */}
         <div style={{
-          fontSize: 11, fontWeight: 700, color: "#9ca3af",
+          fontSize: 11, fontWeight: 700, color: "#6b7280",
           textTransform: "uppercase", letterSpacing: 1, marginBottom: 8,
         }}>Responsável técnico</div>
-        <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.55, marginBottom: 16 }}>
           Aparece como assinatura técnica no aceite das propostas. Se houver mais de um responsável no escritório, você adiciona os outros depois na aba Escritório.
         </div>
 
@@ -2435,10 +2435,10 @@ function BlocoCadastroEscritorio({
 
         {/* ── PIX e Banco ────────────────────────────────────────── */}
         <div style={{
-          fontSize: 11, fontWeight: 700, color: "#9ca3af",
+          fontSize: 11, fontWeight: 700, color: "#6b7280",
           textTransform: "uppercase", letterSpacing: 1, marginBottom: 8,
-        }}>PIX e Banco <span style={{ fontWeight: 400, color: "#9ca3af" }}>· opcional</span></div>
-        <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 16 }}>
+        }}>PIX e Banco <span style={{ fontWeight: 400, color: "#6b7280" }}>· opcional</span></div>
+        <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.55, marginBottom: 16 }}>
           Aparece embaixo da forma de pagamento nas propostas. Pode preencher depois se preferir — só aparece no PDF se você informar a chave.
         </div>
 
@@ -2517,10 +2517,10 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
           </svg>
         </div>
 
-        <div style={{ fontSize:22, fontWeight:300, color:"#262421", letterSpacing:-0.4, marginBottom:10 }}>
+        <div style={{ fontSize:22, fontWeight:300, color:"#111827", letterSpacing:-0.4, marginBottom:10 }}>
           Tudo certo, {primeiroNome}!
         </div>
-        <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.55, marginBottom:36 }}>
+        <div style={{ fontSize:14, color:"#4b5563", lineHeight:1.55, marginBottom:36 }}>
           Seu perfil de pricing está configurado. Agora vamos completar o cadastro do seu escritório.
         </div>
 
@@ -2532,10 +2532,10 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
           textAlign:"left",
           marginBottom:32,
         }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>
             Por que isso importa
           </div>
-          <div style={{ fontSize:13, color:"#262421", lineHeight:1.7 }}>
+          <div style={{ fontSize:13, color:"#111827", lineHeight:1.7 }}>
             Os dados do escritório (logo, endereço, contatos) aparecem nos seus orçamentos, propostas e PDFs enviados aos clientes. É a sua identidade visual no sistema.
           </div>
         </div>
@@ -2574,11 +2574,11 @@ const btnPrimario = {
   fontFamily:"inherit",
 };
 const btnSecundario = {
-  background:"transparent", color:"#6b7280", border:"none",
+  background:"transparent", color:"#4b5563", border:"none",
   padding:"8px", fontSize:12, cursor:"pointer", fontFamily:"inherit",
 };
-const tdLabel = { color:"#6b7280", padding:"4px 0" };
-const tdValor = { textAlign:"right", padding:"4px 0", color:"#262421" };
+const tdLabel = { color:"#4b5563", padding:"4px 0" };
+const tdValor = { textAlign:"right", padding:"4px 0", color:"#111827" };
 
 // ── Helpers ────────────────────────────────────────────────────
 function moeda(v) {

@@ -366,7 +366,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           )}
           {descricao && (
             <div style={{
-              fontSize: 13.5, color: "#262421", lineHeight: 1.5,
+              fontSize: 13.5, color: "#111827", lineHeight: 1.5,
             }}>{descricao}</div>
           )}
         </div>
@@ -670,7 +670,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   const _btnBase = {
     padding: "8px 14px", fontSize: 13, fontWeight: 500,
     borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
-    border: "1.5px solid rgba(38,36,33,0.16)", background: "#fff", color: "#374151",
+    border: "1.5px solid rgba(38,36,33,0.16)", background: "#fff", color: "#111827",
   };
   const _btnPrimary = {
     ..._btnBase,
@@ -724,15 +724,15 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🧪</div>
-          <h2 style={{ fontSize: 20, fontWeight: 600, color: "#262421", margin: "0 0 10px", letterSpacing: -0.3 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 600, color: "#111827", margin: "0 0 10px", letterSpacing: -0.3 }}>
             {welcome.titulo}
           </h2>
-          <p style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.6, margin: "0 0 24px" }}>
+          <p style={{ fontSize: 14, color: "#4b5563", lineHeight: 1.6, margin: "0 0 24px" }}>
             {welcome.descricao}
           </p>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={onCancelar} style={{
-              background: "transparent", color: "#6b7280",
+              background: "transparent", color: "#4b5563",
               border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12,
               padding: "9px 16px", fontSize: 13, fontWeight: 500,
               cursor: "pointer", fontFamily: "inherit",
@@ -780,13 +780,13 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
             <h2 style={{
               fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
-              lineHeight: 1.2, margin: 0, color: "#262421",
+              lineHeight: 1.2, margin: 0, color: "#111827",
             }}>
               {passo.titulo}
             </h2>
             {passo.descricao && (
               <p className="vk-tut-fs-line2" style={{
-                fontSize: 16, fontWeight: 400, color: "#6b7280",
+                fontSize: 16, fontWeight: 400, color: "#4b5563",
                 lineHeight: 1.55, marginTop: 14, marginBottom: 0,
               }}>
                 {passo.descricao}
@@ -977,16 +977,16 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
               {passo.titulo}
             </div>
           )}
-          <div style={{ fontSize: 13.5, color: "#262421", lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13.5, color: "#111827", lineHeight: 1.5 }}>
             {passo.descricao}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between",
             alignItems: "center", marginTop: 12, gap: 8 }}>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>
               {idx + 1} de {passos.length}
             </div>
             <button onClick={onCancelar} style={{
-              background: "transparent", color: "#9ca3af",
+              background: "transparent", color: "#6b7280",
               border: "none", fontSize: 11, cursor: "pointer",
               fontFamily: "inherit", padding: 0,
             }}>Pular tutorial</button>
@@ -1628,7 +1628,7 @@ function DialogosHost() {
                   onClick={() => fecharModal(modalTopo.id, false)}
                   style={{
                     background: "#fff",
-                    color: "#6b7280",
+                    color: "#4b5563",
                     border: "1.5px solid rgba(38,36,33,0.16)",
                     borderRadius: 12,
                     padding: "8px 18px",
@@ -1871,7 +1871,7 @@ function VersionWatcher() {
         }}
         style={{
           background: "#fff",
-          color: "#262421",
+          color: "#111827",
           border: "none",
           borderRadius: 7,
           padding: "7px 14px",
@@ -2581,8 +2581,8 @@ function Etapas({ data, save }) {
   if (!data) {
     return (
       <div style={{ padding:"24px 28px" }}>
-        <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
-        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
+        <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Carregando…</div>
       </div>
     );
   }
@@ -2648,8 +2648,8 @@ function Etapas({ data, save }) {
     <div style={{ padding:"24px 28px", display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
       {/* Cabeçalho */}
       <div style={{ marginBottom:16 }}>
-        <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
-        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Acompanhamento dos projetos em andamento</div>
+        <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Acompanhamento dos projetos em andamento</div>
       </div>
 
       {/* Toolbar: filtros + busca */}
@@ -2663,7 +2663,7 @@ function Etapas({ data, save }) {
           style={{
             flex:1, maxWidth:240, padding:"6px 12px",
             border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6,
-            fontSize:12.5, color:"#262421", background:"#fff",
+            fontSize:12.5, color:"#111827", background:"#fff",
             fontFamily:"inherit", outline:"none",
           }}
         />
@@ -2683,9 +2683,9 @@ function Etapas({ data, save }) {
       {projetos.length === 0 && (
         <div style={{
           position:"absolute", top:"50%", left:"50%", transform:"translate(-50%, -50%)",
-          textAlign:"center", color:"#9ca3af", fontSize:13, pointerEvents:"none",
+          textAlign:"center", color:"#4b5563", fontSize:13, pointerEvents:"none",
         }}>
-          <div style={{ fontSize:14, color:"#6b7280", marginBottom:4 }}>Nenhum projeto em andamento</div>
+          <div style={{ fontSize:14, color:"#4b5563", marginBottom:4 }}>Nenhum projeto em andamento</div>
           <div>Projetos são criados automaticamente quando um orçamento é marcado como <strong>Ganho</strong>.</div>
         </div>
       )}
@@ -2730,7 +2730,7 @@ function KanbanColumn({ col, cards, clientes }) {
         borderBottom: wait ? "1px dashed #e5e7eb" : "1px solid #f3f4f6",
       }}>
         <span style={{
-          fontSize:11, fontWeight:600, color:"#374151",
+          fontSize:11, fontWeight:600, color:"#111827",
           textTransform:"uppercase", letterSpacing:0.8,
         }}>{col.label}</span>
         <span style={{
@@ -2742,7 +2742,7 @@ function KanbanColumn({ col, cards, clientes }) {
       </div>
       <div style={{ flex:1, padding:10, display:"flex", flexDirection:"column", gap:8, overflowY:"auto" }}>
         {cards.length === 0 ? (
-          <div style={{ fontSize:11, color:"#9ca3af", textAlign:"center", padding:"20px 0", fontStyle:"italic" }}>
+          <div style={{ fontSize:11, color:"#4b5563", textAlign:"center", padding:"20px 0", fontStyle:"italic" }}>
             Nenhum projeto
           </div>
         ) : cards.map(card => (
@@ -2788,16 +2788,16 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
       }}>{tag.label}</span>
 
       {/* Nome cliente */}
-      <div style={{ fontSize:13.5, fontWeight:600, color:"#262421", lineHeight:1.3 }}>{nomeCli}</div>
+      <div style={{ fontSize:13.5, fontWeight:600, color:"#111827", lineHeight:1.3 }}>{nomeCli}</div>
       {ref && (
-        <div style={{ fontSize:11.5, color:"#9ca3af", lineHeight:1.3 }}>{ref}</div>
+        <div style={{ fontSize:11.5, color:"#4b5563", lineHeight:1.3 }}>{ref}</div>
       )}
 
       {/* Meta: área + valor */}
       {(area > 0 || valor > 0) && (
-        <div style={{ display:"flex", gap:10, fontSize:11, color:"#6b7280", marginTop:2 }}>
-          {area > 0 && <span><strong style={{ color:"#262421", fontWeight:600 }}>{area}</strong> m²</span>}
-          {valor > 0 && <span>R$ <strong style={{ color:"#262421", fontWeight:600 }}>{brlCurto(valor)}</strong></span>}
+        <div style={{ display:"flex", gap:10, fontSize:11, color:"#4b5563", marginTop:2 }}>
+          {area > 0 && <span><strong style={{ color:"#111827", fontWeight:600 }}>{area}</strong> m²</span>}
+          {valor > 0 && <span>R$ <strong style={{ color:"#111827", fontWeight:600 }}>{brlCurto(valor)}</strong></span>}
         </div>
       )}
 
@@ -2849,9 +2849,9 @@ function CardFooter({ projeto, col, dias, atrasado }) {
           </span>
         </div>
         {projeto.responsavelAcompanha && (
-          <div style={{ fontSize:11.5, color:"#374151", lineHeight:1.3 }}>
-            <strong style={{ fontWeight:600, color:"#262421" }}>{projeto.responsavelAcompanha}</strong>
-            <span style={{ color:"#9ca3af", fontWeight:400 }}> — Acompanhamento</span>
+          <div style={{ fontSize:11.5, color:"#111827", lineHeight:1.3 }}>
+            <strong style={{ fontWeight:600, color:"#111827" }}>{projeto.responsavelAcompanha}</strong>
+            <span style={{ color:"#4b5563", fontWeight:400 }}> — Acompanhamento</span>
           </div>
         )}
       </div>
@@ -3020,9 +3020,9 @@ function Obras({ data, save }) {
 
   const pillStyle = (ativa) => ({
     padding: "6px 14px", borderRadius: 7, fontSize: 12,
-    border: "1.5px solid " + (ativa ? "#b5652f" : "rgba(38,36,33,0.16)"),
+    border: "1.5px solid " + (ativa ? "#0474f4" : "rgba(38,36,33,0.16)"),
     background: ativa ? "#fdf6f0" : "#fff",
-    color: ativa ? "#b5652f" : "#6b7280",
+    color: ativa ? "#0474f4" : "#6b7280",
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });
 
@@ -3034,8 +3034,8 @@ function Obras({ data, save }) {
     return (
       <PageContainer>
         <div style={{ marginBottom: 16 }}>
-          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
-          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>
+          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
+          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>
         </div>
         <GestaoObraPanel key={obraAberta.id} cliente={clienteDaObra} data={data} save={save} isMobile={isMobile} obraInicial={obraAberta} onSairDaObra={() => setObraAbertaId(null)} />
       </PageContainer>
@@ -3046,8 +3046,8 @@ function Obras({ data, save }) {
     <PageContainer>
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:4 }}>
         <div>
-          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
-          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
+          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
+          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
         </div>
       </div>
 
@@ -3070,13 +3070,13 @@ function Obras({ data, save }) {
           marginTop: 20, padding: "48px 24px", textAlign: "center",
           border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14, background: "#fafafa",
         }}>
-          <div style={{ color:"#9ca3af", fontSize:13 }}>
+          <div style={{ color:"#4b5563", fontSize:13 }}>
             {filtro === "andamento" && "Nenhuma obra em andamento."}
             {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
             {filtro === "todas" && "Nenhuma obra cadastrada."}
           </div>
-          <div style={{ color:"#9ca3af", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
-            Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#9ca3af" }}>Engenharia</strong> do Kanban de Projetos.
+          <div style={{ color:"#4b5563", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
+            Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#4b5563" }}>Engenharia</strong> do Kanban de Projetos.
           </div>
         </div>
       ) : (
@@ -3096,8 +3096,8 @@ function Obras({ data, save }) {
                   display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
                 }}>
                 <div style={{ minWidth:0, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:"#262421" }}>{nomeCliente(obra.clienteId)}</div>
-                  <div style={{ fontSize:13, color:"#6b7280" }}>{obra.nome || obra.referencia || "Obra"}</div>
+                  <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{nomeCliente(obra.clienteId)}</div>
+                  <div style={{ fontSize:13, color:"#4b5563" }}>{obra.nome || obra.referencia || "Obra"}</div>
                   {concluida && (
                     <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, padding:"2px 7px", borderRadius:4, background:"#f0fdf4", color:"#16a34a" }}>
                       Concluída
@@ -3113,7 +3113,7 @@ function Obras({ data, save }) {
                   )}
                   {concluida && (
                     <button onClick={() => reabrirObra(obra)}
-                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                      style={{ fontSize:11.5, color:"#4b5563", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                       Reabrir
                     </button>
                   )}
@@ -3509,11 +3509,11 @@ const CATEGORIAS_PRESTADOR = [
 
 // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 const PS = {
-  input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-  label:  { fontSize:12, color:"#78716c", fontWeight:500, display:"block", marginBottom:5 },
+  input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  label:  { fontSize:12, color:"#4b5563", fontWeight:500, display:"block", marginBottom:5 },
   btn:    { background:"#262421", color:"#fff", border:"none", borderRadius:12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-  btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+  btnSec: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btnGhost: { background:"none", border:"none", color:"#4b5563", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:    (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
 };
 
@@ -3577,8 +3577,8 @@ function PrestadoresServico({ data, save }) {
     <div style={{ padding:"28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
-          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>{prestadores.length} cadastrado{prestadores.length !== 1 ? "s" : ""}</div>
+          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
+          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{prestadores.length} cadastrado{prestadores.length !== 1 ? "s" : ""}</div>
         </div>
         <button style={PS.btn} onClick={openNew}>+ Novo prestador</button>
       </div>
@@ -3592,7 +3592,7 @@ function PrestadoresServico({ data, save }) {
       </div>
 
       {filtrados.length === 0 ? (
-        <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
+        <div style={{ padding:"40px 20px", textAlign:"center", color:"#4b5563", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
           {prestadores.length === 0 ? "Nenhum prestador cadastrado." : "Nenhum resultado para essa busca."}{" "}
           {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#b5652f", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
         </div>
@@ -3603,15 +3603,15 @@ function PrestadoresServico({ data, save }) {
               onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
               onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"start", gap:8, marginBottom:8 }}>
-                <div style={{ fontSize:14, fontWeight:700, color:"#262421" }}>{p.nome}</div>
+                <div style={{ fontSize:14, fontWeight:700, color:"#111827" }}>{p.nome}</div>
                 {p.ativo === false && <span style={PS.tag("#9ca3af")}>Inativo</span>}
               </div>
               <span style={PS.tag("#b5652f")}>{p.categoria}</span>
               <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
-                {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
-                {p.telefone && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.telefone}</div>}
-                {p.email && <div style={{ fontSize:12.5, color:"#6b7280", overflow:"hidden", textOverflow:"ellipsis" }}>{p.email}</div>}
-                {(p.cidade || p.estado) && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.cidade}{p.cidade && p.estado ? " — " : ""}{p.estado}</div>}
+                {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
+                {p.telefone && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.telefone}</div>}
+                {p.email && <div style={{ fontSize:12.5, color:"#4b5563", overflow:"hidden", textOverflow:"ellipsis" }}>{p.email}</div>}
+                {(p.cidade || p.estado) && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.cidade}{p.cidade && p.estado ? " — " : ""}{p.estado}</div>}
               </div>
               <div style={{ display:"flex", gap:8, marginTop:14 }}>
                 {p.whatsapp && p.telefone && (
@@ -3633,7 +3633,7 @@ function PrestadoresServico({ data, save }) {
     <div style={{ padding:"28px 32px", maxWidth:560, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
         <button style={PS.btnGhost} onClick={()=>setView("list")}>← Voltar</button>
-        <div style={{ fontSize:17, fontWeight:700, color:"#262421" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#111827" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
       </div>
       <form onSubmit={salvar}>
         <div style={{ marginBottom:14 }}>
@@ -3663,7 +3663,7 @@ function PrestadoresServico({ data, save }) {
         </div>
 
         <div style={{ marginBottom:6, marginTop:20 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Endereço</div>
+          <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1 }}>Endereço</div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
           <div>
@@ -3699,7 +3699,7 @@ function PrestadoresServico({ data, save }) {
         {form.tipo === "PJ" && (
           <>
             <div style={{ marginBottom:6 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Representante / sócio</div>
+              <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1 }}>Representante / sócio</div>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
               <div>
@@ -3715,7 +3715,7 @@ function PrestadoresServico({ data, save }) {
         )}
 
         <div style={{ marginBottom:6 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Contato</div>
+          <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1 }}>Contato</div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
           <div>
@@ -3727,14 +3727,14 @@ function PrestadoresServico({ data, save }) {
             <input style={PS.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} />
           </div>
         </div>
-        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151", marginBottom:20 }}>
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#111827", marginBottom:20 }}>
           <input type="checkbox" checked={form.whatsapp} onChange={e=>setForm({...form,whatsapp:e.target.checked})} /> Este telefone é WhatsApp
         </label>
         <div style={{ marginBottom:14 }}>
           <label style={PS.label}>Observações</label>
           <textarea style={{ ...PS.input, resize:"vertical" }} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} placeholder="Condições, indicações, alertas..." />
         </div>
-        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151", marginBottom:24 }}>
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#111827", marginBottom:24 }}>
           <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Prestador ativo
         </label>
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -6496,11 +6496,11 @@ var INS = {
 var INS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 var INS_S = {
-  input: { border: INS.borda, borderRadius: 12, padding: "9px 12px", fontSize: 13, color: "#262421", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" },
-  label: { fontSize: 12, color: "#6b7280", fontWeight: 500, display: "block", marginBottom: 5 },
+  input: { border: INS.borda, borderRadius: 12, padding: "9px 12px", fontSize: 13, color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" },
+  label: { fontSize: 12, color: "#4b5563", fontWeight: 500, display: "block", marginBottom: 5 },
   btn: { background: "#262421", color: "#fff", border: "none", borderRadius: 12, padding: "9px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
-  btnSec: { background: "#fff", color: "#374151", border: INS.borda, borderRadius: 12, padding: "9px 16px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" },
-  btnGhost: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontFamily: "inherit", fontSize: 13 },
+  btnSec: { background: "#fff", color: "#111827", border: INS.borda, borderRadius: 12, padding: "9px 16px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" },
+  btnGhost: { background: "none", border: "none", color: "#6b7280", cursor: "pointer", fontFamily: "inherit", fontSize: 13 },
   card: { border: INS.borda, borderRadius: 16, background: "#fff", padding: 16 },
 };
 
@@ -6633,10 +6633,10 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
             <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#f2f2f4", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
               {a}
               <button onClick={() => set("aliases", f.aliases.filter((_, j) => j !== i))}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
             </span>
           ))}
-          {!(f.aliases || []).length && <span style={{ fontSize: 12, color: "#9ca3af" }}>Nenhum ainda — o nome principal é usado.</span>}
+          {!(f.aliases || []).length && <span style={{ fontSize: 12, color: "#6b7280" }}>Nenhum ainda — o nome principal é usado.</span>}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <input style={INS_S.input} value={novoAlias} placeholder="Ex.: CIMENTO CP II 50KG"
@@ -6652,7 +6652,7 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
           value={f.observacao || ""} onChange={e => set("observacao", e.target.value)} />
       </div>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", marginBottom: 18, cursor: "pointer" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#111827", marginBottom: 18, cursor: "pointer" }}>
         <input type="checkbox" checked={f.ativo !== false} onChange={e => set("ativo", e.target.checked)} />
         Ativo
       </label>
@@ -6705,15 +6705,15 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginTop: 20 }}>
           <div>
-            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Preço</div>
+            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Preço</div>
             <div style={{ fontSize: 19, fontWeight: 700, color: INS.grafite, display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
               <PontoConfianca conf={p.confianca} tamanho={9} />{fmtBRLIns(p.preco)}
             </div>
             <div style={{ fontSize: 11, color: conf.cor, fontWeight: 600 }}>{conf.label}</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Origem</div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Origem</div>
+            <div style={{ fontSize: 13, color: "#111827", marginTop: 6 }}>
               {insumo.precoManual != null ? "Definido à mão"
                 : insumo.precoFonte === "compra" ? "Última compra"
                 : insumo.precoFonte === "compra_corrigida" ? "Compra corrigida"
@@ -6723,13 +6723,13 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Data base</div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{fmtDataIns(insumo.precoData)}</div>
+            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Data base</div>
+            <div style={{ fontSize: 13, color: "#111827", marginTop: 6 }}>{fmtDataIns(insumo.precoData)}</div>
             {p.corrigido && <div style={{ fontSize: 11, color: INS.inkSoft }}>corrigido ×{p.fator}</div>}
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Compras</div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{insumo.precoNCompras || 0}</div>
+            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Compras</div>
+            <div style={{ fontSize: 13, color: "#111827", marginTop: 6 }}>{insumo.precoNCompras || 0}</div>
           </div>
         </div>
 
@@ -6759,7 +6759,7 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
           Histórico de compras {compras.length ? `(${compras.length})` : ""}
         </div>
         {!compras.length ? (
-          <div style={{ fontSize: 12.5, color: "#9ca3af" }}>
+          <div style={{ fontSize: 12.5, color: "#6b7280" }}>
             Nenhuma compra vinculada a este insumo ainda. O histórico se forma conforme as notas são lançadas nas obras.
           </div>
         ) : (
@@ -6768,7 +6768,7 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
             <div style={{ overflowX: "auto", marginTop: 14 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                 <thead>
-                  <tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  <tr style={{ textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>
                     <th style={{ padding: "6px 8px" }}>Data</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Qtd</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
@@ -6832,7 +6832,7 @@ function GraficoPrecoInsumo({ compras }) {
           </circle>
         ))}
       </svg>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280", marginTop: 2 }}>
         <span>{fmtDataIns(compras[0].data)} · {fmtBRLIns(min)}</span>
         <span>{fmtDataIns(compras[compras.length - 1].data)} · {fmtBRLIns(max)}</span>
       </div>
@@ -6917,7 +6917,7 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
         <div style={INS_S.card}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 640 }}>
-              <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10.5, textTransform: "uppercase" }}>
+              <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10.5, textTransform: "uppercase" }}>
                 <th style={{ padding: "6px 8px" }}>Cômodo</th>
                 {pontosDef.map(function (p) { return <th key={p.id} style={{ padding: "6px 8px", textAlign: "right" }}>{p.nome}</th>; })}
               </tr></thead>
@@ -6926,7 +6926,7 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
                   var pt = pontosDe(t);
                   return (
                     <tr key={t.id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                      <td style={{ padding: "6px 8px", color: "#262421" }}>{t.nome}</td>
+                      <td style={{ padding: "6px 8px", color: "#111827" }}>{t.nome}</td>
                       {pontosDef.map(function (p) {
                         return <td key={p.id} style={{ padding: "4px 8px", textAlign: "right" }}>
                           <input type="number" min="0" step="1" disabled={!podeEditar} value={pt[p.id] == null ? 0 : pt[p.id]}
@@ -6940,7 +6940,7 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
               </tbody>
             </table>
           </div>
-          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 8 }}>Por unidade de cômodo. Cada ponto vira o kit correspondente (aba Kits → Elétrica). Circuitos: 1 disjuntor 10A a cada 8 pontos de luz e 1 de 20A a cada 6 tomadas gerais, calculados pelo motor.</div>
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>Por unidade de cômodo. Cada ponto vira o kit correspondente (aba Kits → Elétrica). Circuitos: 1 disjuntor 10A a cada 8 pontos de luz e 1 de 20A a cada 6 tomadas gerais, calculados pelo motor.</div>
         </div>
       )}
 
@@ -6960,9 +6960,9 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
                   style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#fafafa", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
                   <span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: INS.grafite }}>{kit.nome}</span>
-                    <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 8 }}>{kit.base === "ponto" ? "por ponto" : kit.base === "obra" ? "por obra" : "por ambiente"} · {kit.itens.length} itens · {kit.editado ? "editado pelo escritório" : kit.fonte}</span>
+                    <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>{kit.base === "ponto" ? "por ponto" : kit.base === "obra" ? "por obra" : "por ambiente"} · {kit.itens.length} itens · {kit.editado ? "editado pelo escritório" : kit.fonte}</span>
                   </span>
-                  <span style={{ fontSize: 11, color: "#9ca3af" }}>{ab ? "▲" : "▼"}</span>
+                  <span style={{ fontSize: 11, color: "#6b7280" }}>{ab ? "▲" : "▼"}</span>
                 </button>
                 {ab && (
                   <div style={{ padding: 12 }}>
@@ -6995,7 +6995,7 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
               </div>
             );
           })}
-          {!ids.length && <div style={{ fontSize: 12.5, color: "#6b7280" }}>Nenhum kit nesta disciplina.</div>}
+          {!ids.length && <div style={{ fontSize: 12.5, color: "#4b5563" }}>Nenhum kit nesta disciplina.</div>}
         </div>
       )}
     </div>
@@ -7171,7 +7171,7 @@ function Insumos({ data, save }) {
             <div style={{ fontSize: 13, fontWeight: 600, color: INS.azul, marginBottom: 4 }}>
               {insumos.length === 0 ? "Catálogo vazio" : "Catálogo incompleto"}
             </div>
-            <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12 }}>
+            <div style={{ fontSize: 12.5, color: "#111827", marginBottom: 12 }}>
               {faltamDaSemente > 0 && <>Faltam <strong>{faltamDaSemente}</strong> insumos do catálogo padrão (materiais, louças e metais, esquadrias e prestadores, com preço de referência). </>}
               {pendentesMigracao > 0 && <><strong>{pendentesMigracao}</strong> material antigo ainda não tem código. </>}
               A operação é segura de repetir: nunca sobrescreve preço definido à mão nem preço mais recente que o da semente.
@@ -7212,7 +7212,7 @@ function Insumos({ data, save }) {
         </div>
 
         {filtrados.length === 0 ? (
-          <div style={{ padding: 28, textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 16, background: "#fff" }}>
+          <div style={{ padding: 28, textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 16, background: "#fff" }}>
             {insumos.length === 0 ? "Nenhum insumo cadastrado ainda." : "Nenhum insumo com esses filtros."}
           </div>
         ) : (
@@ -7220,7 +7220,7 @@ function Insumos({ data, save }) {
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: isMobile ? 0 : 720 }}>
                 <thead>
-                  <tr style={{ background: "#f7f7f8", color: "#6b7280", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, textAlign: "left" }}>
+                  <tr style={{ background: "#f7f7f8", color: "#4b5563", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, textAlign: "left" }}>
                     <th style={{ padding: "10px 12px", fontWeight: 600 }}>Código</th>
                     <th style={{ padding: "10px 12px", fontWeight: 600 }}>Insumo</th>
                     {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Grupo</th>}
@@ -7242,8 +7242,8 @@ function Insumos({ data, save }) {
                           {x.i.nome}
                           {x.i.precoPendente && <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309", fontWeight: 600 }}>· confirmar</span>}
                         </td>
-                        {!isMobile && <td style={{ padding: "10px 12px", color: "#6b7280" }}>{x.i.grupo}</td>}
-                        {!isMobile && <td style={{ padding: "10px 12px", color: "#6b7280" }}>{x.i.unidade}</td>}
+                        {!isMobile && <td style={{ padding: "10px 12px", color: "#4b5563" }}>{x.i.grupo}</td>}
+                        {!isMobile && <td style={{ padding: "10px 12px", color: "#4b5563" }}>{x.i.unidade}</td>}
                         <td style={{ padding: "10px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: INS.grafite, whiteSpace: "nowrap" }}>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 7, justifyContent: "flex-end" }}>
                             <PontoConfianca conf={x.p.confianca} />
@@ -7251,7 +7251,7 @@ function Insumos({ data, save }) {
                           </span>
                         </td>
                         {!isMobile && (
-                          <td style={{ padding: "10px 12px", color: "#9ca3af", fontSize: 11.5, whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "10px 12px", color: "#6b7280", fontSize: 11.5, whiteSpace: "nowrap" }}>
                             {fmtDataIns(x.i.precoData)}{x.p.corrigido ? " ×" + x.p.fator : ""}
                           </td>
                         )}
@@ -7264,7 +7264,7 @@ function Insumos({ data, save }) {
           </div>
         )}
 
-        <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 14, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 14, lineHeight: 1.6 }}>
           O preço com 12 meses ou mais é corrigido pelo INCC automaticamente. Definir um preço à mão congela o valor:
           nenhuma compra passa por cima dele.
         </div>
@@ -11734,24 +11734,24 @@ const BITOLAS_FERRO = [
 function GradeFerro({ elementos, pathFerro, pathConcreto, get, set, comConcreto = true }) {
   return (
     <div style={{ gridColumn: "1 / -1" }}>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
         Metros lineares de cada bitola{comConcreto ? ", e m³ de concreto" : ""} por elemento. Campo vazio = 0.
       </div>
       <div style={{ overflowX: "auto", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10 }}>
         <table style={{ borderCollapse: "collapse", fontSize: 11.5, minWidth: 640 }}>
           <thead>
             <tr style={{ background: "#f7f7f8" }}>
-              <th style={{ position: "sticky", left: 0, background: "#f7f7f8", padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>Elemento</th>
+              <th style={{ position: "sticky", left: 0, background: "#f7f7f8", padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "#4b5563", whiteSpace: "nowrap" }}>Elemento</th>
               {BITOLAS_FERRO.map((b) => (
-                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>{b.label}</th>
+                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#4b5563", whiteSpace: "nowrap" }}>{b.label}</th>
               ))}
-              {comConcreto && <th style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>Concreto m³</th>}
+              {comConcreto && <th style={{ padding: "7px 6px", fontWeight: 600, color: "#4b5563", whiteSpace: "nowrap" }}>Concreto m³</th>}
             </tr>
           </thead>
           <tbody>
             {elementos.map((el) => (
               <tr key={el.key} style={{ borderTop: "1px solid #f3f4f6" }}>
-                <td style={{ position: "sticky", left: 0, background: "#fff", padding: "5px 10px", color: "#262421", fontWeight: 500, whiteSpace: "nowrap" }}>{el.label}</td>
+                <td style={{ position: "sticky", left: 0, background: "#fff", padding: "5px 10px", color: "#111827", fontWeight: 500, whiteSpace: "nowrap" }}>{el.label}</td>
                 {BITOLAS_FERRO.map((b) => (
                   <td key={b.k} style={{ padding: 3 }}>
                     <input type="number" step="0.01" style={{ ...C.input, width: 72, padding: "5px 6px", fontSize: 11.5, borderRadius: 7 }}
@@ -11780,13 +11780,13 @@ function GradeFerro({ elementos, pathFerro, pathConcreto, get, set, comConcreto 
 function LinhaFerro({ rotulo, pathFerro, get, set }) {
   return (
     <div style={{ gridColumn: "1 / -1" }}>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>{rotulo} — metros lineares por bitola</div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>{rotulo} — metros lineares por bitola</div>
       <div style={{ overflowX: "auto", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10 }}>
         <table style={{ borderCollapse: "collapse", fontSize: 11.5, minWidth: 560 }}>
           <thead>
             <tr style={{ background: "#f7f7f8" }}>
               {BITOLAS_FERRO.map((b) => (
-                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>{b.label}</th>
+                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#4b5563", whiteSpace: "nowrap" }}>{b.label}</th>
               ))}
             </tr>
           </thead>
@@ -11812,10 +11812,10 @@ function BlocoColapsavel({ titulo, subtitulo, aberto, onToggle, children }) {
     <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}>
       <button onClick={onToggle} type="button"
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#fafafa", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#262421" }}>{titulo}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{titulo}</span>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {subtitulo && <span style={{ fontSize: 11, color: "#9ca3af" }}>{subtitulo}</span>}
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>{aberto ? "▲" : "▼"}</span>
+          {subtitulo && <span style={{ fontSize: 11, color: "#6b7280" }}>{subtitulo}</span>}
+          <span style={{ fontSize: 11, color: "#6b7280" }}>{aberto ? "▲" : "▼"}</span>
         </span>
       </button>
       {aberto && <div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>{children}</div>}
@@ -11844,7 +11844,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
   const inputQtd = { width: 48, padding: "4px 4px", border: "1.5px solid #1f2a37", borderRadius: 7, fontSize: 13, fontFamily: "inherit", textAlign: "center", background: "#fff" };
   const colunasMolhado = isMobile ? "1fr 52px 60px 60px 20px" : "170px 52px 72px 72px 20px";
   const colunasSeco = isMobile ? "1fr 52px 20px" : "150px 52px 20px";
-  const cabecalho = { fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, textAlign: "center" };
+  const cabecalho = { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, textAlign: "center" };
   function setQtd(id, v) { set(`ambientes.${id}`, v === "" ? "" : Math.max(0, Math.round(Number(v)))); }
   function setCfg(id, campo, valor) { set(`comodosCfg.${id}.${campo}`, valor); }
   function restaurar(id) { const cfgs = { ...(projeto.comodosCfg || {}) }; delete cfgs[id]; set("comodosCfg", cfgs); }
@@ -11868,8 +11868,8 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
             <div style={{ fontSize: 13, color: "#1f2a37", padding: "5px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.nome}</div>
           )}
           <input type="number" min="0" step="1" style={inputQtd} value={get(`ambientes.${a.id}`) ?? ""} onChange={(e) => setQtd(a.id, e.target.value)} />
-          {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.revestimento > 0 ? fmt(n * c.revestimento) : "—"}</div>}
-          {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.bancadaM2 > 0 ? fmt(n * c.bancadaM2) : "—"}</div>}
+          {a.molhado && <div style={{ fontSize: 13, color: "#111827", textAlign: "center" }}>{c.revestimento > 0 ? fmt(n * c.revestimento) : "—"}</div>}
+          {a.molhado && <div style={{ fontSize: 13, color: "#111827", textAlign: "center" }}>{c.bancadaM2 > 0 ? fmt(n * c.bancadaM2) : "—"}</div>}
           <button type="button" onClick={() => { setQtd(a.id, 0); if (aberto) setComodoAberto(null); }} title="Tirar da obra" style={{ ...C.btnGhost, fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
         </div>
         {aberto && a.molhado && (
@@ -11894,7 +11894,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
                 </>
               )}
             </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6, fontSize: 11.5, color: "#6b7280", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6, fontSize: 11.5, color: "#4b5563", flexWrap: "wrap" }}>
               <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancadaM2 > 0 ? ` · granito ${fmt(c.bancadaM2)} m²` : ""}{c.bancadaPartes ? ` = bancada ${fmt(c.bancadaPartes.total)} (tampo ${fmt(c.bancadaPartes.tampo)} de ${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m + saia ${fmt(c.bancadaPartes.saia)} + fundo ${fmt(c.bancadaPartes.fundo)} + sapatas ${fmt(c.bancadaPartes.sapatas)})` : ""}{c.ilhaPartes ? ` + ilha ${fmt(c.ilhaPartes.total)} (tampo ${fmt(c.ilhaPartes.tampo)} de ${fmt(c.ilha.comprimento)} × ${fmt(c.ilha.profundidade)} m + laterais ${fmt(c.ilhaPartes.laterais)})` : ""}</span>
               {cfg.editado && <button type="button" style={{ ...C.btnGhost, fontSize: 11.5 }} onClick={() => restaurar(a.id)}>Voltar ao padrão ({cfg.tamanho})</button>}
             </div>
@@ -11937,7 +11937,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
         ) : (
           ausentes.length > 0 && <button type="button" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={() => setAdicionando(true)}>＋ Adicionar cômodo</button>
         )}
-        {presentes.length === 0 && <span style={{ fontSize: 12, color: "#9ca3af" }}>nenhum cômodo ainda</span>}
+        {presentes.length === 0 && <span style={{ fontSize: 12, color: "#6b7280" }}>nenhum cômodo ainda</span>}
       </div>
     </div>
   );
@@ -11965,9 +11965,9 @@ const MEM_S = {
   card: { background: "#fff", borderRadius: 14, maxWidth: 680, width: "100%", margin: "24px auto", boxShadow: "0 18px 50px rgba(0,0,0,0.25)", overflow: "hidden" },
   topo: { padding: "14px 18px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   passo: { display: "flex", gap: 10, padding: "10px 0", borderTop: "1px solid #f6f6f6" },
-  bolinha: { flex: "0 0 22px", height: 22, borderRadius: 11, background: "#f3f4f6", color: "#6b7280", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
-  formula: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11.5, color: "#6b7280" },
-  conta: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, color: "#262421" },
+  bolinha: { flex: "0 0 22px", height: 22, borderRadius: 11, background: "#f3f4f6", color: "#4b5563", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
+  formula: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11.5, color: "#4b5563" },
+  conta: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, color: "#111827" },
 };
 function MemoriaCalculo({ item, passos, onFechar }) {
   const qtd = Number(item.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -11977,33 +11977,33 @@ function MemoriaCalculo({ item, passos, onFechar }) {
       <div style={MEM_S.card} onClick={(e) => e.stopPropagation()}>
         <div style={MEM_S.topo}>
           <div>
-            <div style={{ fontSize: 10.5, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <div style={{ fontSize: 10.5, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
               Memória de cálculo · {item.etapa}{item.subEtapa ? ` › ${item.subEtapa}` : ""}
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#262421", marginTop: 3 }}>{item.item}</div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Quantidade no orçamento: <b style={{ color: "#262421" }}>{qtd} {item.unidade}</b></div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginTop: 3 }}>{item.item}</div>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>Quantidade no orçamento: <b style={{ color: "#111827" }}>{qtd} {item.unidade}</b></div>
           </div>
           <button type="button" onClick={onFechar} style={{ ...C.btnGhost, fontSize: 18, padding: "0 4px", lineHeight: 1 }} title="Fechar">×</button>
         </div>
         <div style={{ padding: "4px 18px 14px" }}>
           {!passos || !passos.length ? (
-            <div style={{ fontSize: 12.5, color: "#6b7280", padding: "14px 0" }}>
+            <div style={{ fontSize: 12.5, color: "#4b5563", padding: "14px 0" }}>
               A memória deste item ainda não foi escrita. Estamos publicando etapa por etapa — por enquanto valem "Instalações pré obra e projetos" e "Fundação".
             </div>
           ) : passos.map((p, idx) => {
             if (p.tipo === "nota") {
-              return <div key={idx} style={{ ...MEM_S.passo, color: "#6b7280", fontSize: 12.5, lineHeight: 1.5 }}>{p.texto}</div>;
+              return <div key={idx} style={{ ...MEM_S.passo, color: "#4b5563", fontSize: 12.5, lineHeight: 1.5 }}>{p.texto}</div>;
             }
             n += 1;
             return (
               <div key={idx} style={MEM_S.passo}>
                 <div style={MEM_S.bolinha}>{n}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, color: "#262421", fontWeight: 600 }}>{p.rotulo}</div>
+                  <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>{p.rotulo}</div>
                   {p.tipo === "dado" && (
-                    <div style={{ fontSize: 12.5, color: "#374151", marginTop: 2 }}>
+                    <div style={{ fontSize: 12.5, color: "#111827", marginTop: 2 }}>
                       <b>{p.valor}</b> {p.unidade}
-                      {p.fonte ? <span style={{ color: "#9ca3af" }}> · lido do {p.fonte}</span> : null}
+                      {p.fonte ? <span style={{ color: "#6b7280" }}> · lido do {p.fonte}</span> : null}
                     </div>
                   )}
                   {p.tipo === "conta" && (
@@ -12013,14 +12013,14 @@ function MemoriaCalculo({ item, passos, onFechar }) {
                     </div>
                   )}
                   {p.tipo === "teto" && (
-                    <div style={{ ...MEM_S.conta, marginTop: 3 }}>{p.conta} <span style={{ color: "#9ca3af" }}>{p.unidade}</span></div>
+                    <div style={{ ...MEM_S.conta, marginTop: 3 }}>{p.conta} <span style={{ color: "#6b7280" }}>{p.unidade}</span></div>
                   )}
                 </div>
               </div>
             );
           })}
         </div>
-        <div style={{ padding: "10px 18px", background: "#fafafa", borderTop: "1px solid #f3f4f6", fontSize: 11.5, color: "#6b7280" }}>
+        <div style={{ padding: "10px 18px", background: "#fafafa", borderTop: "1px solid #f3f4f6", fontSize: 11.5, color: "#4b5563" }}>
           Os números vêm do projeto que gerou este orçamento. Mudou uma medida? Edite os dados do projeto e recalcule — a memória acompanha.
         </div>
       </div>
@@ -12251,7 +12251,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
       <div style={wrap}>
         <button onClick={onVoltar} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 16 }}>Nenhum orçamento nesta obra.</div>
+          <div style={{ fontSize: 14, color: "#4b5563", marginBottom: 16 }}>Nenhum orçamento nesta obra.</div>
           {perm.podeEditar && (
             <button style={C.btn} onClick={() => setViewInterna("form")}>Preencher dados do projeto</button>
           )}
@@ -12265,8 +12265,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     return (
       <div style={wrap}>
         <button onClick={() => setViewInterna(obra.orcamento ? "resultado" : "vazio")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", marginBottom: 4 }}>Dados do projeto</div>
-        <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 16 }}>Campo vazio = 0. Um bloco sem nenhum dado não entra no orçamento.</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Dados do projeto</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>Campo vazio = 0. Um bloco sem nenhum dado não entra no orçamento.</div>
 
         <BlocoColapsavel titulo="Geral" aberto={!!blocosAbertos.geral} onToggle={() => toggleBloco("geral")}>
           <CampoSelect label="Tipo de obra" valor={projetoDraft.tipoObra || "nova"} onChange={(v) => set("tipoObra", v)} opcoes={TIPOS_OBRA} />
@@ -12284,7 +12284,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="M² de parede externa" valor={get("arquitetura.m2ParedesExternas")} onChange={setParedeExterna} />
           <div>
             <label style={C.label}>M² de parede total</label>
-            <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("arquitetura.m2ParedesTotal"))} disabled readOnly />
+            <input style={{ ...C.input, background: "#f3f4f6", color: "#4b5563" }} value={numOrZero(get("arquitetura.m2ParedesTotal"))} disabled readOnly />
           </div>
           {ehTerrea && (
             <>
@@ -12300,7 +12300,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                   <CampoNum label="M² parede 25cm" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
                   <div>
                     <label style={C.label}>M² parede 20cm (automático)</label>
-                    <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("terreo.m2Parede20"))} disabled readOnly />
+                    <input style={{ ...C.input, background: "#f3f4f6", color: "#4b5563" }} value={numOrZero(get("terreo.m2Parede20"))} disabled readOnly />
                   </div>
                 </>
               )}
@@ -12311,7 +12311,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
           <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Cômodos</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 6 }}>Cômodos</div>
             <ListaComodos projeto={projetoDraft} get={get} set={set} comodoAberto={comodoAberto} setComodoAberto={setComodoAberto} isMobile={isMobile} />
           </div>
         </BlocoColapsavel>
@@ -12391,7 +12391,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                     {paredePav1Expandida ? "Simplificar (tudo 20cm)" : "Expandir espessuras de parede (15/20/25cm)"}
                   </button>
                 </div>
-                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#6b7280" }}>
+                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563" }}>
                   Em branco, cada pavimento entra com metade do que está no bloco Geral (parede {au.paredePavimento} m², perímetro {au.perimetroPavimento} m). Digitou aqui, o digitado vence.
                 </div>
               </>); })()}
@@ -12410,7 +12410,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
         <BlocoColapsavel titulo="Forros e Cobertura" subtitulo={`${forrosLista.length} forro${forrosLista.length !== 1 ? "s" : ""} · ${coberturas.length} telhado${coberturas.length !== 1 ? "s" : ""}`} aberto={!!blocosAbertos.cobertura} onToggle={() => toggleBloco("cobertura")}>
           <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Forros</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>Forros</div>
             {forrosLista.map((f, idx) => (
               <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1.2fr 1.6fr 1fr 1.6fr auto", gap: 8, alignItems: "end", padding: 10, background: "#fafafa", borderRadius: 8 }}>
                 <CampoTexto label="Onde" valor={f.pavimento} onChange={(v) => updateForro(idx, "pavimento", v)} placeholder={forrosAuto[idx] ? forrosAuto[idx].pavimento : "trecho"} />
@@ -12437,14 +12437,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               {forrosLista.length < FORROS_MAX && (
                 <button type="button" style={C.btnSec} onClick={addForro}>＋ Adicionar forro</button>
               )}
-              <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+              <span style={{ fontSize: 11.5, color: "#4b5563" }}>
                 {forrosDigitados
                   ? "Lista sua. Para voltar ao automático, remova todos os trechos."
                   : `Automático: ${ehTerrea ? "a área da laje" : "cada pavimento com a área da sua laje"}. Edite ou acrescente trechos de outro tipo (parte em gesso, parte em madeira).`}
                 {" "}O acabamento de borda (tabica ou meia-cana) sai do perímetro dos cômodos do bloco Geral.
               </span>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginTop: 4 }}>Cobertura</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginTop: 4 }}>Cobertura</div>
             {coberturas.map((t, idx) => (
               <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr 1fr auto", gap: 8, alignItems: "end", padding: 10, background: "#fafafa", borderRadius: 8 }}>
                 <CampoSelect label="Tipo de telha" valor={t.tipo} onChange={(v) => updateTelhado(idx, "tipo", v)} opcoes={TIPOS_TELHA_UI} />
@@ -12494,7 +12494,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             {esquadriasLista.length < 40 && (
               <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addEsquadria}>＋ Adicionar esquadria</button>
             )}
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>
               Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. No orçamento aparece uma linha por esquadria com o preço fechado; a composição fica guardada no item. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold. Para usar seus preços, cadastre o alumínio, o vidro e os acessórios em Insumos com o código Alcoa como alias.
             </div>
           </div>
@@ -12503,7 +12503,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         <BlocoColapsavel titulo="Pavimentação externa" subtitulo="contrapiso externo · a área pré-preenche o piso externo" aberto={!!blocosAbertos.externa} onToggle={() => toggleBloco("externa")}>
           <CampoNum label="Pavimentação externa (m²)" valor={get("externa.pavimentacao")} onChange={(v) => set("externa.pavimentacao", v)} />
           <CampoNum label="Perímetro da pavimentação (m)" valor={get("externa.perimetroPavimentacao")} onChange={(v) => set("externa.perimetroPavimentacao", v)} />
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563" }}>
             A área dimensiona o contrapiso (concreto, malha pop, massiamento) e vira o automático do piso externo em Pisos e revestimentos. O perímetro só dimensiona a caixaria da borda do contrapiso (tábuas e sarrafos) — rodapé e soleira não entram aqui.
           </div>
         </BlocoColapsavel>
@@ -12512,11 +12512,11 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <datalist id="vk-insumos-pisos">
             {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleira|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
           </datalist>
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563" }}>
             Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({padraoObra(projetoDraft)}); sem formato, o tamanho típico do padrão. Peças com {Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras); a partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
           </div>
           {(() => { const au = autosPisos(projetoDraft); return (
-            <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
+            <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
               Em branco, o VICKE usa o automático: piso interno = área construída ({au.pisoInterno} m²) · piso externo = pavimentação externa ({au.pisoExterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = perímetro das paredes menos portas ({au.rodapeM} m) · soleiras e peitoris = vão das esquadrias ({au.soleirasM} m) · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
             </div>
           ); })()}
@@ -12542,15 +12542,15 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           ))}
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div><label style={C.label}>Rodapé (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.rodapeM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).rodapeM} (perímetro)`} onChange={(e) => set("pisos.rodapeM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
-            <div style={{ fontSize: 11, color: "#9ca3af", paddingBottom: 8, gridColumn: isMobile ? "auto" : "2 / -1" }}>recorte do próprio piso interno, {RODAPE_ALTURA_M * 100} cm de altura — os m² entram somados ao piso</div>
+            <div style={{ fontSize: 11, color: "#6b7280", paddingBottom: 8, gridColumn: isMobile ? "auto" : "2 / -1" }}>recorte do próprio piso interno, {RODAPE_ALTURA_M * 100} cm de altura — os m² entram somados ao piso</div>
           </div>
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div><label style={C.label}>Soleiras e peitoris (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.soleirasM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).soleirasM} (esquadrias)`} onChange={(e) => set("pisos.soleirasM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
             <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.soleirasProduto") ?? ""} placeholder={soleiraPadrao(padraoObra(projetoDraft))} onChange={(e) => set("pisos.soleirasProduto", e.target.value)} /></div>
           </div>
           <div style={{ gridColumn: "1 / -1", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Bancadas de granito / mármore <span style={{ fontWeight: 400, color: "#9ca3af" }}>— tampo + saia + fundo (rodabanca) + sapatas, em m² de pedra pronta</span></div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>Bancadas de granito / mármore <span style={{ fontWeight: 400, color: "#6b7280" }}>— tampo + saia + fundo (rodabanca) + sapatas, em m² de pedra pronta</span></div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {bancadasLista.map((b, idx) => {
                 const m = medirBancada(b);
@@ -12568,9 +12568,9 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, alignItems: "end", marginTop: 6 }}>
                       <div><label style={C.label}>Pedra (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={b.produto ?? ""} placeholder={granitoPadrao(padraoObra(projetoDraft))} onChange={(e) => updateBancada(idx, "produto", e.target.value)} /></div>
-                      <div style={{ fontSize: 12, color: "#374151", paddingBottom: 8 }}>
+                      <div style={{ fontSize: 12, color: "#111827", paddingBottom: 8 }}>
                         <b>{m.total.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²</b>
-                        <span style={{ color: "#9ca3af" }}> · tampo {m.tampo} · saia {m.saia} · fundo {m.fundo} · sapatas {m.sapatas}</span>
+                        <span style={{ color: "#6b7280" }}> · tampo {m.tampo} · saia {m.saia} · fundo {m.fundo} · sapatas {m.sapatas}</span>
                       </div>
                     </div>
                   </div>
@@ -12580,7 +12580,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                 <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addBancada}>＋ Adicionar bancada</button>
               )}
               {bancadasLista.length === 0 && estimarPelosComodos(projetoDraft).bancadas.length > 0 && (
-                <div style={{ fontSize: 12, color: "#374151", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
+                <div style={{ fontSize: 12, color: "#111827", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
                   Automático pelos cômodos: {estimarPelosComodos(projetoDraft).bancadas.map((b) => `${b.nome} ${Number(b.comprimento).toLocaleString("pt-BR")} × ${Number(b.profundidade).toLocaleString("pt-BR")} m`).join(" · ")} — em {granitoPadrao(padraoObra(projetoDraft))}. Adicione bancadas aqui para substituir.
                 </div>
               )}
@@ -12591,26 +12591,26 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <CampoNum label="Deck (m²)" valor={get("pisos.deckM2")} onChange={(v) => set("pisos.deckM2", v)} />
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>+ Cetol 1 lata / 20 m²</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>+ Cetol 1 lata / 20 m²</div>
             <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.deckProduto") ?? ""} placeholder="Piso - Deck" onChange={(e) => set("pisos.deckProduto", e.target.value)} /></div>
           </div>
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Instalações" subtitulo={`estimativa por kits a partir dos cômodos do bloco Geral · padrão ${padraoInstalacoes(padraoObra(projetoDraft))}`} aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563" }}>
             Sem projeto de engenharia, hidráulica, esgoto, elétrica, louças e portas são estimados por conjuntos de pontos por cômodo (prática do SINAPI), com os kits de Insumos → Composições e os cômodos informados no bloco Geral. Padrão Alto e Altíssimo usam os kits de acabamento superior.
           </div>
           <CampoSelect label="Aquecimento de água" valor={get("instalacoes.aquecimento") || "nenhum"} onChange={(v) => set("instalacoes.aquecimento", v)}
             opcoes={(typeof SISTEMAS_AQUECIMENTO !== "undefined" ? SISTEMAS_AQUECIMENTO : []).map((x) => ({ value: x.id, label: x.nome }))} />
           <CampoSelect label="Pressurizador" valor={get("instalacoes.pressurizador") ? "sim" : "nao"} onChange={(v) => set("instalacoes.pressurizador", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
           <div style={{ gridColumn: "1 / -1", marginTop: 4 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Disciplinas que vêm do projeto de engenharia (a estimativa por kits sai destas):</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 6 }}>Disciplinas que vêm do projeto de engenharia (a estimativa por kits sai destas):</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {ETAPAS_PROJETO.filter((e) => DISCIPLINAS_INSTALACOES.includes(e.id)).map((e) => {
                 const marcado = !!get(`instalacoes.doProjeto.${e.id}`);
                 const temItens = itensProjetoLista.some((it) => it.etapa === e.id && it.nome);
                 return (
-                  <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#374151", padding: "6px 10px", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 8, background: marcado ? "#eef2ff" : "#fff", cursor: "pointer" }}>
+                  <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#111827", padding: "6px 10px", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 8, background: marcado ? "#eef2ff" : "#fff", cursor: "pointer" }}>
                     <input type="checkbox" checked={marcado} onChange={(ev) => set(`instalacoes.doProjeto.${e.id}`, ev.target.checked)} />
                     {e.nome}
                     {temItens && !marcado && <span style={{ color: "#b45309", fontSize: 11 }} title="Há itens do projeto nesta disciplina e a estimativa por kits também está ligada: vai somar os dois.">· soma com o projeto</span>}
@@ -12623,7 +12623,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
         <BlocoColapsavel titulo="Itens do projeto de engenharia" subtitulo={`${itensProjetoLista.length} ite${itensProjetoLista.length !== 1 ? "ns" : "m"} · hidráulica, esgoto, elétrica, louças e metais, aquecimento`} aberto={!!blocosAbertos.itensProjeto} onToggle={() => toggleBloco("itensProjeto")}>
           <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>
               A planilha nunca quantificou esses grupos — eles vêm do projeto de engenharia. Digite (ou cole) a lista do projeto; cada item é procurado no catálogo de Insumos pelo nome e precificado como os demais.
             </div>
             <datalist id="vk-insumos-lista">
@@ -12634,7 +12634,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               if (!doGrupo.length) return null;
               return (
                 <div key={et.id} style={{ padding: 10, background: "#fafafa", borderRadius: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#262421", marginBottom: 6 }}>{et.nome} <span style={{ color: "#9ca3af", fontWeight: 400 }}>· {doGrupo.length}</span></div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 6 }}>{et.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>· {doGrupo.length}</span></div>
                   {doGrupo.map(({ it, idx }) => {
                     const st = statusItemProjeto(it);
                     return (
@@ -12832,22 +12832,22 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           ["Custo por m²", formatoBRL(custoPorM2)],
         ].map(([label, valor, rodape]) => (
           <div key={label} style={{ background: "#fafafa", border: "1px solid #f3f4f6", borderRadius: 12, padding: "12px 14px" }}>
-            <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>{valor}</div>
-            {rodape ? <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{rodape}</div> : null}
+            <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{valor}</div>
+            {rodape ? <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{rodape}</div> : null}
           </div>
         ))}
       </div>
 
       {orc.qualidade ? (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#374151" }}>
+          <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#111827" }}>
             <b>{orc.qualidade.comPreco} de {orc.qualidade.total} itens precificados</b>
             {" · "}{orc.qualidade.alta + orc.qualidade.media} com preço atual
             {" · "}{orc.qualidade.baixa + orc.qualidade.obsoleta} corrigidos pelo INCC ou antigos
             {orc.qualidade.manual ? ` · ${orc.qualidade.manual} manual` : ""}
             {orc.qualidade.semPreco.length ? ` · ${orc.qualidade.semPreco.length} sem preço (R$ 0)` : ""}
-            <span style={{ color: "#9ca3af" }}> — gerado em {new Date(orc.geradoEm).toLocaleDateString("pt-BR")}; recalcule para usar preços novos.</span>
+            <span style={{ color: "#6b7280" }}> — gerado em {new Date(orc.geradoEm).toLocaleDateString("pt-BR")}; recalcule para usar preços novos.</span>
           </div>
           {(orc.qualidade.semPreco.length > 0 || orc.qualidade.atencao.length > 0 || (orc.avisos || []).some((a) => a.tipo && a.tipo.startsWith("esquadria"))) && (
             <details style={{ marginTop: 8, fontSize: 12, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "8px 14px" }}>
@@ -12886,7 +12886,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         };
         return (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>{itensPorEtapa.length} etapas · {orc.itens.length} itens</div>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>{itensPorEtapa.length} etapas · {orc.itens.length} itens</div>
             <button type="button" onClick={alternarTodas} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
               {todasRecolhidas ? "Mostrar todos os itens ▼" : "Recolher todos os itens ▲"}
             </button>
@@ -12902,13 +12902,13 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             <div key={grupo.etapa} style={{ marginBottom: 8, border: "1px solid rgba(38,36,33,0.1)", borderRadius: 10, overflow: "hidden" }}>
               <button type="button" onClick={() => toggleEtapa(grupo.etapa)}
                 style={{ width: "100%", display: "flex", justifyContent: "space-between", padding: "10px 14px", background: "#f9fafb", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#262421" }}>{grupo.etapa}</span>
-                <span style={{ fontSize: 12, color: "#6b7280" }}>{formatoBRL(subtotal)} {colapsado ? "▼" : "▲"}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{grupo.etapa}</span>
+                <span style={{ fontSize: 12, color: "#4b5563" }}>{formatoBRL(subtotal)} {colapsado ? "▼" : "▲"}</span>
               </button>
               {!colapsado && (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 560 }}>
                   <thead>
-                    <tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                    <tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                       <th style={{ padding: "6px 14px" }}>Item</th>
                       <th style={{ padding: "6px 14px" }}>Unidade</th>
                       <th style={{ padding: "6px 14px", textAlign: "right" }}>Qtd</th>
@@ -12920,18 +12920,18 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                   <tbody>
                     {grupo.itens.map((i, idx) => (
                       <tr key={idx} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 14px", color: "#262421" }}>{i.item}</td>
-                        <td style={{ padding: "6px 14px", color: "#6b7280" }}>{i.unidade}</td>
-                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#374151" }}>{Number(i.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
-                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }} title={rotuloConfianca(i)}>
+                        <td style={{ padding: "6px 14px", color: "#111827" }}>{i.item}</td>
+                        <td style={{ padding: "6px 14px", color: "#4b5563" }}>{i.unidade}</td>
+                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827" }}>{Number(i.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
+                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827", whiteSpace: "nowrap" }} title={rotuloConfianca(i)}>
                           <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 4, marginRight: 6, background: corConfianca(i.confianca, i.semPreco) }} />
                           {formatoBRL(i.preco)}
                         </td>
-                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#262421", fontWeight: 600 }}>{formatoBRL(i.total)}</td>
+                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827", fontWeight: 600 }}>{formatoBRL(i.total)}</td>
                         <td style={{ padding: "6px 6px", textAlign: "center" }}>
                           {memorias[chaveMemoria(i)] && (
                             <button type="button" onClick={() => setMemoriaAberta(i)} title="Memória de cálculo: como se chegou nesta quantidade"
-                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 2, color: "#9ca3af", fontFamily: "inherit" }}>⚙</button>
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 2, color: "#6b7280", fontFamily: "inherit" }}>⚙</button>
                           )}
                         </td>
                       </tr>
@@ -12944,7 +12944,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         })}
       </div>
 
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 16 }}>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>
         Gerado em {new Date(orc.geradoEm).toLocaleString("pt-BR")}, versão {orc.versao}.
       </div>
 
@@ -13646,7 +13646,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
   }
 
   const card = { background: "#fafafa", border: "1px solid #f3f4f6", borderRadius: 12, padding: "12px 14px" };
-  const rotulo = { fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 };
+  const rotulo = { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 };
   const input = { width: "100%", padding: "7px 9px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", background: "#fff", boxSizing: "border-box" };
 
   if (res.erro) {
@@ -13671,10 +13671,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
     <div style={{ marginBottom: 16, border: semCabecalho ? "none" : "1px solid rgba(38,36,33,0.1)", borderRadius: 10, overflow: "hidden" }}>
       {!semCabecalho && <button type="button" onClick={() => setAberto((a) => !a)}
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#f9fafb", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#262421" }}>Cronograma da obra
-          <span style={{ fontWeight: 400, color: "#6b7280", marginLeft: 8 }}>{at.meses} meses · término {fmtDataCrono(at.dataFim)} · {ehProd ? "por produtividade" : "simplificado"}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Cronograma da obra
+          <span style={{ fontWeight: 400, color: "#4b5563", marginLeft: 8 }}>{at.meses} meses · término {fmtDataCrono(at.dataFim)} · {ehProd ? "por produtividade" : "simplificado"}</span>
         </span>
-        <span style={{ fontSize: 12, color: "#6b7280" }}>{aberto ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 12, color: "#4b5563" }}>{aberto ? "▲" : "▼"}</span>
       </button>}
       {mostrar && (
         <div style={{ padding: semCabecalho ? 0 : 14 }}>
@@ -13700,11 +13700,11 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
 
           {/* Resumo */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 10, marginBottom: 12 }}>
-            <div style={card}><div style={rotulo}>Prazo</div><div style={{ fontSize: 14, fontWeight: 700 }}>{at.meses} meses</div><div style={{ fontSize: 11, color: "#6b7280" }}>{Math.ceil(at.fimDias)} dias úteis</div></div>
-            <div style={card}><div style={rotulo}>Término previsto</div><div style={{ fontSize: 14, fontWeight: 700 }}>{fmtDataCrono(at.dataFim)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>início {fmtDataCrono(res.dataInicio)}</div></div>
-            <div style={card}><div style={rotulo}>Prazo pela tabela</div><div style={{ fontSize: 14, fontWeight: 700 }}>{res.prazoTabela || "—"} meses</div><div style={{ fontSize: 11, color: "#6b7280" }}>{res.cond.sobrado ? "sobrado" : "térrea"} · {Math.round(numOrZero(obra.projeto && obra.projeto.arquitetura && obra.projeto.arquitetura.areaConstruida))} m²</div></div>
-            <div style={card}><div style={rotulo}>Por produtividade</div><div style={{ fontSize: 14, fontWeight: 700 }}>{prod.meses} meses</div><div style={{ fontSize: 11, color: "#6b7280" }}>{fmtHorasCrono(prod.hhTotal)} com a equipe atual</div></div>
-            <div style={card}><div style={rotulo}>Caminho crítico</div><div style={{ fontSize: 14, fontWeight: 700 }}>{at.criticas.length} etapas</div><div style={{ fontSize: 11, color: "#6b7280" }}>atraso nelas = atraso da obra</div></div>
+            <div style={card}><div style={rotulo}>Prazo</div><div style={{ fontSize: 14, fontWeight: 700 }}>{at.meses} meses</div><div style={{ fontSize: 11, color: "#4b5563" }}>{Math.ceil(at.fimDias)} dias úteis</div></div>
+            <div style={card}><div style={rotulo}>Término previsto</div><div style={{ fontSize: 14, fontWeight: 700 }}>{fmtDataCrono(at.dataFim)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>início {fmtDataCrono(res.dataInicio)}</div></div>
+            <div style={card}><div style={rotulo}>Prazo pela tabela</div><div style={{ fontSize: 14, fontWeight: 700 }}>{res.prazoTabela || "—"} meses</div><div style={{ fontSize: 11, color: "#4b5563" }}>{res.cond.sobrado ? "sobrado" : "térrea"} · {Math.round(numOrZero(obra.projeto && obra.projeto.arquitetura && obra.projeto.arquitetura.areaConstruida))} m²</div></div>
+            <div style={card}><div style={rotulo}>Por produtividade</div><div style={{ fontSize: 14, fontWeight: 700 }}>{prod.meses} meses</div><div style={{ fontSize: 11, color: "#4b5563" }}>{fmtHorasCrono(prod.hhTotal)} com a equipe atual</div></div>
+            <div style={card}><div style={rotulo}>Caminho crítico</div><div style={{ fontSize: 14, fontWeight: 700 }}>{at.criticas.length} etapas</div><div style={{ fontSize: 11, color: "#4b5563" }}>atraso nelas = atraso da obra</div></div>
           </div>
 
           {res.avisos.length > 0 && (
@@ -13715,12 +13715,12 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
 
           {/* Equipe */}
           <details open={ehProd} style={{ marginBottom: 12, fontSize: 12 }}>
-            <summary style={{ cursor: "pointer", fontWeight: 600, color: "#262421" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600, color: "#111827" }}>
               Equipe {prod.equipeNecessaria ? `— para fechar em ${res.prazoAlvo} meses: ${oficios.filter((o) => prod.hhPorOficio[o.id] > 0).map((o) => `${prod.equipeNecessaria[o.id]} ${o.nome.toLowerCase()}`).join(", ")}` : ""}
             </summary>
             <div style={{ overflowX: "auto", marginTop: 8 }}>
               <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 520 }}>
-                <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                   <th style={{ padding: "4px 8px" }}>Ofício</th><th style={{ padding: "4px 8px", textAlign: "right" }}>HH na obra</th>
                   <th style={{ padding: "4px 8px", textAlign: "right" }}>Equipe atual</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Para {res.prazoAlvo} meses</th>
                 </tr></thead>
@@ -13740,10 +13740,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
               {prod.equipeNecessaria && podeEditar && (
                 <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <button style={C.btnSec} onClick={usarEquipeNecessaria}>Usar essa equipe</button>
-                  <span style={{ color: "#6b7280" }}>com ela, por produtividade, a obra fecha em {prod.prazoComEquipeNecessariaMeses} meses (equipe arredondada para cima).</span>
+                  <span style={{ color: "#4b5563" }}>com ela, por produtividade, a obra fecha em {prod.prazoComEquipeNecessariaMeses} meses (equipe arredondada para cima).</span>
                 </div>
               )}
-              <div style={{ marginTop: 6, color: "#6b7280" }}>Horas-homem das composições SINAPI (SP) × quantidades desta obra, ajustadas pela eficiência. Cada etapa dura o tempo do ofício mais carregado; etapas sem serviço medido (pré-obra, impermeabilizações, acabamentos finais) usam a duração paramétrica.</div>
+              <div style={{ marginTop: 6, color: "#4b5563" }}>Horas-homem das composições SINAPI (SP) × quantidades desta obra, ajustadas pela eficiência. Cada etapa dura o tempo do ofício mais carregado; etapas sem serviço medido (pré-obra, impermeabilizações, acabamentos finais) usam a duração paramétrica.</div>
             </div>
           </details>
 
@@ -13758,7 +13758,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 760 }}>
                 <thead>
-                  <tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                  <tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                     <th style={{ padding: "6px 8px" }}>Etapa</th>
                     <th style={{ padding: "6px 8px" }}>Início</th>
                     <th style={{ padding: "6px 8px" }}>Fim</th>
@@ -13767,7 +13767,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                     <th style={{ padding: "6px 8px", width: "45%" }}>
                       <div style={{ position: "relative", height: 14 }}>
                         {marcadores.map((mk) => (
-                          <span key={mk.mes} style={{ position: "absolute", left: `${mk.dia / totalDias * 100}%`, fontSize: 9, color: "#9ca3af", borderLeft: "1px solid #e5e7eb", paddingLeft: 2, whiteSpace: "nowrap" }}>{fmtMesCrono(mk.mes)}</span>
+                          <span key={mk.mes} style={{ position: "absolute", left: `${mk.dia / totalDias * 100}%`, fontSize: 9, color: "#6b7280", borderLeft: "1px solid #e5e7eb", paddingLeft: 2, whiteSpace: "nowrap" }}>{fmtMesCrono(mk.mes)}</span>
                         ))}
                       </div>
                     </th>
@@ -13776,14 +13776,14 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                 <tbody>
                   {at.etapas.map((e) => (
                     <tr key={e.id} style={{ borderTop: "1px solid #f3f4f6" }} title={e.hh ? Object.keys(e.hh).map((of) => `${of}: ${Math.round(e.hh[of])} h`).join(" · ") : "duração paramétrica"}>
-                      <td style={{ padding: "6px 8px", color: "#262421", fontWeight: e.critico ? 600 : 400, whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "6px 8px", color: "#111827", fontWeight: e.critico ? 600 : 400, whiteSpace: "nowrap" }}>
                         {e.critico && <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 4, background: "#dc2626", marginRight: 6 }} />}
                         {e.nome}
-                        {ehProd && e.gargalo && <span style={{ color: "#9ca3af", marginLeft: 6, fontSize: 10 }}>({e.gargalo})</span>}
+                        {ehProd && e.gargalo && <span style={{ color: "#6b7280", marginLeft: 6, fontSize: 10 }}>({e.gargalo})</span>}
                       </td>
-                      <td style={{ padding: "6px 8px", color: "#374151", whiteSpace: "nowrap" }}>{fmtDataCrono(e.dataInicio)}</td>
-                      <td style={{ padding: "6px 8px", color: "#374151", whiteSpace: "nowrap" }}>{fmtDataCrono(e.dataFim)}</td>
-                      <td style={{ padding: "6px 8px", textAlign: "right", color: "#374151" }}>{Math.round(e.duracao)}</td>
+                      <td style={{ padding: "6px 8px", color: "#111827", whiteSpace: "nowrap" }}>{fmtDataCrono(e.dataInicio)}</td>
+                      <td style={{ padding: "6px 8px", color: "#111827", whiteSpace: "nowrap" }}>{fmtDataCrono(e.dataFim)}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "right", color: "#111827" }}>{Math.round(e.duracao)}</td>
                       <td style={{ padding: "6px 8px", textAlign: "right", color: e.critico ? "#dc2626" : "#6b7280" }}>{e.critico ? "crítica" : `${Math.round(e.folga)} d`}</td>
                       <td style={{ padding: "6px 8px" }}>
                         <div style={{ position: "relative", height: 12, background: "#f3f4f6", borderRadius: 4 }}>
@@ -13794,7 +13794,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                   ))}
                 </tbody>
               </table>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Dias úteis (sem fins de semana e feriados nacionais). Vermelho = caminho crítico. {ehProd ? "Entre parênteses, o ofício que dita a duração da etapa." : `Durações-base escaladas por ${res.simplificado.fator.toFixed(2)} para fechar em ${res.prazoAlvo} meses.`}</div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>Dias úteis (sem fins de semana e feriados nacionais). Vermelho = caminho crítico. {ehProd ? "Entre parênteses, o ofício que dita a duração da etapa." : `Durações-base escaladas por ${res.simplificado.fator.toFixed(2)} para fechar em ${res.prazoAlvo} meses.`}</div>
             </div>
           )}
 
@@ -13802,27 +13802,27 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
             res.financeiro ? (
               <div style={{ overflowX: "auto" }}>
                 <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 560, width: "100%" }}>
-                  <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                  <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                     <th style={{ padding: "6px 8px" }}>Mês</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Desembolso</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Acumulado</th><th style={{ padding: "6px 8px", textAlign: "right" }}>%</th><th style={{ padding: "6px 8px", width: "35%" }}>Curva S</th>
                   </tr></thead>
                   <tbody>
                     {res.financeiro.meses.map((m) => (
                       <tr key={m.mes} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 8px", color: "#262421" }}>{fmtMesCrono(m.mes)}</td>
+                        <td style={{ padding: "6px 8px", color: "#111827" }}>{fmtMesCrono(m.mes)}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right" }}>{formatoBRL(m.valor)}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{formatoBRL(m.acumulado)}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{Math.round(m.pct * 100)}%</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{formatoBRL(m.acumulado)}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{Math.round(m.pct * 100)}%</td>
                         <td style={{ padding: "6px 8px" }}><div style={{ height: 10, background: "#f3f4f6", borderRadius: 4 }}><div style={{ width: `${m.pct * 100}%`, height: "100%", background: "#3b82f6", borderRadius: 4, opacity: 0.7 }} /></div></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>
                   Custo de cada etapa do orçamento distribuído pelos dias da etapa no cronograma; prestadores e itens sem etapa ({formatoBRL(res.financeiro.semEtapa)}) diluídos ao longo da obra. Total {formatoBRL(res.financeiro.total)}.
                 </div>
               </div>
-            ) : <div style={{ fontSize: 12, color: "#6b7280" }}>Gere o orçamento para ver o desembolso por mês.</div>
+            ) : <div style={{ fontSize: 12, color: "#4b5563" }}>Gere o orçamento para ver o desembolso por mês.</div>
           )}
 
           {aba === "maoDeObra" && (() => {
@@ -13837,13 +13837,13 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                       <option value="desonerado">SINAPI desonerado</option>
                       <option value="onerado">SINAPI onerado</option>
                     </select></div>
-                  <div style={card}><div style={rotulo}>Mão de obra SINAPI</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalRef)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>{mo.porM2Ref != null ? `${formatoBRL(mo.porM2Ref)}/m²` : ""} · produtividade de referência</div></div>
-                  <div style={card}><div style={rotulo}>Com eficiência {Math.round(mo.eficiencia * 100)}%</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalEficiencia)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>{mo.porM2Eficiencia != null ? `${formatoBRL(mo.porM2Eficiencia)}/m²` : ""} · horas reais da equipe</div></div>
-                  <div style={card}><div style={rotulo}>Prestadores no orçamento</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalOrcadoComparavel)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>só os comparáveis · SINAPI {formatoBRL(mo.totalRefComparavel)}</div></div>
+                  <div style={card}><div style={rotulo}>Mão de obra SINAPI</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalRef)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{mo.porM2Ref != null ? `${formatoBRL(mo.porM2Ref)}/m²` : ""} · produtividade de referência</div></div>
+                  <div style={card}><div style={rotulo}>Com eficiência {Math.round(mo.eficiencia * 100)}%</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalEficiencia)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{mo.porM2Eficiencia != null ? `${formatoBRL(mo.porM2Eficiencia)}/m²` : ""} · horas reais da equipe</div></div>
+                  <div style={card}><div style={rotulo}>Prestadores no orçamento</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalOrcadoComparavel)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>só os comparáveis · SINAPI {formatoBRL(mo.totalRefComparavel)}</div></div>
                 </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 720, width: "100%" }}>
-                    <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                    <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                       <th style={{ padding: "6px 8px" }}>Prestador</th><th style={{ padding: "6px 8px", textAlign: "right" }}>HH</th>
                       <th style={{ padding: "6px 8px", textAlign: "right" }}>SINAPI</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Com eficiência</th>
                       <th style={{ padding: "6px 8px", textAlign: "right" }}>No orçamento</th><th style={{ padding: "6px 8px", textAlign: "right" }}>SINAPI × orçado</th>
@@ -13854,10 +13854,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                         return (
                           <tr key={p.chave} style={{ borderTop: "1px solid #f3f4f6" }} title={p.servicos.join(", ")}>
                             <td style={{ padding: "6px 8px", color: p.temPrestador ? "#262421" : "#9ca3af" }}>{p.rotulo}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{p.hh.toLocaleString("pt-BR")} h</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>{formatoBRL(p.custoRef)}{area > 0 && p.chave === "equipePedreiros" ? <span style={{ color: "#9ca3af" }}> ({formatoBRL(p.custoRef / area)}/m²)</span> : null}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{formatoBRL(p.custoEficiencia)}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{p.orcado != null ? formatoBRL(p.orcado) : <span style={{ color: "#9ca3af", fontWeight: 400 }}>—</span>}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{p.hh.toLocaleString("pt-BR")} h</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>{formatoBRL(p.custoRef)}{area > 0 && p.chave === "equipePedreiros" ? <span style={{ color: "#6b7280" }}> ({formatoBRL(p.custoRef / area)}/m²)</span> : null}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{formatoBRL(p.custoEficiencia)}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{p.orcado != null ? formatoBRL(p.orcado) : <span style={{ color: "#6b7280", fontWeight: 400 }}>—</span>}</td>
                             <td style={{ padding: "6px 8px", textAlign: "right", color: d == null ? "#9ca3af" : Math.abs(d) > 0.3 ? "#b45309" : "#16a34a" }}>{d == null ? "" : `${d > 0 ? "+" : ""}${Math.round(d * 100)}%`}</td>
                           </tr>
                         );
@@ -13866,12 +13866,12 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                   </table>
                 </div>
                 <details style={{ marginTop: 8, fontSize: 12 }}>
-                  <summary style={{ cursor: "pointer", color: "#374151" }}>Preço da hora por ofício ({referenciaSinapi(data)})</summary>
-                  <div style={{ marginTop: 6, color: "#374151" }}>
-                    {oficios.map((o) => { const ph = mo.precoHora[o.id]; const po = mo.porOficio[o.id]; return ph ? <span key={o.id} style={{ display: "inline-block", marginRight: 14, marginBottom: 4 }}>{o.nome.split(" /")[0]} <b>{formatoBRL(ph.preco)}/h</b>{po ? <span style={{ color: "#9ca3af" }}> · {po.hh.toLocaleString("pt-BR")} h · {formatoBRL(po.custoRef)}</span> : null}{ph.fonte === "escritório" ? <span style={{ color: "#b45309" }}> (escritório)</span> : null}</span> : null; })}
+                  <summary style={{ cursor: "pointer", color: "#111827" }}>Preço da hora por ofício ({referenciaSinapi(data)})</summary>
+                  <div style={{ marginTop: 6, color: "#111827" }}>
+                    {oficios.map((o) => { const ph = mo.precoHora[o.id]; const po = mo.porOficio[o.id]; return ph ? <span key={o.id} style={{ display: "inline-block", marginRight: 14, marginBottom: 4 }}>{o.nome.split(" /")[0]} <b>{formatoBRL(ph.preco)}/h</b>{po ? <span style={{ color: "#6b7280" }}> · {po.hh.toLocaleString("pt-BR")} h · {formatoBRL(po.custoRef)}</span> : null}{ph.fonte === "escritório" ? <span style={{ color: "#b45309" }}> (escritório)</span> : null}</span> : null; })}
                   </div>
                 </details>
-                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: "#4b5563", marginTop: 8 }}>
                   Referência, não orçamento: HH das composições SINAPI × preço da hora "com encargos complementares" (salário, encargos, EPI, alimentação, transporte). O contratado por empreitada embute lucro, ferramentas maiores e o risco do prestador — diferença de até ±30% é normal; acima disso vale revisar a taxa por m² em Insumos. Elétrica e hidráulica só medem os pontos por ambiente (sem quadro, prumadas, ligação e ramal externo) — o contratado cobre mais. "Com eficiência" converte para as horas que a sua equipe gasta de fato. Ajuste o preço da hora em Insumos → Composições → Produtividade.
                 </div>
               </div>
@@ -13881,7 +13881,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
           {aba === "medicoes" && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640, width: "100%" }}>
-                <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                   <th style={{ padding: "6px 8px" }}>Etapa</th><th style={{ padding: "6px 8px" }}>Serviço</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Quantidade</th><th style={{ padding: "6px 8px" }}>Horas por ofício</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Mão de obra SINAPI</th><th style={{ padding: "6px 8px" }}>Fonte</th>
                 </tr></thead>
                 <tbody>
@@ -13889,25 +13889,25 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                     const et = res.rede.find((e) => e.id === m.etapa);
                     return (
                       <tr key={i} style={{ borderTop: "1px solid #f3f4f6" }} title={m.nota || ""}>
-                        <td style={{ padding: "6px 8px", color: "#6b7280", whiteSpace: "nowrap" }}>{et ? et.nome : m.etapa}</td>
-                        <td style={{ padding: "6px 8px", color: "#262421" }}>{m.nome}{m.nota ? <span style={{ color: "#9ca3af" }}> · {m.nota}</span> : null}</td>
+                        <td style={{ padding: "6px 8px", color: "#4b5563", whiteSpace: "nowrap" }}>{et ? et.nome : m.etapa}</td>
+                        <td style={{ padding: "6px 8px", color: "#111827" }}>{m.nome}{m.nota ? <span style={{ color: "#6b7280" }}> · {m.nota}</span> : null}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{m.qtd.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} {m.unidade}</td>
-                        <td style={{ padding: "6px 8px", color: "#374151" }}>{Object.keys(m.horas).map((of) => `${of} ${Math.round(m.horas[of])} h`).join(" · ")}</td>
+                        <td style={{ padding: "6px 8px", color: "#111827" }}>{Object.keys(m.horas).map((of) => `${of} ${Math.round(m.horas[of])} h`).join(" · ")}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{formatoBRL(m.custoRef || 0)}</td>
-                        <td style={{ padding: "6px 8px", color: "#9ca3af", whiteSpace: "nowrap" }}>{m.fonte}</td>
+                        <td style={{ padding: "6px 8px", color: "#6b7280", whiteSpace: "nowrap" }}>{m.fonte}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Quantidades derivadas dos mesmos dados do orçamento (áreas de parede, laje, telhado, volumes de concreto, aço, ambientes). Horas por unidade editáveis em Insumos → Composições → Produtividade.</div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>Quantidades derivadas dos mesmos dados do orçamento (áreas de parede, laje, telhado, volumes de concreto, aço, ambientes). Horas por unidade editáveis em Insumos → Composições → Produtividade.</div>
             </div>
           )}
 
           {aba === "comparar" && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 560, width: "100%" }}>
-                <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                   <th style={{ padding: "6px 8px" }}>Etapa</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Simplificado (dias)</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Produtividade (dias)</th>
@@ -13920,10 +13920,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                     const dif = p && e.duracao > 0 ? (p.duracao - e.duracao) / e.duracao : 0;
                     return (
                       <tr key={e.id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 8px", color: "#262421" }}>{e.nome}</td>
+                        <td style={{ padding: "6px 8px", color: "#111827" }}>{e.nome}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right" }}>{Math.round(e.duracao)}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{p ? Math.round(p.duracao) : "—"}{p && !p.hh ? <span style={{ color: "#9ca3af" }}> *</span> : null}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{p && p.hh ? fmtHorasCrono(p.hhTotal) : "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{p ? Math.round(p.duracao) : "—"}{p && !p.hh ? <span style={{ color: "#6b7280" }}> *</span> : null}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{p && p.hh ? fmtHorasCrono(p.hhTotal) : "—"}</td>
                         <td style={{ padding: "6px 8px", color: Math.abs(dif) > 0.5 ? "#b45309" : "#6b7280" }}>{p && p.hh ? `${dif > 0 ? "+" : ""}${Math.round(dif * 100)}%` : ""}</td>
                       </tr>
                     );
@@ -13937,14 +13937,14 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                   </tr>
                 </tbody>
               </table>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>* etapa sem serviço medido: usa a duração paramétrica nos dois modos. Diferença grande numa etapa com HH indica equipe irreal para ela ou tabela desatualizada — o realizado das obras calibra a eficiência.</div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>* etapa sem serviço medido: usa a duração paramétrica nos dois modos. Diferença grande numa etapa com HH indica equipe irreal para ela ou tabela desatualizada — o realizado das obras calibra a eficiência.</div>
             </div>
           )}
 
           {podeEditar && (
             <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button style={C.btn} onClick={salvar}>Salvar cronograma</button>
-              {salvo.geradoEm && <span style={{ fontSize: 11, color: "#9ca3af" }}>salvo em {new Date(salvo.geradoEm).toLocaleString("pt-BR")} · {salvo.prazoMeses} meses</span>}
+              {salvo.geradoEm && <span style={{ fontSize: 11, color: "#6b7280" }}>salvo em {new Date(salvo.geradoEm).toLocaleString("pt-BR")} · {salvo.prazoMeses} meses</span>}
             </div>
           )}
         </div>
@@ -13964,8 +13964,8 @@ function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobil
     <div style={wrap}>
       <button onClick={onVoltar} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#262421" }}>Cronograma — {obra.nome}</div>
-        <div style={{ fontSize: 12, color: "#6b7280" }}>prazo pela tabela do escritório ou por produtividade (HH SINAPI × equipe), caminho crítico, desembolso por mês e mão de obra de referência</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Cronograma — {obra.nome}</div>
+        <div style={{ fontSize: 12, color: "#4b5563" }}>prazo pela tabela do escritório ou por produtividade (HH SINAPI × equipe), caminho crítico, desembolso por mês e mão de obra de referência</div>
       </div>
       {!temProjeto ? (
         <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "14px 16px", fontSize: 12.5, color: "#92400e" }}>
@@ -13975,7 +13975,7 @@ function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobil
       ) : (
         <div>
           {!obra.orcamento && (
-            <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 14px", fontSize: 12, color: "#374151", marginBottom: 12 }}>
+            <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 14px", fontSize: 12, color: "#111827", marginBottom: 12 }}>
               Orçamento ainda não gerado: prazo e equipe já saem do projeto; o físico-financeiro e a comparação de mão de obra aparecem depois de calcular o orçamento.
             </div>
           )}
@@ -14018,14 +14018,14 @@ function CronogramaEditor({ data, save, podeEditar }) {
 
   return (
     <div>
-      <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 10 }}>
+      <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 10 }}>
         Prazo total por área construída (modo simplificado) e rede de etapas com a duração-base de cada uma. A duração-base é um peso: o VICKE escala todas até o caminho crítico fechar no prazo da tabela (ou no prazo-alvo digitado na obra).
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) 1fr", gap: 16, alignItems: "start" }}>
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 }}>
           <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Prazo por área (meses, térrea)</div>
           <table style={{ borderCollapse: "collapse", fontSize: 12 }}>
-            <thead><tr style={{ color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}><th style={{ padding: "4px 8px", textAlign: "right" }}>m²</th><th style={{ padding: "4px 8px", textAlign: "right" }}>meses</th></tr></thead>
+            <thead><tr style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}><th style={{ padding: "4px 8px", textAlign: "right" }}>m²</th><th style={{ padding: "4px 8px", textAlign: "right" }}>meses</th></tr></thead>
             <tbody>
               {tabela.map((l, i) => (
                 <tr key={i}>
@@ -14033,36 +14033,36 @@ function CronogramaEditor({ data, save, podeEditar }) {
                   <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.1" style={input} disabled={!podeEditar} value={l.terrea} onChange={(e) => setTabela(i, "terrea", e.target.value)} /></td>
                 </tr>
               ))}
-              <tr><td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>Sobrado: +</td>
+              <tr><td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>Sobrado: +</td>
                 <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.5" style={input} disabled={!podeEditar} value={extraSobradoMeses(data)} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, sobradoExtra: Number(e.target.value) || 0 })} /></td></tr>
             </tbody>
           </table>
-          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Interpolado entre as linhas; acima da última, segue a inclinação do último trecho. Tabela do modelo antigo do escritório.</div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Interpolado entre as linhas; acima da última, segue a inclinação do último trecho. Tabela do modelo antigo do escritório.</div>
           {editouTabela && podeEditar && <button style={{ ...INS_S.btnGhost, marginTop: 6 }} onClick={restaurarTabela}>Restaurar tabela padrão</button>}
-          {!editouTabela && seedTab.length > 0 && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Valores padrão.</div>}
+          {!editouTabela && seedTab.length > 0 && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Valores padrão.</div>}
         </div>
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto" }}>
           <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Rede de etapas</div>
           <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%", minWidth: 640 }}>
-            <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+            <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
               <th style={{ padding: "4px 8px" }}>Etapa</th><th style={{ padding: "4px 8px" }}>Grupo</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Duração-base (meses)</th><th style={{ padding: "4px 8px" }}>Começa quando</th><th style={{ padding: "4px 8px" }}>Só se</th>
             </tr></thead>
             <tbody>
               {etapas.map((e) => (
                 <tr key={e.id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "4px 8px", color: "#262421", whiteSpace: "nowrap" }}>{e.nome}{e.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6 }}>editado</span>}</td>
-                  <td style={{ padding: "4px 8px", color: "#6b7280" }}>{e.grupo}</td>
+                  <td style={{ padding: "4px 8px", color: "#111827", whiteSpace: "nowrap" }}>{e.nome}{e.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6 }}>editado</span>}</td>
+                  <td style={{ padding: "4px 8px", color: "#4b5563" }}>{e.grupo}</td>
                   <td style={{ padding: "4px 8px", textAlign: "right" }}><input type="number" step="0.5" min="0" style={input} disabled={!podeEditar} value={e.duracaoBase} onChange={(ev) => setDuracao(e.id, ev.target.value)} /></td>
-                  <td style={{ padding: "4px 8px", color: "#6b7280", fontSize: 11.5 }}>
+                  <td style={{ padding: "4px 8px", color: "#4b5563", fontSize: 11.5 }}>
                     {(e.predecessoras || []).length === 0 ? "início da obra" : (e.predecessoras || []).map((l) => l.tipo === "SS" ? `${nomeDe(l.id)} a ${Math.round((l.avanco || 0) * 100)}%` : `${nomeDe(l.id)} termina${l.lag ? ` (${l.lag > 0 ? "+" : ""}${l.lag} d)` : ""}`).join(" · ")}
                   </td>
-                  <td style={{ padding: "4px 8px", color: "#9ca3af" }}>{e.condicao || ""}</td>
+                  <td style={{ padding: "4px 8px", color: "#6b7280" }}>{e.condicao || ""}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {cfg.etapas && Object.keys(cfg.etapas).length > 0 && podeEditar && <button style={{ ...INS_S.btnGhost, marginTop: 6 }} onClick={restaurarEtapas}>Restaurar durações padrão</button>}
-          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Predecessoras e condições vêm da rede padrão (várias por etapa; "a 50%" = começa quando a anterior está na metade). Etapa que não existe na obra (sem arrimo, térrea…) sai da rede e suas dependências passam adiante.</div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Predecessoras e condições vêm da rede padrão (várias por etapa; "a 50%" = começa quando a anterior está na metade). Etapa que não existe na obra (sem arrimo, térrea…) sai da rede e suas dependências passam adiante.</div>
         </div>
       </div>
     </div>
@@ -14115,10 +14115,10 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
 
   return (
     <div>
-      <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 10 }}>
+      <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 10 }}>
         Horas por unidade de serviço, por ofício — composições analíticas do SINAPI (base SP). É a produtividade de referência; a eficiência da equipe (na obra) ajusta para a realidade do canteiro. Zere as horas de um serviço que sua obra não tem (ex.: forro de gesso) ou troque pelo seu número.
       </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12, color: "#374151", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12, color: "#111827", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
         <span>
           <b>{referenciaSinapi(data)}</b>
           {be && be.coletadoEm ? ` · atualizada automaticamente pelo VICKE em ${be.coletadoEm.split("-").reverse().join("/")}` : " · valores da semente (o VICKE atualiza sozinho quando a Caixa publica a base nova)"}
@@ -14131,14 +14131,14 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, marginBottom: 12, overflowX: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
           <div style={{ fontWeight: 600, fontSize: 12.5 }}>Preço da hora por ofício ({referenciaSinapi(data)})</div>
-          <label style={{ fontSize: 12, color: "#374151" }}>Regime padrão:{" "}
+          <label style={{ fontSize: 12, color: "#111827" }}>Regime padrão:{" "}
             <select value={regime} disabled={!podeEditar} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, regimeHora: e.target.value })} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontFamily: "inherit", fontSize: 12 }}>
               <option value="desonerado">desonerado</option><option value="onerado">onerado</option>
             </select>
           </label>
         </div>
         <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640 }}>
-          <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+          <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
             <th style={{ padding: "4px 8px" }}>Ofício</th><th style={{ padding: "4px 8px" }}>SINAPI</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Desonerado</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Onerado</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Do escritório (R$/h)</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Em uso</th>
           </tr></thead>
           <tbody>
@@ -14146,10 +14146,10 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
               const s = precoSeed[o.id]; const ov = cfg.precoHora && cfg.precoHora[o.id]; const at = precoAtivo[o.id];
               return (
                 <tr key={o.id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "4px 8px", color: "#262421" }}>{o.nome}</td>
-                  <td style={{ padding: "4px 8px", color: "#9ca3af" }}>{s ? s.codigo : "—"}</td>
-                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#6b7280" }}>{s ? formatoBRL(s.desonerado) : "—"}</td>
-                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#6b7280" }}>{s ? formatoBRL(s.onerado) : "—"}</td>
+                  <td style={{ padding: "4px 8px", color: "#111827" }}>{o.nome}</td>
+                  <td style={{ padding: "4px 8px", color: "#6b7280" }}>{s ? s.codigo : "—"}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#4b5563" }}>{s ? formatoBRL(s.desonerado) : "—"}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#4b5563" }}>{s ? formatoBRL(s.onerado) : "—"}</td>
                   <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.01" min="0" style={input} disabled={!podeEditar} value={ov != null ? ov : ""} placeholder="—" onChange={(e) => setPrecoHora(o.id, e.target.value)} /></td>
                   <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{at ? formatoBRL(at.preco) : "—"}{at && at.fonte === "escritório" ? <span style={{ color: "#b45309", fontWeight: 400, fontSize: 10, marginLeft: 4 }}>escritório</span> : null}</td>
                 </tr>
@@ -14157,11 +14157,11 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
             })}
           </tbody>
         </table>
-        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Hora "com encargos complementares" (salário + encargos + EPI, ferramentas, alimentação, transporte, exames, seguro). Multiplica as HH da obra para dar a referência de mão de obra por prestador, no bloco Cronograma → Mão de obra.</div>
+        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Hora "com encargos complementares" (salário + encargos + EPI, ferramentas, alimentação, transporte, exames, seguro). Multiplica as HH da obra para dar a referência de mão de obra por prestador, no bloco Cronograma → Mão de obra.</div>
       </div>
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%", minWidth: 900 }}>
-          <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+          <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
             <th style={{ padding: "4px 8px" }}>Serviço</th><th style={{ padding: "4px 8px" }}>Un.</th>
             {usados.map((o) => <th key={o.id} style={{ padding: "4px 6px", textAlign: "right" }}>{o.nome.split(" /")[0]}</th>)}
             <th style={{ padding: "4px 8px" }}>Fonte</th><th />
@@ -14171,15 +14171,15 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
               const s = servicos[id];
               return (
                 <tr key={id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "4px 8px", color: "#262421" }}>{s.nome}{s.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6 }}>editado</span>}</td>
-                  <td style={{ padding: "4px 8px", color: "#6b7280" }}>{s.unidade}</td>
+                  <td style={{ padding: "4px 8px", color: "#111827" }}>{s.nome}{s.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6 }}>editado</span>}</td>
+                  <td style={{ padding: "4px 8px", color: "#4b5563" }}>{s.unidade}</td>
                   {usados.map((o) => (
                     <td key={o.id} style={{ padding: "3px 6px", textAlign: "right" }}>
                       <input type="number" step="0.001" min="0" style={{ ...input, color: (seed[id] && seed[id].horas[o.id] != null) || (s.horas[o.id] != null) ? "#262421" : "#d1d5db" }} disabled={!podeEditar}
                         value={s.horas[o.id] != null ? s.horas[o.id] : ""} onChange={(e) => setHoras(id, o.id, e.target.value)} />
                     </td>
                   ))}
-                  <td style={{ padding: "4px 8px", color: "#9ca3af", whiteSpace: "nowrap", fontSize: 11 }}>{s.fonte}</td>
+                  <td style={{ padding: "4px 8px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 11 }}>{s.fonte}</td>
                   <td style={{ padding: "4px 8px" }}>{s.editado && podeEditar && <button style={INS_S.btnGhost} onClick={() => restaurar(id)}>Restaurar</button>}</td>
                 </tr>
               );
@@ -15448,7 +15448,7 @@ const C = {
   label:    { fontSize:12, color:"#4b5563", fontWeight:600, display:"block", marginBottom:5 },
   btn:      { background:"#111827", color:"#fff", border:"none", borderRadius: 12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
   btnSec:   { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-  btnGhost: { background:"none", border:"none", color:"#6b7280", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+  btnGhost: { background:"none", border:"none", color:"#4b5563", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
   grid3:    { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
@@ -15809,7 +15809,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
     return (
       <div data-vk-ui="1" style={{ padding:"24px 28px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
         <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Clientes</h2>
-        <div style={{ color:"#6b7280", fontSize:13, marginTop:4 }}>Carregando…</div>
+        <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Carregando…</div>
       </div>
     );
   }
@@ -15926,12 +15926,12 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
       if (isInativo) {
         if (c.inativadoAutomaticamente && c.inativadoEm) {
           const meses = Math.floor((Date.now() - new Date(c.inativadoEm).getTime()) / (1000 * 60 * 60 * 24 * 30));
-          return <span style={{ color:"#6b7280" }}>Inativo há {meses} {meses === 1 ? "mês" : "meses"} · automático</span>;
+          return <span style={{ color:"#4b5563" }}>Inativo há {meses} {meses === 1 ? "mês" : "meses"} · automático</span>;
         }
         if (c.inativadoEm) {
-          return <span style={{ color:"#6b7280" }}>Inativado em {new Date(c.inativadoEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}</span>;
+          return <span style={{ color:"#4b5563" }}>Inativado em {new Date(c.inativadoEm).toLocaleDateString("pt-BR", { day:"2-digit", month:"short" }).replace(".", "")}</span>;
         }
-        return <span style={{ color:"#6b7280" }}>Inativo</span>;
+        return <span style={{ color:"#4b5563" }}>Inativo</span>;
       }
 
       // Sem atividade: mostra "cliente inativa em X dias"
@@ -15946,9 +15946,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           if (status.inativaEm <= 30) {
             return <span style={{ color:"#4b5563" }}>Inativa em {status.inativaEm} dias</span>;
           }
-          return <span style={{ color:"#6b7280" }}>Sem serviço ativo</span>;
+          return <span style={{ color:"#4b5563" }}>Sem serviço ativo</span>;
         }
-        return <span style={{ color:"#6b7280" }}>Novo cliente</span>;
+        return <span style={{ color:"#4b5563" }}>Novo cliente</span>;
       }
 
       // Cliente com serviços ativos: renderiza chips
@@ -15956,9 +15956,9 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         const corAlerta = chip.alerta === "vermelho" ? "#111827" : null;
         return (
           <span key={i} style={{ color:"#111827" }}>
-            {i > 0 && <span style={{ color:"#6b7280", margin:"0 6px" }}>·</span>}
+            {i > 0 && <span style={{ color:"#4b5563", margin:"0 6px" }}>·</span>}
             <span>{chip.tipo}</span>
-            <span style={{ color:"#6b7280" }}> ({chip.estado})</span>
+            <span style={{ color:"#4b5563" }}> ({chip.estado})</span>
             {chip.info && (
               <span style={{ color:corAlerta || "#4b5563", marginLeft:4, fontWeight: corAlerta ? 600 : 400 }}>
                 {chip.info}
@@ -15999,7 +15999,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             </select>
           ) : (
             <button onClick={e=>{e.stopPropagation();openEdit(c);}}
-              style={{ fontSize:11, color:"#6b7280", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 6px" }}
+              style={{ fontSize:11, color:"#4b5563", background:"none", border:"none", cursor:"pointer", fontFamily:"inherit", padding:"4px 6px" }}
               title="Editar">⋯</button>
           )}
         </div>
@@ -16026,7 +16026,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
               <div>
                 <div style={{ fontSize:17, fontWeight:700, color:"#111827" }}>Clientes</div>
-                <div style={{ fontSize:12, color:"#6b7280" }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
+                <div style={{ fontSize:12, color:"#4b5563" }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
               </div>
               {perm.podeEditar && <button style={C.btn} onClick={openNew}>+ Novo</button>}
             </div>
@@ -16055,7 +16055,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           {/* Cards da aba ativa */}
           <div style={{ flex:1, overflowY:"auto", padding:"12px 16px" }}>
             {cardsAba.length === 0 ? (
-              <div style={{ textAlign:"center", padding:"48px 0", color:"#6b7280", fontSize:13 }}>
+              <div style={{ textAlign:"center", padding:"48px 0", color:"#4b5563", fontSize:13 }}>
                 <div style={{ fontSize:28, marginBottom:8 }}>—</div>
                 Nenhum cliente em {colAtual.label}
               </div>
@@ -16074,7 +16074,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div>
             <div style={{ fontSize:18, fontWeight:700, color:"#111827" }}>Clientes</div>
-            <div style={{ fontSize:13, color:"#6b7280", marginTop:2 }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
+            <div style={{ fontSize:13, color:"#4b5563", marginTop:2 }}>{data.clientes.length} cadastrado{data.clientes.length!==1?"s":""}</div>
           </div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
             <input style={{ ...C.input, width:220 }} placeholder="Buscar..." value={busca} onChange={e=>setBusca(e.target.value)} />
@@ -16100,7 +16100,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                     
                     <span style={{ fontSize:13, fontWeight:600, color:"#111827" }}>{col.label}</span>
                   </div>
-                  <span style={{ fontSize:12, color:"#6b7280", background:"#f3f4f6", borderRadius: 14, padding:"1px 8px" }}>{cards.length}</span>
+                  <span style={{ fontSize:12, color:"#4b5563", background:"#f3f4f6", borderRadius: 14, padding:"1px 8px" }}>{cards.length}</span>
                 </div>
                 {/* Cards */}
                 <div style={{ flex:1, overflowY:"auto", padding:"10px 10px" }}>
@@ -16114,7 +16114,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                     </div>
                   ))}
                   {cards.length === 0 && (
-                    <div style={{ textAlign:"center", padding:"24px 0", color:"#6b7280", fontSize:12 }}>
+                    <div style={{ textAlign:"center", padding:"24px 0", color:"#4b5563", fontSize:12 }}>
                       Arraste um cliente aqui
                     </div>
                   )}
@@ -16157,7 +16157,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                 <div style={{ width:40, height:40, borderRadius: 14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{c.nome}</div>
-                  <div style={{ fontSize:12, color:"#6b7280" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
+                  <div style={{ fontSize:12, color:"#4b5563" }}>{c.cpfCnpj}{c.cidade?` · ${c.cidade}`:""}</div>
                 </div>
                 <div style={{ display:"flex", gap:6, alignItems:"center" }} onClick={e=>e.stopPropagation()}>
                   <span style={{ fontSize:12, color:"#111827", fontWeight:600 }}>{col.label}</span>
@@ -16339,7 +16339,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
               <input className="vk-fc-input" style={FC.input} value={form.representanteCpf || ""} onChange={e=>setForm({...form,representanteCpf:e.target.value})} placeholder="000.000.000-00" />
             </div>
           </div>
-          <div style={{ fontSize:11.5, color:"#6b7280", marginBottom:12 }}>Usado no preâmbulo e na assinatura dos contratos gerados.</div>
+          <div style={{ fontSize:11.5, color:"#4b5563", marginBottom:12 }}>Usado no preâmbulo e na assinatura dos contratos gerados.</div>
           <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontSize:13,color:VK.inkSoft}}>
             <input className="vk-fc-check" type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Cliente ativo
           </label>
@@ -16418,7 +16418,7 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
       </div>
 
       {orcamentos.length === 0 ? (
-        <div style={{ padding: "20px", textAlign: "center", color:"#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+        <div style={{ padding: "20px", textAlign: "center", color:"#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
           Nenhum projeto cadastrado.
         </div>
       ) : (
@@ -16434,7 +16434,7 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
                 onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color:"#111827" }}>{orc.tipo || "Projeto"}{orc.subtipo ? ` — ${orc.subtipo}` : ""}</div>
-                  <div style={{ fontSize: 11, color:"#6b7280", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ fontSize: 11, color:"#4b5563", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <span style={{ fontSize:12, color:"#111827", fontWeight:600 }}>{sts.label}</span>
                     {orc.padrao && <span>Padrão: {orc.padrao}</span>}
                   </div>
@@ -16813,12 +16813,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
           <div style={{ display: "flex", gap: 20, textAlign: "right" }}>
             <div>
-              <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5 }}>Total estimado</div>
+              <div style={{ fontSize: 11, color: "#4b5563", textTransform: "uppercase", letterSpacing: 0.5 }}>Total estimado</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtBRL(totalPL)}</div>
             </div>
             {totalRealizado > 0 && (
               <div>
-                <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5 }}>Já pago</div>
+                <div style={{ fontSize: 11, color: "#4b5563", textTransform: "uppercase", letterSpacing: 0.5 }}>Já pago</div>
                 <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtBRL(totalRealizado)}</div>
               </div>
             )}
@@ -16836,7 +16836,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         </div>
 
         {itensPL.length === 0 ? (
-          <div style={{ padding: "24px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
+          <div style={{ padding: "24px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
             Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
           </div>
         ) : visaoPL === "conta" ? (
@@ -16888,7 +16888,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <div style={{ height: 6, background: "#f3f4f6", borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
                     <div style={{ height: "100%", width: `${pct}%`, background: "#111827", borderRadius: 4 }} />
                   </div>
-                  <div style={{ fontSize: 11, color: "#6b7280" }}>{pct.toFixed(1)}% do total · {p.itens.length} {p.itens.length !== 1 ? "itens" : "item"}</div>
+                  <div style={{ fontSize: 11, color: "#4b5563" }}>{pct.toFixed(1)}% do total · {p.itens.length} {p.itens.length !== 1 ? "itens" : "item"}</div>
                 </div>
               );
             })}
@@ -17009,7 +17009,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <option value="">— escolher o tipo de profissional —</option>
             {TIPOS_PROFISSIONAL.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
           </select>
-          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>São os mesmos prestadores de serviço do catálogo de insumos. O tipo já sugere o regime do contrato e o objeto.</div>
         </div>
 
         <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
@@ -17026,7 +17026,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </button>
             </div>
             {tipoP && tipoP.categorias.length > 0 && prestadoresDisponiveis.length === 0 && (
-              <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]}. Use ＋ Novo para cadastrar.</div>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Nenhum prestador cadastrado como {tipoP.categorias[0]}. Use ＋ Novo para cadastrar.</div>
             )}
           </div>
           <div>
@@ -17041,7 +17041,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             }}>
               {ESCOPOS_FORNECIMENTO.map(e2 => <option key={e2.id} value={e2.id}>{e2.nome}</option>)}
             </select>
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>{modelo.resumo}</div>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>{modelo.resumo}</div>
           </div>
         </div>
 
@@ -17102,7 +17102,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
             <label style={C.label}>Objeto do contrato</label>
             <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={objetoPadrao(g.tipoProfissional, escopo) || modelo.subtitulo} />
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
               {objetoEditado
                 ? <>Texto editado à mão — não é mais reescrito quando você troca o tipo. <button type="button" onClick={() => setG("objeto", objetoPadrao(g.tipoProfissional, escopo))} style={{ background: "none", border: "none", padding: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>Voltar ao padrão</button></>
                 : "Escrito a partir do tipo de profissional e do que o contrato inclui. Pode ser editado."}
@@ -17111,7 +17111,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ gridColumn: isMobile ? "auto" : "1 / -1" }}>
             <label style={C.label}>Endereço da obra</label>
             <input style={C.input} value={g.enderecoObra || ""} onChange={e => setG("enderecoObra", e.target.value)} placeholder={enderecoDaObra(obraSelecionada, cliente) || "em branco, usa o endereço do cadastro"} />
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Em branco, o contrato usa o endereço do cadastro da obra — ou o do cliente, quando a obra está marcada como "Endereço do cliente".</div>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Em branco, o contrato usa o endereço do cadastro da obra — ou o do cliente, quando a obra está marcada como "Endereço do cliente".</div>
           </div>
           <div>
             <label style={C.label}>Prazo de execução</label>
@@ -17128,7 +17128,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div>
             <label style={C.label}>Data de assinatura</label>
             <input style={C.input} type="date" value={g.dataAssinatura || ""} onChange={e => setG("dataAssinatura", e.target.value)} />
-            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Vem com a data de hoje; é a data que fecha o contrato, acima das assinaturas.</div>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Vem com a data de hoje; é a data que fecha o contrato, acima das assinaturas.</div>
           </div>
           <div><label style={C.label}>Status</label><select style={{ ...C.input, cursor: "pointer" }} value={g.status} onChange={e => setG("status", e.target.value)}>{Object.entries(statusContrato).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
         </div>
@@ -17140,7 +17140,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div>
               <label style={C.label}>Valor total (R$)</label>
               <CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" disabled={(g.itens || []).some(i => Number(i.valor) > 0)} />
-              <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
             </div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "flex-end", fontSize: 14, fontWeight: 700, color: "#111827" }}>
               Total: {fmtMoedaCtr(total)}
@@ -17214,7 +17214,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {/* Cláusulas opcionais */}
         <div style={bloco}>
           <div style={tituloBloco}>Cláusulas do contrato</div>
-          <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>Marque o que entra neste contrato. O texto e a numeração se ajustam sozinhos.</div>
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>Marque o que entra neste contrato. O texto e a numeração se ajustam sozinhos.</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
             {CONTRATO_OPCOES.map(op => (
               <div key={op.id} style={{ border: "1px solid rgba(38,36,33,0.10)", borderRadius: 10, padding: "9px 11px", background: ligada(op.id) ? "#fff" : "#fafafa" }}>
@@ -17222,7 +17222,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <input type="checkbox" checked={ligada(op.id)} onChange={e => setOpcao(op.id, e.target.checked)} style={{ marginTop: 3, cursor: "pointer" }} />
                   <span>
                     <span style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>{op.label}</span>
-                    {op.ajuda && <span style={{ display: "block", fontSize: 11, color: "#6b7280", marginTop: 2 }}>{op.ajuda}</span>}
+                    {op.ajuda && <span style={{ display: "block", fontSize: 11, color: "#4b5563", marginTop: 2 }}>{op.ajuda}</span>}
                   </span>
                 </label>
                 {ligada(op.id) && op.especifica && (
@@ -17267,7 +17267,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ marginBottom: 12 }}>
           <label style={C.label}>Exclusões do objeto (o que não entra)</label>
           <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={g.exclusoes || ""} onChange={e => setG("exclusoes", e.target.value)} placeholder="ex.: o lixamento do concreto e a montagem hidráulica da piscina" />
-          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Comece em minúscula para o contrato abrir com "Não integram o objeto deste contrato:". Começando em maiúscula, o seu texto entra como está.</div>
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Comece em minúscula para o contrato abrir com "Não integram o objeto deste contrato:". Começando em maiúscula, o seu texto entra como está.</div>
         </div>
 
         <div style={bloco}>
@@ -17453,7 +17453,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         </div>
 
         {contratosDaObra.length === 0 ? (
-          <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+          <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
             Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
           </div>
         ) : (
@@ -17464,7 +17464,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 <div key={contrato.id} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "start", gap: 10 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{contrato.nomeContratado}</div>
-                    <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div style={{ fontSize: 11, color: "#4b5563", marginTop: 4, display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <span style={{ fontSize: 12, color: "#111827", fontWeight: 600 }}>{sts.label}</span>
                       {tipoProfissional(contrato.tipoProfissional) && <span>{tipoProfissional(contrato.tipoProfissional).nome}</span>}
                       {contrato.valor && <span>R$ {parseFloat(contrato.valor).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
@@ -17575,8 +17575,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}
             style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fafafa", cursor: "not-allowed", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#6b7280", textAlign: "center" }}>Documentos</div>
-            <div style={{ fontSize: 11, color: "#6b7280", textAlign: "center" }}>Em breve</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#4b5563", textAlign: "center" }}>Documentos</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>Em breve</div>
           </button>
         </div>
 
@@ -17586,26 +17586,26 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1fr 1fr 1fr", gap: 14 }}>
               {obraSelecionada.status && (
                 <div>
-                  <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Status</div>
+                  <div style={{ fontSize: 11, color: "#4b5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Status</div>
                   <span style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{statusObra[obraSelecionada.status]?.label || obraSelecionada.status}</span>
                 </div>
               )}
               {obraSelecionada.dataInicio && (
                 <div>
-                  <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de início</div>
+                  <div style={{ fontSize: 11, color: "#4b5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de início</div>
                   <div style={{ fontSize: 13, color: "#111827" }}>{new Date(obraSelecionada.dataInicio).toLocaleDateString("pt-BR")}</div>
                 </div>
               )}
               {obraSelecionada.dataFim && (
                 <div>
-                  <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de conclusão</div>
+                  <div style={{ fontSize: 11, color: "#4b5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>Data de conclusão</div>
                   <div style={{ fontSize: 13, color: "#111827" }}>{new Date(obraSelecionada.dataFim).toLocaleDateString("pt-BR")}</div>
                 </div>
               )}
             </div>
             {obraSelecionada.descricao && (
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1.5px solid rgba(38,36,33,0.16)" }}>
-                <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Descrição</div>
+                <div style={{ fontSize: 11, color: "#4b5563", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>Descrição</div>
                 <div style={{ fontSize: 13, color: "#111827", lineHeight: 1.5 }}>{obraSelecionada.descricao}</div>
               </div>
             )}
@@ -17636,7 +17636,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       </div>
 
       {obras.length === 0 ? (
-        <div style={{ padding: "20px", textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+        <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
           Nenhuma obra cadastrada.
         </div>
       ) : (
@@ -32742,44 +32742,44 @@ function Escritorio({ data, save }) {
   }
 
   const E = {
-    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#262421", maxWidth:1200, margin:"0 auto" },
+    wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111827", maxWidth:1200, margin:"0 auto" },
     header: { borderBottom:"1.5px solid rgba(38,36,33,0.14)", padding:"24px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
-    titulo: { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
-    sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
+    titulo: { fontSize:18, fontWeight:700, color:"#111827", margin:0 },
+    sub: { fontSize:13, color:"#4b5563", marginTop:3 },
     abas: { display:"flex", gap:0, borderBottom:"1.5px solid rgba(38,36,33,0.14)", padding:"0 32px" },
-    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #b5652f" : "2px solid transparent", color: ativa ? "#b5652f" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
+    aba: (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #0474f4" : "2px solid transparent", color: ativa ? "#0474f4" : "#4b5563", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body: { padding:"32px", maxWidth:760 },
     secao: { marginBottom:32 },
-    secTitulo: { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
+    secTitulo: { fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     grid2: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 },
     grid3: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16 },
     campo: { display:"flex", flexDirection:"column", gap:5 },
-    label: { fontSize:12, color:"#6b7280", fontWeight:500 },
-    input: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-    select: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
+    label: { fontSize:12, color:"#4b5563", fontWeight:500 },
+    input: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+    select: { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box", cursor:"pointer" },
     divisor: { border:"none", borderTop:"1px solid #f3f4f6", margin:"24px 0" },
     btn: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-    btnAdd: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
+    btnSec: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnAdd: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"7px 14px", fontSize:12, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
     btnSalvo: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit", opacity:0.7 },
     // Equipe
     membroCard: { border:"1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding:"16px", marginBottom:10, display:"flex", justifyContent:"space-between", alignItems:"flex-start" },
-    membroNome: { fontSize:14, fontWeight:600, color:"#262421", marginBottom:2 },
-    membroCargo: { fontSize:12, color:"#9ca3af" },
-    membroInfo: { fontSize:12, color:"#6b7280", marginTop:6, display:"flex", gap:16 },
+    membroNome: { fontSize:14, fontWeight:600, color:"#111827", marginBottom:2 },
+    membroCargo: { fontSize:12, color:"#4b5563" },
+    membroInfo: { fontSize:12, color:"#4b5563", marginTop:6, display:"flex", gap:16 },
     // Modal
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.3)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
     modal: { background:"#fff", borderRadius:14, padding:"28px", width:"100%", maxWidth:520, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 40px rgba(0,0,0,0.15)" },
-    modalTitulo: { fontSize:16, fontWeight:700, color:"#262421", marginBottom:20 },
+    modalTitulo: { fontSize:16, fontWeight:700, color:"#111827", marginBottom:20 },
     // View
-    viewVal: { fontSize:14, color:"#262421", marginBottom:2 },
-    viewLabel: { fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
+    viewVal: { fontSize:14, color:"#111827", marginBottom:2 },
+    viewLabel: { fontSize:11, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4 },
     viewBloco: { display:"flex", flexDirection:"column", gap:3 },
     // Modo visualização vs edição (item 4)
     secaoHeader: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 },
-    btnEditar: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
+    btnEditar: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:500, cursor:"pointer", fontFamily:"inherit", display:"flex", alignItems:"center", gap:6 },
     // Valor "vazio" — aparece quando campo não preenchido em modo visualização
-    viewVazio: { fontSize:14, color:"#9ca3af", fontStyle:"italic", marginBottom:2 },
+    viewVazio: { fontSize:14, color:"#4b5563", fontStyle:"italic", marginBottom:2 },
   };
 
   // Tag de nível de usuário (reusável)
@@ -32827,13 +32827,13 @@ function Escritorio({ data, save }) {
               <img src={form.logo} alt="Logo"
                 style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
             ) : (
-              <span style={{ fontSize: 12, color: "#9ca3af" }}>Sem logo</span>
+              <span style={{ fontSize: 12, color: "#6b7280" }}>Sem logo</span>
             )}
           </div>
 
           {/* Ações */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 10, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 10, lineHeight: 1.5 }}>
               Aparece no cabeçalho das propostas em PDF.<br/>
               Formatos: PNG, JPG ou SVG · Máximo 1MB.
             </div>
@@ -32936,7 +32936,7 @@ function Escritorio({ data, save }) {
               <Campo label="Nome do escritório" valor={form.nome} />
               <Campo label="CNPJ / CPF"         valor={form.cnpj} />
             </div>
-            <div style={{ fontSize:12, color:"#6b7280", fontWeight:500, marginBottom:10 }}>Responsáveis técnicos</div>
+            <div style={{ fontSize:12, color:"#4b5563", fontWeight:500, marginBottom:10 }}>Responsáveis técnicos</div>
             {responsaveis.length === 0 ? (
               <div style={E.viewVazio}>Nenhum responsável cadastrado</div>
             ) : (
@@ -32964,13 +32964,13 @@ function Escritorio({ data, save }) {
               </div>
             </div>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-              <span style={{ fontSize:12, color:"#6b7280", fontWeight:500 }}>Responsáveis técnicos</span>
+              <span style={{ fontSize:12, color:"#4b5563", fontWeight:500 }}>Responsáveis técnicos</span>
               <button style={E.btnAdd} onClick={() => setResponsaveis(r => [...r, { id:uid(), nome:"", cau:"", cpf:"" }])}>
                 + Adicionar
               </button>
             </div>
             {responsaveis.length === 0 && (
-              <div style={{ fontSize:13, color:"#9ca3af", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
+              <div style={{ fontSize:13, color:"#4b5563", fontStyle:"italic", marginBottom:8 }}>Nenhum responsável cadastrado.</div>
             )}
             {responsaveis.map((r, idx) => (
               <div key={r.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr auto", gap:10, marginBottom:10, alignItems:"end" }}>
@@ -32982,7 +32982,7 @@ function Escritorio({ data, save }) {
                   </div>
                 ))}
                 <button onClick={() => setResponsaveis(rs => rs.filter((_,i) => i!==idx))}
-                  style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
+                  style={{ background:"none", border:"none", color:"#4b5563", fontSize:18, cursor:"pointer", padding:"8px", alignSelf:"flex-end" }}>×</button>
               </div>
             ))}
           </>
@@ -33055,7 +33055,7 @@ function Escritorio({ data, save }) {
                   maxLength={9}
                 />
                 {cepLoading && (
-                  <div style={{ fontSize:11, color:"#9ca3af", marginTop:4 }}>Buscando endereço…</div>
+                  <div style={{ fontSize:11, color:"#4b5563", marginTop:4 }}>Buscando endereço…</div>
                 )}
               </div>
               <div style={E.campo}>
@@ -33139,7 +33139,7 @@ function Escritorio({ data, save }) {
       {!perm.podeAlterarConfig && (
         <div style={{
           padding:"12px 14px", background:"#f9fafb", border:"1px solid #f3f4f6",
-          borderRadius: 12, color:"#6b7280", fontSize:12.5, textAlign:"center", marginTop:24,
+          borderRadius: 12, color:"#4b5563", fontSize:12.5, textAlign:"center", marginTop:24,
         }}>
           Somente administradores podem alterar estes dados.
         </div>
@@ -33152,14 +33152,14 @@ function Escritorio({ data, save }) {
     <div style={E.body}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
         <div>
-          <div style={{ fontSize:14, color:"#262421", fontWeight:600 }}>{equipe.length} membro{equipe.length !== 1 ? "s" : ""}</div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>Gerencie os membros da equipe</div>
+          <div style={{ fontSize:14, color:"#111827", fontWeight:600 }}>{equipe.length} membro{equipe.length !== 1 ? "s" : ""}</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>Gerencie os membros da equipe</div>
         </div>
         <button style={E.btn} onClick={() => setNovoMembro({...emptyMembro, id:uid()})}>+ Adicionar membro</button>
       </div>
 
       {equipe.length === 0 ? (
-        <div style={{ textAlign:"center", padding:"60px 0", color:"#9ca3af", fontSize:14 }}>
+        <div style={{ textAlign:"center", padding:"60px 0", color:"#4b5563", fontSize:14 }}>
           Nenhum membro cadastrado ainda.
         </div>
       ) : (
@@ -33176,11 +33176,11 @@ function Escritorio({ data, save }) {
             </div>
             <div style={{ display:"flex", gap:6 }}>
               <button onClick={() => setNovoMembro(m)}
-                style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#4b5563", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                 Editar
               </button>
               <button onClick={() => { setEquipe(eq => eq.filter(x => x.id !== m.id)); save({ ...data, escritorio: { ...form, equipe: equipe.filter(x => x.id !== m.id), responsaveis } }); }}
-                style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
+                style={{ background:"none", border:"none", color:"#4b5563", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
             </div>
           </div>
         ))
@@ -33193,7 +33193,7 @@ function Escritorio({ data, save }) {
           <div style={E.modal}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
               <div style={E.modalTitulo}>{novoMembro.nome ? "Editar membro" : "Novo membro"}</div>
-              <button onClick={() => setNovoMembro(null)} style={{ background:"none", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
+              <button onClick={() => setNovoMembro(null)} style={{ background:"none", border:"none", color:"#4b5563", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:20 }}>
               {[["Nome completo","nome"],["Cargo","cargo"],["E-mail","email"],["Telefone","telefone"],["CAU / CREA","cau"],["CPF","cpf"]].map(([lbl,key]) => (
@@ -33244,10 +33244,10 @@ function Escritorio({ data, save }) {
       <div style={E.body}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
           <div>
-            <div style={{ fontSize:14, color:"#262421", fontWeight:600 }}>
+            <div style={{ fontSize:14, color:"#111827", fontWeight:600 }}>
               {usuarios.length} {usuarios.length === 1 ? "usuário" : "usuários"}
             </div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+            <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>
               Controle quem acessa o sistema e em qual nível de permissão
             </div>
           </div>
@@ -33261,7 +33261,7 @@ function Escritorio({ data, save }) {
         {/* Legenda dos níveis */}
         <div style={{
           background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 14,
-          padding:"12px 14px", marginBottom:20, fontSize:12, lineHeight:1.7, color:"#6b7280",
+          padding:"12px 14px", marginBottom:20, fontSize:12, lineHeight:1.7, color:"#4b5563",
         }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4 }}>
             <span style={{ ...tagBase, background: corNivel.admin.bg, color: corNivel.admin.color }}>Admin</span>
@@ -33278,7 +33278,7 @@ function Escritorio({ data, save }) {
         </div>
 
         {loadingUsuarios && (
-          <div style={{ textAlign:"center", padding:"40px 0", color:"#9ca3af", fontSize:13 }}>
+          <div style={{ textAlign:"center", padding:"40px 0", color:"#4b5563", fontSize:13 }}>
             Carregando usuários…
           </div>
         )}
@@ -33295,7 +33295,7 @@ function Escritorio({ data, save }) {
         )}
 
         {!loadingUsuarios && !erroUsuarios && usuarios.length === 0 && (
-          <div style={{ textAlign:"center", padding:"60px 0", color:"#9ca3af", fontSize:14 }}>
+          <div style={{ textAlign:"center", padding:"60px 0", color:"#4b5563", fontSize:14 }}>
             Nenhum usuário cadastrado ainda.
           </div>
         )}
@@ -33326,14 +33326,14 @@ function Escritorio({ data, save }) {
                   {u.ativo === false && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#f3f4f6", color:"#6b7280", fontWeight:600,
+                      background:"#f3f4f6", color:"#4b5563", fontWeight:600,
                       textTransform:"uppercase", letterSpacing:0.5,
                     }}>Inativo</span>
                   )}
                   {u.precisa_trocar_senha && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#fafafa", color:"#374151", fontWeight:600,
+                      background:"#fafafa", color:"#111827", fontWeight:600,
                       border:"1.5px solid rgba(38,36,33,0.16)",
                       textTransform:"uppercase", letterSpacing:0.5,
                     }} title="Senha foi resetada — usuário precisa trocá-la no próximo login">
@@ -33343,9 +33343,9 @@ function Escritorio({ data, save }) {
                 </div>
                 <div style={E.membroCargo}>{u.email}</div>
                 {membroVinculado && (
-                  <div style={{ fontSize:11.5, color:"#6b7280", marginTop:4 }}>
-                    Vinculado a: <strong style={{ color:"#374151" }}>{membroVinculado.nome}</strong>
-                    {membroVinculado.cargo && <span style={{ color:"#9ca3af" }}> · {membroVinculado.cargo}</span>}
+                  <div style={{ fontSize:11.5, color:"#4b5563", marginTop:4 }}>
+                    Vinculado a: <strong style={{ color:"#111827" }}>{membroVinculado.nome}</strong>
+                    {membroVinculado.cargo && <span style={{ color:"#4b5563" }}> · {membroVinculado.cargo}</span>}
                   </div>
                 )}
               </div>
@@ -33362,7 +33362,7 @@ function Escritorio({ data, save }) {
                     });
                     setConfirmSenha("");
                   }}
-                  style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                  style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#4b5563", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                   Editar
                 </button>
                 {/* Reset de senha — só admin de empresa pode, não pra si mesmo,
@@ -33371,7 +33371,7 @@ function Escritorio({ data, save }) {
                   <button
                     onClick={() => setUsuarioParaResetar(u)}
                     title="Resetar senha do usuário"
-                    style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#6b7280", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    style={{ background:"none", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, color:"#4b5563", padding:"5px 10px", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
                     Resetar senha
                   </button>
                 )}
@@ -33379,7 +33379,7 @@ function Escritorio({ data, save }) {
                   <button
                     onClick={() => pedirConfirmacaoExcluir(u)}
                     title="Excluir usuário"
-                    style={{ background:"none", border:"none", color:"#9ca3af", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
+                    style={{ background:"none", border:"none", color:"#4b5563", fontSize:18, cursor:"pointer", padding:"5px 8px" }}>×</button>
                 )}
               </div>
             </div>
@@ -33396,7 +33396,7 @@ function Escritorio({ data, save }) {
                 </div>
                 <button
                   onClick={() => { setNovoUsuario(null); setConfirmSenha(""); }}
-                  style={{ background:"none", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
+                  style={{ background:"none", border:"none", color:"#4b5563", fontSize:20, cursor:"pointer" }}>×</button>
               </div>
 
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
@@ -33464,7 +33464,7 @@ function Escritorio({ data, save }) {
                     </select>
                   </div>
                   {equipe.length === 0 && (
-                    <div style={{ fontSize:11, color:"#9ca3af", marginTop:5 }}>
+                    <div style={{ fontSize:11, color:"#4b5563", marginTop:5 }}>
                       Nenhum membro cadastrado ainda. Use a opção acima ou a aba Equipe.
                     </div>
                   )}
@@ -33472,7 +33472,7 @@ function Escritorio({ data, save }) {
               </div>
 
               <div style={{ marginBottom:20 }}>
-                <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#374151", cursor:"pointer" }}>
+                <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:13, color:"#111827", cursor:"pointer" }}>
                   <input
                     type="checkbox"
                     checked={novoUsuario.ativo !== false}
@@ -33482,7 +33482,7 @@ function Escritorio({ data, save }) {
                   />
                   Usuário ativo
                   {novoUsuario._editando && novoUsuario.id === usuarioLogadoId && (
-                    <span style={{ fontSize:11, color:"#9ca3af" }}>· não é possível desativar a si mesmo</span>
+                    <span style={{ fontSize:11, color:"#4b5563" }}>· não é possível desativar a si mesmo</span>
                   )}
                 </label>
               </div>
@@ -33510,10 +33510,10 @@ function Escritorio({ data, save }) {
           <div style={E.overlay}>
             <div style={{ ...E.modal, maxWidth: 420 }}>
               <div style={{ ...E.modalTitulo, marginBottom: 12 }}>Excluir usuário</div>
-              <div style={{ fontSize:14, color:"#374151", lineHeight:1.5, marginBottom:8 }}>
+              <div style={{ fontSize:14, color:"#111827", lineHeight:1.5, marginBottom:8 }}>
                 Tem certeza que deseja excluir <strong>{confirmarExcluir.nome}</strong>?
               </div>
-              <div style={{ fontSize:13, color:"#9ca3af", marginBottom:24 }}>
+              <div style={{ fontSize:13, color:"#4b5563", marginBottom:24 }}>
                 Esta ação não pode ser desfeita.
               </div>
               <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -33543,7 +33543,7 @@ function Escritorio({ data, save }) {
             btn:     E.btn,
             btnSec:  E.btnSec,
             input:   E.input,
-            label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
+            label:   { display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
           };
           return (
             <>
@@ -33616,7 +33616,7 @@ function Escritorio({ data, save }) {
     <div style={E.body}>
       <div style={E.secao}>
         <div style={E.secTitulo}>Manutenção automática</div>
-        <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
+        <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.6, marginBottom:16 }}>
           O sistema executa automaticamente, todo dia às 3h da manhã:
           <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
             <li>Expira propostas com mais de 30 dias (marca como "Perdido" e remove imagens salvas)</li>
@@ -33634,7 +33634,7 @@ function Escritorio({ data, save }) {
             <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, padding:"8px 14px" }}>
               ✓ Executado em {new Date(manutResult.executadoEm).toLocaleString("pt-BR")}
               <br/>
-              <span style={{ color:"#374151" }}>
+              <span style={{ color:"#111827" }}>
                 {manutResult.orcamentosExpirados} orçamento(s) expirado(s) · {manutResult.clientesInativados} cliente(s) inativado(s)
               </span>
             </div>
@@ -33824,31 +33824,31 @@ function Admin({ usuario, data, save, initialTab }) {
   }, [aba]);
 
   const S = {
-    wrap:    { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#262421", maxWidth:1200, margin:"0 auto" },
+    wrap:    { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111827", maxWidth:1200, margin:"0 auto" },
     header:  { borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"24px 32px" },
-    titulo:  { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
-    sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
+    titulo:  { fontSize:18, fontWeight:700, color:"#111827", margin:0 },
+    sub:     { fontSize:13, color:"#4b5563", marginTop:3 },
     abas:    { display:"flex", gap:0, borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"0 32px" },
-    aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #b5652f" : "2px solid transparent", color: ativa ? "#b5652f" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
+    aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #0474f4" : "2px solid transparent", color: ativa ? "#0474f4" : "#4b5563", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body:    { padding:"32px" },
     bodyNarrow: { padding:"32px", maxWidth:760 },
     secao:   { marginBottom:32 },
-    secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
+    secTit:  { fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     btn:     { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec:  { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnSec:  { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" },
     modal:   { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     modalLg: { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
-    label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
+    label:   { display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
     input:   { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
     tabela:  { width:"100%", borderCollapse:"collapse", fontSize:13 },
-    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1.5px solid rgba(38,36,33,0.16)", background:"#fafbfc" },
+    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1.5px solid rgba(38,36,33,0.16)", background:"#fafbfc" },
     td:      { padding:"12px", borderBottom:"1px solid #f3f4f6", verticalAlign:"middle" },
-    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#262421", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" },
-    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
-    vazio:   { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"40px 0" },
+    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#111827", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" },
+    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#4b5563", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
+    vazio:   { fontSize:13, color:"#4b5563", textAlign:"center", padding:"40px 0" },
   };
 
   // ── ABA MANUTENÇÃO ────────────────────────────────────────────
@@ -33856,14 +33856,14 @@ function Admin({ usuario, data, save, initialTab }) {
     <div style={S.bodyNarrow} className="vk-adm-body-narrow">
       <div style={S.secao}>
         <div style={S.secTit}>Manutenção automática</div>
-        <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
+        <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.6, marginBottom:16 }}>
           O backend executa automaticamente, todo dia às 3h da manhã (UTC):
           <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
             <li>Expira propostas com mais de 30 dias (marca como "Perdido" e remove imagens salvas pra liberar storage)</li>
             <li>Inativa clientes sem serviço em aberto há 3 meses (com observação automática)</li>
           </ul>
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:20 }}>
           Use o botão abaixo para forçar uma execução agora, sem esperar o horário agendado.
         </div>
         <div style={{ display:"flex", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
@@ -33882,7 +33882,7 @@ function Admin({ usuario, data, save, initialTab }) {
             <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, padding:"8px 14px" }}>
               ✓ Executado em {new Date(manutResult.executadoEm).toLocaleString("pt-BR")}
               <br/>
-              <span style={{ color:"#374151" }}>
+              <span style={{ color:"#111827" }}>
                 {manutResult.orcamentosExpirados} orçamento(s) expirado(s) · {manutResult.clientesInativados} cliente(s) inativado(s)
               </span>
             </div>
@@ -33894,8 +33894,8 @@ function Admin({ usuario, data, save, initialTab }) {
       {confirmManut && (
         <div style={S.overlay} onClick={() => setConfirmManut(false)}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:10 }}>Executar manutenção agora?</div>
-            <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.6 }}>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:10 }}>Executar manutenção agora?</div>
+            <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.6 }}>
               Esta ação vai:<br/>
               · Expirar propostas com mais de 30 dias (marca como Perdido e apaga imagens)<br/>
               · Inativar clientes sem serviço em aberto há 3 meses
@@ -33935,7 +33935,7 @@ function Admin({ usuario, data, save, initialTab }) {
     <div style={S.body} className="vk-adm-body">
 
       {/* Cabeçalho com descrição */}
-      <div style={{ marginBottom:24, fontSize:13, color:"#6b7280", lineHeight:1.6 }}>
+      <div style={{ marginBottom:24, fontSize:13, color:"#4b5563", lineHeight:1.6 }}>
         O Custo Unitário Básico (CUB) é divulgado mensalmente pelos sindicatos da construção.
         O sistema atualiza automaticamente todo dia 10 às 4h. Estados ativos: <b>SP, RJ, MG, SC, PR, RS</b>.
         Use o botão para forçar atualização agora.
@@ -33991,7 +33991,7 @@ function Admin({ usuario, data, save, initialTab }) {
                   ? { ...S.badgeAtiva, background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0" }
                   : s.ultimo_status === "falha"
                   ? S.badgeInativa
-                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#f9fafb", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" };
+                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#4b5563", background:"#f9fafb", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" };
                 const statusLabel = s.ultimo_status === "sucesso" ? "OK"
                                   : s.ultimo_status === "falha" ? "Falha"
                                   : "Nunca coletado";
@@ -34000,7 +34000,7 @@ function Admin({ usuario, data, save, initialTab }) {
                     <td style={{ ...S.td, fontWeight:700 }} data-label="Estado">{s.estado}</td>
                     <td style={S.td} data-label="Valores ativos">{s.qtd_valores}</td>
                     <td style={S.td} data-label="Mês">{fmtCubMes(s.mes_mais_recente)}</td>
-                    <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Última atualização">{fmtCubDate(s.ultima_atualizacao)}</td>
+                    <td style={{ ...S.td, fontSize:12, color:"#4b5563" }} data-label="Última atualização">{fmtCubDate(s.ultima_atualizacao)}</td>
                     <td style={S.td} data-label="Status">
                       <span style={statusBadge}>{statusLabel}</span>
                       {s.ultimo_erro && (
@@ -34030,7 +34030,7 @@ function Admin({ usuario, data, save, initialTab }) {
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:12 }} className="vk-cub-filtro-row">
           <div style={{ ...S.secTit, marginBottom:0 }}>Valores atuais</div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <span style={{ fontSize:12, color:"#6b7280" }}>Filtrar:</span>
+            <span style={{ fontSize:12, color:"#4b5563" }}>Filtrar:</span>
             <select
               value={cubFiltroEstado}
               onChange={e => setCubFiltroEstado(e.target.value)}
@@ -34069,8 +34069,8 @@ function Admin({ usuario, data, save, initialTab }) {
                   <td style={{ ...S.td, textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:600 }} data-label="Valor R$/m²">
                     R$ {fmtCubMoney(v.valor_m2)}
                   </td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Mês">{fmtCubMes(v.mes_referencia)}</td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Fonte">{v.fonte}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#4b5563" }} data-label="Mês">{fmtCubMes(v.mes_referencia)}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#4b5563" }} data-label="Fonte">{v.fonte}</td>
                 </tr>
               ))}
             </tbody>
@@ -34099,7 +34099,7 @@ function Admin({ usuario, data, save, initialTab }) {
             <tbody>
               {cubLogs.map(log => (
                 <tr key={log.id}>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280", whiteSpace:"nowrap" }} data-label="Quando">{fmtCubDate(log.executado_em)}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#4b5563", whiteSpace:"nowrap" }} data-label="Quando">{fmtCubDate(log.executado_em)}</td>
                   <td style={{ ...S.td, fontWeight:600 }} data-label="Estado">{log.estado}</td>
                   <td style={{ ...S.td, fontSize:12 }} data-label="Fonte">{log.fonte}</td>
                   <td style={S.td} data-label="Status">
@@ -34112,7 +34112,7 @@ function Admin({ usuario, data, save, initialTab }) {
                     </span>
                   </td>
                   <td style={S.td} data-label="Valores">{log.valores_qtd ?? "—"}</td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Duração">{log.duracao_ms ? `${log.duracao_ms}ms` : "—"}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#4b5563" }} data-label="Duração">{log.duracao_ms ? `${log.duracao_ms}ms` : "—"}</td>
                   <td style={{ ...S.td, fontSize:11, color:"#991b1b", maxWidth:340 }} data-label="Erro">
                     {log.erro_msg || "—"}
                   </td>
@@ -34282,8 +34282,8 @@ function PainelEmpresas({ S }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Empresas cadastradas</div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111827" }}>Empresas cadastradas</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>
             {loading ? "Carregando..." : `${empresas.length} empresa(s) · ${empresas.filter(e => e.ativo).length} ativa(s)`}
           </div>
         </div>
@@ -34317,18 +34317,18 @@ function PainelEmpresas({ S }) {
               {empresas.map(e => (
                 <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setEmpresaSelecionada(e)}>
                   <td style={S.td} data-label="Nome">
-                    <div style={{ fontWeight:600, color:"#262421" }}>{e.nome}</div>
-                    <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{e.plano || "gratuito"}</div>
+                    <div style={{ fontWeight:600, color:"#111827" }}>{e.nome}</div>
+                    <div style={{ fontSize:11, color:"#4b5563", marginTop:2 }}>{e.plano || "gratuito"}</div>
                   </td>
-                  <td style={{ ...S.td, color:"#6b7280" }} data-label="CNPJ / CPF">{e.cnpj_cpf || "—"}</td>
-                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Usuários">
+                  <td style={{ ...S.td, color:"#4b5563" }} data-label="CNPJ / CPF">{e.cnpj_cpf || "—"}</td>
+                  <td style={{ ...S.td, textAlign:"center", color:"#4b5563" }} data-label="Usuários">
                     {e.usuarios_ativos || 0}
                     {e.usuarios_total > e.usuarios_ativos && (
-                      <span style={{ color:"#9ca3af", marginLeft:4 }}>/ {e.usuarios_total}</span>
+                      <span style={{ color:"#4b5563", marginLeft:4 }}>/ {e.usuarios_total}</span>
                     )}
                   </td>
-                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Orçamentos">{e.orcamentos_total || 0}</td>
-                  <td style={{ ...S.td, color:"#6b7280", fontSize:12 }} data-label="Último login">{formatarDataHora(e.ultimo_login_empresa)}</td>
+                  <td style={{ ...S.td, textAlign:"center", color:"#4b5563" }} data-label="Orçamentos">{e.orcamentos_total || 0}</td>
+                  <td style={{ ...S.td, color:"#4b5563", fontSize:12 }} data-label="Último login">{formatarDataHora(e.ultimo_login_empresa)}</td>
                   <td style={S.td} data-label="Status">
                     <span style={e.ativo ? S.badgeAtiva : S.badgeInativa}>
                       {e.ativo ? "Ativa" : "Inativa"}
@@ -34405,7 +34405,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
     return (
       <div style={S.body} className="vk-adm-body">
         <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
-        <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, color:"#4b5563", fontSize:13 }}>
           <div style={{
             width:14, height:14, borderRadius:"50%",
             border:"2px solid #e5e7eb", borderTopColor:"#9ca3af",
@@ -34443,13 +34443,13 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28, gap:16, flexWrap:"wrap" }}>
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-            <div style={{ fontSize:22, fontWeight:600, color:"#262421", letterSpacing:-0.3 }}>{data.nome}</div>
+            <div style={{ fontSize:22, fontWeight:600, color:"#111827", letterSpacing:-0.3 }}>{data.nome}</div>
             <span style={data.ativo ? S.badgeAtiva : S.badgeInativa}>
               {data.ativo ? "Ativa" : "Inativa"}
             </span>
             {isMasterEmp && <span style={S.tag}>MASTER</span>}
           </div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:4 }}>ID: {data.id}</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:4 }}>ID: {data.id}</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
           <button onClick={() => setModalEdit(true)} style={S.btnSec}>Editar</button>
@@ -34471,7 +34471,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       <div style={{ ...S.secao, marginBottom:32 }}>
         <div style={S.secTit}>
           Métricas
-          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#9ca3af", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
+          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#4b5563", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
         </div>
 
         {/* Cards de totais (snapshot atual) */}
@@ -34486,7 +34486,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
         {/* Atividade últimos 30 dias — só renderiza se metricas chegou (fetch completo) */}
         {data.metricas && (
           <>
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
               Atividade — últimos 30 dias
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:10 }}>
@@ -34496,19 +34496,19 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
             </div>
 
             {/* Status breakdown — pintura horizontal de barras com cores neutras */}
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
               Status atual dos orçamentos
             </div>
             <BarraStatus status={data.metricas.status_orcamentos} />
 
             {/* Gráfico de evolução mensal (SVG inline) */}
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
               Evolução mensal — orçamentos criados
             </div>
             <GraficoMensal mensal={data.metricas.mensal} />
 
             {/* Top usuários por atividade */}
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
               Usuários mais ativos (últimos 30 dias)
             </div>
             <TopUsuarios usuarios={data.metricas.top_usuarios} fmtDataHora={fmtDataHora} />
@@ -34520,11 +34520,11 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       <div style={{ ...S.secao, marginBottom:32 }}>
         <div style={S.secTit}>
           Usuários {data.usuarios !== undefined ? `(${data.usuarios.length})` : ""}
-          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#9ca3af", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
+          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#4b5563", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
         </div>
         {/* Estado: ainda carregando E sem usuários no estado */}
         {carregando && data.usuarios === undefined ? (
-          <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13, padding:"20px 0" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, color:"#4b5563", fontSize:13, padding:"20px 0" }}>
             <div style={{
               width:14, height:14, borderRadius:"50%",
               border:"2px solid #e5e7eb", borderTopColor:"#9ca3af",
@@ -34551,17 +34551,17 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                 {data.usuarios.map(u => (
                   <tr key={u.id}>
                     <td style={S.td} data-label="Nome">
-                      <div style={{ fontWeight:500, color:"#262421" }}>{u.nome}</div>
+                      <div style={{ fontWeight:500, color:"#111827" }}>{u.nome}</div>
                       {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
                       {u.precisa_trocar_senha && (
-                        <div style={{ fontSize:10, color:"#6b7280", marginTop:3, fontWeight:600, textTransform:"uppercase", letterSpacing:0.4 }}>
+                        <div style={{ fontSize:10, color:"#4b5563", marginTop:3, fontWeight:600, textTransform:"uppercase", letterSpacing:0.4 }}>
                           Precisa trocar senha
                         </div>
                       )}
                     </td>
-                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Email">{u.email}</td>
-                    <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }} data-label="Nível">{u.nivel || "—"}</td>
-                    <td style={{ ...S.td, color:"#6b7280", fontSize:12 }} data-label="Último login">{fmtDataHora(u.ultimo_login)}</td>
+                    <td style={{ ...S.td, color:"#4b5563" }} data-label="Email">{u.email}</td>
+                    <td style={{ ...S.td, color:"#4b5563", textTransform:"capitalize" }} data-label="Nível">{u.nivel || "—"}</td>
+                    <td style={{ ...S.td, color:"#4b5563", fontSize:12 }} data-label="Último login">{fmtDataHora(u.ultimo_login)}</td>
                     <td style={S.td} data-label="Status">
                       <span style={u.ativo ? S.badgeAtiva : S.badgeInativa}>
                         {u.ativo ? "Ativo" : "Inativo"}
@@ -34605,8 +34605,8 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
         <div style={{ ...S.secao, marginBottom:32 }}>
           <div style={S.secTit}>Ações administrativas</div>
           <div style={{ border:"1.5px solid rgba(38,36,33,0.16)", background:"#fafafa", borderRadius: 14, padding:"16px" }}>
-            <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom:12 }}>
-              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#262421" }}>Não tem como reverter.</strong>
+            <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.5, marginBottom:12 }}>
+              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#111827" }}>Não tem como reverter.</strong>
               <br/>
               Pra cortar acesso temporariamente, use "Editar → Inativar" — preserva dados.
             </div>
@@ -34672,8 +34672,8 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
 function DetalheCampo({ label, valor }) {
   return (
     <div>
-      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>{label}</div>
-      <div style={{ fontSize:13, color:"#262421", lineHeight:1.4 }}>{valor}</div>
+      <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:13, color:"#111827", lineHeight:1.4 }}>{valor}</div>
     </div>
   );
 }
@@ -34683,7 +34683,7 @@ function DetalheCampo({ label, valor }) {
 function MetricaCard({ label, valor, carregando }) {
   return (
     <div style={{ background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, padding:"14px 16px" }}>
-      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
+      <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
       <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#c9c4bd" : "#262421", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
         {carregando ? "…" : (valor ?? 0)}
       </div>
@@ -34701,7 +34701,7 @@ function BarraStatus({ status }) {
   const total = (status.rascunhos || 0) + (status.abertos || 0) + (status.ganhos || 0) + (status.perdidos || 0);
   if (total === 0) {
     return (
-      <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>
+      <div style={{ fontSize:13, color:"#4b5563", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>
         Nenhum orçamento cadastrado ainda.
       </div>
     );
@@ -34730,10 +34730,10 @@ function BarraStatus({ status }) {
       {/* Legenda com bullets */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:14, marginTop:10 }}>
         {segs.map(s => (
-          <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"#374151" }}>
+          <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"#111827" }}>
             <span style={{ width:9, height:9, borderRadius:2, background:s.cor, display:"inline-block" }} />
             <span style={{ fontWeight:500 }}>{s.label}</span>
-            <span style={{ color:"#9ca3af", fontVariantNumeric:"tabular-nums" }}>
+            <span style={{ color:"#4b5563", fontVariantNumeric:"tabular-nums" }}>
               {s.valor} ({Math.round(s.valor / total * 100)}%)
             </span>
           </div>
@@ -34753,7 +34753,7 @@ function BarraStatus({ status }) {
 // Valor numérico aparece em cima de cada barra com dados.
 function GraficoMensal({ mensal }) {
   if (!mensal || mensal.length === 0) {
-    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem histórico ainda.</div>;
+    return <div style={{ fontSize:13, color:"#4b5563", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem histórico ainda.</div>;
   }
 
   const max = Math.max(...mensal.map(m => m.orcamentos), 1); // evita divisão por 0
@@ -34861,7 +34861,7 @@ function GraficoMensal({ mensal }) {
         })}
       </svg>
       {/* Legenda discreta abaixo */}
-      <div style={{ display:"flex", gap:18, justifyContent:"center", marginTop:8, fontSize:11, color:"#9ca3af" }}>
+      <div style={{ display:"flex", gap:18, justifyContent:"center", marginTop:8, fontSize:11, color:"#4b5563" }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <span style={{ width:10, height:10, background:"#3b82f6", borderRadius:3, display:"inline-block" }} />
           Criados
@@ -34883,7 +34883,7 @@ function GraficoMensal({ mensal }) {
 // se há subutilização (uma empresa com 5 usuários mas só 1 ativo, p.ex.).
 function TopUsuarios({ usuarios, fmtDataHora }) {
   if (!usuarios || usuarios.length === 0) {
-    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem usuários ativos.</div>;
+    return <div style={{ fontSize:13, color:"#4b5563", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem usuários ativos.</div>;
   }
 
   // Calcula o máximo pra escalar a barra de progresso
@@ -34902,14 +34902,14 @@ function TopUsuarios({ usuarios, fmtDataHora }) {
           }}>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:"#262421", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {u.nome}
                 </div>
-                <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>
+                <div style={{ fontSize:11, color:"#4b5563", marginTop:1 }}>
                   {u.email} · último login: {u.ultimo_login ? fmtDataHora(u.ultimo_login) : "nunca"}
                 </div>
               </div>
-              <div style={{ fontSize:12, fontWeight:600, color:"#262421", fontVariantNumeric:"tabular-nums", minWidth:60, textAlign:"right" }}>
+              <div style={{ fontSize:12, fontWeight:600, color:"#111827", fontVariantNumeric:"tabular-nums", minWidth:60, textAlign:"right" }}>
                 {acoes} {acoes === 1 ? "ação" : "ações"}
               </div>
             </div>
@@ -34957,10 +34957,10 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Excluir empresa definitivamente?
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:16, lineHeight:1.5 }}>
           Esta ação <strong style={{ color:"#991b1b" }}>NÃO pode ser desfeita</strong>. Vai apagar permanentemente:
           <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
             <li>A empresa <strong>{empresa.nome}</strong></li>
@@ -34978,7 +34978,7 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             background:"#f9fafb", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6,
             padding:"6px 10px", marginBottom:8,
             fontFamily:"'SF Mono',Menlo,Consolas,monospace",
-            fontSize:13, color:"#262421", fontWeight:600,
+            fontSize:13, color:"#111827", fontWeight:600,
             userSelect:"all", // facilita selecionar e copiar
           }}>
             {empresa.nome}
@@ -34996,12 +34996,12 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             placeholder="Digite o nome exato"
           />
           {erroVisivel && (
-            <div style={{ fontSize:11.5, color:"#6b7280", marginTop:6 }}>
+            <div style={{ fontSize:11.5, color:"#4b5563", marginTop:6 }}>
               O texto não corresponde. Atenção a maiúsculas, minúsculas e espaços.
             </div>
           )}
           {podeExcluir && (
-            <div style={{ fontSize:11.5, color:"#262421", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
+            <div style={{ fontSize:11.5, color:"#111827", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
               <IconeMaster nome="check" tamanho={12} cor="#262421" />
               Confere
             </div>
@@ -35053,11 +35053,11 @@ function ModalConfirmarResetSenha({ S, usuario, escopo = "admin", onFechar, onSu
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Resetar senha?
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
-          Será gerada uma nova senha temporária para <strong style={{ color:"#262421" }}>{usuario.nome}</strong> ({usuario.email}).
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:16, lineHeight:1.5 }}>
+          Será gerada uma nova senha temporária para <strong style={{ color:"#111827" }}>{usuario.nome}</strong> ({usuario.email}).
           <br/><br/>
           A senha atual deixará de funcionar imediatamente. <strong>O usuário será obrigado a trocar a senha no próximo login.</strong>
           <br/><br/>
@@ -35102,11 +35102,11 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Nova senha gerada
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
-          Senha temporária para <strong style={{ color:"#262421" }}>{usuario.nome}</strong> ({usuario.email}).
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:18, lineHeight:1.5 }}>
+          Senha temporária para <strong style={{ color:"#111827" }}>{usuario.nome}</strong> ({usuario.email}).
           Copie agora — depois de fechar este aviso, ela não aparece mais.
         </div>
         <div style={{ marginBottom:18 }}>
@@ -35119,7 +35119,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
               style={{
                 ...S.input,
                 fontFamily:"'SF Mono',Menlo,Consolas,monospace",
-                fontSize:15, fontWeight:600, color:"#262421",
+                fontSize:15, fontWeight:600, color:"#111827",
                 background:"#fafbfc", flex:1, userSelect:"all",
               }}
             />
@@ -35137,7 +35137,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
             </button>
           </div>
         </div>
-        <div style={{ background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", color:"#374151", borderRadius: 12, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+        <div style={{ background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", color:"#111827", borderRadius: 12, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
           Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -35190,12 +35190,12 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Editar usuário
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
-          <strong style={{ color:"#262421" }}>{usuario.nome}</strong>
-          <span style={{ color:"#9ca3af" }}> · {usuario.email}</span>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:18, lineHeight:1.5 }}>
+          <strong style={{ color:"#111827" }}>{usuario.nome}</strong>
+          <span style={{ color:"#4b5563" }}> · {usuario.email}</span>
         </div>
 
         <div style={{ marginBottom:14 }}>
@@ -35244,7 +35244,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
             </button>
           </div>
           {!ativo && usuario.ativo && (
-            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
+            <div style={{ fontSize:11.5, color:"#111827", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
               Usuário inativo não consegue mais fazer login. As sessões existentes serão encerradas no próximo refresh.
             </div>
           )}
@@ -35319,8 +35319,8 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:4 }}>Nova empresa</div>
-        <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:4 }}>Nova empresa</div>
+        <div style={{ fontSize:12, color:"#4b5563", marginBottom:20 }}>
           Cria a empresa e o primeiro administrador que poderá logar.
         </div>
 
@@ -35364,7 +35364,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
 
           <div style={{ borderTop:"1px solid #f3f4f6", marginTop:6, paddingTop:14 }}>
             <div style={S.secTit}>Administrador inicial</div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginBottom:10, marginTop:-10 }}>
+            <div style={{ fontSize:12, color:"#4b5563", marginBottom:10, marginTop:-10 }}>
               Esta pessoa vai receber acesso admin e poderá gerenciar usuários da empresa.
             </div>
           </div>
@@ -35491,8 +35491,8 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
           <div>
-            <div style={{ fontSize:16, fontWeight:700, color:"#262421" }}>Editar empresa</div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>ID: {empresa.id}</div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111827" }}>Editar empresa</div>
+            <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>ID: {empresa.id}</div>
           </div>
           <span style={form.ativo ? S.badgeAtiva : S.badgeInativa}>
             {form.ativo ? "Ativa" : "Inativa"}
@@ -35535,21 +35535,21 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
           {/* Stats (readonly) — mostra histórico */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, padding:"14px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius: 12, marginTop:4 }}>
             <div>
-              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Usuários</div>
-              <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginTop:2 }}>
+              <div style={{ fontSize:11, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5 }}>Usuários</div>
+              <div style={{ fontSize:18, fontWeight:700, color:"#111827", marginTop:2 }}>
                 {empresa.usuarios_ativos || 0}
                 {empresa.usuarios_total > empresa.usuarios_ativos && (
-                  <span style={{ fontSize:12, color:"#9ca3af", fontWeight:400, marginLeft:4 }}>/ {empresa.usuarios_total}</span>
+                  <span style={{ fontSize:12, color:"#4b5563", fontWeight:400, marginLeft:4 }}>/ {empresa.usuarios_total}</span>
                 )}
               </div>
             </div>
             <div>
-              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
-              <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginTop:2 }}>{empresa.orcamentos_total || 0}</div>
+              <div style={{ fontSize:11, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
+              <div style={{ fontSize:18, fontWeight:700, color:"#111827", marginTop:2 }}>{empresa.orcamentos_total || 0}</div>
             </div>
             <div>
-              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Criada em</div>
-              <div style={{ fontSize:13, fontWeight:600, color:"#262421", marginTop:4 }}>
+              <div style={{ fontSize:11, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5 }}>Criada em</div>
+              <div style={{ fontSize:13, fontWeight:600, color:"#111827", marginTop:4 }}>
                 {empresa.criado_em ? new Date(empresa.criado_em).toLocaleDateString("pt-BR") : "—"}
               </div>
             </div>
@@ -35676,8 +35676,8 @@ function PainelFeedback({ S }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18, gap:16, flexWrap:"wrap" }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Caixa de Feedback</div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111827" }}>Caixa de Feedback</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>
             {loading
               ? "Carregando..."
               : `${counts.total || 0} no total · ${counts.abertas || 0} aberta(s) · ${counts.em_andamento || 0} em andamento · ${counts.resolvidas || 0} resolvida(s)`}
@@ -35824,25 +35824,25 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
         style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-            <span style={{ fontSize:12, fontWeight:600, color:"#262421" }}>{cat.label}</span>
+            <span style={{ fontSize:12, fontWeight:600, color:"#111827" }}>{cat.label}</span>
             <span style={{
               fontSize:10, padding:"2px 7px", borderRadius:4,
               background:st.bg, color:st.cor, border:`1px solid ${st.borda}`,
               fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
             }}>{st.label}</span>
             {recemSalvo && (
-              <span style={{ fontSize:10, color:"#6b7280", fontWeight:500 }}>
+              <span style={{ fontSize:10, color:"#4b5563", fontWeight:500 }}>
                 salvo
               </span>
             )}
-            <span style={{ fontSize:11, color:"#9ca3af", marginLeft:"auto" }}>
+            <span style={{ fontSize:11, color:"#4b5563", marginLeft:"auto" }}>
               {fmtDataHora(fb.criado_em)}
             </span>
           </div>
-          <div style={{ fontSize:13, color:"#374151", lineHeight:1.5, marginBottom:4 }}>
+          <div style={{ fontSize:13, color:"#111827", lineHeight:1.5, marginBottom:4 }}>
             {aberto ? fb.texto : preview}
           </div>
-          <div style={{ fontSize:11, color:"#9ca3af" }}>
+          <div style={{ fontSize:11, color:"#4b5563" }}>
             {fb.usuario_nome} · {fb.usuario_email}{fb.empresa_nome ? ` · ${fb.empresa_nome}` : ""}
           </div>
         </div>
@@ -35852,7 +35852,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
       {aberto && (
         <div style={{ padding:"0 14px 14px", borderTop:"1px solid #f3f4f6", marginTop:6 }}>
           <div style={{ marginTop:14, marginBottom:14 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
               Status
             </div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -35880,10 +35880,10 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
           </div>
 
           <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>
               Notas internas (privadas)
             </div>
-            <div style={{ fontSize:11, color:"#9ca3af", marginBottom:6, lineHeight:1.4 }}>
+            <div style={{ fontSize:11, color:"#4b5563", marginBottom:6, lineHeight:1.4 }}>
               Anotações para você lembrar (link de issue, prioridade, contexto). Visível só pro time master.
             </div>
             <textarea
@@ -35901,14 +35901,14 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
           </div>
 
           {fb.resolvida_em && (
-            <div style={{ fontSize:11, color:"#9ca3af", marginBottom:10, fontStyle:"italic" }}>
+            <div style={{ fontSize:11, color:"#4b5563", marginBottom:10, fontStyle:"italic" }}>
               Resolvida por {fb.resolvida_por} em {fmtDataHora(fb.resolvida_em)}
             </div>
           )}
 
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
             <button onClick={excluir} disabled={salvando}
-              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, color:"#6b7280" }}>
+              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, color:"#4b5563" }}>
               Excluir
             </button>
           </div>
@@ -35977,8 +35977,8 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Usuários master</div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111827" }}>Usuários master</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>
             {loading ? "Carregando..." : `${masterAtivos} de ${limite} masters ativos · acesso total ao SaaS`}
           </div>
         </div>
@@ -36023,15 +36023,15 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                 return (
                   <tr key={u.id}>
                     <td style={S.td} data-label="Nome">
-                      <div style={{ fontWeight:600, color:"#262421" }}>
+                      <div style={{ fontWeight:600, color:"#111827" }}>
                         {u.nome}
                         {ehVoce && (
-                          <span style={{ fontSize:10, fontWeight:600, color:"#6b7280", background:"#f3f4f6", borderRadius:3, padding:"2px 6px", marginLeft:8, letterSpacing:0.3 }}>VOCÊ</span>
+                          <span style={{ fontSize:10, fontWeight:600, color:"#4b5563", background:"#f3f4f6", borderRadius:3, padding:"2px 6px", marginLeft:8, letterSpacing:0.3 }}>VOCÊ</span>
                         )}
                       </div>
                     </td>
-                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Email">{u.email}</td>
-                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Criado em">
+                    <td style={{ ...S.td, color:"#4b5563" }} data-label="Email">{u.email}</td>
+                    <td style={{ ...S.td, color:"#4b5563" }} data-label="Criado em">
                       {u.criado_em ? new Date(u.criado_em).toLocaleDateString("pt-BR") : "—"}
                     </td>
                     <td style={S.td} data-label="Status">
@@ -36042,7 +36042,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                     <td style={{ ...S.td, textAlign:"right" }} data-label="">
                       {!ehVoce && (
                         <button
-                          style={{ ...S.btnSec, color:"#6b7280", padding:"5px 12px", fontSize:12 }}
+                          style={{ ...S.btnSec, color:"#4b5563", padding:"5px 12px", fontSize:12 }}
                           onClick={() => excluirUsuario(u)}
                         >
                           Excluir
@@ -36109,8 +36109,8 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:4 }}>Novo usuário master</div>
-        <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:4 }}>Novo usuário master</div>
+        <div style={{ fontSize:12, color:"#4b5563", marginBottom:20 }}>
           Masters têm acesso total ao SaaS, incluindo todas as empresas cliente.
         </div>
 
@@ -36218,17 +36218,17 @@ function getEstilos(loading) {
     },
     box: { width: "100%", maxWidth: 360 },
     header: { textAlign: "center", marginBottom: 32 },
-    titulo: { fontSize: 22, fontWeight: 800, color: "#262421", letterSpacing: -0.5, margin: 0 },
-    sub: { fontSize: 13, color: "#78716c", marginTop: 6 },
+    titulo: { fontSize: 22, fontWeight: 800, color: "#111827", letterSpacing: -0.5, margin: 0 },
+    sub: { fontSize: 13, color: "#4b5563", marginTop: 6 },
     card: { background: "#fff", border: "1.5px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "28px 24px", boxShadow: "0 18px 50px -28px rgba(38,36,33,0.35)" },
-    label: { fontSize: 13, color: "#6b7280", display: "block", marginBottom: 6 },
+    label: { fontSize: 13, color: "#4b5563", display: "block", marginBottom: 6 },
     input: {
       width: "100%",
       border: "1.5px solid rgba(38,36,33,0.16)",
       borderRadius: 12,
       padding: "11px 14px",
       fontSize: 14,
-      color: "#262421",
+      color: "#111827",
       outline: "none",
       background: "#fff",
       boxSizing: "border-box",
@@ -36253,7 +36253,7 @@ function getEstilos(loading) {
     btnSec: {
       width: "100%",
       background: "#fff",
-      color: "#374151",
+      color: "#111827",
       border: "1.5px solid rgba(38,36,33,0.16)",
       borderRadius: 12,
       padding: "12px 0",
@@ -36265,13 +36265,13 @@ function getEstilos(loading) {
     },
     erro: { fontSize: 13, color: "#dc2626", textAlign: "center", marginTop: 12, minHeight: 20 },
     info: { fontSize: 13, color: "#059669", textAlign: "center", marginTop: 12, minHeight: 20 },
-    rodape: { textAlign: "center", marginTop: 24, fontSize: 12, color: "#9ca3af" },
+    rodape: { textAlign: "center", marginTop: 24, fontSize: 12, color: "#6b7280" },
     // Link "Criar conta" / "Voltar pro login"
     linkSec: {
       textAlign: "center",
       marginTop: 16,
       fontSize: 13,
-      color: "#6b7280",
+      color: "#4b5563",
     },
     linkBtn: {
       background: "none",
@@ -36430,7 +36430,7 @@ function TelaLoginEntrada({ onLogin, onCriarConta, onEsqueciSenha }) {
                 style={{
                   position:"absolute", right: 8, top:"50%", transform:"translateY(-50%)",
                   background:"none", border:"none", padding: 6, cursor:"pointer",
-                  color:"#9ca3af", display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#4b5563", display:"flex", alignItems:"center", justifyContent:"center",
                   borderRadius: 6,
                 }}
                 onMouseEnter={e => { e.currentTarget.style.color = "#374151"; e.currentTarget.style.background = "#f3f4f6"; }}
@@ -36464,7 +36464,7 @@ function TelaLoginEntrada({ onLogin, onCriarConta, onEsqueciSenha }) {
               onClick={onEsqueciSenha}
               style={{
                 background:"none", border:"none", padding:0, cursor:"pointer",
-                fontFamily:"inherit", fontSize:12.5, color:"#9ca3af",
+                fontFamily:"inherit", fontSize:12.5, color:"#4b5563",
                 textDecoration:"underline", textUnderlineOffset:2,
               }}
               onMouseEnter={e => { e.currentTarget.style.color = "#374151"; }}
@@ -36547,7 +36547,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
             />
           </div>
           <div style={S.grupo}>
-            <label style={S.label}>CNPJ / CPF <span style={{ color:"#9ca3af", fontWeight:400 }}>(opcional)</span></label>
+            <label style={S.label}>CNPJ / CPF <span style={{ color:"#4b5563", fontWeight:400 }}>(opcional)</span></label>
             <input
               style={S.input}
               placeholder="00.000.000/0001-00"
@@ -36575,7 +36575,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
             />
           </div>
           <div style={S.grupo}>
-            <label style={S.label}>Senha * <span style={{ color:"#9ca3af", fontWeight:400 }}>(mínimo 6 caracteres)</span></label>
+            <label style={S.label}>Senha * <span style={{ color:"#4b5563", fontWeight:400 }}>(mínimo 6 caracteres)</span></label>
             <div style={{ position:"relative" }}>
               <input
                 style={{ ...S.input, paddingRight: 40 }}
@@ -36592,7 +36592,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
                 style={{
                   position:"absolute", right: 8, top:"50%", transform:"translateY(-50%)",
                   background:"none", border:"none", padding: 6, cursor:"pointer",
-                  color:"#9ca3af", display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#4b5563", display:"flex", alignItems:"center", justifyContent:"center",
                   borderRadius: 6,
                 }}
                 onMouseEnter={e => { e.currentTarget.style.color = "#374151"; e.currentTarget.style.background = "#f3f4f6"; }}
@@ -36755,7 +36755,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
     borderRadius: 12,
     fontSize: 22,
     fontWeight: 600,
-    color: "#262421",
+    color: "#111827",
     textAlign: "center",
     outline: "none",
     background: "#fff",
@@ -36771,7 +36771,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
           <div style={S.titulo}>Digite o código</div>
           <div style={S.sub}>
             Enviamos um código de 6 dígitos para<br/>
-            <span style={{ color:"#374151", fontWeight:500 }}>{email}</span>
+            <span style={{ color:"#111827", fontWeight:500 }}>{email}</span>
           </div>
         </div>
         <div style={S.card}>
@@ -36868,10 +36868,10 @@ function TelaRecuperarSenha({ onVoltar }) {
             <div style={S.sub}>Verifique seu e-mail</div>
           </div>
           <div style={S.card}>
-            <div style={{ fontSize:13.5, color:"#374151", lineHeight:1.6, textAlign:"center" }}>
+            <div style={{ fontSize:13.5, color:"#111827", lineHeight:1.6, textAlign:"center" }}>
               Se houver uma conta com o e-mail informado, você receberá em instantes um link para redefinir sua senha.
             </div>
-            <div style={{ fontSize:12, color:"#9ca3af", lineHeight:1.5, marginTop:14, textAlign:"center" }}>
+            <div style={{ fontSize:12, color:"#4b5563", lineHeight:1.5, marginTop:14, textAlign:"center" }}>
               O link expira em 1 hora. Verifique também a pasta de spam.
             </div>
           </div>
@@ -36892,7 +36892,7 @@ function TelaRecuperarSenha({ onVoltar }) {
           <div style={S.sub}>Recuperar senha</div>
         </div>
         <div style={S.card}>
-          <div style={{ fontSize:12.5, color:"#6b7280", lineHeight:1.5, marginBottom:16 }}>
+          <div style={{ fontSize:12.5, color:"#4b5563", lineHeight:1.5, marginBottom:16 }}>
             Digite o e-mail da sua conta. Vamos te enviar um link para criar uma nova senha.
           </div>
           <div style={S.grupo}>
@@ -36969,7 +36969,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
             <div style={S.sub}>Link inválido</div>
           </div>
           <div style={S.card}>
-            <div style={{ fontSize:13.5, color:"#374151", lineHeight:1.6, textAlign:"center" }}>
+            <div style={{ fontSize:13.5, color:"#111827", lineHeight:1.6, textAlign:"center" }}>
               Este link de redefinição de senha não é válido ou já foi usado.
             </div>
           </div>
@@ -37002,10 +37002,10 @@ function TelaRedefinirSenha({ token, onConcluido }) {
                 </svg>
               </div>
             </div>
-            <div style={{ fontSize:14, fontWeight:600, color:"#262421", textAlign:"center", marginBottom:6 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:"#111827", textAlign:"center", marginBottom:6 }}>
               Pronto!
             </div>
-            <div style={{ fontSize:13, color:"#6b7280", textAlign:"center", lineHeight:1.5 }}>
+            <div style={{ fontSize:13, color:"#4b5563", textAlign:"center", lineHeight:1.5 }}>
               Sua senha foi redefinida. Você já pode entrar com a nova senha.
             </div>
           </div>
@@ -37023,7 +37023,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
           <div style={S.sub}>Crie uma nova senha</div>
         </div>
         <div style={S.card}>
-          <div style={{ fontSize:12.5, color:"#6b7280", lineHeight:1.5, marginBottom:16 }}>
+          <div style={{ fontSize:12.5, color:"#4b5563", lineHeight:1.5, marginBottom:16 }}>
             Digite a nova senha que você quer usar a partir de agora. Mínimo de 8 caracteres.
           </div>
           <div style={S.grupo}>
@@ -37045,7 +37045,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
                 style={{
                   position:"absolute", right: 8, top:"50%", transform:"translateY(-50%)",
                   background:"none", border:"none", padding: 6, cursor:"pointer",
-                  color:"#9ca3af", display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#4b5563", display:"flex", alignItems:"center", justifyContent:"center",
                   borderRadius: 6,
                 }}>
                 {mostrarSenha ? (
@@ -37302,12 +37302,12 @@ function Mensagens({ usuario }) {
   const S = {
     wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", height:"100vh", display:"flex", flexDirection:"column", background:"#fff" },
     header: { borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"20px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
-    titulo: { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
-    sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
+    titulo: { fontSize:18, fontWeight:700, color:"#111827", margin:0 },
+    sub: { fontSize:13, color:"#4b5563", marginTop:3 },
     filtros: { display:"flex", gap:4, padding:"12px 32px", borderBottom:"1px solid #f3f4f6" },
     btnFiltro: (ativo) => ({
       background: ativo ? "#fdf6f0" : "transparent",
-      color: ativo ? "#b5652f" : "#6b7280",
+      color: ativo ? "#0474f4" : "#6b7280",
       border: "none",
       borderRadius: 6,
       padding: "6px 12px",
@@ -37328,21 +37328,21 @@ function Mensagens({ usuario }) {
       transition: "background 0.1s",
       paddingLeft: selecionada ? 15 : 18,
     }),
-    nome: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 700, color:"#262421", marginBottom:2, display:"flex", justifyContent:"space-between", alignItems:"center" }),
+    nome: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 700, color:"#111827", marginBottom:2, display:"flex", justifyContent:"space-between", alignItems:"center" }),
     assunto: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 600, color: lida ? "#374151" : "#262421", marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }),
-    preview: { fontSize:12, color:"#9ca3af", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
-    data: { fontSize:11, color:"#9ca3af", fontWeight:400 },
+    preview: { fontSize:12, color:"#4b5563", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
+    data: { fontSize:11, color:"#4b5563", fontWeight:400 },
     pontoNaoLida: { display:"inline-block", width:8, height:8, background:"#3b82f6", borderRadius:"50%", marginRight:8, flexShrink:0 },
-    vazio: { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"60px 20px" },
+    vazio: { fontSize:13, color:"#4b5563", textAlign:"center", padding:"60px 20px" },
 
     detHeader: { padding:"24px 32px", borderBottom:"1.5px solid rgba(38,36,33,0.16)", background:"#fff" },
-    detAssunto: { fontSize:18, fontWeight:700, color:"#262421", marginBottom:12 },
-    detLinha: { fontSize:13, color:"#6b7280", marginBottom:4 },
-    detLinhaForte: { fontSize:14, color:"#262421", fontWeight:500 },
+    detAssunto: { fontSize:18, fontWeight:700, color:"#111827", marginBottom:12 },
+    detLinha: { fontSize:13, color:"#4b5563", marginBottom:4 },
+    detLinhaForte: { fontSize:14, color:"#111827", fontWeight:500 },
     detAcoes: { display:"flex", gap:8, marginTop:16 },
     detBody: { padding:"32px", background:"#fff", margin:"24px 32px", borderRadius: 12, border:"1px solid #f3f4f6" },
-    detHtml: { fontSize:14, color:"#262421", lineHeight:1.6 },
-    btnAcao: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
+    detHtml: { fontSize:14, color:"#111827", lineHeight:1.6 },
+    btnAcao: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     btnAcaoPrimaria: { background:"#262421", color:"#fff", border:"1px solid #262421", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     btnAcaoDestrutiva: { background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     badge: { display:"inline-block", fontSize:11, fontWeight:600, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius: 14, padding:"2px 8px", marginLeft:8 },
@@ -37350,15 +37350,15 @@ function Mensagens({ usuario }) {
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
     modal: { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, width:"100%", maxWidth:680, maxHeight:"85vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
     modalHeader: { padding:"20px 24px 16px", borderBottom:"1px solid #f3f4f6" },
-    modalTitulo: { fontSize:16, fontWeight:700, color:"#262421", margin:0 },
+    modalTitulo: { fontSize:16, fontWeight:700, color:"#111827", margin:0 },
     modalBody: { padding:"20px 24px", flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:14 },
-    modalLabel: { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4, display:"block" },
+    modalLabel: { fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4, display:"block" },
     modalInput: { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
-    modalReadonly: { fontSize:13, color:"#374151", padding:"10px 12px", background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 12 },
+    modalReadonly: { fontSize:13, color:"#111827", padding:"10px 12px", background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 12 },
     modalTextarea: { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", minHeight:200, resize:"vertical", lineHeight:1.5 },
     modalFooter: { padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:10 },
     btnEnviar: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnCancelar: { background:"#fff", color:"#6b7280", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnCancelar: { background:"#fff", color:"#4b5563", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   };
 
   if (loading) {
@@ -37480,7 +37480,7 @@ function Mensagens({ usuario }) {
                     {selecionada.body_text}
                   </pre>
                 ) : (
-                  <div style={{ color:"#9ca3af", fontStyle:"italic", fontSize:13 }}>
+                  <div style={{ color:"#4b5563", fontStyle:"italic", fontSize:13 }}>
                     Conteúdo ainda sendo processado pelo servidor… Recarregue em alguns segundos.
                   </div>
                 )}
@@ -37973,7 +37973,7 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
       <div style={tela}>
         <div style={card}>
           <div style={{ fontSize:15, fontWeight:600, color:"#991b1b", marginBottom:8 }}>Erro ao carregar configuração</div>
-          <div style={{ fontSize:13, color:"#6b7280", marginBottom:14 }}>{matrizErro}</div>
+          <div style={{ fontSize:13, color:"#4b5563", marginBottom:14 }}>{matrizErro}</div>
           <button onClick={() => location.reload()} style={btnPrimario}>Tentar novamente</button>
           <button onClick={onLogout} style={btnSecundario}>Sair</button>
         </div>
@@ -37983,7 +37983,7 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
   if (!matriz) {
     return (
       <div style={tela}>
-        <div style={{ fontSize:13, color:"#9ca3af" }}>Carregando…</div>
+        <div style={{ fontSize:13, color:"#4b5563" }}>Carregando…</div>
       </div>
     );
   }
@@ -38113,11 +38113,11 @@ function TelaOnboarding({ usuario, escritorio, onConcluido, onLogout }) {
         {/* ── Cabeçalho — só aparece enquanto questionário ativo ── */}
         {!todasRespondidas && (
           <div style={{ marginBottom:32 }}>
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>VICKE</div>
-            <div style={{ fontSize:24, fontWeight:300, color:"#262421", letterSpacing:-0.5, marginBottom:6 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:8 }}>VICKE</div>
+            <div style={{ fontSize:24, fontWeight:300, color:"#111827", letterSpacing:-0.5, marginBottom:6 }}>
               Bem-vindo, {(usuario?.nome || "").split(" ")[0]}!
             </div>
-            <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.5 }}>
+            <div style={{ fontSize:14, color:"#4b5563", lineHeight:1.5 }}>
               Configure seu perfil profissional para personalizar seus orçamentos. Vai levar 2 minutos.
             </div>
           </div>
@@ -38337,11 +38337,11 @@ function PerguntaBlock({ pergunta, sub, children }) {
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <div style={{ fontSize:15, fontWeight:500, color:"#262421", marginBottom: sub ? 4 : 12, lineHeight:1.4 }}>
+      <div style={{ fontSize:15, fontWeight:500, color:"#111827", marginBottom: sub ? 4 : 12, lineHeight:1.4 }}>
         {pergunta}
       </div>
       {sub && (
-        <div style={{ fontSize:12.5, color:"#9ca3af", marginBottom:12, lineHeight:1.5 }}>
+        <div style={{ fontSize:12.5, color:"#4b5563", marginBottom:12, lineHeight:1.5 }}>
           {sub}
         </div>
       )}
@@ -38369,7 +38369,7 @@ function Opcao({ label, selecionada, onClick }) {
         textAlign:"left",
         fontFamily:"inherit",
         fontSize:13.5,
-        color:"#262421",
+        color:"#111827",
         fontWeight: selecionada ? 600 : 400,
         transition:"all 0.12s",
       }}
@@ -38453,7 +38453,7 @@ function InputMoedaBR({ valor, setValor, onConfirmar }) {
       <span style={{
         position:"absolute", left:14, top:"50%",
         transform:"translateY(-50%)",
-        fontSize:13, color:"#9ca3af",
+        fontSize:13, color:"#4b5563",
         pointerEvents:"none",
         fontVariantNumeric:"tabular-nums",
       }}>R$</span>
@@ -38545,7 +38545,7 @@ function BlocoResultado({
   }
   if (!cubEstado || honorarioCalculado === null || !casaCalc) {
     return (
-      <div style={{ marginTop:32, fontSize:13, color:"#9ca3af" }}>Calculando…</div>
+      <div style={{ marginTop:32, fontSize:13, color:"#4b5563" }}>Calculando…</div>
     );
   }
 
@@ -38561,15 +38561,15 @@ function BlocoResultado({
         marginLeft: etapa === 2 ? 232 : 0,
         transition: "margin-left 0.3s ease-out",
       }} className="vk-onb-header">
-        <div style={{ fontSize:10.5, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1.2, flexShrink:0 }}>
+        <div style={{ fontSize:10.5, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1.2, flexShrink:0 }}>
           VICKE · Análise Inteligente
         </div>
-        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#262421", letterSpacing:-0.4, lineHeight:1.2, display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ fontSize: etapa === 1 ? 22 : 16, fontWeight:300, color:"#111827", letterSpacing:-0.4, lineHeight:1.2, display:"flex", alignItems:"center", gap:10 }}>
           Resultado da sua calibragem
           {/* Indicador sutil quando troca de estado e CUB recarrega — evita
               flash em branco. Spinner pequeno + texto delicado. */}
           {cubLoading && etapa === 2 && (
-            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:"#9ca3af", fontStyle:"italic", fontWeight:400 }}>
+            <span style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:11, color:"#4b5563", fontStyle:"italic", fontWeight:400 }}>
               <span style={{
                 display:"inline-block",
                 width:10, height:10,
@@ -38626,11 +38626,11 @@ function BlocoResultado({
 
             {aceitouCalculado === false && (
               <div style={{ marginTop:14, animation:"vk-onb-fade-in 0.3s ease-out" }}>
-                <div style={{ fontSize:13, color:"#262421", marginBottom:4 }}>
+                <div style={{ fontSize:13, color:"#111827", marginBottom:4 }}>
                   Quanto você cobraria pela casa de {casaCalc.areaTotal.toLocaleString("pt-BR")}m² descrita acima?
                 </div>
-                <div style={{ fontSize:11.5, color:"#9ca3af", marginBottom:10, lineHeight:1.4 }}>
-                  Insira novo valor e aperte <strong style={{ color:"#6b7280", fontWeight:600 }}>ENTER</strong>
+                <div style={{ fontSize:11.5, color:"#4b5563", marginBottom:10, lineHeight:1.4 }}>
+                  Insira novo valor e aperte <strong style={{ color:"#4b5563", fontWeight:600 }}>ENTER</strong>
                 </div>
                 <InputMoedaBR
                   valor={valorCalibragem}
@@ -38651,10 +38651,10 @@ function BlocoResultado({
                     <div style={{ fontSize:12.5, fontWeight:600, color: analiseCalibragem.muitoAlto ? "#92400e" : "#991b1b", marginBottom:6 }}>
                       {analiseCalibragem.muitoAlto ? "Valor parece muito alto" : "Valor parece muito baixo"}
                     </div>
-                    <div style={{ fontSize:12, color:"#6b7280", lineHeight:1.5, marginBottom:10 }}>
+                    <div style={{ fontSize:12, color:"#4b5563", lineHeight:1.5, marginBottom:10 }}>
                       {moeda(analiseCalibragem.valor)} é {analiseCalibragem.ratio.toFixed(1)}× {analiseCalibragem.muitoAlto ? "maior" : "menor"} que o sugerido pela análise ({moeda(honorarioCalculado)}).
                     </div>
-                    <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#262421", cursor:"pointer" }}>
+                    <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, color:"#111827", cursor:"pointer" }}>
                       <input
                         type="checkbox"
                         checked={confirmandoAbsurdo}
@@ -38667,7 +38667,7 @@ function BlocoResultado({
                 )}
 
                 {analiseCalibragem && !analiseCalibragem.invalido && !analiseCalibragem.muitoBaixo && !analiseCalibragem.muitoAlto && (
-                  <div style={{ marginTop:12, fontSize:12, color:"#6b7280", lineHeight:1.5 }}>
+                  <div style={{ marginTop:12, fontSize:12, color:"#4b5563", lineHeight:1.5 }}>
                     {moeda(analiseCalibragem.valor)} será o seu novo preço de referência.
                   </div>
                 )}
@@ -38698,8 +38698,8 @@ function BlocoResultado({
                         <polyline points="5 12 12 19 19 12"/>
                       </svg>
                     </button>
-                    <div style={{ marginTop: 10, fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
-                      Quer ajustar mais? Edite o valor acima e aperte <strong style={{ color: "#6b7280", fontWeight: 600 }}>Enter</strong>.
+                    <div style={{ marginTop: 10, fontSize: 12, color: "#6b7280", lineHeight: 1.5 }}>
+                      Quer ajustar mais? Edite o valor acima e aperte <strong style={{ color: "#4b5563", fontWeight: 600 }}>Enter</strong>.
                     </div>
                   </div>
                 )}
@@ -38773,7 +38773,7 @@ function EtapaTexto({ casaCalc, onProximo }) {
       <div
         onClick={handleSkip}
         style={{
-          fontSize:16, color:"#262421", lineHeight:1.7,
+          fontSize:16, color:"#111827", lineHeight:1.7,
           maxWidth: 760,
           textAlign:"justify",
           textAlignLast:"left",
@@ -38925,7 +38925,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
           simulação...") pra ficarem alinhados horizontalmente no topo das
           colunas do grid. */}
       <div style={{
-        fontSize: 12, fontWeight: 600, color: "#9ca3af",
+        fontSize: 12, fontWeight: 600, color: "#6b7280",
         textTransform: "uppercase", letterSpacing: 0.8,
         lineHeight: 1.5,
         marginBottom: 10, paddingLeft: 2,
@@ -38973,20 +38973,20 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 title="Clique pra alterar">
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{
-                    fontSize: 9.5, fontWeight: 700, color: "#9ca3af",
+                    fontSize: 9.5, fontWeight: 700, color: "#6b7280",
                     textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4,
                   }}>
                     {l.label}
                   </div>
                   <div style={{
-                    fontSize: 12.5, color: "#262421", fontWeight: 500, lineHeight: 1.25,
+                    fontSize: 12.5, color: "#111827", fontWeight: 500, lineHeight: 1.25,
                     overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
                   }}>
                     {l.valor}
                   </div>
                 </div>
                 <div style={{
-                  fontSize: 12, color: "#9ca3af", flexShrink: 0,
+                  fontSize: 12, color: "#6b7280", flexShrink: 0,
                   display: "inline-block", lineHeight: 1,
                   transform: aberto ? "rotate(180deg)" : "rotate(0deg)",
                   transition: "transform 0.15s ease-out",
@@ -39008,7 +39008,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                   minWidth: 200,
                   animation: "vk-fade-up 0.15s ease-out",
                 }}>
-                  <div style={{ fontSize: 9, color: "#9ca3af", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, padding: "4px 8px 6px" }}>
+                  <div style={{ fontSize: 9, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700, padding: "4px 8px 6px" }}>
                     Alterar {l.label.toLowerCase()}
                   </div>
                   {l.opcoes.map(opt => {
@@ -39028,7 +39028,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                           borderRadius: 6,
                           cursor: "pointer",
                           background: selecionada ? "#fdf6f0" : "transparent",
-                          color: selecionada ? "#b5652f" : "#374151",
+                          color: selecionada ? "#0474f4" : "#374151",
                           fontWeight: selecionada ? 600 : 400,
                           transition: "background 0.1s",
                         }}
@@ -39151,10 +39151,10 @@ function FluxogramaCasa({ casaCalc }) {
         transition: "opacity 0.3s ease-out, transform 0.3s ease-out",
         marginBottom: 24,
       }}>
-        <div style={{ fontSize: 12, color: "#9ca3af", lineHeight: 1.5 }}>
+        <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.5 }}>
           Em uma simulação com as seguintes características:
         </div>
-        <div style={{ fontSize: 14, color: "#262421", fontWeight: 500, marginTop: 4 }}>
+        <div style={{ fontSize: 14, color: "#111827", fontWeight: 500, marginTop: 4 }}>
           Casa de padrão {padraoLabel} com ambientes médios
         </div>
       </div>
@@ -39177,7 +39177,7 @@ function FluxogramaCasa({ casaCalc }) {
           transition: "opacity 0.35s ease-out, transform 0.35s ease-out",
         }}>
           <div style={{
-            fontSize: 11, fontWeight: 600, color: "#9ca3af",
+            fontSize: 11, fontWeight: 600, color: "#6b7280",
             textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 16,
           }}>
             Composição dos ambientes
@@ -39195,8 +39195,8 @@ function FluxogramaCasa({ casaCalc }) {
                 transform: revealed ? "translateX(0)" : "translateX(-4px)",
                 transition: "opacity 0.25s ease-out, transform 0.25s ease-out",
               }}>
-                <span style={{ color: "#374151" }}>{displayName(c.nome, c.qtd)}</span>
-                <span style={{ color: "#262421", fontWeight: 500 }}>
+                <span style={{ color: "#111827" }}>{displayName(c.nome, c.qtd)}</span>
+                <span style={{ color: "#111827", fontWeight: 500 }}>
                   {total.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
                 </span>
               </div>
@@ -39214,8 +39214,8 @@ function FluxogramaCasa({ casaCalc }) {
             transform: showSubtotal ? "scale(1)" : "scale(0.96)",
             transition: "opacity 0.3s, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)",
           }}>
-            <span style={{ color: "#6b7280", fontWeight: 500 }}>Subtotal área útil</span>
-            <span style={{ color: "#262421", fontWeight: 600 }}>
+            <span style={{ color: "#4b5563", fontWeight: 500 }}>Subtotal área útil</span>
+            <span style={{ color: "#111827", fontWeight: 600 }}>
               {casaCalc.areaBruta.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} m²
             </span>
           </div>
@@ -39227,7 +39227,7 @@ function FluxogramaCasa({ casaCalc }) {
         }}>
           {/* Label "+25% paredes e circulação" */}
           <div style={{
-            fontSize: 11, color: "#374151", textAlign: "center", lineHeight: 1.35,
+            fontSize: 11, color: "#111827", textAlign: "center", lineHeight: 1.35,
             opacity: showLabelOp ? 1 : 0,
             transform: showLabelOp ? "translateY(0)" : "translateY(-4px)",
             transition: "opacity 0.3s ease-out, transform 0.3s ease-out",
@@ -39278,7 +39278,7 @@ function FluxogramaCasa({ casaCalc }) {
 
           {/* Annotation "+44.78 m²" embaixo */}
           <div style={{
-            fontSize: 11, color: "#374151", textAlign: "center",
+            fontSize: 11, color: "#111827", textAlign: "center",
             fontVariantNumeric: "tabular-nums", fontWeight: 500,
             opacity: arrowDone ? 1 : 0,
             transform: arrowDone ? "translateY(0)" : "translateY(-4px)",
@@ -39300,19 +39300,19 @@ function FluxogramaCasa({ casaCalc }) {
           transition: "opacity 0.4s ease-out, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)",
         }}>
           <div style={{
-            fontSize: 11, fontWeight: 600, color: "#9ca3af",
+            fontSize: 11, fontWeight: 600, color: "#6b7280",
             textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8,
           }}>
             Área total
           </div>
           <div style={{
-            fontSize: 30, fontWeight: 500, color: "#262421",
+            fontSize: 30, fontWeight: 500, color: "#111827",
             letterSpacing: -0.5, fontVariantNumeric: "tabular-nums",
             lineHeight: 1.1,
           }}>
             {areaCountValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 4 }}>m²</div>
+          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 4 }}>m²</div>
         </div>
       </div>
     </div>
@@ -39412,7 +39412,7 @@ function Waterfall({ casaCalc, honorarioCalculado }) {
     }}>
       {/* Título — mesma tipografia dos cards do fluxograma */}
       <div style={{
-        fontSize:11, fontWeight:600, color:"#9ca3af",
+        fontSize:11, fontWeight:600, color:"#4b5563",
         textTransform:"uppercase", letterSpacing:0.5,
         marginBottom:16,
       }}>
@@ -39733,12 +39733,12 @@ function BlocoCadastroEscritorio({
   const inputBase = {
     width: "100%", boxSizing: "border-box",
     border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12,
-    padding: "10px 12px", fontSize: 13, color: "#262421",
+    padding: "10px 12px", fontSize: 13, color: "#111827",
     outline: "none", background: "#fff", fontFamily: "inherit",
     transition: "border-color 0.12s",
   };
   const labelBase = {
-    fontSize: 11.5, color: "#6b7280", fontWeight: 500,
+    fontSize: 11.5, color: "#4b5563", fontWeight: 500,
     marginBottom: 5, display: "block",
   };
   const campoWrap = { display: "flex", flexDirection: "column", marginBottom: 16 };
@@ -39759,19 +39759,19 @@ function BlocoCadastroEscritorio({
       `}</style>
 
       <div style={{
-        fontSize: 10.5, fontWeight: 700, color: "#9ca3af",
+        fontSize: 10.5, fontWeight: 700, color: "#6b7280",
         textTransform: "uppercase", letterSpacing: 1.2, marginBottom: 8,
       }}>
         VICKE · Cadastro do Escritório
       </div>
       <div style={{
-        fontSize: 22, fontWeight: 300, color: "#262421",
+        fontSize: 22, fontWeight: 300, color: "#111827",
         letterSpacing: -0.4, lineHeight: 1.2, marginBottom: 12,
       }}>
         Quase lá — vamos completar o cadastro
       </div>
       <div style={{
-        fontSize: 14, color: "#6b7280", lineHeight: 1.6, maxWidth: 700, marginBottom: 28,
+        fontSize: 14, color: "#4b5563", lineHeight: 1.6, maxWidth: 700, marginBottom: 28,
       }}>
         Reserve alguns minutos para preencher os dados do seu escritório. Essas informações aparecem automaticamente no cabeçalho, no rodapé e na área de aceite de todas as propostas, orçamentos e PDFs que você gerar — preenchendo agora, você não precisa editar em cada proposta enviada ao cliente.
       </div>
@@ -39781,9 +39781,9 @@ function BlocoCadastroEscritorio({
         {/* ── Logo do escritório ─────────────────────────────────── */}
         <div style={{ marginBottom: 8 }}>
           <div style={{
-            fontSize: 11, fontWeight: 700, color: "#9ca3af",
+            fontSize: 11, fontWeight: 700, color: "#6b7280",
             textTransform: "uppercase", letterSpacing: 1, marginBottom: 12,
-          }}>Logo do escritório <span style={{ fontWeight: 400, color: "#9ca3af" }}>· opcional</span></div>
+          }}>Logo do escritório <span style={{ fontWeight: 400, color: "#6b7280" }}>· opcional</span></div>
           <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
             {/* Preview com drag & drop */}
             <label
@@ -39805,7 +39805,7 @@ function BlocoCadastroEscritorio({
               {logo ? (
                 <img src={logo} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
               ) : (
-                <span style={{ fontSize: 12, color: "#9ca3af", textAlign: "center", padding: "0 8px" }}>
+                <span style={{ fontSize: 12, color: "#6b7280", textAlign: "center", padding: "0 8px" }}>
                   {arrastando ? "Solte aqui" : "Clique ou arraste"}
                 </span>
               )}
@@ -39819,7 +39819,7 @@ function BlocoCadastroEscritorio({
 
             {/* Descrição + ações */}
             <div style={{ flex: 1, minWidth: 220 }}>
-              <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 10 }}>
+              <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.55, marginBottom: 10 }}>
                 Aparece no cabeçalho das propostas em PDF.<br/>
                 PNG, JPG ou SVG · Máximo 1MB.
               </div>
@@ -39842,7 +39842,7 @@ function BlocoCadastroEscritorio({
                     type="button"
                     onClick={() => { setLogo(null); setLogoErro(null); }}
                     style={{
-                      background: "#fff", color: "#374151",
+                      background: "#fff", color: "#111827",
                       border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 7,
                       padding: "7px 14px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit",
                     }}>
@@ -39857,12 +39857,12 @@ function BlocoCadastroEscritorio({
               )}
               {!logo && !logoErro && (
                 <div style={{
-                  fontSize: 11.5, color: "#9ca3af", marginTop: 10,
+                  fontSize: 11.5, color: "#6b7280", marginTop: 10,
                   lineHeight: 1.5, display: "flex", alignItems: "flex-start", gap: 6,
                 }}>
                   <span style={{ flexShrink: 0, fontSize: 12 }}>ⓘ</span>
                   <span>
-                    Sem o logo, o cabeçalho das propostas usa só o nome do escritório. Pode adicionar depois na aba <strong style={{ color: "#6b7280", fontWeight: 600 }}>Escritório</strong>.
+                    Sem o logo, o cabeçalho das propostas usa só o nome do escritório. Pode adicionar depois na aba <strong style={{ color: "#4b5563", fontWeight: 600 }}>Escritório</strong>.
                   </span>
                 </div>
               )}
@@ -39950,10 +39950,10 @@ function BlocoCadastroEscritorio({
 
         {/* ── Responsável Técnico ────────────────────────────────── */}
         <div style={{
-          fontSize: 11, fontWeight: 700, color: "#9ca3af",
+          fontSize: 11, fontWeight: 700, color: "#6b7280",
           textTransform: "uppercase", letterSpacing: 1, marginBottom: 8,
         }}>Responsável técnico</div>
-        <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 16 }}>
+        <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.55, marginBottom: 16 }}>
           Aparece como assinatura técnica no aceite das propostas. Se houver mais de um responsável no escritório, você adiciona os outros depois na aba Escritório.
         </div>
 
@@ -39984,10 +39984,10 @@ function BlocoCadastroEscritorio({
 
         {/* ── PIX e Banco ────────────────────────────────────────── */}
         <div style={{
-          fontSize: 11, fontWeight: 700, color: "#9ca3af",
+          fontSize: 11, fontWeight: 700, color: "#6b7280",
           textTransform: "uppercase", letterSpacing: 1, marginBottom: 8,
-        }}>PIX e Banco <span style={{ fontWeight: 400, color: "#9ca3af" }}>· opcional</span></div>
-        <div style={{ fontSize: 12.5, color: "#6b7280", lineHeight: 1.55, marginBottom: 16 }}>
+        }}>PIX e Banco <span style={{ fontWeight: 400, color: "#6b7280" }}>· opcional</span></div>
+        <div style={{ fontSize: 12.5, color: "#4b5563", lineHeight: 1.55, marginBottom: 16 }}>
           Aparece embaixo da forma de pagamento nas propostas. Pode preencher depois se preferir — só aparece no PDF se você informar a chave.
         </div>
 
@@ -40066,10 +40066,10 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
           </svg>
         </div>
 
-        <div style={{ fontSize:22, fontWeight:300, color:"#262421", letterSpacing:-0.4, marginBottom:10 }}>
+        <div style={{ fontSize:22, fontWeight:300, color:"#111827", letterSpacing:-0.4, marginBottom:10 }}>
           Tudo certo, {primeiroNome}!
         </div>
-        <div style={{ fontSize:14, color:"#6b7280", lineHeight:1.55, marginBottom:36 }}>
+        <div style={{ fontSize:14, color:"#4b5563", lineHeight:1.55, marginBottom:36 }}>
           Seu perfil de pricing está configurado. Agora vamos completar o cadastro do seu escritório.
         </div>
 
@@ -40081,10 +40081,10 @@ function TelaTransicao({ usuarioNome, onContinuar }) {
           textAlign:"left",
           marginBottom:32,
         }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>
             Por que isso importa
           </div>
-          <div style={{ fontSize:13, color:"#262421", lineHeight:1.7 }}>
+          <div style={{ fontSize:13, color:"#111827", lineHeight:1.7 }}>
             Os dados do escritório (logo, endereço, contatos) aparecem nos seus orçamentos, propostas e PDFs enviados aos clientes. É a sua identidade visual no sistema.
           </div>
         </div>
@@ -40123,11 +40123,11 @@ const btnPrimario = {
   fontFamily:"inherit",
 };
 const btnSecundario = {
-  background:"transparent", color:"#6b7280", border:"none",
+  background:"transparent", color:"#4b5563", border:"none",
   padding:"8px", fontSize:12, cursor:"pointer", fontFamily:"inherit",
 };
-const tdLabel = { color:"#6b7280", padding:"4px 0" };
-const tdValor = { textAlign:"right", padding:"4px 0", color:"#262421" };
+const tdLabel = { color:"#4b5563", padding:"4px 0" };
+const tdValor = { textAlign:"right", padding:"4px 0", color:"#111827" };
 
 // ── Helpers ────────────────────────────────────────────────────
 function moeda(v) {
@@ -40597,8 +40597,8 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
   return (
     <div style={{ padding: isMobile ? "16px 14px 60px" : "32px 32px 60px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", maxWidth:1100, margin:"0 auto" }}>
       <div style={{ marginBottom: isMobile ? 18 : 28 }}>
-        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#262421", letterSpacing:-0.3 }}>Dashboard</div>
-        <div style={{ fontSize:13, color:"#9ca3af", marginTop:4 }}>Visão geral da plataforma VICKE</div>
+        <div style={{ fontSize: isMobile ? 20 : 24, fontWeight:600, color:"#111827", letterSpacing:-0.3 }}>Dashboard</div>
+        <div style={{ fontSize:13, color:"#4b5563", marginTop:4 }}>Visão geral da plataforma VICKE</div>
       </div>
 
       {erro && (
@@ -40615,7 +40615,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
           navegação primária no topo, atividade/feed embaixo. Com volume de
           empresas crescendo, feed pode esticar muito — não pode empurrar
           os cards de navegação pra fora da tela. */}
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8 }}>Acesso rápido</div>
+      <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:12, marginTop:8 }}>Acesso rápido</div>
       {/* Mobile: 2 colunas fixas (cabe 2 cards de ~150px em 375px de viewport).
           Desktop: auto-fill com mínimo 200px (3-6 colunas conforme largura). */}
       <div style={{ display:"grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fill, minmax(200px, 1fr))", gap: isMobile ? 8 : 12, marginBottom:32 }}>
@@ -40626,10 +40626,10 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
             onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
               <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
-              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#262421" }}>{m.label}</div>
+              <div style={{ fontSize: isMobile ? 12 : 13, fontWeight:600, color:"#111827" }}>{m.label}</div>
             </div>
             {!isMobile && (
-              <div style={{ fontSize:11.5, color:"#9ca3af", marginLeft:28 }}>{m.desc}</div>
+              <div style={{ fontSize:11.5, color:"#4b5563", marginLeft:28 }}>{m.desc}</div>
             )}
           </button>
         ))}
@@ -40700,14 +40700,14 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
           }}
           onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#b5652f"; }}
           onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
-          <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {it.label}
           </div>
-          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#262421", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
+          <div style={{ fontSize: isMobile ? 22 : 28, fontWeight:600, color:"#111827", lineHeight:1.1, fontVariantNumeric:"tabular-nums" }}>
             {it.value}
           </div>
           {it.sub && (
-            <div style={{ fontSize: isMobile ? 10.5 : 11.5, color:"#9ca3af", marginTop:4, lineHeight:1.3 }}>{it.sub}</div>
+            <div style={{ fontSize: isMobile ? 10.5 : 11.5, color:"#4b5563", marginTop:4, lineHeight:1.3 }}>{it.sub}</div>
           )}
         </div>
       ))}
@@ -40725,12 +40725,12 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
 function DashboardFeed({ feed, loading, isMobile }) {
   return (
     <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "12px 14px" : "16px 18px" }}>
-      <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:14 }}>
         Atividade recente
       </div>
-      {loading && <div style={{ fontSize:13, color:"#9ca3af" }}>Carregando…</div>}
+      {loading && <div style={{ fontSize:13, color:"#4b5563" }}>Carregando…</div>}
       {!loading && (!feed || feed.length === 0) && (
-        <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 0" }}>
+        <div style={{ fontSize:13, color:"#4b5563", padding:"12px 0" }}>
           Nenhuma atividade ainda.
         </div>
       )}
@@ -40767,10 +40767,10 @@ function FeedItem({ ev, primeiro }) {
         background: meta.cor, marginTop:6,
       }} />
       <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, color:"#262421", lineHeight:1.4 }}>
+        <div style={{ fontSize:13, color:"#111827", lineHeight:1.4 }}>
           {meta.descricao}
         </div>
-        <div style={{ fontSize:11.5, color:"#9ca3af", marginTop:2 }}>
+        <div style={{ fontSize:11.5, color:"#4b5563", marginTop:2 }}>
           {ev.empresa_nome && ev.empresa_nome !== "—" ? `${ev.empresa_nome} · ` : ""}
           {ev.usuario_email || "anônimo"} · {tempoRelativo(ev.criado_em)}
         </div>
@@ -40961,7 +40961,7 @@ function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus 
           position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
           background:"none", border:"none", cursor: disabled ? "not-allowed" : "pointer",
           padding:"6px 8px", lineHeight:0,
-          color:"#9ca3af", fontFamily:"inherit",
+          color:"#4b5563", fontFamily:"inherit",
           display:"flex", alignItems:"center", justifyContent:"center",
         }}
         onMouseEnter={e => { if (!disabled) e.currentTarget.style.color = "#374151"; }}
@@ -41038,15 +41038,15 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           padding:"32px 32px 24px", maxWidth:420, width:"100%",
           boxShadow:"0 8px 32px rgba(0,0,0,0.06)",
         }}>
-        <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginBottom:6, letterSpacing:-0.3 }}>
+        <div style={{ fontSize:18, fontWeight:700, color:"#111827", marginBottom:6, letterSpacing:-0.3 }}>
           Trocar senha
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.5 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.5 }}>
           Sua senha foi resetada por um administrador. Para continuar, escolha uma senha nova que só você saiba.
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Senha temporária recebida
           </label>
           <CampoSenha
@@ -41060,7 +41060,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Nova senha (mínimo 6 caracteres)
           </label>
           <CampoSenha
@@ -41073,7 +41073,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
         </div>
 
         <div style={{ marginBottom:18 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Confirme a nova senha
           </label>
           <CampoSenha
@@ -41103,13 +41103,13 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
 
         <button type="button" onClick={onLogout} disabled={loading}
           style={{
-            background:"transparent", color:"#6b7280", border:"none",
+            background:"transparent", color:"#4b5563", border:"none",
             padding:"8px", fontSize:12, cursor:"pointer", fontFamily:"inherit", width:"100%",
           }}>
           Sair sem trocar
         </button>
 
-        <div style={{ fontSize:11, color:"#9ca3af", marginTop:12, textAlign:"center" }}>
+        <div style={{ fontSize:11, color:"#4b5563", marginTop:12, textAlign:"center" }}>
           Logado como {usuario?.email || ""}
         </div>
       </form>
@@ -41235,8 +41235,8 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
               <IconeMaster nome="check" tamanho={22} cor="#fff" />
             </div>
           </div>
-          <div style={{ fontSize:16, fontWeight:600, color:"#262421", marginBottom:6 }}>Recebido</div>
-          <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5 }}>
+          <div style={{ fontSize:16, fontWeight:600, color:"#111827", marginBottom:6 }}>Recebido</div>
+          <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.5 }}>
             Obrigado pelo feedback.
           </div>
         </div>
@@ -41256,15 +41256,15 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         maxWidth:480, width:"100%", maxHeight:"90vh", overflowY:"auto",
         boxShadow:"0 8px 32px rgba(0,0,0,0.15)",
       }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Enviar feedback
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:18, lineHeight:1.5 }}>
           Sua mensagem chega direto pro time da Vicke. Pode mandar bugs, ideias, perguntas — tudo serve.
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:8 }}>
             Tipo
           </label>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:6 }}>
@@ -41280,7 +41280,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
                   cursor: enviando ? "not-allowed" : "pointer",
                   border: categoria === c.id ? "1.5px solid #111" : "2px solid #d1d5db",
                   background: categoria === c.id ? "#fafbfc" : "#fff",
-                  color:"#262421",
+                  color:"#111827",
                   fontWeight: categoria === c.id ? 600 : 400,
                 }}>
                 {c.label}
@@ -41290,7 +41290,7 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:6 }}>
             Mensagem
           </label>
           <textarea
@@ -41317,15 +41317,15 @@ function ModalEnviarFeedback({ usuario, onFechar }) {
           </div>
         )}
 
-        <div style={{ fontSize:11, color:"#9ca3af", marginBottom:14, lineHeight:1.5 }}>
-          Enviado por: <strong style={{ color:"#6b7280" }}>{usuario?.nome}</strong> · {usuario?.email}
+        <div style={{ fontSize:11, color:"#4b5563", marginBottom:14, lineHeight:1.5 }}>
+          Enviado por: <strong style={{ color:"#4b5563" }}>{usuario?.nome}</strong> · {usuario?.email}
         </div>
 
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
           <button onClick={onFechar} disabled={enviando}
             style={{
               background:"#fff", border:"2px solid #d1d5db", borderRadius: 12,
-              padding:"9px 14px", fontSize:13, color:"#6b7280", cursor: enviando ? "not-allowed" : "pointer",
+              padding:"9px 14px", fontSize:13, color:"#4b5563", cursor: enviando ? "not-allowed" : "pointer",
               fontFamily:"inherit",
             }}>
             Cancelar
@@ -41765,10 +41765,10 @@ export default function ModuloClientesFornecedores() {
   const conflitoModal = conflitoSessao && (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:100050, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
       <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding:"28px 32px", maxWidth:440, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.15)" }}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:8 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:8 }}>
           {conflitoSessao === "logout" ? "Sessão encerrada" : "Sessão alterada em outra aba"}
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.55 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.55 }}>
           {conflitoSessao === "logout"
             ? "Você foi desconectado em outra aba. Esta página será atualizada para voltar à tela de login."
             : "Outra aba acabou de logar com um usuário diferente. Por segurança, esta página será atualizada para refletir a nova sessão."}
@@ -41896,7 +41896,7 @@ export default function ModuloClientesFornecedores() {
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ width:20, height:20, border:"2px solid #e5e7eb", borderTop:"2px solid #111", borderRadius:"50%", animation:"spin 0.8s linear infinite", margin:"0 auto 12px" }} />
-        <p style={{ color:"#9ca3af", fontSize:13, margin:0 }}>Carregando...</p>
+        <p style={{ color:"#4b5563", fontSize:13, margin:0 }}>Carregando...</p>
       </div>
     </div>
     <DialogosHost />
@@ -41910,10 +41910,10 @@ export default function ModuloClientesFornecedores() {
       <>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100vh", background:"#fff", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", padding:20 }}>
         <div style={{ textAlign:"center", maxWidth:400 }}>
-          <div style={{ fontSize:15, color:"#262421", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
-          <div style={{ fontSize:13, color:"#6b7280", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
+          <div style={{ fontSize:15, color:"#111827", marginBottom:8, fontWeight:600 }}>Servidor indisponível</div>
+          <div style={{ fontSize:13, color:"#4b5563", marginBottom:16 }}>Não foi possível carregar os dados. Tente novamente em alguns segundos.</div>
           <button onClick={() => { setLoading(true); loadData(); }} style={{ background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Tentar novamente</button>
-          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#6b7280", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
+          <button onClick={handleLogout} style={{ marginLeft:10, background:"transparent", color:"#4b5563", border:"2px solid #d1d5db", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Sair</button>
         </div>
       </div>
       <DialogosHost />
@@ -41979,7 +41979,21 @@ export default function ModuloClientesFornecedores() {
   return (
     <>
     <div style={{ display:"flex", height:"100vh", fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", overflow:"hidden" }}>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg); } }
+        /* Interação em azul: borda do campo, do botão e do cartão em hover e foco.
+           Escopado por data-vk-ui, que a área de conteúdo aplica em todos os
+           módulos menos o de orçamento de projeto. */
+        [data-vk-ui="1"] input:hover,
+        [data-vk-ui="1"] select:hover,
+        [data-vk-ui="1"] textarea:hover,
+        [data-vk-ui="1"] button:hover { border-color:#0474f4 !important; }
+        [data-vk-ui="1"] input:focus,
+        [data-vk-ui="1"] select:focus,
+        [data-vk-ui="1"] textarea:focus {
+          border-color:#0474f4 !important; box-shadow:0 0 0 3px rgba(4,116,244,0.18); outline:none;
+        }
+      `}</style>
 
       {/* ── Backdrop mobile: fundo escurecido por trás do drawer.
           Aparece SÓ em mobile quando sidebar está aberta. Toque fecha. */}
@@ -42031,8 +42045,8 @@ export default function ModuloClientesFornecedores() {
         }}>
           {(isMobile || !colapsadaEf) && (
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:15, fontWeight:700, color:"#262421", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
-              <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>Vicke</div>
+              <div style={{ fontFamily:"'Inter', system-ui, sans-serif", fontSize:15, fontWeight:700, color:"#111827", letterSpacing:-0.3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{nomeEscritorio}</div>
+              <div style={{ fontSize:11, color:"#4b5563", marginTop:2 }}>Vicke</div>
             </div>
           )}
           {/* Botão de toggle: muda comportamento conforme dispositivo.
@@ -42048,7 +42062,7 @@ export default function ModuloClientesFornecedores() {
             style={{
               background:"none", border:"none", cursor:"pointer",
               padding: isMobile ? 10 : 6, // touch target maior em mobile
-              color:"#9ca3af", lineHeight:0,
+              color:"#4b5563", lineHeight:0,
               display:"flex", alignItems:"center", justifyContent:"center",
               borderRadius:6, fontFamily:"inherit",
             }}
@@ -42129,7 +42143,7 @@ export default function ModuloClientesFornecedores() {
                       </span>
                       {!colapsadaEf && (
                         <span style={{
-                          color:"#9ca3af", fontSize:9,
+                          color:"#4b5563", fontSize:9,
                           transition:"transform 0.2s",
                           transform: projetosAberto ? "rotate(90deg)" : "rotate(0deg)",
                           display:"inline-block",
@@ -42199,7 +42213,7 @@ export default function ModuloClientesFornecedores() {
                     {icon && <IconeMaster nome={icon} tamanho={16} cor={aba===k ? "#0474f4" : "#4b5563"} />}
                     {!colapsadaEf && label}
                   </span>
-                  {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#9ca3af", fontSize:11, padding:"1px 7px", borderRadius: 12 }}>{count}</span>}
+                  {!colapsadaEf && count > 0 && <span style={{ background:"#f3f4f6", color:"#4b5563", fontSize:11, padding:"1px 7px", borderRadius: 12 }}>{count}</span>}
                 </button>
               );
             })}
@@ -42207,7 +42221,7 @@ export default function ModuloClientesFornecedores() {
           <div style={{ padding:"8px 8px 12px", borderTop:"1px solid rgba(38,36,33,0.08)", display:"flex", flexDirection:"column", gap:2 }}>
             {/* Header da seção — esconde quando sidebar colapsada (não cabe). */}
             {!isMaster && !colapsadaEf && (
-              <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 12px 2px" }}>
+              <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 12px 2px" }}>
                 Configuração
               </div>
             )}
@@ -42259,15 +42273,15 @@ export default function ModuloClientesFornecedores() {
             <div style={{ padding:"8px 12px", marginTop:4, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
               {!colapsadaEf && (
                 <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12, fontWeight:600, color:"#374151", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
-                  <div style={{ fontSize:11, color:"#9ca3af" }}>{usuario?.perfil || ""}</div>
+                  <div style={{ fontSize:12, fontWeight:600, color:"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{usuario?.nome || "—"}</div>
+                  <div style={{ fontSize:11, color:"#4b5563" }}>{usuario?.perfil || ""}</div>
                 </div>
               )}
               <button
                 onClick={handleLogout}
                 title="Sair"
                 style={{
-                  background:"none", border:"none", color:"#9ca3af",
+                  background:"none", border:"none", color:"#4b5563",
                   fontSize:12, cursor:"pointer", fontFamily:"inherit",
                   padding: colapsadaEf ? "6px" : "4px 8px",
                   borderRadius:6, lineHeight:0,
@@ -42287,14 +42301,14 @@ export default function ModuloClientesFornecedores() {
             {/* Importar/Exportar — só master. Discreto, no rodapé. */}
             {isMaster && !colapsadaEf && (
               <div style={{ padding:"4px 12px 8px", display:"flex", gap:6, fontSize:11 }}>
-                <label style={{ flex:1, textAlign:"center", color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px" }}
+                <label style={{ flex:1, textAlign:"center", color:"#4b5563", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px" }}
                   onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
                   Importar
                   <input type="file" accept=".json" style={{ display:"none" }} onChange={importarDados} />
                 </label>
                 <button onClick={exportarDados}
-                  style={{ flex:1, color:"#9ca3af", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px", background:"transparent", fontFamily:"inherit", fontSize:11 }}
+                  style={{ flex:1, color:"#4b5563", cursor:"pointer", border:"1px solid #f3f4f6", borderRadius:6, padding:"5px 8px", background:"transparent", fontFamily:"inherit", fontSize:11 }}
                   onMouseEnter={e => { e.currentTarget.style.background="#f9fafb"; e.currentTarget.style.color="#374151"; }}
                   onMouseLeave={e => { e.currentTarget.style.background="transparent"; e.currentTarget.style.color="#9ca3af"; }}>
                   Exportar
@@ -42321,7 +42335,7 @@ export default function ModuloClientesFornecedores() {
               style={{
                 background:"none", border:"none",
                 padding:8, lineHeight:0,
-                cursor:"pointer", color:"#374151",
+                cursor:"pointer", color:"#111827",
                 borderRadius:6,
                 display:"flex", alignItems:"center", justifyContent:"center",
               }}>
@@ -42333,7 +42347,7 @@ export default function ModuloClientesFornecedores() {
               </svg>
             </button>
             <div style={{
-              fontSize:14, fontWeight:600, color:"#262421",
+              fontSize:14, fontWeight:600, color:"#111827",
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1,
             }}>
               {nomeEscritorio}
@@ -42351,7 +42365,9 @@ export default function ModuloClientesFornecedores() {
             </button>
           </div>
         )}
-        <div style={{ flex:1, overflowY:"auto" }}>
+        {/* O formato visual do app (hover/foco em azul) vale para toda a área de
+            conteúdo, menos o módulo de orçamento de projeto, que tem visual próprio. */}
+        <div data-vk-ui={aba === "projetos:orcamentos" ? undefined : "1"} style={{ flex:1, overflowY:"auto" }}>
           <>
           {orcamentoTelaCheia ? (
             <FormOrcamentoProjetoTeste
@@ -42436,17 +42452,17 @@ export default function ModuloClientesFornecedores() {
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:99999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
           <div style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius:14, padding:24, width:"100%", maxWidth:600, maxHeight:"85vh", display:"flex", flexDirection:"column", gap:16 }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <div style={{ fontWeight:700, fontSize:15, color:"#262421" }}>Backup dos dados</div>
-              <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#9ca3af", fontSize:20, cursor:"pointer" }}>×</button>
+              <div style={{ fontWeight:700, fontSize:15, color:"#111827" }}>Backup dos dados</div>
+              <button onClick={() => setShowBackup(false)} style={{ background:"transparent", border:"none", color:"#4b5563", fontSize:20, cursor:"pointer" }}>×</button>
             </div>
-            <div style={{ color:"#6b7280", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
+            <div style={{ color:"#4b5563", fontSize:13 }}>Download automático não disponível. Selecione tudo (<b>Ctrl+A</b>), copie (<b>Ctrl+C</b>) e salve num arquivo <b>.json</b>.</div>
             <textarea readOnly value={backupJson} onClick={e => e.target.select()}
-              style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius: 12, color:"#374151", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
+              style={{ flex:1, minHeight:320, background:"#f9fafb", border:"2px solid #d1d5db", borderRadius: 12, color:"#111827", fontSize:11, fontFamily:"monospace", padding:14, resize:"none", outline:"none" }} />
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
               <button onClick={() => navigator.clipboard?.writeText(backupJson).catch(()=>{})}
                 style={{ background:"#262421", color:"#fff", border:"none", borderRadius:7, padding:"8px 18px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>Copiar tudo</button>
               <button onClick={() => setShowBackup(false)}
-                style={{ background:"#fff", color:"#6b7280", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>
+                style={{ background:"#fff", color:"#4b5563", border:"2px solid #d1d5db", borderRadius:7, padding:"8px 18px", fontSize:13, cursor:"pointer", fontFamily:"inherit" }}>Fechar</button>
             </div>
           </div>
         </div>
@@ -42475,7 +42491,7 @@ export default function ModuloClientesFornecedores() {
             fontFamily:"'Inter', system-ui, -apple-system, sans-serif",
             display:"flex", flexDirection:"column", gap:1,
           }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 10px 4px" }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, padding:"6px 10px 4px" }}>
             {projetosItem.label}
           </div>
           {projetosItem.sub.map(s => {

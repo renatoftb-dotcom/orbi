@@ -4292,24 +4292,24 @@ const BITOLAS_FERRO = [
 function GradeFerro({ elementos, pathFerro, pathConcreto, get, set, comConcreto = true }) {
   return (
     <div style={{ gridColumn: "1 / -1" }}>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>
         Metros lineares de cada bitola{comConcreto ? ", e m³ de concreto" : ""} por elemento. Campo vazio = 0.
       </div>
       <div style={{ overflowX: "auto", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10 }}>
         <table style={{ borderCollapse: "collapse", fontSize: 11.5, minWidth: 640 }}>
           <thead>
             <tr style={{ background: "#f7f7f8" }}>
-              <th style={{ position: "sticky", left: 0, background: "#f7f7f8", padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>Elemento</th>
+              <th style={{ position: "sticky", left: 0, background: "#f7f7f8", padding: "7px 10px", textAlign: "left", fontWeight: 600, color: "#4b5563", whiteSpace: "nowrap" }}>Elemento</th>
               {BITOLAS_FERRO.map((b) => (
-                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>{b.label}</th>
+                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#4b5563", whiteSpace: "nowrap" }}>{b.label}</th>
               ))}
-              {comConcreto && <th style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>Concreto m³</th>}
+              {comConcreto && <th style={{ padding: "7px 6px", fontWeight: 600, color: "#4b5563", whiteSpace: "nowrap" }}>Concreto m³</th>}
             </tr>
           </thead>
           <tbody>
             {elementos.map((el) => (
               <tr key={el.key} style={{ borderTop: "1px solid #f3f4f6" }}>
-                <td style={{ position: "sticky", left: 0, background: "#fff", padding: "5px 10px", color: "#262421", fontWeight: 500, whiteSpace: "nowrap" }}>{el.label}</td>
+                <td style={{ position: "sticky", left: 0, background: "#fff", padding: "5px 10px", color: "#111827", fontWeight: 500, whiteSpace: "nowrap" }}>{el.label}</td>
                 {BITOLAS_FERRO.map((b) => (
                   <td key={b.k} style={{ padding: 3 }}>
                     <input type="number" step="0.01" style={{ ...C.input, width: 72, padding: "5px 6px", fontSize: 11.5, borderRadius: 7 }}
@@ -4338,13 +4338,13 @@ function GradeFerro({ elementos, pathFerro, pathConcreto, get, set, comConcreto 
 function LinhaFerro({ rotulo, pathFerro, get, set }) {
   return (
     <div style={{ gridColumn: "1 / -1" }}>
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 6 }}>{rotulo} — metros lineares por bitola</div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 6 }}>{rotulo} — metros lineares por bitola</div>
       <div style={{ overflowX: "auto", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 10 }}>
         <table style={{ borderCollapse: "collapse", fontSize: 11.5, minWidth: 560 }}>
           <thead>
             <tr style={{ background: "#f7f7f8" }}>
               {BITOLAS_FERRO.map((b) => (
-                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#6b7280", whiteSpace: "nowrap" }}>{b.label}</th>
+                <th key={b.k} style={{ padding: "7px 6px", fontWeight: 600, color: "#4b5563", whiteSpace: "nowrap" }}>{b.label}</th>
               ))}
             </tr>
           </thead>
@@ -4370,10 +4370,10 @@ function BlocoColapsavel({ titulo, subtitulo, aberto, onToggle, children }) {
     <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, marginBottom: 12, overflow: "hidden" }}>
       <button onClick={onToggle} type="button"
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#fafafa", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#262421" }}>{titulo}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{titulo}</span>
         <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {subtitulo && <span style={{ fontSize: 11, color: "#9ca3af" }}>{subtitulo}</span>}
-          <span style={{ fontSize: 11, color: "#9ca3af" }}>{aberto ? "▲" : "▼"}</span>
+          {subtitulo && <span style={{ fontSize: 11, color: "#6b7280" }}>{subtitulo}</span>}
+          <span style={{ fontSize: 11, color: "#6b7280" }}>{aberto ? "▲" : "▼"}</span>
         </span>
       </button>
       {aberto && <div style={{ padding: 16, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>{children}</div>}
@@ -4402,7 +4402,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
   const inputQtd = { width: 48, padding: "4px 4px", border: "1.5px solid #1f2a37", borderRadius: 7, fontSize: 13, fontFamily: "inherit", textAlign: "center", background: "#fff" };
   const colunasMolhado = isMobile ? "1fr 52px 60px 60px 20px" : "170px 52px 72px 72px 20px";
   const colunasSeco = isMobile ? "1fr 52px 20px" : "150px 52px 20px";
-  const cabecalho = { fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, textAlign: "center" };
+  const cabecalho = { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4, textAlign: "center" };
   function setQtd(id, v) { set(`ambientes.${id}`, v === "" ? "" : Math.max(0, Math.round(Number(v)))); }
   function setCfg(id, campo, valor) { set(`comodosCfg.${id}.${campo}`, valor); }
   function restaurar(id) { const cfgs = { ...(projeto.comodosCfg || {}) }; delete cfgs[id]; set("comodosCfg", cfgs); }
@@ -4426,8 +4426,8 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
             <div style={{ fontSize: 13, color: "#1f2a37", padding: "5px 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.nome}</div>
           )}
           <input type="number" min="0" step="1" style={inputQtd} value={get(`ambientes.${a.id}`) ?? ""} onChange={(e) => setQtd(a.id, e.target.value)} />
-          {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.revestimento > 0 ? fmt(n * c.revestimento) : "—"}</div>}
-          {a.molhado && <div style={{ fontSize: 13, color: "#374151", textAlign: "center" }}>{c.bancadaM2 > 0 ? fmt(n * c.bancadaM2) : "—"}</div>}
+          {a.molhado && <div style={{ fontSize: 13, color: "#111827", textAlign: "center" }}>{c.revestimento > 0 ? fmt(n * c.revestimento) : "—"}</div>}
+          {a.molhado && <div style={{ fontSize: 13, color: "#111827", textAlign: "center" }}>{c.bancadaM2 > 0 ? fmt(n * c.bancadaM2) : "—"}</div>}
           <button type="button" onClick={() => { setQtd(a.id, 0); if (aberto) setComodoAberto(null); }} title="Tirar da obra" style={{ ...C.btnGhost, fontSize: 14, padding: 0, lineHeight: 1 }}>×</button>
         </div>
         {aberto && a.molhado && (
@@ -4452,7 +4452,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
                 </>
               )}
             </div>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6, fontSize: 11.5, color: "#6b7280", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", marginTop: 6, fontSize: 11.5, color: "#4b5563", flexWrap: "wrap" }}>
               <span>Por cômodo: {fmt(c.area)} m² · perímetro {fmt(c.perimetro)} m · revestimento {fmt(c.revestimento)} m²{c.bancadaM2 > 0 ? ` · granito ${fmt(c.bancadaM2)} m²` : ""}{c.bancadaPartes ? ` = bancada ${fmt(c.bancadaPartes.total)} (tampo ${fmt(c.bancadaPartes.tampo)} de ${fmt(c.bancada.comprimento)} × ${fmt(c.bancada.profundidade)} m + saia ${fmt(c.bancadaPartes.saia)} + fundo ${fmt(c.bancadaPartes.fundo)} + sapatas ${fmt(c.bancadaPartes.sapatas)})` : ""}{c.ilhaPartes ? ` + ilha ${fmt(c.ilhaPartes.total)} (tampo ${fmt(c.ilhaPartes.tampo)} de ${fmt(c.ilha.comprimento)} × ${fmt(c.ilha.profundidade)} m + laterais ${fmt(c.ilhaPartes.laterais)})` : ""}</span>
               {cfg.editado && <button type="button" style={{ ...C.btnGhost, fontSize: 11.5 }} onClick={() => restaurar(a.id)}>Voltar ao padrão ({cfg.tamanho})</button>}
             </div>
@@ -4495,7 +4495,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
         ) : (
           ausentes.length > 0 && <button type="button" style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }} onClick={() => setAdicionando(true)}>＋ Adicionar cômodo</button>
         )}
-        {presentes.length === 0 && <span style={{ fontSize: 12, color: "#9ca3af" }}>nenhum cômodo ainda</span>}
+        {presentes.length === 0 && <span style={{ fontSize: 12, color: "#6b7280" }}>nenhum cômodo ainda</span>}
       </div>
     </div>
   );
@@ -4523,9 +4523,9 @@ const MEM_S = {
   card: { background: "#fff", borderRadius: 14, maxWidth: 680, width: "100%", margin: "24px auto", boxShadow: "0 18px 50px rgba(0,0,0,0.25)", overflow: "hidden" },
   topo: { padding: "14px 18px", borderBottom: "1px solid #f3f4f6", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
   passo: { display: "flex", gap: 10, padding: "10px 0", borderTop: "1px solid #f6f6f6" },
-  bolinha: { flex: "0 0 22px", height: 22, borderRadius: 11, background: "#f3f4f6", color: "#6b7280", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
-  formula: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11.5, color: "#6b7280" },
-  conta: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, color: "#262421" },
+  bolinha: { flex: "0 0 22px", height: 22, borderRadius: 11, background: "#f3f4f6", color: "#4b5563", fontSize: 11, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" },
+  formula: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 11.5, color: "#4b5563" },
+  conta: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: 12.5, color: "#111827" },
 };
 function MemoriaCalculo({ item, passos, onFechar }) {
   const qtd = Number(item.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -4535,33 +4535,33 @@ function MemoriaCalculo({ item, passos, onFechar }) {
       <div style={MEM_S.card} onClick={(e) => e.stopPropagation()}>
         <div style={MEM_S.topo}>
           <div>
-            <div style={{ fontSize: 10.5, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <div style={{ fontSize: 10.5, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>
               Memória de cálculo · {item.etapa}{item.subEtapa ? ` › ${item.subEtapa}` : ""}
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, color: "#262421", marginTop: 3 }}>{item.item}</div>
-            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2 }}>Quantidade no orçamento: <b style={{ color: "#262421" }}>{qtd} {item.unidade}</b></div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginTop: 3 }}>{item.item}</div>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>Quantidade no orçamento: <b style={{ color: "#111827" }}>{qtd} {item.unidade}</b></div>
           </div>
           <button type="button" onClick={onFechar} style={{ ...C.btnGhost, fontSize: 18, padding: "0 4px", lineHeight: 1 }} title="Fechar">×</button>
         </div>
         <div style={{ padding: "4px 18px 14px" }}>
           {!passos || !passos.length ? (
-            <div style={{ fontSize: 12.5, color: "#6b7280", padding: "14px 0" }}>
+            <div style={{ fontSize: 12.5, color: "#4b5563", padding: "14px 0" }}>
               A memória deste item ainda não foi escrita. Estamos publicando etapa por etapa — por enquanto valem "Instalações pré obra e projetos" e "Fundação".
             </div>
           ) : passos.map((p, idx) => {
             if (p.tipo === "nota") {
-              return <div key={idx} style={{ ...MEM_S.passo, color: "#6b7280", fontSize: 12.5, lineHeight: 1.5 }}>{p.texto}</div>;
+              return <div key={idx} style={{ ...MEM_S.passo, color: "#4b5563", fontSize: 12.5, lineHeight: 1.5 }}>{p.texto}</div>;
             }
             n += 1;
             return (
               <div key={idx} style={MEM_S.passo}>
                 <div style={MEM_S.bolinha}>{n}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 12.5, color: "#262421", fontWeight: 600 }}>{p.rotulo}</div>
+                  <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>{p.rotulo}</div>
                   {p.tipo === "dado" && (
-                    <div style={{ fontSize: 12.5, color: "#374151", marginTop: 2 }}>
+                    <div style={{ fontSize: 12.5, color: "#111827", marginTop: 2 }}>
                       <b>{p.valor}</b> {p.unidade}
-                      {p.fonte ? <span style={{ color: "#9ca3af" }}> · lido do {p.fonte}</span> : null}
+                      {p.fonte ? <span style={{ color: "#6b7280" }}> · lido do {p.fonte}</span> : null}
                     </div>
                   )}
                   {p.tipo === "conta" && (
@@ -4571,14 +4571,14 @@ function MemoriaCalculo({ item, passos, onFechar }) {
                     </div>
                   )}
                   {p.tipo === "teto" && (
-                    <div style={{ ...MEM_S.conta, marginTop: 3 }}>{p.conta} <span style={{ color: "#9ca3af" }}>{p.unidade}</span></div>
+                    <div style={{ ...MEM_S.conta, marginTop: 3 }}>{p.conta} <span style={{ color: "#6b7280" }}>{p.unidade}</span></div>
                   )}
                 </div>
               </div>
             );
           })}
         </div>
-        <div style={{ padding: "10px 18px", background: "#fafafa", borderTop: "1px solid #f3f4f6", fontSize: 11.5, color: "#6b7280" }}>
+        <div style={{ padding: "10px 18px", background: "#fafafa", borderTop: "1px solid #f3f4f6", fontSize: 11.5, color: "#4b5563" }}>
           Os números vêm do projeto que gerou este orçamento. Mudou uma medida? Edite os dados do projeto e recalcule — a memória acompanha.
         </div>
       </div>
@@ -4809,7 +4809,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
       <div style={wrap}>
         <button onClick={onVoltar} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
         <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <div style={{ fontSize: 14, color: "#6b7280", marginBottom: 16 }}>Nenhum orçamento nesta obra.</div>
+          <div style={{ fontSize: 14, color: "#4b5563", marginBottom: 16 }}>Nenhum orçamento nesta obra.</div>
           {perm.podeEditar && (
             <button style={C.btn} onClick={() => setViewInterna("form")}>Preencher dados do projeto</button>
           )}
@@ -4823,8 +4823,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     return (
       <div style={wrap}>
         <button onClick={() => setViewInterna(obra.orcamento ? "resultado" : "vazio")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#262421", marginBottom: 4 }}>Dados do projeto</div>
-        <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 16 }}>Campo vazio = 0. Um bloco sem nenhum dado não entra no orçamento.</div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Dados do projeto</div>
+        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>Campo vazio = 0. Um bloco sem nenhum dado não entra no orçamento.</div>
 
         <BlocoColapsavel titulo="Geral" aberto={!!blocosAbertos.geral} onToggle={() => toggleBloco("geral")}>
           <CampoSelect label="Tipo de obra" valor={projetoDraft.tipoObra || "nova"} onChange={(v) => set("tipoObra", v)} opcoes={TIPOS_OBRA} />
@@ -4842,7 +4842,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="M² de parede externa" valor={get("arquitetura.m2ParedesExternas")} onChange={setParedeExterna} />
           <div>
             <label style={C.label}>M² de parede total</label>
-            <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("arquitetura.m2ParedesTotal"))} disabled readOnly />
+            <input style={{ ...C.input, background: "#f3f4f6", color: "#4b5563" }} value={numOrZero(get("arquitetura.m2ParedesTotal"))} disabled readOnly />
           </div>
           {ehTerrea && (
             <>
@@ -4858,7 +4858,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                   <CampoNum label="M² parede 25cm" valor={get("terreo.m2Parede25")} onChange={(v) => set("terreo.m2Parede25", v)} />
                   <div>
                     <label style={C.label}>M² parede 20cm (automático)</label>
-                    <input style={{ ...C.input, background: "#f3f4f6", color: "#6b7280" }} value={numOrZero(get("terreo.m2Parede20"))} disabled readOnly />
+                    <input style={{ ...C.input, background: "#f3f4f6", color: "#4b5563" }} value={numOrZero(get("terreo.m2Parede20"))} disabled readOnly />
                   </div>
                 </>
               )}
@@ -4869,7 +4869,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           )}
           <CampoNum label="Gabarito" valor={get("arquitetura.gabarito")} onChange={(v) => set("arquitetura.gabarito", v)} />
           <div style={{ gridColumn: "1 / -1", marginTop: 6 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Cômodos</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 6 }}>Cômodos</div>
             <ListaComodos projeto={projetoDraft} get={get} set={set} comodoAberto={comodoAberto} setComodoAberto={setComodoAberto} isMobile={isMobile} />
           </div>
         </BlocoColapsavel>
@@ -4949,7 +4949,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                     {paredePav1Expandida ? "Simplificar (tudo 20cm)" : "Expandir espessuras de parede (15/20/25cm)"}
                   </button>
                 </div>
-                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#6b7280" }}>
+                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#4b5563" }}>
                   Em branco, cada pavimento entra com metade do que está no bloco Geral (parede {au.paredePavimento} m², perímetro {au.perimetroPavimento} m). Digitou aqui, o digitado vence.
                 </div>
               </>); })()}
@@ -4968,7 +4968,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
         <BlocoColapsavel titulo="Forros e Cobertura" subtitulo={`${forrosLista.length} forro${forrosLista.length !== 1 ? "s" : ""} · ${coberturas.length} telhado${coberturas.length !== 1 ? "s" : ""}`} aberto={!!blocosAbertos.cobertura} onToggle={() => toggleBloco("cobertura")}>
           <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151" }}>Forros</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827" }}>Forros</div>
             {forrosLista.map((f, idx) => (
               <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "1.2fr 1.6fr 1fr 1.6fr auto", gap: 8, alignItems: "end", padding: 10, background: "#fafafa", borderRadius: 8 }}>
                 <CampoTexto label="Onde" valor={f.pavimento} onChange={(v) => updateForro(idx, "pavimento", v)} placeholder={forrosAuto[idx] ? forrosAuto[idx].pavimento : "trecho"} />
@@ -4995,14 +4995,14 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               {forrosLista.length < FORROS_MAX && (
                 <button type="button" style={C.btnSec} onClick={addForro}>＋ Adicionar forro</button>
               )}
-              <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+              <span style={{ fontSize: 11.5, color: "#4b5563" }}>
                 {forrosDigitados
                   ? "Lista sua. Para voltar ao automático, remova todos os trechos."
                   : `Automático: ${ehTerrea ? "a área da laje" : "cada pavimento com a área da sua laje"}. Edite ou acrescente trechos de outro tipo (parte em gesso, parte em madeira).`}
                 {" "}O acabamento de borda (tabica ou meia-cana) sai do perímetro dos cômodos do bloco Geral.
               </span>
             </div>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginTop: 4 }}>Cobertura</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginTop: 4 }}>Cobertura</div>
             {coberturas.map((t, idx) => (
               <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "2fr 1fr 1fr 1fr 1fr auto", gap: 8, alignItems: "end", padding: 10, background: "#fafafa", borderRadius: 8 }}>
                 <CampoSelect label="Tipo de telha" valor={t.tipo} onChange={(v) => updateTelhado(idx, "tipo", v)} opcoes={TIPOS_TELHA_UI} />
@@ -5052,7 +5052,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             {esquadriasLista.length < 40 && (
               <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addEsquadria}>＋ Adicionar esquadria</button>
             )}
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>
               Calcula o alumínio por perfil (código Alcoa e kg), o vidro 8mm (descontos de corte por tipo) e os acessórios (roldanas, fechos, dobradiças, braços, borrachas, conexões, chumbadores e parafusos), segundo a lista de perfis da linha. No orçamento aparece uma linha por esquadria com o preço fechado; a composição fica guardada no item. Correr e persiana: aba ESQUADRIAS da planilha; giro, maxim-ar e fixo: desenhos de montagem do catálogo Alcoa Gold. Para usar seus preços, cadastre o alumínio, o vidro e os acessórios em Insumos com o código Alcoa como alias.
             </div>
           </div>
@@ -5061,7 +5061,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         <BlocoColapsavel titulo="Pavimentação externa" subtitulo="contrapiso externo · a área pré-preenche o piso externo" aberto={!!blocosAbertos.externa} onToggle={() => toggleBloco("externa")}>
           <CampoNum label="Pavimentação externa (m²)" valor={get("externa.pavimentacao")} onChange={(v) => set("externa.pavimentacao", v)} />
           <CampoNum label="Perímetro da pavimentação (m)" valor={get("externa.perimetroPavimentacao")} onChange={(v) => set("externa.perimetroPavimentacao", v)} />
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563" }}>
             A área dimensiona o contrapiso (concreto, malha pop, massiamento) e vira o automático do piso externo em Pisos e revestimentos. O perímetro só dimensiona a caixaria da borda do contrapiso (tábuas e sarrafos) — rodapé e soleira não entram aqui.
           </div>
         </BlocoColapsavel>
@@ -5070,11 +5070,11 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <datalist id="vk-insumos-pisos">
             {(data.materiais || []).filter((m) => /pisos e revestimentos|argamassas/i.test(String(m.grupo || "")) || /^(Piso|Revestimento|Soleira|Granito)/i.test(String(m.nome || ""))).map((m) => <option key={m.codigo || m.nome} value={m.nome} />)}
           </datalist>
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563" }}>
             Informe os m² de cada superfície. Sem produto escolhido, entra o genérico do padrão da obra ({padraoObra(projetoDraft)}); sem formato, o tamanho típico do padrão. Peças com {Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras); a partir do formato o VICKE calcula argamassa (AC-III em porcelanato e externo, AC-II em cerâmica), rejunte pela geometria da junta, clips e cunhas (peça ≥ 60 cm) ou cruzetas, disco e salva-piso.
           </div>
           {(() => { const au = autosPisos(projetoDraft); return (
-            <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
+            <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px" }}>
               Em branco, o VICKE usa o automático: piso interno = área construída ({au.pisoInterno} m²) · piso externo = pavimentação externa ({au.pisoExterno} m²) · revestimento de parede = cômodos ({au.revestimentoInterno} m²) · rodapé = perímetro das paredes menos portas ({au.rodapeM} m) · soleiras e peitoris = vão das esquadrias ({au.soleirasM} m) · bancadas = cômodos ({au.bancadas.length}). Vergas e contravergas: {au.vaos.portasInternas} porta{au.vaos.portasInternas !== 1 ? "s" : ""} interna{au.vaos.portasInternas !== 1 ? "s" : ""} de 0,80 + {au.vaos.metrosPortasExternas} m de portas externas + {au.vaos.metrosJanelas} m de janelas (verga e contraverga) = {au.vaos.metrosVergas} m de treliça.
             </div>
           ); })()}
@@ -5100,15 +5100,15 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           ))}
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div><label style={C.label}>Rodapé (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.rodapeM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).rodapeM} (perímetro)`} onChange={(e) => set("pisos.rodapeM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
-            <div style={{ fontSize: 11, color: "#9ca3af", paddingBottom: 8, gridColumn: isMobile ? "auto" : "2 / -1" }}>recorte do próprio piso interno, {RODAPE_ALTURA_M * 100} cm de altura — os m² entram somados ao piso</div>
+            <div style={{ fontSize: 11, color: "#6b7280", paddingBottom: 8, gridColumn: isMobile ? "auto" : "2 / -1" }}>recorte do próprio piso interno, {RODAPE_ALTURA_M * 100} cm de altura — os m² entram somados ao piso</div>
           </div>
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <div><label style={C.label}>Soleiras e peitoris (m)</label><input style={C.input} type="number" step="0.01" value={get("pisos.soleirasM") ?? ""} placeholder={`auto: ${autosPisos(projetoDraft).soleirasM} (esquadrias)`} onChange={(e) => set("pisos.soleirasM", e.target.value === "" ? "" : Number(e.target.value))} /></div>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>largura {SOLEIRA_LARGURA_M * 100} cm</div>
             <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.soleirasProduto") ?? ""} placeholder={soleiraPadrao(padraoObra(projetoDraft))} onChange={(e) => set("pisos.soleirasProduto", e.target.value)} /></div>
           </div>
           <div style={{ gridColumn: "1 / -1", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 4 }}>Bancadas de granito / mármore <span style={{ fontWeight: 400, color: "#9ca3af" }}>— tampo + saia + fundo (rodabanca) + sapatas, em m² de pedra pronta</span></div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 4 }}>Bancadas de granito / mármore <span style={{ fontWeight: 400, color: "#6b7280" }}>— tampo + saia + fundo (rodabanca) + sapatas, em m² de pedra pronta</span></div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {bancadasLista.map((b, idx) => {
                 const m = medirBancada(b);
@@ -5126,9 +5126,9 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, alignItems: "end", marginTop: 6 }}>
                       <div><label style={C.label}>Pedra (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={b.produto ?? ""} placeholder={granitoPadrao(padraoObra(projetoDraft))} onChange={(e) => updateBancada(idx, "produto", e.target.value)} /></div>
-                      <div style={{ fontSize: 12, color: "#374151", paddingBottom: 8 }}>
+                      <div style={{ fontSize: 12, color: "#111827", paddingBottom: 8 }}>
                         <b>{m.total.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} m²</b>
-                        <span style={{ color: "#9ca3af" }}> · tampo {m.tampo} · saia {m.saia} · fundo {m.fundo} · sapatas {m.sapatas}</span>
+                        <span style={{ color: "#6b7280" }}> · tampo {m.tampo} · saia {m.saia} · fundo {m.fundo} · sapatas {m.sapatas}</span>
                       </div>
                     </div>
                   </div>
@@ -5138,7 +5138,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                 <button type="button" style={{ ...C.btnSec, alignSelf: "flex-start" }} onClick={addBancada}>＋ Adicionar bancada</button>
               )}
               {bancadasLista.length === 0 && estimarPelosComodos(projetoDraft).bancadas.length > 0 && (
-                <div style={{ fontSize: 12, color: "#374151", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
+                <div style={{ fontSize: 12, color: "#111827", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, padding: "6px 10px" }}>
                   Automático pelos cômodos: {estimarPelosComodos(projetoDraft).bancadas.map((b) => `${b.nome} ${Number(b.comprimento).toLocaleString("pt-BR")} × ${Number(b.profundidade).toLocaleString("pt-BR")} m`).join(" · ")} — em {granitoPadrao(padraoObra(projetoDraft))}. Adicione bancadas aqui para substituir.
                 </div>
               )}
@@ -5149,26 +5149,26 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           </div>
           <div style={{ gridColumn: "1 / -1", display: "grid", gridTemplateColumns: isMobile ? "1fr" : "150px 200px 1fr", gap: 10, alignItems: "end", padding: "8px 0", borderTop: "1px solid #f3f4f6" }}>
             <CampoNum label="Deck (m²)" valor={get("pisos.deckM2")} onChange={(v) => set("pisos.deckM2", v)} />
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>+ Cetol 1 lata / 20 m²</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>+ Cetol 1 lata / 20 m²</div>
             <div><label style={C.label}>Produto (Insumos)</label><input style={C.input} list="vk-insumos-pisos" value={get("pisos.deckProduto") ?? ""} placeholder="Piso - Deck" onChange={(e) => set("pisos.deckProduto", e.target.value)} /></div>
           </div>
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Instalações" subtitulo={`estimativa por kits a partir dos cômodos do bloco Geral · padrão ${padraoInstalacoes(padraoObra(projetoDraft))}`} aberto={!!blocosAbertos.ambientes} onToggle={() => toggleBloco("ambientes")}>
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#6b7280" }}>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563" }}>
             Sem projeto de engenharia, hidráulica, esgoto, elétrica, louças e portas são estimados por conjuntos de pontos por cômodo (prática do SINAPI), com os kits de Insumos → Composições e os cômodos informados no bloco Geral. Padrão Alto e Altíssimo usam os kits de acabamento superior.
           </div>
           <CampoSelect label="Aquecimento de água" valor={get("instalacoes.aquecimento") || "nenhum"} onChange={(v) => set("instalacoes.aquecimento", v)}
             opcoes={(typeof SISTEMAS_AQUECIMENTO !== "undefined" ? SISTEMAS_AQUECIMENTO : []).map((x) => ({ value: x.id, label: x.nome }))} />
           <CampoSelect label="Pressurizador" valor={get("instalacoes.pressurizador") ? "sim" : "nao"} onChange={(v) => set("instalacoes.pressurizador", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
           <div style={{ gridColumn: "1 / -1", marginTop: 4 }}>
-            <div style={{ fontSize: 12, fontWeight: 600, color: "#374151", marginBottom: 6 }}>Disciplinas que vêm do projeto de engenharia (a estimativa por kits sai destas):</div>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 6 }}>Disciplinas que vêm do projeto de engenharia (a estimativa por kits sai destas):</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
               {ETAPAS_PROJETO.filter((e) => DISCIPLINAS_INSTALACOES.includes(e.id)).map((e) => {
                 const marcado = !!get(`instalacoes.doProjeto.${e.id}`);
                 const temItens = itensProjetoLista.some((it) => it.etapa === e.id && it.nome);
                 return (
-                  <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#374151", padding: "6px 10px", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 8, background: marcado ? "#eef2ff" : "#fff", cursor: "pointer" }}>
+                  <label key={e.id} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: "#111827", padding: "6px 10px", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 8, background: marcado ? "#eef2ff" : "#fff", cursor: "pointer" }}>
                     <input type="checkbox" checked={marcado} onChange={(ev) => set(`instalacoes.doProjeto.${e.id}`, ev.target.checked)} />
                     {e.nome}
                     {temItens && !marcado && <span style={{ color: "#b45309", fontSize: 11 }} title="Há itens do projeto nesta disciplina e a estimativa por kits também está ligada: vai somar os dois.">· soma com o projeto</span>}
@@ -5181,7 +5181,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
         <BlocoColapsavel titulo="Itens do projeto de engenharia" subtitulo={`${itensProjetoLista.length} ite${itensProjetoLista.length !== 1 ? "ns" : "m"} · hidráulica, esgoto, elétrica, louças e metais, aquecimento`} aberto={!!blocosAbertos.itensProjeto} onToggle={() => toggleBloco("itensProjeto")}>
           <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>
               A planilha nunca quantificou esses grupos — eles vêm do projeto de engenharia. Digite (ou cole) a lista do projeto; cada item é procurado no catálogo de Insumos pelo nome e precificado como os demais.
             </div>
             <datalist id="vk-insumos-lista">
@@ -5192,7 +5192,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               if (!doGrupo.length) return null;
               return (
                 <div key={et.id} style={{ padding: 10, background: "#fafafa", borderRadius: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#262421", marginBottom: 6 }}>{et.nome} <span style={{ color: "#9ca3af", fontWeight: 400 }}>· {doGrupo.length}</span></div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "#111827", marginBottom: 6 }}>{et.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>· {doGrupo.length}</span></div>
                   {doGrupo.map(({ it, idx }) => {
                     const st = statusItemProjeto(it);
                     return (
@@ -5390,22 +5390,22 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           ["Custo por m²", formatoBRL(custoPorM2)],
         ].map(([label, valor, rodape]) => (
           <div key={label} style={{ background: "#fafafa", border: "1px solid #f3f4f6", borderRadius: 12, padding: "12px 14px" }}>
-            <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#262421" }}>{valor}</div>
-            {rodape ? <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 2 }}>{rodape}</div> : null}
+            <div style={{ fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{valor}</div>
+            {rodape ? <div style={{ fontSize: 10, color: "#6b7280", marginTop: 2 }}>{rodape}</div> : null}
           </div>
         ))}
       </div>
 
       {orc.qualidade ? (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#374151" }}>
+          <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "10px 14px", fontSize: 12, color: "#111827" }}>
             <b>{orc.qualidade.comPreco} de {orc.qualidade.total} itens precificados</b>
             {" · "}{orc.qualidade.alta + orc.qualidade.media} com preço atual
             {" · "}{orc.qualidade.baixa + orc.qualidade.obsoleta} corrigidos pelo INCC ou antigos
             {orc.qualidade.manual ? ` · ${orc.qualidade.manual} manual` : ""}
             {orc.qualidade.semPreco.length ? ` · ${orc.qualidade.semPreco.length} sem preço (R$ 0)` : ""}
-            <span style={{ color: "#9ca3af" }}> — gerado em {new Date(orc.geradoEm).toLocaleDateString("pt-BR")}; recalcule para usar preços novos.</span>
+            <span style={{ color: "#6b7280" }}> — gerado em {new Date(orc.geradoEm).toLocaleDateString("pt-BR")}; recalcule para usar preços novos.</span>
           </div>
           {(orc.qualidade.semPreco.length > 0 || orc.qualidade.atencao.length > 0 || (orc.avisos || []).some((a) => a.tipo && a.tipo.startsWith("esquadria"))) && (
             <details style={{ marginTop: 8, fontSize: 12, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "8px 14px" }}>
@@ -5444,7 +5444,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         };
         return (
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
-            <div style={{ fontSize: 12, color: "#6b7280" }}>{itensPorEtapa.length} etapas · {orc.itens.length} itens</div>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>{itensPorEtapa.length} etapas · {orc.itens.length} itens</div>
             <button type="button" onClick={alternarTodas} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>
               {todasRecolhidas ? "Mostrar todos os itens ▼" : "Recolher todos os itens ▲"}
             </button>
@@ -5460,13 +5460,13 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             <div key={grupo.etapa} style={{ marginBottom: 8, border: "1px solid rgba(38,36,33,0.1)", borderRadius: 10, overflow: "hidden" }}>
               <button type="button" onClick={() => toggleEtapa(grupo.etapa)}
                 style={{ width: "100%", display: "flex", justifyContent: "space-between", padding: "10px 14px", background: "#f9fafb", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#262421" }}>{grupo.etapa}</span>
-                <span style={{ fontSize: 12, color: "#6b7280" }}>{formatoBRL(subtotal)} {colapsado ? "▼" : "▲"}</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{grupo.etapa}</span>
+                <span style={{ fontSize: 12, color: "#4b5563" }}>{formatoBRL(subtotal)} {colapsado ? "▼" : "▲"}</span>
               </button>
               {!colapsado && (
                 <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 560 }}>
                   <thead>
-                    <tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                    <tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                       <th style={{ padding: "6px 14px" }}>Item</th>
                       <th style={{ padding: "6px 14px" }}>Unidade</th>
                       <th style={{ padding: "6px 14px", textAlign: "right" }}>Qtd</th>
@@ -5478,18 +5478,18 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                   <tbody>
                     {grupo.itens.map((i, idx) => (
                       <tr key={idx} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 14px", color: "#262421" }}>{i.item}</td>
-                        <td style={{ padding: "6px 14px", color: "#6b7280" }}>{i.unidade}</td>
-                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#374151" }}>{Number(i.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
-                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#374151", whiteSpace: "nowrap" }} title={rotuloConfianca(i)}>
+                        <td style={{ padding: "6px 14px", color: "#111827" }}>{i.item}</td>
+                        <td style={{ padding: "6px 14px", color: "#4b5563" }}>{i.unidade}</td>
+                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827" }}>{Number(i.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
+                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827", whiteSpace: "nowrap" }} title={rotuloConfianca(i)}>
                           <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 4, marginRight: 6, background: corConfianca(i.confianca, i.semPreco) }} />
                           {formatoBRL(i.preco)}
                         </td>
-                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#262421", fontWeight: 600 }}>{formatoBRL(i.total)}</td>
+                        <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827", fontWeight: 600 }}>{formatoBRL(i.total)}</td>
                         <td style={{ padding: "6px 6px", textAlign: "center" }}>
                           {memorias[chaveMemoria(i)] && (
                             <button type="button" onClick={() => setMemoriaAberta(i)} title="Memória de cálculo: como se chegou nesta quantidade"
-                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 2, color: "#9ca3af", fontFamily: "inherit" }}>⚙</button>
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 13, lineHeight: 1, padding: 2, color: "#6b7280", fontFamily: "inherit" }}>⚙</button>
                           )}
                         </td>
                       </tr>
@@ -5502,7 +5502,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         })}
       </div>
 
-      <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 16 }}>
+      <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 16 }}>
         Gerado em {new Date(orc.geradoEm).toLocaleString("pt-BR")}, versão {orc.versao}.
       </div>
 

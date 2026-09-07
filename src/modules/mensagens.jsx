@@ -208,12 +208,12 @@ function Mensagens({ usuario }) {
   const S = {
     wrap: { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", height:"100vh", display:"flex", flexDirection:"column", background:"#fff" },
     header: { borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"20px 32px", display:"flex", justifyContent:"space-between", alignItems:"center" },
-    titulo: { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
-    sub: { fontSize:13, color:"#9ca3af", marginTop:3 },
+    titulo: { fontSize:18, fontWeight:700, color:"#111827", margin:0 },
+    sub: { fontSize:13, color:"#4b5563", marginTop:3 },
     filtros: { display:"flex", gap:4, padding:"12px 32px", borderBottom:"1px solid #f3f4f6" },
     btnFiltro: (ativo) => ({
       background: ativo ? "#fdf6f0" : "transparent",
-      color: ativo ? "#b5652f" : "#6b7280",
+      color: ativo ? "#0474f4" : "#6b7280",
       border: "none",
       borderRadius: 6,
       padding: "6px 12px",
@@ -234,21 +234,21 @@ function Mensagens({ usuario }) {
       transition: "background 0.1s",
       paddingLeft: selecionada ? 15 : 18,
     }),
-    nome: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 700, color:"#262421", marginBottom:2, display:"flex", justifyContent:"space-between", alignItems:"center" }),
+    nome: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 700, color:"#111827", marginBottom:2, display:"flex", justifyContent:"space-between", alignItems:"center" }),
     assunto: (lida) => ({ fontSize:13, fontWeight: lida ? 400 : 600, color: lida ? "#374151" : "#262421", marginBottom:3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }),
-    preview: { fontSize:12, color:"#9ca3af", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
-    data: { fontSize:11, color:"#9ca3af", fontWeight:400 },
+    preview: { fontSize:12, color:"#4b5563", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" },
+    data: { fontSize:11, color:"#4b5563", fontWeight:400 },
     pontoNaoLida: { display:"inline-block", width:8, height:8, background:"#3b82f6", borderRadius:"50%", marginRight:8, flexShrink:0 },
-    vazio: { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"60px 20px" },
+    vazio: { fontSize:13, color:"#4b5563", textAlign:"center", padding:"60px 20px" },
 
     detHeader: { padding:"24px 32px", borderBottom:"1.5px solid rgba(38,36,33,0.16)", background:"#fff" },
-    detAssunto: { fontSize:18, fontWeight:700, color:"#262421", marginBottom:12 },
-    detLinha: { fontSize:13, color:"#6b7280", marginBottom:4 },
-    detLinhaForte: { fontSize:14, color:"#262421", fontWeight:500 },
+    detAssunto: { fontSize:18, fontWeight:700, color:"#111827", marginBottom:12 },
+    detLinha: { fontSize:13, color:"#4b5563", marginBottom:4 },
+    detLinhaForte: { fontSize:14, color:"#111827", fontWeight:500 },
     detAcoes: { display:"flex", gap:8, marginTop:16 },
     detBody: { padding:"32px", background:"#fff", margin:"24px 32px", borderRadius: 12, border:"1px solid #f3f4f6" },
-    detHtml: { fontSize:14, color:"#262421", lineHeight:1.6 },
-    btnAcao: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
+    detHtml: { fontSize:14, color:"#111827", lineHeight:1.6 },
+    btnAcao: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     btnAcaoPrimaria: { background:"#262421", color:"#fff", border:"1px solid #262421", borderRadius:7, padding:"6px 14px", fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     btnAcaoDestrutiva: { background:"#fff", color:"#dc2626", border:"1px solid #fecaca", borderRadius:7, padding:"6px 12px", fontSize:12.5, cursor:"pointer", fontFamily:"inherit", display:"inline-flex", alignItems:"center", gap:6 },
     badge: { display:"inline-block", fontSize:11, fontWeight:600, color:"#7c3aed", background:"#f5f3ff", border:"1px solid #ddd6fe", borderRadius: 14, padding:"2px 8px", marginLeft:8 },
@@ -256,15 +256,15 @@ function Mensagens({ usuario }) {
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20 },
     modal: { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, width:"100%", maxWidth:680, maxHeight:"85vh", display:"flex", flexDirection:"column", boxShadow:"0 8px 32px rgba(0,0,0,0.12)" },
     modalHeader: { padding:"20px 24px 16px", borderBottom:"1px solid #f3f4f6" },
-    modalTitulo: { fontSize:16, fontWeight:700, color:"#262421", margin:0 },
+    modalTitulo: { fontSize:16, fontWeight:700, color:"#111827", margin:0 },
     modalBody: { padding:"20px 24px", flex:1, overflowY:"auto", display:"flex", flexDirection:"column", gap:14 },
-    modalLabel: { fontSize:11, fontWeight:600, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4, display:"block" },
+    modalLabel: { fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:4, display:"block" },
     modalInput: { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
-    modalReadonly: { fontSize:13, color:"#374151", padding:"10px 12px", background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 12 },
+    modalReadonly: { fontSize:13, color:"#111827", padding:"10px 12px", background:"#f9fafb", border:"1px solid #f3f4f6", borderRadius: 12 },
     modalTextarea: { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", minHeight:200, resize:"vertical", lineHeight:1.5 },
     modalFooter: { padding:"14px 24px 18px", borderTop:"1px solid #f3f4f6", display:"flex", justifyContent:"flex-end", gap:10 },
     btnEnviar: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnCancelar: { background:"#fff", color:"#6b7280", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnCancelar: { background:"#fff", color:"#4b5563", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"10px 20px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
   };
 
   if (loading) {
@@ -386,7 +386,7 @@ function Mensagens({ usuario }) {
                     {selecionada.body_text}
                   </pre>
                 ) : (
-                  <div style={{ color:"#9ca3af", fontStyle:"italic", fontSize:13 }}>
+                  <div style={{ color:"#4b5563", fontStyle:"italic", fontSize:13 }}>
                     Conteúdo ainda sendo processado pelo servidor… Recarregue em alguns segundos.
                   </div>
                 )}

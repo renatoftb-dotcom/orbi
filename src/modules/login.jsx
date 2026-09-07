@@ -52,17 +52,17 @@ function getEstilos(loading) {
     },
     box: { width: "100%", maxWidth: 360 },
     header: { textAlign: "center", marginBottom: 32 },
-    titulo: { fontSize: 22, fontWeight: 800, color: "#262421", letterSpacing: -0.5, margin: 0 },
-    sub: { fontSize: 13, color: "#78716c", marginTop: 6 },
+    titulo: { fontSize: 22, fontWeight: 800, color: "#111827", letterSpacing: -0.5, margin: 0 },
+    sub: { fontSize: 13, color: "#4b5563", marginTop: 6 },
     card: { background: "#fff", border: "1.5px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "28px 24px", boxShadow: "0 18px 50px -28px rgba(38,36,33,0.35)" },
-    label: { fontSize: 13, color: "#6b7280", display: "block", marginBottom: 6 },
+    label: { fontSize: 13, color: "#4b5563", display: "block", marginBottom: 6 },
     input: {
       width: "100%",
       border: "1.5px solid rgba(38,36,33,0.16)",
       borderRadius: 12,
       padding: "11px 14px",
       fontSize: 14,
-      color: "#262421",
+      color: "#111827",
       outline: "none",
       background: "#fff",
       boxSizing: "border-box",
@@ -87,7 +87,7 @@ function getEstilos(loading) {
     btnSec: {
       width: "100%",
       background: "#fff",
-      color: "#374151",
+      color: "#111827",
       border: "1.5px solid rgba(38,36,33,0.16)",
       borderRadius: 12,
       padding: "12px 0",
@@ -99,13 +99,13 @@ function getEstilos(loading) {
     },
     erro: { fontSize: 13, color: "#dc2626", textAlign: "center", marginTop: 12, minHeight: 20 },
     info: { fontSize: 13, color: "#059669", textAlign: "center", marginTop: 12, minHeight: 20 },
-    rodape: { textAlign: "center", marginTop: 24, fontSize: 12, color: "#9ca3af" },
+    rodape: { textAlign: "center", marginTop: 24, fontSize: 12, color: "#6b7280" },
     // Link "Criar conta" / "Voltar pro login"
     linkSec: {
       textAlign: "center",
       marginTop: 16,
       fontSize: 13,
-      color: "#6b7280",
+      color: "#4b5563",
     },
     linkBtn: {
       background: "none",
@@ -264,7 +264,7 @@ function TelaLoginEntrada({ onLogin, onCriarConta, onEsqueciSenha }) {
                 style={{
                   position:"absolute", right: 8, top:"50%", transform:"translateY(-50%)",
                   background:"none", border:"none", padding: 6, cursor:"pointer",
-                  color:"#9ca3af", display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#4b5563", display:"flex", alignItems:"center", justifyContent:"center",
                   borderRadius: 6,
                 }}
                 onMouseEnter={e => { e.currentTarget.style.color = "#374151"; e.currentTarget.style.background = "#f3f4f6"; }}
@@ -298,7 +298,7 @@ function TelaLoginEntrada({ onLogin, onCriarConta, onEsqueciSenha }) {
               onClick={onEsqueciSenha}
               style={{
                 background:"none", border:"none", padding:0, cursor:"pointer",
-                fontFamily:"inherit", fontSize:12.5, color:"#9ca3af",
+                fontFamily:"inherit", fontSize:12.5, color:"#4b5563",
                 textDecoration:"underline", textUnderlineOffset:2,
               }}
               onMouseEnter={e => { e.currentTarget.style.color = "#374151"; }}
@@ -381,7 +381,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
             />
           </div>
           <div style={S.grupo}>
-            <label style={S.label}>CNPJ / CPF <span style={{ color:"#9ca3af", fontWeight:400 }}>(opcional)</span></label>
+            <label style={S.label}>CNPJ / CPF <span style={{ color:"#4b5563", fontWeight:400 }}>(opcional)</span></label>
             <input
               style={S.input}
               placeholder="00.000.000/0001-00"
@@ -409,7 +409,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
             />
           </div>
           <div style={S.grupo}>
-            <label style={S.label}>Senha * <span style={{ color:"#9ca3af", fontWeight:400 }}>(mínimo 6 caracteres)</span></label>
+            <label style={S.label}>Senha * <span style={{ color:"#4b5563", fontWeight:400 }}>(mínimo 6 caracteres)</span></label>
             <div style={{ position:"relative" }}>
               <input
                 style={{ ...S.input, paddingRight: 40 }}
@@ -426,7 +426,7 @@ function TelaCadastro({ onVoltar, onCodigoEnviado }) {
                 style={{
                   position:"absolute", right: 8, top:"50%", transform:"translateY(-50%)",
                   background:"none", border:"none", padding: 6, cursor:"pointer",
-                  color:"#9ca3af", display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#4b5563", display:"flex", alignItems:"center", justifyContent:"center",
                   borderRadius: 6,
                 }}
                 onMouseEnter={e => { e.currentTarget.style.color = "#374151"; e.currentTarget.style.background = "#f3f4f6"; }}
@@ -589,7 +589,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
     borderRadius: 12,
     fontSize: 22,
     fontWeight: 600,
-    color: "#262421",
+    color: "#111827",
     textAlign: "center",
     outline: "none",
     background: "#fff",
@@ -605,7 +605,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
           <div style={S.titulo}>Digite o código</div>
           <div style={S.sub}>
             Enviamos um código de 6 dígitos para<br/>
-            <span style={{ color:"#374151", fontWeight:500 }}>{email}</span>
+            <span style={{ color:"#111827", fontWeight:500 }}>{email}</span>
           </div>
         </div>
         <div style={S.card}>
@@ -702,10 +702,10 @@ function TelaRecuperarSenha({ onVoltar }) {
             <div style={S.sub}>Verifique seu e-mail</div>
           </div>
           <div style={S.card}>
-            <div style={{ fontSize:13.5, color:"#374151", lineHeight:1.6, textAlign:"center" }}>
+            <div style={{ fontSize:13.5, color:"#111827", lineHeight:1.6, textAlign:"center" }}>
               Se houver uma conta com o e-mail informado, você receberá em instantes um link para redefinir sua senha.
             </div>
-            <div style={{ fontSize:12, color:"#9ca3af", lineHeight:1.5, marginTop:14, textAlign:"center" }}>
+            <div style={{ fontSize:12, color:"#4b5563", lineHeight:1.5, marginTop:14, textAlign:"center" }}>
               O link expira em 1 hora. Verifique também a pasta de spam.
             </div>
           </div>
@@ -726,7 +726,7 @@ function TelaRecuperarSenha({ onVoltar }) {
           <div style={S.sub}>Recuperar senha</div>
         </div>
         <div style={S.card}>
-          <div style={{ fontSize:12.5, color:"#6b7280", lineHeight:1.5, marginBottom:16 }}>
+          <div style={{ fontSize:12.5, color:"#4b5563", lineHeight:1.5, marginBottom:16 }}>
             Digite o e-mail da sua conta. Vamos te enviar um link para criar uma nova senha.
           </div>
           <div style={S.grupo}>
@@ -803,7 +803,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
             <div style={S.sub}>Link inválido</div>
           </div>
           <div style={S.card}>
-            <div style={{ fontSize:13.5, color:"#374151", lineHeight:1.6, textAlign:"center" }}>
+            <div style={{ fontSize:13.5, color:"#111827", lineHeight:1.6, textAlign:"center" }}>
               Este link de redefinição de senha não é válido ou já foi usado.
             </div>
           </div>
@@ -836,10 +836,10 @@ function TelaRedefinirSenha({ token, onConcluido }) {
                 </svg>
               </div>
             </div>
-            <div style={{ fontSize:14, fontWeight:600, color:"#262421", textAlign:"center", marginBottom:6 }}>
+            <div style={{ fontSize:14, fontWeight:600, color:"#111827", textAlign:"center", marginBottom:6 }}>
               Pronto!
             </div>
-            <div style={{ fontSize:13, color:"#6b7280", textAlign:"center", lineHeight:1.5 }}>
+            <div style={{ fontSize:13, color:"#4b5563", textAlign:"center", lineHeight:1.5 }}>
               Sua senha foi redefinida. Você já pode entrar com a nova senha.
             </div>
           </div>
@@ -857,7 +857,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
           <div style={S.sub}>Crie uma nova senha</div>
         </div>
         <div style={S.card}>
-          <div style={{ fontSize:12.5, color:"#6b7280", lineHeight:1.5, marginBottom:16 }}>
+          <div style={{ fontSize:12.5, color:"#4b5563", lineHeight:1.5, marginBottom:16 }}>
             Digite a nova senha que você quer usar a partir de agora. Mínimo de 8 caracteres.
           </div>
           <div style={S.grupo}>
@@ -879,7 +879,7 @@ function TelaRedefinirSenha({ token, onConcluido }) {
                 style={{
                   position:"absolute", right: 8, top:"50%", transform:"translateY(-50%)",
                   background:"none", border:"none", padding: 6, cursor:"pointer",
-                  color:"#9ca3af", display:"flex", alignItems:"center", justifyContent:"center",
+                  color:"#4b5563", display:"flex", alignItems:"center", justifyContent:"center",
                   borderRadius: 6,
                 }}>
                 {mostrarSenha ? (

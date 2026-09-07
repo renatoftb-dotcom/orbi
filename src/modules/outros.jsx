@@ -60,8 +60,8 @@ function Etapas({ data, save }) {
   if (!data) {
     return (
       <div style={{ padding:"24px 28px" }}>
-        <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
-        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Carregando…</div>
+        <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Carregando…</div>
       </div>
     );
   }
@@ -127,8 +127,8 @@ function Etapas({ data, save }) {
     <div style={{ padding:"24px 28px", display:"flex", flexDirection:"column", height:"100%", overflow:"hidden" }}>
       {/* Cabeçalho */}
       <div style={{ marginBottom:16 }}>
-        <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
-        <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Acompanhamento dos projetos em andamento</div>
+        <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Etapas</h2>
+        <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Acompanhamento dos projetos em andamento</div>
       </div>
 
       {/* Toolbar: filtros + busca */}
@@ -142,7 +142,7 @@ function Etapas({ data, save }) {
           style={{
             flex:1, maxWidth:240, padding:"6px 12px",
             border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6,
-            fontSize:12.5, color:"#262421", background:"#fff",
+            fontSize:12.5, color:"#111827", background:"#fff",
             fontFamily:"inherit", outline:"none",
           }}
         />
@@ -162,9 +162,9 @@ function Etapas({ data, save }) {
       {projetos.length === 0 && (
         <div style={{
           position:"absolute", top:"50%", left:"50%", transform:"translate(-50%, -50%)",
-          textAlign:"center", color:"#9ca3af", fontSize:13, pointerEvents:"none",
+          textAlign:"center", color:"#4b5563", fontSize:13, pointerEvents:"none",
         }}>
-          <div style={{ fontSize:14, color:"#6b7280", marginBottom:4 }}>Nenhum projeto em andamento</div>
+          <div style={{ fontSize:14, color:"#4b5563", marginBottom:4 }}>Nenhum projeto em andamento</div>
           <div>Projetos são criados automaticamente quando um orçamento é marcado como <strong>Ganho</strong>.</div>
         </div>
       )}
@@ -209,7 +209,7 @@ function KanbanColumn({ col, cards, clientes }) {
         borderBottom: wait ? "1px dashed #e5e7eb" : "1px solid #f3f4f6",
       }}>
         <span style={{
-          fontSize:11, fontWeight:600, color:"#374151",
+          fontSize:11, fontWeight:600, color:"#111827",
           textTransform:"uppercase", letterSpacing:0.8,
         }}>{col.label}</span>
         <span style={{
@@ -221,7 +221,7 @@ function KanbanColumn({ col, cards, clientes }) {
       </div>
       <div style={{ flex:1, padding:10, display:"flex", flexDirection:"column", gap:8, overflowY:"auto" }}>
         {cards.length === 0 ? (
-          <div style={{ fontSize:11, color:"#9ca3af", textAlign:"center", padding:"20px 0", fontStyle:"italic" }}>
+          <div style={{ fontSize:11, color:"#4b5563", textAlign:"center", padding:"20px 0", fontStyle:"italic" }}>
             Nenhum projeto
           </div>
         ) : cards.map(card => (
@@ -267,16 +267,16 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
       }}>{tag.label}</span>
 
       {/* Nome cliente */}
-      <div style={{ fontSize:13.5, fontWeight:600, color:"#262421", lineHeight:1.3 }}>{nomeCli}</div>
+      <div style={{ fontSize:13.5, fontWeight:600, color:"#111827", lineHeight:1.3 }}>{nomeCli}</div>
       {ref && (
-        <div style={{ fontSize:11.5, color:"#9ca3af", lineHeight:1.3 }}>{ref}</div>
+        <div style={{ fontSize:11.5, color:"#4b5563", lineHeight:1.3 }}>{ref}</div>
       )}
 
       {/* Meta: área + valor */}
       {(area > 0 || valor > 0) && (
-        <div style={{ display:"flex", gap:10, fontSize:11, color:"#6b7280", marginTop:2 }}>
-          {area > 0 && <span><strong style={{ color:"#262421", fontWeight:600 }}>{area}</strong> m²</span>}
-          {valor > 0 && <span>R$ <strong style={{ color:"#262421", fontWeight:600 }}>{brlCurto(valor)}</strong></span>}
+        <div style={{ display:"flex", gap:10, fontSize:11, color:"#4b5563", marginTop:2 }}>
+          {area > 0 && <span><strong style={{ color:"#111827", fontWeight:600 }}>{area}</strong> m²</span>}
+          {valor > 0 && <span>R$ <strong style={{ color:"#111827", fontWeight:600 }}>{brlCurto(valor)}</strong></span>}
         </div>
       )}
 
@@ -328,9 +328,9 @@ function CardFooter({ projeto, col, dias, atrasado }) {
           </span>
         </div>
         {projeto.responsavelAcompanha && (
-          <div style={{ fontSize:11.5, color:"#374151", lineHeight:1.3 }}>
-            <strong style={{ fontWeight:600, color:"#262421" }}>{projeto.responsavelAcompanha}</strong>
-            <span style={{ color:"#9ca3af", fontWeight:400 }}> — Acompanhamento</span>
+          <div style={{ fontSize:11.5, color:"#111827", lineHeight:1.3 }}>
+            <strong style={{ fontWeight:600, color:"#111827" }}>{projeto.responsavelAcompanha}</strong>
+            <span style={{ color:"#4b5563", fontWeight:400 }}> — Acompanhamento</span>
           </div>
         )}
       </div>
@@ -499,9 +499,9 @@ function Obras({ data, save }) {
 
   const pillStyle = (ativa) => ({
     padding: "6px 14px", borderRadius: 7, fontSize: 12,
-    border: "1.5px solid " + (ativa ? "#b5652f" : "rgba(38,36,33,0.16)"),
+    border: "1.5px solid " + (ativa ? "#0474f4" : "rgba(38,36,33,0.16)"),
     background: ativa ? "#fdf6f0" : "#fff",
-    color: ativa ? "#b5652f" : "#6b7280",
+    color: ativa ? "#0474f4" : "#6b7280",
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });
 
@@ -513,8 +513,8 @@ function Obras({ data, save }) {
     return (
       <PageContainer>
         <div style={{ marginBottom: 16 }}>
-          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
-          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>
+          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>{clienteDaObra.nome}</h2>
+          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{obraAberta.nome || obraAberta.referencia || "Obra"}</div>
         </div>
         <GestaoObraPanel key={obraAberta.id} cliente={clienteDaObra} data={data} save={save} isMobile={isMobile} obraInicial={obraAberta} onSairDaObra={() => setObraAbertaId(null)} />
       </PageContainer>
@@ -525,8 +525,8 @@ function Obras({ data, save }) {
     <PageContainer>
       <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:4 }}>
         <div>
-          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
-          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
+          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Obras</h2>
+          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>Gestão de obras em execução</div>
         </div>
       </div>
 
@@ -549,13 +549,13 @@ function Obras({ data, save }) {
           marginTop: 20, padding: "48px 24px", textAlign: "center",
           border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 14, background: "#fafafa",
         }}>
-          <div style={{ color:"#9ca3af", fontSize:13 }}>
+          <div style={{ color:"#4b5563", fontSize:13 }}>
             {filtro === "andamento" && "Nenhuma obra em andamento."}
             {filtro === "concluidas" && "Nenhuma obra concluída ainda."}
             {filtro === "todas" && "Nenhuma obra cadastrada."}
           </div>
-          <div style={{ color:"#9ca3af", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
-            Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#9ca3af" }}>Engenharia</strong> do Kanban de Projetos.
+          <div style={{ color:"#4b5563", fontSize:12, marginTop:6, maxWidth:440, margin:"6px auto 0" }}>
+            Obras aparecem aqui automaticamente quando um projeto é finalizado na etapa <strong style={{ color:"#4b5563" }}>Engenharia</strong> do Kanban de Projetos.
           </div>
         </div>
       ) : (
@@ -575,8 +575,8 @@ function Obras({ data, save }) {
                   display:"grid", gridTemplateColumns:"1fr auto", gap:16, alignItems:"center",
                 }}>
                 <div style={{ minWidth:0, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                  <div style={{ fontSize:14, fontWeight:600, color:"#262421" }}>{nomeCliente(obra.clienteId)}</div>
-                  <div style={{ fontSize:13, color:"#6b7280" }}>{obra.nome || obra.referencia || "Obra"}</div>
+                  <div style={{ fontSize:14, fontWeight:600, color:"#111827" }}>{nomeCliente(obra.clienteId)}</div>
+                  <div style={{ fontSize:13, color:"#4b5563" }}>{obra.nome || obra.referencia || "Obra"}</div>
                   {concluida && (
                     <span style={{ fontSize:10, fontWeight:600, textTransform:"uppercase", letterSpacing:0.5, padding:"2px 7px", borderRadius:4, background:"#f0fdf4", color:"#16a34a" }}>
                       Concluída
@@ -592,7 +592,7 @@ function Obras({ data, save }) {
                   )}
                   {concluida && (
                     <button onClick={() => reabrirObra(obra)}
-                      style={{ fontSize:11.5, color:"#6b7280", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
+                      style={{ fontSize:11.5, color:"#4b5563", background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"5px 10px", cursor:"pointer", fontFamily:"inherit" }}>
                       Reabrir
                     </button>
                   )}
@@ -988,11 +988,11 @@ const CATEGORIAS_PRESTADOR = [
 
 // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
 const PS = {
-  input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#262421", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
-  label:  { fontSize:12, color:"#78716c", fontWeight:500, display:"block", marginBottom:5 },
+  input:  { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 12px", fontSize:13, color:"#111827", outline:"none", background:"#fff", fontFamily:"inherit", width:"100%", boxSizing:"border-box" },
+  label:  { fontSize:12, color:"#4b5563", fontWeight:500, display:"block", marginBottom:5 },
   btn:    { background:"#262421", color:"#fff", border:"none", borderRadius:12, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-  btnSec: { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
-  btnGhost: { background:"none", border:"none", color:"#9ca3af", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
+  btnSec: { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:12, padding:"9px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+  btnGhost: { background:"none", border:"none", color:"#4b5563", cursor:"pointer", fontFamily:"inherit", fontSize:13 },
   tag:    (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
 };
 
@@ -1056,8 +1056,8 @@ function PrestadoresServico({ data, save }) {
     <div style={{ padding:"28px 32px", fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <h2 style={{ color:"#262421", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
-          <div style={{ color:"#9ca3af", fontSize:13, marginTop:4 }}>{prestadores.length} cadastrado{prestadores.length !== 1 ? "s" : ""}</div>
+          <h2 style={{ color:"#111827", fontWeight:700, fontSize:22, margin:0, letterSpacing:-0.5 }}>Prestadores de Serviços</h2>
+          <div style={{ color:"#4b5563", fontSize:13, marginTop:4 }}>{prestadores.length} cadastrado{prestadores.length !== 1 ? "s" : ""}</div>
         </div>
         <button style={PS.btn} onClick={openNew}>+ Novo prestador</button>
       </div>
@@ -1071,7 +1071,7 @@ function PrestadoresServico({ data, save }) {
       </div>
 
       {filtrados.length === 0 ? (
-        <div style={{ padding:"40px 20px", textAlign:"center", color:"#9ca3af", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
+        <div style={{ padding:"40px 20px", textAlign:"center", color:"#4b5563", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
           {prestadores.length === 0 ? "Nenhum prestador cadastrado." : "Nenhum resultado para essa busca."}{" "}
           {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#b5652f", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
         </div>
@@ -1082,15 +1082,15 @@ function PrestadoresServico({ data, save }) {
               onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
               onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"start", gap:8, marginBottom:8 }}>
-                <div style={{ fontSize:14, fontWeight:700, color:"#262421" }}>{p.nome}</div>
+                <div style={{ fontSize:14, fontWeight:700, color:"#111827" }}>{p.nome}</div>
                 {p.ativo === false && <span style={PS.tag("#9ca3af")}>Inativo</span>}
               </div>
               <span style={PS.tag("#b5652f")}>{p.categoria}</span>
               <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
-                {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
-                {p.telefone && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.telefone}</div>}
-                {p.email && <div style={{ fontSize:12.5, color:"#6b7280", overflow:"hidden", textOverflow:"ellipsis" }}>{p.email}</div>}
-                {(p.cidade || p.estado) && <div style={{ fontSize:12.5, color:"#6b7280" }}>{p.cidade}{p.cidade && p.estado ? " — " : ""}{p.estado}</div>}
+                {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
+                {p.telefone && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.telefone}</div>}
+                {p.email && <div style={{ fontSize:12.5, color:"#4b5563", overflow:"hidden", textOverflow:"ellipsis" }}>{p.email}</div>}
+                {(p.cidade || p.estado) && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.cidade}{p.cidade && p.estado ? " — " : ""}{p.estado}</div>}
               </div>
               <div style={{ display:"flex", gap:8, marginTop:14 }}>
                 {p.whatsapp && p.telefone && (
@@ -1112,7 +1112,7 @@ function PrestadoresServico({ data, save }) {
     <div style={{ padding:"28px 32px", maxWidth:560, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24 }}>
         <button style={PS.btnGhost} onClick={()=>setView("list")}>← Voltar</button>
-        <div style={{ fontSize:17, fontWeight:700, color:"#262421" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
+        <div style={{ fontSize:17, fontWeight:700, color:"#111827" }}>{form.id ? "Editar prestador" : "Novo prestador"}</div>
       </div>
       <form onSubmit={salvar}>
         <div style={{ marginBottom:14 }}>
@@ -1142,7 +1142,7 @@ function PrestadoresServico({ data, save }) {
         </div>
 
         <div style={{ marginBottom:6, marginTop:20 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Endereço</div>
+          <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1 }}>Endereço</div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
           <div>
@@ -1178,7 +1178,7 @@ function PrestadoresServico({ data, save }) {
         {form.tipo === "PJ" && (
           <>
             <div style={{ marginBottom:6 }}>
-              <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Representante / sócio</div>
+              <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1 }}>Representante / sócio</div>
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
               <div>
@@ -1194,7 +1194,7 @@ function PrestadoresServico({ data, save }) {
         )}
 
         <div style={{ marginBottom:6 }}>
-          <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1 }}>Contato</div>
+          <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1 }}>Contato</div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
           <div>
@@ -1206,14 +1206,14 @@ function PrestadoresServico({ data, save }) {
             <input style={PS.input} type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} />
           </div>
         </div>
-        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151", marginBottom:20 }}>
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#111827", marginBottom:20 }}>
           <input type="checkbox" checked={form.whatsapp} onChange={e=>setForm({...form,whatsapp:e.target.checked})} /> Este telefone é WhatsApp
         </label>
         <div style={{ marginBottom:14 }}>
           <label style={PS.label}>Observações</label>
           <textarea style={{ ...PS.input, resize:"vertical" }} value={form.observacoes} onChange={e=>setForm({...form,observacoes:e.target.value})} rows={3} placeholder="Condições, indicações, alertas..." />
         </div>
-        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#374151", marginBottom:24 }}>
+        <label style={{ display:"flex", alignItems:"center", gap:8, cursor:"pointer", fontSize:13, color:"#111827", marginBottom:24 }}>
           <input type="checkbox" checked={form.ativo} onChange={e=>setForm({...form,ativo:e.target.checked})} /> Prestador ativo
         </label>
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>

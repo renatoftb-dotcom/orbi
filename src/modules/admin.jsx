@@ -139,31 +139,31 @@ function Admin({ usuario, data, save, initialTab }) {
   }, [aba]);
 
   const S = {
-    wrap:    { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#262421", maxWidth:1200, margin:"0 auto" },
+    wrap:    { fontFamily:"'Inter', system-ui, -apple-system, sans-serif", background:"#fff", minHeight:"100vh", color:"#111827", maxWidth:1200, margin:"0 auto" },
     header:  { borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"24px 32px" },
-    titulo:  { fontSize:18, fontWeight:700, color:"#262421", margin:0 },
-    sub:     { fontSize:13, color:"#9ca3af", marginTop:3 },
+    titulo:  { fontSize:18, fontWeight:700, color:"#111827", margin:0 },
+    sub:     { fontSize:13, color:"#4b5563", marginTop:3 },
     abas:    { display:"flex", gap:0, borderBottom:"1.5px solid rgba(38,36,33,0.16)", padding:"0 32px" },
-    aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #b5652f" : "2px solid transparent", color: ativa ? "#b5652f" : "#9ca3af", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
+    aba:     (ativa) => ({ background:"none", border:"none", borderBottom: ativa ? "2px solid #0474f4" : "2px solid transparent", color: ativa ? "#0474f4" : "#4b5563", padding:"12px 16px", fontSize:13, fontWeight: ativa ? 600 : 400, cursor:"pointer", fontFamily:"inherit", marginBottom:-1 }),
     body:    { padding:"32px" },
     bodyNarrow: { padding:"32px", maxWidth:760 },
     secao:   { marginBottom:32 },
-    secTit:  { fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
+    secTit:  { fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:1, marginBottom:16 },
     btn:     { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"10px 24px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
-    btnSec:  { background:"#fff", color:"#374151", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
+    btnSec:  { background:"#fff", color:"#111827", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"8px 16px", fontSize:13, cursor:"pointer", fontFamily:"inherit" },
     btnDestrutivo: { background:"#262421", color:"#fff", border:"none", borderRadius: 12, padding:"8px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" },
     tag:     { display:"inline-block", fontSize:10, fontWeight:700, color:"#1e3a8a", background:"#eff6ff", border:"1px solid #bfdbfe", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:1, marginLeft:10 },
     overlay: { position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center", padding:20, fontFamily:"'Inter', system-ui, -apple-system, sans-serif" },
     modal:   { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding:"28px 32px", maxWidth:480, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
     modalLg: { background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 16, padding:"28px 32px", maxWidth:560, width:"100%", boxShadow:"0 8px 32px rgba(0,0,0,0.12)", maxHeight:"90vh", overflowY:"auto" },
-    label:   { display:"block", fontSize:11, fontWeight:600, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
+    label:   { display:"block", fontSize:11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, marginBottom:5 },
     input:   { width:"100%", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 12, padding:"9px 12px", fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" },
     tabela:  { width:"100%", borderCollapse:"collapse", fontSize:13 },
-    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#6b7280", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1.5px solid rgba(38,36,33,0.16)", background:"#fafbfc" },
+    th:      { textAlign:"left", fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5, padding:"10px 12px", borderBottom:"1.5px solid rgba(38,36,33,0.16)", background:"#fafbfc" },
     td:      { padding:"12px", borderBottom:"1px solid #f3f4f6", verticalAlign:"middle" },
-    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#262421", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" },
-    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
-    vazio:   { fontSize:13, color:"#9ca3af", textAlign:"center", padding:"40px 0" },
+    badgeAtiva: { display:"inline-block", fontSize:11, fontWeight:600, color:"#111827", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" },
+    badgeInativa: { display:"inline-block", fontSize:11, fontWeight:600, color:"#4b5563", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px", textTransform:"uppercase", letterSpacing:0.4 },
+    vazio:   { fontSize:13, color:"#4b5563", textAlign:"center", padding:"40px 0" },
   };
 
   // ── ABA MANUTENÇÃO ────────────────────────────────────────────
@@ -171,14 +171,14 @@ function Admin({ usuario, data, save, initialTab }) {
     <div style={S.bodyNarrow} className="vk-adm-body-narrow">
       <div style={S.secao}>
         <div style={S.secTit}>Manutenção automática</div>
-        <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.6, marginBottom:16 }}>
+        <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.6, marginBottom:16 }}>
           O backend executa automaticamente, todo dia às 3h da manhã (UTC):
           <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
             <li>Expira propostas com mais de 30 dias (marca como "Perdido" e remove imagens salvas pra liberar storage)</li>
             <li>Inativa clientes sem serviço em aberto há 3 meses (com observação automática)</li>
           </ul>
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:20 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:20 }}>
           Use o botão abaixo para forçar uma execução agora, sem esperar o horário agendado.
         </div>
         <div style={{ display:"flex", alignItems:"flex-start", gap:12, flexWrap:"wrap" }}>
@@ -197,7 +197,7 @@ function Admin({ usuario, data, save, initialTab }) {
             <div style={{ fontSize:12.5, color:"#16a34a", background:"#f0fdf4", border:"1px solid #bbf7d0", borderRadius: 12, padding:"8px 14px" }}>
               ✓ Executado em {new Date(manutResult.executadoEm).toLocaleString("pt-BR")}
               <br/>
-              <span style={{ color:"#374151" }}>
+              <span style={{ color:"#111827" }}>
                 {manutResult.orcamentosExpirados} orçamento(s) expirado(s) · {manutResult.clientesInativados} cliente(s) inativado(s)
               </span>
             </div>
@@ -209,8 +209,8 @@ function Admin({ usuario, data, save, initialTab }) {
       {confirmManut && (
         <div style={S.overlay} onClick={() => setConfirmManut(false)}>
           <div style={S.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:10 }}>Executar manutenção agora?</div>
-            <div style={{ fontSize:13, color:"#6b7280", marginBottom:20, lineHeight:1.6 }}>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:10 }}>Executar manutenção agora?</div>
+            <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.6 }}>
               Esta ação vai:<br/>
               · Expirar propostas com mais de 30 dias (marca como Perdido e apaga imagens)<br/>
               · Inativar clientes sem serviço em aberto há 3 meses
@@ -250,7 +250,7 @@ function Admin({ usuario, data, save, initialTab }) {
     <div style={S.body} className="vk-adm-body">
 
       {/* Cabeçalho com descrição */}
-      <div style={{ marginBottom:24, fontSize:13, color:"#6b7280", lineHeight:1.6 }}>
+      <div style={{ marginBottom:24, fontSize:13, color:"#4b5563", lineHeight:1.6 }}>
         O Custo Unitário Básico (CUB) é divulgado mensalmente pelos sindicatos da construção.
         O sistema atualiza automaticamente todo dia 10 às 4h. Estados ativos: <b>SP, RJ, MG, SC, PR, RS</b>.
         Use o botão para forçar atualização agora.
@@ -306,7 +306,7 @@ function Admin({ usuario, data, save, initialTab }) {
                   ? { ...S.badgeAtiva, background:"#f0fdf4", color:"#15803d", border:"1px solid #bbf7d0" }
                   : s.ultimo_status === "falha"
                   ? S.badgeInativa
-                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#9ca3af", background:"#f9fafb", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" };
+                  : { display:"inline-block", fontSize:11, fontWeight:600, color:"#4b5563", background:"#f9fafb", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:4, padding:"2px 8px" };
                 const statusLabel = s.ultimo_status === "sucesso" ? "OK"
                                   : s.ultimo_status === "falha" ? "Falha"
                                   : "Nunca coletado";
@@ -315,7 +315,7 @@ function Admin({ usuario, data, save, initialTab }) {
                     <td style={{ ...S.td, fontWeight:700 }} data-label="Estado">{s.estado}</td>
                     <td style={S.td} data-label="Valores ativos">{s.qtd_valores}</td>
                     <td style={S.td} data-label="Mês">{fmtCubMes(s.mes_mais_recente)}</td>
-                    <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Última atualização">{fmtCubDate(s.ultima_atualizacao)}</td>
+                    <td style={{ ...S.td, fontSize:12, color:"#4b5563" }} data-label="Última atualização">{fmtCubDate(s.ultima_atualizacao)}</td>
                     <td style={S.td} data-label="Status">
                       <span style={statusBadge}>{statusLabel}</span>
                       {s.ultimo_erro && (
@@ -345,7 +345,7 @@ function Admin({ usuario, data, save, initialTab }) {
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:12 }} className="vk-cub-filtro-row">
           <div style={{ ...S.secTit, marginBottom:0 }}>Valores atuais</div>
           <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-            <span style={{ fontSize:12, color:"#6b7280" }}>Filtrar:</span>
+            <span style={{ fontSize:12, color:"#4b5563" }}>Filtrar:</span>
             <select
               value={cubFiltroEstado}
               onChange={e => setCubFiltroEstado(e.target.value)}
@@ -384,8 +384,8 @@ function Admin({ usuario, data, save, initialTab }) {
                   <td style={{ ...S.td, textAlign:"right", fontVariantNumeric:"tabular-nums", fontWeight:600 }} data-label="Valor R$/m²">
                     R$ {fmtCubMoney(v.valor_m2)}
                   </td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Mês">{fmtCubMes(v.mes_referencia)}</td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Fonte">{v.fonte}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#4b5563" }} data-label="Mês">{fmtCubMes(v.mes_referencia)}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#4b5563" }} data-label="Fonte">{v.fonte}</td>
                 </tr>
               ))}
             </tbody>
@@ -414,7 +414,7 @@ function Admin({ usuario, data, save, initialTab }) {
             <tbody>
               {cubLogs.map(log => (
                 <tr key={log.id}>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280", whiteSpace:"nowrap" }} data-label="Quando">{fmtCubDate(log.executado_em)}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#4b5563", whiteSpace:"nowrap" }} data-label="Quando">{fmtCubDate(log.executado_em)}</td>
                   <td style={{ ...S.td, fontWeight:600 }} data-label="Estado">{log.estado}</td>
                   <td style={{ ...S.td, fontSize:12 }} data-label="Fonte">{log.fonte}</td>
                   <td style={S.td} data-label="Status">
@@ -427,7 +427,7 @@ function Admin({ usuario, data, save, initialTab }) {
                     </span>
                   </td>
                   <td style={S.td} data-label="Valores">{log.valores_qtd ?? "—"}</td>
-                  <td style={{ ...S.td, fontSize:12, color:"#6b7280" }} data-label="Duração">{log.duracao_ms ? `${log.duracao_ms}ms` : "—"}</td>
+                  <td style={{ ...S.td, fontSize:12, color:"#4b5563" }} data-label="Duração">{log.duracao_ms ? `${log.duracao_ms}ms` : "—"}</td>
                   <td style={{ ...S.td, fontSize:11, color:"#991b1b", maxWidth:340 }} data-label="Erro">
                     {log.erro_msg || "—"}
                   </td>
@@ -597,8 +597,8 @@ function PainelEmpresas({ S }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Empresas cadastradas</div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111827" }}>Empresas cadastradas</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>
             {loading ? "Carregando..." : `${empresas.length} empresa(s) · ${empresas.filter(e => e.ativo).length} ativa(s)`}
           </div>
         </div>
@@ -632,18 +632,18 @@ function PainelEmpresas({ S }) {
               {empresas.map(e => (
                 <tr key={e.id} style={{ cursor:"pointer" }} onClick={() => setEmpresaSelecionada(e)}>
                   <td style={S.td} data-label="Nome">
-                    <div style={{ fontWeight:600, color:"#262421" }}>{e.nome}</div>
-                    <div style={{ fontSize:11, color:"#9ca3af", marginTop:2 }}>{e.plano || "gratuito"}</div>
+                    <div style={{ fontWeight:600, color:"#111827" }}>{e.nome}</div>
+                    <div style={{ fontSize:11, color:"#4b5563", marginTop:2 }}>{e.plano || "gratuito"}</div>
                   </td>
-                  <td style={{ ...S.td, color:"#6b7280" }} data-label="CNPJ / CPF">{e.cnpj_cpf || "—"}</td>
-                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Usuários">
+                  <td style={{ ...S.td, color:"#4b5563" }} data-label="CNPJ / CPF">{e.cnpj_cpf || "—"}</td>
+                  <td style={{ ...S.td, textAlign:"center", color:"#4b5563" }} data-label="Usuários">
                     {e.usuarios_ativos || 0}
                     {e.usuarios_total > e.usuarios_ativos && (
-                      <span style={{ color:"#9ca3af", marginLeft:4 }}>/ {e.usuarios_total}</span>
+                      <span style={{ color:"#4b5563", marginLeft:4 }}>/ {e.usuarios_total}</span>
                     )}
                   </td>
-                  <td style={{ ...S.td, textAlign:"center", color:"#6b7280" }} data-label="Orçamentos">{e.orcamentos_total || 0}</td>
-                  <td style={{ ...S.td, color:"#6b7280", fontSize:12 }} data-label="Último login">{formatarDataHora(e.ultimo_login_empresa)}</td>
+                  <td style={{ ...S.td, textAlign:"center", color:"#4b5563" }} data-label="Orçamentos">{e.orcamentos_total || 0}</td>
+                  <td style={{ ...S.td, color:"#4b5563", fontSize:12 }} data-label="Último login">{formatarDataHora(e.ultimo_login_empresa)}</td>
                   <td style={S.td} data-label="Status">
                     <span style={e.ativo ? S.badgeAtiva : S.badgeInativa}>
                       {e.ativo ? "Ativa" : "Inativa"}
@@ -720,7 +720,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
     return (
       <div style={S.body} className="vk-adm-body">
         <button onClick={onVoltar} style={{ background:"none", border:"none", padding:0, fontSize:13, color:"#828a98", cursor:"pointer", fontFamily:"inherit", marginBottom:24, display:"inline-flex", alignItems:"center", gap:6 }}><IconeMaster nome="back" tamanho={14} cor="#828a98" />Voltar</button>
-        <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, color:"#4b5563", fontSize:13 }}>
           <div style={{
             width:14, height:14, borderRadius:"50%",
             border:"2px solid #e5e7eb", borderTopColor:"#9ca3af",
@@ -758,13 +758,13 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:28, gap:16, flexWrap:"wrap" }}>
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-            <div style={{ fontSize:22, fontWeight:600, color:"#262421", letterSpacing:-0.3 }}>{data.nome}</div>
+            <div style={{ fontSize:22, fontWeight:600, color:"#111827", letterSpacing:-0.3 }}>{data.nome}</div>
             <span style={data.ativo ? S.badgeAtiva : S.badgeInativa}>
               {data.ativo ? "Ativa" : "Inativa"}
             </span>
             {isMasterEmp && <span style={S.tag}>MASTER</span>}
           </div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:4 }}>ID: {data.id}</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:4 }}>ID: {data.id}</div>
         </div>
         <div style={{ display:"flex", gap:8 }}>
           <button onClick={() => setModalEdit(true)} style={S.btnSec}>Editar</button>
@@ -786,7 +786,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       <div style={{ ...S.secao, marginBottom:32 }}>
         <div style={S.secTit}>
           Métricas
-          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#9ca3af", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
+          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#4b5563", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
         </div>
 
         {/* Cards de totais (snapshot atual) */}
@@ -801,7 +801,7 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
         {/* Atividade últimos 30 dias — só renderiza se metricas chegou (fetch completo) */}
         {data.metricas && (
           <>
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
               Atividade — últimos 30 dias
             </div>
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(140px, 1fr))", gap:10 }}>
@@ -811,19 +811,19 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
             </div>
 
             {/* Status breakdown — pintura horizontal de barras com cores neutras */}
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
               Status atual dos orçamentos
             </div>
             <BarraStatus status={data.metricas.status_orcamentos} />
 
             {/* Gráfico de evolução mensal (SVG inline) */}
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
               Evolução mensal — orçamentos criados
             </div>
             <GraficoMensal mensal={data.metricas.mensal} />
 
             {/* Top usuários por atividade */}
-            <div style={{ fontSize:11, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginTop:24, marginBottom:10 }}>
               Usuários mais ativos (últimos 30 dias)
             </div>
             <TopUsuarios usuarios={data.metricas.top_usuarios} fmtDataHora={fmtDataHora} />
@@ -835,11 +835,11 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
       <div style={{ ...S.secao, marginBottom:32 }}>
         <div style={S.secTit}>
           Usuários {data.usuarios !== undefined ? `(${data.usuarios.length})` : ""}
-          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#9ca3af", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
+          {carregando && data.usuarios === undefined && <span style={{ fontSize:10, color:"#4b5563", marginLeft:8, textTransform:"none", letterSpacing:0 }}>(carregando…)</span>}
         </div>
         {/* Estado: ainda carregando E sem usuários no estado */}
         {carregando && data.usuarios === undefined ? (
-          <div style={{ display:"flex", alignItems:"center", gap:10, color:"#9ca3af", fontSize:13, padding:"20px 0" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, color:"#4b5563", fontSize:13, padding:"20px 0" }}>
             <div style={{
               width:14, height:14, borderRadius:"50%",
               border:"2px solid #e5e7eb", borderTopColor:"#9ca3af",
@@ -866,17 +866,17 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
                 {data.usuarios.map(u => (
                   <tr key={u.id}>
                     <td style={S.td} data-label="Nome">
-                      <div style={{ fontWeight:500, color:"#262421" }}>{u.nome}</div>
+                      <div style={{ fontWeight:500, color:"#111827" }}>{u.nome}</div>
                       {u.perfil === "master" && <span style={{ ...S.tag, marginLeft:0, marginTop:2, display:"inline-block" }}>MASTER</span>}
                       {u.precisa_trocar_senha && (
-                        <div style={{ fontSize:10, color:"#6b7280", marginTop:3, fontWeight:600, textTransform:"uppercase", letterSpacing:0.4 }}>
+                        <div style={{ fontSize:10, color:"#4b5563", marginTop:3, fontWeight:600, textTransform:"uppercase", letterSpacing:0.4 }}>
                           Precisa trocar senha
                         </div>
                       )}
                     </td>
-                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Email">{u.email}</td>
-                    <td style={{ ...S.td, color:"#6b7280", textTransform:"capitalize" }} data-label="Nível">{u.nivel || "—"}</td>
-                    <td style={{ ...S.td, color:"#6b7280", fontSize:12 }} data-label="Último login">{fmtDataHora(u.ultimo_login)}</td>
+                    <td style={{ ...S.td, color:"#4b5563" }} data-label="Email">{u.email}</td>
+                    <td style={{ ...S.td, color:"#4b5563", textTransform:"capitalize" }} data-label="Nível">{u.nivel || "—"}</td>
+                    <td style={{ ...S.td, color:"#4b5563", fontSize:12 }} data-label="Último login">{fmtDataHora(u.ultimo_login)}</td>
                     <td style={S.td} data-label="Status">
                       <span style={u.ativo ? S.badgeAtiva : S.badgeInativa}>
                         {u.ativo ? "Ativo" : "Inativo"}
@@ -920,8 +920,8 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
         <div style={{ ...S.secao, marginBottom:32 }}>
           <div style={S.secTit}>Ações administrativas</div>
           <div style={{ border:"1.5px solid rgba(38,36,33,0.16)", background:"#fafafa", borderRadius: 14, padding:"16px" }}>
-            <div style={{ fontSize:13, color:"#6b7280", lineHeight:1.5, marginBottom:12 }}>
-              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#262421" }}>Não tem como reverter.</strong>
+            <div style={{ fontSize:13, color:"#4b5563", lineHeight:1.5, marginBottom:12 }}>
+              Excluir definitivamente apaga a empresa, todos os usuários e dados de negócio (clientes, orçamentos, obras). <strong style={{ color:"#111827" }}>Não tem como reverter.</strong>
               <br/>
               Pra cortar acesso temporariamente, use "Editar → Inativar" — preserva dados.
             </div>
@@ -987,8 +987,8 @@ function EmpresaDetalhe({ S, empresaId, empresaPreCarregada, onVoltar, onExcluid
 function DetalheCampo({ label, valor }) {
   return (
     <div>
-      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>{label}</div>
-      <div style={{ fontSize:13, color:"#262421", lineHeight:1.4 }}>{valor}</div>
+      <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:13, color:"#111827", lineHeight:1.4 }}>{valor}</div>
     </div>
   );
 }
@@ -998,7 +998,7 @@ function DetalheCampo({ label, valor }) {
 function MetricaCard({ label, valor, carregando }) {
   return (
     <div style={{ background:"#fff", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius: 14, padding:"14px 16px" }}>
-      <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
+      <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>{label}</div>
       <div style={{ fontSize:24, fontWeight:600, color: carregando ? "#c9c4bd" : "#262421", lineHeight:1, fontVariantNumeric:"tabular-nums" }}>
         {carregando ? "…" : (valor ?? 0)}
       </div>
@@ -1016,7 +1016,7 @@ function BarraStatus({ status }) {
   const total = (status.rascunhos || 0) + (status.abertos || 0) + (status.ganhos || 0) + (status.perdidos || 0);
   if (total === 0) {
     return (
-      <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>
+      <div style={{ fontSize:13, color:"#4b5563", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>
         Nenhum orçamento cadastrado ainda.
       </div>
     );
@@ -1045,10 +1045,10 @@ function BarraStatus({ status }) {
       {/* Legenda com bullets */}
       <div style={{ display:"flex", flexWrap:"wrap", gap:14, marginTop:10 }}>
         {segs.map(s => (
-          <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"#374151" }}>
+          <div key={s.key} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"#111827" }}>
             <span style={{ width:9, height:9, borderRadius:2, background:s.cor, display:"inline-block" }} />
             <span style={{ fontWeight:500 }}>{s.label}</span>
-            <span style={{ color:"#9ca3af", fontVariantNumeric:"tabular-nums" }}>
+            <span style={{ color:"#4b5563", fontVariantNumeric:"tabular-nums" }}>
               {s.valor} ({Math.round(s.valor / total * 100)}%)
             </span>
           </div>
@@ -1068,7 +1068,7 @@ function BarraStatus({ status }) {
 // Valor numérico aparece em cima de cada barra com dados.
 function GraficoMensal({ mensal }) {
   if (!mensal || mensal.length === 0) {
-    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem histórico ainda.</div>;
+    return <div style={{ fontSize:13, color:"#4b5563", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem histórico ainda.</div>;
   }
 
   const max = Math.max(...mensal.map(m => m.orcamentos), 1); // evita divisão por 0
@@ -1176,7 +1176,7 @@ function GraficoMensal({ mensal }) {
         })}
       </svg>
       {/* Legenda discreta abaixo */}
-      <div style={{ display:"flex", gap:18, justifyContent:"center", marginTop:8, fontSize:11, color:"#9ca3af" }}>
+      <div style={{ display:"flex", gap:18, justifyContent:"center", marginTop:8, fontSize:11, color:"#4b5563" }}>
         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
           <span style={{ width:10, height:10, background:"#3b82f6", borderRadius:3, display:"inline-block" }} />
           Criados
@@ -1198,7 +1198,7 @@ function GraficoMensal({ mensal }) {
 // se há subutilização (uma empresa com 5 usuários mas só 1 ativo, p.ex.).
 function TopUsuarios({ usuarios, fmtDataHora }) {
   if (!usuarios || usuarios.length === 0) {
-    return <div style={{ fontSize:13, color:"#9ca3af", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem usuários ativos.</div>;
+    return <div style={{ fontSize:13, color:"#4b5563", padding:"12px 14px", border:"1px solid #f3f4f6", borderRadius: 12, background:"#fafafa" }}>Sem usuários ativos.</div>;
   }
 
   // Calcula o máximo pra escalar a barra de progresso
@@ -1217,14 +1217,14 @@ function TopUsuarios({ usuarios, fmtDataHora }) {
           }}>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:"#262421", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                <div style={{ fontSize:13, fontWeight:600, color:"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {u.nome}
                 </div>
-                <div style={{ fontSize:11, color:"#9ca3af", marginTop:1 }}>
+                <div style={{ fontSize:11, color:"#4b5563", marginTop:1 }}>
                   {u.email} · último login: {u.ultimo_login ? fmtDataHora(u.ultimo_login) : "nunca"}
                 </div>
               </div>
-              <div style={{ fontSize:12, fontWeight:600, color:"#262421", fontVariantNumeric:"tabular-nums", minWidth:60, textAlign:"right" }}>
+              <div style={{ fontSize:12, fontWeight:600, color:"#111827", fontVariantNumeric:"tabular-nums", minWidth:60, textAlign:"right" }}>
                 {acoes} {acoes === 1 ? "ação" : "ações"}
               </div>
             </div>
@@ -1272,10 +1272,10 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Excluir empresa definitivamente?
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:16, lineHeight:1.5 }}>
           Esta ação <strong style={{ color:"#991b1b" }}>NÃO pode ser desfeita</strong>. Vai apagar permanentemente:
           <ul style={{ margin:"10px 0 0 0", padding:"0 0 0 20px" }}>
             <li>A empresa <strong>{empresa.nome}</strong></li>
@@ -1293,7 +1293,7 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             background:"#f9fafb", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6,
             padding:"6px 10px", marginBottom:8,
             fontFamily:"'SF Mono',Menlo,Consolas,monospace",
-            fontSize:13, color:"#262421", fontWeight:600,
+            fontSize:13, color:"#111827", fontWeight:600,
             userSelect:"all", // facilita selecionar e copiar
           }}>
             {empresa.nome}
@@ -1311,12 +1311,12 @@ function ModalConfirmarExclusaoEmpresa({ S, empresa, onFechar, onConfirmado }) {
             placeholder="Digite o nome exato"
           />
           {erroVisivel && (
-            <div style={{ fontSize:11.5, color:"#6b7280", marginTop:6 }}>
+            <div style={{ fontSize:11.5, color:"#4b5563", marginTop:6 }}>
               O texto não corresponde. Atenção a maiúsculas, minúsculas e espaços.
             </div>
           )}
           {podeExcluir && (
-            <div style={{ fontSize:11.5, color:"#262421", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
+            <div style={{ fontSize:11.5, color:"#111827", marginTop:6, display:"flex", alignItems:"center", gap:5 }}>
               <IconeMaster nome="check" tamanho={12} cor="#262421" />
               Confere
             </div>
@@ -1368,11 +1368,11 @@ function ModalConfirmarResetSenha({ S, usuario, escopo = "admin", onFechar, onSu
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Resetar senha?
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:16, lineHeight:1.5 }}>
-          Será gerada uma nova senha temporária para <strong style={{ color:"#262421" }}>{usuario.nome}</strong> ({usuario.email}).
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:16, lineHeight:1.5 }}>
+          Será gerada uma nova senha temporária para <strong style={{ color:"#111827" }}>{usuario.nome}</strong> ({usuario.email}).
           <br/><br/>
           A senha atual deixará de funcionar imediatamente. <strong>O usuário será obrigado a trocar a senha no próximo login.</strong>
           <br/><br/>
@@ -1417,11 +1417,11 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Nova senha gerada
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
-          Senha temporária para <strong style={{ color:"#262421" }}>{usuario.nome}</strong> ({usuario.email}).
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:18, lineHeight:1.5 }}>
+          Senha temporária para <strong style={{ color:"#111827" }}>{usuario.nome}</strong> ({usuario.email}).
           Copie agora — depois de fechar este aviso, ela não aparece mais.
         </div>
         <div style={{ marginBottom:18 }}>
@@ -1434,7 +1434,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
               style={{
                 ...S.input,
                 fontFamily:"'SF Mono',Menlo,Consolas,monospace",
-                fontSize:15, fontWeight:600, color:"#262421",
+                fontSize:15, fontWeight:600, color:"#111827",
                 background:"#fafbfc", flex:1, userSelect:"all",
               }}
             />
@@ -1452,7 +1452,7 @@ function ModalExibirNovaSenha({ S, usuario, senha, onFechar }) {
             </button>
           </div>
         </div>
-        <div style={{ background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", color:"#374151", borderRadius: 12, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
+        <div style={{ background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", color:"#111827", borderRadius: 12, padding:"10px 12px", fontSize:12.5, marginBottom:16, lineHeight:1.5 }}>
           Envie esta senha ao usuário por canal seguro (mensagem direta, não email comum). Ele será obrigado a trocá-la no próximo login.
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
@@ -1505,12 +1505,12 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:6 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:6 }}>
           Editar usuário
         </div>
-        <div style={{ fontSize:13, color:"#6b7280", marginBottom:18, lineHeight:1.5 }}>
-          <strong style={{ color:"#262421" }}>{usuario.nome}</strong>
-          <span style={{ color:"#9ca3af" }}> · {usuario.email}</span>
+        <div style={{ fontSize:13, color:"#4b5563", marginBottom:18, lineHeight:1.5 }}>
+          <strong style={{ color:"#111827" }}>{usuario.nome}</strong>
+          <span style={{ color:"#4b5563" }}> · {usuario.email}</span>
         </div>
 
         <div style={{ marginBottom:14 }}>
@@ -1559,7 +1559,7 @@ function ModalEditarUsuarioAdmin({ S, usuario, onFechar, onSucesso }) {
             </button>
           </div>
           {!ativo && usuario.ativo && (
-            <div style={{ fontSize:11.5, color:"#374151", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
+            <div style={{ fontSize:11.5, color:"#111827", background:"#fafafa", border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:6, padding:"6px 10px", marginTop:8 }}>
               Usuário inativo não consegue mais fazer login. As sessões existentes serão encerradas no próximo refresh.
             </div>
           )}
@@ -1634,8 +1634,8 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:4 }}>Nova empresa</div>
-        <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:4 }}>Nova empresa</div>
+        <div style={{ fontSize:12, color:"#4b5563", marginBottom:20 }}>
           Cria a empresa e o primeiro administrador que poderá logar.
         </div>
 
@@ -1679,7 +1679,7 @@ function ModalNovaEmpresa({ S, onFechar, onSucesso }) {
 
           <div style={{ borderTop:"1px solid #f3f4f6", marginTop:6, paddingTop:14 }}>
             <div style={S.secTit}>Administrador inicial</div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginBottom:10, marginTop:-10 }}>
+            <div style={{ fontSize:12, color:"#4b5563", marginBottom:10, marginTop:-10 }}>
               Esta pessoa vai receber acesso admin e poderá gerenciar usuários da empresa.
             </div>
           </div>
@@ -1806,8 +1806,8 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
       <div style={S.modalLg} onClick={e => e.stopPropagation()}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
           <div>
-            <div style={{ fontSize:16, fontWeight:700, color:"#262421" }}>Editar empresa</div>
-            <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>ID: {empresa.id}</div>
+            <div style={{ fontSize:16, fontWeight:700, color:"#111827" }}>Editar empresa</div>
+            <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>ID: {empresa.id}</div>
           </div>
           <span style={form.ativo ? S.badgeAtiva : S.badgeInativa}>
             {form.ativo ? "Ativa" : "Inativa"}
@@ -1850,21 +1850,21 @@ function ModalEditarEmpresa({ S, empresa, onFechar, onSucesso }) {
           {/* Stats (readonly) — mostra histórico */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, padding:"14px", background:"#fafbfc", border:"1px solid #f3f4f6", borderRadius: 12, marginTop:4 }}>
             <div>
-              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Usuários</div>
-              <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginTop:2 }}>
+              <div style={{ fontSize:11, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5 }}>Usuários</div>
+              <div style={{ fontSize:18, fontWeight:700, color:"#111827", marginTop:2 }}>
                 {empresa.usuarios_ativos || 0}
                 {empresa.usuarios_total > empresa.usuarios_ativos && (
-                  <span style={{ fontSize:12, color:"#9ca3af", fontWeight:400, marginLeft:4 }}>/ {empresa.usuarios_total}</span>
+                  <span style={{ fontSize:12, color:"#4b5563", fontWeight:400, marginLeft:4 }}>/ {empresa.usuarios_total}</span>
                 )}
               </div>
             </div>
             <div>
-              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
-              <div style={{ fontSize:18, fontWeight:700, color:"#262421", marginTop:2 }}>{empresa.orcamentos_total || 0}</div>
+              <div style={{ fontSize:11, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5 }}>Orçamentos</div>
+              <div style={{ fontSize:18, fontWeight:700, color:"#111827", marginTop:2 }}>{empresa.orcamentos_total || 0}</div>
             </div>
             <div>
-              <div style={{ fontSize:11, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.5 }}>Criada em</div>
-              <div style={{ fontSize:13, fontWeight:600, color:"#262421", marginTop:4 }}>
+              <div style={{ fontSize:11, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.5 }}>Criada em</div>
+              <div style={{ fontSize:13, fontWeight:600, color:"#111827", marginTop:4 }}>
                 {empresa.criado_em ? new Date(empresa.criado_em).toLocaleDateString("pt-BR") : "—"}
               </div>
             </div>
@@ -1991,8 +1991,8 @@ function PainelFeedback({ S }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18, gap:16, flexWrap:"wrap" }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Caixa de Feedback</div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111827" }}>Caixa de Feedback</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>
             {loading
               ? "Carregando..."
               : `${counts.total || 0} no total · ${counts.abertas || 0} aberta(s) · ${counts.em_andamento || 0} em andamento · ${counts.resolvidas || 0} resolvida(s)`}
@@ -2139,25 +2139,25 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
         style={{ padding:"12px 14px", cursor:"pointer", display:"flex", gap:12, alignItems:"flex-start" }}>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ display:"flex", gap:8, alignItems:"center", marginBottom:4, flexWrap:"wrap" }}>
-            <span style={{ fontSize:12, fontWeight:600, color:"#262421" }}>{cat.label}</span>
+            <span style={{ fontSize:12, fontWeight:600, color:"#111827" }}>{cat.label}</span>
             <span style={{
               fontSize:10, padding:"2px 7px", borderRadius:4,
               background:st.bg, color:st.cor, border:`1px solid ${st.borda}`,
               fontWeight:600, textTransform:"uppercase", letterSpacing:0.5,
             }}>{st.label}</span>
             {recemSalvo && (
-              <span style={{ fontSize:10, color:"#6b7280", fontWeight:500 }}>
+              <span style={{ fontSize:10, color:"#4b5563", fontWeight:500 }}>
                 salvo
               </span>
             )}
-            <span style={{ fontSize:11, color:"#9ca3af", marginLeft:"auto" }}>
+            <span style={{ fontSize:11, color:"#4b5563", marginLeft:"auto" }}>
               {fmtDataHora(fb.criado_em)}
             </span>
           </div>
-          <div style={{ fontSize:13, color:"#374151", lineHeight:1.5, marginBottom:4 }}>
+          <div style={{ fontSize:13, color:"#111827", lineHeight:1.5, marginBottom:4 }}>
             {aberto ? fb.texto : preview}
           </div>
-          <div style={{ fontSize:11, color:"#9ca3af" }}>
+          <div style={{ fontSize:11, color:"#4b5563" }}>
             {fb.usuario_nome} · {fb.usuario_email}{fb.empresa_nome ? ` · ${fb.empresa_nome}` : ""}
           </div>
         </div>
@@ -2167,7 +2167,7 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
       {aberto && (
         <div style={{ padding:"0 14px 14px", borderTop:"1px solid #f3f4f6", marginTop:6 }}>
           <div style={{ marginTop:14, marginBottom:14 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:6 }}>
               Status
             </div>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
@@ -2195,10 +2195,10 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
           </div>
 
           <div style={{ marginBottom:14 }}>
-            <div style={{ fontSize:10, fontWeight:700, color:"#9ca3af", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>
+            <div style={{ fontSize:10, fontWeight:700, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom:4 }}>
               Notas internas (privadas)
             </div>
-            <div style={{ fontSize:11, color:"#9ca3af", marginBottom:6, lineHeight:1.4 }}>
+            <div style={{ fontSize:11, color:"#4b5563", marginBottom:6, lineHeight:1.4 }}>
               Anotações para você lembrar (link de issue, prioridade, contexto). Visível só pro time master.
             </div>
             <textarea
@@ -2216,14 +2216,14 @@ function FeedbackItem({ S, fb, aberto, onToggle, onAtualizado, fmtDataHora }) {
           </div>
 
           {fb.resolvida_em && (
-            <div style={{ fontSize:11, color:"#9ca3af", marginBottom:10, fontStyle:"italic" }}>
+            <div style={{ fontSize:11, color:"#4b5563", marginBottom:10, fontStyle:"italic" }}>
               Resolvida por {fb.resolvida_por} em {fmtDataHora(fb.resolvida_em)}
             </div>
           )}
 
           <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
             <button onClick={excluir} disabled={salvando}
-              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, color:"#6b7280" }}>
+              style={{ ...S.btnSec, padding:"5px 10px", fontSize:11.5, color:"#4b5563" }}>
               Excluir
             </button>
           </div>
@@ -2292,8 +2292,8 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
     <div style={S.body} className="vk-adm-body">
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20, flexWrap:"wrap", gap:12 }}>
         <div>
-          <div style={{ fontSize:15, fontWeight:600, color:"#262421" }}>Usuários master</div>
-          <div style={{ fontSize:12, color:"#9ca3af", marginTop:2 }}>
+          <div style={{ fontSize:15, fontWeight:600, color:"#111827" }}>Usuários master</div>
+          <div style={{ fontSize:12, color:"#4b5563", marginTop:2 }}>
             {loading ? "Carregando..." : `${masterAtivos} de ${limite} masters ativos · acesso total ao SaaS`}
           </div>
         </div>
@@ -2338,15 +2338,15 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                 return (
                   <tr key={u.id}>
                     <td style={S.td} data-label="Nome">
-                      <div style={{ fontWeight:600, color:"#262421" }}>
+                      <div style={{ fontWeight:600, color:"#111827" }}>
                         {u.nome}
                         {ehVoce && (
-                          <span style={{ fontSize:10, fontWeight:600, color:"#6b7280", background:"#f3f4f6", borderRadius:3, padding:"2px 6px", marginLeft:8, letterSpacing:0.3 }}>VOCÊ</span>
+                          <span style={{ fontSize:10, fontWeight:600, color:"#4b5563", background:"#f3f4f6", borderRadius:3, padding:"2px 6px", marginLeft:8, letterSpacing:0.3 }}>VOCÊ</span>
                         )}
                       </div>
                     </td>
-                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Email">{u.email}</td>
-                    <td style={{ ...S.td, color:"#6b7280" }} data-label="Criado em">
+                    <td style={{ ...S.td, color:"#4b5563" }} data-label="Email">{u.email}</td>
+                    <td style={{ ...S.td, color:"#4b5563" }} data-label="Criado em">
                       {u.criado_em ? new Date(u.criado_em).toLocaleDateString("pt-BR") : "—"}
                     </td>
                     <td style={S.td} data-label="Status">
@@ -2357,7 +2357,7 @@ function PainelUsuariosMaster({ S, usuarioLogado }) {
                     <td style={{ ...S.td, textAlign:"right" }} data-label="">
                       {!ehVoce && (
                         <button
-                          style={{ ...S.btnSec, color:"#6b7280", padding:"5px 12px", fontSize:12 }}
+                          style={{ ...S.btnSec, color:"#4b5563", padding:"5px 12px", fontSize:12 }}
                           onClick={() => excluirUsuario(u)}
                         >
                           Excluir
@@ -2424,8 +2424,8 @@ function ModalNovoMaster({ S, onFechar, onSucesso }) {
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize:16, fontWeight:700, color:"#262421", marginBottom:4 }}>Novo usuário master</div>
-        <div style={{ fontSize:12, color:"#9ca3af", marginBottom:20 }}>
+        <div style={{ fontSize:16, fontWeight:700, color:"#111827", marginBottom:4 }}>Novo usuário master</div>
+        <div style={{ fontSize:12, color:"#4b5563", marginBottom:20 }}>
           Masters têm acesso total ao SaaS, incluindo todas as empresas cliente.
         </div>
 

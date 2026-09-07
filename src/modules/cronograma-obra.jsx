@@ -673,7 +673,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
   }
 
   const card = { background: "#fafafa", border: "1px solid #f3f4f6", borderRadius: 12, padding: "12px 14px" };
-  const rotulo = { fontSize: 10, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 };
+  const rotulo = { fontSize: 10, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 };
   const input = { width: "100%", padding: "7px 9px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12.5, fontFamily: "inherit", background: "#fff", boxSizing: "border-box" };
 
   if (res.erro) {
@@ -698,10 +698,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
     <div style={{ marginBottom: 16, border: semCabecalho ? "none" : "1px solid rgba(38,36,33,0.1)", borderRadius: 10, overflow: "hidden" }}>
       {!semCabecalho && <button type="button" onClick={() => setAberto((a) => !a)}
         style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", background: "#f9fafb", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#262421" }}>Cronograma da obra
-          <span style={{ fontWeight: 400, color: "#6b7280", marginLeft: 8 }}>{at.meses} meses · término {fmtDataCrono(at.dataFim)} · {ehProd ? "por produtividade" : "simplificado"}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Cronograma da obra
+          <span style={{ fontWeight: 400, color: "#4b5563", marginLeft: 8 }}>{at.meses} meses · término {fmtDataCrono(at.dataFim)} · {ehProd ? "por produtividade" : "simplificado"}</span>
         </span>
-        <span style={{ fontSize: 12, color: "#6b7280" }}>{aberto ? "▲" : "▼"}</span>
+        <span style={{ fontSize: 12, color: "#4b5563" }}>{aberto ? "▲" : "▼"}</span>
       </button>}
       {mostrar && (
         <div style={{ padding: semCabecalho ? 0 : 14 }}>
@@ -727,11 +727,11 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
 
           {/* Resumo */}
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(5, 1fr)", gap: 10, marginBottom: 12 }}>
-            <div style={card}><div style={rotulo}>Prazo</div><div style={{ fontSize: 14, fontWeight: 700 }}>{at.meses} meses</div><div style={{ fontSize: 11, color: "#6b7280" }}>{Math.ceil(at.fimDias)} dias úteis</div></div>
-            <div style={card}><div style={rotulo}>Término previsto</div><div style={{ fontSize: 14, fontWeight: 700 }}>{fmtDataCrono(at.dataFim)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>início {fmtDataCrono(res.dataInicio)}</div></div>
-            <div style={card}><div style={rotulo}>Prazo pela tabela</div><div style={{ fontSize: 14, fontWeight: 700 }}>{res.prazoTabela || "—"} meses</div><div style={{ fontSize: 11, color: "#6b7280" }}>{res.cond.sobrado ? "sobrado" : "térrea"} · {Math.round(numOrZero(obra.projeto && obra.projeto.arquitetura && obra.projeto.arquitetura.areaConstruida))} m²</div></div>
-            <div style={card}><div style={rotulo}>Por produtividade</div><div style={{ fontSize: 14, fontWeight: 700 }}>{prod.meses} meses</div><div style={{ fontSize: 11, color: "#6b7280" }}>{fmtHorasCrono(prod.hhTotal)} com a equipe atual</div></div>
-            <div style={card}><div style={rotulo}>Caminho crítico</div><div style={{ fontSize: 14, fontWeight: 700 }}>{at.criticas.length} etapas</div><div style={{ fontSize: 11, color: "#6b7280" }}>atraso nelas = atraso da obra</div></div>
+            <div style={card}><div style={rotulo}>Prazo</div><div style={{ fontSize: 14, fontWeight: 700 }}>{at.meses} meses</div><div style={{ fontSize: 11, color: "#4b5563" }}>{Math.ceil(at.fimDias)} dias úteis</div></div>
+            <div style={card}><div style={rotulo}>Término previsto</div><div style={{ fontSize: 14, fontWeight: 700 }}>{fmtDataCrono(at.dataFim)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>início {fmtDataCrono(res.dataInicio)}</div></div>
+            <div style={card}><div style={rotulo}>Prazo pela tabela</div><div style={{ fontSize: 14, fontWeight: 700 }}>{res.prazoTabela || "—"} meses</div><div style={{ fontSize: 11, color: "#4b5563" }}>{res.cond.sobrado ? "sobrado" : "térrea"} · {Math.round(numOrZero(obra.projeto && obra.projeto.arquitetura && obra.projeto.arquitetura.areaConstruida))} m²</div></div>
+            <div style={card}><div style={rotulo}>Por produtividade</div><div style={{ fontSize: 14, fontWeight: 700 }}>{prod.meses} meses</div><div style={{ fontSize: 11, color: "#4b5563" }}>{fmtHorasCrono(prod.hhTotal)} com a equipe atual</div></div>
+            <div style={card}><div style={rotulo}>Caminho crítico</div><div style={{ fontSize: 14, fontWeight: 700 }}>{at.criticas.length} etapas</div><div style={{ fontSize: 11, color: "#4b5563" }}>atraso nelas = atraso da obra</div></div>
           </div>
 
           {res.avisos.length > 0 && (
@@ -742,12 +742,12 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
 
           {/* Equipe */}
           <details open={ehProd} style={{ marginBottom: 12, fontSize: 12 }}>
-            <summary style={{ cursor: "pointer", fontWeight: 600, color: "#262421" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 600, color: "#111827" }}>
               Equipe {prod.equipeNecessaria ? `— para fechar em ${res.prazoAlvo} meses: ${oficios.filter((o) => prod.hhPorOficio[o.id] > 0).map((o) => `${prod.equipeNecessaria[o.id]} ${o.nome.toLowerCase()}`).join(", ")}` : ""}
             </summary>
             <div style={{ overflowX: "auto", marginTop: 8 }}>
               <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 520 }}>
-                <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                   <th style={{ padding: "4px 8px" }}>Ofício</th><th style={{ padding: "4px 8px", textAlign: "right" }}>HH na obra</th>
                   <th style={{ padding: "4px 8px", textAlign: "right" }}>Equipe atual</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Para {res.prazoAlvo} meses</th>
                 </tr></thead>
@@ -767,10 +767,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
               {prod.equipeNecessaria && podeEditar && (
                 <div style={{ marginTop: 8, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                   <button style={C.btnSec} onClick={usarEquipeNecessaria}>Usar essa equipe</button>
-                  <span style={{ color: "#6b7280" }}>com ela, por produtividade, a obra fecha em {prod.prazoComEquipeNecessariaMeses} meses (equipe arredondada para cima).</span>
+                  <span style={{ color: "#4b5563" }}>com ela, por produtividade, a obra fecha em {prod.prazoComEquipeNecessariaMeses} meses (equipe arredondada para cima).</span>
                 </div>
               )}
-              <div style={{ marginTop: 6, color: "#6b7280" }}>Horas-homem das composições SINAPI (SP) × quantidades desta obra, ajustadas pela eficiência. Cada etapa dura o tempo do ofício mais carregado; etapas sem serviço medido (pré-obra, impermeabilizações, acabamentos finais) usam a duração paramétrica.</div>
+              <div style={{ marginTop: 6, color: "#4b5563" }}>Horas-homem das composições SINAPI (SP) × quantidades desta obra, ajustadas pela eficiência. Cada etapa dura o tempo do ofício mais carregado; etapas sem serviço medido (pré-obra, impermeabilizações, acabamentos finais) usam a duração paramétrica.</div>
             </div>
           </details>
 
@@ -785,7 +785,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, minWidth: 760 }}>
                 <thead>
-                  <tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                  <tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                     <th style={{ padding: "6px 8px" }}>Etapa</th>
                     <th style={{ padding: "6px 8px" }}>Início</th>
                     <th style={{ padding: "6px 8px" }}>Fim</th>
@@ -794,7 +794,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                     <th style={{ padding: "6px 8px", width: "45%" }}>
                       <div style={{ position: "relative", height: 14 }}>
                         {marcadores.map((mk) => (
-                          <span key={mk.mes} style={{ position: "absolute", left: `${mk.dia / totalDias * 100}%`, fontSize: 9, color: "#9ca3af", borderLeft: "1px solid #e5e7eb", paddingLeft: 2, whiteSpace: "nowrap" }}>{fmtMesCrono(mk.mes)}</span>
+                          <span key={mk.mes} style={{ position: "absolute", left: `${mk.dia / totalDias * 100}%`, fontSize: 9, color: "#6b7280", borderLeft: "1px solid #e5e7eb", paddingLeft: 2, whiteSpace: "nowrap" }}>{fmtMesCrono(mk.mes)}</span>
                         ))}
                       </div>
                     </th>
@@ -803,14 +803,14 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                 <tbody>
                   {at.etapas.map((e) => (
                     <tr key={e.id} style={{ borderTop: "1px solid #f3f4f6" }} title={e.hh ? Object.keys(e.hh).map((of) => `${of}: ${Math.round(e.hh[of])} h`).join(" · ") : "duração paramétrica"}>
-                      <td style={{ padding: "6px 8px", color: "#262421", fontWeight: e.critico ? 600 : 400, whiteSpace: "nowrap" }}>
+                      <td style={{ padding: "6px 8px", color: "#111827", fontWeight: e.critico ? 600 : 400, whiteSpace: "nowrap" }}>
                         {e.critico && <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: 4, background: "#dc2626", marginRight: 6 }} />}
                         {e.nome}
-                        {ehProd && e.gargalo && <span style={{ color: "#9ca3af", marginLeft: 6, fontSize: 10 }}>({e.gargalo})</span>}
+                        {ehProd && e.gargalo && <span style={{ color: "#6b7280", marginLeft: 6, fontSize: 10 }}>({e.gargalo})</span>}
                       </td>
-                      <td style={{ padding: "6px 8px", color: "#374151", whiteSpace: "nowrap" }}>{fmtDataCrono(e.dataInicio)}</td>
-                      <td style={{ padding: "6px 8px", color: "#374151", whiteSpace: "nowrap" }}>{fmtDataCrono(e.dataFim)}</td>
-                      <td style={{ padding: "6px 8px", textAlign: "right", color: "#374151" }}>{Math.round(e.duracao)}</td>
+                      <td style={{ padding: "6px 8px", color: "#111827", whiteSpace: "nowrap" }}>{fmtDataCrono(e.dataInicio)}</td>
+                      <td style={{ padding: "6px 8px", color: "#111827", whiteSpace: "nowrap" }}>{fmtDataCrono(e.dataFim)}</td>
+                      <td style={{ padding: "6px 8px", textAlign: "right", color: "#111827" }}>{Math.round(e.duracao)}</td>
                       <td style={{ padding: "6px 8px", textAlign: "right", color: e.critico ? "#dc2626" : "#6b7280" }}>{e.critico ? "crítica" : `${Math.round(e.folga)} d`}</td>
                       <td style={{ padding: "6px 8px" }}>
                         <div style={{ position: "relative", height: 12, background: "#f3f4f6", borderRadius: 4 }}>
@@ -821,7 +821,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                   ))}
                 </tbody>
               </table>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Dias úteis (sem fins de semana e feriados nacionais). Vermelho = caminho crítico. {ehProd ? "Entre parênteses, o ofício que dita a duração da etapa." : `Durações-base escaladas por ${res.simplificado.fator.toFixed(2)} para fechar em ${res.prazoAlvo} meses.`}</div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>Dias úteis (sem fins de semana e feriados nacionais). Vermelho = caminho crítico. {ehProd ? "Entre parênteses, o ofício que dita a duração da etapa." : `Durações-base escaladas por ${res.simplificado.fator.toFixed(2)} para fechar em ${res.prazoAlvo} meses.`}</div>
             </div>
           )}
 
@@ -829,27 +829,27 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
             res.financeiro ? (
               <div style={{ overflowX: "auto" }}>
                 <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 560, width: "100%" }}>
-                  <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                  <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                     <th style={{ padding: "6px 8px" }}>Mês</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Desembolso</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Acumulado</th><th style={{ padding: "6px 8px", textAlign: "right" }}>%</th><th style={{ padding: "6px 8px", width: "35%" }}>Curva S</th>
                   </tr></thead>
                   <tbody>
                     {res.financeiro.meses.map((m) => (
                       <tr key={m.mes} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 8px", color: "#262421" }}>{fmtMesCrono(m.mes)}</td>
+                        <td style={{ padding: "6px 8px", color: "#111827" }}>{fmtMesCrono(m.mes)}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right" }}>{formatoBRL(m.valor)}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{formatoBRL(m.acumulado)}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{Math.round(m.pct * 100)}%</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{formatoBRL(m.acumulado)}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{Math.round(m.pct * 100)}%</td>
                         <td style={{ padding: "6px 8px" }}><div style={{ height: 10, background: "#f3f4f6", borderRadius: 4 }}><div style={{ width: `${m.pct * 100}%`, height: "100%", background: "#3b82f6", borderRadius: 4, opacity: 0.7 }} /></div></td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+                <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>
                   Custo de cada etapa do orçamento distribuído pelos dias da etapa no cronograma; prestadores e itens sem etapa ({formatoBRL(res.financeiro.semEtapa)}) diluídos ao longo da obra. Total {formatoBRL(res.financeiro.total)}.
                 </div>
               </div>
-            ) : <div style={{ fontSize: 12, color: "#6b7280" }}>Gere o orçamento para ver o desembolso por mês.</div>
+            ) : <div style={{ fontSize: 12, color: "#4b5563" }}>Gere o orçamento para ver o desembolso por mês.</div>
           )}
 
           {aba === "maoDeObra" && (() => {
@@ -864,13 +864,13 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                       <option value="desonerado">SINAPI desonerado</option>
                       <option value="onerado">SINAPI onerado</option>
                     </select></div>
-                  <div style={card}><div style={rotulo}>Mão de obra SINAPI</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalRef)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>{mo.porM2Ref != null ? `${formatoBRL(mo.porM2Ref)}/m²` : ""} · produtividade de referência</div></div>
-                  <div style={card}><div style={rotulo}>Com eficiência {Math.round(mo.eficiencia * 100)}%</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalEficiencia)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>{mo.porM2Eficiencia != null ? `${formatoBRL(mo.porM2Eficiencia)}/m²` : ""} · horas reais da equipe</div></div>
-                  <div style={card}><div style={rotulo}>Prestadores no orçamento</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalOrcadoComparavel)}</div><div style={{ fontSize: 11, color: "#6b7280" }}>só os comparáveis · SINAPI {formatoBRL(mo.totalRefComparavel)}</div></div>
+                  <div style={card}><div style={rotulo}>Mão de obra SINAPI</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalRef)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{mo.porM2Ref != null ? `${formatoBRL(mo.porM2Ref)}/m²` : ""} · produtividade de referência</div></div>
+                  <div style={card}><div style={rotulo}>Com eficiência {Math.round(mo.eficiencia * 100)}%</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalEficiencia)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>{mo.porM2Eficiencia != null ? `${formatoBRL(mo.porM2Eficiencia)}/m²` : ""} · horas reais da equipe</div></div>
+                  <div style={card}><div style={rotulo}>Prestadores no orçamento</div><div style={{ fontSize: 14, fontWeight: 700 }}>{formatoBRL(mo.totalOrcadoComparavel)}</div><div style={{ fontSize: 11, color: "#4b5563" }}>só os comparáveis · SINAPI {formatoBRL(mo.totalRefComparavel)}</div></div>
                 </div>
                 <div style={{ overflowX: "auto" }}>
                   <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 720, width: "100%" }}>
-                    <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                    <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                       <th style={{ padding: "6px 8px" }}>Prestador</th><th style={{ padding: "6px 8px", textAlign: "right" }}>HH</th>
                       <th style={{ padding: "6px 8px", textAlign: "right" }}>SINAPI</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Com eficiência</th>
                       <th style={{ padding: "6px 8px", textAlign: "right" }}>No orçamento</th><th style={{ padding: "6px 8px", textAlign: "right" }}>SINAPI × orçado</th>
@@ -881,10 +881,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                         return (
                           <tr key={p.chave} style={{ borderTop: "1px solid #f3f4f6" }} title={p.servicos.join(", ")}>
                             <td style={{ padding: "6px 8px", color: p.temPrestador ? "#262421" : "#9ca3af" }}>{p.rotulo}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{p.hh.toLocaleString("pt-BR")} h</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right" }}>{formatoBRL(p.custoRef)}{area > 0 && p.chave === "equipePedreiros" ? <span style={{ color: "#9ca3af" }}> ({formatoBRL(p.custoRef / area)}/m²)</span> : null}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{formatoBRL(p.custoEficiencia)}</td>
-                            <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{p.orcado != null ? formatoBRL(p.orcado) : <span style={{ color: "#9ca3af", fontWeight: 400 }}>—</span>}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{p.hh.toLocaleString("pt-BR")} h</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right" }}>{formatoBRL(p.custoRef)}{area > 0 && p.chave === "equipePedreiros" ? <span style={{ color: "#6b7280" }}> ({formatoBRL(p.custoRef / area)}/m²)</span> : null}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{formatoBRL(p.custoEficiencia)}</td>
+                            <td style={{ padding: "6px 8px", textAlign: "right", fontWeight: 600 }}>{p.orcado != null ? formatoBRL(p.orcado) : <span style={{ color: "#6b7280", fontWeight: 400 }}>—</span>}</td>
                             <td style={{ padding: "6px 8px", textAlign: "right", color: d == null ? "#9ca3af" : Math.abs(d) > 0.3 ? "#b45309" : "#16a34a" }}>{d == null ? "" : `${d > 0 ? "+" : ""}${Math.round(d * 100)}%`}</td>
                           </tr>
                         );
@@ -893,12 +893,12 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                   </table>
                 </div>
                 <details style={{ marginTop: 8, fontSize: 12 }}>
-                  <summary style={{ cursor: "pointer", color: "#374151" }}>Preço da hora por ofício ({referenciaSinapi(data)})</summary>
-                  <div style={{ marginTop: 6, color: "#374151" }}>
-                    {oficios.map((o) => { const ph = mo.precoHora[o.id]; const po = mo.porOficio[o.id]; return ph ? <span key={o.id} style={{ display: "inline-block", marginRight: 14, marginBottom: 4 }}>{o.nome.split(" /")[0]} <b>{formatoBRL(ph.preco)}/h</b>{po ? <span style={{ color: "#9ca3af" }}> · {po.hh.toLocaleString("pt-BR")} h · {formatoBRL(po.custoRef)}</span> : null}{ph.fonte === "escritório" ? <span style={{ color: "#b45309" }}> (escritório)</span> : null}</span> : null; })}
+                  <summary style={{ cursor: "pointer", color: "#111827" }}>Preço da hora por ofício ({referenciaSinapi(data)})</summary>
+                  <div style={{ marginTop: 6, color: "#111827" }}>
+                    {oficios.map((o) => { const ph = mo.precoHora[o.id]; const po = mo.porOficio[o.id]; return ph ? <span key={o.id} style={{ display: "inline-block", marginRight: 14, marginBottom: 4 }}>{o.nome.split(" /")[0]} <b>{formatoBRL(ph.preco)}/h</b>{po ? <span style={{ color: "#6b7280" }}> · {po.hh.toLocaleString("pt-BR")} h · {formatoBRL(po.custoRef)}</span> : null}{ph.fonte === "escritório" ? <span style={{ color: "#b45309" }}> (escritório)</span> : null}</span> : null; })}
                   </div>
                 </details>
-                <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
+                <div style={{ fontSize: 11, color: "#4b5563", marginTop: 8 }}>
                   Referência, não orçamento: HH das composições SINAPI × preço da hora "com encargos complementares" (salário, encargos, EPI, alimentação, transporte). O contratado por empreitada embute lucro, ferramentas maiores e o risco do prestador — diferença de até ±30% é normal; acima disso vale revisar a taxa por m² em Insumos. Elétrica e hidráulica só medem os pontos por ambiente (sem quadro, prumadas, ligação e ramal externo) — o contratado cobre mais. "Com eficiência" converte para as horas que a sua equipe gasta de fato. Ajuste o preço da hora em Insumos → Composições → Produtividade.
                 </div>
               </div>
@@ -908,7 +908,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
           {aba === "medicoes" && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640, width: "100%" }}>
-                <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                   <th style={{ padding: "6px 8px" }}>Etapa</th><th style={{ padding: "6px 8px" }}>Serviço</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Quantidade</th><th style={{ padding: "6px 8px" }}>Horas por ofício</th><th style={{ padding: "6px 8px", textAlign: "right" }}>Mão de obra SINAPI</th><th style={{ padding: "6px 8px" }}>Fonte</th>
                 </tr></thead>
                 <tbody>
@@ -916,25 +916,25 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                     const et = res.rede.find((e) => e.id === m.etapa);
                     return (
                       <tr key={i} style={{ borderTop: "1px solid #f3f4f6" }} title={m.nota || ""}>
-                        <td style={{ padding: "6px 8px", color: "#6b7280", whiteSpace: "nowrap" }}>{et ? et.nome : m.etapa}</td>
-                        <td style={{ padding: "6px 8px", color: "#262421" }}>{m.nome}{m.nota ? <span style={{ color: "#9ca3af" }}> · {m.nota}</span> : null}</td>
+                        <td style={{ padding: "6px 8px", color: "#4b5563", whiteSpace: "nowrap" }}>{et ? et.nome : m.etapa}</td>
+                        <td style={{ padding: "6px 8px", color: "#111827" }}>{m.nome}{m.nota ? <span style={{ color: "#6b7280" }}> · {m.nota}</span> : null}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{m.qtd.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} {m.unidade}</td>
-                        <td style={{ padding: "6px 8px", color: "#374151" }}>{Object.keys(m.horas).map((of) => `${of} ${Math.round(m.horas[of])} h`).join(" · ")}</td>
+                        <td style={{ padding: "6px 8px", color: "#111827" }}>{Object.keys(m.horas).map((of) => `${of} ${Math.round(m.horas[of])} h`).join(" · ")}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right", whiteSpace: "nowrap" }}>{formatoBRL(m.custoRef || 0)}</td>
-                        <td style={{ padding: "6px 8px", color: "#9ca3af", whiteSpace: "nowrap" }}>{m.fonte}</td>
+                        <td style={{ padding: "6px 8px", color: "#6b7280", whiteSpace: "nowrap" }}>{m.fonte}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Quantidades derivadas dos mesmos dados do orçamento (áreas de parede, laje, telhado, volumes de concreto, aço, ambientes). Horas por unidade editáveis em Insumos → Composições → Produtividade.</div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>Quantidades derivadas dos mesmos dados do orçamento (áreas de parede, laje, telhado, volumes de concreto, aço, ambientes). Horas por unidade editáveis em Insumos → Composições → Produtividade.</div>
             </div>
           )}
 
           {aba === "comparar" && (
             <div style={{ overflowX: "auto" }}>
               <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 560, width: "100%" }}>
-                <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+                <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
                   <th style={{ padding: "6px 8px" }}>Etapa</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Simplificado (dias)</th>
                   <th style={{ padding: "6px 8px", textAlign: "right" }}>Produtividade (dias)</th>
@@ -947,10 +947,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                     const dif = p && e.duracao > 0 ? (p.duracao - e.duracao) / e.duracao : 0;
                     return (
                       <tr key={e.id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 8px", color: "#262421" }}>{e.nome}</td>
+                        <td style={{ padding: "6px 8px", color: "#111827" }}>{e.nome}</td>
                         <td style={{ padding: "6px 8px", textAlign: "right" }}>{Math.round(e.duracao)}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{p ? Math.round(p.duracao) : "—"}{p && !p.hh ? <span style={{ color: "#9ca3af" }}> *</span> : null}</td>
-                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>{p && p.hh ? fmtHorasCrono(p.hhTotal) : "—"}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right" }}>{p ? Math.round(p.duracao) : "—"}{p && !p.hh ? <span style={{ color: "#6b7280" }}> *</span> : null}</td>
+                        <td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>{p && p.hh ? fmtHorasCrono(p.hhTotal) : "—"}</td>
                         <td style={{ padding: "6px 8px", color: Math.abs(dif) > 0.5 ? "#b45309" : "#6b7280" }}>{p && p.hh ? `${dif > 0 ? "+" : ""}${Math.round(dif * 100)}%` : ""}</td>
                       </tr>
                     );
@@ -964,14 +964,14 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                   </tr>
                 </tbody>
               </table>
-              <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>* etapa sem serviço medido: usa a duração paramétrica nos dois modos. Diferença grande numa etapa com HH indica equipe irreal para ela ou tabela desatualizada — o realizado das obras calibra a eficiência.</div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>* etapa sem serviço medido: usa a duração paramétrica nos dois modos. Diferença grande numa etapa com HH indica equipe irreal para ela ou tabela desatualizada — o realizado das obras calibra a eficiência.</div>
             </div>
           )}
 
           {podeEditar && (
             <div style={{ marginTop: 12, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <button style={C.btn} onClick={salvar}>Salvar cronograma</button>
-              {salvo.geradoEm && <span style={{ fontSize: 11, color: "#9ca3af" }}>salvo em {new Date(salvo.geradoEm).toLocaleString("pt-BR")} · {salvo.prazoMeses} meses</span>}
+              {salvo.geradoEm && <span style={{ fontSize: 11, color: "#6b7280" }}>salvo em {new Date(salvo.geradoEm).toLocaleString("pt-BR")} · {salvo.prazoMeses} meses</span>}
             </div>
           )}
         </div>
@@ -991,8 +991,8 @@ function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobil
     <div style={wrap}>
       <button onClick={onVoltar} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
       <div style={{ display: "flex", alignItems: "baseline", gap: 12, marginBottom: 14, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#262421" }}>Cronograma — {obra.nome}</div>
-        <div style={{ fontSize: 12, color: "#6b7280" }}>prazo pela tabela do escritório ou por produtividade (HH SINAPI × equipe), caminho crítico, desembolso por mês e mão de obra de referência</div>
+        <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>Cronograma — {obra.nome}</div>
+        <div style={{ fontSize: 12, color: "#4b5563" }}>prazo pela tabela do escritório ou por produtividade (HH SINAPI × equipe), caminho crítico, desembolso por mês e mão de obra de referência</div>
       </div>
       {!temProjeto ? (
         <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "14px 16px", fontSize: 12.5, color: "#92400e" }}>
@@ -1002,7 +1002,7 @@ function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobil
       ) : (
         <div>
           {!obra.orcamento && (
-            <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 14px", fontSize: 12, color: "#374151", marginBottom: 12 }}>
+            <div style={{ background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 14px", fontSize: 12, color: "#111827", marginBottom: 12 }}>
               Orçamento ainda não gerado: prazo e equipe já saem do projeto; o físico-financeiro e a comparação de mão de obra aparecem depois de calcular o orçamento.
             </div>
           )}
@@ -1045,14 +1045,14 @@ function CronogramaEditor({ data, save, podeEditar }) {
 
   return (
     <div>
-      <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 10 }}>
+      <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 10 }}>
         Prazo total por área construída (modo simplificado) e rede de etapas com a duração-base de cada uma. A duração-base é um peso: o VICKE escala todas até o caminho crítico fechar no prazo da tabela (ou no prazo-alvo digitado na obra).
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "minmax(260px, 340px) 1fr", gap: 16, alignItems: "start" }}>
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12 }}>
           <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Prazo por área (meses, térrea)</div>
           <table style={{ borderCollapse: "collapse", fontSize: 12 }}>
-            <thead><tr style={{ color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}><th style={{ padding: "4px 8px", textAlign: "right" }}>m²</th><th style={{ padding: "4px 8px", textAlign: "right" }}>meses</th></tr></thead>
+            <thead><tr style={{ color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}><th style={{ padding: "4px 8px", textAlign: "right" }}>m²</th><th style={{ padding: "4px 8px", textAlign: "right" }}>meses</th></tr></thead>
             <tbody>
               {tabela.map((l, i) => (
                 <tr key={i}>
@@ -1060,36 +1060,36 @@ function CronogramaEditor({ data, save, podeEditar }) {
                   <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.1" style={input} disabled={!podeEditar} value={l.terrea} onChange={(e) => setTabela(i, "terrea", e.target.value)} /></td>
                 </tr>
               ))}
-              <tr><td style={{ padding: "6px 8px", textAlign: "right", color: "#6b7280" }}>Sobrado: +</td>
+              <tr><td style={{ padding: "6px 8px", textAlign: "right", color: "#4b5563" }}>Sobrado: +</td>
                 <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.5" style={input} disabled={!podeEditar} value={extraSobradoMeses(data)} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, sobradoExtra: Number(e.target.value) || 0 })} /></td></tr>
             </tbody>
           </table>
-          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Interpolado entre as linhas; acima da última, segue a inclinação do último trecho. Tabela do modelo antigo do escritório.</div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Interpolado entre as linhas; acima da última, segue a inclinação do último trecho. Tabela do modelo antigo do escritório.</div>
           {editouTabela && podeEditar && <button style={{ ...INS_S.btnGhost, marginTop: 6 }} onClick={restaurarTabela}>Restaurar tabela padrão</button>}
-          {!editouTabela && seedTab.length > 0 && <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Valores padrão.</div>}
+          {!editouTabela && seedTab.length > 0 && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Valores padrão.</div>}
         </div>
         <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto" }}>
           <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 6 }}>Rede de etapas</div>
           <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%", minWidth: 640 }}>
-            <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+            <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
               <th style={{ padding: "4px 8px" }}>Etapa</th><th style={{ padding: "4px 8px" }}>Grupo</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Duração-base (meses)</th><th style={{ padding: "4px 8px" }}>Começa quando</th><th style={{ padding: "4px 8px" }}>Só se</th>
             </tr></thead>
             <tbody>
               {etapas.map((e) => (
                 <tr key={e.id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "4px 8px", color: "#262421", whiteSpace: "nowrap" }}>{e.nome}{e.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6 }}>editado</span>}</td>
-                  <td style={{ padding: "4px 8px", color: "#6b7280" }}>{e.grupo}</td>
+                  <td style={{ padding: "4px 8px", color: "#111827", whiteSpace: "nowrap" }}>{e.nome}{e.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6 }}>editado</span>}</td>
+                  <td style={{ padding: "4px 8px", color: "#4b5563" }}>{e.grupo}</td>
                   <td style={{ padding: "4px 8px", textAlign: "right" }}><input type="number" step="0.5" min="0" style={input} disabled={!podeEditar} value={e.duracaoBase} onChange={(ev) => setDuracao(e.id, ev.target.value)} /></td>
-                  <td style={{ padding: "4px 8px", color: "#6b7280", fontSize: 11.5 }}>
+                  <td style={{ padding: "4px 8px", color: "#4b5563", fontSize: 11.5 }}>
                     {(e.predecessoras || []).length === 0 ? "início da obra" : (e.predecessoras || []).map((l) => l.tipo === "SS" ? `${nomeDe(l.id)} a ${Math.round((l.avanco || 0) * 100)}%` : `${nomeDe(l.id)} termina${l.lag ? ` (${l.lag > 0 ? "+" : ""}${l.lag} d)` : ""}`).join(" · ")}
                   </td>
-                  <td style={{ padding: "4px 8px", color: "#9ca3af" }}>{e.condicao || ""}</td>
+                  <td style={{ padding: "4px 8px", color: "#6b7280" }}>{e.condicao || ""}</td>
                 </tr>
               ))}
             </tbody>
           </table>
           {cfg.etapas && Object.keys(cfg.etapas).length > 0 && podeEditar && <button style={{ ...INS_S.btnGhost, marginTop: 6 }} onClick={restaurarEtapas}>Restaurar durações padrão</button>}
-          <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Predecessoras e condições vêm da rede padrão (várias por etapa; "a 50%" = começa quando a anterior está na metade). Etapa que não existe na obra (sem arrimo, térrea…) sai da rede e suas dependências passam adiante.</div>
+          <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Predecessoras e condições vêm da rede padrão (várias por etapa; "a 50%" = começa quando a anterior está na metade). Etapa que não existe na obra (sem arrimo, térrea…) sai da rede e suas dependências passam adiante.</div>
         </div>
       </div>
     </div>
@@ -1142,10 +1142,10 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
 
   return (
     <div>
-      <div style={{ fontSize: 12.5, color: "#6b7280", marginBottom: 10 }}>
+      <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 10 }}>
         Horas por unidade de serviço, por ofício — composições analíticas do SINAPI (base SP). É a produtividade de referência; a eficiência da equipe (na obra) ajusta para a realidade do canteiro. Zere as horas de um serviço que sua obra não tem (ex.: forro de gesso) ou troque pelo seu número.
       </div>
-      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12, color: "#374151", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", fontSize: 12, color: "#111827", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 10, padding: "8px 12px", marginBottom: 12 }}>
         <span>
           <b>{referenciaSinapi(data)}</b>
           {be && be.coletadoEm ? ` · atualizada automaticamente pelo VICKE em ${be.coletadoEm.split("-").reverse().join("/")}` : " · valores da semente (o VICKE atualiza sozinho quando a Caixa publica a base nova)"}
@@ -1158,14 +1158,14 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, marginBottom: 12, overflowX: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
           <div style={{ fontWeight: 600, fontSize: 12.5 }}>Preço da hora por ofício ({referenciaSinapi(data)})</div>
-          <label style={{ fontSize: 12, color: "#374151" }}>Regime padrão:{" "}
+          <label style={{ fontSize: 12, color: "#111827" }}>Regime padrão:{" "}
             <select value={regime} disabled={!podeEditar} onChange={(e) => gravarCronogramaCfg(data, save, { ...cfg, regimeHora: e.target.value })} style={{ padding: "3px 6px", border: "1px solid #e5e7eb", borderRadius: 6, fontFamily: "inherit", fontSize: 12 }}>
               <option value="desonerado">desonerado</option><option value="onerado">onerado</option>
             </select>
           </label>
         </div>
         <table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: 640 }}>
-          <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+          <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
             <th style={{ padding: "4px 8px" }}>Ofício</th><th style={{ padding: "4px 8px" }}>SINAPI</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Desonerado</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Onerado</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Do escritório (R$/h)</th><th style={{ padding: "4px 8px", textAlign: "right" }}>Em uso</th>
           </tr></thead>
           <tbody>
@@ -1173,10 +1173,10 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
               const s = precoSeed[o.id]; const ov = cfg.precoHora && cfg.precoHora[o.id]; const at = precoAtivo[o.id];
               return (
                 <tr key={o.id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "4px 8px", color: "#262421" }}>{o.nome}</td>
-                  <td style={{ padding: "4px 8px", color: "#9ca3af" }}>{s ? s.codigo : "—"}</td>
-                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#6b7280" }}>{s ? formatoBRL(s.desonerado) : "—"}</td>
-                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#6b7280" }}>{s ? formatoBRL(s.onerado) : "—"}</td>
+                  <td style={{ padding: "4px 8px", color: "#111827" }}>{o.nome}</td>
+                  <td style={{ padding: "4px 8px", color: "#6b7280" }}>{s ? s.codigo : "—"}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#4b5563" }}>{s ? formatoBRL(s.desonerado) : "—"}</td>
+                  <td style={{ padding: "4px 8px", textAlign: "right", color: "#4b5563" }}>{s ? formatoBRL(s.onerado) : "—"}</td>
                   <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.01" min="0" style={input} disabled={!podeEditar} value={ov != null ? ov : ""} placeholder="—" onChange={(e) => setPrecoHora(o.id, e.target.value)} /></td>
                   <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{at ? formatoBRL(at.preco) : "—"}{at && at.fonte === "escritório" ? <span style={{ color: "#b45309", fontWeight: 400, fontSize: 10, marginLeft: 4 }}>escritório</span> : null}</td>
                 </tr>
@@ -1184,11 +1184,11 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
             })}
           </tbody>
         </table>
-        <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 6 }}>Hora "com encargos complementares" (salário + encargos + EPI, ferramentas, alimentação, transporte, exames, seguro). Multiplica as HH da obra para dar a referência de mão de obra por prestador, no bloco Cronograma → Mão de obra.</div>
+        <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>Hora "com encargos complementares" (salário + encargos + EPI, ferramentas, alimentação, transporte, exames, seguro). Multiplica as HH da obra para dar a referência de mão de obra por prestador, no bloco Cronograma → Mão de obra.</div>
       </div>
       <div style={{ background: "#fff", border: "1px solid #e5e7eb", borderRadius: 12, padding: 12, overflowX: "auto" }}>
         <table style={{ borderCollapse: "collapse", fontSize: 12, width: "100%", minWidth: 900 }}>
-          <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10, textTransform: "uppercase" }}>
+          <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10, textTransform: "uppercase" }}>
             <th style={{ padding: "4px 8px" }}>Serviço</th><th style={{ padding: "4px 8px" }}>Un.</th>
             {usados.map((o) => <th key={o.id} style={{ padding: "4px 6px", textAlign: "right" }}>{o.nome.split(" /")[0]}</th>)}
             <th style={{ padding: "4px 8px" }}>Fonte</th><th />
@@ -1198,15 +1198,15 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
               const s = servicos[id];
               return (
                 <tr key={id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                  <td style={{ padding: "4px 8px", color: "#262421" }}>{s.nome}{s.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6 }}>editado</span>}</td>
-                  <td style={{ padding: "4px 8px", color: "#6b7280" }}>{s.unidade}</td>
+                  <td style={{ padding: "4px 8px", color: "#111827" }}>{s.nome}{s.editado && <span style={{ color: "#b45309", fontSize: 10, marginLeft: 6 }}>editado</span>}</td>
+                  <td style={{ padding: "4px 8px", color: "#4b5563" }}>{s.unidade}</td>
                   {usados.map((o) => (
                     <td key={o.id} style={{ padding: "3px 6px", textAlign: "right" }}>
                       <input type="number" step="0.001" min="0" style={{ ...input, color: (seed[id] && seed[id].horas[o.id] != null) || (s.horas[o.id] != null) ? "#262421" : "#d1d5db" }} disabled={!podeEditar}
                         value={s.horas[o.id] != null ? s.horas[o.id] : ""} onChange={(e) => setHoras(id, o.id, e.target.value)} />
                     </td>
                   ))}
-                  <td style={{ padding: "4px 8px", color: "#9ca3af", whiteSpace: "nowrap", fontSize: 11 }}>{s.fonte}</td>
+                  <td style={{ padding: "4px 8px", color: "#6b7280", whiteSpace: "nowrap", fontSize: 11 }}>{s.fonte}</td>
                   <td style={{ padding: "4px 8px" }}>{s.editado && podeEditar && <button style={INS_S.btnGhost} onClick={() => restaurar(id)}>Restaurar</button>}</td>
                 </tr>
               );

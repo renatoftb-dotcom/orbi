@@ -479,11 +479,11 @@ var INS = {
 var INS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
 
 var INS_S = {
-  input: { border: INS.borda, borderRadius: 12, padding: "9px 12px", fontSize: 13, color: "#262421", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" },
-  label: { fontSize: 12, color: "#6b7280", fontWeight: 500, display: "block", marginBottom: 5 },
+  input: { border: INS.borda, borderRadius: 12, padding: "9px 12px", fontSize: 13, color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" },
+  label: { fontSize: 12, color: "#4b5563", fontWeight: 500, display: "block", marginBottom: 5 },
   btn: { background: "#262421", color: "#fff", border: "none", borderRadius: 12, padding: "9px 20px", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" },
-  btnSec: { background: "#fff", color: "#374151", border: INS.borda, borderRadius: 12, padding: "9px 16px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" },
-  btnGhost: { background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontFamily: "inherit", fontSize: 13 },
+  btnSec: { background: "#fff", color: "#111827", border: INS.borda, borderRadius: 12, padding: "9px 16px", fontSize: 13, cursor: "pointer", fontFamily: "inherit" },
+  btnGhost: { background: "none", border: "none", color: "#6b7280", cursor: "pointer", fontFamily: "inherit", fontSize: 13 },
   card: { border: INS.borda, borderRadius: 16, background: "#fff", padding: 16 },
 };
 
@@ -616,10 +616,10 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
             <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#f2f2f4", borderRadius: 8, padding: "4px 8px", fontSize: 12 }}>
               {a}
               <button onClick={() => set("aliases", f.aliases.filter((_, j) => j !== i))}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", padding: 0, fontSize: 14, lineHeight: 1 }}>×</button>
             </span>
           ))}
-          {!(f.aliases || []).length && <span style={{ fontSize: 12, color: "#9ca3af" }}>Nenhum ainda — o nome principal é usado.</span>}
+          {!(f.aliases || []).length && <span style={{ fontSize: 12, color: "#6b7280" }}>Nenhum ainda — o nome principal é usado.</span>}
         </div>
         <div style={{ display: "flex", gap: 8 }}>
           <input style={INS_S.input} value={novoAlias} placeholder="Ex.: CIMENTO CP II 50KG"
@@ -635,7 +635,7 @@ function InsumoForm({ insumo, insumos, onSalvar, onCancelar, isMobile }) {
           value={f.observacao || ""} onChange={e => set("observacao", e.target.value)} />
       </div>
 
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#374151", marginBottom: 18, cursor: "pointer" }}>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#111827", marginBottom: 18, cursor: "pointer" }}>
         <input type="checkbox" checked={f.ativo !== false} onChange={e => set("ativo", e.target.checked)} />
         Ativo
       </label>
@@ -688,15 +688,15 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
 
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginTop: 20 }}>
           <div>
-            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Preço</div>
+            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Preço</div>
             <div style={{ fontSize: 19, fontWeight: 700, color: INS.grafite, display: "flex", alignItems: "center", gap: 7, marginTop: 3 }}>
               <PontoConfianca conf={p.confianca} tamanho={9} />{fmtBRLIns(p.preco)}
             </div>
             <div style={{ fontSize: 11, color: conf.cor, fontWeight: 600 }}>{conf.label}</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Origem</div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>
+            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Origem</div>
+            <div style={{ fontSize: 13, color: "#111827", marginTop: 6 }}>
               {insumo.precoManual != null ? "Definido à mão"
                 : insumo.precoFonte === "compra" ? "Última compra"
                 : insumo.precoFonte === "compra_corrigida" ? "Compra corrigida"
@@ -706,13 +706,13 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
             </div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Data base</div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{fmtDataIns(insumo.precoData)}</div>
+            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Data base</div>
+            <div style={{ fontSize: 13, color: "#111827", marginTop: 6 }}>{fmtDataIns(insumo.precoData)}</div>
             {p.corrigido && <div style={{ fontSize: 11, color: INS.inkSoft }}>corrigido ×{p.fator}</div>}
           </div>
           <div>
-            <div style={{ fontSize: 11, color: "#9ca3af", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Compras</div>
-            <div style={{ fontSize: 13, color: "#374151", marginTop: 6 }}>{insumo.precoNCompras || 0}</div>
+            <div style={{ fontSize: 11, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.5 }}>Compras</div>
+            <div style={{ fontSize: 13, color: "#111827", marginTop: 6 }}>{insumo.precoNCompras || 0}</div>
           </div>
         </div>
 
@@ -742,7 +742,7 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
           Histórico de compras {compras.length ? `(${compras.length})` : ""}
         </div>
         {!compras.length ? (
-          <div style={{ fontSize: 12.5, color: "#9ca3af" }}>
+          <div style={{ fontSize: 12.5, color: "#6b7280" }}>
             Nenhuma compra vinculada a este insumo ainda. O histórico se forma conforme as notas são lançadas nas obras.
           </div>
         ) : (
@@ -751,7 +751,7 @@ function InsumoDetalhe({ insumo, data, onEditar, onVoltar, onAceitarPendente, on
             <div style={{ overflowX: "auto", marginTop: 14 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
                 <thead>
-                  <tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>
+                  <tr style={{ textAlign: "left", color: "#6b7280", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>
                     <th style={{ padding: "6px 8px" }}>Data</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Qtd</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Total</th>
@@ -815,7 +815,7 @@ function GraficoPrecoInsumo({ compras }) {
           </circle>
         ))}
       </svg>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#9ca3af", marginTop: 2 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "#6b7280", marginTop: 2 }}>
         <span>{fmtDataIns(compras[0].data)} · {fmtBRLIns(min)}</span>
         <span>{fmtDataIns(compras[compras.length - 1].data)} · {fmtBRLIns(max)}</span>
       </div>
@@ -900,7 +900,7 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
         <div style={INS_S.card}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 640 }}>
-              <thead><tr style={{ textAlign: "left", color: "#9ca3af", fontSize: 10.5, textTransform: "uppercase" }}>
+              <thead><tr style={{ textAlign: "left", color: "#6b7280", fontSize: 10.5, textTransform: "uppercase" }}>
                 <th style={{ padding: "6px 8px" }}>Cômodo</th>
                 {pontosDef.map(function (p) { return <th key={p.id} style={{ padding: "6px 8px", textAlign: "right" }}>{p.nome}</th>; })}
               </tr></thead>
@@ -909,7 +909,7 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
                   var pt = pontosDe(t);
                   return (
                     <tr key={t.id} style={{ borderTop: "1px solid #f3f4f6" }}>
-                      <td style={{ padding: "6px 8px", color: "#262421" }}>{t.nome}</td>
+                      <td style={{ padding: "6px 8px", color: "#111827" }}>{t.nome}</td>
                       {pontosDef.map(function (p) {
                         return <td key={p.id} style={{ padding: "4px 8px", textAlign: "right" }}>
                           <input type="number" min="0" step="1" disabled={!podeEditar} value={pt[p.id] == null ? 0 : pt[p.id]}
@@ -923,7 +923,7 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
               </tbody>
             </table>
           </div>
-          <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 8 }}>Por unidade de cômodo. Cada ponto vira o kit correspondente (aba Kits → Elétrica). Circuitos: 1 disjuntor 10A a cada 8 pontos de luz e 1 de 20A a cada 6 tomadas gerais, calculados pelo motor.</div>
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>Por unidade de cômodo. Cada ponto vira o kit correspondente (aba Kits → Elétrica). Circuitos: 1 disjuntor 10A a cada 8 pontos de luz e 1 de 20A a cada 6 tomadas gerais, calculados pelo motor.</div>
         </div>
       )}
 
@@ -943,9 +943,9 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
                   style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", background: "#fafafa", border: "none", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
                   <span>
                     <span style={{ fontSize: 13, fontWeight: 700, color: INS.grafite }}>{kit.nome}</span>
-                    <span style={{ fontSize: 11, color: "#9ca3af", marginLeft: 8 }}>{kit.base === "ponto" ? "por ponto" : kit.base === "obra" ? "por obra" : "por ambiente"} · {kit.itens.length} itens · {kit.editado ? "editado pelo escritório" : kit.fonte}</span>
+                    <span style={{ fontSize: 11, color: "#6b7280", marginLeft: 8 }}>{kit.base === "ponto" ? "por ponto" : kit.base === "obra" ? "por obra" : "por ambiente"} · {kit.itens.length} itens · {kit.editado ? "editado pelo escritório" : kit.fonte}</span>
                   </span>
-                  <span style={{ fontSize: 11, color: "#9ca3af" }}>{ab ? "▲" : "▼"}</span>
+                  <span style={{ fontSize: 11, color: "#6b7280" }}>{ab ? "▲" : "▼"}</span>
                 </button>
                 {ab && (
                   <div style={{ padding: 12 }}>
@@ -978,7 +978,7 @@ function ComposicoesEditor({ data, save, insumos, podeEditar, onVoltar }) {
               </div>
             );
           })}
-          {!ids.length && <div style={{ fontSize: 12.5, color: "#6b7280" }}>Nenhum kit nesta disciplina.</div>}
+          {!ids.length && <div style={{ fontSize: 12.5, color: "#4b5563" }}>Nenhum kit nesta disciplina.</div>}
         </div>
       )}
     </div>
@@ -1154,7 +1154,7 @@ function Insumos({ data, save }) {
             <div style={{ fontSize: 13, fontWeight: 600, color: INS.azul, marginBottom: 4 }}>
               {insumos.length === 0 ? "Catálogo vazio" : "Catálogo incompleto"}
             </div>
-            <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12 }}>
+            <div style={{ fontSize: 12.5, color: "#111827", marginBottom: 12 }}>
               {faltamDaSemente > 0 && <>Faltam <strong>{faltamDaSemente}</strong> insumos do catálogo padrão (materiais, louças e metais, esquadrias e prestadores, com preço de referência). </>}
               {pendentesMigracao > 0 && <><strong>{pendentesMigracao}</strong> material antigo ainda não tem código. </>}
               A operação é segura de repetir: nunca sobrescreve preço definido à mão nem preço mais recente que o da semente.
@@ -1195,7 +1195,7 @@ function Insumos({ data, save }) {
         </div>
 
         {filtrados.length === 0 ? (
-          <div style={{ padding: 28, textAlign: "center", color: "#9ca3af", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 16, background: "#fff" }}>
+          <div style={{ padding: 28, textAlign: "center", color: "#6b7280", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 16, background: "#fff" }}>
             {insumos.length === 0 ? "Nenhum insumo cadastrado ainda." : "Nenhum insumo com esses filtros."}
           </div>
         ) : (
@@ -1203,7 +1203,7 @@ function Insumos({ data, save }) {
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: isMobile ? 0 : 720 }}>
                 <thead>
-                  <tr style={{ background: "#f7f7f8", color: "#6b7280", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, textAlign: "left" }}>
+                  <tr style={{ background: "#f7f7f8", color: "#4b5563", fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5, textAlign: "left" }}>
                     <th style={{ padding: "10px 12px", fontWeight: 600 }}>Código</th>
                     <th style={{ padding: "10px 12px", fontWeight: 600 }}>Insumo</th>
                     {!isMobile && <th style={{ padding: "10px 12px", fontWeight: 600 }}>Grupo</th>}
@@ -1225,8 +1225,8 @@ function Insumos({ data, save }) {
                           {x.i.nome}
                           {x.i.precoPendente && <span style={{ marginLeft: 8, fontSize: 11, color: "#b45309", fontWeight: 600 }}>· confirmar</span>}
                         </td>
-                        {!isMobile && <td style={{ padding: "10px 12px", color: "#6b7280" }}>{x.i.grupo}</td>}
-                        {!isMobile && <td style={{ padding: "10px 12px", color: "#6b7280" }}>{x.i.unidade}</td>}
+                        {!isMobile && <td style={{ padding: "10px 12px", color: "#4b5563" }}>{x.i.grupo}</td>}
+                        {!isMobile && <td style={{ padding: "10px 12px", color: "#4b5563" }}>{x.i.unidade}</td>}
                         <td style={{ padding: "10px 12px", textAlign: "right", fontVariantNumeric: "tabular-nums", fontWeight: 600, color: INS.grafite, whiteSpace: "nowrap" }}>
                           <span style={{ display: "inline-flex", alignItems: "center", gap: 7, justifyContent: "flex-end" }}>
                             <PontoConfianca conf={x.p.confianca} />
@@ -1234,7 +1234,7 @@ function Insumos({ data, save }) {
                           </span>
                         </td>
                         {!isMobile && (
-                          <td style={{ padding: "10px 12px", color: "#9ca3af", fontSize: 11.5, whiteSpace: "nowrap" }}>
+                          <td style={{ padding: "10px 12px", color: "#6b7280", fontSize: 11.5, whiteSpace: "nowrap" }}>
                             {fmtDataIns(x.i.precoData)}{x.p.corrigido ? " ×" + x.p.fator : ""}
                           </td>
                         )}
@@ -1247,7 +1247,7 @@ function Insumos({ data, save }) {
           </div>
         )}
 
-        <div style={{ fontSize: 11.5, color: "#9ca3af", marginTop: 14, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 14, lineHeight: 1.6 }}>
           O preço com 12 meses ou mais é corrigido pelo INCC automaticamente. Definir um preço à mão congela o valor:
           nenhuma compra passa por cima dele.
         </div>

@@ -362,7 +362,7 @@ function CalloutsRenderer({ ids, titulo, descricao, acaoAoIniciar, posicao = "le
           )}
           {descricao && (
             <div style={{
-              fontSize: 13.5, color: "#262421", lineHeight: 1.5,
+              fontSize: 13.5, color: "#111827", lineHeight: 1.5,
             }}>{descricao}</div>
           )}
         </div>
@@ -666,7 +666,7 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
   const _btnBase = {
     padding: "8px 14px", fontSize: 13, fontWeight: 500,
     borderRadius: 7, cursor: "pointer", fontFamily: "inherit",
-    border: "1.5px solid rgba(38,36,33,0.16)", background: "#fff", color: "#374151",
+    border: "1.5px solid rgba(38,36,33,0.16)", background: "#fff", color: "#111827",
   };
   const _btnPrimary = {
     ..._btnBase,
@@ -720,15 +720,15 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
         }}>
           <div style={{ fontSize: 32, marginBottom: 12 }}>🧪</div>
-          <h2 style={{ fontSize: 20, fontWeight: 600, color: "#262421", margin: "0 0 10px", letterSpacing: -0.3 }}>
+          <h2 style={{ fontSize: 20, fontWeight: 600, color: "#111827", margin: "0 0 10px", letterSpacing: -0.3 }}>
             {welcome.titulo}
           </h2>
-          <p style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.6, margin: "0 0 24px" }}>
+          <p style={{ fontSize: 14, color: "#4b5563", lineHeight: 1.6, margin: "0 0 24px" }}>
             {welcome.descricao}
           </p>
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
             <button onClick={onCancelar} style={{
-              background: "transparent", color: "#6b7280",
+              background: "transparent", color: "#4b5563",
               border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 12,
               padding: "9px 16px", fontSize: 13, fontWeight: 500,
               cursor: "pointer", fontFamily: "inherit",
@@ -776,13 +776,13 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
           <div className="vk-tut-fs-card" style={{ maxWidth: 720, textAlign: "center" }}>
             <h2 style={{
               fontSize: 26, fontWeight: 500, letterSpacing: "-0.022em",
-              lineHeight: 1.2, margin: 0, color: "#262421",
+              lineHeight: 1.2, margin: 0, color: "#111827",
             }}>
               {passo.titulo}
             </h2>
             {passo.descricao && (
               <p className="vk-tut-fs-line2" style={{
-                fontSize: 16, fontWeight: 400, color: "#6b7280",
+                fontSize: 16, fontWeight: 400, color: "#4b5563",
                 lineHeight: 1.55, marginTop: 14, marginBottom: 0,
               }}>
                 {passo.descricao}
@@ -973,16 +973,16 @@ function TutorialOverlay({ passos, welcome, onConcluir, onCancelar }) {
               {passo.titulo}
             </div>
           )}
-          <div style={{ fontSize: 13.5, color: "#262421", lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13.5, color: "#111827", lineHeight: 1.5 }}>
             {passo.descricao}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between",
             alignItems: "center", marginTop: 12, gap: 8 }}>
-            <div style={{ fontSize: 11, color: "#9ca3af" }}>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>
               {idx + 1} de {passos.length}
             </div>
             <button onClick={onCancelar} style={{
-              background: "transparent", color: "#9ca3af",
+              background: "transparent", color: "#6b7280",
               border: "none", fontSize: 11, cursor: "pointer",
               fontFamily: "inherit", padding: 0,
             }}>Pular tutorial</button>
@@ -1624,7 +1624,7 @@ function DialogosHost() {
                   onClick={() => fecharModal(modalTopo.id, false)}
                   style={{
                     background: "#fff",
-                    color: "#6b7280",
+                    color: "#4b5563",
                     border: "1.5px solid rgba(38,36,33,0.16)",
                     borderRadius: 12,
                     padding: "8px 18px",
@@ -1867,7 +1867,7 @@ function VersionWatcher() {
         }}
         style={{
           background: "#fff",
-          color: "#262421",
+          color: "#111827",
           border: "none",
           borderRadius: 7,
           padding: "7px 14px",
