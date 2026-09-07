@@ -35,6 +35,9 @@ const ORDER = [
   // cronograma-obra.jsx usa normalizarProjeto/calcularTelhado de orcamento-obra.jsx
   // e é renderizado dentro do resultado do orçamento (OrcamentoObraView).
   "cronograma-obra.jsx",
+  // contratos-obra.jsx vem antes de clientes.jsx: é lá (aba Contratos da
+  // obra) que o gerador e o documento são renderizados.
+  "contratos-obra.jsx",
   "clientes.jsx",
   "resultado-pdf.jsx",
   // shared-textos.jsx vem antes de quem o consome (modelo-padrao.jsx,
