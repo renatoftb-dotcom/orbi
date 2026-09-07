@@ -812,10 +812,10 @@ function Opcao({ label, selecionada, onClick }) {
       style={{
         display:"flex", alignItems:"center", gap:10,
         padding:"12px 14px",
-        background: selecionada ? "#eef5ff" : "#fff",
-        border: selecionada ? "1.5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
+        background: "#fff",
+        border: selecionada ? "1.5px solid #0474f4" : "1.5px solid rgba(38,36,33,0.16)",
         borderRadius: 12,
-        boxShadow: selecionada ? "0 0 0 3px rgba(181,101,47,0.14)" : "none",
+        boxShadow: selecionada ? "0 0 0 3px rgba(4,116,244,0.14)" : "none",
         cursor:"pointer",
         textAlign:"left",
         fontFamily:"inherit",
@@ -829,7 +829,7 @@ function Opcao({ label, selecionada, onClick }) {
       <span style={{
         flexShrink:0,
         width:18, height:18, borderRadius:"50%",
-        border: selecionada ? "5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
+        border: selecionada ? "5px solid #0474f4" : "1.5px solid rgba(38,36,33,0.16)",
         background:"#fff",
         transition:"all 0.12s",
       }} />
@@ -1396,10 +1396,10 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 onClick={() => setEditando(aberto ? null : l.campo)}
                 style={{
                   width: "100%",
-                  border: aberto ? "1.5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
+                  border: aberto ? "1.5px solid #0474f4" : "1.5px solid rgba(38,36,33,0.16)",
                   borderRadius: 14,
                   padding: "10px 12px",
-                  background: aberto ? "#eef5ff" : "#fff",
+                  background: "#fff",
                   cursor: "pointer",
                   fontFamily: "inherit",
                   textAlign: "left",
@@ -1478,7 +1478,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                           fontSize: 12,
                           borderRadius: 6,
                           cursor: "pointer",
-                          background: selecionada ? "#eef5ff" : "transparent",
+                          background: "transparent",
                           color: selecionada ? "#0474f4" : "#374151",
                           fontWeight: selecionada ? 600 : 400,
                           transition: "background 0.1s",
@@ -2203,7 +2203,7 @@ function BlocoCadastroEscritorio({
       scrollMarginTop: 16,
     }}>
       <style>{`
-        .vk-onb-cad input:focus, .vk-onb-cad select:focus { border-color: #b5652f !important; box-shadow: 0 0 0 3px rgba(181,101,47,0.12); }
+        .vk-onb-cad input:focus, .vk-onb-cad select:focus { border-color: #0474f4 !important; box-shadow: 0 0 0 3px rgba(4,116,244,0.12); }
         @media (max-width: 720px) {
           .vk-onb-cad-grid { grid-template-columns: 1fr !important; }
         }
@@ -2243,7 +2243,7 @@ function BlocoCadastroEscritorio({
               onDrop={handleDrop}
               style={{
                 width: 160, height: 100,
-                border: arrastando ? "1.5px solid #b5652f" : (logo ? "1.5px solid rgba(38,36,33,0.16)" : "1.5px dashed rgba(38,36,33,0.2)"),
+                border: arrastando ? "1.5px solid #0474f4" : (logo ? "1.5px solid rgba(38,36,33,0.16)" : "1.5px dashed rgba(38,36,33,0.2)"),
                 borderRadius: 12,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: arrastando ? "#f3f4f6" : "#fafbfc",

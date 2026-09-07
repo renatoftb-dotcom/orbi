@@ -473,7 +473,7 @@ function semearInsumos(materiais, seed) {
 // ═══════════════════════════════════════════════════════════════
 
 var INS = {
-  fundo: "#fafafb", grafite: "#1a1a1a", cobre: "#b5652f", azul: "#1e3a5f",
+  fundo: "#fafafb", grafite: "#1a1a1a", cobre: "#0474f4", azul: "#1e3a5f",
   inkSoft: "#78716c", borda: "1.5px solid rgba(38,36,33,0.16)",
 };
 var INS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";

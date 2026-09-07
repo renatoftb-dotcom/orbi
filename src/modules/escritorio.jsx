@@ -945,7 +945,7 @@ function Escritorio({ data, save }) {
                   {ehVoce && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#eef5ff", color:"#b5652f", fontWeight:600,
+                      background:"#eef5ff", color:"#0474f4", fontWeight:600,
                       textTransform:"uppercase", letterSpacing:0.5,
                     }}>Você</span>
                   )}

@@ -33,7 +33,7 @@ const C = {
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
   grid3:    { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
-  secTit:   { fontSize:11, fontWeight:700, color:"#b5652f", textTransform:"uppercase", letterSpacing:1, marginBottom:14 },
+  secTit:   { fontSize:12.5, fontWeight:700, color:"#111827", marginBottom:14 },
   divider:  { border:"none", borderTop:"1px solid rgba(38,36,33,0.08)", margin:"20px 0" },
   row:      { display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid #f9fafb" },
 };
@@ -200,12 +200,12 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
   const totalReceber  = lancsCli.filter(r=>r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const fmtV = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
-  const VK = { grafite:"#111827", cobre:"#b5652f", inkSoft:"#4b5563" };
-  const secTit = { fontSize:11, fontWeight:600, color:VK.cobre, textTransform:"uppercase", letterSpacing:"0.18em", marginBottom:14 };
+  const VK = { grafite:"#111827", cobre:AZUL_VK, inkSoft:"#4b5563" };
+  const secTit = { fontSize:12.5, fontWeight:700, color:VK.grafite, marginBottom:14 };
   const secBtn = () => ({ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", borderBottom:"1px solid rgba(38,36,33,0.08)", padding:"12px 0", cursor:"pointer", fontFamily:"inherit", color:VK.grafite, fontSize:13, fontWeight:600 });
   const card = { border:"1px solid rgba(38,36,33,0.12)", borderRadius:16, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff", boxShadow:"0 4px 16px -10px rgba(38,36,33,0.25)" };
   const btn = { background:VK.grafite, color:"#fff", border:"none", borderRadius:9, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
-  const btnSec = { background:"transparent", color:VK.grafite, boxShadow:`inset 0 0 0 1.5px ${VK.cobre}`, border:"none", borderRadius:9, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
+  const btnSec = { background:"#fff", color:VK.grafite, border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
   const inputSel = { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, padding:"7px 12px", fontSize:12, color:VK.grafite, background:"#fff", fontFamily:"inherit", cursor:"pointer", outline:"none" };
 
   return (
@@ -559,7 +559,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
           transition:"border-color 0.15s, box-shadow 0.15s",
         }}
-        onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
+        onMouseEnter={e=>{ e.currentTarget.style.borderColor=AZUL_VK; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.12)"; }}
         onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
           <div style={{ fontSize:13, fontWeight:600, color:"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -732,7 +732,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
             return (
               <div key={c.id} style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer", transition:"border-color 0.15s, box-shadow 0.15s" }}
-                onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
+                onMouseEnter={e=>{ e.currentTarget.style.borderColor=AZUL_VK; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.12)"; }}
                 onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}
                 onClick={()=>openDetail(c)}>
                 <div style={{ width:40, height:40, borderRadius: 14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
@@ -801,7 +801,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                   border: abaCliente === aba.id ? `1.5px solid ${VKD.cobre}` : "1.5px solid rgba(38,36,33,0.16)",
                   borderRadius: 16,
                   padding: "20px",
-                  background: abaCliente === aba.id ? VKD.cobreClaro : "#fff",
+                  background: "#fff",
                   boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(4,116,244,0.16)" : "none",
                   cursor: "pointer",
                   fontFamily: SYS_FONT,
@@ -861,7 +861,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   const VK = {
     fundo:      "#fafafb",
     grafite:    "#111827",
-    cobre:      "#b5652f",
+    cobre:      AZUL_VK,
     cobreClaro: "#eef5ff",
     ink:        "#111827",
     inkSoft:    "#4b5563",
@@ -1418,7 +1418,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {itensPL.length === 0 ? (
           <div style={{ padding: "24px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
-            Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
+            Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
           </div>
         ) : visaoPL === "conta" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
@@ -1685,7 +1685,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={objetoPadrao(g.tipoProfissional, escopo) || modelo.subtitulo} />
             <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
               {objetoEditado
-                ? <>Texto editado à mão — não é mais reescrito quando você troca o tipo. <button type="button" onClick={() => setG("objeto", objetoPadrao(g.tipoProfissional, escopo))} style={{ background: "none", border: "none", padding: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>Voltar ao padrão</button></>
+                ? <>Texto editado à mão — não é mais reescrito quando você troca o tipo. <button type="button" onClick={() => setG("objeto", objetoPadrao(g.tipoProfissional, escopo))} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>Voltar ao padrão</button></>
                 : "Escrito a partir do tipo de profissional e do que o contrato inclui. Pode ser editado."}
             </div>
           </div>
@@ -1819,7 +1819,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       />
                     ) : (
                       <button type="button" onClick={() => setEspecificando({ ...especificando, [op.id]: true })}
-                        style={{ background: "none", border: "none", padding: "6px 0 0 24px", margin: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>
+                        style={{ background: "none", border: "none", padding: "6px 0 0 24px", margin: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>
                         Especificar
                       </button>
                     )
@@ -2035,7 +2035,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {contratosDaObra.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
-            Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
+            Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
@@ -2209,7 +2209,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {perm.podeEditar && (
           <button onClick={novaObra} title="Adicionar obra"
             style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: "#111827", color: "#fff", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
-            onMouseEnter={e => e.currentTarget.style.background = "#b5652f"}
+            onMouseEnter={e => e.currentTarget.style.background = AZUL_VK}
             onMouseLeave={e => e.currentTarget.style.background = "#111827"}>
             +
           </button>

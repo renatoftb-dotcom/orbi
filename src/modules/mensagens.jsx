@@ -212,8 +212,8 @@ function Mensagens({ usuario }) {
     sub: { fontSize:13, color:"#4b5563", marginTop:3 },
     filtros: { display:"flex", gap:4, padding:"12px 32px", borderBottom:"1px solid #f3f4f6" },
     btnFiltro: (ativo) => ({
-      background: ativo ? "#eef5ff" : "transparent",
-      color: ativo ? "#0474f4" : "#6b7280",
+      background: "transparent",
+      color: ativo ? "#0474f4" : "#4b5563",
       border: "none",
       borderRadius: 6,
       padding: "6px 12px",

@@ -4419,7 +4419,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
         <div style={{ display: "grid", gridTemplateColumns: a.molhado ? colunasMolhado : colunasSeco, gap: 8, alignItems: "center", padding: "3px 0" }}>
           {a.molhado ? (
             <button type="button" onClick={() => setComodoAberto(aberto ? null : a.id)} title="Editar medidas, revestimento e bancada"
-              style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 13, padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${aberto ? "#b5652f" : "rgba(38,36,33,0.18)"}`, background: aberto ? "#eef5ff" : "#fff", color: "#1f2a37", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 13, padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${aberto ? "#0474f4" : "rgba(38,36,33,0.18)"}`, background: "#fff", color: "#1f2a37", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {a.nome}{cfg.editado ? " *" : ""}
             </button>
           ) : (
@@ -5255,7 +5255,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Engenharia — Pilares e vigas" subtitulo={ehTerrea ? "térreo e cobertura" : "térreo, pav. 1 e cobertura"} aberto={!!blocosAbertos.estrutura} onToggle={() => toggleBloco("estrutura")}>
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6 }}>Pav. Térreo</div>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#0474f4", textTransform: "uppercase", letterSpacing: 0.6 }}>Pav. Térreo</div>
           <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.colunasTerreo.15")} onChange={(v) => set("engenharia.colunasTerreo.15", v)} />
           <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.colunasTerreo.20")} onChange={(v) => set("engenharia.colunasTerreo.20", v)} />
           <CampoNum label="Qtd. pilares 30cm" valor={get("engenharia.colunasTerreo.30")} onChange={(v) => set("engenharia.colunasTerreo.30", v)} />
@@ -5267,7 +5267,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
           {!ehTerrea && (
             <>
-              <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Pav. 1</div>
+              <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#0474f4", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Pav. 1</div>
               <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.colunasPav1.15")} onChange={(v) => set("engenharia.colunasPav1.15", v)} />
               <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.colunasPav1.20")} onChange={(v) => set("engenharia.colunasPav1.20", v)} />
               <CampoNum label="Qtd. pilares 25cm" valor={get("engenharia.colunasPav1.25")} onChange={(v) => set("engenharia.colunasPav1.25", v)} />
@@ -5280,7 +5280,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             </>
           )}
 
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Cobertura</div>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#0474f4", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Cobertura</div>
           <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.coberturaEstrutura.colunas.15")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.15", v)} />
           <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.coberturaEstrutura.colunas.20")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.20", v)} />
           <CampoNum label="Qtd. pilares 25cm" valor={get("engenharia.coberturaEstrutura.colunas.25")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.25", v)} />

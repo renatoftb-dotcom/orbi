@@ -18,8 +18,10 @@ texto: era o que deixava a tela lavada.
 
 - **hover** e **foco** de campo, seletor, área de texto e botão: borda azul;
   o foco leva também um halo `rgba(4,116,244,0.18)`.
-- **selecionado**: aba, cartão ou item ativo em azul — texto, borda e, quando
-  há preenchimento, o azul claro `#eef5ff`.
+- **selecionado**: em botões, abas e cartões o fundo continua **branco** — a
+  seleção é marcada só pela borda e pelo texto em azul. O preenchimento azul
+  claro `#eef5ff` fica reservado ao **menu lateral do app**, que segue com o
+  item ativo em fundo azul claro.
 
 A regra de hover/foco é uma folha só, declarada em `app.jsx` e escopada por
 `data-vk-ui`, que a área de conteúdo aplica em todos os módulos exceto o de
@@ -41,8 +43,10 @@ auxiliares em `#fafafa`. O pêssego `#fdf6f0` de item selecionado e o
 sem etiqueta colorida de status — status é texto, com negrito no que exige
 atenção.
 
-As únicas cores fora do azul são o vermelho de ações destrutivas (`#dc2626`)
-e o cobre da marca (`#b5652f`), que ficou restrito a links de ação.
+O cobre `#b5652f` saiu de todos os módulos cobertos — títulos de seção,
+contornos de botão, links de ação e realces de hover viraram azul ou preto.
+A única cor fora do azul é o vermelho de ações destrutivas (`#dc2626`), mais
+os fundos de alerta.
 
 ## O que não foi tocado
 

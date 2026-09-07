@@ -177,7 +177,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
             style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
-            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#b5652f"; }}
+            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#0474f4"; }}
             onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
               <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
@@ -253,7 +253,7 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
             cursor: it.onClick ? "pointer" : "default",
             transition:"border-color 0.12s",
           }}
-          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#b5652f"; }}
+          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#0474f4"; }}
           onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
           <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {it.label}

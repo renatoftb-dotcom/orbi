@@ -110,7 +110,7 @@ function getEstilos(loading) {
     linkBtn: {
       background: "none",
       border: "none",
-      color: "#b5652f",
+      color: "#0474f4",
       fontWeight: 600,
       cursor: "pointer",
       padding: 0,
@@ -621,7 +621,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
                 value={d}
                 onChange={e => handleChangeDigito(idx, e.target.value)}
                 onKeyDown={e => handleKeyDown(idx, e)}
-                onFocus={e => { e.currentTarget.style.borderColor = "#b5652f"; }}
+                onFocus={e => { e.currentTarget.style.borderColor = "#0474f4"; }}
                 onBlur={e => { e.currentTarget.style.borderColor = "rgba(38,36,33,0.16)"; }}
                 style={inputCodigo}
                 disabled={loading}

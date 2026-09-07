@@ -2699,10 +2699,10 @@ function FilterPill({ label, count, active, onClick, countColor }) {
     <button
       onClick={onClick}
       style={{
-        fontSize:12, color: active ? "#b5652f" : "#6b7280",
-        border:"1.5px solid " + (active ? "#b5652f" : "rgba(38,36,33,0.16)"),
+        fontSize:12, color: active ? "#0474f4" : "#4b5563",
+        border:"1.5px solid " + (active ? "#0474f4" : "rgba(38,36,33,0.16)"),
         borderRadius:20, padding:"5px 12px",
-        background: active ? "#eef5ff" : "#fff",
+        background: "#fff",
         cursor:"pointer", fontFamily:"inherit",
         display:"flex", alignItems:"center", gap:5,
       }}>
@@ -2776,7 +2776,7 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
       display:"flex", flexDirection:"column", gap:8,
       ...(atrasado ? { background:"#fffbfb" } : {}),
     }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#b5652f"; }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#0474f4"; }}
     onMouseLeave={e => { e.currentTarget.style.borderColor = atrasado ? "#fecaca" : "rgba(38,36,33,0.14)"; }}>
       {/* Tag de tipo */}
       <span style={{
@@ -3021,8 +3021,8 @@ function Obras({ data, save }) {
   const pillStyle = (ativa) => ({
     padding: "6px 14px", borderRadius: 7, fontSize: 12,
     border: "1.5px solid " + (ativa ? "#0474f4" : "rgba(38,36,33,0.16)"),
-    background: ativa ? "#eef5ff" : "#fff",
-    color: ativa ? "#0474f4" : "#6b7280",
+    background: "#fff",
+    color: ativa ? "#0474f4" : "#4b5563",
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });
 
@@ -3594,19 +3594,19 @@ function PrestadoresServico({ data, save }) {
       {filtrados.length === 0 ? (
         <div style={{ padding:"40px 20px", textAlign:"center", color:"#4b5563", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
           {prestadores.length === 0 ? "Nenhum prestador cadastrado." : "Nenhum resultado para essa busca."}{" "}
-          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#b5652f", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
+          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#0474f4", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
         </div>
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:14 }}>
           {filtrados.map(p => (
             <div key={p.id} style={{ border:"1px solid rgba(38,36,33,0.14)", borderRadius:16, padding:"16px 18px", background:"#fff", transition:"border-color 0.15s, box-shadow 0.15s" }}
-              onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
+              onMouseEnter={e=>{ e.currentTarget.style.borderColor="#0474f4"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.12)"; }}
               onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"start", gap:8, marginBottom:8 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:"#111827" }}>{p.nome}</div>
                 {p.ativo === false && <span style={PS.tag("#9ca3af")}>Inativo</span>}
               </div>
-              <span style={PS.tag("#b5652f")}>{p.categoria}</span>
+              <span style={PS.tag("#0474f4")}>{p.categoria}</span>
               <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
                 {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
                 {p.telefone && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.telefone}</div>}
@@ -6490,7 +6490,7 @@ function semearInsumos(materiais, seed) {
 // ═══════════════════════════════════════════════════════════════
 
 var INS = {
-  fundo: "#fafafb", grafite: "#1a1a1a", cobre: "#b5652f", azul: "#1e3a5f",
+  fundo: "#fafafb", grafite: "#1a1a1a", cobre: "#0474f4", azul: "#1e3a5f",
   inkSoft: "#78716c", borda: "1.5px solid rgba(38,36,33,0.16)",
 };
 var INS_FONT = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
@@ -11861,7 +11861,7 @@ function ListaComodos({ projeto, get, set, comodoAberto, setComodoAberto, isMobi
         <div style={{ display: "grid", gridTemplateColumns: a.molhado ? colunasMolhado : colunasSeco, gap: 8, alignItems: "center", padding: "3px 0" }}>
           {a.molhado ? (
             <button type="button" onClick={() => setComodoAberto(aberto ? null : a.id)} title="Editar medidas, revestimento e bancada"
-              style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 13, padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${aberto ? "#b5652f" : "rgba(38,36,33,0.18)"}`, background: aberto ? "#eef5ff" : "#fff", color: "#1f2a37", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              style={{ textAlign: "left", cursor: "pointer", fontFamily: "inherit", fontSize: 13, padding: "5px 10px", borderRadius: 8, border: `1.5px solid ${aberto ? "#0474f4" : "rgba(38,36,33,0.18)"}`, background: "#fff", color: "#1f2a37", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {a.nome}{cfg.editado ? " *" : ""}
             </button>
           ) : (
@@ -12697,7 +12697,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         </BlocoColapsavel>
 
         <BlocoColapsavel titulo="Engenharia — Pilares e vigas" subtitulo={ehTerrea ? "térreo e cobertura" : "térreo, pav. 1 e cobertura"} aberto={!!blocosAbertos.estrutura} onToggle={() => toggleBloco("estrutura")}>
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6 }}>Pav. Térreo</div>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#0474f4", textTransform: "uppercase", letterSpacing: 0.6 }}>Pav. Térreo</div>
           <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.colunasTerreo.15")} onChange={(v) => set("engenharia.colunasTerreo.15", v)} />
           <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.colunasTerreo.20")} onChange={(v) => set("engenharia.colunasTerreo.20", v)} />
           <CampoNum label="Qtd. pilares 30cm" valor={get("engenharia.colunasTerreo.30")} onChange={(v) => set("engenharia.colunasTerreo.30", v)} />
@@ -12709,7 +12709,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
           {!ehTerrea && (
             <>
-              <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Pav. 1</div>
+              <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#0474f4", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Pav. 1</div>
               <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.colunasPav1.15")} onChange={(v) => set("engenharia.colunasPav1.15", v)} />
               <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.colunasPav1.20")} onChange={(v) => set("engenharia.colunasPav1.20", v)} />
               <CampoNum label="Qtd. pilares 25cm" valor={get("engenharia.colunasPav1.25")} onChange={(v) => set("engenharia.colunasPav1.25", v)} />
@@ -12722,7 +12722,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             </>
           )}
 
-          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#b5652f", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Cobertura</div>
+          <div style={{ gridColumn: "1 / -1", fontSize: 12, fontWeight: 700, color: "#0474f4", textTransform: "uppercase", letterSpacing: 0.6, marginTop: 8 }}>Cobertura</div>
           <CampoNum label="Qtd. pilares 15cm" valor={get("engenharia.coberturaEstrutura.colunas.15")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.15", v)} />
           <CampoNum label="Qtd. pilares 20cm" valor={get("engenharia.coberturaEstrutura.colunas.20")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.20", v)} />
           <CampoNum label="Qtd. pilares 25cm" valor={get("engenharia.coberturaEstrutura.colunas.25")} onChange={(v) => set("engenharia.coberturaEstrutura.colunas.25", v)} />
@@ -15452,7 +15452,7 @@ const C = {
   tag:      (cor) => ({ fontSize:11, fontWeight:600, padding:"2px 8px", borderRadius:6, background:cor+"18", color:cor }),
   grid2:    { display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 },
   grid3:    { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14 },
-  secTit:   { fontSize:11, fontWeight:700, color:"#b5652f", textTransform:"uppercase", letterSpacing:1, marginBottom:14 },
+  secTit:   { fontSize:12.5, fontWeight:700, color:"#111827", marginBottom:14 },
   divider:  { border:"none", borderTop:"1px solid rgba(38,36,33,0.08)", margin:"20px 0" },
   row:      { display:"flex", justifyContent:"space-between", padding:"8px 0", borderBottom:"1px solid #f9fafb" },
 };
@@ -15619,12 +15619,12 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
   const totalReceber  = lancsCli.filter(r=>r.recebimento==="A Receber").reduce((s,r)=>s+(r.valor||0),0);
   const fmtV = v => "R$ " + v.toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});
   // Paleta oficial do Vicke (grafite + cobre) — ver memória "vicke_paleta_cores".
-  const VK = { grafite:"#111827", cobre:"#b5652f", inkSoft:"#4b5563" };
-  const secTit = { fontSize:11, fontWeight:600, color:VK.cobre, textTransform:"uppercase", letterSpacing:"0.18em", marginBottom:14 };
+  const VK = { grafite:"#111827", cobre:AZUL_VK, inkSoft:"#4b5563" };
+  const secTit = { fontSize:12.5, fontWeight:700, color:VK.grafite, marginBottom:14 };
   const secBtn = () => ({ width:"100%", display:"flex", justifyContent:"space-between", alignItems:"center", background:"none", border:"none", borderBottom:"1px solid rgba(38,36,33,0.08)", padding:"12px 0", cursor:"pointer", fontFamily:"inherit", color:VK.grafite, fontSize:13, fontWeight:600 });
   const card = { border:"1px solid rgba(38,36,33,0.12)", borderRadius:16, padding: isMobile ? "16px" : "18px 20px", marginBottom:16, background:"#fff", boxShadow:"0 4px 16px -10px rgba(38,36,33,0.25)" };
   const btn = { background:VK.grafite, color:"#fff", border:"none", borderRadius:9, padding:"9px 20px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
-  const btnSec = { background:"transparent", color:VK.grafite, boxShadow:`inset 0 0 0 1.5px ${VK.cobre}`, border:"none", borderRadius:9, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
+  const btnSec = { background:"#fff", color:VK.grafite, border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, padding:"9px 16px", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"inherit" };
   const inputSel = { border:"1.5px solid rgba(38,36,33,0.16)", borderRadius:9, padding:"7px 12px", fontSize:12, color:VK.grafite, background:"#fff", fontFamily:"inherit", cursor:"pointer", outline:"none" };
 
   return (
@@ -15978,7 +15978,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
           display:"flex", alignItems:"center", justifyContent:"space-between", gap:10,
           transition:"border-color 0.15s, box-shadow 0.15s",
         }}
-        onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
+        onMouseEnter={e=>{ e.currentTarget.style.borderColor=AZUL_VK; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.12)"; }}
         onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
         <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:2 }}>
           <div style={{ fontSize:13, fontWeight:600, color:"#111827", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -16151,7 +16151,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
             const tel = c.contatos?.find(ct=>ct.whatsapp)?.telefone||c.contatos?.[0]?.telefone||"";
             return (
               <div key={c.id} style={{ background:"#fff", border:"1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding:"14px 16px", display:"flex", alignItems:"center", gap:14, cursor:"pointer", transition:"border-color 0.15s, box-shadow 0.15s" }}
-                onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
+                onMouseEnter={e=>{ e.currentTarget.style.borderColor=AZUL_VK; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.12)"; }}
                 onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}
                 onClick={()=>openDetail(c)}>
                 <div style={{ width:40, height:40, borderRadius: 14, background:corAv+"15", color:corAv, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:700, flexShrink:0 }}>{iniciais}</div>
@@ -16220,7 +16220,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
                   border: abaCliente === aba.id ? `1.5px solid ${VKD.cobre}` : "1.5px solid rgba(38,36,33,0.16)",
                   borderRadius: 16,
                   padding: "20px",
-                  background: abaCliente === aba.id ? VKD.cobreClaro : "#fff",
+                  background: "#fff",
                   boxShadow: abaCliente === aba.id ? "0 0 0 3px rgba(4,116,244,0.16)" : "none",
                   cursor: "pointer",
                   fontFamily: SYS_FONT,
@@ -16280,7 +16280,7 @@ function Clientes({ data, save, onAbrirOrcamento, abrirClienteDetail, onClienteD
   const VK = {
     fundo:      "#fafafb",
     grafite:    "#111827",
-    cobre:      "#b5652f",
+    cobre:      AZUL_VK,
     cobreClaro: "#eef5ff",
     ink:        "#111827",
     inkSoft:    "#4b5563",
@@ -16837,7 +16837,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {itensPL.length === 0 ? (
           <div style={{ padding: "24px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
-            Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
+            Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
           </div>
         ) : visaoPL === "conta" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
@@ -17104,7 +17104,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <input style={C.input} value={g.objeto || ""} onChange={e => setG("objeto", e.target.value)} placeholder={objetoPadrao(g.tipoProfissional, escopo) || modelo.subtitulo} />
             <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
               {objetoEditado
-                ? <>Texto editado à mão — não é mais reescrito quando você troca o tipo. <button type="button" onClick={() => setG("objeto", objetoPadrao(g.tipoProfissional, escopo))} style={{ background: "none", border: "none", padding: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>Voltar ao padrão</button></>
+                ? <>Texto editado à mão — não é mais reescrito quando você troca o tipo. <button type="button" onClick={() => setG("objeto", objetoPadrao(g.tipoProfissional, escopo))} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>Voltar ao padrão</button></>
                 : "Escrito a partir do tipo de profissional e do que o contrato inclui. Pode ser editado."}
             </div>
           </div>
@@ -17238,7 +17238,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       />
                     ) : (
                       <button type="button" onClick={() => setEspecificando({ ...especificando, [op.id]: true })}
-                        style={{ background: "none", border: "none", padding: "6px 0 0 24px", margin: 0, color: "#b5652f", cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>
+                        style={{ background: "none", border: "none", padding: "6px 0 0 24px", margin: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>
                         Especificar
                       </button>
                     )
@@ -17454,7 +17454,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {contratosDaObra.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
-            Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: "#b5652f", cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
+            Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
@@ -17628,7 +17628,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         {perm.podeEditar && (
           <button onClick={novaObra} title="Adicionar obra"
             style={{ width: 32, height: 32, borderRadius: "50%", border: "none", background: "#111827", color: "#fff", fontSize: 18, lineHeight: 1, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}
-            onMouseEnter={e => e.currentTarget.style.background = "#b5652f"}
+            onMouseEnter={e => e.currentTarget.style.background = AZUL_VK}
             onMouseLeave={e => e.currentTarget.style.background = "#111827"}>
             +
           </button>
@@ -33319,7 +33319,7 @@ function Escritorio({ data, save }) {
                   {ehVoce && (
                     <span style={{
                       fontSize:10, padding:"2px 6px", borderRadius:4,
-                      background:"#eef5ff", color:"#b5652f", fontWeight:600,
+                      background:"#eef5ff", color:"#0474f4", fontWeight:600,
                       textTransform:"uppercase", letterSpacing:0.5,
                     }}>Você</span>
                   )}
@@ -36276,7 +36276,7 @@ function getEstilos(loading) {
     linkBtn: {
       background: "none",
       border: "none",
-      color: "#b5652f",
+      color: "#0474f4",
       fontWeight: 600,
       cursor: "pointer",
       padding: 0,
@@ -36787,7 +36787,7 @@ function TelaCadastroCodigo({ email, onVoltar, onValidado }) {
                 value={d}
                 onChange={e => handleChangeDigito(idx, e.target.value)}
                 onKeyDown={e => handleKeyDown(idx, e)}
-                onFocus={e => { e.currentTarget.style.borderColor = "#b5652f"; }}
+                onFocus={e => { e.currentTarget.style.borderColor = "#0474f4"; }}
                 onBlur={e => { e.currentTarget.style.borderColor = "rgba(38,36,33,0.16)"; }}
                 style={inputCodigo}
                 disabled={loading}
@@ -37306,8 +37306,8 @@ function Mensagens({ usuario }) {
     sub: { fontSize:13, color:"#4b5563", marginTop:3 },
     filtros: { display:"flex", gap:4, padding:"12px 32px", borderBottom:"1px solid #f3f4f6" },
     btnFiltro: (ativo) => ({
-      background: ativo ? "#eef5ff" : "transparent",
-      color: ativo ? "#0474f4" : "#6b7280",
+      background: "transparent",
+      color: ativo ? "#0474f4" : "#4b5563",
       border: "none",
       borderRadius: 6,
       padding: "6px 12px",
@@ -38361,10 +38361,10 @@ function Opcao({ label, selecionada, onClick }) {
       style={{
         display:"flex", alignItems:"center", gap:10,
         padding:"12px 14px",
-        background: selecionada ? "#eef5ff" : "#fff",
-        border: selecionada ? "1.5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
+        background: "#fff",
+        border: selecionada ? "1.5px solid #0474f4" : "1.5px solid rgba(38,36,33,0.16)",
         borderRadius: 12,
-        boxShadow: selecionada ? "0 0 0 3px rgba(181,101,47,0.14)" : "none",
+        boxShadow: selecionada ? "0 0 0 3px rgba(4,116,244,0.14)" : "none",
         cursor:"pointer",
         textAlign:"left",
         fontFamily:"inherit",
@@ -38378,7 +38378,7 @@ function Opcao({ label, selecionada, onClick }) {
       <span style={{
         flexShrink:0,
         width:18, height:18, borderRadius:"50%",
-        border: selecionada ? "5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
+        border: selecionada ? "5px solid #0474f4" : "1.5px solid rgba(38,36,33,0.16)",
         background:"#fff",
         transition:"all 0.12s",
       }} />
@@ -38945,10 +38945,10 @@ function ResumoLateral({ respostas, setters, matriz }) {
                 onClick={() => setEditando(aberto ? null : l.campo)}
                 style={{
                   width: "100%",
-                  border: aberto ? "1.5px solid #b5652f" : "1.5px solid rgba(38,36,33,0.16)",
+                  border: aberto ? "1.5px solid #0474f4" : "1.5px solid rgba(38,36,33,0.16)",
                   borderRadius: 14,
                   padding: "10px 12px",
-                  background: aberto ? "#eef5ff" : "#fff",
+                  background: "#fff",
                   cursor: "pointer",
                   fontFamily: "inherit",
                   textAlign: "left",
@@ -39027,7 +39027,7 @@ function ResumoLateral({ respostas, setters, matriz }) {
                           fontSize: 12,
                           borderRadius: 6,
                           cursor: "pointer",
-                          background: selecionada ? "#eef5ff" : "transparent",
+                          background: "transparent",
                           color: selecionada ? "#0474f4" : "#374151",
                           fontWeight: selecionada ? 600 : 400,
                           transition: "background 0.1s",
@@ -39752,7 +39752,7 @@ function BlocoCadastroEscritorio({
       scrollMarginTop: 16,
     }}>
       <style>{`
-        .vk-onb-cad input:focus, .vk-onb-cad select:focus { border-color: #b5652f !important; box-shadow: 0 0 0 3px rgba(181,101,47,0.12); }
+        .vk-onb-cad input:focus, .vk-onb-cad select:focus { border-color: #0474f4 !important; box-shadow: 0 0 0 3px rgba(4,116,244,0.12); }
         @media (max-width: 720px) {
           .vk-onb-cad-grid { grid-template-columns: 1fr !important; }
         }
@@ -39792,7 +39792,7 @@ function BlocoCadastroEscritorio({
               onDrop={handleDrop}
               style={{
                 width: 160, height: 100,
-                border: arrastando ? "1.5px solid #b5652f" : (logo ? "1.5px solid rgba(38,36,33,0.16)" : "1.5px dashed rgba(38,36,33,0.2)"),
+                border: arrastando ? "1.5px solid #0474f4" : (logo ? "1.5px solid rgba(38,36,33,0.16)" : "1.5px dashed rgba(38,36,33,0.2)"),
                 borderRadius: 12,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 background: arrastando ? "#f3f4f6" : "#fafbfc",
@@ -40622,7 +40622,7 @@ function DashboardMaster({ data, setAba, tentarTrocar }) {
         {modulos.map(m => (
           <button key={m.k} onClick={() => { const go = () => setAba(m.k); if (tentarTrocar) tentarTrocar(go); else go(); }}
             style={{ background:"#fff", border:"2px solid #d1d5db", borderRadius: 16, padding: isMobile ? "12px 10px" : "16px", textAlign:"left", cursor:"pointer", fontFamily:"inherit" }}
-            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#b5652f"; }}
+            onMouseEnter={e => { if (!isMobile) e.currentTarget.style.borderColor="#0474f4"; }}
             onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor="#d1d5db"; }}>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:4 }}>
               <IconeMaster nome={m.icon} tamanho={isMobile ? 16 : 18} cor="#374151" />
@@ -40698,7 +40698,7 @@ function DashboardCards({ counts, loading, setAba, tentarTrocar, isMobile }) {
             cursor: it.onClick ? "pointer" : "default",
             transition:"border-color 0.12s",
           }}
-          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#b5652f"; }}
+          onMouseEnter={e => { if (it.onClick && !isMobile) e.currentTarget.style.borderColor = "#0474f4"; }}
           onMouseLeave={e => { if (!isMobile) e.currentTarget.style.borderColor = it.destaque ? "#f59e0b" : "#e5e7eb"; }}>
           <div style={{ fontSize: isMobile ? 10 : 11, fontWeight:600, color:"#4b5563", textTransform:"uppercase", letterSpacing:0.6, marginBottom: isMobile ? 6 : 8, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {it.label}

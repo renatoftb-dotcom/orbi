@@ -178,10 +178,10 @@ function FilterPill({ label, count, active, onClick, countColor }) {
     <button
       onClick={onClick}
       style={{
-        fontSize:12, color: active ? "#b5652f" : "#6b7280",
-        border:"1.5px solid " + (active ? "#b5652f" : "rgba(38,36,33,0.16)"),
+        fontSize:12, color: active ? "#0474f4" : "#4b5563",
+        border:"1.5px solid " + (active ? "#0474f4" : "rgba(38,36,33,0.16)"),
         borderRadius:20, padding:"5px 12px",
-        background: active ? "#eef5ff" : "#fff",
+        background: "#fff",
         cursor:"pointer", fontFamily:"inherit",
         display:"flex", alignItems:"center", gap:5,
       }}>
@@ -255,7 +255,7 @@ function ProjetoCard({ projeto, clientes, col, onFinalizar }) {
       display:"flex", flexDirection:"column", gap:8,
       ...(atrasado ? { background:"#fffbfb" } : {}),
     }}
-    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#b5652f"; }}
+    onMouseEnter={e => { e.currentTarget.style.borderColor = atrasado ? "#fca5a5" : "#0474f4"; }}
     onMouseLeave={e => { e.currentTarget.style.borderColor = atrasado ? "#fecaca" : "rgba(38,36,33,0.14)"; }}>
       {/* Tag de tipo */}
       <span style={{
@@ -500,8 +500,8 @@ function Obras({ data, save }) {
   const pillStyle = (ativa) => ({
     padding: "6px 14px", borderRadius: 7, fontSize: 12,
     border: "1.5px solid " + (ativa ? "#0474f4" : "rgba(38,36,33,0.16)"),
-    background: ativa ? "#eef5ff" : "#fff",
-    color: ativa ? "#0474f4" : "#6b7280",
+    background: "#fff",
+    color: ativa ? "#0474f4" : "#4b5563",
     cursor: "pointer", fontFamily: "inherit", fontWeight: ativa ? 600 : 400,
   });
 
@@ -1073,19 +1073,19 @@ function PrestadoresServico({ data, save }) {
       {filtrados.length === 0 ? (
         <div style={{ padding:"40px 20px", textAlign:"center", color:"#4b5563", fontSize:13, border:"1px dashed rgba(38,36,33,0.18)", borderRadius:16, background:"#fafafa" }}>
           {prestadores.length === 0 ? "Nenhum prestador cadastrado." : "Nenhum resultado para essa busca."}{" "}
-          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#b5652f", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
+          {prestadores.length === 0 && <button onClick={openNew} style={{ background:"transparent", border:"none", color:"#0474f4", cursor:"pointer", padding:0, fontSize:13, fontFamily:"inherit", textDecoration:"underline" }}>Cadastrar o primeiro</button>}
         </div>
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:14 }}>
           {filtrados.map(p => (
             <div key={p.id} style={{ border:"1px solid rgba(38,36,33,0.14)", borderRadius:16, padding:"16px 18px", background:"#fff", transition:"border-color 0.15s, box-shadow 0.15s" }}
-              onMouseEnter={e=>{ e.currentTarget.style.borderColor="#b5652f"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(181,101,47,0.12)"; }}
+              onMouseEnter={e=>{ e.currentTarget.style.borderColor="#0474f4"; e.currentTarget.style.boxShadow="0 0 0 3px rgba(4,116,244,0.12)"; }}
               onMouseLeave={e=>{ e.currentTarget.style.borderColor="rgba(38,36,33,0.14)"; e.currentTarget.style.boxShadow="none"; }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"start", gap:8, marginBottom:8 }}>
                 <div style={{ fontSize:14, fontWeight:700, color:"#111827" }}>{p.nome}</div>
                 {p.ativo === false && <span style={PS.tag("#9ca3af")}>Inativo</span>}
               </div>
-              <span style={PS.tag("#b5652f")}>{p.categoria}</span>
+              <span style={PS.tag("#0474f4")}>{p.categoria}</span>
               <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
                 {p.cnpjCpf && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.tipo === "PF" ? "CPF" : "CNPJ"}: {p.cnpjCpf}</div>}
                 {p.telefone && <div style={{ fontSize:12.5, color:"#4b5563" }}>{p.telefone}</div>}
