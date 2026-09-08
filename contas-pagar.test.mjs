@@ -24,7 +24,8 @@ const modulo = new Function(`
            situacaoConta, totaisContas, realizadoPorConta, realizadoPorPrestador,
            contaDoTipo, contaAvulsaVazia, somarDias, somarMeses, vencimentoFinal, medicoesPrevistas,
            tituloConta, detalheConta, agruparContas, filtrarContas, rotuloMes,
-           VISOES_CONTAS, FILTROS_CONTAS, proximoNumeroContrato, servicoDoContrato, fluxoMensal };
+           VISOES_CONTAS, FILTROS_CONTAS, FILTRO_CONTAS_PADRAO, seriesDoFiltro,
+           proximoNumeroContrato, servicoDoContrato, fluxoMensal };
 `)();
 
 let passou = 0, falhou = 0;
@@ -307,6 +308,19 @@ teste("fluxo mensal: uma barra por mês, separando pago, a pagar e vencido", () 
   assert.strictEqual(f.semDataValor, 700);
   // sem contas, o gráfico não existe
   assert.deepStrictEqual(modulo.fluxoMensal([], hoje), { meses: [], semData: 0, semDataValor: 0, maior: 0 });
+});
+
+teste("o gráfico abre só com 'a pagar' e segue os quadros do topo", () => {
+  assert.strictEqual(modulo.FILTRO_CONTAS_PADRAO, "aPagar");
+  // "a pagar" inclui o vencido, como o quadro do topo: a barra do mês soma os dois
+  assert.deepStrictEqual(modulo.seriesDoFiltro(modulo.FILTRO_CONTAS_PADRAO), ["vencido", "aberto"]);
+  assert.deepStrictEqual(modulo.seriesDoFiltro("pagas"), ["pago"]);
+  assert.deepStrictEqual(modulo.seriesDoFiltro("vencidas"), ["vencido"]);
+  assert.deepStrictEqual(modulo.seriesDoFiltro("todas"), ["pago", "vencido", "aberto"]);
+  // filtro desconhecido não deixa o gráfico vazio
+  assert.deepStrictEqual(modulo.seriesDoFiltro("qualquer"), ["pago", "vencido", "aberto"]);
+  // todo filtro dos quadros tem faixa definida
+  for (const f of modulo.FILTROS_CONTAS) assert.ok(modulo.seriesDoFiltro(f.id).length > 0, f.id);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

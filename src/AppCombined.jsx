@@ -15657,6 +15657,23 @@ const VISOES_CONTAS = [
   { id: "fornecedor", nome: "Fornecedor" },
   { id: "contrato", nome: "Contrato" },
 ];
+// Qual faixa cada filtro dos quadros do topo desenha no gráfico. O padrão é
+// só "a pagar" — a barra azul com o total do mês em cima; quem quiser ver o
+// pago (cinza) ou o quadro inteiro empilhado clica no quadro correspondente.
+const SERIES_POR_FILTRO = {
+  // "A pagar" é tudo que não foi pago — o vencido é parte disso, como no
+  // quadro do topo. Ele entra na base da barra, em preto; num mês sem atraso
+  // (o normal) a barra sai azul inteira, e o número em cima é o que se deve
+  // naquele mês.
+  aPagar: ["vencido", "aberto"],
+  vencidas: ["vencido"],
+  pagas: ["pago"],
+  todas: ["pago", "vencido", "aberto"],
+};
+const FILTRO_CONTAS_PADRAO = "aPagar";
+function seriesDoFiltro(filtro) {
+  return SERIES_POR_FILTRO[filtro] || SERIES_POR_FILTRO.todas;
+}
 const FILTROS_CONTAS = [
   { id: "todas", nome: "Todas" },
   { id: "aPagar", nome: "A pagar" },
@@ -15761,7 +15778,7 @@ function fluxoMensal(contas, hoje) {
 // barra em coordenadas do gráfico; animar um <g> com `transform-box: fill-box`
 // não é respeitado por todos os navegadores e a barra ficava parada.
 const CP_FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", "#0474f4", "A pagar"]];
-function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico }) {
+function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico, series }) {
   // Revelação em cascata, como na calibragem: `reveladas` sobe de uma em uma
   // e cada barra só anima quando chega a sua vez. Recomeça quando a lista de
   // meses muda, para a animação rodar de novo depois de pagar ou filtrar.
@@ -15783,9 +15800,16 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
   }, [chaveMeses]);
   if (!fluxo || !fluxo.meses.length) return null;
 
+  // `series` diz quais faixas entram na barra (padrão: só "a pagar"). A
+  // escala e o número em cima seguem o que está sendo mostrado, senão a
+  // barra azul sozinha ficaria achatada contra o total do mês.
+  const chaves = series && series.length ? series : ["aberto"];
+  const faixasDaVez = CP_FAIXAS.filter((f) => chaves.indexOf(f[0]) >= 0);
+  const valorDoMes = (m) => chaves.reduce((a, k) => a + (Number(m[k]) || 0), 0);
+  const maior = fluxo.meses.reduce((a, m) => Math.max(a, valorDoMes(m)), 0);
   const LARG = 40, ESPACO = 16, ALT = 130, BASE = ALT + 16;
   const largura = Math.max(fluxo.meses.length * (LARG + ESPACO), 220);
-  const altura = (v) => (fluxo.maior > 0 && v > 0 ? Math.max(3, (v / fluxo.maior) * ALT) : 0);
+  const altura = (v) => (maior > 0 && v > 0 ? Math.max(3, (v / maior) * ALT) : 0);
   const curto = (v) => (v >= 1000 ? `${Math.round(v / 1000)}k` : v > 0 ? String(Math.round(v)) : "");
   const mesAtual = String(hojeIso || "").slice(0, 7);
   // Caminho da faixa: cantos de cima arredondados só na faixa do topo da
@@ -15808,8 +15832,9 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
       <svg width={largura} height={ALT + 46} role="img" style={{ display: "block" }}>
         {fluxo.meses.map((m, i) => {
           const x = i * (LARG + ESPACO) + ESPACO / 2;
-          const faixas = CP_FAIXAS.map(([k, cor]) => ({ k, cor, h: altura(m[k]) })).filter((f) => f.h > 0);
+          const faixas = faixasDaVez.map(([k, cor]) => ({ k, cor, h: altura(m[k]) })).filter((f) => f.h > 0);
           const hTotal = faixas.reduce((a, f) => a + f.h, 0);
+          const valorMes = valorDoMes(m);
           const apagada = !!mesSelecionado && mesSelecionado !== m.chave;
           const visivel = i < reveladas;
           let y = BASE;
@@ -15818,7 +15843,7 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
               style={{ cursor: onEscolherMes ? "pointer" : "default",
                        opacity: !visivel ? 0 : apagada ? 0.38 : 1,
                        transition: "opacity 0.35s ease-out" }}>
-              <title>{`${rotuloMes(m.chave)} — ${fmtMoedaCtr(m.total)}`}</title>
+              <title>{`${rotuloMes(m.chave)} — ${fmtMoedaCtr(valorMes)}`}</title>
               {faixas.map((f, j) => {
                 y -= f.h;
                 return (
@@ -15832,7 +15857,7 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
               })}
               <text className="vk-cp-valor" x={x + LARG / 2} y={BASE - 5 - hTotal} textAnchor="middle"
                 fontSize="10.5" fontWeight="700" fill="#111827"
-                style={{ animation: visivel ? `vk-cp-subir 0.4s ease-out 0.35s both` : "none", opacity: visivel ? undefined : 0 }}>{curto(m.total)}</text>
+                style={{ animation: visivel ? `vk-cp-subir 0.4s ease-out 0.35s both` : "none", opacity: visivel ? undefined : 0 }}>{curto(valorMes)}</text>
               <text x={x + LARG / 2} y={BASE + 16} textAnchor="middle" fontSize="11"
                 fill={m.chave === mesSelecionado ? "#0474f4" : m.chave === mesAtual ? "#111827" : "#4b5563"}
                 fontWeight={m.chave === mesSelecionado || m.chave === mesAtual ? 700 : 400}>{m.rotulo}</text>
@@ -16903,7 +16928,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [formConta, setFormConta] = useState(null);
   // Contas a pagar: como agrupar, o que mostrar e quais grupos estão fechados.
   const [visaoContas, setVisaoContas] = useState("mes");
-  const [filtroContas, setFiltroContas] = useState("todas");
+  // Abre em "A pagar": é o que a tela é. O gráfico segue o mesmo filtro —
+  // barra azul do que falta pagar — e os quadros do topo trocam os dois.
+  const [filtroContas, setFiltroContas] = useState(FILTRO_CONTAS_PADRAO);
   const [gruposFechados, setGruposFechados] = useState({});
   // Mês escolhido no gráfico: filtra a lista até clicarem fora do gráfico.
   const [mesSelecionado, setMesSelecionado] = useState("");
@@ -17936,6 +17963,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
     // ── Gráfico do fluxo mensal (desenho em contas-pagar.jsx) ──
     const fluxo = fluxoMensal(contasDaObra, hojeIso);
+    // O gráfico desenha as faixas do filtro escolhido nos quadros do topo.
+    const seriesGrafico = seriesDoFiltro(filtroContas);
     // Clicar na barra filtra a lista por aquele mês; clicar de novo desfaz.
     const irParaMes = (chave) => {
       setMesSelecionado(mesSelecionado === chave ? "" : chave);
@@ -17963,16 +17992,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Fluxo por mês</div>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {[...CP_FAIXAS].reverse().map(([k, cor, rot]) => (
+                {[...CP_FAIXAS].filter(([k]) => seriesGrafico.indexOf(k) >= 0).reverse().map(([k, cor, rot]) => (
                   <span key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#4b5563" }}>
                     <span style={{ width: 9, height: 9, borderRadius: 2, background: cor, display: "inline-block" }} />{rot}
                   </span>
                 ))}
               </div>
             </div>
-            <GraficoFluxoMensal fluxo={fluxo} hojeIso={hojeIso} uid={obraSelecionada.id} onEscolherMes={irParaMes} mesSelecionado={mesSelecionado} />
+            <GraficoFluxoMensal fluxo={fluxo} hojeIso={hojeIso} uid={obraSelecionada.id} onEscolherMes={irParaMes} mesSelecionado={mesSelecionado} series={seriesGrafico} />
             <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
-              Valores em milhares quando passam de mil. Clique num mês para ver só as contas dele; clique fora do gráfico para voltar a todas.
+              Mostrando {(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()} — os quadros acima trocam o que o gráfico desenha. Valores em milhares quando passam de mil. Clique num mês para ver só as contas dele; clique fora do gráfico para voltar a todas.
               {fluxo.semData > 0 ? ` ${fluxo.semData} ${fluxo.semData === 1 ? "conta" : "contas"} sem vencimento (${fmtMoedaCtr(fluxo.semDataValor)}) fora do gráfico.` : ""}
             </div>
           </div>
@@ -17984,10 +18013,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           {VISOES_CONTAS.map(v => chip(visaoContas === v.id, v.nome, () => setVisaoContas(v.id)))}
         </div>
 
-        {(filtroContas !== "todas" || mesSelecionado) && (
+        {(filtroContas !== FILTRO_CONTAS_PADRAO || mesSelecionado) && (
           <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 16 }}>
-            {`Mostrando ${mesSelecionado ? rotuloMes(mesSelecionado).toLowerCase() : ""}${mesSelecionado && filtroContas !== "todas" ? " · " : ""}${filtroContas !== "todas" ? `só ${(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()}` : ""} · `}
-            <button type="button" onClick={() => { setFiltroContas("todas"); setMesSelecionado(""); }} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>ver todas</button>
+            {`Mostrando ${mesSelecionado ? rotuloMes(mesSelecionado).toLowerCase() : ""}${mesSelecionado && filtroContas !== "todas" ? " · " : ""}${filtroContas === "todas" ? (mesSelecionado ? "" : "todas as contas") : `só ${(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()}`} · `}
+            <button type="button" onClick={() => { setFiltroContas(FILTRO_CONTAS_PADRAO); setMesSelecionado(""); }} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>voltar ao padrão</button>
           </div>
         )}
 

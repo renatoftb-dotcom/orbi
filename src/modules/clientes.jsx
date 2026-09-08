@@ -1050,7 +1050,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [formConta, setFormConta] = useState(null);
   // Contas a pagar: como agrupar, o que mostrar e quais grupos estão fechados.
   const [visaoContas, setVisaoContas] = useState("mes");
-  const [filtroContas, setFiltroContas] = useState("todas");
+  // Abre em "A pagar": é o que a tela é. O gráfico segue o mesmo filtro —
+  // barra azul do que falta pagar — e os quadros do topo trocam os dois.
+  const [filtroContas, setFiltroContas] = useState(FILTRO_CONTAS_PADRAO);
   const [gruposFechados, setGruposFechados] = useState({});
   // Mês escolhido no gráfico: filtra a lista até clicarem fora do gráfico.
   const [mesSelecionado, setMesSelecionado] = useState("");
@@ -2083,6 +2085,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
     // ── Gráfico do fluxo mensal (desenho em contas-pagar.jsx) ──
     const fluxo = fluxoMensal(contasDaObra, hojeIso);
+    // O gráfico desenha as faixas do filtro escolhido nos quadros do topo.
+    const seriesGrafico = seriesDoFiltro(filtroContas);
     // Clicar na barra filtra a lista por aquele mês; clicar de novo desfaz.
     const irParaMes = (chave) => {
       setMesSelecionado(mesSelecionado === chave ? "" : chave);
@@ -2110,16 +2114,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Fluxo por mês</div>
               <div style={{ display: "flex", gap: 14, flexWrap: "wrap" }}>
-                {[...CP_FAIXAS].reverse().map(([k, cor, rot]) => (
+                {[...CP_FAIXAS].filter(([k]) => seriesGrafico.indexOf(k) >= 0).reverse().map(([k, cor, rot]) => (
                   <span key={k} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "#4b5563" }}>
                     <span style={{ width: 9, height: 9, borderRadius: 2, background: cor, display: "inline-block" }} />{rot}
                   </span>
                 ))}
               </div>
             </div>
-            <GraficoFluxoMensal fluxo={fluxo} hojeIso={hojeIso} uid={obraSelecionada.id} onEscolherMes={irParaMes} mesSelecionado={mesSelecionado} />
+            <GraficoFluxoMensal fluxo={fluxo} hojeIso={hojeIso} uid={obraSelecionada.id} onEscolherMes={irParaMes} mesSelecionado={mesSelecionado} series={seriesGrafico} />
             <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
-              Valores em milhares quando passam de mil. Clique num mês para ver só as contas dele; clique fora do gráfico para voltar a todas.
+              Mostrando {(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()} — os quadros acima trocam o que o gráfico desenha. Valores em milhares quando passam de mil. Clique num mês para ver só as contas dele; clique fora do gráfico para voltar a todas.
               {fluxo.semData > 0 ? ` ${fluxo.semData} ${fluxo.semData === 1 ? "conta" : "contas"} sem vencimento (${fmtMoedaCtr(fluxo.semDataValor)}) fora do gráfico.` : ""}
             </div>
           </div>
@@ -2131,10 +2135,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           {VISOES_CONTAS.map(v => chip(visaoContas === v.id, v.nome, () => setVisaoContas(v.id)))}
         </div>
 
-        {(filtroContas !== "todas" || mesSelecionado) && (
+        {(filtroContas !== FILTRO_CONTAS_PADRAO || mesSelecionado) && (
           <div data-vk-mantem-mes="1" style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 16 }}>
-            {`Mostrando ${mesSelecionado ? rotuloMes(mesSelecionado).toLowerCase() : ""}${mesSelecionado && filtroContas !== "todas" ? " · " : ""}${filtroContas !== "todas" ? `só ${(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()}` : ""} · `}
-            <button type="button" onClick={() => { setFiltroContas("todas"); setMesSelecionado(""); }} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>ver todas</button>
+            {`Mostrando ${mesSelecionado ? rotuloMes(mesSelecionado).toLowerCase() : ""}${mesSelecionado && filtroContas !== "todas" ? " · " : ""}${filtroContas === "todas" ? (mesSelecionado ? "" : "todas as contas") : `só ${(FILTROS_CONTAS.find(f => f.id === filtroContas) || {}).nome.toLowerCase()}`} · `}
+            <button type="button" onClick={() => { setFiltroContas(FILTRO_CONTAS_PADRAO); setMesSelecionado(""); }} style={{ background: "none", border: "none", padding: 0, color: AZUL_VK, cursor: "pointer", fontFamily: "inherit", fontSize: 11.5 }}>voltar ao padrão</button>
           </div>
         )}
 

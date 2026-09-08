@@ -90,6 +90,25 @@ faixas encostam sem entalhe, e não é preciso recortar nada.
 Ao abrir a tela elas surgem crescendo da linha de base, em cascata (70 ms
 entre uma e outra), com o valor aparecendo logo depois.
 
+**O gráfico abre mostrando só o que falta pagar.** A barra é azul, com o
+número do mês em cima, e a escala usa o maior mês *do que está sendo
+mostrado* — senão a barra azul sozinha ficaria achatada contra o total.
+
+Os **quadros do topo trocam o que o gráfico desenha**, além de filtrarem a
+lista (`SERIES_POR_FILTRO`):
+
+| quadro | faixas na barra | cor |
+| --- | --- | --- |
+| A pagar (padrão) | vencido + a pagar | preto na base, azul em cima |
+| Vencido | vencido | preto |
+| Pago | pago | cinza |
+| Total | pago + vencido + a pagar | as três empilhadas |
+
+"A pagar" inclui o vencido porque o quadro do topo soma os dois — num mês sem
+atraso, que é o normal, a barra sai azul inteira. A legenda mostra só as
+faixas desenhadas, e a tela abre com `FILTRO_CONTAS_PADRAO = "aPagar"`; clicar
+no quadro ativo volta para "Total", e a linha de aviso traz "voltar ao padrão".
+
 **A entrada é a mesma do gráfico da calibragem, peça por peça** — decisão do
 Renato: "deixa igual da calibragem".
 
