@@ -2126,6 +2126,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <select style={{ ...C.input, cursor: "pointer" }} value={g.periodicidade || "quinzenais"} onChange={e => setG("periodicidade", e.target.value)}>
                     {PERIODICIDADES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
+                  {(g.periodicidade || "quinzenais") !== "mensais" && (
+                    <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
+                      {(g.periodicidade || "quinzenais") === "quinzenais" ? "Sextas-feiras alternadas — uma sim, outra não (14 dias)." : "Toda sexta-feira."}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -2147,6 +2152,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </>
             )}
           </div>
+          {(modo === "parcelado" || modo === "entradaParcelas") && (g.periodicidade || "quinzenais") !== "mensais" && (
+            <label style={{ display: "flex", gap: 8, alignItems: "start", marginTop: 12, cursor: "pointer" }}>
+              <input type="checkbox" checked={(g.ajusteFeriado || "anteciparDiaUtil") !== "nenhum"} style={{ marginTop: 3, cursor: "pointer" }}
+                onChange={e => setG("ajusteFeriado", e.target.checked ? "anteciparDiaUtil" : "nenhum")} />
+              <span>
+                <span style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>Antecipar quando cair em feriado</span>
+                <span style={{ display: "block", fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
+                  Sexta-feira de feriado paga na quinta. Vale para os feriados nacionais; a cadência das demais parcelas não muda.
+                </span>
+              </span>
+            </label>
+          )}
           {(modo === "parcelado" || modo === "entradaParcelas") && (
             <div style={{ ...grade("1fr 1fr"), marginTop: 12 }}>
               <div>

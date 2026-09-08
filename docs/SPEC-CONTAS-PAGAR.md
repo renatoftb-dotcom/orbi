@@ -218,6 +218,23 @@ semanais e quinzenais andam de 7 e 15 dias. Antes tudo andava em dias corridos
 e "mensal" virava 30 dias, o que fazia a data escorregar mês a mês (05/10,
 04/11, 04/12, 03/01…).
 
+**Semanal e quinzenal são pagamentos de sexta-feira.** É como o contrato do
+empreiteiro sempre foi pago: uma sexta sim, outra não — 14 dias, não 15.
+`primeiroVencimentoContrato()` leva a âncora para a **próxima sexta** (semanal)
+ou a **segunda sexta** (quinzenal), e daí o passo é de 7 ou 14 dias, o que
+mantém o dia da semana para sempre. Quando a data do primeiro pagamento é
+informada, ela é respeitada como está e a cadência segue o dia da semana dela.
+
+**Feriado antecipa para o dia útil anterior.** Sexta-feira feriada paga-se na
+quinta (`anteciparParaDiaUtil()`), e se a quinta também for feriado anda mais
+um dia. O calendário é o mesmo do cronograma (`feriadosDoAno`, em
+cronograma-obra.jsx): feriados nacionais, com carnaval, sexta-feira santa e
+Corpus Christi calculados pela Páscoa. **A antecipação não desloca a
+cadência** — cada parcela é contada a partir do primeiro vencimento, então a
+seguinte volta para a sexta. O contrato pode desligar isso
+(`ajusteFeriado: "nenhum"`, a caixa "Antecipar quando cair em feriado" do
+gerador), e o mensal não é afetado.
+
 **As contas se corrigem sozinhas.** Contas geradas por uma versão antiga das
 regras não precisam de novo salvamento do contrato: ao abrir a tela,
 `contasDesatualizadas(contas, contratos)` compara o que está gravado com o que

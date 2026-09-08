@@ -12,9 +12,15 @@ const contratosSrc = mod("contratos-obra.jsx");
 const corte = contratosSrc.indexOf("// UI — documento e gerador");
 const plano = mod("obra-financeiro.jsx");
 
+// o calendário de feriados mora no cronograma; as datas de sexta-feira
+// dependem dele
+const cronoSrc = mod("cronograma-obra.jsx");
+const cronoCorte = cronoSrc.indexOf("// UI — bloco");
+
 const modulo = new Function(`
   var uid = () => "id1";
   ${plano}
+  ${cronoSrc.slice(0, cronoCorte)}
   ${contratosSrc.slice(0, corte)}
   ${(() => { const cp = mod("contas-pagar.jsx"); const i = cp.indexOf("// UI — gráfico do fluxo mensal");
              if (i < 0) throw new Error("Marcador de início da UI não encontrado em contas-pagar.jsx");
@@ -60,12 +66,13 @@ teste("parcelado: uma conta por parcela, na periodicidade escolhida, fechando o 
   // "mensais" anda de mês em mês, preservando o dia
   assert.strictEqual(l[5].vencimento, "2027-03-01");
   assert.ok(l[0].descricao.includes("1/6") && l[0].descricao.includes("mensal"));
-  // quinzenal anda de 15 em 15
+  // quinzenal é sexta sim, sexta não: a partir de 01/09/2026 (terça), a
+  // primeira cai na segunda sexta — 11/09 — e as demais a cada 14 dias
   const q = modulo.parcelasAPagar({ ...c, periodicidade: "quinzenais" });
-  assert.strictEqual(q[0].vencimento, "2026-09-16");
-  assert.strictEqual(q[1].vencimento, "2026-10-01");
-  // semanal, de 7 em 7
-  assert.strictEqual(modulo.parcelasAPagar({ ...c, periodicidade: "semanais" })[0].vencimento, "2026-09-08");
+  assert.strictEqual(q[0].vencimento, "2026-09-11");
+  assert.strictEqual(q[1].vencimento, "2026-09-25");
+  // semanal: toda sexta, começando na primeira posterior ao início
+  assert.strictEqual(modulo.parcelasAPagar({ ...c, periodicidade: "semanais" })[0].vencimento, "2026-09-04");
   // resíduo de arredondamento vai para a última
   const r = modulo.parcelasAPagar({ ...c, valor: 10000, parcelas: 3 });
   assert.strictEqual(soma(r), 10000);
@@ -381,10 +388,10 @@ teste("primeiro vencimento manda nas datas — contrato lançado atrasado", () =
   // sem o campo, volta a contar da âncora
   const semCampo = modulo.parcelasAPagar({ ...c, primeiroVencimento: "" });
   assert.strictEqual(semCampo[0].vencimento, "2026-10-01");
-  // quinzenal a partir da data informada
+  // quinzenal a partir da data informada: mantém o dia da semana dela
   const q = modulo.parcelasAPagar({ ...c, periodicidade: "quinzenais" });
   assert.strictEqual(q[0].vencimento, "2026-08-10");
-  assert.strictEqual(q[1].vencimento, "2026-08-25");
+  assert.strictEqual(q[1].vencimento, "2026-08-24");
 });
 
 teste("dia de vencimento ancora as mensais (o 'todo dia 05' do gerenciamento)", () => {
@@ -594,6 +601,33 @@ teste("extrato em matriz: mês a mês, total da obra e estimativa ao lado", () =
   assert.strictEqual(so.grupos[0].linhas[0].conta.id, "pintor");
   assert.strictEqual(so.grupos[0].linhas[0].total, 0);
   assert.strictEqual(so.grupos[0].linhas[0].estimado, 3000);
+});
+
+teste("empreiteiro: sextas alternadas, e feriado antecipa para a quinta", () => {
+  const c = base({ valor: 80000, modalidade: "parcelado", parcelas: 6, periodicidade: "quinzenais",
+    tipoProfissional: "empreiteiro", dataInicio: "2026-03-06" });
+  const datas = modulo.parcelasAPagar(c).map(x => x.vencimento);
+  // 06/03/2026 é sexta: a primeira parcela cai na segunda sexta seguinte
+  assert.strictEqual(datas[0], "2026-03-20");
+  // 03/04/2026 é sexta-feira santa → paga-se na quinta, 02/04
+  assert.strictEqual(datas[1], "2026-04-02");
+  // a cadência não se perde: a seguinte volta para a sexta
+  assert.strictEqual(datas[2], "2026-04-17");
+  // 01/05/2026 (sexta, Dia do Trabalho) → 30/04
+  assert.strictEqual(datas[3], "2026-04-30");
+  assert.deepStrictEqual(datas.slice(4), ["2026-05-15", "2026-05-29"]);
+  // desligando o ajuste, os feriados ficam
+  const semAjuste = modulo.parcelasAPagar({ ...c, ajusteFeriado: "nenhum" }).map(x => x.vencimento);
+  assert.deepStrictEqual(semAjuste.slice(0, 4), ["2026-03-20", "2026-04-03", "2026-04-17", "2026-05-01"]);
+  // semanal também é sexta: 01/05 vira 30/04
+  const sem = modulo.parcelasAPagar({ ...c, periodicidade: "semanais", parcelas: 3, dataInicio: "2026-04-20" });
+  assert.deepStrictEqual(sem.map(x => x.vencimento), ["2026-04-24", "2026-04-30", "2026-05-08"]);
+  // Natal de 2026 cai na sexta; e 01/01/2027 também → 31/12
+  const natal = modulo.parcelasAPagar({ ...c, parcelas: 3, dataInicio: "2026-11-25" });
+  assert.deepStrictEqual(natal.map(x => x.vencimento), ["2026-12-04", "2026-12-18", "2026-12-31"]);
+  // mensal não é afetado pela regra de sexta-feira
+  const mensal = modulo.parcelasAPagar({ ...c, periodicidade: "mensais", parcelas: 3, diaVencimento: 25, dataInicio: "2026-11-01" });
+  assert.deepStrictEqual(mensal.map(x => x.vencimento), ["2026-11-25", "2026-12-25", "2027-01-25"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

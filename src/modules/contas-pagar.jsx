@@ -66,7 +66,46 @@ function somarMeses(iso, n) {
   d.setDate(Math.min(dia, ultimo));
   return dataParaIso(d);
 }
-const DIAS_PERIODO = { semanais: 7, quinzenais: 15, mensais: 30 };
+// Semanal e quinzenal são pagamentos de SEXTA-FEIRA: uma sexta sim, outra
+// não — 14 dias, não 15. O mês continua andando de mês em mês.
+const DIAS_PERIODO = { semanais: 7, quinzenais: 14, mensais: 30 };
+
+// ── Feriados e dia útil ─────────────────────────────────────────
+// O calendário de feriados nacionais é o do cronograma (cronograma-obra.jsx,
+// `feriadosDoAno`, que já resolve carnaval, sexta-feira santa e Corpus
+// Christi pela Páscoa): um só calendário para o app inteiro.
+function ehFeriado(iso) {
+  const ano = Number(String(iso || "").slice(0, 4));
+  if (!ano || typeof feriadosDoAno !== "function") return false;
+  return feriadosDoAno(ano).has(String(iso));
+}
+function diaDaSemana(iso) {
+  const d = isoParaData(iso);
+  return d ? d.getDay() : -1; // 0 domingo … 5 sexta
+}
+function ehFimDeSemana(iso) {
+  const s = diaDaSemana(iso);
+  return s === 0 || s === 6;
+}
+// Antecipa para o dia útil anterior: sexta feriado vira quinta; se a quinta
+// também for feriado, anda mais um.
+function anteciparParaDiaUtil(iso) {
+  let d = iso;
+  for (let i = 0; i < 10 && (ehFeriado(d) || ehFimDeSemana(d)); i++) d = somarDias(d, -1);
+  return d;
+}
+// A n-ésima sexta-feira depois da data (1 = a próxima sexta).
+function sextaSeguinte(iso, quantas) {
+  const s = diaDaSemana(iso);
+  if (s < 0) return "";
+  let dias = (5 - s + 7) % 7;
+  if (dias === 0) dias = 7; // caindo numa sexta, a "próxima" é a de sete dias
+  return somarDias(iso, dias + 7 * (Math.max(1, quantas || 1) - 1));
+}
+// O contrato pode desligar a antecipação (campo `ajusteFeriado`).
+function ajustaFeriado(c) {
+  return (c || {}).ajusteFeriado !== "nenhum";
+}
 // Data-âncora do cronograma: o início previsto quando houver, senão a
 // assinatura. Sem nenhuma das duas, as parcelas saem sem vencimento.
 function ancoraContrato(c) {
@@ -100,7 +139,9 @@ function primeiroVencimentoContrato(c) {
     }
     return somarMeses(ancora, 1);
   }
-  return somarDias(ancora, DIAS_PERIODO[per] || 15);
+  // sexta-feira: a próxima no semanal, a segunda no quinzenal — como diz a
+  // cláusula de pagamento
+  return sextaSeguinte(ancora, per === "quinzenais" ? 2 : 1);
 }
 // O dia do mês que as parcelas mensais devem manter: o da data informada
 // como primeiro vencimento, ou o dia escolhido no contrato ("todo dia 05").
@@ -120,7 +161,11 @@ function vencimentoDaParcela(c, i) {
   if (!pv) return "";
   const per = (c || {}).periodicidade || "quinzenais";
   const n = Math.max(0, Math.floor(i) - 1);
-  if (per !== "mensais") return somarDias(pv, (DIAS_PERIODO[per] || 15) * n);
+  if (per !== "mensais") {
+    const bruta = somarDias(pv, (DIAS_PERIODO[per] || 14) * n);
+    // feriado na sexta: paga-se na quinta
+    return ajustaFeriado(c) ? anteciparParaDiaUtil(bruta) : bruta;
+  }
   const noMes = somarMeses(pv, n);
   const dia = diaAlvoContrato(c);
   return dia > 0 ? comDiaDoMes(noMes, dia) : noMes;
