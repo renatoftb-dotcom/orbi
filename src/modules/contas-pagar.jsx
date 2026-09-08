@@ -451,6 +451,29 @@ function entradaObraVazia(obraId) {
     obraId, contaId: "deposito_proprio", descricao: "", valor: "", data: "" };
 }
 
+// ── Recalibrar as datas de um contrato ──────────────────────────
+// O contrato é registrado antes de a obra começar de fato; quando a data do
+// primeiro pagamento muda, é ela que se ajusta — as demais parcelas andam
+// junto, e as já pagas ficam como estão (o dinheiro já saiu).
+function recalibrarContrato(contrato, novaData) {
+  return { ...(contrato || {}), primeiroVencimento: novaData || "" };
+}
+// Prévia do que a recalibragem faz: as datas de antes e de depois, só das
+// parcelas em aberto, para conferir antes de gravar.
+function previaRecalibragem(contrato, novaData, contas, limite) {
+  const antes = contasDoContrato(contrato);
+  const depois = contasDoContrato(recalibrarContrato(contrato, novaData));
+  const pagas = new Set((contas || []).filter((c) => c.pago && c.contratoId === (contrato || {}).id).map((c) => c.id));
+  const linhas = [];
+  for (let i = 0; i < depois.length; i++) {
+    if (pagas.has(depois[i].id)) continue;
+    linhas.push({ id: depois[i].id, descricao: depois[i].descricao,
+      de: (antes[i] || {}).vencimento || "", para: depois[i].vencimento });
+    if (limite && linhas.length >= limite) break;
+  }
+  return { linhas, pagas: pagas.size, total: depois.length };
+}
+
 // ── Visões ──────────────────────────────────────────────────────
 const VISOES_CONTAS = [
   { id: "mes", nome: "Mês" },

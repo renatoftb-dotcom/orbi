@@ -27,6 +27,7 @@ const modulo = new Function(`
            VISOES_CONTAS, FILTROS_CONTAS, FILTRO_CONTAS_PADRAO, seriesDoFiltro,
            sincronizarContasDaObra, contasDesatualizadas, somarDias, contasDoContrato,
            extratoMensal, mesesDoExtrato, acumuladoAte, entradaObraVazia, mesDe,
+           recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal };
 `)();
 
@@ -435,6 +436,33 @@ teste("extrato mensal: o mês vem da data de contabilização, não do venciment
   // conta nova de entrada nasce como depósito de recurso próprio
   assert.strictEqual(modulo.entradaObraVazia("o1").contaId, "deposito_proprio");
   assert.strictEqual(modulo.mesDe("2026-10-02"), "2026-10");
+});
+
+teste("recalibrar joga o contrato inteiro para a nova data do 1º pagamento", () => {
+  const c = base({ id: "ct9", valor: 120000, modalidade: "parcelado", parcelas: 12, periodicidade: "mensais",
+    diaVencimento: 5, dataInicio: "2026-09-20" });
+  assert.strictEqual(modulo.primeiroVencimentoContrato(c), "2026-10-05");
+  // a obra atrasou: o primeiro pagamento passa para dezembro
+  const novo = modulo.recalibrarContrato(c, "2026-12-05");
+  assert.strictEqual(novo.primeiroVencimento, "2026-12-05");
+  const datas = modulo.contasDoContrato(novo).map(x => x.vencimento);
+  assert.deepStrictEqual(datas.slice(0, 3), ["2026-12-05", "2027-01-05", "2027-02-05"]);
+  assert.strictEqual(datas[11], "2027-11-05", "as doze andam junto");
+
+  // prévia: mostra de → para só das parcelas em aberto
+  const contas = modulo.contasDoContrato(c).map((x, i) => i === 0 ? { ...x, pago: true, pagoEm: "2026-10-05", valorPago: 10000 } : x);
+  const previa = modulo.previaRecalibragem(c, "2026-12-05", contas, 3);
+  assert.strictEqual(previa.pagas, 1);
+  assert.strictEqual(previa.total, 12);
+  assert.strictEqual(previa.linhas.length, 3);
+  assert.deepStrictEqual([previa.linhas[0].de, previa.linhas[0].para], ["2026-11-05", "2027-01-05"]);
+  assert.ok(!previa.linhas.some(l => l.id === contas[0].id), "a parcela paga não entra na prévia");
+
+  // gravando: a paga fica intocada, as demais recebem as datas novas
+  const arrumadas = modulo.sincronizarContasDaObra(contas, [novo]);
+  const paga = arrumadas.find(x => x.id === contas[0].id);
+  assert.ok(paga.pago && paga.vencimento === "2026-10-05", "a parcela paga não se move");
+  assert.strictEqual(arrumadas.find(x => x.id === contas[1].id).vencimento, "2027-01-05");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

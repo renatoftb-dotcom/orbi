@@ -258,6 +258,20 @@ mês).
 - As **entradas da obra** (aportes) moram em `obra.entradas` e usam as contas
   do grupo `receitas` — "＋ Registrar entrada" cria, edita e remove ali mesmo.
 
+## Recalibrar as datas do contrato
+
+O contrato costuma ser registrado antes de a obra começar de fato, e a data
+combinada escorrega. Em Contas a pagar, ao lado de "＋ Nova conta", o botão
+**Recalibrar datas** abre uma telinha: escolhe-se o contrato e a nova data do
+**primeiro pagamento**, e ela mostra a prévia — de → para — das quatro
+primeiras parcelas em aberto antes de gravar.
+
+Ao confirmar, `recalibrarContrato()` grava a data em `primeiroVencimento` do
+contrato (o texto do contrato passa a citá-la) e
+`sincronizarContasDaObra()` reescreve as parcelas em aberto na mesma
+periodicidade. **Parcela paga não se move**: ela fica com a data em que foi
+paga e com o valor pago, e nem aparece na prévia.
+
 ## Datas estimadas
 
 Nem toda data é vencimento pactuado. Quando o pagamento depende de um evento
