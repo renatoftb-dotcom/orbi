@@ -220,6 +220,23 @@ a correção — uma vez só (a comparação é por id/valor/vencimento/descriç
 não pela ordem, senão a tela gravaria em laço). Parcelas pagas ficam como
 estão, e contas avulsas não são tocadas.
 
+## A linha da conta: duas linhas, o resto ao abrir
+
+A descrição de um item de contrato costuma ser um parágrafo inteiro, e a
+linha da conta crescia a ponto de a lista virar um texto corrido. Agora a
+linha fechada tem **no máximo duas**, ambas cortadas com reticências:
+
+1. `tituloCurtoConta()` — "Contrato 0004 · Parcela 2/10", mais "· estimada"
+   quando é o caso. Uma descrição curta (até 42 caracteres) vale mais que o
+   número da parcela e entra no lugar dela: "Entrada", "Saldo na conclusão",
+   "Portão basculante — entrada".
+2. `apoioCurtoConta()` — quem recebe e o serviço, mais a conta do plano.
+
+Clicar na linha abre o detalhe (▸ / ▾): a descrição inteira e os campos que
+não cabiam — conta, favorecido, serviço, origem, vencimento (com "prevista"
+quando estimado), data de contabilização, dia em que foi registrada, valor
+pago e observação. Os botões de ação não abrem nem fecham nada.
+
 ## Dar baixa: a data de contabilização
 
 "Pagar" abre uma telinha antes de gravar, com dois campos:

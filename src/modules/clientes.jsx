@@ -1084,6 +1084,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [formEntrada, setFormEntrada] = useState(null);
   // Recalibragem das datas de um contrato já registrado.
   const [formRecalibrar, setFormRecalibrar] = useState(null);
+  // Contas com os detalhes abertos na lista (a linha fechada tem 2 linhas).
+  const [contasAbertas, setContasAbertas] = useState({});
 
   const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
   const prestadores = data.fornecedores || [];
@@ -2580,15 +2582,42 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                         {g.itens.map(c => {
                           const st = SITUACAO_CONTA[situacaoConta(c, hojeIso)] || SITUACAO_CONTA.aberto;
                           const detalhe = detalheConta(c);
+                          const aberta = !!contasAbertas[c.id];
+                          const umaLinha = { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" };
+                          const apoio = [apoioCurtoConta(c), nomeConta(c.contaId)].filter(Boolean).join(" · ");
+                          const dataBR = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "";
                           return (
                             <div key={c.id} style={{ display: "grid", gridTemplateColumns: COLS, gap: 10, alignItems: "center",
                               padding: "9px 11px", borderTop: "1px solid rgba(38,36,33,0.06)", background: "#fff" }}>
-                              <div style={{ minWidth: 0 }}>
-                                <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{tituloConta(c)}{c.estimada ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · estimada</span> : null}</div>
-                                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
-                                  {[detalhe, nomeConta(c.contaId), c.observacao,
-                                    c.pago && c.pagoEm ? `contabilizado em ${new Date(c.pagoEm + "T12:00:00").toLocaleDateString("pt-BR")}` : ""].filter(Boolean).join(" · ")}
+                              <div data-vk-mantem-mes="1" style={{ minWidth: 0, cursor: "pointer" }}
+                                title={aberta ? "Fechar detalhes" : "Ver detalhes"}
+                                onClick={() => setContasAbertas({ ...contasAbertas, [c.id]: !aberta })}>
+                                <div style={{ fontSize: 13, color: "#111827", fontWeight: 600, ...umaLinha }}>
+                                  <span style={{ color: "#6b7280", fontWeight: 400, marginRight: 4 }}>{aberta ? "▾" : "▸"}</span>
+                                  {tituloCurtoConta(c)}
+                                  {c.estimada ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · estimada</span> : null}
                                 </div>
+                                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2, ...umaLinha }}>
+                                  {apoio || detalhe || "—"}
+                                </div>
+                                {aberta && (
+                                  <div style={{ marginTop: 8, marginBottom: 2, paddingLeft: 12, borderLeft: "2px solid rgba(38,36,33,0.10)", display: "flex", flexDirection: "column", gap: 4 }}>
+                                    {detalhe && <div style={{ fontSize: 12, color: "#4b5563", whiteSpace: "pre-wrap" }}>{detalhe}</div>}
+                                    {[["Conta", nomeConta(c.contaId)],
+                                      ["Favorecido", c.favorecido || (c.prestadorId ? nomePrestador(c.prestadorId) : "")],
+                                      ["Serviço", c.servico],
+                                      ["Origem", c.origem === "contrato" ? "Parcela de contrato" : "Conta avulsa"],
+                                      ["Vencimento", c.vencimento ? `${dataBR(c.vencimento)}${c.estimada ? " (prevista)" : ""}` : "a definir"],
+                                      ["Contabilizado em", c.pago ? dataBR(c.pagoEm) : ""],
+                                      ["Registrado em", c.pago ? dataBR(c.contabilizadoEm) : ""],
+                                      ["Valor pago", c.pago ? fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0) : ""],
+                                      ["Observação", c.observacao]].filter(([, v]) => v).map(([rot, v]) => (
+                                        <div key={rot} style={{ fontSize: 11.5, color: "#4b5563" }}>
+                                          <span style={{ color: "#6b7280" }}>{rot}: </span><span style={{ color: "#111827" }}>{v}</span>
+                                        </div>
+                                      ))}
+                                  </div>
+                                )}
                               </div>
                               <div style={{ fontSize: 12.5, color: "#111827" }}>
                                 {c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}
@@ -2597,7 +2626,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               <div style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500 }}>{st.label}</div>
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                               {perm.podeEditar ? (
-                                <div data-vk-mantem-mes="1" style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
+                                <div data-vk-mantem-mes="1" onClick={e => e.stopPropagation()} style={{ display: "flex", gap: 6, justifyContent: isMobile ? "flex-start" : "flex-end" }}>
                                   <button onClick={() => alternarPagamento(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>{c.pago ? "Desfazer" : "Pagar"}</button>
                                   {c.origem === "avulsa" && <button onClick={() => setFormConta(c)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                                   {c.origem === "avulsa" && (

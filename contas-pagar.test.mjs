@@ -29,6 +29,7 @@ const modulo = new Function(`
            extratoMensal, mesesDoExtrato, acumuladoAte, entradaObraVazia, mesDe,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
+           tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal };
 `)();
 
@@ -499,6 +500,31 @@ teste("no pagamento item a item, a recalibragem é item a item", () => {
   const arrumadas = modulo.sincronizarContasDaObra(contas, [novo]);
   assert.strictEqual(arrumadas.find(x => x.id === contas[0].id).vencimento, "2026-10-01");
   assert.strictEqual(arrumadas.find(x => x.id === contas[1].id).vencimento, "2027-01-15");
+});
+
+teste("a linha da conta é curta; o parágrafo do item fica no detalhe", () => {
+  const c = { origem: "contrato", numeroContrato: "0004", servico: "Serralheria",
+    favorecido: "MB VIEZZER MONTAGENS INDUSTRIAIS", parcela: 2, totalParcelas: 10, contaId: "serralheiro",
+    descricao: "Continuidade da cobertura do espaço novo — ampliação e fechamento de cobertura metálica, com telha metálica simples, estrutura, calhas e rufos. Não inclui a revisão da estrutura existente. — conclusão" };
+  assert.strictEqual(modulo.tituloCurtoConta(c), "Contrato 0004 · Parcela 2/10");
+  assert.strictEqual(modulo.apoioCurtoConta(c), "MB VIEZZER MONTAGENS INDUSTRIAIS · Serralheria");
+  // as duas linhas visíveis são curtas; o texto longo só aparece aberto
+  assert.ok(modulo.tituloCurtoConta(c).length < 40);
+  assert.ok(modulo.apoioCurtoConta(c).length < 60);
+  assert.ok(modulo.detalheConta(c).length > 100, "o detalhe guarda a descrição inteira");
+  // conta avulsa: a descrição é o próprio título
+  const av = { origem: "avulsa", descricao: "Caçamba de entulho", contaId: "frete" };
+  assert.strictEqual(modulo.tituloCurtoConta(av), "Caçamba de entulho");
+  assert.strictEqual(modulo.apoioCurtoConta(av), "");
+  // parcela sem contrato numerado ainda se identifica
+  assert.strictEqual(modulo.tituloCurtoConta({ parcela: 1, totalParcelas: 6, descricao: "Parcela 1/6 (mensal)" }), "Parcela 1/6");
+  // descrição curta diz mais que "Parcela 1/2" e fica no lugar dela
+  assert.strictEqual(modulo.tituloCurtoConta({ numeroContrato: "0008", parcela: 2, totalParcelas: 2, descricao: "Saldo na conclusão" }),
+    "Contrato 0008 · Saldo na conclusão");
+  assert.strictEqual(modulo.tituloCurtoConta({ numeroContrato: "0008", parcela: 1, totalParcelas: 2, descricao: "Entrada" }),
+    "Contrato 0008 · Entrada");
+  assert.strictEqual(modulo.tituloCurtoConta({ numeroContrato: "0009", parcela: 1, totalParcelas: 4, descricao: "Portão basculante — entrada" }),
+    "Contrato 0009 · Portão basculante — entrada");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

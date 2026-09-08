@@ -378,6 +378,27 @@ function tituloConta(conta) {
   else if (c.descricao) partes.push(c.descricao);
   return partes.join(" · ") || (c.descricao || "—");
 }
+// Na lista, a linha da conta tem no máximo duas linhas: a identificação
+// curta em cima e quem recebe embaixo. O resto (a descrição do item, que
+// costuma ser um parágrafo) só aparece quando se abre a conta.
+const CP_TITULO_CURTO = 42;
+function tituloCurtoConta(conta) {
+  const c = conta || {};
+  const d = String(c.descricao || "").trim();
+  const partes = [];
+  if (c.numeroContrato) partes.push(`Contrato ${c.numeroContrato}`);
+  // descrição curta diz mais que "Parcela 1/2" ("Entrada", "Saldo na
+  // conclusão", "Portão — entrada"); parágrafo de item fica para o detalhe
+  const curta = d && d.length <= CP_TITULO_CURTO && !/^Parcela \d+\/\d+/.test(d) ? d : "";
+  if (curta) partes.push(curta);
+  else if (c.parcela && c.totalParcelas) partes.push(`Parcela ${c.parcela}/${c.totalParcelas}`);
+  else if (d) partes.push(d.slice(0, CP_TITULO_CURTO));
+  return partes.join(" · ") || "—";
+}
+function apoioCurtoConta(conta) {
+  const c = conta || {};
+  return [c.favorecido, c.servico].filter(Boolean).join(" · ");
+}
 // Linha de apoio: o que a parcela é, sem repetir o que o título já diz.
 function detalheConta(conta) {
   const c = conta || {};
