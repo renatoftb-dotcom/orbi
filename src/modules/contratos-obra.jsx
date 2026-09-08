@@ -499,7 +499,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     exclusoes: "",
     // o formulário é o mesmo para qualquer prestador: itens e descritivo
     // estão sempre disponíveis, e vale o que for preenchido
-    itens: [{ descricao: "", valor: "", previsao: "" }],
+    itens: [{ descricao: "", valor: "", inicio: "", previsao: "" }],
     escopo: [{ titulo: "", texto: "" }],
     valor: "",
     // prazo em branco de propósito — quem escolhe a unidade e o número é o usuário

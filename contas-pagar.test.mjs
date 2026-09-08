@@ -97,18 +97,22 @@ teste("entrada + saldo no final: contrato todo ou item a item", () => {
   assert.strictEqual(comPrevisao[1].vencimento, "2027-01-20");
   assert.ok(comPrevisao[1].estimada);
 
-  // item a item: entrada na assinatura, conclusão na previsão de cada item
+  // item a item: a entrada vence no início do item, o saldo na previsão dele
   const porItem = modulo.parcelasAPagar(base({ modelo: "empreitadaGlobal", modalidade: "entradaFinal",
     entradaEscopo: "item", entradaPct: 50, dataAssinatura: "2026-09-07", previsaoConclusao: "2026-12-20",
-    itens: [{ descricao: "Portão", valor: 60000, previsao: "2026-11-30" }, { descricao: "Vitrine", valor: 40000 }] }));
+    itens: [{ descricao: "Portão", valor: 60000, inicio: "2026-10-01", previsao: "2026-11-30" },
+            { descricao: "Vitrine", valor: 40000 }] }));
   assert.strictEqual(porItem.length, 4);
   assert.strictEqual(soma(porItem), 100000);
   assert.ok(porItem[0].descricao.startsWith("Portão — entrada"));
   assert.strictEqual(porItem[0].valor, 30000);
-  assert.strictEqual(porItem[0].vencimento, "2026-09-07");
-  assert.ok(!porItem[0].estimada);
+  assert.strictEqual(porItem[0].vencimento, "2026-10-01", "a entrada vence quando o item começa");
+  assert.ok(porItem[0].estimada, "início planejado é estimativa");
   assert.strictEqual(porItem[1].vencimento, "2026-11-30", "a previsão do próprio item");
   assert.ok(porItem[1].estimada);
+  // item sem datas próprias: entrada na assinatura (firme), saldo na previsão do contrato
+  assert.strictEqual(porItem[2].vencimento, "2026-09-07");
+  assert.ok(!porItem[2].estimada);
   assert.strictEqual(porItem[3].vencimento, "2026-12-20", "item sem previsão usa a do contrato");
 });
 

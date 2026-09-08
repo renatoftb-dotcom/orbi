@@ -2008,20 +2008,30 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
           {!gerenciamento && porItem && (g.itens || []).some(i => Number(i.valor) > 0) && (
             <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 6 }}>
-              A previsão de cada item é a data estimada da conclusão dele — entra em contas a pagar marcada como estimada.
+              Por item, duas datas: o <strong style={{ color: "#111827" }}>início</strong> (quando o item é liberado para produção, quando vence a entrada dele) e a
+              <strong style={{ color: "#111827" }}> previsão</strong> de conclusão (quando vence o saldo). Ambas entram em contas a pagar marcadas como estimadas.
+            </div>
+          )}
+          {!gerenciamento && porItem && !isMobile && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 140px 140px auto", gap: 8, marginBottom: 4 }}>
+              <span style={C.label}>Item</span><span style={C.label}>Valor</span>
+              <span style={C.label}>Início</span><span style={C.label}>Previsão de conclusão</span><span />
             </div>
           )}
           {!gerenciamento && (g.itens || []).map((it, idx) => (
-            <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (porItem ? "1fr 160px 150px auto" : "1fr 160px auto"), gap: 8, alignItems: "start", marginBottom: 8 }}>
+            <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (porItem ? "1fr 160px 140px 140px auto" : "1fr 160px auto"), gap: 8, alignItems: "start", marginBottom: 8 }}>
               <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do item (opcional)" />
               <CampoCtrNum tipo="moeda" valor={it.valor} onChange={v => setLista("itens", idx, "valor", v)} style={C.input} placeholder="0,00" />
               {porItem && (
-                <input style={C.input} type="date" title="Previsão de conclusão do item" value={it.previsao || ""} onChange={e => setLista("itens", idx, "previsao", e.target.value)} />
+                <input style={C.input} type="date" title="Início do item — vence a entrada dele" value={it.inicio || ""} onChange={e => setLista("itens", idx, "inicio", e.target.value)} />
+              )}
+              {porItem && (
+                <input style={C.input} type="date" title="Previsão de conclusão do item — vence o saldo" value={it.previsao || ""} onChange={e => setLista("itens", idx, "previsao", e.target.value)} />
               )}
               <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
             </div>
           ))}
-          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "", previsao: "" })}>＋ Adicionar item</button>}
+          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "", inicio: "", previsao: "" })}>＋ Adicionar item</button>}
         </div>
 
         {/* Modalidade de pagamento — igual para todo contrato de prestação de

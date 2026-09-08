@@ -176,9 +176,12 @@ function parcelasAPagar(contrato) {
         const v = Number(it.valor) || 0;
         const p1 = Math.floor(v * pct * 100) / 100;
         const nome = it.descricao || `Item ${idx + 1}`;
+        // a entrada de cada item vence quando ele é liberado para produção:
+        // a data de início prevista do item, ou a assinatura quando não há
+        const inicioItem = it.inicio || entradaEm;
         const prevItem = it.previsao || previsto;
         linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2,
-          descricao: `${nome} — entrada`, valor: p1, vencimento: entradaEm });
+          descricao: `${nome} — entrada`, valor: p1, vencimento: inicioItem, estimada: !!it.inicio });
         linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2,
           descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100,
           vencimento: prevItem, estimada: !!prevItem });

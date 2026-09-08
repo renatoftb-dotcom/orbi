@@ -262,9 +262,12 @@ sob a data.
 - **Entrada + saldo no final**: a entrada vence na assinatura (data firme); o
   saldo usa o campo **Previsão de conclusão** do contrato e, sem ele, o fim do
   prazo de execução.
-- **Item a item**: a entrada de cada item vence na assinatura; a conclusão usa
-  a **previsão do próprio item** (coluna de data na tabela de itens) e, sem
-  ela, a previsão do contrato. Antes essas parcelas nasciam sem data nenhuma.
+- **Item a item**: cada item tem duas datas próprias na tabela de itens —
+  **Início** (quando o item é liberado para produção: é quando vence a entrada
+  dele) e **Previsão de conclusão** (quando vence o saldo). Sem o início, a
+  entrada cai na assinatura e é data firme; com o início preenchido, é
+  estimativa. Sem a previsão, o saldo usa a previsão de conclusão do contrato.
+  Antes essas parcelas nasciam sem data nenhuma.
 - **Por medição**: como já era, uma conta por período dentro do prazo.
 
 Fluxo do contrato atrasado, ponta a ponta (conferido em Chromium): informar o

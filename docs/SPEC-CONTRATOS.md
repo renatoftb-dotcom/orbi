@@ -99,7 +99,8 @@ mensais andavam de 30 em 30 dias e o dia escrito no contrato não valia para
 contas a pagar.
 
 No pagamento **entrada + saldo no final** há **Previsão de conclusão** (e, no
-modo item a item, uma coluna de previsão por item). É data de estimativa, não
+modo item a item, duas colunas por item: **Início**, que é quando vence a
+entrada daquele item, e **Previsão de conclusão**, quando vence o saldo). É data de estimativa, não
 de vencimento: em contas a pagar a parcela aparece marcada como *estimada* e
 com "prevista" sob a data. Em branco, vale o fim do prazo de execução.
 
