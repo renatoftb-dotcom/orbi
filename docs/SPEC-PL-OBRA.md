@@ -130,7 +130,7 @@ const PLANO_CONTAS = [
   { id: "outras_taxas",       nome: "Outras taxas e serviços",           grupo: "servicos" },
   { id: "tarifas_bancarias",  nome: "Tarifas bancárias",                 grupo: "servicos" },
   { id: "projetos_docs",      nome: "Projetos e documentação",           grupo: "servicos" },
-  { id: "taxa_admin_obra",    nome: "Taxa de administração da obra",     grupo: "servicos" },
+  { id: "taxa_admin_obra",    nome: "Gerenciamento de obra",             grupo: "servicos" },
   { id: "contabilidade",      nome: "Escritório de contabilidade",       grupo: "servicos" },
 
   // ── excluídas (fora do resultado) ─────────────────────────
@@ -138,10 +138,13 @@ const PLANO_CONTAS = [
 ];
 ```
 
-**Regra de negócio importante:** `taxa_admin_obra` é a receita do escritório
-dentro da obra do cliente. Na planilha de origem ela está zerada — o relatório
-mostrava o custo da obra, não a margem. No VICKE ela precisa existir e ser
-lançável desde o dia 1.
+**Regra de negócio importante:** `taxa_admin_obra` — rotulada **Gerenciamento
+de obra** — é a receita do escritório dentro da obra do cliente. Na planilha de
+origem ela está zerada; o relatório mostrava o custo da obra, não a margem. No
+VICKE ela existe desde o dia 1 e é para onde vão as parcelas do **contrato de
+gestão de obra** (`CONTA_POR_TIPO.gestaoObra`), que antes caíam em
+`mo_diversos`. O `id` não muda quando o rótulo muda: ele é chave gravada no
+lançamento.
 
 ### Etapas (dimensão de execução)
 

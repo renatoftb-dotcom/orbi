@@ -27,7 +27,9 @@ const CONTA_POR_TIPO = {
   impermeabilizador: "impermeabilizacao",
   instaladorAr: "instalador_ar",
   terraplanagem: "terraplanagem",
-  gestaoObra: "mo_diversos",
+  // o contrato de gestão de obra é o gerenciamento: vai para a conta dele,
+  // em SERVIÇOS & TAXAS, e não para a mão de obra
+  gestaoObra: "taxa_admin_obra",
   instaladorAquecedores: "mo_diversos",
   equipPiscina: "mo_diversos",
   outro: "mo_diversos",
@@ -268,8 +270,12 @@ function sincronizarContasDoContrato(contas, contrato) {
   const pagas = antigas.filter((x) => x.pago);
   const geradas = contasDoContrato(c).map((nova) => {
     const anterior = antigas.find((x) => x.id === nova.id);
-    if (anterior && anterior.pago) return anterior;
-    return anterior ? { ...nova, observacao: anterior.observacao || "" } : nova;
+    if (!anterior) return nova;
+    // parcela paga guarda o pagamento (data, valor, competência), mas a
+    // CLASSIFICAÇÃO acompanha o contrato: mudou a conta do plano, o extrato
+    // do mês passado passa a mostrá-la no lugar certo
+    if (anterior.pago) return { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
+    return { ...nova, observacao: anterior.observacao || "" };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
@@ -291,7 +297,7 @@ function sincronizarContasDaObra(contas, contratos) {
 // agora: se nada mudou, não se grava nada (senão a tela gravaria em laço).
 function assinaturaContas(contas) {
   return JSON.stringify((contas || [])
-    .map((c) => [c.id, c.valor, c.vencimento, c.descricao, !!c.estimada, !!c.pago])
+    .map((c) => [c.id, c.valor, c.vencimento, c.descricao, c.contaId, !!c.estimada, !!c.pago])
     .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
 }
 function contasDesatualizadas(contas, contratos) {

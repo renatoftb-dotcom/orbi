@@ -34,7 +34,13 @@ Sem nenhuma das duas, as parcelas saem sem vencimento (a definir).
 
 Cada conta nasce com o `contaId` do plano de contas (`obra-financeiro.jsx`)
 correspondente ao tipo de profissional — serralheiro → `serralheiro`,
-gestão de obra → `mo_diversos` —, o prestador e o nome do favorecido.
+gestão de obra → `taxa_admin_obra`, a conta "Gerenciamento de obra" —, o
+prestador e o nome do favorecido.
+
+Trocar a conta de um tipo reclassifica também o que já foi pago: a parcela
+paga guarda o pagamento (data de contabilização, valor, dia do registro) mas
+recebe a conta nova, e como `contaId` entra na assinatura da conta, a correção
+dispara sozinha ao abrir a tela.
 
 ## Regravar o contrato
 

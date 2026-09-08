@@ -172,7 +172,10 @@ teste("a conta nasce com o favorecido, o prestador e a conta do plano de contas"
     assert.ok(modulo.PLANO_CONTAS.some(x => x.id === id), `conta ${id} não existe no plano de contas`);
   }
   assert.strictEqual(modulo.contaDoTipo("serralheiro"), "serralheiro");
-  assert.strictEqual(modulo.contaDoTipo("gestaoObra"), "mo_diversos");
+  // gestão de obra é o gerenciamento, em SERVIÇOS & TAXAS
+  assert.strictEqual(modulo.contaDoTipo("gestaoObra"), "taxa_admin_obra");
+  assert.strictEqual(modulo.PLANO_CONTAS.find(x => x.id === "taxa_admin_obra").nome, "Gerenciamento de obra");
+  assert.strictEqual(modulo.contaDoTipo("outro"), "mo_diversos");
 });
 
 teste("regravar o contrato atualiza o que está em aberto e preserva o que foi pago", () => {
@@ -525,6 +528,27 @@ teste("a linha da conta é curta; o parágrafo do item fica no detalhe", () => {
     "Contrato 0008 · Entrada");
   assert.strictEqual(modulo.tituloCurtoConta({ numeroContrato: "0009", parcela: 1, totalParcelas: 4, descricao: "Portão basculante — entrada" }),
     "Contrato 0009 · Portão basculante — entrada");
+});
+
+teste("mudou a conta do plano, o que já foi pago é reclassificado junto", () => {
+  const c = base({ id: "ctg", tipoProfissional: "gestaoObra", valor: 24000, modalidade: "parcelado",
+    parcelas: 12, periodicidade: "mensais", diaVencimento: 5, dataInicio: "2026-08-01" });
+  const geradas = modulo.contasDoContrato(c);
+  assert.strictEqual(geradas[0].contaId, "taxa_admin_obra");
+  // como estavam antes: parcela paga classificada na conta antiga
+  const antigas = geradas.map((x, i) => ({ ...x, contaId: "mo_diversos",
+    ...(i === 0 ? { pago: true, pagoEm: "2026-08-05", valorPago: 2000, contabilizadoEm: "2026-08-06" } : {}) }));
+  assert.ok(modulo.contasDesatualizadas(antigas, [c]), "a conta do plano entra na comparação");
+  const arrumadas = modulo.sincronizarContasDaObra(antigas, [c]);
+  const paga = arrumadas.find(x => x.id === geradas[0].id);
+  assert.strictEqual(paga.contaId, "taxa_admin_obra", "a classificação acompanha o contrato");
+  assert.ok(paga.pago && paga.valorPago === 2000 && paga.pagoEm === "2026-08-05", "o pagamento fica intacto");
+  assert.strictEqual(paga.contabilizadoEm, "2026-08-06");
+  // e o extrato do mês passa a mostrá-la em SERVIÇOS & TAXAS
+  const ex = modulo.extratoMensal(arrumadas, [], "2026-08");
+  assert.deepStrictEqual(ex.grupos.map(g => g.grupo.id), ["servicos"]);
+  assert.strictEqual(ex.grupos[0].linhas[0].conta.nome, "Gerenciamento de obra");
+  assert.strictEqual(ex.custos, 2000);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

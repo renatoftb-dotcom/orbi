@@ -69,7 +69,9 @@ const PLANO_CONTAS = [
   { id: "outras_taxas",       nome: "Outras taxas e serviços",           grupo: "servicos" },
   { id: "tarifas_bancarias",  nome: "Tarifas bancárias",                 grupo: "servicos" },
   { id: "projetos_docs",      nome: "Projetos e documentação",           grupo: "servicos" },
-  { id: "taxa_admin_obra",    nome: "Taxa de administração da obra",     grupo: "servicos" },
+  // rótulo trocado de "Taxa de administração da obra" para "Gerenciamento de
+  // obra"; o id continua o mesmo, porque é chave gravada nos lançamentos
+  { id: "taxa_admin_obra",    nome: "Gerenciamento de obra",             grupo: "servicos" },
   { id: "contabilidade",      nome: "Escritório de contabilidade",       grupo: "servicos" },
 
   // ── excluídas (fora do resultado) ─────────────────────────
