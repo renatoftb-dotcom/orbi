@@ -204,10 +204,36 @@ ação, que são o padrão do app inteiro.
    competência posterior à âncora (início previsto, ou assinatura);
 3. senão, um período cheio depois da âncora.
 
-`vencimentoDaParcela(c, i)` anda dali em diante: mensais de mês em mês,
-preservando o dia (31 de janeiro + 1 mês = 28/29 de fevereiro, nunca 3 de
-março); semanais e quinzenais, de 7 e 15 dias. Antes tudo andava em dias
-corridos e "mensal" virava 30 dias, o que fazia a data escorregar mês a mês.
+`vencimentoDaParcela(c, i)` anda dali em diante: mensais **sempre no mesmo dia
+do mês** — o dia vem da data informada ou do "todo dia N", e é reaplicado a
+cada competência, então dia 31 continua 31 em outubro e dezembro e só encolhe
+onde o calendário não tem (28/29 de fevereiro), voltando a 31 no mês seguinte;
+semanais e quinzenais andam de 7 e 15 dias. Antes tudo andava em dias corridos
+e "mensal" virava 30 dias, o que fazia a data escorregar mês a mês (05/10,
+04/11, 04/12, 03/01…).
+
+**As contas se corrigem sozinhas.** Contas geradas por uma versão antiga das
+regras não precisam de novo salvamento do contrato: ao abrir a tela,
+`contasDesatualizadas(contas, contratos)` compara o que está gravado com o que
+as regras produzem agora e, havendo diferença, `sincronizarContasDaObra` grava
+a correção — uma vez só (a comparação é por id/valor/vencimento/descrição, e
+não pela ordem, senão a tela gravaria em laço). Parcelas pagas ficam como
+estão, e contas avulsas não são tocadas.
+
+## Datas estimadas
+
+Nem toda data é vencimento pactuado. Quando o pagamento depende de um evento
+futuro — a conclusão do serviço, ou uma medição —, a conta nasce com
+`estimada: true` e a tela mostra "· estimada" ao lado do título e **prevista**
+sob a data.
+
+- **Entrada + saldo no final**: a entrada vence na assinatura (data firme); o
+  saldo usa o campo **Previsão de conclusão** do contrato e, sem ele, o fim do
+  prazo de execução.
+- **Item a item**: a entrada de cada item vence na assinatura; a conclusão usa
+  a **previsão do próprio item** (coluna de data na tabela de itens) e, sem
+  ela, a previsão do contrato. Antes essas parcelas nasciam sem data nenhuma.
+- **Por medição**: como já era, uma conta por período dentro do prazo.
 
 Fluxo do contrato atrasado, ponta a ponta (conferido em Chromium): informar o
 primeiro vencimento no mês passado → salvar → as seis parcelas nascem a partir

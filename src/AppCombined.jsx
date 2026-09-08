@@ -14697,7 +14697,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     exclusoes: "",
     // o formulário é o mesmo para qualquer prestador: itens e descritivo
     // estão sempre disponíveis, e vale o que for preenchido
-    itens: [{ descricao: "", valor: "" }],
+    itens: [{ descricao: "", valor: "", previsao: "" }],
     escopo: [{ titulo: "", texto: "" }],
     valor: "",
     // prazo em branco de propósito — quem escolhe a unidade e o número é o usuário
@@ -14710,6 +14710,10 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     // assinatura); preenchido, permite registrar contrato que já começou a
     // ser pago antes de entrar no sistema.
     primeiroVencimento: "",
+    // Previsão de conclusão: data estimada do saldo quando o pagamento é
+    // "entrada + saldo no final". Entra em contas a pagar marcada como
+    // estimada, não como vencimento pactuado.
+    previsaoConclusao: "",
     entradaPct: m.id === "empreitadaGlobal" ? 50 : "",
     entradaEscopo: m.id === "empreitadaGlobal" ? "item" : "contrato",
     medicaoPeriodicidade: "mensal",
@@ -15478,14 +15482,28 @@ function primeiroVencimentoContrato(c) {
   }
   return somarDias(ancora, DIAS_PERIODO[per] || 15);
 }
-// Vencimento da parcela i (1 = a primeira). Mensais andam de mês em mês,
-// preservando o dia; as demais, de tantos dias em tantos dias.
+// O dia do mês que as parcelas mensais devem manter: o da data informada
+// como primeiro vencimento, ou o dia escolhido no contrato ("todo dia 05").
+function diaAlvoContrato(c) {
+  const o = c || {};
+  if (o.primeiroVencimento) {
+    const m = /^\d{4}-\d{2}-(\d{2})/.exec(String(o.primeiroVencimento));
+    return m ? Number(m[1]) : 0;
+  }
+  return Math.floor(Number(o.diaVencimento) || 0);
+}
+// Vencimento da parcela i (1 = a primeira). Mensais caem sempre no MESMO dia
+// do mês — dia 31 continua 31 em março e maio, e só encolhe onde o calendário
+// não tem (fevereiro). As demais andam de tantos dias em tantos dias.
 function vencimentoDaParcela(c, i) {
   const pv = primeiroVencimentoContrato(c);
   if (!pv) return "";
   const per = (c || {}).periodicidade || "quinzenais";
   const n = Math.max(0, Math.floor(i) - 1);
-  return per === "mensais" ? somarMeses(pv, n) : somarDias(pv, (DIAS_PERIODO[per] || 15) * n);
+  if (per !== "mensais") return somarDias(pv, (DIAS_PERIODO[per] || 15) * n);
+  const noMes = somarMeses(pv, n);
+  const dia = diaAlvoContrato(c);
+  return dia > 0 ? comDiaDoMes(noMes, dia) : noMes;
 }
 
 // ── Parcelas do contrato ────────────────────────────────────────
@@ -15530,19 +15548,28 @@ function parcelasAPagar(contrato) {
     const porItem = (c.entradaEscopo || "contrato") === "item";
     const itens = (c.itens || []).filter((i) => i && (String(i.descricao || "").trim() || Number(i.valor)));
     const pct = (Number(c.entradaPct) || 0) / 100;
+    // O saldo depende da conclusão, que ainda não aconteceu: a data é uma
+    // PREVISÃO — a informada no contrato, ou o fim do prazo. Vai marcada
+    // como estimada para não se confundir com vencimento pactuado.
+    const previsto = c.previsaoConclusao || vencimentoFinal(c);
+    const entradaEm = c.dataAssinatura || ancora;
     if (porItem && itens.length) {
-      // sem data: cada metade vence na liberação e na conclusão do item
       itens.forEach((it, idx) => {
         const v = Number(it.valor) || 0;
         const p1 = Math.floor(v * pct * 100) / 100;
         const nome = it.descricao || `Item ${idx + 1}`;
-        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2, descricao: `${nome} — entrada`, valor: p1, vencimento: "" });
-        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2, descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100, vencimento: "" });
+        const prevItem = it.previsao || previsto;
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2,
+          descricao: `${nome} — entrada`, valor: p1, vencimento: entradaEm });
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2,
+          descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100,
+          vencimento: prevItem, estimada: !!prevItem });
       });
     } else {
       const e = entradaESaldo(total, c.entradaPct, 1);
-      if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: 2, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
-      if (e.saldo > 0) linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: 2, descricao: "Saldo na conclusão", valor: e.saldo, vencimento: vencimentoFinal(c) });
+      if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: 2, descricao: "Entrada", valor: e.entrada, vencimento: entradaEm });
+      if (e.saldo > 0) linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: 2,
+        descricao: "Saldo na conclusão", valor: e.saldo, vencimento: previsto, estimada: !!previsto });
     }
   } else if (modo === "medicao") {
     // uma medição por período dentro do prazo, com valor estimado
@@ -15627,6 +15654,27 @@ function sincronizarContasDoContrato(contas, contrato) {
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
   const orfas = pagas.filter((x) => !geradas.some((g) => g.id === x.id));
   return [...outras, ...geradas, ...orfas];
+}
+// Passa a régua em todos os contratos da obra de uma vez. Serve para
+// reconciliar contas geradas por uma versão antiga das regras de vencimento
+// — o contrato não precisa ser salvo de novo para as datas se corrigirem.
+function sincronizarContasDaObra(contas, contratos) {
+  let lista = contas || [];
+  for (const ct of contratos || []) {
+    if (!ct || !ct.id) continue;
+    lista = sincronizarContasDoContrato(lista, ct);
+  }
+  return lista;
+}
+// O que interessa comparar entre a conta guardada e a que as regras geram
+// agora: se nada mudou, não se grava nada (senão a tela gravaria em laço).
+function assinaturaContas(contas) {
+  return JSON.stringify((contas || [])
+    .map((c) => [c.id, c.valor, c.vencimento, c.descricao, !!c.estimada, !!c.pago])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+}
+function contasDesatualizadas(contas, contratos) {
+  return assinaturaContas(sincronizarContasDaObra(contas, contratos)) !== assinaturaContas(contas);
 }
 // Some as contas de um contrato removido, menos as que já foram pagas.
 function removerContasDoContrato(contas, contratoId) {
@@ -17081,6 +17129,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!alvo) return;
     gravarObras(obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o));
   };
+  // Contas geradas por uma versão antiga das regras de vencimento (ex.: as
+  // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
+  // corrigem sozinhas ao abrir a tela — sem precisar salvar o contrato de
+  // novo. O que já foi pago é preservado; só se grava quando algo muda.
+  useEffect(() => {
+    if (view !== "contasPagar" || !obraAtual) return;
+    const contratosDaObra = obraAtual.contratos || [];
+    if (!contratosDaObra.length) return;
+    if (!contasDesatualizadas(contasDaObra, contratosDaObra)) return;
+    gravarContas(sincronizarContasDaObra(contasDaObra, contratosDaObra), obraAtual.id);
+  }, [view, obraAtual && obraAtual.id, assinaturaContas(contasDaObra), JSON.stringify((obraAtual && obraAtual.contratos) || [])]);
+
   const salvarContaAvulsa = () => {
     const f = formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
@@ -17519,6 +17579,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const pz = prazoContrato(g);
     const escopo = escopoContrato(g);
     const gerenciamento = g.modelo === "gerenciamentoObra";
+    // saldo pago item a item: muda o bloco de valor (coluna de previsão) e as
+    // datas estimadas que vão para contas a pagar
+    const porItem = modalidadeContrato(g) === "entradaFinal" && (g.entradaEscopo || "contrato") === "item";
     // O objeto só é reescrito automaticamente enquanto estiver no texto padrão.
     const objetoEditado = String(g.objeto || "").trim() !== objetoPadrao(g.tipoProfissional, escopo);
     const setG = (campo, valor) => setContratoGerando({ ...g, [campo]: valor });
@@ -17810,14 +17873,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               Total: {fmtMoedaCtr(total)}
             </div>
           </div>
+          {!gerenciamento && porItem && (g.itens || []).some(i => Number(i.valor) > 0) && (
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 6 }}>
+              A previsão de cada item é a data estimada da conclusão dele — entra em contas a pagar marcada como estimada.
+            </div>
+          )}
           {!gerenciamento && (g.itens || []).map((it, idx) => (
-            <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 160px auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
+            <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (porItem ? "1fr 160px 150px auto" : "1fr 160px auto"), gap: 8, alignItems: "start", marginBottom: 8 }}>
               <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do item (opcional)" />
               <CampoCtrNum tipo="moeda" valor={it.valor} onChange={v => setLista("itens", idx, "valor", v)} style={C.input} placeholder="0,00" />
+              {porItem && (
+                <input style={C.input} type="date" title="Previsão de conclusão do item" value={it.previsao || ""} onChange={e => setLista("itens", idx, "previsao", e.target.value)} />
+              )}
               <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
             </div>
           ))}
-          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>}
+          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "", previsao: "" })}>＋ Adicionar item</button>}
         </div>
 
         {/* Modalidade de pagamento — igual para todo contrato de prestação de
@@ -17893,6 +17964,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Usado quando não há primeiro vencimento informado.</div>
                 </div>
               )}
+            </div>
+          )}
+          {modo === "entradaFinal" && (
+            <div style={{ ...grade("1fr 1fr"), marginTop: 12 }}>
+              <div>
+                <label style={C.label}>{porItem ? "Previsão de conclusão (padrão dos itens)" : "Previsão de conclusão"}</label>
+                <input style={C.input} type="date" value={g.previsaoConclusao || ""} onChange={e => setG("previsaoConclusao", e.target.value)} />
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
+                  Data estimada do saldo{porItem ? ", usada nos itens sem previsão própria" : ""}. Em branco, vale o fim do prazo de execução. Em contas a pagar a parcela aparece marcada como <strong style={{ color: "#111827" }}>estimada</strong>.
+                </div>
+              </div>
             </div>
           )}
           {modo === "entradaFinal" && (g.entradaEscopo || "contrato") === "item" && !(g.itens || []).some(i => Number(i.valor) > 0) && (
@@ -18185,7 +18267,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   {[detalhe, nomeConta(c.contaId), c.observacao].filter(Boolean).join(" · ")}
                                 </div>
                               </div>
-                              <div style={{ fontSize: 12.5, color: "#111827" }}>{c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}</div>
+                              <div style={{ fontSize: 12.5, color: "#111827" }}>
+                                {c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}
+                                {c.estimada && c.vencimento ? <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>prevista</div> : null}
+                              </div>
                               <div style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500 }}>{st.label}</div>
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                               {perm.podeEditar ? (

@@ -100,14 +100,28 @@ function primeiroVencimentoContrato(c) {
   }
   return somarDias(ancora, DIAS_PERIODO[per] || 15);
 }
-// Vencimento da parcela i (1 = a primeira). Mensais andam de mês em mês,
-// preservando o dia; as demais, de tantos dias em tantos dias.
+// O dia do mês que as parcelas mensais devem manter: o da data informada
+// como primeiro vencimento, ou o dia escolhido no contrato ("todo dia 05").
+function diaAlvoContrato(c) {
+  const o = c || {};
+  if (o.primeiroVencimento) {
+    const m = /^\d{4}-\d{2}-(\d{2})/.exec(String(o.primeiroVencimento));
+    return m ? Number(m[1]) : 0;
+  }
+  return Math.floor(Number(o.diaVencimento) || 0);
+}
+// Vencimento da parcela i (1 = a primeira). Mensais caem sempre no MESMO dia
+// do mês — dia 31 continua 31 em março e maio, e só encolhe onde o calendário
+// não tem (fevereiro). As demais andam de tantos dias em tantos dias.
 function vencimentoDaParcela(c, i) {
   const pv = primeiroVencimentoContrato(c);
   if (!pv) return "";
   const per = (c || {}).periodicidade || "quinzenais";
   const n = Math.max(0, Math.floor(i) - 1);
-  return per === "mensais" ? somarMeses(pv, n) : somarDias(pv, (DIAS_PERIODO[per] || 15) * n);
+  if (per !== "mensais") return somarDias(pv, (DIAS_PERIODO[per] || 15) * n);
+  const noMes = somarMeses(pv, n);
+  const dia = diaAlvoContrato(c);
+  return dia > 0 ? comDiaDoMes(noMes, dia) : noMes;
 }
 
 // ── Parcelas do contrato ────────────────────────────────────────
@@ -152,19 +166,28 @@ function parcelasAPagar(contrato) {
     const porItem = (c.entradaEscopo || "contrato") === "item";
     const itens = (c.itens || []).filter((i) => i && (String(i.descricao || "").trim() || Number(i.valor)));
     const pct = (Number(c.entradaPct) || 0) / 100;
+    // O saldo depende da conclusão, que ainda não aconteceu: a data é uma
+    // PREVISÃO — a informada no contrato, ou o fim do prazo. Vai marcada
+    // como estimada para não se confundir com vencimento pactuado.
+    const previsto = c.previsaoConclusao || vencimentoFinal(c);
+    const entradaEm = c.dataAssinatura || ancora;
     if (porItem && itens.length) {
-      // sem data: cada metade vence na liberação e na conclusão do item
       itens.forEach((it, idx) => {
         const v = Number(it.valor) || 0;
         const p1 = Math.floor(v * pct * 100) / 100;
         const nome = it.descricao || `Item ${idx + 1}`;
-        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2, descricao: `${nome} — entrada`, valor: p1, vencimento: "" });
-        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2, descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100, vencimento: "" });
+        const prevItem = it.previsao || previsto;
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2,
+          descricao: `${nome} — entrada`, valor: p1, vencimento: entradaEm });
+        linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: itens.length * 2,
+          descricao: `${nome} — conclusão`, valor: Math.round((v - p1) * 100) / 100,
+          vencimento: prevItem, estimada: !!prevItem });
       });
     } else {
       const e = entradaESaldo(total, c.entradaPct, 1);
-      if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: 2, descricao: "Entrada", valor: e.entrada, vencimento: c.dataAssinatura || ancora });
-      if (e.saldo > 0) linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: 2, descricao: "Saldo na conclusão", valor: e.saldo, vencimento: vencimentoFinal(c) });
+      if (e.entrada > 0) linhas.push({ n: 1, parcela: 1, totalParcelas: 2, descricao: "Entrada", valor: e.entrada, vencimento: entradaEm });
+      if (e.saldo > 0) linhas.push({ n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: 2,
+        descricao: "Saldo na conclusão", valor: e.saldo, vencimento: previsto, estimada: !!previsto });
     }
   } else if (modo === "medicao") {
     // uma medição por período dentro do prazo, com valor estimado
@@ -249,6 +272,27 @@ function sincronizarContasDoContrato(contas, contrato) {
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
   const orfas = pagas.filter((x) => !geradas.some((g) => g.id === x.id));
   return [...outras, ...geradas, ...orfas];
+}
+// Passa a régua em todos os contratos da obra de uma vez. Serve para
+// reconciliar contas geradas por uma versão antiga das regras de vencimento
+// — o contrato não precisa ser salvo de novo para as datas se corrigirem.
+function sincronizarContasDaObra(contas, contratos) {
+  let lista = contas || [];
+  for (const ct of contratos || []) {
+    if (!ct || !ct.id) continue;
+    lista = sincronizarContasDoContrato(lista, ct);
+  }
+  return lista;
+}
+// O que interessa comparar entre a conta guardada e a que as regras geram
+// agora: se nada mudou, não se grava nada (senão a tela gravaria em laço).
+function assinaturaContas(contas) {
+  return JSON.stringify((contas || [])
+    .map((c) => [c.id, c.valor, c.vencimento, c.descricao, !!c.estimada, !!c.pago])
+    .sort((a, b) => String(a[0]).localeCompare(String(b[0]))));
+}
+function contasDesatualizadas(contas, contratos) {
+  return assinaturaContas(sincronizarContasDaObra(contas, contratos)) !== assinaturaContas(contas);
 }
 // Some as contas de um contrato removido, menos as que já foram pagas.
 function removerContasDoContrato(contas, contratoId) {

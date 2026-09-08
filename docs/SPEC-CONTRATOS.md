@@ -98,6 +98,11 @@ gerenciamento) passa a ancorar de verdade as parcelas: a primeira cai no dia
 mensais andavam de 30 em 30 dias e o dia escrito no contrato não valia para
 contas a pagar.
 
+No pagamento **entrada + saldo no final** há **Previsão de conclusão** (e, no
+modo item a item, uma coluna de previsão por item). É data de estimativa, não
+de vencimento: em contas a pagar a parcela aparece marcada como *estimada* e
+com "prevista" sob a data. Em branco, vale o fim do prazo de execução.
+
 ### Forma de pagamento: a mesma para todo contrato de serviço
 
 O bloco **Modalidade de pagamento** — parcelado, por medição, entrada +

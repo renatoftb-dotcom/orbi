@@ -25,6 +25,7 @@ const modulo = new Function(`
            contaDoTipo, contaAvulsaVazia, somarDias, somarMeses, vencimentoFinal, medicoesPrevistas,
            tituloConta, detalheConta, agruparContas, filtrarContas, rotuloMes,
            VISOES_CONTAS, FILTROS_CONTAS, FILTRO_CONTAS_PADRAO, seriesDoFiltro,
+           sincronizarContasDaObra, contasDesatualizadas, somarDias, contasDoContrato,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal };
 `)();
 
@@ -84,16 +85,50 @@ teste("entrada + saldo no final: contrato todo ou item a item", () => {
     prazoQtd: 3, prazoUnidade: "meses" }));
   assert.deepStrictEqual(todo.map(x => x.valor), [20000, 30000]);
   assert.strictEqual(todo[0].vencimento, "2026-09-07");
-  assert.strictEqual(todo[1].vencimento, "2026-12-10", "o saldo vence no fim do prazo");
+  assert.strictEqual(todo[1].vencimento, "2026-12-10", "sem previsão informada, o saldo cai no fim do prazo");
+  assert.ok(todo[1].estimada, "o saldo depende da conclusão: data estimada");
+  assert.ok(!todo[0].estimada, "a entrada vence na assinatura, não é estimativa");
 
-  // item a item: duas contas por item, sem data (dependem da liberação)
+  // a previsão de conclusão informada manda no saldo
+  const comPrevisao = modulo.parcelasAPagar(base({ modelo: "empreitadaGlobal", valor: 50000, modalidade: "entradaFinal",
+    entradaEscopo: "contrato", entradaPct: 40, dataAssinatura: "2026-09-07", dataInicio: "2026-09-10",
+    prazoQtd: 3, prazoUnidade: "meses", previsaoConclusao: "2027-01-20" }));
+  assert.strictEqual(comPrevisao[1].vencimento, "2027-01-20");
+  assert.ok(comPrevisao[1].estimada);
+
+  // item a item: entrada na assinatura, conclusão na previsão de cada item
   const porItem = modulo.parcelasAPagar(base({ modelo: "empreitadaGlobal", modalidade: "entradaFinal",
-    entradaEscopo: "item", entradaPct: 50, itens: [{ descricao: "Portão", valor: 60000 }, { descricao: "Vitrine", valor: 40000 }] }));
+    entradaEscopo: "item", entradaPct: 50, dataAssinatura: "2026-09-07", previsaoConclusao: "2026-12-20",
+    itens: [{ descricao: "Portão", valor: 60000, previsao: "2026-11-30" }, { descricao: "Vitrine", valor: 40000 }] }));
   assert.strictEqual(porItem.length, 4);
   assert.strictEqual(soma(porItem), 100000);
   assert.ok(porItem[0].descricao.startsWith("Portão — entrada"));
   assert.strictEqual(porItem[0].valor, 30000);
-  assert.strictEqual(porItem[0].vencimento, "");
+  assert.strictEqual(porItem[0].vencimento, "2026-09-07");
+  assert.ok(!porItem[0].estimada);
+  assert.strictEqual(porItem[1].vencimento, "2026-11-30", "a previsão do próprio item");
+  assert.ok(porItem[1].estimada);
+  assert.strictEqual(porItem[3].vencimento, "2026-12-20", "item sem previsão usa a do contrato");
+});
+
+teste("ressincronizar a obra corrige contas geradas por regras antigas", () => {
+  const c = base({ id: "ct1", valor: 120000, modalidade: "parcelado", parcelas: 12, periodicidade: "mensais",
+    diaVencimento: 5, dataInicio: "2026-09-20" });
+  const certas = modulo.contasDoContrato(c);
+  assert.strictEqual(certas[0].vencimento, "2026-10-05");
+  assert.strictEqual(certas[3].vencimento, "2027-01-05", "todo mês no mesmo dia");
+  // como saíam antes: 30 em 30 dias, escorregando o dia
+  const antigas = certas.map((x, i) => ({ ...x, vencimento: modulo.somarDias("2026-09-20", 30 * (i + 1)) }));
+  antigas[0] = { ...antigas[0], pago: true, valorPago: 10000, pagoEm: "2026-10-21" };
+  assert.ok(modulo.contasDesatualizadas(antigas, [c]));
+  const arrumadas = modulo.sincronizarContasDaObra(antigas, [c]);
+  assert.ok(!modulo.contasDesatualizadas(arrumadas, [c]), "depois de ressincronizar, nada mais muda");
+  const paga = arrumadas.find(x => x.id === antigas[0].id);
+  assert.ok(paga.pago && paga.valorPago === 10000, "a parcela paga fica como está");
+  assert.strictEqual(arrumadas.find(x => x.id === certas[3].id).vencimento, "2027-01-05");
+  // contas avulsas não são tocadas
+  const comAvulsa = [...antigas, { id: "av1", origem: "avulsa", descricao: "Caçamba", valor: 350, vencimento: "2026-10-02" }];
+  assert.ok(modulo.sincronizarContasDaObra(comAvulsa, [c]).some(x => x.id === "av1"));
 });
 
 teste("medição: uma conta por medição dentro do prazo, marcada como estimada", () => {
@@ -353,6 +388,14 @@ teste("dia de vencimento ancora as mensais (o 'todo dia 05' do gerenciamento)", 
   // o primeiro vencimento informado tem prioridade sobre o dia
   const forcado = modulo.parcelasAPagar({ ...c, primeiroVencimento: "2026-08-05" });
   assert.strictEqual(forcado[0].vencimento, "2026-08-05");
+  // o dia se mantém mês a mês, custe o que custar ao calendário: 31 continua
+  // 31 onde existe, e só encolhe em fevereiro
+  const trintaEUm = modulo.parcelasAPagar({ ...c, diaVencimento: 31 }).map(x => x.vencimento);
+  assert.deepStrictEqual(trintaEUm.slice(0, 7),
+    ["2026-09-30", "2026-10-31", "2026-11-30", "2026-12-31", "2027-01-31", "2027-02-28", "2027-03-31"]);
+  // dia 30 idem, sem escorregar para março
+  const trinta = modulo.parcelasAPagar({ ...c, diaVencimento: 30, dataInicio: "2026-12-01" }).map(x => x.vencimento);
+  assert.deepStrictEqual(trinta.slice(0, 4), ["2026-12-30", "2027-01-30", "2027-02-28", "2027-03-30"]);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

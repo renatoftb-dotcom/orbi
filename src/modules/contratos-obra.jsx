@@ -499,7 +499,7 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     exclusoes: "",
     // o formulário é o mesmo para qualquer prestador: itens e descritivo
     // estão sempre disponíveis, e vale o que for preenchido
-    itens: [{ descricao: "", valor: "" }],
+    itens: [{ descricao: "", valor: "", previsao: "" }],
     escopo: [{ titulo: "", texto: "" }],
     valor: "",
     // prazo em branco de propósito — quem escolhe a unidade e o número é o usuário
@@ -512,6 +512,10 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     // assinatura); preenchido, permite registrar contrato que já começou a
     // ser pago antes de entrar no sistema.
     primeiroVencimento: "",
+    // Previsão de conclusão: data estimada do saldo quando o pagamento é
+    // "entrada + saldo no final". Entra em contas a pagar marcada como
+    // estimada, não como vencimento pactuado.
+    previsaoConclusao: "",
     entradaPct: m.id === "empreitadaGlobal" ? 50 : "",
     entradaEscopo: m.id === "empreitadaGlobal" ? "item" : "contrato",
     medicaoPeriodicidade: "mensal",

@@ -1133,6 +1133,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!alvo) return;
     gravarObras(obras.map(o => o.id === alvo ? { ...o, contasPagar: novasContas } : o));
   };
+  // Contas geradas por uma versão antiga das regras de vencimento (ex.: as
+  // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
+  // corrigem sozinhas ao abrir a tela — sem precisar salvar o contrato de
+  // novo. O que já foi pago é preservado; só se grava quando algo muda.
+  useEffect(() => {
+    if (view !== "contasPagar" || !obraAtual) return;
+    const contratosDaObra = obraAtual.contratos || [];
+    if (!contratosDaObra.length) return;
+    if (!contasDesatualizadas(contasDaObra, contratosDaObra)) return;
+    gravarContas(sincronizarContasDaObra(contasDaObra, contratosDaObra), obraAtual.id);
+  }, [view, obraAtual && obraAtual.id, assinaturaContas(contasDaObra), JSON.stringify((obraAtual && obraAtual.contratos) || [])]);
+
   const salvarContaAvulsa = () => {
     const f = formConta;
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
@@ -1571,6 +1583,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const pz = prazoContrato(g);
     const escopo = escopoContrato(g);
     const gerenciamento = g.modelo === "gerenciamentoObra";
+    // saldo pago item a item: muda o bloco de valor (coluna de previsão) e as
+    // datas estimadas que vão para contas a pagar
+    const porItem = modalidadeContrato(g) === "entradaFinal" && (g.entradaEscopo || "contrato") === "item";
     // O objeto só é reescrito automaticamente enquanto estiver no texto padrão.
     const objetoEditado = String(g.objeto || "").trim() !== objetoPadrao(g.tipoProfissional, escopo);
     const setG = (campo, valor) => setContratoGerando({ ...g, [campo]: valor });
@@ -1862,14 +1877,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               Total: {fmtMoedaCtr(total)}
             </div>
           </div>
+          {!gerenciamento && porItem && (g.itens || []).some(i => Number(i.valor) > 0) && (
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 6 }}>
+              A previsão de cada item é a data estimada da conclusão dele — entra em contas a pagar marcada como estimada.
+            </div>
+          )}
           {!gerenciamento && (g.itens || []).map((it, idx) => (
-            <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 160px auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
+            <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (porItem ? "1fr 160px 150px auto" : "1fr 160px auto"), gap: 8, alignItems: "start", marginBottom: 8 }}>
               <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do item (opcional)" />
               <CampoCtrNum tipo="moeda" valor={it.valor} onChange={v => setLista("itens", idx, "valor", v)} style={C.input} placeholder="0,00" />
+              {porItem && (
+                <input style={C.input} type="date" title="Previsão de conclusão do item" value={it.previsao || ""} onChange={e => setLista("itens", idx, "previsao", e.target.value)} />
+              )}
               <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
             </div>
           ))}
-          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>}
+          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "", previsao: "" })}>＋ Adicionar item</button>}
         </div>
 
         {/* Modalidade de pagamento — igual para todo contrato de prestação de
@@ -1945,6 +1968,17 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Usado quando não há primeiro vencimento informado.</div>
                 </div>
               )}
+            </div>
+          )}
+          {modo === "entradaFinal" && (
+            <div style={{ ...grade("1fr 1fr"), marginTop: 12 }}>
+              <div>
+                <label style={C.label}>{porItem ? "Previsão de conclusão (padrão dos itens)" : "Previsão de conclusão"}</label>
+                <input style={C.input} type="date" value={g.previsaoConclusao || ""} onChange={e => setG("previsaoConclusao", e.target.value)} />
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
+                  Data estimada do saldo{porItem ? ", usada nos itens sem previsão própria" : ""}. Em branco, vale o fim do prazo de execução. Em contas a pagar a parcela aparece marcada como <strong style={{ color: "#111827" }}>estimada</strong>.
+                </div>
+              </div>
             </div>
           )}
           {modo === "entradaFinal" && (g.entradaEscopo || "contrato") === "item" && !(g.itens || []).some(i => Number(i.valor) > 0) && (
@@ -2237,7 +2271,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                   {[detalhe, nomeConta(c.contaId), c.observacao].filter(Boolean).join(" · ")}
                                 </div>
                               </div>
-                              <div style={{ fontSize: 12.5, color: "#111827" }}>{c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}</div>
+                              <div style={{ fontSize: 12.5, color: "#111827" }}>
+                                {c.vencimento ? new Date(c.vencimento + "T12:00:00").toLocaleDateString("pt-BR") : "a definir"}
+                                {c.estimada && c.vencimento ? <div style={{ fontSize: 11, color: "#6b7280", marginTop: 1 }}>prevista</div> : null}
+                              </div>
                               <div style={{ fontSize: 12, color: st.forte ? "#111827" : "#4b5563", fontWeight: st.forte ? 700 : 500 }}>{st.label}</div>
                               <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{fmtMoedaCtr(c.pago ? (Number(c.valorPago) || c.valor) : c.valor)}</div>
                               {perm.podeEditar ? (
