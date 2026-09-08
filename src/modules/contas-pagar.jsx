@@ -458,11 +458,33 @@ function entradaObraVazia(obraId) {
 function recalibrarContrato(contrato, novaData) {
   return { ...(contrato || {}), primeiroVencimento: novaData || "" };
 }
-// Prévia do que a recalibragem faz: as datas de antes e de depois, só das
-// parcelas em aberto, para conferir antes de gravar.
-function previaRecalibragem(contrato, novaData, contas, limite) {
+// No pagamento "entrada + saldo no final" item a item não há uma data só: o
+// que se recalibra é o cronograma de CADA ITEM — quando ele começa (vence a
+// entrada) e quando conclui (vence o saldo).
+function contratoPorItem(contrato) {
+  const c = contrato || {};
+  return modalidadeContrato(c) === "entradaFinal"
+    && (c.entradaEscopo || "contrato") === "item"
+    && (c.itens || []).some((i) => i && (String(i.descricao || "").trim() || Number(i.valor)));
+}
+// `datas` é um array na ordem dos itens: [{ inicio, previsao }, …]
+function recalibrarItens(contrato, datas) {
+  const c = contrato || {};
+  const lista = datas || [];
+  return { ...c, itens: (c.itens || []).map((it, i) => ({
+    ...it,
+    inicio: lista[i] && lista[i].inicio !== undefined ? lista[i].inicio : it.inicio || "",
+    previsao: lista[i] && lista[i].previsao !== undefined ? lista[i].previsao : it.previsao || "",
+  })) };
+}
+function datasDosItens(contrato) {
+  return ((contrato || {}).itens || []).map((it) => ({ inicio: it.inicio || "", previsao: it.previsao || "" }));
+}
+// Prévia entre duas versões do contrato: as datas de antes e de depois, só
+// das parcelas em aberto, para conferir antes de gravar.
+function previaEntreContratos(contrato, contratoNovo, contas, limite) {
   const antes = contasDoContrato(contrato);
-  const depois = contasDoContrato(recalibrarContrato(contrato, novaData));
+  const depois = contasDoContrato(contratoNovo);
   const pagas = new Set((contas || []).filter((c) => c.pago && c.contratoId === (contrato || {}).id).map((c) => c.id));
   const linhas = [];
   for (let i = 0; i < depois.length; i++) {
@@ -472,6 +494,9 @@ function previaRecalibragem(contrato, novaData, contas, limite) {
     if (limite && linhas.length >= limite) break;
   }
   return { linhas, pagas: pagas.size, total: depois.length };
+}
+function previaRecalibragem(contrato, novaData, contas, limite) {
+  return previaEntreContratos(contrato, recalibrarContrato(contrato, novaData), contas, limite);
 }
 
 // ── Visões ──────────────────────────────────────────────────────

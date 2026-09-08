@@ -272,6 +272,14 @@ contrato (o texto do contrato passa a citá-la) e
 periodicidade. **Parcela paga não se move**: ela fica com a data em que foi
 paga e com o valor pago, e nem aparece na prévia.
 
+**Entrada + saldo item a item não tem "primeira data".** Nesse contrato cada
+item tem o seu próprio ciclo — entrada na liberação, saldo na conclusão —, então
+a telinha troca de forma (`contratoPorItem()`): em vez de uma data, lista os
+itens com **Início** e **Conclusão** cada um, mais a previsão padrão do
+contrato para quem não tiver conclusão própria. `recalibrarItens()` grava as
+datas nos itens e a prévia sai de `previaEntreContratos()`, que compara as
+duas versões do contrato — serve para os dois modos.
+
 ## Datas estimadas
 
 Nem toda data é vencimento pactuado. Quando o pagamento depende de um evento

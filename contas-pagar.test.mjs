@@ -28,6 +28,7 @@ const modulo = new Function(`
            sincronizarContasDaObra, contasDesatualizadas, somarDias, contasDoContrato,
            extratoMensal, mesesDoExtrato, acumuladoAte, entradaObraVazia, mesDe,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
+           contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal };
 `)();
 
@@ -463,6 +464,41 @@ teste("recalibrar joga o contrato inteiro para a nova data do 1º pagamento", ()
   const paga = arrumadas.find(x => x.id === contas[0].id);
   assert.ok(paga.pago && paga.vencimento === "2026-10-05", "a parcela paga não se move");
   assert.strictEqual(arrumadas.find(x => x.id === contas[1].id).vencimento, "2027-01-05");
+});
+
+teste("no pagamento item a item, a recalibragem é item a item", () => {
+  const c = base({ id: "ct7", modelo: "empreitadaGlobal", modalidade: "entradaFinal", entradaEscopo: "item",
+    entradaPct: 50, dataAssinatura: "2026-09-01", previsaoConclusao: "2026-12-20",
+    itens: [{ descricao: "Portão", valor: 60000, inicio: "2026-10-01", previsao: "2026-11-30" },
+            { descricao: "Vitrine", valor: 40000 }] });
+  assert.ok(modulo.contratoPorItem(c), "contrato item a item se recalibra por item");
+  assert.ok(!modulo.contratoPorItem(base({ modalidade: "parcelado", parcelas: 6 })), "parcelado não");
+  assert.deepStrictEqual(modulo.datasDosItens(c),
+    [{ inicio: "2026-10-01", previsao: "2026-11-30" }, { inicio: "", previsao: "" }]);
+
+  // a obra atrasou: cada item ganha o seu novo começo e a sua nova conclusão
+  const novo = modulo.recalibrarItens(c, [{ inicio: "2026-11-03", previsao: "2027-01-15" },
+                                          { inicio: "2027-01-20", previsao: "2027-03-10" }]);
+  const datas = modulo.contasDoContrato(novo).map(x => [x.descricao, x.vencimento, !!x.estimada]);
+  assert.deepStrictEqual(datas, [
+    ["Portão — entrada", "2026-11-03", true],
+    ["Portão — conclusão", "2027-01-15", true],
+    ["Vitrine — entrada", "2027-01-20", true],
+    ["Vitrine — conclusão", "2027-03-10", true],
+  ]);
+  // os valores não se mexem: metade na entrada, metade na conclusão
+  assert.deepStrictEqual(modulo.contasDoContrato(novo).map(x => x.valor), [30000, 30000, 20000, 20000]);
+
+  // prévia entre as duas versões, ignorando o que já foi pago
+  const contas = modulo.contasDoContrato(c).map((x, i) => i === 0 ? { ...x, pago: true, pagoEm: "2026-10-01", valorPago: 30000 } : x);
+  const previa = modulo.previaEntreContratos(c, novo, contas, 6);
+  assert.strictEqual(previa.pagas, 1);
+  assert.strictEqual(previa.linhas.length, 3, "a entrada já paga fica fora");
+  assert.deepStrictEqual([previa.linhas[0].de, previa.linhas[0].para], ["2026-11-30", "2027-01-15"]);
+  // gravando: a entrada paga do Portão não se move
+  const arrumadas = modulo.sincronizarContasDaObra(contas, [novo]);
+  assert.strictEqual(arrumadas.find(x => x.id === contas[0].id).vencimento, "2026-10-01");
+  assert.strictEqual(arrumadas.find(x => x.id === contas[1].id).vencimento, "2027-01-15");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

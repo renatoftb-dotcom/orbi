@@ -1186,10 +1186,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // parcelas em aberto; as pagas ficam como estão.
   const confirmarRecalibragem = () => {
     const f = formRecalibrar; if (!f) return;
-    if (!f.novaData) { dialogo.alertar({ titulo: "Informe a nova data do primeiro pagamento", tipo: "aviso" }); return; }
     const alvo = (obraAtual.contratos || []).find(c => c.id === f.contratoId);
     if (!alvo) { setFormRecalibrar(null); return; }
-    const contratosNovos = (obraAtual.contratos || []).map(c => c.id === alvo.id ? recalibrarContrato(c, f.novaData) : c);
+    const porItem = contratoPorItem(alvo);
+    if (!porItem && !f.novaData) { dialogo.alertar({ titulo: "Informe a nova data do primeiro pagamento", tipo: "aviso" }); return; }
+    const recalibrado = porItem
+      ? { ...recalibrarItens(alvo, f.itens || []), previsaoConclusao: f.previsaoConclusao || "" }
+      : recalibrarContrato(alvo, f.novaData);
+    const contratosNovos = (obraAtual.contratos || []).map(c => c.id === alvo.id ? recalibrado : c);
     const contasNovas = sincronizarContasDaObra(contasDaObra, contratosNovos);
     gravarObras(obras.map(o => o.id === obraAtual.id ? { ...o, contratos: contratosNovos, contasPagar: contasNovas } : o));
     setFormRecalibrar(null);
@@ -2406,7 +2410,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             {(obraAtual.contratos || []).length > 0 && (
               <button style={C.btnSec} onClick={() => {
                 const primeiro = (obraAtual.contratos || [])[0];
-                setFormRecalibrar({ contratoId: primeiro.id, novaData: primeiroVencimentoContrato(primeiro) || hojeIso });
+                setFormRecalibrar({ contratoId: primeiro.id, novaData: primeiroVencimentoContrato(primeiro) || hojeIso,
+                  itens: datasDosItens(primeiro), previsaoConclusao: primeiro.previsaoConclusao || "" });
               }}>Recalibrar datas</button>
             )}
           </div>
@@ -2417,7 +2422,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             junto. As pagas ficam onde estão. */}
         {formRecalibrar && (() => {
           const alvo = (obraAtual.contratos || []).find(c => c.id === formRecalibrar.contratoId) || (obraAtual.contratos || [])[0];
-          const previa = alvo ? previaRecalibragem(alvo, formRecalibrar.novaData, contasDaObra, 4) : { linhas: [], pagas: 0, total: 0 };
+          const porItem = alvo ? contratoPorItem(alvo) : false;
+          const alvoNovo = !alvo ? null : porItem
+            ? { ...recalibrarItens(alvo, formRecalibrar.itens || []), previsaoConclusao: formRecalibrar.previsaoConclusao || "" }
+            : recalibrarContrato(alvo, formRecalibrar.novaData);
+          const previa = alvo ? previaEntreContratos(alvo, alvoNovo, contasDaObra, porItem ? 6 : 4) : { linhas: [], pagas: 0, total: 0 };
+          const itensDoAlvo = ((alvo || {}).itens || []);
           const dia = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "—";
           return (
             <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}
@@ -2426,7 +2436,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 520, maxHeight: "86vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Recalibrar datas do contrato</div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>
-                  A obra não começou na data registrada? Informe quando vence o primeiro pagamento; as parcelas em aberto andam junto, na mesma periodicidade.
+                  {porItem
+                    ? "A obra não começou na data registrada? Ajuste abaixo o começo e a conclusão de cada item — as parcelas em aberto acompanham."
+                    : "A obra não começou na data registrada? Informe quando vence o primeiro pagamento; as parcelas em aberto andam junto, na mesma periodicidade."}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 170px", gap: 12 }}>
                   <div>
@@ -2434,7 +2446,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     <select style={{ ...C.input, cursor: "pointer" }} value={formRecalibrar.contratoId}
                       onChange={e => {
                         const ct = (obraAtual.contratos || []).find(x => x.id === e.target.value);
-                        setFormRecalibrar({ contratoId: e.target.value, novaData: (ct && primeiroVencimentoContrato(ct)) || hojeIso });
+                        setFormRecalibrar({ contratoId: e.target.value, novaData: (ct && primeiroVencimentoContrato(ct)) || hojeIso,
+                          itens: datasDosItens(ct), previsaoConclusao: (ct && ct.previsaoConclusao) || "" });
                       }}>
                       {(obraAtual.contratos || []).map(ct => (
                         <option key={ct.id} value={ct.id}>
@@ -2443,12 +2456,54 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       ))}
                     </select>
                   </div>
-                  <div>
-                    <label style={C.label}>1º pagamento vence em</label>
-                    <input style={C.input} type="date" value={formRecalibrar.novaData}
-                      onChange={e => setFormRecalibrar({ ...formRecalibrar, novaData: e.target.value })} />
-                  </div>
+                  {!porItem && (
+                    <div>
+                      <label style={C.label}>1º pagamento vence em</label>
+                      <input style={C.input} type="date" value={formRecalibrar.novaData}
+                        onChange={e => setFormRecalibrar({ ...formRecalibrar, novaData: e.target.value })} />
+                    </div>
+                  )}
+                  {porItem && (
+                    <div>
+                      <label style={C.label}>Previsão de conclusão (padrão)</label>
+                      <input style={C.input} type="date" value={formRecalibrar.previsaoConclusao || ""}
+                        onChange={e => setFormRecalibrar({ ...formRecalibrar, previsaoConclusao: e.target.value })} />
+                    </div>
+                  )}
                 </div>
+
+                {/* Pagamento item a item: cada item tem o seu próprio começo e
+                    a sua própria conclusão — é item a item que se recalibra. */}
+                {porItem && (
+                  <div style={{ marginTop: 14 }}>
+                    <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
+                      Este contrato paga entrada na liberação de cada item e o saldo na conclusão dele, então a recalibragem é item a item.
+                    </div>
+                    {!isMobile && (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 150px 150px", gap: 8, marginBottom: 4 }}>
+                        <span style={C.label}>Item</span><span style={C.label}>Início</span><span style={C.label}>Conclusão</span>
+                      </div>
+                    )}
+                    {itensDoAlvo.map((it, i) => (
+                      <div key={i} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 150px 150px", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12.5, color: "#111827" }}>
+                          {it.descricao || `Item ${i + 1}`}
+                          <span style={{ color: "#6b7280" }}>{Number(it.valor) ? ` · ${fmtMoedaCtr(Number(it.valor))}` : ""}</span>
+                        </span>
+                        <input style={C.input} type="date" value={(formRecalibrar.itens && formRecalibrar.itens[i] && formRecalibrar.itens[i].inicio) || ""}
+                          onChange={e => {
+                            const novos = (formRecalibrar.itens || []).map((x, j) => j === i ? { ...x, inicio: e.target.value } : x);
+                            setFormRecalibrar({ ...formRecalibrar, itens: novos });
+                          }} />
+                        <input style={C.input} type="date" value={(formRecalibrar.itens && formRecalibrar.itens[i] && formRecalibrar.itens[i].previsao) || ""}
+                          onChange={e => {
+                            const novos = (formRecalibrar.itens || []).map((x, j) => j === i ? { ...x, previsao: e.target.value } : x);
+                            setFormRecalibrar({ ...formRecalibrar, itens: novos });
+                          }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div style={{ marginTop: 14, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, overflow: "hidden" }}>
                   <div style={{ background: "#fafafa", padding: "7px 11px", fontSize: 11.5, fontWeight: 700, color: "#111827" }}>Como ficam as parcelas em aberto</div>
@@ -2468,7 +2523,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
                   {previa.pagas > 0 ? `${previa.pagas} parcela${previa.pagas === 1 ? "" : "s"} já paga${previa.pagas === 1 ? "" : "s"} fica${previa.pagas === 1 ? "" : "m"} como está${previa.pagas === 1 ? "" : "ão"}. ` : ""}
-                  O contrato passa a dizer que a primeira parcela vence nesta data.
+                  {porItem
+                    ? "Cada item passa a ter o seu próprio começo e a sua própria conclusão; item sem conclusão própria usa a previsão padrão acima."
+                    : "O contrato passa a dizer que a primeira parcela vence nesta data."}
                 </div>
                 <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
                   <button type="button" style={C.btnSec} onClick={() => setFormRecalibrar(null)}>Cancelar</button>
