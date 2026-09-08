@@ -194,6 +194,27 @@ obra, contas a pagar inclusive:
 As únicas cores que restam são o vermelho de "Remover" e o cobre dos links de
 ação, que são o padrão do app inteiro.
 
+## Datas das parcelas
+
+`primeiroVencimentoContrato(c)` decide quando vence a primeira:
+
+1. o campo **Primeiro vencimento** do contrato, quando preenchido — é ele que
+   permite registrar contrato lançado atrasado, com parcelas que já venceram;
+2. senão, nas mensais, o **dia de vencimento** escolhido, na primeira
+   competência posterior à âncora (início previsto, ou assinatura);
+3. senão, um período cheio depois da âncora.
+
+`vencimentoDaParcela(c, i)` anda dali em diante: mensais de mês em mês,
+preservando o dia (31 de janeiro + 1 mês = 28/29 de fevereiro, nunca 3 de
+março); semanais e quinzenais, de 7 e 15 dias. Antes tudo andava em dias
+corridos e "mensal" virava 30 dias, o que fazia a data escorregar mês a mês.
+
+Fluxo do contrato atrasado, ponta a ponta (conferido em Chromium): informar o
+primeiro vencimento no mês passado → salvar → as seis parcelas nascem a partir
+daquele mês → a do mês passado aparece **Vencida** no grupo do mês e no quadro
+"Vencido" → botão **Pagar** → o quadro Vencido zera, o Pago sobe e a barra
+daquele mês sai do gráfico de "a pagar".
+
 ## Ler sempre o registro fresco da obra
 
 `obraSelecionada` é uma **cópia** guardada no estado quando a obra foi aberta.

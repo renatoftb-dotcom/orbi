@@ -71,6 +71,44 @@ function ancoraContrato(c) {
   const o = c || {};
   return o.dataInicio || o.dataAssinatura || "";
 }
+// Mesma competência, no dia pedido (28 vira o teto para não pular de mês).
+function comDiaDoMes(iso, dia) {
+  const d = isoParaData(iso);
+  if (!d || !dia) return "";
+  const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(Math.max(1, Math.floor(dia)), ultimo));
+  return dataParaIso(d);
+}
+// Quando vence a PRIMEIRA parcela. O campo "primeiro vencimento" do contrato
+// manda — é ele que permite registrar contrato que começou a ser pago antes
+// de ser lançado no sistema. Sem ele: nas mensais, o dia de vencimento
+// escolhido (o "todo dia 05" do gerenciamento) na primeira competência que
+// vier depois da âncora; sem dia, um período cheio depois da âncora.
+function primeiroVencimentoContrato(c) {
+  const o = c || {};
+  if (o.primeiroVencimento) return o.primeiroVencimento;
+  const ancora = ancoraContrato(o);
+  if (!ancora) return "";
+  const per = o.periodicidade || "quinzenais";
+  if (per === "mensais") {
+    const dia = Math.floor(Number(o.diaVencimento) || 0);
+    if (dia > 0) {
+      const noMes = comDiaDoMes(ancora, dia);
+      return noMes > ancora ? noMes : somarMeses(noMes, 1);
+    }
+    return somarMeses(ancora, 1);
+  }
+  return somarDias(ancora, DIAS_PERIODO[per] || 15);
+}
+// Vencimento da parcela i (1 = a primeira). Mensais andam de mês em mês,
+// preservando o dia; as demais, de tantos dias em tantos dias.
+function vencimentoDaParcela(c, i) {
+  const pv = primeiroVencimentoContrato(c);
+  if (!pv) return "";
+  const per = (c || {}).periodicidade || "quinzenais";
+  const n = Math.max(0, Math.floor(i) - 1);
+  return per === "mensais" ? somarMeses(pv, n) : somarDias(pv, (DIAS_PERIODO[per] || 15) * n);
+}
 
 // ── Parcelas do contrato ────────────────────────────────────────
 // Traduz a modalidade de pagamento numa lista de parcelas com data e valor.
@@ -81,7 +119,6 @@ function parcelasAPagar(contrato) {
   const modo = modalidadeContrato(c);
   const ancora = ancoraContrato(c);
   const per = c.periodicidade || "quinzenais";
-  const passo = DIAS_PERIODO[per] || 15;
   const rotuloPer = per === "semanais" ? "semanal" : per === "mensais" ? "mensal" : "quinzenal";
   const linhas = [];
 
@@ -94,7 +131,7 @@ function parcelasAPagar(contrato) {
         n: i, parcela: i, totalParcelas: n,
         descricao: `Parcela ${i}/${n} (${rotuloPer})`,
         valor: i === n ? p.ultima : p.base,
-        vencimento: ancora ? somarDias(ancora, passo * i) : "",
+        vencimento: vencimentoDaParcela(c, i),
       });
     }
   } else if (modo === "entradaParcelas") {
@@ -107,7 +144,7 @@ function parcelasAPagar(contrato) {
           n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: n + 1,
           descricao: `Parcela ${i}/${n} (${rotuloPer})`,
           valor: i === n ? e.parcelas.ultima : e.parcelas.base,
-          vencimento: ancora ? somarDias(ancora, passo * i) : "",
+          vencimento: vencimentoDaParcela(c, i),
         });
       }
     }

@@ -651,8 +651,9 @@ teste("gerenciamento de obra segue o modelo do escritório", () => {
   const t = texto(d);
   assert.ok(t.includes("Reforma comercial com aproximadamente 435,86 metros quadrados"));
   assert.ok(t.includes("no endereço: Avenida Doutor Altino Arantes"));
-  assert.ok(t.includes("R$ 130.000,00 (cento e trinta mil reais), parcelado em 12 (doze) parcelas de R$ 10.833,33"));
-  assert.ok(t.includes("boletos com vencimento todo dia 05 de cada mês"));
+  assert.ok(t.includes("R$ 130.000,00 (cento e trinta mil reais), parcelado em 12 (doze) parcelas mensais de R$ 10.833,33"));
+  assert.ok(t.includes("com vencimento todo dia 05 de cada mês"));
+  assert.ok(t.includes("Os pagamentos serão feitos por boleto bancário."));
   assert.ok(t.includes("geralmente na FERMAC Locação de Equipamentos"));
   assert.ok(t.includes("multa aqui pactuada em 20% sobre o valor do contrato, acrescida de juros de 1% ao mês"));
   assert.ok(t.includes("honorários advocatícios de 20%"));
@@ -689,9 +690,9 @@ teste("no gerenciamento, a condição de pagamento muda a frase do vencimento", 
   const c = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra"), valor: 130000, parcelas: 12, diaVencimento: 5 };
   assert.strictEqual(c.meioPagamento, "boleto", "gerenciamento nasce em boleto, como no modelo do escritório");
   const t = (meio) => texto(modulo.montarContrato({ ...c, meioPagamento: meio }, { cliente, obra, prestador: serralheiro }));
-  assert.ok(t("boleto").includes("Serão gerados boletos com vencimento todo dia 05 de cada mês"));
-  assert.ok(t("pix").includes("Os pagamentos serão feitos por PIX, com vencimento todo dia 05 de cada mês"));
-  assert.ok(t("transferencia").includes("por transferência bancária, com vencimento todo dia 05"));
+  assert.ok(t("boleto").includes("com vencimento todo dia 05 de cada mês. Os pagamentos serão feitos por boleto bancário."));
+  assert.ok(t("pix").includes("com vencimento todo dia 05 de cada mês. Os pagamentos serão feitos por PIX."));
+  assert.ok(t("transferencia").includes("Os pagamentos serão feitos por transferência bancária."));
   // sem dia informado, a frase some
   assert.ok(!texto(modulo.montarContrato({ ...c, diaVencimento: "" }, { cliente, obra, prestador: serralheiro })).includes("todo dia"));
 });
@@ -710,6 +711,43 @@ teste("o contratado escritório sai qualificado; cadastro incompleto vira aviso"
   // cadastro antigo, com o documento e o endereço em outras chaves
   const antigo = { nome: "Padovan Arquitetos", cnpjCpf: "20.205.619/0001-40", logradouro: "Rua A", numero: "10", bairro: "Centro", cidade: "Ourinhos", estado: "SP", cep: "19900-000" };
   assert.ok(modulo.qualificarCurto(modulo.prestadorDoEscritorio(antigo)).includes("Rua A, nº 10, Centro"));
+});
+
+teste("gerenciamento aceita as mesmas formas de pagamento dos demais contratos", () => {
+  const base = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra"), valor: 120000, parcelas: 12, diaVencimento: 5 };
+  const t = (extra) => texto(modulo.montarContrato({ ...base, ...extra }, { cliente, obra, prestador: serralheiro }));
+  // parcelado (padrão do modelo)
+  assert.ok(t({}).includes("parcelado em 12 (doze) parcelas mensais"));
+  // por medição
+  const med = t({ modalidade: "medicao", medicaoPeriodicidade: "mensal", medicaoPrazoDias: 10 });
+  assert.ok(med.includes("pago por medição mensal"));
+  assert.ok(med.includes("em até 10 (dez) dias da aprovação da medição"));
+  // entrada + parcelas
+  const ep = t({ modalidade: "entradaParcelas", entradaPct: 30, parcelas: 6 });
+  assert.ok(ep.includes("sendo 30% a título de entrada, correspondentes a R$ 36.000,00"));
+  assert.ok(ep.includes("o saldo de R$ 84.000,00 dividido em 6 (seis) parcelas mensais"));
+  // entrada + saldo na conclusão
+  const ef = t({ modalidade: "entradaFinal", entradaPct: 40 });
+  assert.ok(ef.includes("o saldo de R$ 72.000,00 (setenta e dois mil reais) na conclusão da obra"));
+  // a condição de pagamento continua valendo em todas
+  assert.ok(ef.includes("Os pagamentos serão feitos por boleto bancário."));
+});
+
+teste("primeiro vencimento entra no texto do contrato", () => {
+  // genérico
+  const c = { ...modulo.contratoVazio(null, "c1", "o1", "serralheiro", "ambos"), valor: 12000, parcelas: 6,
+    modalidade: "parcelado", periodicidade: "mensais", primeiroVencimento: "2026-08-10" };
+  const t = texto(modulo.montarContrato(c, { cliente, obra, prestador: serralheiro }));
+  assert.ok(t.includes("A primeira parcela vence em 10/08/2026 e as demais no mesmo dia dos meses subsequentes."));
+  // sem o campo, volta a frase padrão
+  const semCampo = texto(modulo.montarContrato({ ...c, primeiroVencimento: "" }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(semCampo.includes("vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços"));
+  // gerenciamento: a data informada vence o "todo dia"
+  const g = { ...modulo.contratoVazio(null, "c1", "o1", "gestaoObra"), valor: 120000, parcelas: 12,
+    diaVencimento: 5, primeiroVencimento: "2026-08-05" };
+  const tg = texto(modulo.montarContrato(g, { cliente, obra, prestador: serralheiro }));
+  assert.ok(tg.includes("vencendo a primeira em 05/08/2026 e as demais no mesmo dia dos meses subsequentes"));
+  assert.ok(!tg.includes("todo dia 05"));
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

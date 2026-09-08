@@ -1833,20 +1833,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 placeholder="ex.: Reforma comercial com aproximadamente 435,86 metros quadrados entre áreas de ampliação e existente" />
               <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Entra na cláusula 2, seguida do endereço da obra.</div>
             </div>
-            <div style={{ ...grade("1fr 1fr 1fr"), marginBottom: 12 }}>
-              <div><label style={C.label}>Valor total (R$)</label><CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" /></div>
-              <div><label style={C.label}>Nº de parcelas</label><CampoCtrNum tipo="inteiro" valor={g.parcelas} onChange={v => setG("parcelas", v)} style={C.input} placeholder="0" /></div>
-              <div><label style={C.label}>Vencimento todo dia</label><CampoCtrNum tipo="inteiro" valor={g.diaVencimento} onChange={v => setG("diaVencimento", v)} style={C.input} placeholder="05" /></div>
-            </div>
-            <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
-              <div>
-                <label style={C.label}>Condição de pagamento</label>
-                <select style={{ ...C.input, cursor: "pointer" }} value={g.meioPagamento || "boleto"} onChange={e => setG("meioPagamento", e.target.value)}>
-                  {MEIOS_PAGAMENTO.map(mp => <option key={mp.id} value={mp.id}>{mp.nome}</option>)}
-                </select>
-              </div>
-              <div />
-            </div>
             <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
               <div>
                 <label style={C.label}>Locadora de equipamentos preferida</label>
@@ -1862,8 +1848,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {/* Valor: itens discriminados ou valor único — vale o que for preenchido */}
-        {!gerenciamento && <div style={bloco}>
+        {/* Valor: itens discriminados ou valor único — vale o que for preenchido.
+            No gerenciamento o valor é um só: os itens não aparecem. */}
+        <div style={bloco}>
           <div style={tituloBloco}>Valor do contrato</div>
           <div style={{ ...grade("240px 1fr"), marginBottom: 10 }}>
             <div>
@@ -1875,18 +1862,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               Total: {fmtMoedaCtr(total)}
             </div>
           </div>
-          {(g.itens || []).map((it, idx) => (
+          {!gerenciamento && (g.itens || []).map((it, idx) => (
             <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 160px auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
               <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do item (opcional)" />
               <CampoCtrNum tipo="moeda" valor={it.valor} onChange={v => setLista("itens", idx, "valor", v)} style={C.input} placeholder="0,00" />
               <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
             </div>
           ))}
-          <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>
-        </div>}
+          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>}
+        </div>
 
-        {/* Modalidade de pagamento */}
-        {!gerenciamento && <div style={bloco}>
+        {/* Modalidade de pagamento — igual para todo contrato de prestação de
+            serviço, gestão de obra inclusive */}
+        <div style={bloco}>
           <div style={tituloBloco}>Modalidade de pagamento</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {MODALIDADES_PAGAMENTO.map(mp => (
@@ -1941,10 +1929,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </>
             )}
           </div>
+          {(modo === "parcelado" || modo === "entradaParcelas") && (
+            <div style={{ ...grade("1fr 1fr"), marginTop: 12 }}>
+              <div>
+                <label style={C.label}>Primeiro vencimento</label>
+                <input style={C.input} type="date" value={g.primeiroVencimento || ""} onChange={e => setG("primeiroVencimento", e.target.value)} />
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
+                  Em branco, a 1ª parcela conta do início/assinatura{g.periodicidade === "mensais" && Number(g.diaVencimento) > 0 ? `, no dia ${String(Math.floor(Number(g.diaVencimento))).padStart(2, "0")}` : ""}. Preencha para registrar contrato que já começou a ser pago — as parcelas anteriores entram em contas a pagar e você marca as pagas por lá.
+                </div>
+              </div>
+              {gerenciamento && (
+                <div>
+                  <label style={C.label}>Vencimento todo dia</label>
+                  <CampoCtrNum tipo="inteiro" valor={g.diaVencimento} onChange={v => setG("diaVencimento", v)} style={C.input} placeholder="05" />
+                  <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Usado quando não há primeiro vencimento informado.</div>
+                </div>
+              )}
+            </div>
+          )}
           {modo === "entradaFinal" && (g.entradaEscopo || "contrato") === "item" && !(g.itens || []).some(i => Number(i.valor) > 0) && (
             <div style={{ fontSize: 12, color: "#4b5563", marginTop: 8 }}>Pagamento item a item precisa de itens com valor — sem eles, o contrato sai como entrada + saldo no final.</div>
           )}
-        </div>}
+        </div>
 
         {/* Cláusulas opcionais */}
         {!gerenciamento && <div style={bloco}>

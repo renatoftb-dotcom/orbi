@@ -79,6 +79,40 @@ tem valor total, itens discriminados (opcionais — havendo itens com valor, o
 total é a soma deles e o campo de valor total trava), descritivo do ANEXO I
 (opcional), modalidade de pagamento, prazo e a lista de cláusulas marcáveis.
 
+### Quando vence a primeira parcela
+
+Todo contrato tem **Primeiro vencimento** (opcional) ao lado do nº de parcelas.
+Em branco, a primeira parcela conta da âncora — início previsto, ou a
+assinatura — como sempre foi. Preenchido, é ele que manda: serve para
+registrar contrato que **já vinha sendo pago** antes de entrar no sistema. As
+parcelas anteriores nascem em contas a pagar, aparecem como vencidas e se
+marca lá o que já foi quitado.
+
+O texto do contrato acompanha: com a data informada sai "A primeira parcela
+vence em 10/08/2026 e as demais no mesmo dia dos meses subsequentes"; sem ela,
+a frase padrão da periodicidade.
+
+Nas mensais sem data informada, o **dia de vencimento** (o "todo dia 05" do
+gerenciamento) passa a ancorar de verdade as parcelas: a primeira cai no dia
+05 seguinte à âncora e as demais no dia 05 dos meses seguintes. Antes as
+mensais andavam de 30 em 30 dias e o dia escrito no contrato não valia para
+contas a pagar.
+
+### Forma de pagamento: a mesma para todo contrato de serviço
+
+O bloco **Modalidade de pagamento** — parcelado, por medição, entrada +
+parcelas, entrada + saldo no final — vale para **todos** os contratos de
+prestação de serviço, gestão de obra inclusive, junto com a condição de
+pagamento (PIX, boleto, …). O gerenciamento deixou de ser sempre "parcelado
+mensal": a cláusula VALORES E FORMA DE PAGAMENTO é escrita conforme a
+modalidade escolhida, na voz do modelo do escritório, e as contas a pagar
+seguem a mesma escolha.
+
+No gerenciamento continuam próprios apenas os campos do modelo do escritório:
+referência da obra, locadora preferida, dias de interrupção que rescindem, e
+multa/juros/honorários. O valor é um só (sem itens discriminados) e o
+descritivo e as cláusulas marcáveis seguem escondidos — o modelo já os traz.
+
 ### O próprio escritório como contratado
 
 A gestão da obra costuma ser do escritório. Ele aparece **no topo da lista de

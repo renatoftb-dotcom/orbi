@@ -14706,6 +14706,10 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     // o número de parcelas só vem pronto no gerenciamento, onde 12 é a praxe
     parcelas: m.id === "gerenciamentoObra" ? (m.padrao.parcelas || "") : "",
     periodicidade: m.padrao.periodicidade || "quinzenais",
+    // Quando vence a primeira parcela. Em branco, conta da âncora (início ou
+    // assinatura); preenchido, permite registrar contrato que já começou a
+    // ser pago antes de entrar no sistema.
+    primeiroVencimento: "",
     entradaPct: m.id === "empreitadaGlobal" ? 50 : "",
     entradaEscopo: m.id === "empreitadaGlobal" ? "item" : "contrato",
     medicaoPeriodicidade: "mensal",
@@ -14778,7 +14782,15 @@ function pctCtr(v) {
   return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
 }
 function periodicidadeAdj(p) { return p === "semanais" ? "semanais" : p === "mensais" ? "mensais" : "quinzenais"; }
-function vencimentoTexto(p) {
+function vencimentoTexto(p, primeiro) {
+  // Com a data da primeira parcela informada, o contrato escreve a data —
+  // é o caso do contrato que já vinha sendo pago quando foi registrado.
+  if (primeiro) {
+    const d = fmtDataCtr(primeiro);
+    if (p === "semanais") return `A primeira parcela vence em ${d} e as demais a cada 7 (sete) dias subsequentes.`;
+    if (p === "mensais") return `A primeira parcela vence em ${d} e as demais no mesmo dia dos meses subsequentes.`;
+    return `A primeira parcela vence em ${d} e as demais a cada 15 (quinze) dias subsequentes.`;
+  }
   if (p === "semanais") return "Os pagamentos serão realizados semanalmente, sempre às sextas-feiras, vencendo-se a primeira parcela na primeira sexta-feira posterior ao início dos serviços e as demais a cada 7 (sete) dias subsequentes.";
   if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços e as demais a cada 30 (trinta) dias subsequentes.";
   return "Os pagamentos serão realizados sempre às sextas-feiras, em quinzenas alternadas e no período da manhã, vencendo-se a primeira parcela na segunda sexta-feira contada do início dos serviços e as demais a cada 15 (quinze) dias subsequentes.";
@@ -14796,6 +14808,7 @@ function clausulasGerenciamento(c, ctx) {
   const dia = Number(c.diaVencimento) || 0;
   const locadora = String(c.locadoraEquipamentos || "").trim();
   const meio = meioPagamento(c.meioPagamento);
+  const modo = modalidadeContrato(c);
 
   add("objeto", "OBJETO DO CONTRATO", [
     "O presente contrato tem como objeto a prestação de serviços de gerenciamento de obra, o qual compreenderá a gestão da compra de materiais, intermediação na contratação de empreiteiros e prestadores de serviços.",
@@ -14816,9 +14829,29 @@ function clausulasGerenciamento(c, ctx) {
     "VÍNCULO EMPREGATÍCIO: Não se estabelece vínculo empregatício entre a CONTRATANTE e a CONTRATADA, bem como toda a mão de obra empregada na obra não terá vínculo empregatício com a CONTRATADA, visto que se trata de contrato de prestação de serviço.",
   ], { subtitulo: "DESCRIÇÃO DO SERVIÇO CONTRATADO:" });
 
-  add("pagamento", "VALORES E FORMA DE PAGAMENTO", [
-    `O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${parcelas ? `, parcelado em ${numExtensoCtr(parcelas)} parcelas de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)})${p.iguais ? "" : `, sendo a última de ${fmtMoedaCtr(p.ultima)}`}` : ""}${dia ? `. ${meio.id === "boleto" ? `Serão gerados boletos com vencimento` : `Os pagamentos serão feitos por ${meio.curto}, com vencimento`} todo dia ${String(dia).padStart(2, "0")} de cada mês` : ""}. Caso a obra seja concluída antes do prazo das parcelas, a quitação do saldo devedor será antecipada; caso o prazo seja extrapolado, o valor deste contrato não se altera, ou seja, não será cobrado nenhum valor adicional de gerenciamento de obra.`,
-  ]);
+  // A forma de pagamento é a mesma escolha dos demais contratos de prestação
+  // de serviço (parcelado, por medição, entrada + parcelas, entrada + saldo),
+  // escrita na voz do modelo do escritório.
+  const perGer = periodicidadeAdj(c.periodicidade);
+  const quando = c.primeiroVencimento
+    ? `, vencendo a primeira em ${fmtDataCtr(c.primeiroVencimento)} e as demais ${c.periodicidade === "mensais" ? "no mesmo dia dos meses subsequentes" : `a cada ${c.periodicidade === "semanais" ? "7 (sete)" : "15 (quinze)"} dias`}`
+    : dia ? `, com vencimento todo dia ${String(dia).padStart(2, "0")} de cada mês` : "";
+  const comoPaga = `${meio.id === "boleto" ? "Os pagamentos serão feitos por boleto bancário" : `Os pagamentos serão feitos por ${meio.curto}`}`;
+  const frasesPag = [];
+  if (modo === "medicao") {
+    const perMed = c.medicaoPeriodicidade === "semanal" ? "semanal" : c.medicaoPeriodicidade === "quinzenal" ? "quinzenal" : "mensal";
+    frasesPag.push(`O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)}), pago por medição ${perMed}: ao final de cada período as partes apurarão, em conjunto, os serviços efetivamente gerenciados, e a CONTRATADA receberá o valor correspondente ao percentual medido${numCtr(c.medicaoPrazoDias, "dias") !== "______ (______) dias" ? `, em até ${numCtr(c.medicaoPrazoDias, "dias")} da aprovação da medição` : ""}. ${comoPaga}.`);
+  } else if (modo === "entradaParcelas") {
+    const e = entradaESaldo(total, c.entradaPct, parcelas);
+    frasesPag.push(`O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)}), sendo ${pctCtr(c.entradaPct)} a título de entrada, correspondentes a ${fmtMoedaCtr(e.entrada)} (${moedaExtensoCtr(e.entrada)}), na assinatura deste contrato${parcelas ? `, e o saldo de ${fmtMoedaCtr(e.saldo)} dividido em ${numExtensoCtr(parcelas)} parcelas ${perGer} de ${fmtMoedaCtr(e.parcelas.base)}${e.parcelas.iguais ? "" : `, sendo a última de ${fmtMoedaCtr(e.parcelas.ultima)}`}${quando}` : ""}. ${comoPaga}.`);
+  } else if (modo === "entradaFinal") {
+    const e = entradaESaldo(total, c.entradaPct, 1);
+    frasesPag.push(`O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)}), sendo ${pctCtr(c.entradaPct)} a título de entrada, correspondentes a ${fmtMoedaCtr(e.entrada)} (${moedaExtensoCtr(e.entrada)}), na assinatura deste contrato, e o saldo de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) na conclusão da obra. ${comoPaga}.`);
+  } else {
+    frasesPag.push(`O valor total do presente contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)})${parcelas ? `, parcelado em ${numExtensoCtr(parcelas)} parcelas ${perGer} de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)})${p.iguais ? "" : `, sendo a última de ${fmtMoedaCtr(p.ultima)}`}` : ""}${quando ? `${quando}` : ""}. ${comoPaga}.`);
+  }
+  frasesPag.push("Caso a obra seja concluída antes do prazo das parcelas, a quitação do saldo devedor será antecipada; caso o prazo seja extrapolado, o valor deste contrato não se altera, ou seja, não será cobrado nenhum valor adicional de gerenciamento de obra.");
+  add("pagamento", "VALORES E FORMA DE PAGAMENTO", frasesPag);
 
   add("naoContempladas", "DESPESAS NÃO CONTEMPLADAS NESTE CONTRATO", [
     "Não estão inclusas despesas de impressão de plantas, emissão de ARTs e RRTs, taxas de órgãos públicos e de fiscalização de qualquer espécie, incluindo taxas notariais e cartoriais. Caso se faça necessário que a CONTRATADA execute essas atividades, fica desde já autorizada pela CONTRATANTE a proceder com elas, tendo a CONTRATANTE a obrigação de reembolsá-la mediante apresentação dos comprovantes de pagamento.",
@@ -14908,8 +14941,8 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const escId = esc ? esc.id : (global ? "ambos" : "maoDeObra");
   let modo = modalidadeContrato(c), tabelaParcelas = [], parcelasApos = null;
   if (m.id === "gerenciamentoObra") {
-    // gerenciamento é sempre mensal e parcelado — é o que alimenta as contas a pagar
-    modo = "parcelado";
+    // a modalidade do gerenciamento é a mesma dos demais contratos de
+    // prestação de serviço; o padrão do modelo é parcelado mensal
     clausulasGerenciamento(c, { enderecoObra, total, foro, add });
   } else {
 
@@ -14992,7 +15025,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
         ? `O valor total será dividido em ${numCtr(p.qtd)} parcelas ${per} e sucessivas, no valor de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)}) cada.`
         : `O valor total será dividido em ${numCtr(p.qtd)} parcelas ${per} e sucessivas, sendo ${numCtr(p.qtd - 1)} parcelas no valor de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)}) cada e a última no valor de ${fmtMoedaCtr(p.ultima)} (${moedaExtensoCtr(p.ultima)}), ajustada em razão de arredondamento.`)
       : `O valor total será dividido em ______ parcelas ${per} e sucessivas.`);
-    pag.push(vencimentoTexto(c.periodicidade));
+    pag.push(vencimentoTexto(c.periodicidade, c.primeiroVencimento));
   } else if (modo === "medicao") {
     const perMed = c.medicaoPeriodicidade === "semanal" ? "semanal" : c.medicaoPeriodicidade === "quinzenal" ? "quinzenal" : "mensal";
     pag.push(`O pagamento será feito por medição ${perMed}: ao final de cada período as partes apurarão, em conjunto, os serviços efetivamente executados, e ${ela} receberá o valor correspondente ao percentual medido do valor total deste contrato.`);
@@ -15006,7 +15039,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
         ? `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ${numCtr(e.parcelas.qtd)} parcelas ${per} e sucessivas, no valor de ${fmtMoedaCtr(e.parcelas.base)} (${moedaExtensoCtr(e.parcelas.base)}) cada.`
         : `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ${numCtr(e.parcelas.qtd)} parcelas ${per} e sucessivas, sendo ${numCtr(e.parcelas.qtd - 1)} no valor de ${fmtMoedaCtr(e.parcelas.base)} (${moedaExtensoCtr(e.parcelas.base)}) cada e a última no valor de ${fmtMoedaCtr(e.parcelas.ultima)} (${moedaExtensoCtr(e.parcelas.ultima)}), ajustada em razão de arredondamento.`)
       : `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ______ parcelas ${per} e sucessivas.`);
-    pag.push(vencimentoTexto(c.periodicidade));
+    pag.push(vencimentoTexto(c.periodicidade, c.primeiroVencimento));
   } else {
     // entrada + saldo no final — do contrato todo ou item a item
     const porItem = (c.entradaEscopo || (global ? "item" : "contrato")) === "item" && temItens;
@@ -15416,6 +15449,44 @@ function ancoraContrato(c) {
   const o = c || {};
   return o.dataInicio || o.dataAssinatura || "";
 }
+// Mesma competência, no dia pedido (28 vira o teto para não pular de mês).
+function comDiaDoMes(iso, dia) {
+  const d = isoParaData(iso);
+  if (!d || !dia) return "";
+  const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(Math.max(1, Math.floor(dia)), ultimo));
+  return dataParaIso(d);
+}
+// Quando vence a PRIMEIRA parcela. O campo "primeiro vencimento" do contrato
+// manda — é ele que permite registrar contrato que começou a ser pago antes
+// de ser lançado no sistema. Sem ele: nas mensais, o dia de vencimento
+// escolhido (o "todo dia 05" do gerenciamento) na primeira competência que
+// vier depois da âncora; sem dia, um período cheio depois da âncora.
+function primeiroVencimentoContrato(c) {
+  const o = c || {};
+  if (o.primeiroVencimento) return o.primeiroVencimento;
+  const ancora = ancoraContrato(o);
+  if (!ancora) return "";
+  const per = o.periodicidade || "quinzenais";
+  if (per === "mensais") {
+    const dia = Math.floor(Number(o.diaVencimento) || 0);
+    if (dia > 0) {
+      const noMes = comDiaDoMes(ancora, dia);
+      return noMes > ancora ? noMes : somarMeses(noMes, 1);
+    }
+    return somarMeses(ancora, 1);
+  }
+  return somarDias(ancora, DIAS_PERIODO[per] || 15);
+}
+// Vencimento da parcela i (1 = a primeira). Mensais andam de mês em mês,
+// preservando o dia; as demais, de tantos dias em tantos dias.
+function vencimentoDaParcela(c, i) {
+  const pv = primeiroVencimentoContrato(c);
+  if (!pv) return "";
+  const per = (c || {}).periodicidade || "quinzenais";
+  const n = Math.max(0, Math.floor(i) - 1);
+  return per === "mensais" ? somarMeses(pv, n) : somarDias(pv, (DIAS_PERIODO[per] || 15) * n);
+}
 
 // ── Parcelas do contrato ────────────────────────────────────────
 // Traduz a modalidade de pagamento numa lista de parcelas com data e valor.
@@ -15426,7 +15497,6 @@ function parcelasAPagar(contrato) {
   const modo = modalidadeContrato(c);
   const ancora = ancoraContrato(c);
   const per = c.periodicidade || "quinzenais";
-  const passo = DIAS_PERIODO[per] || 15;
   const rotuloPer = per === "semanais" ? "semanal" : per === "mensais" ? "mensal" : "quinzenal";
   const linhas = [];
 
@@ -15439,7 +15509,7 @@ function parcelasAPagar(contrato) {
         n: i, parcela: i, totalParcelas: n,
         descricao: `Parcela ${i}/${n} (${rotuloPer})`,
         valor: i === n ? p.ultima : p.base,
-        vencimento: ancora ? somarDias(ancora, passo * i) : "",
+        vencimento: vencimentoDaParcela(c, i),
       });
     }
   } else if (modo === "entradaParcelas") {
@@ -15452,7 +15522,7 @@ function parcelasAPagar(contrato) {
           n: linhas.length + 1, parcela: linhas.length + 1, totalParcelas: n + 1,
           descricao: `Parcela ${i}/${n} (${rotuloPer})`,
           valor: i === n ? e.parcelas.ultima : e.parcelas.base,
-          vencimento: ancora ? somarDias(ancora, passo * i) : "",
+          vencimento: vencimentoDaParcela(c, i),
         });
       }
     }
@@ -17711,20 +17781,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 placeholder="ex.: Reforma comercial com aproximadamente 435,86 metros quadrados entre áreas de ampliação e existente" />
               <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 5 }}>Entra na cláusula 2, seguida do endereço da obra.</div>
             </div>
-            <div style={{ ...grade("1fr 1fr 1fr"), marginBottom: 12 }}>
-              <div><label style={C.label}>Valor total (R$)</label><CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" /></div>
-              <div><label style={C.label}>Nº de parcelas</label><CampoCtrNum tipo="inteiro" valor={g.parcelas} onChange={v => setG("parcelas", v)} style={C.input} placeholder="0" /></div>
-              <div><label style={C.label}>Vencimento todo dia</label><CampoCtrNum tipo="inteiro" valor={g.diaVencimento} onChange={v => setG("diaVencimento", v)} style={C.input} placeholder="05" /></div>
-            </div>
-            <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
-              <div>
-                <label style={C.label}>Condição de pagamento</label>
-                <select style={{ ...C.input, cursor: "pointer" }} value={g.meioPagamento || "boleto"} onChange={e => setG("meioPagamento", e.target.value)}>
-                  {MEIOS_PAGAMENTO.map(mp => <option key={mp.id} value={mp.id}>{mp.nome}</option>)}
-                </select>
-              </div>
-              <div />
-            </div>
             <div style={{ ...grade("1fr 1fr"), marginBottom: 12 }}>
               <div>
                 <label style={C.label}>Locadora de equipamentos preferida</label>
@@ -17740,8 +17796,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {/* Valor: itens discriminados ou valor único — vale o que for preenchido */}
-        {!gerenciamento && <div style={bloco}>
+        {/* Valor: itens discriminados ou valor único — vale o que for preenchido.
+            No gerenciamento o valor é um só: os itens não aparecem. */}
+        <div style={bloco}>
           <div style={tituloBloco}>Valor do contrato</div>
           <div style={{ ...grade("240px 1fr"), marginBottom: 10 }}>
             <div>
@@ -17753,18 +17810,19 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               Total: {fmtMoedaCtr(total)}
             </div>
           </div>
-          {(g.itens || []).map((it, idx) => (
+          {!gerenciamento && (g.itens || []).map((it, idx) => (
             <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 160px auto", gap: 8, alignItems: "start", marginBottom: 8 }}>
               <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do item (opcional)" />
               <CampoCtrNum tipo="moeda" valor={it.valor} onChange={v => setLista("itens", idx, "valor", v)} style={C.input} placeholder="0,00" />
               <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
             </div>
           ))}
-          <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>
-        </div>}
+          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "" })}>＋ Adicionar item</button>}
+        </div>
 
-        {/* Modalidade de pagamento */}
-        {!gerenciamento && <div style={bloco}>
+        {/* Modalidade de pagamento — igual para todo contrato de prestação de
+            serviço, gestão de obra inclusive */}
+        <div style={bloco}>
           <div style={tituloBloco}>Modalidade de pagamento</div>
           <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8, marginBottom: 10 }}>
             {MODALIDADES_PAGAMENTO.map(mp => (
@@ -17819,10 +17877,28 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </>
             )}
           </div>
+          {(modo === "parcelado" || modo === "entradaParcelas") && (
+            <div style={{ ...grade("1fr 1fr"), marginTop: 12 }}>
+              <div>
+                <label style={C.label}>Primeiro vencimento</label>
+                <input style={C.input} type="date" value={g.primeiroVencimento || ""} onChange={e => setG("primeiroVencimento", e.target.value)} />
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
+                  Em branco, a 1ª parcela conta do início/assinatura{g.periodicidade === "mensais" && Number(g.diaVencimento) > 0 ? `, no dia ${String(Math.floor(Number(g.diaVencimento))).padStart(2, "0")}` : ""}. Preencha para registrar contrato que já começou a ser pago — as parcelas anteriores entram em contas a pagar e você marca as pagas por lá.
+                </div>
+              </div>
+              {gerenciamento && (
+                <div>
+                  <label style={C.label}>Vencimento todo dia</label>
+                  <CampoCtrNum tipo="inteiro" valor={g.diaVencimento} onChange={v => setG("diaVencimento", v)} style={C.input} placeholder="05" />
+                  <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Usado quando não há primeiro vencimento informado.</div>
+                </div>
+              )}
+            </div>
+          )}
           {modo === "entradaFinal" && (g.entradaEscopo || "contrato") === "item" && !(g.itens || []).some(i => Number(i.valor) > 0) && (
             <div style={{ fontSize: 12, color: "#4b5563", marginTop: 8 }}>Pagamento item a item precisa de itens com valor — sem eles, o contrato sai como entrada + saldo no final.</div>
           )}
-        </div>}
+        </div>
 
         {/* Cláusulas opcionais */}
         {!gerenciamento && <div style={bloco}>

@@ -51,8 +51,8 @@ teste("parcelado: uma conta por parcela, na periodicidade escolhida, fechando o 
   assert.strictEqual(soma(l), 12000);
   assert.strictEqual(l[0].valor, 2000);
   assert.strictEqual(l[0].vencimento, "2026-10-01");
-  // "mensais" anda de 30 em 30 dias, como diz a cláusula de pagamento
-  assert.strictEqual(l[5].vencimento, "2027-02-28");
+  // "mensais" anda de mês em mês, preservando o dia
+  assert.strictEqual(l[5].vencimento, "2027-03-01");
   assert.ok(l[0].descricao.includes("1/6") && l[0].descricao.includes("mensal"));
   // quinzenal anda de 15 em 15
   const q = modulo.parcelasAPagar({ ...c, periodicidade: "quinzenais" });
@@ -74,7 +74,7 @@ teste("entrada + parcelas: entrada na assinatura e o saldo dividido", () => {
   assert.strictEqual(l[0].descricao, "Entrada");
   assert.strictEqual(l[0].valor, 30000);
   assert.strictEqual(l[0].vencimento, "2026-09-07", "a entrada vence na assinatura");
-  assert.strictEqual(l[1].vencimento, "2026-10-31", "as parcelas contam do início da obra");
+  assert.strictEqual(l[1].vencimento, "2026-11-01", "as parcelas contam do início da obra, de mês em mês");
   assert.strictEqual(soma(l), 100000);
 });
 
@@ -321,6 +321,38 @@ teste("o gráfico abre só com 'a pagar' e segue os quadros do topo", () => {
   assert.deepStrictEqual(modulo.seriesDoFiltro("qualquer"), ["pago", "vencido", "aberto"]);
   // todo filtro dos quadros tem faixa definida
   for (const f of modulo.FILTROS_CONTAS) assert.ok(modulo.seriesDoFiltro(f.id).length > 0, f.id);
+});
+
+teste("primeiro vencimento manda nas datas — contrato lançado atrasado", () => {
+  // contrato registrado hoje, mas cuja primeira parcela venceu no mês passado
+  const c = base({ valor: 12000, modalidade: "parcelado", parcelas: 6, periodicidade: "mensais",
+    dataInicio: "2026-09-01", primeiroVencimento: "2026-08-10" });
+  const l = modulo.parcelasAPagar(c);
+  assert.strictEqual(l[0].vencimento, "2026-08-10", "a primeira parcela vence na data informada");
+  assert.strictEqual(l[1].vencimento, "2026-09-10");
+  assert.strictEqual(l[5].vencimento, "2027-01-10", "as demais andam de mês em mês, no mesmo dia");
+  // sem o campo, volta a contar da âncora
+  const semCampo = modulo.parcelasAPagar({ ...c, primeiroVencimento: "" });
+  assert.strictEqual(semCampo[0].vencimento, "2026-10-01");
+  // quinzenal a partir da data informada
+  const q = modulo.parcelasAPagar({ ...c, periodicidade: "quinzenais" });
+  assert.strictEqual(q[0].vencimento, "2026-08-10");
+  assert.strictEqual(q[1].vencimento, "2026-08-25");
+});
+
+teste("dia de vencimento ancora as mensais (o 'todo dia 05' do gerenciamento)", () => {
+  const c = base({ valor: 120000, modalidade: "parcelado", parcelas: 12, periodicidade: "mensais",
+    dataInicio: "2026-09-20", diaVencimento: 5 });
+  const l = modulo.parcelasAPagar(c);
+  assert.strictEqual(l[0].vencimento, "2026-10-05", "o dia 05 seguinte ao início");
+  assert.strictEqual(l[1].vencimento, "2026-11-05");
+  assert.strictEqual(l[11].vencimento, "2027-09-05");
+  // início antes do dia 05 do próprio mês: a primeira cai no mês do início
+  const cedo = modulo.parcelasAPagar({ ...c, dataInicio: "2026-09-01" });
+  assert.strictEqual(cedo[0].vencimento, "2026-09-05");
+  // o primeiro vencimento informado tem prioridade sobre o dia
+  const forcado = modulo.parcelasAPagar({ ...c, primeiroVencimento: "2026-08-05" });
+  assert.strictEqual(forcado[0].vencimento, "2026-08-05");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
