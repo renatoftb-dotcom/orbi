@@ -104,6 +104,28 @@ entrada daquele item, e **Previsão de conclusão**, quando vence o saldo). É d
 de vencimento: em contas a pagar a parcela aparece marcada como *estimada* e
 com "prevista" sob a data. Em branco, vale o fim do prazo de execução.
 
+### Semanal e quinzenal são pagamentos de um dia da semana
+
+A periodicidade diz o que é, no próprio rótulo do gerador:
+
+| opção | o que significa |
+| --- | --- |
+| Semanal — toda semana, no mesmo dia | 7 dias, sempre no dia escolhido |
+| Quinzenal — um dia sim, outro não (14 dias) | sextas alternadas, a praxe do empreiteiro |
+| Mensal — dia fixo do mês | o "todo dia 05" |
+
+Ao lado, **Dia do pagamento** (segunda a sexta, sexta por padrão) — o mesmo
+mecanismo serve para quem paga na segunda. A cláusula sai com o dia escrito:
+"Os pagamentos serão realizados sempre às **segundas-feiras**, em quinzenas
+alternadas — uma segunda-feira sim, outra não —, vencendo-se a primeira
+parcela na **2ª segunda-feira** posterior ao início dos serviços e as demais a
+cada 14 (quatorze) dias subsequentes." (o ordinal em numeral evita a gagueira
+de "na segunda segunda-feira").
+
+E a caixa **Antecipar quando cair em feriado**, ligada por padrão, acrescenta:
+"Recaindo o vencimento em feriado, o pagamento será antecipado para o dia útil
+imediatamente anterior."
+
 ### Forma de pagamento: a mesma para todo contrato de serviço
 
 O bloco **Modalidade de pagamento** — parcelado, por medição, entrada +

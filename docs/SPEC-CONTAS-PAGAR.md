@@ -218,10 +218,11 @@ semanais e quinzenais andam de 7 e 15 dias. Antes tudo andava em dias corridos
 e "mensal" virava 30 dias, o que fazia a data escorregar mês a mês (05/10,
 04/11, 04/12, 03/01…).
 
-**Semanal e quinzenal são pagamentos de sexta-feira.** É como o contrato do
+**Semanal e quinzenal são pagamentos de um dia da semana** — sexta, por
+padrão, e o contrato escolhe outro em `diaSemana` (o campo "Dia do pagamento"). É como o contrato do
 empreiteiro sempre foi pago: uma sexta sim, outra não — 14 dias, não 15.
-`primeiroVencimentoContrato()` leva a âncora para a **próxima sexta** (semanal)
-ou a **segunda sexta** (quinzenal), e daí o passo é de 7 ou 14 dias, o que
+`primeiroVencimentoContrato()` leva a âncora para a **próxima ocorrência** do
+dia escolhido (semanal) ou a **segunda** (quinzenal), e daí o passo é de 7 ou 14 dias, o que
 mantém o dia da semana para sempre. Quando a data do primeiro pagamento é
 informada, ela é respeitada como está e a cadência segue o dia da semana dela.
 

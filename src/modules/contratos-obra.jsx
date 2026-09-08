@@ -287,7 +287,28 @@ const MODALIDADES_PAGAMENTO = [
   { id: "entradaFinal", nome: "Entrada + saldo no final", resumo: "Entrada em percentual e o restante na conclusão — do contrato todo ou item a item.",
     campos: ["entradaPct", "entradaEscopo"] },
 ];
-const PERIODICIDADES = [["semanais", "Semanal"], ["quinzenais", "Quinzenal"], ["mensais", "Mensal"]];
+const PERIODICIDADES = [
+  ["semanais", "Semanal — toda semana, no mesmo dia"],
+  ["quinzenais", "Quinzenal — um dia sim, outro não (14 dias)"],
+  ["mensais", "Mensal — dia fixo do mês"],
+];
+// Dia da semana em que se paga no semanal e no quinzenal. A praxe do
+// empreiteiro é sexta-feira; outros prestadores usam outro dia.
+const DIAS_SEMANA_PGTO = [
+  [1, "Segunda-feira", "segundas-feiras", "na segunda-feira"],
+  [2, "Terça-feira", "terças-feiras", "na terça-feira"],
+  [3, "Quarta-feira", "quartas-feiras", "na quarta-feira"],
+  [4, "Quinta-feira", "quintas-feiras", "na quinta-feira"],
+  [5, "Sexta-feira", "sextas-feiras", "na sexta-feira"],
+];
+function diaSemanaPgto(c) {
+  const n = Math.floor(Number((c || {}).diaSemana));
+  return DIAS_SEMANA_PGTO.some(([v]) => v === n) ? n : 5;
+}
+function diaSemanaPlural(c) {
+  const d = DIAS_SEMANA_PGTO.find(([v]) => v === diaSemanaPgto(c));
+  return d ? d[2] : "sextas-feiras";
+}
 
 // ── Condição de pagamento ───────────────────────────────────────
 // Como o dinheiro sai. `frase` monta a cláusula; `curto` é o que aparece no
@@ -525,7 +546,9 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     // assinatura); preenchido, permite registrar contrato que já começou a
     // ser pago antes de entrar no sistema.
     primeiroVencimento: "",
-    // Sexta-feira que cai em feriado: paga-se no dia útil anterior.
+    // Dia da semana do pagamento semanal/quinzenal (5 = sexta, a praxe).
+    diaSemana: 5,
+    // Dia de pagamento que cai em feriado: paga-se no dia útil anterior.
     // "nenhum" desliga o ajuste.
     ajusteFeriado: "anteciparDiaUtil",
     // Previsão de conclusão: data estimada do saldo quando o pagamento é
@@ -604,7 +627,9 @@ function pctCtr(v) {
   return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
 }
 function periodicidadeAdj(p) { return p === "semanais" ? "semanais" : p === "mensais" ? "mensais" : "quinzenais"; }
-function vencimentoTexto(p, primeiro) {
+function vencimentoTexto(p, primeiro, c) {
+  const plural = diaSemanaPlural(c);           // "sextas-feiras"
+  const singular = plural.replace(/s-feiras$/, "-feira").replace(/^(segunda|terça|quarta|quinta|sexta)$/, "$1-feira");
   // Com a data da primeira parcela informada, o contrato escreve a data —
   // é o caso do contrato que já vinha sendo pago quando foi registrado.
   if (primeiro) {
@@ -613,9 +638,10 @@ function vencimentoTexto(p, primeiro) {
     if (p === "mensais") return `A primeira parcela vence em ${d} e as demais no mesmo dia dos meses subsequentes.`;
     return `A primeira parcela vence em ${d} e as demais a cada 14 (quatorze) dias subsequentes, no mesmo dia da semana.`;
   }
-  if (p === "semanais") return "Os pagamentos serão realizados semanalmente, sempre às sextas-feiras, vencendo-se a primeira parcela na primeira sexta-feira posterior ao início dos serviços e as demais a cada 7 (sete) dias subsequentes.";
+  // ordinal em numeral evita a gagueira de "na segunda segunda-feira"
+  if (p === "semanais") return `Os pagamentos serão realizados semanalmente, sempre às ${plural}, vencendo-se a primeira parcela na 1ª ${singular} posterior ao início dos serviços e as demais a cada 7 (sete) dias subsequentes.`;
   if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços e as demais a cada 30 (trinta) dias subsequentes.";
-  return "Os pagamentos serão realizados sempre às sextas-feiras, em quinzenas alternadas — uma sexta-feira sim, outra não —, no período da manhã, vencendo-se a primeira parcela na segunda sexta-feira contada do início dos serviços e as demais a cada 14 (quatorze) dias subsequentes.";
+  return `Os pagamentos serão realizados sempre às ${plural}, em quinzenas alternadas — uma ${singular} sim, outra não —, vencendo-se a primeira parcela na 2ª ${singular} posterior ao início dos serviços e as demais a cada 14 (quatorze) dias subsequentes.`;
 }
 // Frase da antecipação em feriado, para os pagamentos de sexta-feira.
 function feriadoTexto(c) {
@@ -853,7 +879,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
         ? `O valor total será dividido em ${numCtr(p.qtd)} parcelas ${per} e sucessivas, no valor de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)}) cada.`
         : `O valor total será dividido em ${numCtr(p.qtd)} parcelas ${per} e sucessivas, sendo ${numCtr(p.qtd - 1)} parcelas no valor de ${fmtMoedaCtr(p.base)} (${moedaExtensoCtr(p.base)}) cada e a última no valor de ${fmtMoedaCtr(p.ultima)} (${moedaExtensoCtr(p.ultima)}), ajustada em razão de arredondamento.`)
       : `O valor total será dividido em ______ parcelas ${per} e sucessivas.`);
-    pag.push(vencimentoTexto(c.periodicidade, c.primeiroVencimento));
+    pag.push(vencimentoTexto(c.periodicidade, c.primeiroVencimento, c));
     if (feriadoTexto(c)) pag.push(feriadoTexto(c));
   } else if (modo === "medicao") {
     const perMed = c.medicaoPeriodicidade === "semanal" ? "semanal" : c.medicaoPeriodicidade === "quinzenal" ? "quinzenal" : "mensal";
@@ -868,7 +894,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
         ? `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ${numCtr(e.parcelas.qtd)} parcelas ${per} e sucessivas, no valor de ${fmtMoedaCtr(e.parcelas.base)} (${moedaExtensoCtr(e.parcelas.base)}) cada.`
         : `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ${numCtr(e.parcelas.qtd)} parcelas ${per} e sucessivas, sendo ${numCtr(e.parcelas.qtd - 1)} no valor de ${fmtMoedaCtr(e.parcelas.base)} (${moedaExtensoCtr(e.parcelas.base)}) cada e a última no valor de ${fmtMoedaCtr(e.parcelas.ultima)} (${moedaExtensoCtr(e.parcelas.ultima)}), ajustada em razão de arredondamento.`)
       : `O saldo remanescente de ${fmtMoedaCtr(e.saldo)} (${moedaExtensoCtr(e.saldo)}) será dividido em ______ parcelas ${per} e sucessivas.`);
-    pag.push(vencimentoTexto(c.periodicidade, c.primeiroVencimento));
+    pag.push(vencimentoTexto(c.periodicidade, c.primeiroVencimento, c));
     if (feriadoTexto(c)) pag.push(feriadoTexto(c));
   } else {
     // entrada + saldo no final — do contrato todo ou item a item

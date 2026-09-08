@@ -2126,12 +2126,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   <select style={{ ...C.input, cursor: "pointer" }} value={g.periodicidade || "quinzenais"} onChange={e => setG("periodicidade", e.target.value)}>
                     {PERIODICIDADES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
-                  {(g.periodicidade || "quinzenais") !== "mensais" && (
-                    <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
-                      {(g.periodicidade || "quinzenais") === "quinzenais" ? "Sextas-feiras alternadas — uma sim, outra não (14 dias)." : "Toda sexta-feira."}
-                    </div>
-                  )}
                 </div>
+                {(g.periodicidade || "quinzenais") !== "mensais" && (
+                  <div>
+                    <label style={C.label}>Dia do pagamento</label>
+                    <select style={{ ...C.input, cursor: "pointer" }} value={diaSemanaPgto(g)} onChange={e => setG("diaSemana", Number(e.target.value))}>
+                      {DIAS_SEMANA_PGTO.map(([v, nome]) => <option key={v} value={v}>{nome}</option>)}
+                    </select>
+                    <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>
+                      {(g.periodicidade || "quinzenais") === "quinzenais"
+                        ? `${diaSemanaPlural(g).replace(/^./, c => c.toUpperCase())} alternadas — uma sim, outra não.`
+                        : `Toda ${diaSemanaPlural(g).replace(/s-feiras$/, "-feira")}.`}
+                    </div>
+                  </div>
+                )}
               </>
             )}
             <div>

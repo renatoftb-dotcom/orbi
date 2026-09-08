@@ -625,7 +625,14 @@ teste("empreiteiro: sextas alternadas, e feriado antecipa para a quinta", () => 
   // Natal de 2026 cai na sexta; e 01/01/2027 também → 31/12
   const natal = modulo.parcelasAPagar({ ...c, parcelas: 3, dataInicio: "2026-11-25" });
   assert.deepStrictEqual(natal.map(x => x.vencimento), ["2026-12-04", "2026-12-18", "2026-12-31"]);
-  // mensal não é afetado pela regra de sexta-feira
+  // outro dia da semana: quem paga na segunda escolhe segunda
+  const naSegunda = modulo.parcelasAPagar({ ...c, diaSemana: 1, parcelas: 4, dataInicio: "2026-03-06" });
+  assert.deepStrictEqual(naSegunda.map(x => x.vencimento), ["2026-03-16", "2026-03-30", "2026-04-13", "2026-04-27"]);
+  assert.strictEqual(new Date(naSegunda[0].vencimento + "T12:00:00").getDay(), 1, "segunda-feira");
+  // e o feriado antecipa igual: 20/11/2026 é sexta (Consciência Negra)
+  const naSexta = modulo.parcelasAPagar({ ...c, parcelas: 2, dataInicio: "2026-10-23" });
+  assert.deepStrictEqual(naSexta.map(x => x.vencimento), ["2026-11-06", "2026-11-19"]);
+  // mensal não é afetado pela regra de dia da semana
   const mensal = modulo.parcelasAPagar({ ...c, periodicidade: "mensais", parcelas: 3, diaVencimento: 25, dataInicio: "2026-11-01" });
   assert.deepStrictEqual(mensal.map(x => x.vencimento), ["2026-11-25", "2026-12-25", "2027-01-25"]);
 });

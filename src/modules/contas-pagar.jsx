@@ -94,12 +94,14 @@ function anteciparParaDiaUtil(iso) {
   for (let i = 0; i < 10 && (ehFeriado(d) || ehFimDeSemana(d)); i++) d = somarDias(d, -1);
   return d;
 }
-// A n-ésima sexta-feira depois da data (1 = a próxima sexta).
-function sextaSeguinte(iso, quantas) {
+// A n-ésima ocorrência do dia da semana escolhido depois da data
+// (1 = a próxima). Padrão: sexta-feira, a praxe do empreiteiro.
+function diaDaSemanaSeguinte(iso, quantas, alvo) {
   const s = diaDaSemana(iso);
   if (s < 0) return "";
-  let dias = (5 - s + 7) % 7;
-  if (dias === 0) dias = 7; // caindo numa sexta, a "próxima" é a de sete dias
+  const dia = typeof diaSemanaPgto === "function" ? diaSemanaPgto({ diaSemana: alvo }) : (alvo || 5);
+  let dias = (dia - s + 7) % 7;
+  if (dias === 0) dias = 7; // caindo no próprio dia, a "próxima" é a de sete dias
   return somarDias(iso, dias + 7 * (Math.max(1, quantas || 1) - 1));
 }
 // O contrato pode desligar a antecipação (campo `ajusteFeriado`).
@@ -139,9 +141,9 @@ function primeiroVencimentoContrato(c) {
     }
     return somarMeses(ancora, 1);
   }
-  // sexta-feira: a próxima no semanal, a segunda no quinzenal — como diz a
-  // cláusula de pagamento
-  return sextaSeguinte(ancora, per === "quinzenais" ? 2 : 1);
+  // dia da semana escolhido (sexta, por praxe): o próximo no semanal, o
+  // segundo no quinzenal — como diz a cláusula de pagamento
+  return diaDaSemanaSeguinte(ancora, per === "quinzenais" ? 2 : 1, o.diaSemana);
 }
 // O dia do mês que as parcelas mensais devem manter: o da data informada
 // como primeiro vencimento, ou o dia escolhido no contrato ("todo dia 05").

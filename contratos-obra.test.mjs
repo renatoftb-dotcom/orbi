@@ -318,6 +318,15 @@ teste("modalidade parcelada aceita semanal, quinzenal e mensal", () => {
   assert.ok(t("quinzenais").includes("12 (doze) parcelas quinzenais"));
   // quinzenal é sexta sim, sexta não: 14 dias
   assert.ok(t("quinzenais").includes("uma sexta-feira sim, outra não"));
+  assert.ok(t("quinzenais").includes("sempre às sextas-feiras"));
+  // o dia da semana é escolhível e sai escrito no contrato
+  const naSegunda = texto(modulo.montarContrato({ ...base, periodicidade: "quinzenais", diaSemana: 1 }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(naSegunda.includes("sempre às segundas-feiras"));
+  assert.ok(naSegunda.includes("uma segunda-feira sim, outra não"));
+  assert.ok(naSegunda.includes("na 2ª segunda-feira posterior ao início dos serviços"));
+  const semanalQuarta = texto(modulo.montarContrato({ ...base, periodicidade: "semanais", diaSemana: 3 }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(semanalQuarta.includes("sempre às quartas-feiras"));
+  assert.ok(semanalQuarta.includes("na 1ª quarta-feira posterior ao início"));
   assert.ok(t("quinzenais").includes("a cada 14 (quatorze) dias"));
   // a antecipação em feriado sai escrita, e some quando desligada
   assert.ok(t("quinzenais").includes("Recaindo o vencimento em feriado, o pagamento será antecipado para o dia útil imediatamente anterior."));
