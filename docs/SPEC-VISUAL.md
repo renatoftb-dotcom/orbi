@@ -48,6 +48,23 @@ contornos de botão, links de ação e realces de hover viraram azul ou preto.
 A única cor fora do azul é o vermelho de ações destrutivas (`#dc2626`), mais
 os fundos de alerta.
 
+## Listas: um cartão só, em todo lugar
+
+A lista de clientes é o modelo: cartão branco, borda de 1px
+`rgba(38,36,33,0.14)`, raio 16, `padding: 14px 16px`, `display: flex` com
+`gap: 14`, quadrado de iniciais 40×40 (raio 14), nome em 14/600, uma linha de
+apoio em 12 `#4b5563`, e à direita o status em negrito mais os botões de ação
+com borda fina. O hover troca a borda por `#0474f4` e acende o anel
+`0 0 0 3px rgba(4,116,244,0.12)`.
+
+A **lista de obras** (Clientes → cliente → Obras) usa exatamente esse cartão:
+iniciais da obra num quadrado neutro (`#f3f4f6`, sem cor), nome, linha de
+apoio com cidade · responsável · nº de contratos, e à direita o status
+("Planejamento", "Em execução", "Concluída") com o botão Editar. O cabeçalho
+e o botão são os do painel de Projetos, ao lado: título, contagem e um
+`C.btn` escuro — **+ Nova obra** para **+ Novo projeto**. O botão redondo de
+"+" que existia ali saiu.
+
 ## O que não foi tocado
 
 `orcamento-teste.jsx`, `modelo-padrao.jsx`, `template-edicao.jsx`,
