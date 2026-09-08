@@ -15768,6 +15768,68 @@ function detalheConta(conta) {
   return c.parcela && c.totalParcelas && /^Parcela \d+\/\d+$/.test(d) ? "" : d;
 }
 
+// ── Extrato mensal da obra (P&L realizado) ──────────────────────
+// O que foi pago entra no mês da DATA DE CONTABILIZAÇÃO (`pagoEm`), que é
+// escolhida na hora de dar baixa — não no mês do vencimento nem no dia em
+// que se mexeu no sistema (esse fica em `contabilizadoEm`, para auditoria).
+// As entradas da obra (aportes) moram em obra.entradas e usam as contas do
+// grupo "receitas".
+function mesDe(iso) {
+  return String(iso || "").slice(0, 7);
+}
+function extratoMensal(contas, entradas, mes) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const porConta = {};
+  for (const c of contas || []) {
+    if (!c || !c.pago || mesDe(c.pagoEm) !== mes) continue;
+    const id = c.contaId || "mo_diversos";
+    porConta[id] = red((porConta[id] || 0) + (Number(c.valorPago) || Number(c.valor) || 0));
+  }
+  for (const e of entradas || []) {
+    if (!e || mesDe(e.data) !== mes) continue;
+    const id = e.contaId || "deposito_proprio";
+    porConta[id] = red((porConta[id] || 0) + (Number(e.valor) || 0));
+  }
+  const grupos = (typeof GRUPOS_PL === "undefined" ? [] : GRUPOS_PL).map((g) => {
+    const linhas = contasDoGrupo(g.id)
+      .filter((c) => Math.abs(porConta[c.id] || 0) > 0.004)
+      .map((c) => ({ conta: c, valor: porConta[c.id] }));
+    return { grupo: g, linhas, total: red(linhas.reduce((a, l) => a + l.valor, 0)) };
+  }).filter((x) => x.linhas.length > 0);
+  const soma = (id) => (grupos.find((x) => x.grupo.id === id) || { total: 0 }).total;
+  const entradasTotal = soma("receitas");
+  const custos = red(soma("materiais") + soma("maoDeObra") + soma("servicos"));
+  return { mes, grupos, entradas: entradasTotal, custos, saldo: red(entradasTotal - custos) };
+}
+// Meses com movimento (pagamento contabilizado ou entrada), do mais antigo
+// para o mais novo. O mês corrente entra sempre, para a tela nunca abrir vazia.
+function mesesDoExtrato(contas, entradas, hoje) {
+  const set = new Set();
+  for (const c of contas || []) if (c && c.pago && mesDe(c.pagoEm)) set.add(mesDe(c.pagoEm));
+  for (const e of entradas || []) if (e && mesDe(e.data)) set.add(mesDe(e.data));
+  if (hoje) set.add(mesDe(hoje));
+  return [...set].sort();
+}
+// Acumulado do início da obra até o fim do mês — o "saldo final" da planilha
+// só faz sentido com o histórico junto.
+function acumuladoAte(contas, entradas, mes) {
+  const red = (x) => Math.round(x * 100) / 100;
+  let ent = 0, cus = 0;
+  for (const c of contas || []) {
+    if (!c || !c.pago || !mesDe(c.pagoEm) || mesDe(c.pagoEm) > mes) continue;
+    cus += Number(c.valorPago) || Number(c.valor) || 0;
+  }
+  for (const e of entradas || []) {
+    if (!e || !mesDe(e.data) || mesDe(e.data) > mes) continue;
+    ent += Number(e.valor) || 0;
+  }
+  return { entradas: red(ent), custos: red(cus), saldo: red(ent - cus) };
+}
+function entradaObraVazia(obraId) {
+  return { id: (typeof uid === "function" ? uid() : String(Date.now())),
+    obraId, contaId: "deposito_proprio", descricao: "", valor: "", data: "" };
+}
+
 // ── Visões ──────────────────────────────────────────────────────
 const VISOES_CONTAS = [
   { id: "mes", nome: "Mês" },
@@ -17073,6 +17135,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Cadastro do escritório editado de dentro do gerador de contratos: sem ele
   // o contrato do escritório sai sem CNPJ, endereço e responsável técnico.
   const [formEscritorio, setFormEscritorio] = useState(null);
+  // Baixa de conta: telinha com a data de contabilização e o valor pago.
+  const [formPagamento, setFormPagamento] = useState(null);
+  // Extrato mensal (P&L realizado): mês escolhido e formulário de entrada.
+  const [mesExtrato, setMesExtrato] = useState("");
+  const [formEntrada, setFormEntrada] = useState(null);
 
   const obras = (data.obras || []).filter(o => o.clienteId === cliente.id);
   const prestadores = data.fornecedores || [];
@@ -17151,11 +17218,42 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   };
   // Pagar registra o realizado na própria conta — é ela que alimenta o
   // realizado por conta do plano de contas e por prestador.
+  // Desfazer é imediato; pagar abre a telinha da data de contabilização.
   const alternarPagamento = (conta) => {
-    const atualizada = conta.pago
-      ? { ...conta, pago: false, pagoEm: "", valorPago: "" }
-      : { ...conta, pago: true, pagoEm: hojeIso, valorPago: Number(conta.valor) || 0 };
-    gravarContas(contasDaObra.map(c => c.id === conta.id ? atualizada : c), conta.obraId);
+    if (conta.pago) {
+      const atualizada = { ...conta, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" };
+      gravarContas(contasDaObra.map(c => c.id === conta.id ? atualizada : c), conta.obraId);
+      return;
+    }
+    setFormPagamento({ conta, dataContab: conta.vencimento && conta.vencimento <= hojeIso ? conta.vencimento : hojeIso,
+      valorPago: String(Number(conta.valor) || 0) });
+  };
+  // Confirma a baixa: a despesa entra no mês da data de contabilização
+  // escolhida (`pagoEm`); `contabilizadoEm` guarda o dia em que se registrou.
+  const confirmarPagamento = () => {
+    const f = formPagamento; if (!f) return;
+    const valor = parseFloat(String(f.valorPago).replace(/\./g, "").replace(",", ".")) || Number(f.conta.valor) || 0;
+    if (!f.dataContab) { dialogo.alertar({ titulo: "Informe a data de contabilização", tipo: "aviso" }); return; }
+    const atualizada = { ...f.conta, pago: true, pagoEm: f.dataContab, valorPago: valor, contabilizadoEm: hojeIso };
+    gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
+    setFormPagamento(null);
+  };
+  // ── Entradas da obra (aportes) — o outro lado do extrato ──────
+  const entradasDaObra = (obraAtual && obraAtual.entradas) || [];
+  const gravarEntradas = (novas, obraId) => {
+    const alvo = obraId || (obraAtual && obraAtual.id);
+    if (!alvo) return;
+    gravarObras(obras.map(o => o.id === alvo ? { ...o, entradas: novas } : o));
+  };
+  const salvarEntrada = () => {
+    const f = formEntrada; if (!f) return;
+    const valor = parseFloat(String(f.valor).replace(/\./g, "").replace(",", ".")) || 0;
+    if (!(valor > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
+    if (!f.data) { dialogo.alertar({ titulo: "Informe a data da entrada", tipo: "aviso" }); return; }
+    const nova = { ...f, valor };
+    const existe = entradasDaObra.some(e => e.id === nova.id);
+    gravarEntradas(existe ? entradasDaObra.map(e => e.id === nova.id ? nova : e) : [...entradasDaObra, nova]);
+    setFormEntrada(null);
   };
 
   const gravarContratos = (fatia) => save({
@@ -17469,7 +17567,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {/* Toggle de visão */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["conta", "Por conta"], ["prestador", "Por prestador"]].map(([v, l]) => (
+          {[["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -17477,7 +17575,100 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           ))}
         </div>
 
-        {itensPL.length === 0 ? (
+        {visaoPL === "extrato" ? (() => {
+          const meses = mesesDoExtrato(contasDaObra, entradasDaObra, hojeIso);
+          const mes = meses.includes(mesExtrato) ? mesExtrato : meses[meses.length - 1];
+          const ex = extratoMensal(contasDaObra, entradasDaObra, mes);
+          const ac = acumuladoAte(contasDaObra, entradasDaObra, mes);
+          const rotulo = (chave) => {
+            const [a, m] = String(chave).split("-");
+            return `${["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][Number(m) - 1]}-${a.slice(2)}`;
+          };
+          return (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+                <select style={{ ...C.input, cursor: "pointer", width: 180 }} value={mes} onChange={e => setMesExtrato(e.target.value)}>
+                  {meses.map(m => <option key={m} value={m}>{rotuloMes(m)}</option>)}
+                </select>
+                {perm.podeEditar && (
+                  <button type="button" style={C.btnSec}
+                    onClick={() => setFormEntrada({ ...entradaObraVazia(obraAtual.id), data: `${mes}-01` })}>＋ Registrar entrada</button>
+                )}
+              </div>
+
+              {formEntrada && (
+                <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14, background: "#fafafa" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#111827", marginBottom: 10 }}>{entradasDaObra.some(e => e.id === formEntrada.id) ? "Editar entrada" : "Nova entrada"}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={C.label}>Conta</label>
+                      <select style={{ ...C.input, cursor: "pointer" }} value={formEntrada.contaId} onChange={e => setFormEntrada({ ...formEntrada, contaId: e.target.value })}>
+                        {contasDoGrupo("receitas").map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                      </select>
+                    </div>
+                    <div><label style={C.label}>Descrição</label><input style={C.input} value={formEntrada.descricao} onChange={e => setFormEntrada({ ...formEntrada, descricao: e.target.value })} placeholder="opcional" /></div>
+                    <div><label style={C.label}>Valor (R$)</label><CampoCtrNum tipo="moeda" valor={formEntrada.valor} onChange={v => setFormEntrada({ ...formEntrada, valor: v })} style={C.input} placeholder="0,00" /></div>
+                    <div><label style={C.label}>Data</label><input style={C.input} type="date" value={formEntrada.data} onChange={e => setFormEntrada({ ...formEntrada, data: e.target.value })} /></div>
+                  </div>
+                  <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 12 }}>
+                    <button type="button" style={C.btnSec} onClick={() => setFormEntrada(null)}>Cancelar</button>
+                    <button type="button" style={C.btn} onClick={salvarEntrada}>Salvar entrada</button>
+                  </div>
+                </div>
+              )}
+
+              <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ background: "#111827", color: "#fff", padding: "9px 12px", fontSize: 12.5, fontWeight: 700, textAlign: "center", letterSpacing: 0.3 }}>
+                  EXTRATO OBRA — {rotulo(mes)}
+                </div>
+                {ex.grupos.length === 0 ? (
+                  <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5 }}>
+                    Nada contabilizado neste mês. As contas pagas entram aqui pelo mês da data de contabilização.
+                  </div>
+                ) : ex.grupos.map(({ grupo, linhas, total }) => (
+                  <div key={grupo.id}>
+                    <div style={{ display: "flex", justifyContent: "space-between", background: "#f3f4f6", padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{grupo.titulo}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{fmtBRL(total)}</span>
+                    </div>
+                    {linhas.map(l => (
+                      <div key={l.conta.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                        <span style={{ fontSize: 12.5, color: "#4b5563" }}>{l.conta.nome}</span>
+                        <span style={{ fontSize: 12.5, color: "#111827" }}>{fmtBRL(l.valor)}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>SALDO DO MÊS</span>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{fmtBRL(ex.saldo)}</span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                  <span style={{ fontSize: 11.5, color: "#4b5563" }}>SALDO FINAL — acumulado até {rotulo(mes)} (entradas {fmtBRL(ac.entradas)} − custos {fmtBRL(ac.custos)})</span>
+                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{fmtBRL(ac.saldo)}</span>
+                </div>
+              </div>
+
+              {entradasDaObra.filter(e => mesDe(e.data) === mes).length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 6 }}>Entradas de {rotuloMes(mes).toLowerCase()}</div>
+                  {entradasDaObra.filter(e => mesDe(e.data) === mes).map(e => (
+                    <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", borderRadius: 8 }}>
+                      <span style={{ fontSize: 12, color: "#4b5563" }}>
+                        {new Date(e.data + "T12:00:00").toLocaleDateString("pt-BR")} · {(contaPorId(e.contaId) || {}).nome || "Entrada"}{e.descricao ? ` · ${e.descricao}` : ""}
+                      </span>
+                      <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span style={{ fontSize: 12, color: "#111827" }}>{fmtBRL(Number(e.valor) || 0)}</span>
+                        {perm.podeEditar && <button onClick={() => setFormEntrada({ ...e, valor: String(e.valor) })} style={{ ...C.btnGhost, fontSize: 11 }}>Editar</button>}
+                        {perm.podeEditar && <button onClick={() => gravarEntradas(entradasDaObra.filter(x => x.id !== e.id))} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 11 }}>Remover</button>}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })() : itensPL.length === 0 ? (
           <div style={{ padding: "24px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
             Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
           </div>
@@ -18132,6 +18323,38 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => { setFormConta(null); setView("detalheObra"); }} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
+
+        {/* Baixa da conta: a data de contabilização é o que define em que mês
+            a despesa entra no extrato da obra. */}
+        {formPagamento && (
+          <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}
+            onClick={() => setFormPagamento(null)}>
+            <div data-vk-ui="1" onClick={e => e.stopPropagation()}
+              style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Registrar pagamento</div>
+              <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>{tituloConta(formPagamento.conta)}</div>
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
+                <div>
+                  <label style={C.label}>Data de contabilização</label>
+                  <input style={C.input} type="date" value={formPagamento.dataContab}
+                    onChange={e => setFormPagamento({ ...formPagamento, dataContab: e.target.value })} />
+                </div>
+                <div>
+                  <label style={C.label}>Valor pago (R$)</label>
+                  <CampoCtrNum tipo="moeda" valor={formPagamento.valorPago} onChange={v => setFormPagamento({ ...formPagamento, valorPago: v })} style={C.input} placeholder="0,00" />
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
+                A despesa entra no extrato da obra no mês desta data. O dia de hoje ({new Date(hojeIso + "T12:00:00").toLocaleDateString("pt-BR")}) fica registrado como a data em que foi contabilizada.
+              </div>
+              <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
+                <button type="button" style={C.btnSec} onClick={() => setFormPagamento(null)}>Cancelar</button>
+                <button type="button" style={C.btn} onClick={confirmarPagamento}>Registrar pagamento</button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Contas a pagar</div>
           <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.nome}</div>
@@ -18264,7 +18487,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                               <div style={{ minWidth: 0 }}>
                                 <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{tituloConta(c)}{c.estimada ? <span style={{ fontWeight: 400, color: "#6b7280" }}> · estimada</span> : null}</div>
                                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>
-                                  {[detalhe, nomeConta(c.contaId), c.observacao].filter(Boolean).join(" · ")}
+                                  {[detalhe, nomeConta(c.contaId), c.observacao,
+                                    c.pago && c.pagoEm ? `contabilizado em ${new Date(c.pagoEm + "T12:00:00").toLocaleDateString("pt-BR")}` : ""].filter(Boolean).join(" · ")}
                                 </div>
                               </div>
                               <div style={{ fontSize: 12.5, color: "#111827" }}>

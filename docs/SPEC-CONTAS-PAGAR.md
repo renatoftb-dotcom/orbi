@@ -220,6 +220,38 @@ a correção — uma vez só (a comparação é por id/valor/vencimento/descriç
 não pela ordem, senão a tela gravaria em laço). Parcelas pagas ficam como
 estão, e contas avulsas não são tocadas.
 
+## Dar baixa: a data de contabilização
+
+"Pagar" abre uma telinha antes de gravar, com dois campos:
+
+- **Data de contabilização** — é ela que decide em que mês a despesa entra no
+  extrato da obra. Vem sugerida com o vencimento, quando já passou, ou com
+  hoje. Fica gravada em `pagoEm`.
+- **Valor pago** — vem com o valor da parcela e pode ser ajustado
+  (`valorPago`); é o valor que o extrato usa.
+
+Junto vai `contabilizadoEm`, com o dia em que se registrou — o histórico de
+quando a baixa foi feita, que não se confunde com a competência escolhida. A
+linha da conta paga mostra "contabilizado em DD/MM/AAAA". "Desfazer" continua
+imediato e limpa os três campos.
+
+## Extrato mensal da obra (P&L realizado)
+
+Terceira visão do Planejamento, no formato da planilha que o escritório já
+usava: barra com **EXTRATO OBRA — mês**, os grupos de `GRUPOS_PL` com seus
+totais (ENTRADAS TOTAIS, MATERIAL & INSUMOS, MÃO DE OBRA & PRESTADORES,
+SERVIÇOS & TAXAS), uma linha por conta do plano de contas com movimento,
+**SALDO DO MÊS** e **SALDO FINAL** (acumulado do início da obra até aquele
+mês).
+
+- `extratoMensal(contas, entradas, mes)` monta o mês: despesas pelo mês de
+  `pagoEm` — nunca pelo vencimento — e entradas pelo mês de `data`.
+- `mesesDoExtrato(...)` lista os meses com movimento, mais o corrente, para o
+  seletor nunca abrir vazio.
+- `acumuladoAte(...)` é o saldo final: entradas menos custos até o fim do mês.
+- As **entradas da obra** (aportes) moram em `obra.entradas` e usam as contas
+  do grupo `receitas` — "＋ Registrar entrada" cria, edita e remove ali mesmo.
+
 ## Datas estimadas
 
 Nem toda data é vencimento pactuado. Quando o pagamento depende de um evento

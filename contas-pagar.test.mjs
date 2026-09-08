@@ -26,6 +26,7 @@ const modulo = new Function(`
            tituloConta, detalheConta, agruparContas, filtrarContas, rotuloMes,
            VISOES_CONTAS, FILTROS_CONTAS, FILTRO_CONTAS_PADRAO, seriesDoFiltro,
            sincronizarContasDaObra, contasDesatualizadas, somarDias, contasDoContrato,
+           extratoMensal, mesesDoExtrato, acumuladoAte, entradaObraVazia, mesDe,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal };
 `)();
 
@@ -396,6 +397,40 @@ teste("dia de vencimento ancora as mensais (o 'todo dia 05' do gerenciamento)", 
   // dia 30 idem, sem escorregar para março
   const trinta = modulo.parcelasAPagar({ ...c, diaVencimento: 30, dataInicio: "2026-12-01" }).map(x => x.vencimento);
   assert.deepStrictEqual(trinta.slice(0, 4), ["2026-12-30", "2027-01-30", "2027-02-28", "2027-03-30"]);
+});
+
+teste("extrato mensal: o mês vem da data de contabilização, não do vencimento", () => {
+  const contas = [
+    // vence em setembro, contabilizada em outubro: entra em outubro
+    { id: "a", origem: "contrato", contaId: "empreiteiro", valor: 10000, vencimento: "2026-09-10",
+      pago: true, pagoEm: "2026-10-02", valorPago: 10000, contabilizadoEm: "2026-10-15" },
+    { id: "b", origem: "avulsa", contaId: "material", valor: 2500, vencimento: "2026-10-05",
+      pago: true, pagoEm: "2026-10-05", valorPago: 2400 },
+    { id: "c", origem: "avulsa", contaId: "frete", valor: 300, vencimento: "2026-10-20" }, // não paga
+    { id: "d", origem: "avulsa", contaId: "taxa_admin_obra", valor: 1200, vencimento: "2026-09-30",
+      pago: true, pagoEm: "2026-09-30", valorPago: 1200 },
+  ];
+  const entradas = [{ id: "e1", contaId: "deposito_proprio", valor: 20000, data: "2026-10-01" }];
+  const out = modulo.extratoMensal(contas, entradas, "2026-10");
+  assert.deepStrictEqual(out.grupos.map(g => g.grupo.id), ["receitas", "materiais", "maoDeObra"]);
+  assert.strictEqual(out.entradas, 20000);
+  // 10.000 de empreiteiro + 2.400 de material (o valor PAGO, não o previsto)
+  assert.strictEqual(out.custos, 12400);
+  assert.strictEqual(out.saldo, 7600);
+  const materiais = out.grupos.find(g => g.grupo.id === "materiais");
+  assert.deepStrictEqual(materiais.linhas.map(l => [l.conta.id, l.valor]), [["material", 2400]]);
+  // setembro tem só a taxa de administração
+  const set = modulo.extratoMensal(contas, entradas, "2026-09");
+  assert.strictEqual(set.custos, 1200);
+  assert.strictEqual(set.saldo, -1200);
+  // meses com movimento, mais o mês corrente
+  assert.deepStrictEqual(modulo.mesesDoExtrato(contas, entradas, "2026-11-08"), ["2026-09", "2026-10", "2026-11"]);
+  // acumulado até outubro: 20.000 de entradas contra 13.600 de custos
+  assert.deepStrictEqual(modulo.acumuladoAte(contas, entradas, "2026-10"), { entradas: 20000, custos: 13600, saldo: 6400 });
+  assert.strictEqual(modulo.acumuladoAte(contas, entradas, "2026-09").saldo, -1200);
+  // conta nova de entrada nasce como depósito de recurso próprio
+  assert.strictEqual(modulo.entradaObraVazia("o1").contaId, "deposito_proprio");
+  assert.strictEqual(modulo.mesDe("2026-10-02"), "2026-10");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

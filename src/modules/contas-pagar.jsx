@@ -386,6 +386,68 @@ function detalheConta(conta) {
   return c.parcela && c.totalParcelas && /^Parcela \d+\/\d+$/.test(d) ? "" : d;
 }
 
+// ── Extrato mensal da obra (P&L realizado) ──────────────────────
+// O que foi pago entra no mês da DATA DE CONTABILIZAÇÃO (`pagoEm`), que é
+// escolhida na hora de dar baixa — não no mês do vencimento nem no dia em
+// que se mexeu no sistema (esse fica em `contabilizadoEm`, para auditoria).
+// As entradas da obra (aportes) moram em obra.entradas e usam as contas do
+// grupo "receitas".
+function mesDe(iso) {
+  return String(iso || "").slice(0, 7);
+}
+function extratoMensal(contas, entradas, mes) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const porConta = {};
+  for (const c of contas || []) {
+    if (!c || !c.pago || mesDe(c.pagoEm) !== mes) continue;
+    const id = c.contaId || "mo_diversos";
+    porConta[id] = red((porConta[id] || 0) + (Number(c.valorPago) || Number(c.valor) || 0));
+  }
+  for (const e of entradas || []) {
+    if (!e || mesDe(e.data) !== mes) continue;
+    const id = e.contaId || "deposito_proprio";
+    porConta[id] = red((porConta[id] || 0) + (Number(e.valor) || 0));
+  }
+  const grupos = (typeof GRUPOS_PL === "undefined" ? [] : GRUPOS_PL).map((g) => {
+    const linhas = contasDoGrupo(g.id)
+      .filter((c) => Math.abs(porConta[c.id] || 0) > 0.004)
+      .map((c) => ({ conta: c, valor: porConta[c.id] }));
+    return { grupo: g, linhas, total: red(linhas.reduce((a, l) => a + l.valor, 0)) };
+  }).filter((x) => x.linhas.length > 0);
+  const soma = (id) => (grupos.find((x) => x.grupo.id === id) || { total: 0 }).total;
+  const entradasTotal = soma("receitas");
+  const custos = red(soma("materiais") + soma("maoDeObra") + soma("servicos"));
+  return { mes, grupos, entradas: entradasTotal, custos, saldo: red(entradasTotal - custos) };
+}
+// Meses com movimento (pagamento contabilizado ou entrada), do mais antigo
+// para o mais novo. O mês corrente entra sempre, para a tela nunca abrir vazia.
+function mesesDoExtrato(contas, entradas, hoje) {
+  const set = new Set();
+  for (const c of contas || []) if (c && c.pago && mesDe(c.pagoEm)) set.add(mesDe(c.pagoEm));
+  for (const e of entradas || []) if (e && mesDe(e.data)) set.add(mesDe(e.data));
+  if (hoje) set.add(mesDe(hoje));
+  return [...set].sort();
+}
+// Acumulado do início da obra até o fim do mês — o "saldo final" da planilha
+// só faz sentido com o histórico junto.
+function acumuladoAte(contas, entradas, mes) {
+  const red = (x) => Math.round(x * 100) / 100;
+  let ent = 0, cus = 0;
+  for (const c of contas || []) {
+    if (!c || !c.pago || !mesDe(c.pagoEm) || mesDe(c.pagoEm) > mes) continue;
+    cus += Number(c.valorPago) || Number(c.valor) || 0;
+  }
+  for (const e of entradas || []) {
+    if (!e || !mesDe(e.data) || mesDe(e.data) > mes) continue;
+    ent += Number(e.valor) || 0;
+  }
+  return { entradas: red(ent), custos: red(cus), saldo: red(ent - cus) };
+}
+function entradaObraVazia(obraId) {
+  return { id: (typeof uid === "function" ? uid() : String(Date.now())),
+    obraId, contaId: "deposito_proprio", descricao: "", valor: "", data: "" };
+}
+
 // ── Visões ──────────────────────────────────────────────────────
 const VISOES_CONTAS = [
   { id: "mes", nome: "Mês" },
