@@ -449,6 +449,70 @@ function extratoMensal(contas, entradas, mes) {
   const custos = red(soma("materiais") + soma("maoDeObra") + soma("servicos"));
   return { mes, grupos, entradas: entradasTotal, custos, saldo: red(entradasTotal - custos) };
 }
+// Extrato em matriz: uma coluna por mês pedido, mais o total da obra e a
+// estimativa (quando houver). É o formato da planilha do escritório.
+// `estimativa` é um mapa { contaId: valor } — o P&L estimado da obra.
+function extratoMatriz(contas, entradas, meses, estimativa) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const ms = meses || [];
+  const est = estimativa || {};
+  const porConta = {};
+  const soma = (id, mes, v) => {
+    if (!porConta[id]) porConta[id] = { total: 0, meses: {} };
+    porConta[id].total = red(porConta[id].total + v);
+    porConta[id].meses[mes] = red((porConta[id].meses[mes] || 0) + v);
+  };
+  for (const c of contas || []) {
+    if (!c || !c.pago || !mesDe(c.pagoEm)) continue;
+    soma(c.contaId || "mo_diversos", mesDe(c.pagoEm), Number(c.valorPago) || Number(c.valor) || 0);
+  }
+  for (const e of entradas || []) {
+    if (!e || !mesDe(e.data)) continue;
+    soma(e.contaId || "deposito_proprio", mesDe(e.data), Number(e.valor) || 0);
+  }
+  const grupos = (typeof GRUPOS_PL === "undefined" ? [] : GRUPOS_PL).map((g) => {
+    const linhas = contasDoGrupo(g.id)
+      .filter((c) => porConta[c.id] || Number(est[c.id]) > 0)
+      .map((c) => ({
+        conta: c,
+        valores: ms.map((m) => (porConta[c.id] && porConta[c.id].meses[m]) || 0),
+        total: (porConta[c.id] && porConta[c.id].total) || 0,
+        estimado: Number(est[c.id]) || 0,
+      }));
+    return {
+      grupo: g, linhas,
+      valores: ms.map((_, i) => red(linhas.reduce((a, l) => a + l.valores[i], 0))),
+      total: red(linhas.reduce((a, l) => a + l.total, 0)),
+      estimado: red(linhas.reduce((a, l) => a + l.estimado, 0)),
+    };
+  }).filter((x) => x.linhas.length > 0);
+  const doGrupo = (id) => grupos.find((x) => x.grupo.id === id) || { valores: ms.map(() => 0), total: 0, estimado: 0 };
+  const custoDe = (pegar) => red(pegar(doGrupo("materiais")) + pegar(doGrupo("maoDeObra")) + pegar(doGrupo("servicos")));
+  const rec = doGrupo("receitas");
+  return {
+    meses: ms, grupos,
+    entradas: { valores: rec.valores, total: rec.total },
+    custos: {
+      valores: ms.map((_, i) => custoDe((g) => g.valores[i])),
+      total: custoDe((g) => g.total),
+      estimado: custoDe((g) => g.estimado),
+    },
+    saldo: {
+      valores: ms.map((_, i) => red(rec.valores[i] - custoDe((g) => g.valores[i]))),
+      total: red(rec.total - custoDe((g) => g.total)),
+    },
+  };
+}
+// Estimativa por conta do plano, a partir dos itens do Planejamento.
+function estimativaPorConta(itens) {
+  const r = {};
+  for (const i of itens || []) {
+    if (!i) continue;
+    const k = i.contaId || "mo_diversos";
+    r[k] = Math.round(((r[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
+  }
+  return r;
+}
 // Meses com movimento (pagamento contabilizado ou entrada), do mais antigo
 // para o mais novo. O mês corrente entra sempre, para a tela nunca abrir vazia.
 function mesesDoExtrato(contas, entradas, hoje) {

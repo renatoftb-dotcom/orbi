@@ -27,6 +27,7 @@ const modulo = new Function(`
            VISOES_CONTAS, FILTROS_CONTAS, FILTRO_CONTAS_PADRAO, seriesDoFiltro,
            sincronizarContasDaObra, contasDesatualizadas, somarDias, contasDoContrato,
            extratoMensal, mesesDoExtrato, acumuladoAte, entradaObraVazia, mesDe,
+           extratoMatriz, estimativaPorConta,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -549,6 +550,50 @@ teste("mudou a conta do plano, o que já foi pago é reclassificado junto", () =
   assert.deepStrictEqual(ex.grupos.map(g => g.grupo.id), ["servicos"]);
   assert.strictEqual(ex.grupos[0].linhas[0].conta.nome, "Gerenciamento de obra");
   assert.strictEqual(ex.custos, 2000);
+});
+
+teste("extrato em matriz: mês a mês, total da obra e estimativa ao lado", () => {
+  const contas = [
+    { id: "a", contaId: "empreiteiro", valor: 10000, pago: true, pagoEm: "2026-01-20", valorPago: 7150 },
+    { id: "b", contaId: "empreiteiro", valor: 6000, pago: true, pagoEm: "2026-02-10", valorPago: 5795 },
+    { id: "c", contaId: "material", valor: 500, pago: true, pagoEm: "2026-01-15", valorPago: 480 },
+    { id: "d", contaId: "material", valor: 300, pago: true, pagoEm: "2026-02-02", valorPago: 274.9 },
+    { id: "e", contaId: "taxa_admin_obra", valor: 2000, pago: true, pagoEm: "2026-03-05", valorPago: 2000 },
+    { id: "f", contaId: "frete", valor: 200, pago: false, vencimento: "2026-03-10" },
+  ];
+  const entradas = [{ id: "e1", contaId: "deposito_proprio", valor: 8390, data: "2026-01-05" },
+                    { id: "e2", contaId: "deposito_proprio", valor: 6800, data: "2026-03-01" }];
+  const est = modulo.estimativaPorConta([{ contaId: "empreiteiro", valor: 40000 }, { contaId: "empreiteiro", valor: 5000 },
+                                         { contaId: "material", valor: 12000 }]);
+  assert.deepStrictEqual(est, { empreiteiro: 45000, material: 12000 });
+
+  const m = modulo.extratoMatriz(contas, entradas, ["2026-01", "2026-02", "2026-03"], est);
+  assert.deepStrictEqual(m.grupos.map(g => g.grupo.id), ["receitas", "materiais", "maoDeObra", "servicos"]);
+  const linha = (grupo, conta) => m.grupos.find(g => g.grupo.id === grupo).linhas.find(l => l.conta.id === conta);
+  assert.deepStrictEqual(linha("maoDeObra", "empreiteiro").valores, [7150, 5795, 0]);
+  assert.strictEqual(linha("maoDeObra", "empreiteiro").total, 12945);
+  assert.strictEqual(linha("maoDeObra", "empreiteiro").estimado, 45000, "a estimativa entra ao lado do contabilizado");
+  assert.deepStrictEqual(linha("materiais", "material").valores, [480, 274.9, 0]);
+  // a conta não paga não entra
+  assert.strictEqual(m.grupos.find(g => g.grupo.id === "materiais").linhas.some(l => l.conta.id === "frete"), false);
+  // totais por coluna e saldo
+  assert.deepStrictEqual(m.entradas.valores, [8390, 0, 6800]);
+  assert.deepStrictEqual(m.custos.valores, [7630, 6069.9, 2000]);
+  assert.deepStrictEqual(m.saldo.valores, [760, -6069.9, 4800]);
+  assert.strictEqual(m.custos.total, 15699.9);
+  assert.strictEqual(m.saldo.total, -509.9);
+  assert.strictEqual(m.custos.estimado, 57000, "estimativa dos três grupos de custo");
+
+  // sem meses pedidos, sobra o total da obra — é como a tela abre
+  const soTotal = modulo.extratoMatriz(contas, entradas, [], est);
+  assert.deepStrictEqual(soTotal.meses, []);
+  assert.strictEqual(soTotal.saldo.total, -509.9);
+  assert.strictEqual(soTotal.grupos.find(g => g.grupo.id === "maoDeObra").total, 12945);
+  // conta só estimada aparece, com contabilizado zero
+  const so = modulo.extratoMatriz([], [], [], { pintor: 3000 });
+  assert.strictEqual(so.grupos[0].linhas[0].conta.id, "pintor");
+  assert.strictEqual(so.grupos[0].linhas[0].total, 0);
+  assert.strictEqual(so.grupos[0].linhas[0].estimado, 3000);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -15846,6 +15846,70 @@ function extratoMensal(contas, entradas, mes) {
   const custos = red(soma("materiais") + soma("maoDeObra") + soma("servicos"));
   return { mes, grupos, entradas: entradasTotal, custos, saldo: red(entradasTotal - custos) };
 }
+// Extrato em matriz: uma coluna por mês pedido, mais o total da obra e a
+// estimativa (quando houver). É o formato da planilha do escritório.
+// `estimativa` é um mapa { contaId: valor } — o P&L estimado da obra.
+function extratoMatriz(contas, entradas, meses, estimativa) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const ms = meses || [];
+  const est = estimativa || {};
+  const porConta = {};
+  const soma = (id, mes, v) => {
+    if (!porConta[id]) porConta[id] = { total: 0, meses: {} };
+    porConta[id].total = red(porConta[id].total + v);
+    porConta[id].meses[mes] = red((porConta[id].meses[mes] || 0) + v);
+  };
+  for (const c of contas || []) {
+    if (!c || !c.pago || !mesDe(c.pagoEm)) continue;
+    soma(c.contaId || "mo_diversos", mesDe(c.pagoEm), Number(c.valorPago) || Number(c.valor) || 0);
+  }
+  for (const e of entradas || []) {
+    if (!e || !mesDe(e.data)) continue;
+    soma(e.contaId || "deposito_proprio", mesDe(e.data), Number(e.valor) || 0);
+  }
+  const grupos = (typeof GRUPOS_PL === "undefined" ? [] : GRUPOS_PL).map((g) => {
+    const linhas = contasDoGrupo(g.id)
+      .filter((c) => porConta[c.id] || Number(est[c.id]) > 0)
+      .map((c) => ({
+        conta: c,
+        valores: ms.map((m) => (porConta[c.id] && porConta[c.id].meses[m]) || 0),
+        total: (porConta[c.id] && porConta[c.id].total) || 0,
+        estimado: Number(est[c.id]) || 0,
+      }));
+    return {
+      grupo: g, linhas,
+      valores: ms.map((_, i) => red(linhas.reduce((a, l) => a + l.valores[i], 0))),
+      total: red(linhas.reduce((a, l) => a + l.total, 0)),
+      estimado: red(linhas.reduce((a, l) => a + l.estimado, 0)),
+    };
+  }).filter((x) => x.linhas.length > 0);
+  const doGrupo = (id) => grupos.find((x) => x.grupo.id === id) || { valores: ms.map(() => 0), total: 0, estimado: 0 };
+  const custoDe = (pegar) => red(pegar(doGrupo("materiais")) + pegar(doGrupo("maoDeObra")) + pegar(doGrupo("servicos")));
+  const rec = doGrupo("receitas");
+  return {
+    meses: ms, grupos,
+    entradas: { valores: rec.valores, total: rec.total },
+    custos: {
+      valores: ms.map((_, i) => custoDe((g) => g.valores[i])),
+      total: custoDe((g) => g.total),
+      estimado: custoDe((g) => g.estimado),
+    },
+    saldo: {
+      valores: ms.map((_, i) => red(rec.valores[i] - custoDe((g) => g.valores[i]))),
+      total: red(rec.total - custoDe((g) => g.total)),
+    },
+  };
+}
+// Estimativa por conta do plano, a partir dos itens do Planejamento.
+function estimativaPorConta(itens) {
+  const r = {};
+  for (const i of itens || []) {
+    if (!i) continue;
+    const k = i.contaId || "mo_diversos";
+    r[k] = Math.round(((r[k] || 0) + (Number(i.valor) || 0)) * 100) / 100;
+  }
+  return r;
+}
 // Meses com movimento (pagamento contabilizado ou entrada), do mais antigo
 // para o mais novo. O mês corrente entra sempre, para a tela nunca abrir vazia.
 function mesesDoExtrato(contas, entradas, hoje) {
@@ -17690,23 +17754,44 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         </div>
 
         {visaoPL === "extrato" ? (() => {
+          // no menu, o mês corrente também aparece (para registrar entrada nele);
+          // nas colunas, só os meses que têm movimento
           const meses = mesesDoExtrato(contasDaObra, entradasDaObra, hojeIso);
-          const mes = meses.includes(mesExtrato) ? mesExtrato : meses[meses.length - 1];
-          const ex = extratoMensal(contasDaObra, entradasDaObra, mes);
-          const ac = acumuladoAte(contasDaObra, entradasDaObra, mes);
+          const comMovimento = mesesDoExtrato(contasDaObra, entradasDaObra, "");
           const rotulo = (chave) => {
             const [a, m] = String(chave).split("-");
             return `${["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][Number(m) - 1]}-${a.slice(2)}`;
           };
+          const anos = [...new Set(meses.map(m => m.slice(0, 4)))].sort();
+          // O menu decide quais MESES viram coluna. Entrando, só o total e a
+          // estimativa; daí se abre o ano, ou um mês só.
+          const escolha = mesExtrato || "total";
+          const colunas = escolha === "total" ? []
+            : escolha === "todos" ? comMovimento
+            : /^\d{4}$/.test(escolha) ? comMovimento.filter(m => m.startsWith(escolha))
+            : meses.includes(escolha) ? [escolha] : [];
+          const estimativa = estimativaPorConta(itensPL);
+          const ex = extratoMatriz(contasDaObra, entradasDaObra, colunas, estimativa);
+          const temEstimativa = Object.keys(estimativa).length > 0;
+          const grade = `minmax(190px, 1fr) ${colunas.map(() => "110px").join(" ")} 120px${temEstimativa ? " 120px" : ""}`;
+          // largura mínima do quadro: sem isso as colunas se espremem e a
+          // última fica cortada em vez de rolar
+          const larguraMin = 210 + colunas.length * 118 + 128 + (temEstimativa ? 128 : 0);
+          const num = (v) => (Math.abs(v) < 0.005 ? "–" : fmtBRL(v));
+          const celula = { fontSize: 12, color: "#111827", textAlign: "right" };
           return (
             <div style={{ marginBottom: 16 }}>
               <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-                <select style={{ ...C.input, cursor: "pointer", width: 180 }} value={mes} onChange={e => setMesExtrato(e.target.value)}>
+                <span style={{ fontSize: 11.5, color: "#6b7280" }}>Ver</span>
+                <select style={{ ...C.input, cursor: "pointer", width: 220 }} value={escolha} onChange={e => setMesExtrato(e.target.value)}>
+                  <option value="total">Só o total da obra</option>
+                  <option value="todos">Todos os meses</option>
+                  {anos.map(a => <option key={a} value={a}>Meses de {a}</option>)}
                   {meses.map(m => <option key={m} value={m}>{rotuloMes(m)}</option>)}
                 </select>
                 {perm.podeEditar && (
                   <button type="button" style={C.btnSec}
-                    onClick={() => setFormEntrada({ ...entradaObraVazia(obraAtual.id), data: `${mes}-01` })}>＋ Registrar entrada</button>
+                    onClick={() => setFormEntrada({ ...entradaObraVazia(obraAtual.id), data: `${(colunas[colunas.length - 1] || meses[meses.length - 1] || hojeIso.slice(0, 7))}-01` })}>＋ Registrar entrada</button>
                 )}
               </div>
 
@@ -17731,45 +17816,59 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
               )}
 
-              <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, overflow: "hidden" }}>
-                <div style={{ background: "#111827", color: "#fff", padding: "9px 12px", fontSize: 12.5, fontWeight: 700, textAlign: "center", letterSpacing: 0.3 }}>
-                  EXTRATO OBRA — {rotulo(mes)}
-                </div>
-                {ex.grupos.length === 0 ? (
-                  <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5 }}>
-                    Nada contabilizado neste mês. As contas pagas entram aqui pelo mês da data de contabilização.
+              <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, overflowX: "auto" }}>
+                <div style={{ minWidth: larguraMin }}>
+                  <div style={{ background: "#111827", color: "#fff", padding: "9px 12px", fontSize: 12.5, fontWeight: 700, textAlign: "center", letterSpacing: 0.3 }}>
+                    EXTRATO OBRA — {obraSelecionada.nome}
                   </div>
-                ) : ex.grupos.map(({ grupo, linhas, total }) => (
-                  <div key={grupo.id}>
-                    <div style={{ display: "flex", justifyContent: "space-between", background: "#f3f4f6", padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{grupo.titulo}</span>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{fmtBRL(total)}</span>
+                  {/* cabeçalho das colunas */}
+                  <div style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "7px 12px", background: "#f3f4f6", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: "#4b5563", textTransform: "uppercase", letterSpacing: 0.4 }}>Conta</span>
+                    {colunas.map(m => <span key={m} style={{ ...celula, fontSize: 11.5, fontWeight: 700, color: "#4b5563" }}>{rotulo(m)}</span>)}
+                    <span style={{ ...celula, fontSize: 11.5, fontWeight: 700, color: "#111827" }}>Contabilizado</span>
+                    {temEstimativa && <span style={{ ...celula, fontSize: 11.5, fontWeight: 700, color: "#4b5563" }}>Estimado</span>}
+                  </div>
+                  {ex.grupos.length === 0 ? (
+                    <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5 }}>
+                      Nada contabilizado ainda. As contas pagas entram aqui pelo mês da data de contabilização.
                     </div>
-                    {linhas.map(l => (
-                      <div key={l.conta.id} style={{ display: "flex", justifyContent: "space-between", padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                        <span style={{ fontSize: 12.5, color: "#4b5563" }}>{l.conta.nome}</span>
-                        <span style={{ fontSize: 12.5, color: "#111827" }}>{fmtBRL(l.valor)}</span>
+                  ) : ex.grupos.map(g => (
+                    <div key={g.grupo.id}>
+                      <div style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "7px 12px", background: "#fafafa", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>{g.grupo.titulo}</span>
+                        {g.valores.map((v, i) => <span key={i} style={{ ...celula, fontWeight: 700 }}>{num(v)}</span>)}
+                        <span style={{ ...celula, fontWeight: 700 }}>{num(g.total)}</span>
+                        {temEstimativa && <span style={{ ...celula, fontWeight: 700, color: "#4b5563" }}>{num(g.estimado)}</span>}
                       </div>
-                    ))}
+                      {g.linhas.map(l => (
+                        <div key={l.conta.id} style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                          <span style={{ fontSize: 12.5, color: "#4b5563" }}>{l.conta.nome}</span>
+                          {l.valores.map((v, i) => <span key={i} style={celula}>{num(v)}</span>)}
+                          <span style={celula}>{num(l.total)}</span>
+                          {temEstimativa && <span style={{ ...celula, color: "#6b7280" }}>{num(l.estimado)}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  <div style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
+                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>SALDO FINAL</span>
+                    {ex.saldo.valores.map((v, i) => <span key={i} style={{ ...celula, fontWeight: 700 }}>{num(v)}</span>)}
+                    <span style={{ ...celula, fontWeight: 700 }}>{num(ex.saldo.total)}</span>
+                    {temEstimativa && <span />}
                   </div>
-                ))}
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>SALDO DO MÊS</span>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{fmtBRL(ex.saldo)}</span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                  <span style={{ fontSize: 11.5, color: "#4b5563" }}>SALDO FINAL — acumulado até {rotulo(mes)} (entradas {fmtBRL(ac.entradas)} − custos {fmtBRL(ac.custos)})</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{fmtBRL(ac.saldo)}</span>
                 </div>
               </div>
+              <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
+                Entradas menos custos, pelo mês da data de contabilização. "Contabilizado" é o acumulado da obra inteira{temEstimativa ? "; “Estimado” vem dos itens do Planejamento" : ""}.
+              </div>
 
-              {entradasDaObra.filter(e => mesDe(e.data) === mes).length > 0 && (
+              {entradasDaObra.length > 0 && (
                 <div style={{ marginTop: 12 }}>
-                  <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 6 }}>Entradas de {rotuloMes(mes).toLowerCase()}</div>
-                  {entradasDaObra.filter(e => mesDe(e.data) === mes).map(e => (
+                  <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 6 }}>Entradas registradas</div>
+                  {[...entradasDaObra].sort((a, b) => String(a.data).localeCompare(String(b.data))).map(e => (
                     <div key={e.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", borderRadius: 8 }}>
                       <span style={{ fontSize: 12, color: "#4b5563" }}>
-                        {new Date(e.data + "T12:00:00").toLocaleDateString("pt-BR")} · {(contaPorId(e.contaId) || {}).nome || "Entrada"}{e.descricao ? ` · ${e.descricao}` : ""}
+                        {e.data ? new Date(e.data + "T12:00:00").toLocaleDateString("pt-BR") : "sem data"} · {(contaPorId(e.contaId) || {}).nome || "Entrada"}{e.descricao ? ` · ${e.descricao}` : ""}
                       </span>
                       <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <span style={{ fontSize: 12, color: "#111827" }}>{fmtBRL(Number(e.valor) || 0)}</span>

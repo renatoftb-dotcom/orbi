@@ -273,8 +273,18 @@ SERVIÇOS & TAXAS), uma linha por conta do plano de contas com movimento,
 **SALDO DO MÊS** e **SALDO FINAL** (acumulado do início da obra até aquele
 mês).
 
-- `extratoMensal(contas, entradas, mes)` monta o mês: despesas pelo mês de
-  `pagoEm` — nunca pelo vencimento — e entradas pelo mês de `data`.
+- `extratoMatriz(contas, entradas, meses, estimativa)` monta a tabela: uma
+  coluna por mês pedido, a coluna **Contabilizado** (o acumulado da obra
+  inteira) e a coluna **Estimado**, que vem de `estimativaPorConta()` — a soma
+  dos itens do Planejamento por conta do plano. Despesa entra pelo mês de
+  `pagoEm`, nunca pelo vencimento; entrada, pelo mês de `data`.
+- O menu **Ver** decide as colunas: "Só o total da obra" (como a tela abre),
+  "Todos os meses", "Meses de <ano>" ou um mês específico. Nas colunas entram
+  só os meses com movimento; no menu o mês corrente também aparece, para se
+  registrar uma entrada nele.
+- Uma conta aparece na tabela se tem movimento **ou** estimativa — assim o
+  estimado que ainda não teve gasto continua visível.
+- `extratoMensal(contas, entradas, mes)` continua para o mês isolado.
 - `mesesDoExtrato(...)` lista os meses com movimento, mais o corrente, para o
   seletor nunca abrir vazio.
 - `acumuladoAte(...)` é o saldo final: entradas menos custos até o fim do mês.
