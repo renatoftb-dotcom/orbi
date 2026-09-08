@@ -637,5 +637,25 @@ teste("empreiteiro: sextas alternadas, e feriado antecipa para a quinta", () => 
   assert.deepStrictEqual(mensal.map(x => x.vencimento), ["2026-11-25", "2026-12-25", "2027-01-25"]);
 });
 
+teste("quinzenal de 15 dias corridos: data fixa, sem dia da semana nem feriado", () => {
+  const c = base({ valor: 60000, modalidade: "parcelado", parcelas: 6, periodicidade: "quinzeDias",
+    dataInicio: "2026-03-06" });
+  const datas = modulo.parcelasAPagar(c).map(x => x.vencimento);
+  // 15 dias da âncora e daí de 15 em 15, caindo em qualquer dia da semana
+  assert.deepStrictEqual(datas, ["2026-03-21", "2026-04-05", "2026-04-20", "2026-05-05", "2026-05-20", "2026-06-04"]);
+  assert.strictEqual(new Date(datas[0] + "T12:00:00").getDay(), 6, "sábado — a data manda, não o dia da semana");
+  // não antecipa em feriado: 01/05/2026 é sexta e feriado, e fica
+  const noFeriado = modulo.parcelasAPagar({ ...c, parcelas: 2, dataInicio: "2026-04-16" }).map(x => x.vencimento);
+  assert.deepStrictEqual(noFeriado, ["2026-05-01", "2026-05-16"]);
+  // com o primeiro vencimento informado, conta dali
+  const informado = modulo.parcelasAPagar({ ...c, parcelas: 3, primeiroVencimento: "2026-07-10" }).map(x => x.vencimento);
+  assert.deepStrictEqual(informado, ["2026-07-10", "2026-07-25", "2026-08-09"]);
+  // a descrição diz a cadência
+  assert.ok(modulo.parcelasAPagar(c)[0].descricao.includes("a cada 15 dias"));
+  // a quinzena de sextas continua como antes
+  const sextas = modulo.parcelasAPagar({ ...c, periodicidade: "quinzenais" }).map(x => x.vencimento);
+  assert.strictEqual(sextas[0], "2026-03-20");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou) process.exit(1);

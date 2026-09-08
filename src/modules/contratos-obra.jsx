@@ -290,8 +290,16 @@ const MODALIDADES_PAGAMENTO = [
 const PERIODICIDADES = [
   ["semanais", "Semanal — toda semana, no mesmo dia"],
   ["quinzenais", "Quinzenal — um dia sim, outro não (14 dias)"],
+  // conta dias corridos e cai em qualquer dia da semana: é a quinzena de
+  // quem fecha por data, não pelo dia da semana
+  ["quinzeDias", "Quinzenal — a cada 15 dias corridos"],
   ["mensais", "Mensal — dia fixo do mês"],
 ];
+// Periodicidades que caem sempre no mesmo dia da semana (e por isso têm o
+// campo "Dia do pagamento" e a antecipação em feriado).
+function pagaEmDiaDaSemana(p) {
+  return p === "semanais" || p === "quinzenais";
+}
 // Dia da semana em que se paga no semanal e no quinzenal. A praxe do
 // empreiteiro é sexta-feira; outros prestadores usam outro dia.
 const DIAS_SEMANA_PGTO = [
@@ -626,6 +634,7 @@ function pctCtr(v) {
   if (!Number.isFinite(n) || n <= 0) return "____%";
   return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
 }
+// adjetivo que acompanha "parcelas" na cláusula
 function periodicidadeAdj(p) { return p === "semanais" ? "semanais" : p === "mensais" ? "mensais" : "quinzenais"; }
 function vencimentoTexto(p, primeiro, c) {
   const plural = diaSemanaPlural(c);           // "sextas-feiras"
@@ -636,17 +645,19 @@ function vencimentoTexto(p, primeiro, c) {
     const d = fmtDataCtr(primeiro);
     if (p === "semanais") return `A primeira parcela vence em ${d} e as demais a cada 7 (sete) dias subsequentes, no mesmo dia da semana.`;
     if (p === "mensais") return `A primeira parcela vence em ${d} e as demais no mesmo dia dos meses subsequentes.`;
+    if (p === "quinzeDias") return `A primeira parcela vence em ${d} e as demais a cada 15 (quinze) dias subsequentes, em data fixa.`;
     return `A primeira parcela vence em ${d} e as demais a cada 14 (quatorze) dias subsequentes, no mesmo dia da semana.`;
   }
   // ordinal em numeral evita a gagueira de "na segunda segunda-feira"
   if (p === "semanais") return `Os pagamentos serão realizados semanalmente, sempre às ${plural}, vencendo-se a primeira parcela na 1ª ${singular} posterior ao início dos serviços e as demais a cada 7 (sete) dias subsequentes.`;
   if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços e as demais a cada 30 (trinta) dias subsequentes.";
+  if (p === "quinzeDias") return "Os pagamentos serão realizados quinzenalmente, vencendo-se a primeira parcela 15 (quinze) dias após o início dos serviços e as demais a cada 15 (quinze) dias subsequentes, em data fixa, independentemente do dia da semana.";
   return `Os pagamentos serão realizados sempre às ${plural}, em quinzenas alternadas — uma ${singular} sim, outra não —, vencendo-se a primeira parcela na 2ª ${singular} posterior ao início dos serviços e as demais a cada 14 (quatorze) dias subsequentes.`;
 }
 // Frase da antecipação em feriado, para os pagamentos de sexta-feira.
 function feriadoTexto(c) {
   const p = (c || {}).periodicidade || "quinzenais";
-  if (p === "mensais" || (c || {}).ajusteFeriado === "nenhum") return "";
+  if (!pagaEmDiaDaSemana(p) || (c || {}).ajusteFeriado === "nenhum") return "";
   return "Recaindo o vencimento em feriado, o pagamento será antecipado para o dia útil imediatamente anterior.";
 }
 

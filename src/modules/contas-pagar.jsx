@@ -68,7 +68,7 @@ function somarMeses(iso, n) {
 }
 // Semanal e quinzenal são pagamentos de SEXTA-FEIRA: uma sexta sim, outra
 // não — 14 dias, não 15. O mês continua andando de mês em mês.
-const DIAS_PERIODO = { semanais: 7, quinzenais: 14, mensais: 30 };
+const DIAS_PERIODO = { semanais: 7, quinzenais: 14, quinzeDias: 15, mensais: 30 };
 
 // ── Feriados e dia útil ─────────────────────────────────────────
 // O calendário de feriados nacionais é o do cronograma (cronograma-obra.jsx,
@@ -141,6 +141,8 @@ function primeiroVencimentoContrato(c) {
     }
     return somarMeses(ancora, 1);
   }
+  // 15 dias corridos: conta a partir da âncora, caia em que dia cair
+  if (per === "quinzeDias") return somarDias(ancora, 15);
   // dia da semana escolhido (sexta, por praxe): o próximo no semanal, o
   // segundo no quinzenal — como diz a cláusula de pagamento
   return diaDaSemanaSeguinte(ancora, per === "quinzenais" ? 2 : 1, o.diaSemana);
@@ -165,8 +167,10 @@ function vencimentoDaParcela(c, i) {
   const n = Math.max(0, Math.floor(i) - 1);
   if (per !== "mensais") {
     const bruta = somarDias(pv, (DIAS_PERIODO[per] || 14) * n);
-    // feriado na sexta: paga-se na quinta
-    return ajustaFeriado(c) ? anteciparParaDiaUtil(bruta) : bruta;
+    // a antecipação em feriado é do pagamento de dia da semana; quem conta
+    // 15 dias corridos fecha na data, caia onde cair
+    const emDiaDaSemana = typeof pagaEmDiaDaSemana === "function" ? pagaEmDiaDaSemana(per) : per !== "quinzeDias";
+    return emDiaDaSemana && ajustaFeriado(c) ? anteciparParaDiaUtil(bruta) : bruta;
   }
   const noMes = somarMeses(pv, n);
   const dia = diaAlvoContrato(c);
@@ -182,7 +186,8 @@ function parcelasAPagar(contrato) {
   const modo = modalidadeContrato(c);
   const ancora = ancoraContrato(c);
   const per = c.periodicidade || "quinzenais";
-  const rotuloPer = per === "semanais" ? "semanal" : per === "mensais" ? "mensal" : "quinzenal";
+  const rotuloPer = per === "semanais" ? "semanal" : per === "mensais" ? "mensal"
+    : per === "quinzeDias" ? "a cada 15 dias" : "quinzenal";
   const linhas = [];
 
   if (modo === "parcelado") {

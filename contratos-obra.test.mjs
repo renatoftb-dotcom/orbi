@@ -324,6 +324,12 @@ teste("modalidade parcelada aceita semanal, quinzenal e mensal", () => {
   assert.ok(naSegunda.includes("sempre às segundas-feiras"));
   assert.ok(naSegunda.includes("uma segunda-feira sim, outra não"));
   assert.ok(naSegunda.includes("na 2ª segunda-feira posterior ao início dos serviços"));
+  // 15 dias corridos: data fixa, sem dia da semana e sem antecipação
+  const corridos = texto(modulo.montarContrato({ ...base, periodicidade: "quinzeDias" }, { cliente, obra, prestador: serralheiro }));
+  assert.ok(corridos.includes("12 (doze) parcelas quinzenais"));
+  assert.ok(corridos.includes("a cada 15 (quinze) dias subsequentes, em data fixa, independentemente do dia da semana"));
+  assert.ok(!corridos.includes("sextas-feiras"));
+  assert.ok(!corridos.includes("antecipado para o dia útil"), "quem conta dias corridos não antecipa em feriado");
   const semanalQuarta = texto(modulo.montarContrato({ ...base, periodicidade: "semanais", diaSemana: 3 }, { cliente, obra, prestador: serralheiro }));
   assert.ok(semanalQuarta.includes("sempre às quartas-feiras"));
   assert.ok(semanalQuarta.includes("na 1ª quarta-feira posterior ao início"));

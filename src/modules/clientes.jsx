@@ -2127,7 +2127,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     {PERIODICIDADES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
-                {(g.periodicidade || "quinzenais") !== "mensais" && (
+                {pagaEmDiaDaSemana(g.periodicidade || "quinzenais") && (
                   <div>
                     <label style={C.label}>Dia do pagamento</label>
                     <select style={{ ...C.input, cursor: "pointer" }} value={diaSemanaPgto(g)} onChange={e => setG("diaSemana", Number(e.target.value))}>
@@ -2160,7 +2160,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </>
             )}
           </div>
-          {(modo === "parcelado" || modo === "entradaParcelas") && (g.periodicidade || "quinzenais") !== "mensais" && (
+          {(modo === "parcelado" || modo === "entradaParcelas") && pagaEmDiaDaSemana(g.periodicidade || "quinzenais") && (
             <label style={{ display: "flex", gap: 8, alignItems: "start", marginTop: 12, cursor: "pointer" }}>
               <input type="checkbox" checked={(g.ajusteFeriado || "anteciparDiaUtil") !== "nenhum"} style={{ marginTop: 3, cursor: "pointer" }}
                 onChange={e => setG("ajusteFeriado", e.target.checked ? "anteciparDiaUtil" : "nenhum")} />

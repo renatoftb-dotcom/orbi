@@ -112,7 +112,14 @@ A periodicidade diz o que é, no próprio rótulo do gerador:
 | --- | --- |
 | Semanal — toda semana, no mesmo dia | 7 dias, sempre no dia escolhido |
 | Quinzenal — um dia sim, outro não (14 dias) | sextas alternadas, a praxe do empreiteiro |
+| Quinzenal — a cada 15 dias corridos | data fixa, caindo em qualquer dia da semana |
 | Mensal — dia fixo do mês | o "todo dia 05" |
+
+`pagaEmDiaDaSemana()` separa as duas famílias: **semanal** e **quinzenal de
+14 dias** pagam num dia da semana (têm "Dia do pagamento" e antecipação em
+feriado); **15 dias corridos** e **mensal** fecham por data — a cláusula sai
+"a cada 15 (quinze) dias subsequentes, em data fixa, independentemente do dia
+da semana", sem a frase de feriado.
 
 Ao lado, **Dia do pagamento** (segunda a sexta, sexta por padrão) — o mesmo
 mecanismo serve para quem paga na segunda. A cláusula sai com o dia escrito:

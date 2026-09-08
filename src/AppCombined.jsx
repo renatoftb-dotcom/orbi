@@ -14490,8 +14490,16 @@ const MODALIDADES_PAGAMENTO = [
 const PERIODICIDADES = [
   ["semanais", "Semanal — toda semana, no mesmo dia"],
   ["quinzenais", "Quinzenal — um dia sim, outro não (14 dias)"],
+  // conta dias corridos e cai em qualquer dia da semana: é a quinzena de
+  // quem fecha por data, não pelo dia da semana
+  ["quinzeDias", "Quinzenal — a cada 15 dias corridos"],
   ["mensais", "Mensal — dia fixo do mês"],
 ];
+// Periodicidades que caem sempre no mesmo dia da semana (e por isso têm o
+// campo "Dia do pagamento" e a antecipação em feriado).
+function pagaEmDiaDaSemana(p) {
+  return p === "semanais" || p === "quinzenais";
+}
 // Dia da semana em que se paga no semanal e no quinzenal. A praxe do
 // empreiteiro é sexta-feira; outros prestadores usam outro dia.
 const DIAS_SEMANA_PGTO = [
@@ -14826,6 +14834,7 @@ function pctCtr(v) {
   if (!Number.isFinite(n) || n <= 0) return "____%";
   return `${String(Math.round(n * 100) / 100).replace(".", ",")}%`;
 }
+// adjetivo que acompanha "parcelas" na cláusula
 function periodicidadeAdj(p) { return p === "semanais" ? "semanais" : p === "mensais" ? "mensais" : "quinzenais"; }
 function vencimentoTexto(p, primeiro, c) {
   const plural = diaSemanaPlural(c);           // "sextas-feiras"
@@ -14836,17 +14845,19 @@ function vencimentoTexto(p, primeiro, c) {
     const d = fmtDataCtr(primeiro);
     if (p === "semanais") return `A primeira parcela vence em ${d} e as demais a cada 7 (sete) dias subsequentes, no mesmo dia da semana.`;
     if (p === "mensais") return `A primeira parcela vence em ${d} e as demais no mesmo dia dos meses subsequentes.`;
+    if (p === "quinzeDias") return `A primeira parcela vence em ${d} e as demais a cada 15 (quinze) dias subsequentes, em data fixa.`;
     return `A primeira parcela vence em ${d} e as demais a cada 14 (quatorze) dias subsequentes, no mesmo dia da semana.`;
   }
   // ordinal em numeral evita a gagueira de "na segunda segunda-feira"
   if (p === "semanais") return `Os pagamentos serão realizados semanalmente, sempre às ${plural}, vencendo-se a primeira parcela na 1ª ${singular} posterior ao início dos serviços e as demais a cada 7 (sete) dias subsequentes.`;
   if (p === "mensais") return "Os pagamentos serão realizados mensalmente, vencendo-se a primeira parcela 30 (trinta) dias após o início dos serviços e as demais a cada 30 (trinta) dias subsequentes.";
+  if (p === "quinzeDias") return "Os pagamentos serão realizados quinzenalmente, vencendo-se a primeira parcela 15 (quinze) dias após o início dos serviços e as demais a cada 15 (quinze) dias subsequentes, em data fixa, independentemente do dia da semana.";
   return `Os pagamentos serão realizados sempre às ${plural}, em quinzenas alternadas — uma ${singular} sim, outra não —, vencendo-se a primeira parcela na 2ª ${singular} posterior ao início dos serviços e as demais a cada 14 (quatorze) dias subsequentes.`;
 }
 // Frase da antecipação em feriado, para os pagamentos de sexta-feira.
 function feriadoTexto(c) {
   const p = (c || {}).periodicidade || "quinzenais";
-  if (p === "mensais" || (c || {}).ajusteFeriado === "nenhum") return "";
+  if (!pagaEmDiaDaSemana(p) || (c || {}).ajusteFeriado === "nenhum") return "";
   return "Recaindo o vencimento em feriado, o pagamento será antecipado para o dia útil imediatamente anterior.";
 }
 
@@ -15502,7 +15513,7 @@ function somarMeses(iso, n) {
 }
 // Semanal e quinzenal são pagamentos de SEXTA-FEIRA: uma sexta sim, outra
 // não — 14 dias, não 15. O mês continua andando de mês em mês.
-const DIAS_PERIODO = { semanais: 7, quinzenais: 14, mensais: 30 };
+const DIAS_PERIODO = { semanais: 7, quinzenais: 14, quinzeDias: 15, mensais: 30 };
 
 // ── Feriados e dia útil ─────────────────────────────────────────
 // O calendário de feriados nacionais é o do cronograma (cronograma-obra.jsx,
@@ -15575,6 +15586,8 @@ function primeiroVencimentoContrato(c) {
     }
     return somarMeses(ancora, 1);
   }
+  // 15 dias corridos: conta a partir da âncora, caia em que dia cair
+  if (per === "quinzeDias") return somarDias(ancora, 15);
   // dia da semana escolhido (sexta, por praxe): o próximo no semanal, o
   // segundo no quinzenal — como diz a cláusula de pagamento
   return diaDaSemanaSeguinte(ancora, per === "quinzenais" ? 2 : 1, o.diaSemana);
@@ -15599,8 +15612,10 @@ function vencimentoDaParcela(c, i) {
   const n = Math.max(0, Math.floor(i) - 1);
   if (per !== "mensais") {
     const bruta = somarDias(pv, (DIAS_PERIODO[per] || 14) * n);
-    // feriado na sexta: paga-se na quinta
-    return ajustaFeriado(c) ? anteciparParaDiaUtil(bruta) : bruta;
+    // a antecipação em feriado é do pagamento de dia da semana; quem conta
+    // 15 dias corridos fecha na data, caia onde cair
+    const emDiaDaSemana = typeof pagaEmDiaDaSemana === "function" ? pagaEmDiaDaSemana(per) : per !== "quinzeDias";
+    return emDiaDaSemana && ajustaFeriado(c) ? anteciparParaDiaUtil(bruta) : bruta;
   }
   const noMes = somarMeses(pv, n);
   const dia = diaAlvoContrato(c);
@@ -15616,7 +15631,8 @@ function parcelasAPagar(contrato) {
   const modo = modalidadeContrato(c);
   const ancora = ancoraContrato(c);
   const per = c.periodicidade || "quinzenais";
-  const rotuloPer = per === "semanais" ? "semanal" : per === "mensais" ? "mensal" : "quinzenal";
+  const rotuloPer = per === "semanais" ? "semanal" : per === "mensais" ? "mensal"
+    : per === "quinzeDias" ? "a cada 15 dias" : "quinzenal";
   const linhas = [];
 
   if (modo === "parcelado") {
@@ -18426,7 +18442,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     {PERIODICIDADES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </div>
-                {(g.periodicidade || "quinzenais") !== "mensais" && (
+                {pagaEmDiaDaSemana(g.periodicidade || "quinzenais") && (
                   <div>
                     <label style={C.label}>Dia do pagamento</label>
                     <select style={{ ...C.input, cursor: "pointer" }} value={diaSemanaPgto(g)} onChange={e => setG("diaSemana", Number(e.target.value))}>
@@ -18459,7 +18475,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </>
             )}
           </div>
-          {(modo === "parcelado" || modo === "entradaParcelas") && (g.periodicidade || "quinzenais") !== "mensais" && (
+          {(modo === "parcelado" || modo === "entradaParcelas") && pagaEmDiaDaSemana(g.periodicidade || "quinzenais") && (
             <label style={{ display: "flex", gap: 8, alignItems: "start", marginTop: 12, cursor: "pointer" }}>
               <input type="checkbox" checked={(g.ajusteFeriado || "anteciparDiaUtil") !== "nenhum"} style={{ marginTop: 3, cursor: "pointer" }}
                 onChange={e => setG("ajusteFeriado", e.target.checked ? "anteciparDiaUtil" : "nenhum")} />

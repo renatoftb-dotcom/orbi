@@ -226,6 +226,10 @@ dia escolhido (semanal) ou a **segunda** (quinzenal), e daí o passo é de 7 ou 
 mantém o dia da semana para sempre. Quando a data do primeiro pagamento é
 informada, ela é respeitada como está e a cadência segue o dia da semana dela.
 
+A quinzena de **15 dias corridos** (`quinzeDias`) é a outra família: conta 15
+dias da âncora e daí de 15 em 15, caindo em qualquer dia da semana, e **não**
+antecipa em feriado — quem fecha por data quer a data.
+
 **Feriado antecipa para o dia útil anterior.** Sexta-feira feriada paga-se na
 quinta (`anteciparParaDiaUtil()`), e se a quinta também for feriado anda mais
 um dia. O calendário é o mesmo do cronograma (`feriadosDoAno`, em
