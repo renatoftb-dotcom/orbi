@@ -22,7 +22,7 @@ const modulo = new Function(`
            MEIOS_PAGAMENTO, meioPagamento,
            ESCOPOS_FORNECIMENTO, escopoContrato, escopoDoTipo, objetoPadrao, tituloServicoCtr,
            CONTRATO_OPCOES, opcaoAtiva, opcoesPadrao,
-           textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr,
+           textoMoedaCampo, textoPctCampo, textoInteiroCampo, digitandoNumero, dataExtensoCtr, numeroDeCampo,
            mesclarPorCliente, contratosDasObras, contratosNasObras,
            prestadorDoEscritorio, faltaNoEscritorio, qualificarCurto, ID_PRESTADOR_ESCRITORIO };
 `)();
@@ -748,6 +748,26 @@ teste("primeiro vencimento entra no texto do contrato", () => {
   const tg = texto(modulo.montarContrato(g, { cliente, obra, prestador: serralheiro }));
   assert.ok(tg.includes("vencendo a primeira em 05/08/2026 e as demais no mesmo dia dos meses subsequentes"));
   assert.ok(!tg.includes("todo dia 05"));
+});
+
+teste("numeroDeCampo não multiplica por 100 o que tem centavos", () => {
+  // CampoCtrNum entrega número: é o caso da baixa de conta, onde tirar os
+  // pontos transformava 10833.33 em 1.083.333
+  assert.strictEqual(modulo.numeroDeCampo(10833.33), 10833.33);
+  assert.strictEqual(modulo.numeroDeCampo(10000), 10000);
+  // texto em pt-BR: ponto é milhar, vírgula é decimal
+  assert.strictEqual(modulo.numeroDeCampo("10.833,33"), 10833.33);
+  // sem vírgula, o ponto é decimal — é como o JS serializa número, que é o
+  // que chega dos campos; "1.200" isolado é ambíguo e vale 1,2
+  assert.strictEqual(modulo.numeroDeCampo("10833.33"), 10833.33);
+  // vazio e lixo viram zero
+  assert.strictEqual(modulo.numeroDeCampo(""), 0);
+  assert.strictEqual(modulo.numeroDeCampo(null), 0);
+  assert.strictEqual(modulo.numeroDeCampo("abc"), 0);
+  assert.strictEqual(modulo.numeroDeCampo(NaN), 0);
+  // o valor que o campo mostra volta igual quando relido
+  const ida = modulo.textoMoedaCampo(10833.33);
+  assert.strictEqual(modulo.numeroDeCampo(ida), 10833.33);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

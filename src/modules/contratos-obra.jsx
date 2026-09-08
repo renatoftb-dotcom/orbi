@@ -241,6 +241,19 @@ function enderecoLinha(o) {
 // Todo campo numérico do gerador é formatado enquanto se digita: os
 // dígitos entram pela direita, como no aplicativo do banco. O contrato
 // guarda o número puro; a máscara é só a apresentação.
+// Valor de campo → número. CampoCtrNum entrega NÚMERO (10833.33); um
+// formulário pode entregar texto em pt-BR ("10.833,33") ou já em ponto
+// ("10833.33"). Tratar tudo como pt-BR e simplesmente tirar os pontos
+// multiplicava por 100 o que tinha centavos — foi o bug da baixa de conta.
+function numeroDeCampo(v) {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return 0;
+  // com vírgula, é pt-BR: o ponto é separador de milhar
+  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".") : t.replace(/\s/g, "");
+  const n = parseFloat(limpo);
+  return Number.isFinite(n) ? n : 0;
+}
 function numeroDosDigitos(txt, casas) {
   const d = String(txt == null ? "" : txt).replace(/\D/g, "");
   if (!d) return "";

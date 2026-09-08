@@ -1168,13 +1168,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return;
     }
     setFormPagamento({ conta, dataContab: conta.vencimento && conta.vencimento <= hojeIso ? conta.vencimento : hojeIso,
-      valorPago: String(Number(conta.valor) || 0) });
+      valorPago: Number(conta.valor) || 0 });
   };
   // Confirma a baixa: a despesa entra no mês da data de contabilização
   // escolhida (`pagoEm`); `contabilizadoEm` guarda o dia em que se registrou.
   const confirmarPagamento = () => {
     const f = formPagamento; if (!f) return;
-    const valor = parseFloat(String(f.valorPago).replace(/\./g, "").replace(",", ".")) || Number(f.conta.valor) || 0;
+    const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
     if (!f.dataContab) { dialogo.alertar({ titulo: "Informe a data de contabilização", tipo: "aviso" }); return; }
     const atualizada = { ...f.conta, pago: true, pagoEm: f.dataContab, valorPago: valor, contabilizadoEm: hojeIso };
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
@@ -1189,7 +1189,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   };
   const salvarEntrada = () => {
     const f = formEntrada; if (!f) return;
-    const valor = parseFloat(String(f.valor).replace(/\./g, "").replace(",", ".")) || 0;
+    const valor = numeroDeCampo(f.valor);
     if (!(valor > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     if (!f.data) { dialogo.alertar({ titulo: "Informe a data da entrada", tipo: "aviso" }); return; }
     const nova = { ...f, valor };
@@ -1601,7 +1601,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       </span>
                       <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <span style={{ fontSize: 12, color: "#111827" }}>{fmtBRL(Number(e.valor) || 0)}</span>
-                        {perm.podeEditar && <button onClick={() => setFormEntrada({ ...e, valor: String(e.valor) })} style={{ ...C.btnGhost, fontSize: 11 }}>Editar</button>}
+                        {perm.podeEditar && <button onClick={() => setFormEntrada({ ...e, valor: Number(e.valor) || 0 })} style={{ ...C.btnGhost, fontSize: 11 }}>Editar</button>}
                         {perm.podeEditar && <button onClick={() => gravarEntradas(entradasDaObra.filter(x => x.id !== e.id))} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 11 }}>Remover</button>}
                       </span>
                     </div>

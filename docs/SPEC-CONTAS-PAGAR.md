@@ -230,6 +230,12 @@ estão, e contas avulsas não são tocadas.
 - **Valor pago** — vem com o valor da parcela e pode ser ajustado
   (`valorPago`); é o valor que o extrato usa.
 
+O valor dos campos passa por `numeroDeCampo()`: `CampoCtrNum` entrega
+**número** (10833.33), e a primeira versão tratava tudo como texto pt-BR,
+tirando os pontos — o que multiplicava por 100 toda parcela com centavos
+(R$ 10.833,33 virava R$ 1.083.333,00). Agora número passa direto, texto com
+vírgula é lido como pt-BR e texto sem vírgula tem o ponto como decimal.
+
 Junto vai `contabilizadoEm`, com o dia em que se registrou — o histórico de
 quando a baixa foi feita, que não se confunde com a competência escolhida. A
 linha da conta paga mostra "contabilizado em DD/MM/AAAA". "Desfazer" continua

@@ -14439,6 +14439,19 @@ function enderecoLinha(o) {
 // Todo campo numérico do gerador é formatado enquanto se digita: os
 // dígitos entram pela direita, como no aplicativo do banco. O contrato
 // guarda o número puro; a máscara é só a apresentação.
+// Valor de campo → número. CampoCtrNum entrega NÚMERO (10833.33); um
+// formulário pode entregar texto em pt-BR ("10.833,33") ou já em ponto
+// ("10833.33"). Tratar tudo como pt-BR e simplesmente tirar os pontos
+// multiplicava por 100 o que tinha centavos — foi o bug da baixa de conta.
+function numeroDeCampo(v) {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const t = String(v == null ? "" : v).trim();
+  if (!t) return 0;
+  // com vírgula, é pt-BR: o ponto é separador de milhar
+  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".") : t.replace(/\s/g, "");
+  const n = parseFloat(limpo);
+  return Number.isFinite(n) ? n : 0;
+}
 function numeroDosDigitos(txt, casas) {
   const d = String(txt == null ? "" : txt).replace(/\D/g, "");
   if (!d) return "";
@@ -17229,13 +17242,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return;
     }
     setFormPagamento({ conta, dataContab: conta.vencimento && conta.vencimento <= hojeIso ? conta.vencimento : hojeIso,
-      valorPago: String(Number(conta.valor) || 0) });
+      valorPago: Number(conta.valor) || 0 });
   };
   // Confirma a baixa: a despesa entra no mês da data de contabilização
   // escolhida (`pagoEm`); `contabilizadoEm` guarda o dia em que se registrou.
   const confirmarPagamento = () => {
     const f = formPagamento; if (!f) return;
-    const valor = parseFloat(String(f.valorPago).replace(/\./g, "").replace(",", ".")) || Number(f.conta.valor) || 0;
+    const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
     if (!f.dataContab) { dialogo.alertar({ titulo: "Informe a data de contabilização", tipo: "aviso" }); return; }
     const atualizada = { ...f.conta, pago: true, pagoEm: f.dataContab, valorPago: valor, contabilizadoEm: hojeIso };
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
@@ -17250,7 +17263,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   };
   const salvarEntrada = () => {
     const f = formEntrada; if (!f) return;
-    const valor = parseFloat(String(f.valor).replace(/\./g, "").replace(",", ".")) || 0;
+    const valor = numeroDeCampo(f.valor);
     if (!(valor > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     if (!f.data) { dialogo.alertar({ titulo: "Informe a data da entrada", tipo: "aviso" }); return; }
     const nova = { ...f, valor };
@@ -17662,7 +17675,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       </span>
                       <span style={{ display: "flex", gap: 8, alignItems: "center" }}>
                         <span style={{ fontSize: 12, color: "#111827" }}>{fmtBRL(Number(e.valor) || 0)}</span>
-                        {perm.podeEditar && <button onClick={() => setFormEntrada({ ...e, valor: String(e.valor) })} style={{ ...C.btnGhost, fontSize: 11 }}>Editar</button>}
+                        {perm.podeEditar && <button onClick={() => setFormEntrada({ ...e, valor: Number(e.valor) || 0 })} style={{ ...C.btnGhost, fontSize: 11 }}>Editar</button>}
                         {perm.podeEditar && <button onClick={() => gravarEntradas(entradasDaObra.filter(x => x.id !== e.id))} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 11 }}>Remover</button>}
                       </span>
                     </div>
