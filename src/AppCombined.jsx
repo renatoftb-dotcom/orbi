@@ -15754,22 +15754,33 @@ function fluxoMensal(contas, hoje) {
 // falta pagar fica na ponta, que é o que se olha. O topo é arredondado pela
 // barra inteira (clipPath), não faixa a faixa, senão apareceriam entalhes.
 //
-// A entrada é uma transição disparada depois da montagem, e não uma animação
-// CSS: `transform-box: fill-box` num <g> não é respeitado por todos os
-// navegadores, e a barra ficava parada. Com estado + transition, o navegador
-// sempre tem um valor inicial e um final para interpolar.
+// A entrada é a MESMA do gráfico da calibragem de preço (onboarding.jsx): um
+// contador diz até qual barra já foi revelada, e cada barra, ao ser revelada,
+// troca `animation: none` pelo crescimento — é essa troca que faz o navegador
+// animar de verdade. A escala vai no próprio <path>, com a origem no pé da
+// barra em coordenadas do gráfico; animar um <g> com `transform-box: fill-box`
+// não é respeitado por todos os navegadores e a barra ficava parada.
 const CP_FAIXAS = [["pago", "#cbd5e1", "Pago"], ["vencido", "#111827", "Vencido"], ["aberto", "#0474f4", "A pagar"]];
 function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid: idGrafico }) {
-  // A revelação é por estado, como no gráfico da calibragem: a barra só ganha
-  // a animação quando `pronto` vira true, o que garante que o navegador veja
-  // o elemento antes de animar. A escala é aplicada no próprio desenho (path),
-  // com a origem em coordenadas do gráfico — animar um <g> com transform-box
-  // não funciona em todos os navegadores.
-  const [pronto, setPronto] = useState(false);
+  // Revelação em cascata, como na calibragem: `reveladas` sobe de uma em uma
+  // e cada barra só anima quando chega a sua vez. Recomeça quando a lista de
+  // meses muda, para a animação rodar de novo depois de pagar ou filtrar.
+  const chaveMeses = fluxo && fluxo.meses ? fluxo.meses.map((m) => m.chave).join("|") : "";
+  const [reveladas, setReveladas] = useState(0);
   useEffect(() => {
-    const t = setTimeout(() => setPronto(true), 30);
-    return () => clearTimeout(t);
-  }, []);
+    setReveladas(0);
+    const total = chaveMeses ? chaveMeses.split("|").length : 0;
+    if (!total) return;
+    const timers = [];
+    let i = 0;
+    const passo = () => {
+      i++;
+      setReveladas(i);
+      if (i < total) timers.push(setTimeout(passo, 120));
+    };
+    timers.push(setTimeout(passo, 60));
+    return () => timers.forEach(clearTimeout);
+  }, [chaveMeses]);
   if (!fluxo || !fluxo.meses.length) return null;
 
   const LARG = 40, ESPACO = 16, ALT = 130, BASE = ALT + 16;
@@ -15790,30 +15801,23 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
       <style>{`
         @keyframes vk-cp-crescer { from { transform: scaleY(0); } to { transform: scaleY(1); } }
         @keyframes vk-cp-subir { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes vk-cp-surgir { from { opacity: 0; } to { opacity: 1; } }
-        /* Quem pede menos movimento no sistema (Windows: Acessibilidade →
-           Efeitos visuais → Efeitos de animação) não perde a entrada: as
-           barras aparecem por opacidade, na mesma ordem, sem crescer nem
-           deslocar. Antes aqui era animation:none, e a tela abria estática. */
-        @media (prefers-reduced-motion: reduce) {
-          .vk-cp-barra, .vk-cp-valor {
-            animation-name: vk-cp-surgir !important;
-            animation-duration: 0.45s !important;
-            animation-timing-function: ease-out !important;
-          }
-        }
+        /* Sem regra de "menos movimento" no CSS, como no gráfico da
+           calibragem: as barras crescem da linha de base em qualquer
+           máquina. (Ver a nota na spec sobre essa escolha.) */
       `}</style>
       <svg width={largura} height={ALT + 46} role="img" style={{ display: "block" }}>
         {fluxo.meses.map((m, i) => {
           const x = i * (LARG + ESPACO) + ESPACO / 2;
           const faixas = CP_FAIXAS.map(([k, cor]) => ({ k, cor, h: altura(m[k]) })).filter((f) => f.h > 0);
           const hTotal = faixas.reduce((a, f) => a + f.h, 0);
-          const atraso = i * 70;
           const apagada = !!mesSelecionado && mesSelecionado !== m.chave;
+          const visivel = i < reveladas;
           let y = BASE;
           return (
             <g key={m.chave} onClick={() => onEscolherMes && onEscolherMes(m.chave)}
-              style={{ cursor: onEscolherMes ? "pointer" : "default", opacity: apagada ? 0.38 : 1, transition: "opacity 180ms ease-out" }}>
+              style={{ cursor: onEscolherMes ? "pointer" : "default",
+                       opacity: !visivel ? 0 : apagada ? 0.38 : 1,
+                       transition: "opacity 0.35s ease-out" }}>
               <title>{`${rotuloMes(m.chave)} — ${fmtMoedaCtr(m.total)}`}</title>
               {faixas.map((f, j) => {
                 y -= f.h;
@@ -15822,14 +15826,13 @@ function GraficoFluxoMensal({ fluxo, hojeIso, onEscolherMes, mesSelecionado, uid
                     className="vk-cp-barra"
                     style={{
                       transformOrigin: `${x + LARG / 2}px ${BASE}px`,
-                      animation: pronto ? `vk-cp-crescer 0.7s cubic-bezier(0.34, 1.4, 0.64, 1) ${atraso}ms both` : "none",
-                      opacity: pronto ? 1 : 0,
+                      animation: visivel ? `vk-cp-crescer 0.7s cubic-bezier(0.34, 1.4, 0.64, 1)` : "none",
                     }} />
                 );
               })}
               <text className="vk-cp-valor" x={x + LARG / 2} y={BASE - 5 - hTotal} textAnchor="middle"
                 fontSize="10.5" fontWeight="700" fill="#111827"
-                style={{ animation: pronto ? `vk-cp-subir 0.4s ease-out ${atraso + 420}ms both` : "none", opacity: pronto ? undefined : 0 }}>{curto(m.total)}</text>
+                style={{ animation: visivel ? `vk-cp-subir 0.4s ease-out 0.35s both` : "none", opacity: visivel ? undefined : 0 }}>{curto(m.total)}</text>
               <text x={x + LARG / 2} y={BASE + 16} textAnchor="middle" fontSize="11"
                 fill={m.chave === mesSelecionado ? "#0474f4" : m.chave === mesAtual ? "#111827" : "#4b5563"}
                 fontWeight={m.chave === mesSelecionado || m.chave === mesAtual ? 700 : 400}>{m.rotulo}</text>

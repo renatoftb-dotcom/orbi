@@ -90,14 +90,31 @@ faixas encostam sem entalhe, e não é preciso recortar nada.
 Ao abrir a tela elas surgem crescendo da linha de base, em cascata (70 ms
 entre uma e outra), com o valor aparecendo logo depois.
 
-**Quem pede menos movimento no sistema não fica sem entrada.** No Windows,
-Acessibilidade → Efeitos visuais → Efeitos de animação desligado faz o Chrome
-responder `prefers-reduced-motion: reduce`; a regra antiga era
-`animation: none !important` e o gráfico abria estático — foi por isso que a
-animação "não funcionava" numa máquina onde a da calibragem funcionava (aquele
-gráfico não tem a regra). Agora, sob essa preferência, as barras e os valores
-trocam de animação em vez de perdê-la: aparecem por **opacidade**, na mesma
-cascata, sem crescer nem deslocar.
+**A entrada é a mesma do gráfico da calibragem, peça por peça** — decisão do
+Renato: "deixa igual da calibragem".
+
+1. Um contador de revelação (`reveladas`), não um "pronto" único: um
+   `setTimeout` encadeado sobe o contador de um em um (60 ms para começar,
+   120 ms entre barras) e cada barra pergunta `i < reveladas`. Recomeça quando
+   a lista de meses muda, então a animação roda de novo depois de pagar,
+   filtrar ou entrar na tela.
+2. A escala vai no próprio `<path>`, com `transform-origin` no **pé da barra**
+   em coordenadas do gráfico, e o valor da propriedade troca de `"none"` para
+   `vk-cp-crescer 0.7s cubic-bezier(0.34, 1.4, 0.64, 1)` no momento da
+   revelação — é essa troca que faz o navegador animar. O `cubic-bezier` passa
+   de 1 e volta: é o quique do fim.
+3. O `<g>` em volta cuida só da opacidade (`transition: opacity 0.35s`), que é
+   também o que apaga os meses não escolhidos quando se clica numa barra.
+
+**Sem regra de `prefers-reduced-motion`**, igual à calibragem: a barra cresce
+em qualquer máquina. Isso é deliberado — com a regra antiga
+(`animation: none !important`), um Windows com "Efeitos de animação" desligado
+abria o gráfico estático enquanto o da calibragem continuava animando, e a
+diferença entre os dois gráficos era justamente essa regra.
+
+Conferido em Chromium de verdade, nos dois modos (`reducedMotion:
+no-preference` e `reduce`): a escala de cada barra sobe 0 → ~0,9 → 1,05 → 1,00
+em cascata, e clicar numa barra apaga as outras quatro.
 
 A técnica é a mesma do gráfico da calibragem de preço (`onboarding.jsx`), que
 já funcionava: **animação CSS aplicada no próprio desenho** (`path`), com
