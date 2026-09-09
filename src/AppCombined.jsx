@@ -17544,6 +17544,10 @@ function previaRecalibragem(contrato, novaData, contas, limite) {
 }
 
 // ── Visões ──────────────────────────────────────────────────────
+// O grupo que junta o que não tem a chave da visão: sem vencimento, sem
+// fornecedor, sem contrato. A tela precisa reconhecê-lo para não chamar de
+// "contratado" o que é conta avulsa.
+const CHAVE_SEM_GRUPO = "__sem_data__";
 const VISOES_CONTAS = [
   { id: "mes", nome: "Mês" },
   { id: "ano", nome: "Ano" },
@@ -17594,7 +17598,7 @@ function agruparContas(contas, visao, ctx) {
   const lista = contas || [];
   const c = ctx || {};
   const hoje = c.hoje;
-  const semData = "__sem_data__";
+  const semData = CHAVE_SEM_GRUPO;
   const chaveDe = (x) => {
     if (visao === "mes") return x.vencimento ? String(x.vencimento).slice(0, 7) : semData;
     if (visao === "ano") return x.vencimento ? String(x.vencimento).slice(0, 4) : semData;
@@ -17628,6 +17632,39 @@ function agruparContas(contas, visao, ctx) {
     return b.totais.total - a.totais.total;
   });
   return grupos;
+}
+
+// ── Anéis por grupo (fornecedor, contrato) ──────────────────────
+// A barra responde "QUANDO vou pagar" — é série temporal, e mês fora de
+// ordem não quer dizer nada. Agrupando por fornecedor ou por contrato a
+// pergunta muda: "quanto do que devo a cada um já saiu". Isso é uma razão
+// contra um limite, uma por grupo, e a forma disso é o mesmo anel do
+// Planejamento repetido.
+//
+// Por contrato é onde o anel diz mais: o total é o valor contratado, então
+// o preenchimento é literalmente o quanto do contrato já foi pago.
+const VISOES_CONTAS_EM_ANEL = ["fornecedor", "contrato"];
+const visaoUsaAnel = (visao) => VISOES_CONTAS_EM_ANEL.indexOf(visao) >= 0;
+
+function aneisDosGrupos(grupos) {
+  const linhas = (grupos || []).map((g) => {
+    const t = g.totais || { total: 0, pago: 0, aberto: 0, vencido: 0 };
+    return {
+      chave: g.chave, titulo: g.titulo, avulso: g.chave === CHAVE_SEM_GRUPO,
+      total: t.total, pago: t.pago, aberto: t.aberto, vencido: t.vencido,
+      progresso: progressoCusto({ estimado: t.total, realizado: t.pago }),
+    };
+  }).filter((l) => l.total > 0 || l.pago > 0);
+  const red = (x) => Math.round(x * 100) / 100;
+  return {
+    linhas,
+    total: {
+      total: red(linhas.reduce((a, l) => a + l.total, 0)),
+      pago: red(linhas.reduce((a, l) => a + l.pago, 0)),
+      vencido: red(linhas.reduce((a, l) => a + l.vencido, 0)),
+    },
+    vazio: linhas.length === 0,
+  };
 }
 
 // ── Fluxo mensal (gráfico) ──────────────────────────────────────
@@ -20088,6 +20125,68 @@ function AnelCusto({ progresso, tamanho }) {
   );
 }
 
+// ── Anéis por grupo, no lugar da barra ──────────────────────────
+// Agrupando por fornecedor ou por contrato, a pergunta deixa de ser "quando
+// vou pagar" e passa a ser "quanto do que devo a cada um já saiu". O mesmo
+// anel do Planejamento, repetido — e por contrato ele diz mais ainda: o
+// total é o valor contratado, então o preenchimento É o quanto do contrato
+// já foi pago.
+function AneisPorGrupo({ grupos, visao, isMobile, fmtBRL }) {
+  const r = aneisDosGrupos(grupos);
+  if (r.vazio) return null;
+  const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
+  const porContrato = visao === "contrato";
+  const geral = progressoCusto({ estimado: r.total.total, realizado: r.total.pago });
+
+  return (
+    <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "14px 16px", marginBottom: 16, background: "#fff" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 12 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
+          {porContrato ? "Pago por contrato" : "Pago por fornecedor"}
+        </div>
+        <div style={{ fontSize: 11.5, color: "#4b5563" }}>
+          {r.linhas.length === 1 ? "1 " : `${r.linhas.length} `}
+          {porContrato ? (r.linhas.length === 1 ? "contrato" : "contratos") : (r.linhas.length === 1 ? "fornecedor" : "fornecedores")}
+          {" · "}pago <strong style={{ color: "#111827" }}>{num(r.total.pago)}</strong> de{" "}
+          <strong style={{ color: "#111827" }}>{num(r.total.total)}</strong>
+          {geral.medivel ? ` (${geral.pct}%)` : ""}
+        </div>
+      </div>
+      <div style={{ display: "grid", gap: 12,
+        gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(232px, 1fr))" }}>
+        {r.linhas.map(l => (
+          <div key={l.chave} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12,
+            padding: "12px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", marginBottom: 6 }}>{l.titulo}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 10px", alignItems: "baseline" }}>
+                <span style={{ fontSize: 11, color: "#6b7280" }}>{porContrato && !l.avulso ? "Contratado" : "Total"}</span>
+                <span style={{ fontSize: 12.5, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{num(l.total)}</span>
+                <span style={{ fontSize: 11, color: "#6b7280" }}>Pago</span>
+                <span style={{ fontSize: 12.5, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{num(l.pago)}</span>
+                <span style={{ fontSize: 11, color: "#6b7280" }}>A pagar</span>
+                <span style={{ fontSize: 12.5, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{num(l.aberto)}</span>
+                {l.vencido > 0.005 && (
+                  <>
+                    <span style={{ fontSize: 11, color: "#dc2626" }}>Vencido</span>
+                    <span style={{ fontSize: 12.5, fontWeight: 600, color: "#dc2626", fontVariantNumeric: "tabular-nums" }}>{num(l.vencido)}</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <AnelCusto progresso={l.progresso} tamanho={74} />
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 10 }}>
+        Cada anel é o quanto já foi pago {porContrato ? "do contrato" : "do que se deve ao fornecedor"} —
+        fecha em 100% quando não sobra nada. Os anéis somam a obra inteira; os quadros do topo e o mês
+        escolhido filtram só a lista abaixo. Volte a agrupar por mês ou ano para ver o fluxo no tempo.
+      </div>
+    </div>
+  );
+}
+
 // ── Prestadores: um anel por ofício ─────────────────────────────
 // Pequenos múltiplos do MESMO medidor do cartão de custo: o olho compara
 // preenchimento entre cartões sem precisar ler número nenhum, e quem
@@ -21698,6 +21797,13 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       : contasDaObra;
     const lista = filtrarContas(doMes, filtroContas, hojeIso);
     const grupos = agruparContas(lista, visaoContas, { hoje: hojeIso, nomePrestador, nomeContrato });
+    // Os anéis somam a obra INTEIRA, não a lista filtrada: "pago de total"
+    // precisa dos dois lados, e o filtro padrão esconde justamente as pagas —
+    // todo anel sairia em 0%. Os quadros do topo e o mês do gráfico mandam na
+    // lista de baixo; o anel é o retrato do contrato/fornecedor por inteiro.
+    const gruposCheios = visaoUsaAnel(visaoContas)
+      ? agruparContas(contasDaObra, visaoContas, { hoje: hojeIso, nomePrestador, nomeContrato })
+      : grupos;
     const mesAtual = hojeIso.slice(0, 7);
     const abertoPadrao = (g) => (visaoContas === "mes" ? g.chave >= mesAtual : true);
     const fechado = (g) => (gruposFechados[`${visaoContas}:${g.chave}`] ?? !abertoPadrao(g));
@@ -21785,8 +21891,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           {tile("Total", t.total, "contratado + avulsas", "todas")}
         </div>
 
-        {/* Fluxo mensal */}
-        {fluxo.meses.length > 0 && (
+        {/* Fluxo mensal — ou os anéis, quando o agrupamento é por entidade */}
+        {visaoUsaAnel(visaoContas) ? (
+          <AneisPorGrupo grupos={gruposCheios} visao={visaoContas} isMobile={isMobile} fmtBRL={fmtMoedaCtr} />
+        ) : fluxo.meses.length > 0 && (
           <div ref={refGrafico} style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: "14px 16px", marginBottom: 16, background: "#fff" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Fluxo por mês</div>

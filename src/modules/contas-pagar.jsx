@@ -863,6 +863,10 @@ function previaRecalibragem(contrato, novaData, contas, limite) {
 }
 
 // ── Visões ──────────────────────────────────────────────────────
+// O grupo que junta o que não tem a chave da visão: sem vencimento, sem
+// fornecedor, sem contrato. A tela precisa reconhecê-lo para não chamar de
+// "contratado" o que é conta avulsa.
+const CHAVE_SEM_GRUPO = "__sem_data__";
 const VISOES_CONTAS = [
   { id: "mes", nome: "Mês" },
   { id: "ano", nome: "Ano" },
@@ -913,7 +917,7 @@ function agruparContas(contas, visao, ctx) {
   const lista = contas || [];
   const c = ctx || {};
   const hoje = c.hoje;
-  const semData = "__sem_data__";
+  const semData = CHAVE_SEM_GRUPO;
   const chaveDe = (x) => {
     if (visao === "mes") return x.vencimento ? String(x.vencimento).slice(0, 7) : semData;
     if (visao === "ano") return x.vencimento ? String(x.vencimento).slice(0, 4) : semData;
@@ -947,6 +951,39 @@ function agruparContas(contas, visao, ctx) {
     return b.totais.total - a.totais.total;
   });
   return grupos;
+}
+
+// ── Anéis por grupo (fornecedor, contrato) ──────────────────────
+// A barra responde "QUANDO vou pagar" — é série temporal, e mês fora de
+// ordem não quer dizer nada. Agrupando por fornecedor ou por contrato a
+// pergunta muda: "quanto do que devo a cada um já saiu". Isso é uma razão
+// contra um limite, uma por grupo, e a forma disso é o mesmo anel do
+// Planejamento repetido.
+//
+// Por contrato é onde o anel diz mais: o total é o valor contratado, então
+// o preenchimento é literalmente o quanto do contrato já foi pago.
+const VISOES_CONTAS_EM_ANEL = ["fornecedor", "contrato"];
+const visaoUsaAnel = (visao) => VISOES_CONTAS_EM_ANEL.indexOf(visao) >= 0;
+
+function aneisDosGrupos(grupos) {
+  const linhas = (grupos || []).map((g) => {
+    const t = g.totais || { total: 0, pago: 0, aberto: 0, vencido: 0 };
+    return {
+      chave: g.chave, titulo: g.titulo, avulso: g.chave === CHAVE_SEM_GRUPO,
+      total: t.total, pago: t.pago, aberto: t.aberto, vencido: t.vencido,
+      progresso: progressoCusto({ estimado: t.total, realizado: t.pago }),
+    };
+  }).filter((l) => l.total > 0 || l.pago > 0);
+  const red = (x) => Math.round(x * 100) / 100;
+  return {
+    linhas,
+    total: {
+      total: red(linhas.reduce((a, l) => a + l.total, 0)),
+      pago: red(linhas.reduce((a, l) => a + l.pago, 0)),
+      vencido: red(linhas.reduce((a, l) => a + l.vencido, 0)),
+    },
+    vazio: linhas.length === 0,
+  };
 }
 
 // ── Fluxo mensal (gráfico) ──────────────────────────────────────

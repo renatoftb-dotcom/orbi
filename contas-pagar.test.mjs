@@ -39,6 +39,7 @@ const modulo = new Function(`
            CARGA_ESTIMATIVA_UNICA, estimativaCargaUnica,
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
            prestadoresDoPL, CONTAS_PRESTADOR_EXTRA,
+           aneisDosGrupos, visaoUsaAnel, VISOES_CONTAS_EM_ANEL,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -981,6 +982,57 @@ teste("ofício que só tem pagamento aparece; sem nenhum lado, não", () => {
   assert.deepStrictEqual(r.linhas.map(l => l.conta.id), ["encanador"]);
   assert.strictEqual(r.linhas[0].progresso.medivel, false, "sem estimativa não há anel");
   assert.strictEqual(prest([], []).vazio, true);
+});
+
+console.log("\n--- anéis por fornecedor e por contrato ---");
+const contasDeDois = [
+  // Zé Empreiteiro: 3 parcelas de 100, uma paga
+  { id: "z1", obraId: "o1", contratoId: "ctr1", prestadorId: "f1", favorecido: "Zé Empreiteiro", valor: 100, pago: true, valorPago: 100, pagoEm: "2026-03-10", vencimento: "2026-03-10" },
+  { id: "z2", obraId: "o1", contratoId: "ctr1", prestadorId: "f1", favorecido: "Zé Empreiteiro", valor: 100, pago: false, vencimento: "2026-04-10" },
+  { id: "z3", obraId: "o1", contratoId: "ctr1", prestadorId: "f1", favorecido: "Zé Empreiteiro", valor: 100, pago: false, vencimento: "2026-01-10" }, // vencida
+  // Serralheria: 1 conta paga inteira
+  { id: "s1", obraId: "o1", contratoId: "ctr2", prestadorId: "f2", favorecido: "Serralheria", valor: 500, pago: true, valorPago: 500, pagoEm: "2026-02-01", vencimento: "2026-02-01" },
+];
+const gruposPor = (visao) => modulo.agruparContas(contasDeDois, visao, { hoje: "2026-03-15",
+  nomePrestador: (id) => ({ f1: "Zé Empreiteiro", f2: "Serralheria" })[id],
+  nomeContrato: (id) => ({ ctr1: "Empreitada da casa", ctr2: "Esquadrias" })[id] });
+
+teste("só fornecedor e contrato viram anel; mês e ano seguem em barra", () => {
+  assert.strictEqual(modulo.visaoUsaAnel("fornecedor"), true);
+  assert.strictEqual(modulo.visaoUsaAnel("contrato"), true);
+  assert.strictEqual(modulo.visaoUsaAnel("mes"), false, "série temporal é barra");
+  assert.strictEqual(modulo.visaoUsaAnel("ano"), false);
+  assert.strictEqual(modulo.visaoUsaAnel(undefined), false);
+});
+
+teste("por fornecedor, o anel é o pago sobre o devido", () => {
+  const r = modulo.aneisDosGrupos(gruposPor("fornecedor"));
+  const ze = r.linhas.find(l => /Zé/.test(l.titulo));
+  assert.strictEqual(ze.total, 300);
+  assert.strictEqual(ze.pago, 100);
+  assert.strictEqual(ze.progresso.pct, 33);
+  assert.strictEqual(ze.vencido, 100, "a parcela de janeiro está em atraso");
+  const ser = r.linhas.find(l => /Serralheria/.test(l.titulo));
+  assert.strictEqual(ser.progresso.pct, 100, "pago por inteiro fecha o anel");
+  assert.strictEqual(ser.vencido, 0);
+  assert.strictEqual(r.total.total, 800);
+  assert.strictEqual(r.total.pago, 600);
+});
+
+teste("por contrato, o anel é o quanto do contrato já foi pago", () => {
+  const r = modulo.aneisDosGrupos(gruposPor("contrato"));
+  // agruparContas já ordena do maior total para o menor nas visões por nome
+  assert.deepStrictEqual(r.linhas.map(l => l.titulo), ["Esquadrias", "Empreitada da casa"]);
+  const de = (t) => r.linhas.find(l => l.titulo === t);
+  assert.strictEqual(de("Empreitada da casa").progresso.pct, 33);
+  assert.strictEqual(de("Esquadrias").progresso.pct, 100);
+});
+
+teste("grupo sem valor nenhum não ocupa cartão", () => {
+  const r = modulo.aneisDosGrupos([{ chave: "x", titulo: "Vazio", totais: { total: 0, pago: 0, aberto: 0, vencido: 0 } }]);
+  assert.strictEqual(r.vazio, true);
+  assert.strictEqual(modulo.aneisDosGrupos([]).vazio, true);
+  assert.strictEqual(modulo.aneisDosGrupos(null).vazio, true);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
