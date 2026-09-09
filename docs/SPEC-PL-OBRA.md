@@ -649,3 +649,40 @@ lançava entrada na estimativa isso passava; com o quadro convidando a
 preencher as contas de receita, uma obra de 900 mil de entrada e 700 mil de
 custo passou a anunciar "estimado R$ 1.600.000,00". Agora são dois números,
 como no P&L: **Entradas estimadas** (só quando houver) e **Custo estimado**.
+
+### Estimativa de referência do escritório
+
+`ESTIMATIVA_PL_SEED` (em `obra-financeiro.jsx`) traz os números de uma obra
+real do escritório — a planilha ESTIMATIVA PL OBRA, **R$ 1.030.000,00** de
+custo. O botão "Carregar estimativa de referência", na aba Preencher, joga
+esses valores no quadro; dali o escritório ajusta linha a linha.
+
+| Grupo | Contas | Total |
+|---|---|---|
+| Material & insumos | Material 310.539,19 · Aluguel de ferramentas e equipamentos 12.000,00 · Adicionais de material 44.990,38 | 367.529,57 |
+| Mão de obra & prestadores | Empreiteiro 174.800,00 · Eletricista 34.960,00 · Pintor 43.700,00 · Gesseiro 85.440,00 · Serralheiro 117.362,00 · Lixador de concreto 3.277,50 · Adicionais de mão de obra 68.930,93 | 528.470,43 |
+| Serviços & taxas | Gerenciamento de obra 134.000,00 | 134.000,00 |
+| | | **1.030.000,00** |
+
+Três contas nasceram com esta planilha, todas **acrescentadas no fim do
+bloco do seu grupo** — id é chave gravada no lançamento, e a §10 proíbe
+renomear ou reordenar o que já existe:
+
+- `adicionais_material` — Adicionais de material
+- `lixador_concreto` — Lixador de concreto
+- `adicionais_mo` — Adicionais de mão de obra
+
+A planilha chama os dois adicionais só de "Adicionais". Aqui levam sufixo
+porque são contas diferentes em grupos diferentes e aparecem lado a lado em
+lista plana (extrato, contas a pagar) — dois "Adicionais" ali seriam
+indistinguíveis.
+
+**"Adicionais" é fecho de grupo, não serviço.** O de mão de obra é exatamente
+15% dos ofícios nomeados; o de material fecha o total em R$ 1.030.000,00
+redondos. A planilha traz quatro casas decimais e o quadro guarda duas: o
+centavo do arredondamento foi tirado do adicional de material, que é
+justamente a linha de fechamento — por isso a semente fecha no total exato.
+
+`aplicarEstimativaReferencia()` só escreve em item `origem: "quadro"`, então
+conta com item detalhado é pulada e a confirmação diz quais. Carregar duas
+vezes troca o valor, nunca duplica linha.

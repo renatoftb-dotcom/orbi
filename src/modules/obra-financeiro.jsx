@@ -42,6 +42,11 @@ const PLANO_CONTAS = [
   { id: "instalacoes_obra",   nome: "Instalações da obra",               grupo: "materiais" },
   { id: "manutencao_equip",   nome: "Manutenção de equipamentos",        grupo: "materiais" },
   { id: "terraplanagem",      nome: "Terraplanagem",                     grupo: "materiais" },
+  // Fecho do grupo: o que não tem conta própria e o arredondamento da
+  // estimativa. Na planilha do escritório chama só "Adicionais"; aqui leva
+  // o sufixo porque mão de obra tem um homônimo e os dois aparecem juntos
+  // em lista plana (extrato, contas a pagar).
+  { id: "adicionais_material", nome: "Adicionais de material",            grupo: "materiais" },
 
   // ── mão de obra & prestadores ─────────────────────────────
   { id: "ajudantes",          nome: "Ajudantes",                grupo: "maoDeObra" },
@@ -62,6 +67,8 @@ const PLANO_CONTAS = [
   { id: "vale_refeicao",      nome: "Vale refeição",            grupo: "maoDeObra" },
   { id: "fgts",               nome: "FGTS",                     grupo: "maoDeObra" },
   { id: "darf",               nome: "DARF",                     grupo: "maoDeObra" },
+  { id: "lixador_concreto",   nome: "Lixador de concreto",      grupo: "maoDeObra" },
+  { id: "adicionais_mo",      nome: "Adicionais de mão de obra", grupo: "maoDeObra" },
 
   // ── serviços & taxas ──────────────────────────────────────
   { id: "impostos",           nome: "Impostos",                          grupo: "servicos" },
@@ -77,6 +84,41 @@ const PLANO_CONTAS = [
   // ── excluídas (fora do resultado) ─────────────────────────
   { id: "reembolsos",         nome: "Reembolsos",               grupo: "excluidas" },
 ];
+
+// ── Estimativa de referência do P&L ─────────────────────────────
+// Números de uma obra real do escritório, na planilha ESTIMATIVA PL OBRA:
+// R$ 1.030.000,00 de custo total. Servem de ponto de partida para uma obra
+// nova — o escritório carrega, ajusta linha a linha e segue.
+//
+// É provisório de propósito. Amanhã quem preenche estas contas são os
+// fluxos do próprio site (quantitativo, contratos, cotações), gravando no
+// mesmo item `origem: "quadro"` que o botão grava hoje.
+//
+// Sobre "Adicionais": é o fecho de cada grupo, não um serviço. O de mão de
+// obra é exatamente 15% dos ofícios nomeados; o de material fecha o total
+// em R$ 1.030.000,00 redondos. O centavo do arredondamento para duas casas
+// (a planilha traz 4) foi tirado do adicional de material, que é justamente
+// a linha de fechamento.
+const ESTIMATIVA_PL_SEED = {
+  fonte: "planilha ESTIMATIVA PL OBRA — obra de referência do escritório",
+  total: 1030000,
+  valores: {
+    // material & insumos — R$ 367.529,57
+    material:            310539.19,
+    aluguel_equip:        12000.00,
+    adicionais_material:  44990.38,
+    // mão de obra & prestadores — R$ 528.470,43
+    empreiteiro:         174800.00,
+    eletricista:          34960.00,
+    pintor:               43700.00,
+    gesseiro:             85440.00,
+    serralheiro:         117362.00,
+    lixador_concreto:      3277.50,
+    adicionais_mo:        68930.93,
+    // serviços & taxas — R$ 134.000,00
+    taxa_admin_obra:     134000.00,
+  },
+};
 
 // ── Etapas de execução da obra — ordem construtiva, preservar. Cada etapa
 // pertence a uma macroetapa usada nos agrupamentos/rankings. ──

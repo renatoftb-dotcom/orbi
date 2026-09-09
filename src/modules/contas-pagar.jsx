@@ -622,6 +622,32 @@ function definirEstimativaDaConta(itens, contaId, valor, novoId) {
   return lista.concat([{ id: novoId, contaId, prestadorId: "", valor: v, observacao: "", origem: EST_ORIGEM_QUADRO }]);
 }
 
+// Carrega a estimativa de referência nas contas do quadro. Só mexe nos
+// itens `origem: "quadro"` — o que foi detalhado à mão em "Por conta" não é
+// tocado, e por isso conta com detalhe fica de fora (a soma dela já é o
+// número certo, e sobrescrever esconderia de onde veio).
+// `novoId` é uma função, não um id: cada conta criada precisa do seu.
+function aplicarEstimativaReferencia(itens, semente, novoId) {
+  let lista = (itens || []).slice();
+  const valores = (semente && semente.valores) || {};
+  for (const contaId of Object.keys(valores)) {
+    if (itensDetalhados(lista, contaId).length) continue;
+    lista = definirEstimativaDaConta(lista, contaId, valores[contaId], novoId());
+  }
+  return lista;
+}
+
+// O que o botão vai fazer, para a confirmação poder dizer antes de fazer.
+function previaEstimativaReferencia(itens, semente) {
+  const valores = (semente && semente.valores) || {};
+  const preencher = [], substituir = [], pulados = [];
+  for (const contaId of Object.keys(valores)) {
+    if (itensDetalhados(itens, contaId).length) { pulados.push(contaId); continue; }
+    (itemDeQuadro(itens, contaId) ? substituir : preencher).push(contaId);
+  }
+  return { preencher, substituir, pulados };
+}
+
 // Totais do quadro por grupo, e o resultado estimado da obra: entradas
 // menos os grupos de custo. "Excluídas" fica de fora, como no P&L realizado.
 function totaisEstimativaPL(itens, grupos, contas) {

@@ -36,6 +36,7 @@ const modulo = new Function(`
            extratoMatriz, estimativaPorConta,
            GRUPOS_PL, linhasEstimativaPL, definirEstimativaDaConta, totaisEstimativaPL,
            itemDeQuadro, itensDetalhados, EST_ORIGEM_QUADRO,
+           ESTIMATIVA_PL_SEED, aplicarEstimativaReferencia, previaEstimativaReferencia,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -728,6 +729,55 @@ teste("o resultado estimado é entradas menos custos, sem as excluídas", () => 
   assert.strictEqual(t.porGrupo.servicos, 50000);
   assert.strictEqual(t.porGrupo.excluidas, 30000, "aparece no quadro");
   assert.strictEqual(t.resultado, 200000, "mas fica fora do resultado");
+});
+
+// ── Estimativa de referência (planilha ESTIMATIVA PL OBRA) ──────
+teste("toda conta da semente existe no plano", () => {
+  for (const id of Object.keys(modulo.ESTIMATIVA_PL_SEED.valores)) {
+    assert.ok(modulo.PLANO_CONTAS.some(c => c.id === id), `conta "${id}" não existe no plano`);
+  }
+});
+
+teste("a semente soma exatamente o total da planilha", () => {
+  const v = modulo.ESTIMATIVA_PL_SEED.valores;
+  const soma = Object.keys(v).reduce((a, k) => a + v[k], 0);
+  assert.strictEqual(Math.round(soma * 100) / 100, modulo.ESTIMATIVA_PL_SEED.total);
+  assert.strictEqual(modulo.ESTIMATIVA_PL_SEED.total, 1030000);
+});
+
+teste("carregar preenche as contas da semente e fecha no total", () => {
+  const itens = modulo.aplicarEstimativaReferencia([], modulo.ESTIMATIVA_PL_SEED, (() => { let n = 0; return () => "s" + (++n); })());
+  assert.strictEqual(itens.length, Object.keys(modulo.ESTIMATIVA_PL_SEED.valores).length);
+  assert.ok(itens.every(i => i.origem === "quadro"), "tudo entra como item de quadro");
+  const t = modulo.totaisEstimativaPL(itens, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+  assert.strictEqual(t.porGrupo.materiais, 367529.57);
+  assert.strictEqual(t.porGrupo.maoDeObra, 528470.43);
+  assert.strictEqual(t.porGrupo.servicos, 134000);
+  assert.strictEqual(t.resultado, -1030000, "sem entradas, o resultado é o custo inteiro no negativo");
+  const est = modulo.estimativaPorConta(itens);
+  const soma = Object.keys(est).reduce((a, k) => a + est[k], 0);
+  assert.strictEqual(Math.round(soma * 100) / 100, 1030000);
+});
+
+teste("carregar não encosta no que foi detalhado à mão", () => {
+  const antes = [{ id: "d1", contaId: "empreiteiro", valor: 999, observacao: "Contrato Zé" }];
+  const p = modulo.previaEstimativaReferencia(antes, modulo.ESTIMATIVA_PL_SEED);
+  assert.deepStrictEqual(p.pulados, ["empreiteiro"]);
+  assert.ok(!p.preencher.includes("empreiteiro"));
+  const depois = modulo.aplicarEstimativaReferencia(antes, modulo.ESTIMATIVA_PL_SEED, (() => { let n = 0; return () => "s" + (++n); })());
+  assert.deepStrictEqual(depois.filter(i => i.contaId === "empreiteiro"), antes, "o item detalhado fica como estava");
+});
+
+teste("carregar duas vezes troca o valor, não duplica linha", () => {
+  const gerador = () => { let n = 0; return () => "s" + (++n); };
+  const uma = modulo.aplicarEstimativaReferencia([], modulo.ESTIMATIVA_PL_SEED, gerador());
+  const editada = modulo.definirEstimativaDaConta(uma, "material", 1, "x");
+  const p = modulo.previaEstimativaReferencia(editada, modulo.ESTIMATIVA_PL_SEED);
+  assert.strictEqual(p.preencher.length, 0);
+  assert.strictEqual(p.substituir.length, Object.keys(modulo.ESTIMATIVA_PL_SEED.valores).length);
+  const duas = modulo.aplicarEstimativaReferencia(editada, modulo.ESTIMATIVA_PL_SEED, gerador());
+  assert.strictEqual(duas.length, uma.length, "não pode duplicar");
+  assert.strictEqual(duas.find(i => i.contaId === "material").valor, 310539.19, "volta ao valor da semente");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -7397,6 +7397,11 @@ const PLANO_CONTAS = [
   { id: "instalacoes_obra",   nome: "Instalações da obra",               grupo: "materiais" },
   { id: "manutencao_equip",   nome: "Manutenção de equipamentos",        grupo: "materiais" },
   { id: "terraplanagem",      nome: "Terraplanagem",                     grupo: "materiais" },
+  // Fecho do grupo: o que não tem conta própria e o arredondamento da
+  // estimativa. Na planilha do escritório chama só "Adicionais"; aqui leva
+  // o sufixo porque mão de obra tem um homônimo e os dois aparecem juntos
+  // em lista plana (extrato, contas a pagar).
+  { id: "adicionais_material", nome: "Adicionais de material",            grupo: "materiais" },
 
   // ── mão de obra & prestadores ─────────────────────────────
   { id: "ajudantes",          nome: "Ajudantes",                grupo: "maoDeObra" },
@@ -7417,6 +7422,8 @@ const PLANO_CONTAS = [
   { id: "vale_refeicao",      nome: "Vale refeição",            grupo: "maoDeObra" },
   { id: "fgts",               nome: "FGTS",                     grupo: "maoDeObra" },
   { id: "darf",               nome: "DARF",                     grupo: "maoDeObra" },
+  { id: "lixador_concreto",   nome: "Lixador de concreto",      grupo: "maoDeObra" },
+  { id: "adicionais_mo",      nome: "Adicionais de mão de obra", grupo: "maoDeObra" },
 
   // ── serviços & taxas ──────────────────────────────────────
   { id: "impostos",           nome: "Impostos",                          grupo: "servicos" },
@@ -7432,6 +7439,41 @@ const PLANO_CONTAS = [
   // ── excluídas (fora do resultado) ─────────────────────────
   { id: "reembolsos",         nome: "Reembolsos",               grupo: "excluidas" },
 ];
+
+// ── Estimativa de referência do P&L ─────────────────────────────
+// Números de uma obra real do escritório, na planilha ESTIMATIVA PL OBRA:
+// R$ 1.030.000,00 de custo total. Servem de ponto de partida para uma obra
+// nova — o escritório carrega, ajusta linha a linha e segue.
+//
+// É provisório de propósito. Amanhã quem preenche estas contas são os
+// fluxos do próprio site (quantitativo, contratos, cotações), gravando no
+// mesmo item `origem: "quadro"` que o botão grava hoje.
+//
+// Sobre "Adicionais": é o fecho de cada grupo, não um serviço. O de mão de
+// obra é exatamente 15% dos ofícios nomeados; o de material fecha o total
+// em R$ 1.030.000,00 redondos. O centavo do arredondamento para duas casas
+// (a planilha traz 4) foi tirado do adicional de material, que é justamente
+// a linha de fechamento.
+const ESTIMATIVA_PL_SEED = {
+  fonte: "planilha ESTIMATIVA PL OBRA — obra de referência do escritório",
+  total: 1030000,
+  valores: {
+    // material & insumos — R$ 367.529,57
+    material:            310539.19,
+    aluguel_equip:        12000.00,
+    adicionais_material:  44990.38,
+    // mão de obra & prestadores — R$ 528.470,43
+    empreiteiro:         174800.00,
+    eletricista:          34960.00,
+    pintor:               43700.00,
+    gesseiro:             85440.00,
+    serralheiro:         117362.00,
+    lixador_concreto:      3277.50,
+    adicionais_mo:        68930.93,
+    // serviços & taxas — R$ 134.000,00
+    taxa_admin_obra:     134000.00,
+  },
+};
 
 // ── Etapas de execução da obra — ordem construtiva, preservar. Cada etapa
 // pertence a uma macroetapa usada nos agrupamentos/rankings. ──
@@ -17259,6 +17301,32 @@ function definirEstimativaDaConta(itens, contaId, valor, novoId) {
   return lista.concat([{ id: novoId, contaId, prestadorId: "", valor: v, observacao: "", origem: EST_ORIGEM_QUADRO }]);
 }
 
+// Carrega a estimativa de referência nas contas do quadro. Só mexe nos
+// itens `origem: "quadro"` — o que foi detalhado à mão em "Por conta" não é
+// tocado, e por isso conta com detalhe fica de fora (a soma dela já é o
+// número certo, e sobrescrever esconderia de onde veio).
+// `novoId` é uma função, não um id: cada conta criada precisa do seu.
+function aplicarEstimativaReferencia(itens, semente, novoId) {
+  let lista = (itens || []).slice();
+  const valores = (semente && semente.valores) || {};
+  for (const contaId of Object.keys(valores)) {
+    if (itensDetalhados(lista, contaId).length) continue;
+    lista = definirEstimativaDaConta(lista, contaId, valores[contaId], novoId());
+  }
+  return lista;
+}
+
+// O que o botão vai fazer, para a confirmação poder dizer antes de fazer.
+function previaEstimativaReferencia(itens, semente) {
+  const valores = (semente && semente.valores) || {};
+  const preencher = [], substituir = [], pulados = [];
+  for (const contaId of Object.keys(valores)) {
+    if (itensDetalhados(itens, contaId).length) { pulados.push(contaId); continue; }
+    (itemDeQuadro(itens, contaId) ? substituir : preencher).push(contaId);
+  }
+  return { preencher, substituir, pulados };
+}
+
 // Totais do quadro por grupo, e o resultado estimado da obra: entradas
 // menos os grupos de custo. "Excluídas" fica de fora, como no P&L realizado.
 function totaisEstimativaPL(itens, grupos, contas) {
@@ -19601,7 +19669,7 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
 // Uma linha por conta do plano, o valor digitado direto. É o caminho para
 // dar o primeiro número em quarenta contas sem quarenta idas ao formulário;
 // o detalhe item a item continua existindo em "Por conta".
-function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL }) {
+function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, aoCarregarReferencia }) {
   const linhas = linhasEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
   const totais = totaisEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
   const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 9, padding: "6px 9px", fontSize: 12.5,
@@ -19610,13 +19678,30 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL }) 
   const grade = { display: "grid", gridTemplateColumns: isMobile ? "1fr 130px" : "minmax(190px, 1fr) 150px 150px", gap: 10, alignItems: "center" };
   const porGrupo = {};
   for (const l of linhas) (porGrupo[l.grupoId] || (porGrupo[l.grupoId] = [])).push(l);
+  // Grupo sem nada estimado mostra travessão, não "R$ 0,00" — zero aqui é
+  // ausência de estimativa, e a linha da conta já usa a mesma convenção.
+  const dinheiroOuTraco = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
+  // O menos vai na frente do símbolo: "− R$ 1.030.000,00", não "R$ -1.030.000,00".
+  const comSinal = (v) => (v < -0.005 ? "− " + fmtBRL(Math.abs(v)) : fmtBRL(v));
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 14 }}>
+      <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>
         Um campo por conta do P&amp;L. Campo em branco é conta sem estimativa — não é conta estimada em zero.
         Contas que já têm itens detalhados em “Por conta” mostram a soma deles e não são editadas aqui.
       </div>
+      {podeEditar && aoCarregarReferencia && (
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+          <button type="button" onClick={aoCarregarReferencia}
+            style={{ border: "1px solid rgba(38,36,33,0.16)", background: "#fff", color: "#111827", borderRadius: 20,
+              padding: "6px 16px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>
+            Carregar estimativa de referência
+          </button>
+          <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+            {fmtBRL(ESTIMATIVA_PL_SEED.total)} de uma obra do escritório — ponto de partida, ajuste depois.
+          </span>
+        </div>
+      )}
       {GRUPOS_PL.map(g => {
         const ls = porGrupo[g.id] || [];
         if (!ls.length) return null;
@@ -19625,7 +19710,7 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL }) 
             <div style={{ ...grade, borderBottom: "1.5px solid rgba(38,36,33,0.14)", paddingBottom: 6, marginBottom: 8 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#111827", textTransform: "uppercase", letterSpacing: 0.5 }}>{g.titulo}</div>
               {!isMobile && <div />}
-              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", textAlign: "right" }}>{fmtBRL(totais.porGrupo[g.id] || 0)}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", textAlign: "right" }}>{dinheiroOuTraco(totais.porGrupo[g.id] || 0)}</div>
             </div>
             {ls.map(l => (
               <div key={l.contaId} style={{ ...grade, marginBottom: 7 }}>
@@ -19661,11 +19746,12 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL }) 
         <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Resultado estimado da obra</div>
         {!isMobile && <div />}
         <div style={{ fontSize: 13.5, fontWeight: 700, color: totais.resultado < 0 ? "#dc2626" : "#15803d", textAlign: "right", whiteSpace: "nowrap" }}>
-          {fmtBRL(totais.resultado)}
+          {comSinal(totais.resultado)}
         </div>
       </div>
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
         Entradas menos os custos. “Excluídas” aparece no quadro, mas fica de fora do resultado.
+        {(totais.porGrupo.receitas || 0) < 0.005 && " Sem entrada estimada ainda, o resultado é o custo inteiro."}
       </div>
     </div>
   );
@@ -19925,6 +20011,33 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // registro fresco da obra pelo mesmo motivo de salvarItemPL.
   function definirEstimativa(contaId, valor) {
     const novosItens = definirEstimativaDaConta(obraAtual.estimativaPL || [], contaId, valor, uid());
+    const obraAtualizada = { ...obraAtual, estimativaPL: novosItens };
+    gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
+    setObraSelecionada(obraAtualizada);
+  }
+
+  // Carrega a estimativa de referência do escritório. Diz o que vai fazer
+  // antes de fazer: quantas contas preenche, quantas substitui, quais pula.
+  async function carregarEstimativaReferencia() {
+    const itens = obraAtual.estimativaPL || [];
+    const p = previaEstimativaReferencia(itens, ESTIMATIVA_PL_SEED);
+    const nome = (id) => (contaPorId(id) || {}).nome || id;
+    const linhas = [];
+    if (p.preencher.length) linhas.push(`Preenche ${p.preencher.length} conta${p.preencher.length > 1 ? "s" : ""}.`);
+    if (p.substituir.length) linhas.push(`Substitui o valor de ${p.substituir.length}: ${p.substituir.map(nome).join(", ")}.`);
+    if (p.pulados.length) linhas.push(`Não mexe em ${p.pulados.map(nome).join(", ")} — tem item detalhado.`);
+    if (!p.preencher.length && !p.substituir.length) {
+      dialogo.alertar({ titulo: "Nada a carregar", mensagem: linhas.join(" "), tipo: "aviso" });
+      return;
+    }
+    const ok = await dialogo.confirmar({
+      titulo: "Carregar a estimativa de referência?",
+      mensagem: `${linhas.join(" ")} Os valores vêm de uma obra do escritório e são um ponto de partida — ajuste linha a linha depois.`,
+      confirmar: "Carregar",
+      destrutivo: p.substituir.length > 0,
+    });
+    if (!ok) return;
+    const novosItens = aplicarEstimativaReferencia(itens, ESTIMATIVA_PL_SEED, () => uid());
     const obraAtualizada = { ...obraAtual, estimativaPL: novosItens };
     gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
     setObraSelecionada(obraAtualizada);
@@ -20226,7 +20339,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
-            fmtBRL={fmtBRL} aoDefinir={definirEstimativa} />
+            fmtBRL={fmtBRL} aoDefinir={definirEstimativa} aoCarregarReferencia={carregarEstimativaReferencia} />
         ) : visaoPL === "extrato" ? (() => {
           // no menu, o mês corrente também aparece (para registrar entrada nele);
           // nas colunas, só os meses que têm movimento
