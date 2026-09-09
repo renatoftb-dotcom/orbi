@@ -52,7 +52,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    camposPreenchidos, projetoVazio, projetoParaFormulario,
+    camposPreenchidos, projetoVazio, projetoParaFormulario, agruparPorSubEtapa,
     demolicoesRemocoes, entulhoDaReforma, execucaoNoExistente, SERVICOS_REFORMA, ITENS_EXISTENTE,
     migrarExistente, medidaExistente, taxaServicoReforma, DRYWALL_CONSUMO,
     consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
@@ -1250,6 +1250,64 @@ teste("o contador do botão de limpar enxerga a matriz", () => {
   const naTela = modulo.projetoParaFormulario({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
     arquitetura: {}, terreo: {}, existente: { alvenaria: { remover: 40, executar: 12 } } });
   assert.strictEqual(modulo.camposPreenchidos(naTela), 2);
+});
+
+
+// ── Agrupamento por serviço na tabela do resultado ──────────────
+teste("as linhas se agrupam pelo serviço que as gerou, na ordem em que saíram", () => {
+  const itens = [
+    { subEtapa: "Contrapiso", item: "Areia Grossa", total: 100 },
+    { subEtapa: "Contrapiso", item: "Pedra", total: 200 },
+    { subEtapa: "Calçada", item: "Areia Grossa", total: 50 },
+    { subEtapa: "Contrapiso", item: "Sacos de cimento 50kg", total: 300 },
+  ];
+  const g = modulo.agruparPorSubEtapa(itens);
+  assert.deepStrictEqual(g.map(x => x.subEtapa), ["Contrapiso", "Calçada"]);
+  assert.strictEqual(g[0].itens.length, 3, "a linha que voltou ao Contrapiso entra no mesmo grupo");
+  assert.strictEqual(g[0].subtotal, 600);
+  assert.strictEqual(g[1].subtotal, 50);
+  assert.ok(g[0].mostrarTitulo && g[1].mostrarTitulo);
+});
+
+teste("com um serviço só, o título não se repete", () => {
+  const g = modulo.agruparPorSubEtapa([
+    { subEtapa: "Construção existente", item: "Caçamba", total: 320 },
+  ]);
+  assert.strictEqual(g.length, 1);
+  assert.strictEqual(g[0].mostrarTitulo, false, "o título da etapa já diz isso");
+});
+
+teste("linha sem sub-etapa não ganha título vazio", () => {
+  const g = modulo.agruparPorSubEtapa([
+    { subEtapa: "", item: "A", total: 1 },
+    { subEtapa: "Piso", item: "B", total: 2 },
+  ]);
+  assert.strictEqual(g[0].mostrarTitulo, false);
+  assert.strictEqual(g[1].mostrarTitulo, true);
+});
+
+teste("o agrupamento não perde nem duplica nenhuma linha do orçamento", () => {
+  const r = modulo.gerarOrcamentoObra({
+    tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 120, m2ParedesInternas: 150, m2ParedesExternas: 90, m2ParedesTotal: 240 },
+    terreo: { area: 120 },
+    existente: { contrapiso: { executar: 30 }, calcada: { executar: 20 }, alvenaria: { executar: 12 },
+      piso: { executar: 30 }, banheiro: { executar: 3 } },
+  }, { materiais: [] });
+  for (const etapa of [...new Set(r.itens.map(i => i.etapa))]) {
+    const daEtapa = r.itens.filter(i => i.etapa === etapa);
+    const grupos = modulo.agruparPorSubEtapa(daEtapa);
+    const somadas = grupos.reduce((n, g) => n + g.itens.length, 0);
+    assert.strictEqual(somadas, daEtapa.length, `${etapa}: agrupamento perdeu ou duplicou linha`);
+    const soma = grupos.reduce((n, g) => n + g.subtotal, 0);
+    const esperado = daEtapa.reduce((n, i) => n + i.total, 0);
+    assert.ok(Math.abs(soma - esperado) < 0.005, `${etapa}: subtotais não fecham com a etapa`);
+  }
+  // e o caso que motivou tudo: contrapiso e calçada usam os mesmos materiais
+  const existente = modulo.agruparPorSubEtapa(r.itens.filter(i => i.etapa === "Construção existente"));
+  const nomes = existente.map(g => g.subEtapa);
+  assert.ok(nomes.includes("Contrapiso") && nomes.includes("Calçada"),
+    "contrapiso e calçada têm que aparecer separados, não como areia e cimento repetidos");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

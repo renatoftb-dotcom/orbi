@@ -71,3 +71,31 @@ e o botão são os do painel de Projetos, ao lado: título, contagem e um
 `modelos-registry.jsx`, `orcamento-onboarding.jsx`, `orcamento-config.jsx` —
 o módulo de orçamento de projeto — e os módulos de impressão
 (`resultado-pdf.jsx`, `render-pdf-route.jsx`), cujo visual é o do documento.
+
+
+## Tabela do quantitativo: agrupada pelo serviço
+
+Cada linha do orçamento carrega `etapa` e `subEtapa`. A tabela mostrava só a
+etapa, então "Construção existente" saía com três `Sacos de cimento 50kg`
+seguidos — um da parede, um do contrapiso, um da calçada — e duas
+`Areia Grossa`, sem dizer qual era qual. Impossível conferir ou comprar por
+serviço.
+
+`agruparPorSubEtapa()` junta as linhas pelo serviço que as gerou,
+preservando a ordem de emissão do motor, e a tabela ganha uma linha de
+título com o nome do serviço e o subtotal dele:
+
+```
+▸ Contrapiso                              R$ 21.747,00
+    Areia Grossa            m3        2
+    Pedra                   m3        4
+    Sacos de cimento 50kg   Unidades  27
+    Aço - Malha Pop         Unidade   5
+▸ Calçada                                 R$ 15.320,00
+    Areia Grossa            m3        2
+    ...
+```
+
+Com uma sub-etapa só, o título não aparece — o da etapa já diz. Vale para
+todas as etapas, não só a reforma: "Contrapiso Interno" também separa o
+contrapiso do massiamento.

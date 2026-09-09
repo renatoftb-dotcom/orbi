@@ -12058,6 +12058,28 @@ function execucaoNoExistente(cp, out, data) {
   }
 }
 
+// Agrupa as linhas de uma etapa pelo serviço que as gerou (a sub-etapa),
+// preservando a ordem em que o motor emitiu. Sem isso a tabela mostra três
+// "Sacos de cimento 50kg" seguidos, um da parede, um do contrapiso e um da
+// calçada, sem dizer qual é qual — e o leitor não tem como conferir nem
+// comprar por serviço.
+//
+// Com uma sub-etapa só, devolve o grupo com `mostrarTitulo: false`: o título
+// da etapa já diz tudo, e repetir vira ruído.
+function agruparPorSubEtapa(itens) {
+  const grupos = [];
+  for (const i of itens || []) {
+    const nome = i.subEtapa || "";
+    let g = grupos.find((x) => x.subEtapa === nome);
+    if (!g) { g = { subEtapa: nome, itens: [], subtotal: 0 }; grupos.push(g); }
+    g.itens.push(i);
+    g.subtotal += Number(i.total) || 0;
+  }
+  const mostrarTitulo = grupos.length > 1;
+  for (const g of grupos) g.mostrarTitulo = mostrarTitulo && !!g.subEtapa;
+  return grupos;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // gerarOrcamentoObra — função pura, sem React, sem side-effect. Espelha a
 // ordem de execução de A_GERAR_ORCAMENTO.bas.
@@ -13622,9 +13644,17 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                     </tr>
                   </thead>
                   <tbody>
-                    {grupo.itens.map((i, idx) => (
-                      <tr key={idx} style={{ borderTop: "1px solid #f3f4f6" }}>
-                        <td style={{ padding: "6px 14px", color: "#111827" }}>{i.item}</td>
+                    {agruparPorSubEtapa(grupo.itens).flatMap((sub, si) => [
+                      ...(sub.mostrarTitulo ? [(
+                        <tr key={`s${si}`} style={{ borderTop: "1px solid #e5e7eb", background: "#fcfcfd" }}>
+                          <td colSpan={4} style={{ padding: "7px 14px", fontSize: 11.5, fontWeight: 700, color: "#111827" }}>{sub.subEtapa}</td>
+                          <td style={{ padding: "7px 14px", textAlign: "right", fontSize: 11.5, fontWeight: 700, color: "#4b5563" }}>{formatoBRL(sub.subtotal)}</td>
+                          <td />
+                        </tr>
+                      )] : []),
+                      ...sub.itens.map((i, idx) => (
+                      <tr key={`s${si}i${idx}`} style={{ borderTop: "1px solid #f3f4f6" }}>
+                        <td style={{ padding: "6px 14px", color: "#111827", paddingLeft: sub.mostrarTitulo ? 26 : 14 }}>{i.item}</td>
                         <td style={{ padding: "6px 14px", color: "#4b5563" }}>{i.unidade}</td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827" }}>{Number(i.qtd).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</td>
                         <td style={{ padding: "6px 14px", textAlign: "right", color: "#111827", whiteSpace: "nowrap" }} title={rotuloConfianca(i)}>
@@ -13639,7 +13669,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
                           )}
                         </td>
                       </tr>
-                    ))}
+                      )),
+                    ])}
                   </tbody>
                 </table>
               )}
