@@ -411,3 +411,33 @@ curta (ler clientes/obras/fornecedores/escritório/orçamentos; gravar só obras
 servidor **aceita apenas** `contasPagar`, `entradas` e `aceites` — o resto do
 documento fica como o escritório gravou, mesmo que a requisição venha
 adulterada.
+
+## O gráfico segue o agrupamento: barra para tempo, anel para entidade
+
+O "Agrupar por" troca a pergunta, então troca o gráfico:
+
+| agrupar por | pergunta | forma |
+|---|---|---|
+| Mês, Ano | quando vou pagar | barras (série temporal) |
+| Fornecedor, Contrato | quanto do que devo a cada um já saiu | um anel por grupo |
+
+Mês fora de ordem não quer dizer nada — série temporal é barra. Já
+"pago sobre o devido" é uma razão contra um limite, uma por grupo, e a forma
+disso é o mesmo anel do Planejamento repetido. `visaoUsaAnel()` decide, a
+partir de `VISOES_CONTAS_EM_ANEL`.
+
+**Por contrato é onde o anel diz mais**: o total é o valor contratado, então o
+preenchimento é literalmente o quanto do contrato já foi pago. O rótulo
+acompanha — "Contratado" nos contratos, "Total" no grupo de contas avulsas,
+que não foi contratado por ninguém (`avulso`, a partir de `CHAVE_SEM_GRUPO`).
+
+O vencido não entra no anel: seria uma segunda dimensão no mesmo desenho.
+Ele aparece como linha vermelha no cartão quando existe.
+
+### Os anéis somam a obra inteira
+
+Os quadros do topo e o mês escolhido no gráfico filtram a **lista de baixo**.
+Os anéis, não: "pago de total" precisa dos dois lados, e o filtro padrão é
+"a pagar", que esconde justamente as pagas — todo anel sairia em 0%. Por isso
+`gruposCheios` reagrupa `contasDaObra` sem filtro algum, e a nota abaixo dos
+cartões diz isso.
