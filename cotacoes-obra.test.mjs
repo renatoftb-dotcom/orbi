@@ -34,7 +34,8 @@ const modulo = new Function(`
            aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
            podeLancarCotacao, contaDaCotacao, resumoCotacoes, cotacoesAguardandoCliente,
            nomeDoFornecedor, PLANO_CONTAS,
-           podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas };
+           podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
+           prestadorRapidoVazio, criarPrestadorRapido };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -268,6 +269,40 @@ teste("os anexos das propostas apagadas voltam para limpar o storage", () => {
   assert.deepStrictEqual(M.anexosDasPropostas([]), []);
   assert.deepStrictEqual(M.anexosDasPropostas(null), []);
   assert.deepStrictEqual(M.anexosDasPropostas([{ anexo: { url: "u" } }]), [], "anexo sem public_id não vira chamada");
+});
+
+// ── Cadastro de prestador na hora ───────────────────────────────
+teste("o cadastro rápido nasce com os campos do contrato", () => {
+  const v = M.prestadorRapidoVazio();
+  for (const k of ["nome", "tipo", "categoria", "cnpjCpf", "telefone", "email",
+                   "cep", "logradouro", "numero", "bairro", "cidade", "estado",
+                   "representanteNome", "representanteCpf"]) {
+    assert.ok(k in v, `falta o campo ${k} — quem cadastra aqui tem que servir de contratado`);
+  }
+  assert.strictEqual(v.tipo, "PJ");
+  assert.strictEqual(v.categoria, "Outro", "sair daqui como 'Carpinteiro' sem ninguém ter escolhido é pior que sair sem ofício");
+});
+
+teste("só o nome é obrigatório, e ele entra ativo", () => {
+  assert.strictEqual(M.criarPrestadorRapido({ nome: "" }, "f1"), null);
+  assert.strictEqual(M.criarPrestadorRapido({ nome: "   " }, "f1"), null, "espaço não é nome");
+  assert.strictEqual(M.criarPrestadorRapido(null, "f1"), null);
+  const r = M.criarPrestadorRapido({ nome: "  Engevidros  " }, "f1");
+  assert.strictEqual(r.nome, "Engevidros", "o nome entra aparado");
+  assert.strictEqual(r.id, "f1");
+  assert.strictEqual(r.ativo, true, "senão não apareceria na própria lista de onde foi cadastrado");
+  assert.strictEqual(r.origem, "cotacao");
+  assert.ok(r.criadoEm);
+});
+
+teste("o que foi digitado vence o vazio do modelo", () => {
+  const r = M.criarPrestadorRapido({ nome: "Alumisantos", tipo: "PF", cnpjCpf: "123", cidade: "Ourinhos" }, "f2");
+  assert.strictEqual(r.tipo, "PF");
+  assert.strictEqual(r.cnpjCpf, "123");
+  assert.strictEqual(r.cidade, "Ourinhos");
+  assert.strictEqual(r.estado, "SP", "o que não foi digitado fica com o padrão");
+  // e o cadastro novo é achável pelo mesmo caminho de sempre
+  assert.strictEqual(M.nomeDoFornecedor([r], "f2"), "Alumisantos");
 });
 
 let falhas = 0;

@@ -147,3 +147,37 @@ Os anexos das propostas apagadas voltam de `anexosDasPropostas()` e a tela
 tenta removê-los do storage. É best-effort de propósito: apagar arquivo é
 permissão de admin, o arquivo já não está mais em lugar nenhum da obra, e
 uma recusa ali não pode travar a exclusão.
+
+## Cadastrar o prestador na hora
+
+O select de fornecedor da proposta abria com "— outro —". Escolher aquilo
+significava desistir do cadastro: o nome ia no campo ao lado e ficava só
+ali, sem CNPJ, sem contato, e sem servir de contratado quando o contrato
+daquele serviço fosse gerado.
+
+"— outro —" saiu. No lugar ficaram duas coisas diferentes:
+
+- **"— nenhum —"** — o repouso do campo. Continua possível registrar uma
+  proposta sem cadastrar ninguém, digitando o nome ao lado.
+- **"＋ Cadastrar prestador"** — não é um fornecedor, é uma ação: abre o
+  cadastro dentro da própria tela da proposta.
+
+Os campos são **os mesmos do cadastro rápido do gerador de contratos** —
+nome, pessoa, CNPJ/CPF, categoria, telefone, e-mail, endereço com ViaCEP e
+representante legal para PJ. Quem cadastra pela cotação já serve de
+contratado depois, sem redigitar.
+
+Só o nome é obrigatório: exigir CNPJ na hora de lançar uma proposta
+devolveria o usuário ao "outro" de antes. A categoria nasce **"Outro"**, e
+não a primeira da lista — a primeira é "Carpinteiro", e sair dali com um
+ofício que ninguém escolheu é pior que sair sem ofício, porque é por essa
+categoria que o gerador de contratos filtra os contratados.
+
+Ao salvar, o prestador entra em `data.fornecedores` com `ativo: true` e
+`origem: "cotacao"`, e **já sai escolhido na proposta**, com o nome copiado
+para "Nome que vai na conta" — é para isso que o usuário abriu o cadastro.
+
+Duas travas pequenas: o select fica desabilitado enquanto o cadastro está
+aberto (senão trocar de fornecedor no meio deixaria um formulário órfão na
+tela), e salvar a proposta com o cadastro aberto avisa em vez de jogar fora
+o que já foi digitado nele.

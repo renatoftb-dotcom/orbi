@@ -199,6 +199,39 @@ function anexosDasPropostas(propostas) {
     .filter(Boolean);
 }
 
+// ── Cadastro de prestador na hora ───────────────────────────────
+// Antes, fornecedor fora do cadastro virava "— outro —": o nome ia no campo
+// ao lado e ficava só ali, sem CNPJ, sem contato, sem virar contratado de
+// contrato depois. Agora o próprio formulário da proposta cadastra.
+//
+// Os campos são os mesmos do cadastro rápido do gerador de contratos — quem
+// cadastra aqui já serve para contrato, sem redigitar.
+function prestadorRapidoVazio() {
+  return {
+    // "Outro" e não a primeira da lista: a primeira é "Carpinteiro", e sair
+    // daqui com um ofício que ninguém escolheu é pior que sair sem ofício —
+    // é por essa categoria que o gerador de contratos filtra os contratados.
+    nome: "", tipo: "PJ", categoria: "Outro",
+    cnpjCpf: "", telefone: "", email: "",
+    cep: "", logradouro: "", numero: "", bairro: "", cidade: "", estado: "SP",
+    representanteNome: "", representanteCpf: "",
+  };
+}
+
+// O registro que entra em data.fornecedores. Só o nome é obrigatório: o
+// resto se completa depois em Prestadores de Serviços, e exigir CNPJ na
+// hora de lançar uma proposta faria o usuário voltar ao "outro" de antes.
+function criarPrestadorRapido(campos, novoId) {
+  const c = campos || {};
+  const nome = String(c.nome || "").trim();
+  if (!nome) return null;
+  return {
+    ...prestadorRapidoVazio(), ...c, nome,
+    id: novoId, ativo: true, criadoEm: new Date().toISOString(),
+    origem: "cotacao",
+  };
+}
+
 // A conta avulsa que nasce da cotação escolhida. Vence no prazo de
 // resposta quando houver, senão hoje — o escritório ajusta na baixa.
 function contaDaCotacao(cot, hoje) {
@@ -364,6 +397,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [formCotacao, setFormCotacao] = useState(null);
   const [formProposta, setFormProposta] = useState(null); // { cotacaoId, proposta }
   const [formDecisao, setFormDecisao] = useState(null);   // { cotacao, status }
+  const [novoPrestador, setNovoPrestador] = useState(null); // objeto quando o cadastro está aberto
   const [erro, setErro] = useState("");
 
   // Grava a obra sem encostar nas obras dos outros clientes: `obras` aqui é
@@ -452,8 +486,32 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     );
   }
 
+  // ── Cadastro do prestador, sem sair da proposta ───────────────
+  async function buscarCepPrestador(cepBruto) {
+    const limpo = String(cepBruto || "").replace(/\D/g, "");
+    if (limpo.length !== 8) return;
+    try {
+      const r = await fetch(`https://viacep.com.br/ws/${limpo}/json/`);
+      const d = await r.json();
+      if (!d.erro) setNovoPrestador(f => f && ({ ...f, logradouro: d.logradouro || f.logradouro, bairro: d.bairro || f.bairro, cidade: d.localidade || f.cidade, estado: d.uf || f.estado }));
+    } catch (e) {}
+  }
+
+  function salvarNovoPrestador() {
+    const registro = criarPrestadorRapido(novoPrestador, uid());
+    if (!registro) { setErro("Diga o nome do prestador."); return; }
+    setErro("");
+    save({ ...data, fornecedores: [...(data.fornecedores || []), registro] });
+    // já entra escolhido na proposta — é para isso que o usuário veio aqui
+    setFormProposta(f => f && ({ ...f, proposta: { ...f.proposta, fornecedorId: registro.id, favorecido: registro.nome } }));
+    setNovoPrestador(null);
+  }
+
   // ── Formulário da proposta recebida ───────────────────────────
   function salvarProposta() {
+    // Salvar a proposta com o cadastro aberto jogaria fora o que já foi
+    // digitado nele, sem dizer nada.
+    if (novoPrestador) { setErro("Termine o cadastro do prestador — salve ou cancele — antes de salvar a proposta."); return; }
     const { cotacaoId, proposta } = formProposta;
     const nome = proposta.favorecido || nomeDoFornecedor(prestadores, proposta.fornecedorId);
     if (!String(nome || "").trim()) { setErro("Diga de quem é a proposta."); return; }
@@ -471,16 +529,23 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const set = (k, v) => setFormProposta(f => ({ ...f, proposta: { ...f.proposta, [k]: v } }));
     return (
       <div style={E.wrap}>
-        <button onClick={() => { setFormProposta(null); setErro(""); }} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontFamily: "inherit", fontSize: 12, marginBottom: 16 }}>← Voltar</button>
+        <button onClick={() => { setFormProposta(null); setNovoPrestador(null); setErro(""); }} style={{ background: "none", border: "none", color: "#4b5563", cursor: "pointer", fontFamily: "inherit", fontSize: 12, marginBottom: 16 }}>← Voltar</button>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Proposta recebida</div>
         <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 18 }}>Registre o que o fornecedor respondeu.</div>
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>Fornecedor cadastrado</label>
-            <select style={E.input} value={p.fornecedorId}
-              onChange={e => { const id = e.target.value; setFormProposta(f => ({ ...f, proposta: { ...f.proposta, fornecedorId: id, favorecido: nomeDoFornecedor(prestadores, id) || f.proposta.favorecido } })); }}>
-              <option value="">— outro —</option>
+            <select style={E.input} value={p.fornecedorId} disabled={!!novoPrestador}
+              onChange={e => {
+                const id = e.target.value;
+                // "cadastrar" não é um fornecedor: abre o cadastro e o select
+                // volta para onde estava, senão ficaria mostrando a opção-ação
+                if (id === "__novo__") { setErro(""); setNovoPrestador(prestadorRapidoVazio()); return; }
+                setFormProposta(f => ({ ...f, proposta: { ...f.proposta, fornecedorId: id, favorecido: nomeDoFornecedor(prestadores, id) || f.proposta.favorecido } }));
+              }}>
+              <option value="">— nenhum —</option>
               {prestadores.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+              <option value="__novo__">＋ Cadastrar prestador</option>
             </select>
           </div>
           <div>
@@ -488,6 +553,60 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             <input style={E.input} value={p.favorecido} onChange={e => set("favorecido", e.target.value)} placeholder="MB Viezzer Serralheria" />
           </div>
         </div>
+        {novoPrestador && (
+          <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14, background: "#fafafa" }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 3 }}>Novo prestador de serviço</div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginBottom: 10 }}>
+              Só o nome é obrigatório — o resto dá para completar depois em Prestadores de Serviços. Estes são os mesmos campos do contrato, então quem cadastra aqui já serve de contratado.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr 1.2fr", gap: 12, marginBottom: 12 }}>
+              <div><label style={E.label}>Nome / razão social *</label>
+                <input style={E.input} value={novoPrestador.nome} onChange={e => setNovoPrestador({ ...novoPrestador, nome: e.target.value })} placeholder="MB Viezzer Serralheria" /></div>
+              <div><label style={E.label}>Pessoa</label>
+                <select style={E.input} value={novoPrestador.tipo} onChange={e => setNovoPrestador({ ...novoPrestador, tipo: e.target.value })}>
+                  <option value="PJ">Jurídica</option><option value="PF">Física</option>
+                </select></div>
+              <div><label style={E.label}>{novoPrestador.tipo === "PF" ? "CPF" : "CNPJ"}</label>
+                <input style={E.input} value={novoPrestador.cnpjCpf} onChange={e => setNovoPrestador({ ...novoPrestador, cnpjCpf: e.target.value })} /></div>
+              <div><label style={E.label}>Categoria</label>
+                <select style={E.input} value={novoPrestador.categoria} onChange={e => setNovoPrestador({ ...novoPrestador, categoria: e.target.value })}>
+                  {(typeof CATEGORIAS_PRESTADOR !== "undefined" ? CATEGORIAS_PRESTADOR : ["Outro"]).map(c => <option key={c} value={c}>{c}</option>)}
+                </select></div>
+              <div><label style={E.label}>Telefone</label>
+                <input style={E.input} value={novoPrestador.telefone} onChange={e => setNovoPrestador({ ...novoPrestador, telefone: e.target.value })} /></div>
+              <div><label style={E.label}>E-mail</label>
+                <input style={E.input} value={novoPrestador.email} onChange={e => setNovoPrestador({ ...novoPrestador, email: e.target.value })} /></div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 2fr 0.8fr", gap: 12, marginBottom: 12 }}>
+              <div><label style={E.label}>CEP</label>
+                <input style={E.input} value={novoPrestador.cep} placeholder="00000-000"
+                  onChange={e => { setNovoPrestador({ ...novoPrestador, cep: e.target.value }); buscarCepPrestador(e.target.value); }} /></div>
+              <div><label style={E.label}>Logradouro</label>
+                <input style={E.input} value={novoPrestador.logradouro} onChange={e => setNovoPrestador({ ...novoPrestador, logradouro: e.target.value })} /></div>
+              <div><label style={E.label}>Número</label>
+                <input style={E.input} value={novoPrestador.numero} onChange={e => setNovoPrestador({ ...novoPrestador, numero: e.target.value })} /></div>
+              <div><label style={E.label}>Bairro</label>
+                <input style={E.input} value={novoPrestador.bairro} onChange={e => setNovoPrestador({ ...novoPrestador, bairro: e.target.value })} /></div>
+              <div><label style={E.label}>Cidade</label>
+                <input style={E.input} value={novoPrestador.cidade} onChange={e => setNovoPrestador({ ...novoPrestador, cidade: e.target.value })} /></div>
+              <div><label style={E.label}>UF</label>
+                <input style={E.input} maxLength={2} value={novoPrestador.estado} onChange={e => setNovoPrestador({ ...novoPrestador, estado: e.target.value.toUpperCase().slice(0, 2) })} /></div>
+            </div>
+            {novoPrestador.tipo === "PJ" && (
+              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "2fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div><label style={E.label}>Representante legal</label>
+                  <input style={E.input} value={novoPrestador.representanteNome} placeholder="quem assina pela empresa"
+                    onChange={e => setNovoPrestador({ ...novoPrestador, representanteNome: e.target.value })} /></div>
+                <div><label style={E.label}>CPF do representante</label>
+                  <input style={E.input} value={novoPrestador.representanteCpf} onChange={e => setNovoPrestador({ ...novoPrestador, representanteCpf: e.target.value })} /></div>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 10 }}>
+              <button style={E.btn} onClick={salvarNovoPrestador}>Salvar prestador</button>
+              <button style={E.btnSec} onClick={() => { setNovoPrestador(null); setErro(""); }}>Cancelar</button>
+            </div>
+          </div>
+        )}
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>Valor</label>
@@ -517,7 +636,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         {erro && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 12 }}>{erro}</div>}
         <div style={{ display: "flex", gap: 10 }}>
           <button style={E.btn} onClick={salvarProposta}>Salvar proposta</button>
-          <button style={E.btnSec} onClick={() => { setFormProposta(null); setErro(""); }}>Cancelar</button>
+          <button style={E.btnSec} onClick={() => { setFormProposta(null); setNovoPrestador(null); setErro(""); }}>Cancelar</button>
         </div>
       </div>
     );
