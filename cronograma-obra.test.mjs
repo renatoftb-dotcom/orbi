@@ -269,7 +269,7 @@ teste("custo de referência = Σ HH × R$/h; onerado > desonerado; preço do esc
   assert.ok(esc.maoDeObra.totalRef > mo.totalRef * 1.5);
 });
 teste("compara com o prestador do orçamento pelo nome do insumo", () => {
-  const orc = { itens: [{ tipo: "Prestadores de serviços", item: "Pedreiros Casa", total: 330860 }, { tipo: "Prestadores de serviços", item: "Pintor", total: 33086 }] };
+  const orc = { itens: [{ tipo: "Prestadores de serviços", item: "Empreiteiro - Casa", total: 330860 }, { tipo: "Prestadores de serviços", item: "Pintor", total: 33086 }] };
   const r = M.gerarCronogramaObra(projetoSobrado, orc, dataVazia, cfg);
   const ped = r.maoDeObra.porPrestador.find((p) => p.chave === "equipePedreiros");
   assert.strictEqual(ped.orcado, 330860);

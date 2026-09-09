@@ -57,6 +57,7 @@ const modulo = new Function(`
     migrarExistente, medidaExistente, taxaServicoReforma, DRYWALL_CONSUMO,
     padroesDoItem, facesDaPintura, PINTURA_PAREDE, cacambasDaReforma, volumeEntulhoReforma,
     PRESTADORES_OBRA, linhasPrestadores, migrarPrestadores, baseAutomaticaPrestador, totalPrestadores,
+    itemDoPrestador, numeroDigitadoBR, textoNumeroBR,
     consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
 `)();
@@ -129,13 +130,13 @@ const outPrestadores = [];
 prestadores(cpReferencia, outPrestadores);
 
 const casosCentavos = [
-  ["Pedreiros Casa", 330860.00],
+  ["Empreiteiro - Casa", 330860.00],
   ["Pintor", 33086.00],
   ["Eletricista", 26468.80],
   ["Encanador", 19851.60],
   ["Gestão Obra", 162121.40],
-  ["Pedreiros Pavim. Externa", 25800.00],
-  ["Pedreiros Muro Divisa", 20280.00],
+  ["Empreiteiro - Pavimentação externa", 25800.00],
+  ["Empreiteiro - Muro de divisa", 20280.00],
   ["Terraplanagem", 8000.00],
 ];
 
@@ -354,7 +355,7 @@ teste("sem catálogo, todo item entra com preço 0, semPreco e aviso; qualidade 
   assert.strictEqual(r.qualidade.semPreco.length, materiais.length);
   assert.ok(r.avisos.some((a) => a.tipo === "sem_preco"));
   // prestadores continuam com a taxa do VBA
-  const ped = r.itens.find((i) => i.item === "Pedreiros Casa");
+  const ped = r.itens.find((i) => i.item === "Empreiteiro - Casa");
   assert.strictEqual(ped.preco, 1000);
   assert.strictEqual(ped.confianca, "modulo");
 });
@@ -491,10 +492,10 @@ teste("sem piscina: dados da piscina são ignorados e os prestadores da piscina 
   const base = { ...projetoReferencia, piscina: { areaConstruida: 32, profundidade: 1.4, paredesM2Total: 40, concreto: { contrapiso: 5 } } };
   const com = gerarOrcamentoObra({ ...base, temPiscina: true }, { materiais: [] });
   const sem = gerarOrcamentoObra({ ...base, temPiscina: false }, { materiais: [] });
-  assert.ok(com.itens.some((i) => i.item === "Pedreiros Piscina"));
+  assert.ok(com.itens.some((i) => i.item === "Empreiteiro - Piscina"));
   assert.ok(com.itens.some((i) => i.item === "Instalador Equip. Piscina"));
   assert.ok(com.itens.some((i) => i.etapa === "Piscina"));
-  assert.ok(!sem.itens.some((i) => i.item === "Pedreiros Piscina" || i.item === "Instalador Equip. Piscina" || i.etapa === "Piscina"));
+  assert.ok(!sem.itens.some((i) => i.item === "Empreiteiro - Piscina" || i.item === "Instalador Equip. Piscina" || i.etapa === "Piscina"));
   // projeto antigo sem o campo: tem piscina se havia área digitada
   assert.strictEqual(normalizarProjeto(base).temPiscina, true);
   assert.strictEqual(normalizarProjeto(projetoReferencia).temPiscina, false);
@@ -1575,7 +1576,7 @@ teste("desmarcar tira o prestador do orçamento", () => {
   assert.strictEqual(linha(cp, "equipePedreiros").incluir, false);
   const out = [];
   modulo.prestadores(cp, out, { materiais: [] });
-  assert.ok(!out.some(i => i.item === "Pedreiros Casa"), "desmarcado não pode ser emitido");
+  assert.ok(!out.some(i => i.item === "Empreiteiro - Casa"), "desmarcado não pode ser emitido");
   assert.ok(out.some(i => i.item === "Eletricista"), "os outros continuam");
 });
 
@@ -1638,6 +1639,64 @@ teste("o orçamento emitido bate com o quadro, linha por linha", () => {
   }
   assert.ok(!out.some(i => i.item === "Eletricista"));
   assert.strictEqual(out.find(i => i.item === "Pintor").preco, 130);
+});
+
+teste("as frentes do empreiteiro vêm agrupadas, cada uma com sua metragem", () => {
+  const cp = obraP({ externa: { pavimentacao: 60, muroDivisa: { comprimento: 30, altura: 2 } },
+    arrimo: { comprimento: 10, altura: 3 }, temPiscina: true, piscina: { areaConstruida: 32 } });
+  const linhas = modulo.linhasPrestadores(cp, { materiais: [] }).filter((l) => l.disponivel);
+  const doGrupo = linhas.filter((l) => l.grupo === "Empreiteiro");
+  assert.deepStrictEqual(doGrupo.map((l) => l.sub),
+    ["Casa", "Pavimentação externa", "Muro de divisa", "Muro de arrimo", "Piscina"]);
+  const m = (sub) => doGrupo.find((l) => l.sub === sub).qtd;
+  assert.strictEqual(m("Casa"), 200);
+  assert.strictEqual(m("Pavimentação externa"), 60);
+  assert.strictEqual(m("Muro de divisa"), 60);
+  assert.strictEqual(m("Muro de arrimo"), 30);
+  assert.strictEqual(m("Piscina"), 32);
+  // vêm em sequência, para o quadro desenhar um bloco só com subtotal
+  const pos = doGrupo.map((l) => linhas.indexOf(l));
+  assert.strictEqual(pos[pos.length - 1] - pos[0], pos.length - 1, "o grupo não pode vir partido");
+  // fora do grupo, cada ofício continua sozinho
+  assert.strictEqual(linhas.find((l) => l.chave === "pintor").grupo, null);
+});
+
+teste("o nome do empreiteiro é o mesmo no quadro, no orçamento e no cronograma", () => {
+  assert.strictEqual(modulo.itemDoPrestador("equipePedreiros"), "Empreiteiro - Casa");
+  assert.strictEqual(modulo.itemDoPrestador("muroArrimo"), "Empreiteiro - Muro de arrimo");
+  assert.strictEqual(modulo.itemDoPrestador("pintor"), "Pintor");
+  assert.strictEqual(modulo.itemDoPrestador("nao_existe"), null);
+});
+
+console.log("\n--- número digitado em pt-BR ---");
+teste("ponto é milhar quando há vírgula; sem vírgula, é decimal", () => {
+  assert.strictEqual(modulo.numeroDigitadoBR("1.250,50"), 1250.5);
+  assert.strictEqual(modulo.numeroDigitadoBR("1250,5"), 1250.5);
+  assert.strictEqual(modulo.numeroDigitadoBR("1250.5"), 1250.5);
+  assert.strictEqual(modulo.numeroDigitadoBR("1000"), 1000);
+  assert.strictEqual(modulo.numeroDigitadoBR("0"), 0);
+  assert.strictEqual(modulo.numeroDigitadoBR(""), "");
+  assert.strictEqual(modulo.numeroDigitadoBR("   "), "");
+  assert.strictEqual(modulo.numeroDigitadoBR("abc"), "");
+});
+
+teste("o número volta formatado, sem casas quando é redondo", () => {
+  assert.strictEqual(modulo.textoNumeroBR(1250.5), "1.250,5");
+  assert.strictEqual(modulo.textoNumeroBR(1000), "1.000");
+  // o preço pede duas casas; a metragem, nenhuma
+  assert.strictEqual(modulo.textoNumeroBR(1250.5, 2), "1.250,50");
+  assert.strictEqual(modulo.textoNumeroBR(1000, 2), "1.000,00");
+  assert.strictEqual(modulo.textoNumeroBR(200, 0), "200");
+  assert.strictEqual(modulo.textoNumeroBR(0), "0");
+  assert.strictEqual(modulo.textoNumeroBR(""), "");
+  assert.strictEqual(modulo.textoNumeroBR(null), "");
+});
+
+teste("digitar 1.250,50 no preço dá o mesmo total que 1250.5", () => {
+  const cp = obraP({ prestadores: { equipePedreiros: { preco: modulo.numeroDigitadoBR("1.250,50") } } });
+  const l = linha(cp, "equipePedreiros");
+  assert.strictEqual(l.preco, 1250.5);
+  assert.strictEqual(l.total, 250100);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

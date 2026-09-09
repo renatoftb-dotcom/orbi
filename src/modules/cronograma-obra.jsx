@@ -121,7 +121,10 @@ function maoDeObraReferencia(medicoesDetalhe, precoHora, eficiencia, orcamento, 
   const itens = (orcamento && Array.isArray(orcamento.itens)) ? orcamento.itens : [];
   const ef = eficiencia > 0 ? eficiencia : 1;
   const lista = Object.values(porPrestador).map((p) => {
-    const nome = nomeDe[p.chave];
+    // O nome vem de PRESTADORES_OBRA, que é quem batiza a linha do orçamento;
+    // INSUMO_PRESTADOR (nome no catálogo) fica de reserva.
+    const doOrcamento = typeof itemDoPrestador === "function" ? itemDoPrestador(p.chave) : null;
+    const nome = doOrcamento || nomeDe[p.chave];
     const orcadoItens = nome ? itens.filter((i) => i.tipo === "Prestadores de serviços" && i.item === nome) : [];
     const orcado = orcadoItens.length ? orcadoItens.reduce((a, i) => a + numOrZero(i.total), 0) : null;
     return { ...p, hh: Math.round(p.hh), custoRef: r2(p.custoRef), custoEficiencia: r2(p.custoRef / ef), orcado: orcado != null ? r2(orcado) : null, temPrestador: !!nome };

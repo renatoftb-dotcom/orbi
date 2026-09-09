@@ -6079,8 +6079,8 @@ var PRESTADOR_POR_SERVICO = {
   PINTURA_INT: "pintor", PINTURA_EXT: "pintor", FORRO_GESSO: "gesseiro", PORTA: "marceneiroPortas",
 };
 var PRESTADORES_ROTULO = {
-  equipePedreiros: "Pedreiros Casa", pintor: "Pintor", eletricista: "Eletricista", encanador: "Encanador", carpinteiro: "Carpinteiro (telhado)",
-  muroDivisa: "Pedreiros Muro Divisa", muroArrimo: "Pedreiros Muro Arrimo", pedreirosPiscina: "Pedreiros Piscina", pavimentacaoExterna: "Pedreiros Pavim. Externa",
+  equipePedreiros: "Empreiteiro - Casa", pintor: "Pintor", eletricista: "Eletricista", encanador: "Encanador", carpinteiro: "Carpinteiro (telhado)",
+  muroDivisa: "Empreiteiro - Muro de divisa", muroArrimo: "Empreiteiro - Muro de arrimo", pedreirosPiscina: "Empreiteiro - Piscina", pavimentacaoExterna: "Empreiteiro - Pavimentação externa",
   impermeabilizador: "Impermeabilizador", marceneiroPortas: "Marceneiro Portas Internas", gesseiro: "Gesseiro (forro) — sem prestador no orçamento",
 };
 
@@ -7934,8 +7934,16 @@ function taxaPrestador(chave, data) {
 //
 // `base` é de onde sai a metragem automática. "fixo" é serviço de verba —
 // terraplanagem, instalador — que não se mede por metro.
+// O empreiteiro é um só, mas cobra por frente de obra: a casa, a pavimentação
+// externa, cada muro e a piscina têm metragem e preço próprios. Por isso as
+// cinco linhas ficam num `grupo`, com um subtotal na tela — o orçamento
+// continua emitindo uma linha por frente, que é como o empreiteiro fatura.
 const PRESTADORES_OBRA = [
-  { chave: "equipePedreiros",        item: "Pedreiros Casa",             base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
+  { chave: "equipePedreiros",        item: "Empreiteiro - Casa",                  grupo: "Empreiteiro", sub: "Casa",                 base: "areaConstruida",        rotulo: "Área construída da casa (m²)" },
+  { chave: "pavimentacaoExterna",    item: "Empreiteiro - Pavimentação externa",  grupo: "Empreiteiro", sub: "Pavimentação externa", base: "pavimentacaoExterna",   rotulo: "Área de pavimentação externa (m²)" },
+  { chave: "muroDivisa",             item: "Empreiteiro - Muro de divisa",        grupo: "Empreiteiro", sub: "Muro de divisa",       base: "m2MuroDivisa",          rotulo: "Área do muro de divisa (m²)" },
+  { chave: "muroArrimo",             item: "Empreiteiro - Muro de arrimo",        grupo: "Empreiteiro", sub: "Muro de arrimo",       base: "m2Arrimo",              rotulo: "Área do muro de arrimo (m²)" },
+  { chave: "pedreirosPiscina",       item: "Empreiteiro - Piscina",               grupo: "Empreiteiro", sub: "Piscina",              base: "areaConstruidaPiscina", rotulo: "Área construída da piscina (m²)", sohComPiscina: true },
   { chave: "gestaoObra",             item: "Gestão Obra",                base: "areaConstruida",       rotulo: "Área construída da casa (m²)", regressiva: true },
   { chave: "eletricista",            item: "Eletricista",                base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
   { chave: "encanador",              item: "Encanador",                  base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
@@ -7945,15 +7953,14 @@ const PRESTADORES_OBRA = [
   { chave: "marceneiroPortas",       item: "Marceneiro Portas Internas", base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
   { chave: "serralheiro",            item: "Serralheiro",                base: "fixo",                 rotulo: "Serviço fechado" },
   { chave: "instaladorAr",           item: "Instalador AR",              base: "fixo",                 rotulo: "Serviço fechado" },
-  { chave: "pavimentacaoExterna",    item: "Pedreiros Pavim. Externa",   base: "pavimentacaoExterna",  rotulo: "Área de pavimentação externa (m²)" },
-  { chave: "muroDivisa",             item: "Pedreiros Muro Divisa",      base: "m2MuroDivisa",         rotulo: "Área do muro de divisa (m²)" },
-  { chave: "muroArrimo",             item: "Pedreiros Muro Arrimo",      base: "m2Arrimo",             rotulo: "Área do muro de arrimo (m²)" },
-  { chave: "pedreirosPiscina",       item: "Pedreiros Piscina",          base: "areaConstruidaPiscina", rotulo: "Área construída da piscina (m²)", sohComPiscina: true },
   { chave: "terraplanagem",          item: "Terraplanagem",              base: "fixo",                 rotulo: "Serviço fechado" },
   { chave: "instaladorAquecedores",  item: "Instalador Aquecedores",     base: "fixo",                 rotulo: "Serviço fechado" },
   { chave: "instaladorEquipPiscina", item: "Instalador Equip. Piscina",  base: "fixo",                 rotulo: "Serviço fechado", sohComPiscina: true },
 ];
 const prestadorPorChave = (chave) => PRESTADORES_OBRA.find((p) => p.chave === chave) || null;
+// Nome com que o serviço aparece no orçamento — é por ele que o cronograma
+// acha o valor contratado de cada ofício.
+const itemDoPrestador = (chave) => { const p = prestadorPorChave(chave); return p ? p.item : null; };
 
 // Metragem automática de uma linha, lida do projeto.
 function baseAutomaticaPrestador(p, cp) {
@@ -8025,6 +8032,7 @@ function linhasPrestadores(cp, data) {
     const preco = precoDigitado == null ? sugerido.valor : precoDigitado;
     linhas.push({
       chave: p.chave, item: p.item, rotulo: p.rotulo, base: p.base,
+      grupo: p.grupo || null, sub: p.sub || p.item,
       unidade: p.base === "fixo" ? "Unidades" : "m2",
       auto, sugerido: sugerido.valor, fontePreco: sugerido.fonte, confianca: sugerido.confianca,
       qtdDigitada, precoDigitado, qtd, preco,
@@ -8035,6 +8043,27 @@ function linhasPrestadores(cp, data) {
     });
   }
   return linhas;
+}
+
+// Campos de número em pt-BR: o usuário digita "1.250,50" e o programa guarda
+// 1250.5. Sem vírgula, o ponto é decimal ("1250.5" colado de outro lugar
+// continua valendo). Vazio volta como "" para o campo ficar em branco e o
+// sugerido reaparecer no placeholder.
+function numeroDigitadoBR(txt) {
+  const t = String(txt == null ? "" : txt).trim();
+  if (!t) return "";
+  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".") : t.replace(/\s/g, "");
+  const n = parseFloat(limpo);
+  return Number.isFinite(n) ? n : "";
+}
+// Como o número volta para o campo: milhar com ponto, decimal com vírgula.
+// `casas` é o mínimo de decimais — preço usa 2 (1.250,50), metragem usa 0
+// (200, e não 200,00).
+function textoNumeroBR(v, casas) {
+  const n = Number(v);
+  if (v === "" || v == null || !Number.isFinite(n)) return "";
+  const min = casas > 0 ? casas : 0;
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: min, maximumFractionDigits: Math.max(2, min) });
 }
 
 function totalPrestadores(cp, data) {
@@ -12800,11 +12829,27 @@ function MemoriaCalculo({ item, passos, onFechar }) {
 // A matriz da reforma: uma linha por elemento, duas colunas — o que sai e o
 // que entra. As linhas vêm de ITENS_EXISTENTE, a mesma tabela que dirige o
 // cálculo, então acrescentar um elemento é acrescentar uma linha lá.
+// Campo de número em pt-BR. Enquanto o usuário digita, o texto fica como ele
+// escreveu (senão "1.2" viraria "1,2" no meio da digitação e o cursor pularia);
+// ao sair do campo, volta formatado a partir do número guardado.
+function CampoNumeroBR({ valor, placeholder, disabled, estilo, casas, aoMudar }) {
+  const [texto, setTexto] = useState(null);
+  const mostrado = texto != null ? texto : (valor == null || valor === "" ? "" : textoNumeroBR(valor, casas));
+  return (
+    <input style={estilo} type="text" inputMode="decimal" disabled={disabled}
+      value={mostrado} placeholder={placeholder}
+      onChange={(e) => { setTexto(e.target.value); aoMudar(numeroDigitadoBR(e.target.value)); }}
+      onBlur={() => setTexto(null)} />
+  );
+}
+
 // Quadro dos prestadores: o mesmo desenho da tabela do resultado, mas
 // editável. Uma linha por ofício, com tique de incluir, metragem e preço.
 // Em branco, a metragem vem da medida do projeto e o preço do catálogo de
 // Insumos — o campo mostra esse valor como placeholder, então dá para ver o
 // que vai entrar sem precisar gerar o orçamento.
+// As frentes do empreiteiro (casa, pavimentação, muros, piscina) vêm juntas
+// sob um cabeçalho de grupo, com subtotal próprio.
 function QuadroPrestadores({ projetoDraft, data, get, set, isMobile }) {
   const cp = normalizarProjeto(projetoDraft);
   const linhas = linhasPrestadores(cp, data).filter((l) => l.disponivel);
@@ -12833,6 +12878,39 @@ function QuadroPrestadores({ projetoDraft, data, get, set, isMobile }) {
       </div>
     );
   }
+
+  // Linhas na ordem de PRESTADORES_OBRA, com as de um mesmo grupo juntas.
+  const blocos = [];
+  for (const l of linhas) {
+    const ultimo = blocos[blocos.length - 1];
+    if (l.grupo && ultimo && ultimo.grupo === l.grupo) ultimo.linhas.push(l);
+    else blocos.push({ grupo: l.grupo, linhas: [l] });
+  }
+
+  const linhaDe = (l, dentroDeGrupo) => {
+    const apagado = !l.incluir;
+    return (
+      <div key={l.chave} style={{ ...grade, marginBottom: 8, opacity: apagado ? 0.45 : 1 }}>
+        <input type="checkbox" checked={l.incluir} title={l.incluir ? "Entra no orçamento" : "Fora do orçamento"}
+          onChange={(e) => set(`prestadores.${l.chave}.incluir`, e.target.checked)} />
+        <div style={{ minWidth: 0, paddingLeft: dentroDeGrupo ? 12 : 0 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{dentroDeGrupo ? l.sub : l.item}</div>
+          <div style={{ fontSize: 10.5, color: cor(l) }}>{fonteTexto(l)}</div>
+        </div>
+        <div style={{ fontSize: 11.5, color: "#6b7280", textAlign: "center" }}>{l.unidade === "m2" ? "m²" : "un"}</div>
+        <CampoNumeroBR estilo={cel} disabled={apagado} valor={l.qtdDigitada}
+          placeholder={numMem(l.auto)}
+          aoMudar={(v) => set(`prestadores.${l.chave}.qtd`, v)} />
+        <CampoNumeroBR estilo={cel} disabled={apagado} valor={l.precoDigitado} casas={2}
+          placeholder={l.sugerido > 0 ? textoNumeroBR(l.sugerido, 2) : "—"}
+          aoMudar={(v) => set(`prestadores.${l.chave}.preco`, v)} />
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", textAlign: "right", whiteSpace: "nowrap" }}>
+          {formatoBRL(l.total)}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div style={{ gridColumn: "1 / -1" }}>
       <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 10 }}>
@@ -12848,28 +12926,20 @@ function QuadroPrestadores({ projetoDraft, data, get, set, isMobile }) {
           <div style={{ ...cab, textAlign: "right" }}>Total</div>
         </div>
       )}
-      {linhas.map((l) => {
-        const apagado = !l.incluir;
+      {blocos.map((b, i) => {
+        if (!b.grupo) return b.linhas.map((l) => linhaDe(l, false));
+        const subtotal = b.linhas.filter((l) => l.incluir).reduce((s, l) => s + l.total, 0);
         return (
-          <div key={l.chave} style={{ ...grade, marginBottom: 8, opacity: apagado ? 0.45 : 1 }}>
-            <input type="checkbox" checked={l.incluir} title={l.incluir ? "Entra no orçamento" : "Fora do orçamento"}
-              onChange={(e) => set(`prestadores.${l.chave}.incluir`, e.target.checked)} />
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{l.item}</div>
-              <div style={{ fontSize: 10.5, color: cor(l) }}>{fonteTexto(l)}</div>
+          <div key={`g${i}`} style={{ marginBottom: 4 }}>
+            <div style={{ ...grade, marginBottom: 6 }}>
+              <div />
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{b.grupo}</div>
+              <div /><div /><div />
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#6b7280", textAlign: "right", whiteSpace: "nowrap" }}>
+                {formatoBRL(subtotal)}
+              </div>
             </div>
-            <div style={{ fontSize: 11.5, color: "#6b7280", textAlign: "center" }}>{l.unidade === "m2" ? "m²" : "un"}</div>
-            <input style={cel} type="number" step="0.01" disabled={apagado}
-              value={l.qtdDigitada == null ? "" : l.qtdDigitada}
-              placeholder={numMem(l.auto)}
-              onChange={(e) => set(`prestadores.${l.chave}.qtd`, e.target.value === "" ? "" : Number(e.target.value))} />
-            <input style={cel} type="number" step="0.01" disabled={apagado}
-              value={l.precoDigitado == null ? "" : l.precoDigitado}
-              placeholder={l.sugerido > 0 ? numMem(l.sugerido) : "—"}
-              onChange={(e) => set(`prestadores.${l.chave}.preco`, e.target.value === "" ? "" : Number(e.target.value))} />
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", textAlign: "right", whiteSpace: "nowrap" }}>
-              {formatoBRL(l.total)}
-            </div>
+            {b.linhas.map((l) => linhaDe(l, true))}
           </div>
         );
       })}
@@ -14126,7 +14196,10 @@ function maoDeObraReferencia(medicoesDetalhe, precoHora, eficiencia, orcamento, 
   const itens = (orcamento && Array.isArray(orcamento.itens)) ? orcamento.itens : [];
   const ef = eficiencia > 0 ? eficiencia : 1;
   const lista = Object.values(porPrestador).map((p) => {
-    const nome = nomeDe[p.chave];
+    // O nome vem de PRESTADORES_OBRA, que é quem batiza a linha do orçamento;
+    // INSUMO_PRESTADOR (nome no catálogo) fica de reserva.
+    const doOrcamento = typeof itemDoPrestador === "function" ? itemDoPrestador(p.chave) : null;
+    const nome = doOrcamento || nomeDe[p.chave];
     const orcadoItens = nome ? itens.filter((i) => i.tipo === "Prestadores de serviços" && i.item === nome) : [];
     const orcado = orcadoItens.length ? orcadoItens.reduce((a, i) => a + numOrZero(i.total), 0) : null;
     return { ...p, hh: Math.round(p.hh), custoRef: r2(p.custoRef), custoEficiencia: r2(p.custoRef / ef), orcado: orcado != null ? r2(orcado) : null, temPrestador: !!nome };

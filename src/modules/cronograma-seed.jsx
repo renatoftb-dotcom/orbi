@@ -192,7 +192,7 @@ var PRESTADOR_POR_SERVICO = {
   PINTURA_INT: "pintor", PINTURA_EXT: "pintor", FORRO_GESSO: "gesseiro", PORTA: "marceneiroPortas",
 };
 var PRESTADORES_ROTULO = {
-  equipePedreiros: "Pedreiros Casa", pintor: "Pintor", eletricista: "Eletricista", encanador: "Encanador", carpinteiro: "Carpinteiro (telhado)",
-  muroDivisa: "Pedreiros Muro Divisa", muroArrimo: "Pedreiros Muro Arrimo", pedreirosPiscina: "Pedreiros Piscina", pavimentacaoExterna: "Pedreiros Pavim. Externa",
+  equipePedreiros: "Empreiteiro - Casa", pintor: "Pintor", eletricista: "Eletricista", encanador: "Encanador", carpinteiro: "Carpinteiro (telhado)",
+  muroDivisa: "Empreiteiro - Muro de divisa", muroArrimo: "Empreiteiro - Muro de arrimo", pedreirosPiscina: "Empreiteiro - Piscina", pavimentacaoExterna: "Empreiteiro - Pavimentação externa",
   impermeabilizador: "Impermeabilizador", marceneiroPortas: "Marceneiro Portas Internas", gesseiro: "Gesseiro (forro) — sem prestador no orçamento",
 };

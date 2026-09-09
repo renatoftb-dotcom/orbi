@@ -135,11 +135,14 @@ mostrava. Não dava para saber o que entraria deixando em branco.
 Agora é o mesmo desenho da tabela do resultado, editável:
 
 ```
-[x] Pedreiros Casa              m²   (200)   (1.000)   R$ 200.000,00
-    referência da planilha do escritório
-[x] Gestão Obra                 m²   (200)     (550)   R$ 110.000,00
+    Empreiteiro                                          R$ 215.000,00
+[x]   Casa                      m²   (200) (1.000,00)   R$ 200.000,00
+      referência da planilha do escritório
+[x]   Pavimentação externa      m²    (60)   (120,00)     R$ 7.200,00
+[x]   Muro de divisa            m²    (60)   (130,00)     R$ 7.800,00
+[x] Gestão Obra                 m²   (200)   (550,00)   R$ 110.000,00
     escada regressiva da gestão de obra
-[ ] Serralheiro                 un     (1)       (—)   R$ 0,00
+[ ] Serralheiro                 un     (1)         (—)         R$ 0,00
     sem preço — cadastre em Insumos ou digite aqui
                                       Total dos prestadores  R$ 383.000,00
 ```
@@ -155,6 +158,30 @@ Agora é o mesmo desenho da tabela do resultado, editável:
 `PRESTADORES_OBRA` é fonte única: desenha o quadro e emite o orçamento. Um
 teste confere linha a linha que o que a tela mostra é o que o orçamento
 recebe.
+
+### O empreiteiro é um só, com uma linha por frente
+
+Casa, pavimentação externa, muro de divisa, muro de arrimo e piscina são o
+mesmo empreiteiro cobrando por frente de obra. As cinco linhas trazem
+`grupo: "Empreiteiro"` e vêm em sequência na tabela: o quadro desenha um
+cabeçalho com subtotal e recolhe as filhas, cada uma com sua própria
+metragem (área construída, m² de pavimentação, m² de cada muro, área da
+piscina) e seu próprio preço.
+
+O orçamento continua emitindo **uma linha por frente** — `Empreiteiro - Casa`,
+`Empreiteiro - Muro de divisa` etc. — que é como o empreiteiro fatura e como o
+cronograma acha o valor contratado de cada ofício (`itemDoPrestador`). No
+catálogo de Insumos os códigos seguem sendo PRE-001/009/010/011/012 com os
+nomes antigos; `INSUMO_PRESTADOR` é quem faz a ponte, então renomear na tela
+não desfaz nenhum preço já cadastrado.
+
+### Preço e metragem em português
+
+Os dois campos são texto, não `input[type=number]`: aceitam **1.250,50** — o
+ponto é milhar quando há vírgula. Enquanto se digita, o texto fica como foi
+escrito (senão o cursor pularia a cada tecla); ao sair do campo ele volta
+formatado, com duas casas no preço e nenhuma na metragem. `numeroDigitadoBR`
+converte para número e `textoNumeroBR` de volta para texto.
 
 ### Sem preço não entra marcado
 

@@ -465,7 +465,7 @@ Asserções mínimas:
 
   | Item | Total |
   |---|---|
-  | Pedreiros Casa | R$ 330.860,00 |
+  | Empreiteiro - Casa | R$ 330.860,00 |
   | Pintor | R$ 33.086,00 |
   | Eletricista | R$ 26.468,80 |
   | Encanador | R$ 19.851,60 |
