@@ -20028,10 +20028,14 @@ function AnelCusto({ progresso, tamanho }) {
   const grossura = Math.round(d * 0.13);
   const raio = (d - grossura) / 2;
   const volta = 2 * Math.PI * raio;
-  const tom = !p.medivel ? { arco: "#9ca3af", trilha: "#f3f4f6" }
-    : p.acima      ? { arco: "#dc2626", trilha: "#fee2e2" }
-    : p.pct >= 90  ? { arco: "#b45309", trilha: "#fef3c7" }
-    :                { arco: "#0474f4", trilha: "#eef5ff" };
+  // SPEC-VISUAL: a única cor fora do azul é o vermelho de ação destrutiva e
+  // os fundos de alerta — sem fundo cobre, âmbar ou verde. Então são dois
+  // estados, não três: azul enquanto está dentro do estimado, vermelho
+  // quando passou. A faixa âmbar de "chegando no limite" saiu; quem avisa
+  // que está apertado é o "Falta" ao lado, que é número, não cor.
+  const tom = !p.medivel ? { arco: "rgba(38,36,33,0.16)", trilha: "rgba(38,36,33,0.10)" }
+    : p.acima ? { arco: "#dc2626", trilha: "#fee2e2" }
+    :           { arco: "#0474f4", trilha: "#eef5ff" };
   // arranca do topo e cresce no sentido do relógio
   const preenchido = volta * (p.arco / 100);
   return (
@@ -20045,7 +20049,7 @@ function AnelCusto({ progresso, tamanho }) {
           style={{ transition: "stroke-dasharray .6s ease" }} />
       )}
       <text x={d / 2} y={d / 2} textAnchor="middle" dominantBaseline="central"
-        style={{ fontSize: Math.round(d * 0.23), fontWeight: 700, fill: p.medivel ? "#111827" : "#9ca3af", fontFamily: "inherit" }}>
+        style={{ fontSize: Math.round(d * 0.23), fontWeight: 700, fill: p.medivel ? "#111827" : "#6b7280", fontFamily: "inherit" }}>
         {p.medivel ? `${p.pct}%` : "—"}
       </text>
     </svg>

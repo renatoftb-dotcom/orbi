@@ -760,9 +760,15 @@ dado. A cor só reforça a gravidade:
 
 | situação | arco | trilha |
 |---|---|---|
-| até 89% | `#0474f4` (o azul do resto do sistema) | `#eef5ff` |
-| 90–100% | `#b45309` | `#fef3c7` |
-| acima de 100% | `#dc2626` | `#fee2e2` |
+| dentro do estimado | `#0474f4` | `#eef5ff` |
+| passou do estimado | `#dc2626` | `#fee2e2` |
+| sem estimativa | — (só a trilha) | `rgba(38,36,33,0.10)` |
+
+São **dois** estados, não três. A faixa âmbar de "chegando no limite" existiu
+por um commit e saiu: SPEC-VISUAL é explícita em que a única cor fora do azul
+é o vermelho de ação destrutiva mais os fundos de alerta — sem fundo cobre,
+âmbar ou verde. Quem avisa que está apertado é o "Falta" ao lado, que é
+número, não cor.
 
 `progressoCusto()` devolve `pct` e `arco` separados de propósito: o número
 diz 117% quando estourou, mas o desenho não dá mais que uma volta. Sem
