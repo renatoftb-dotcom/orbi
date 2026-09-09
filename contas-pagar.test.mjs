@@ -37,6 +37,7 @@ const modulo = new Function(`
            GRUPOS_PL, linhasEstimativaPL, definirEstimativaDaConta, totaisEstimativaPL,
            itemDeQuadro, itensDetalhados, EST_ORIGEM_QUADRO,
            CARGA_ESTIMATIVA_UNICA, estimativaCargaUnica,
+           linhaFinalExtrato, fechoEstimativaPL,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -785,6 +786,70 @@ teste("carrega uma vez só, e nunca por cima do que já foi digitado", () => {
   // rodar de novo no resultado também não repete
   const uma = modulo.estimativaCargaUnica(obraCobop(), CARGA, ids());
   assert.strictEqual(modulo.estimativaCargaUnica(uma, CARGA, ids()), null);
+});
+
+// ── O cliente paga os fornecedores direto ───────────────────────
+const plComCustos = () => {
+  let itens = [];
+  itens = modulo.definirEstimativaDaConta(itens, "material", 400000, "e1");
+  itens = modulo.definirEstimativaDaConta(itens, "empreiteiro", 250000, "e2");
+  itens = modulo.definirEstimativaDaConta(itens, "impostos", 50000, "e3");
+  itens = modulo.definirEstimativaDaConta(itens, "reembolsos", 30000, "e4");
+  return itens;
+};
+
+teste("sem o tique, o fecho da estimativa continua o resultado", () => {
+  const f = modulo.fechoEstimativaPL(plComCustos(), modulo.GRUPOS_PL, modulo.PLANO_CONTAS, false);
+  assert.strictEqual(f.rotulo, "Resultado estimado da obra");
+  assert.strictEqual(f.valor, -700000, "sem entrada, o resultado é o custo no negativo");
+});
+
+teste("com o tique, o fecho vira o custo e nunca é negativo", () => {
+  const f = modulo.fechoEstimativaPL(plComCustos(), modulo.GRUPOS_PL, modulo.PLANO_CONTAS, true);
+  assert.strictEqual(f.rotulo, "Custo estimado da obra");
+  assert.strictEqual(f.valor, 700000, "o mesmo número, positivo");
+  assert.ok(f.valor >= 0);
+  // "Excluídas" fica de fora dos dois jeitos
+  assert.strictEqual(f.porGrupo.excluidas, 30000);
+  assert.ok(!String(f.valor).includes("730000"));
+});
+
+teste("com entrada estimada, o tique ainda mostra só o custo", () => {
+  const comEntrada = modulo.definirEstimativaDaConta(plComCustos(), "deposito_proprio", 900000, "e5");
+  const sem = modulo.fechoEstimativaPL(comEntrada, modulo.GRUPOS_PL, modulo.PLANO_CONTAS, false);
+  const com = modulo.fechoEstimativaPL(comEntrada, modulo.GRUPOS_PL, modulo.PLANO_CONTAS, true);
+  assert.strictEqual(sem.valor, 200000);
+  assert.strictEqual(com.valor, 700000, "o custo não muda por existir entrada lançada");
+});
+
+teste("a última linha do extrato troca de fecho com o tique", () => {
+  const contas = [
+    { id: "c1", obraId: "o1", contaId: "material", valor: 1000, pago: true, valorPago: 1000, pagoEm: "2026-03-10" },
+    { id: "c2", obraId: "o1", contaId: "empreiteiro", valor: 500, pago: true, valorPago: 500, pagoEm: "2026-03-20" },
+  ];
+  const est = modulo.estimativaPorConta(plComCustos());
+  const ex = modulo.extratoMatriz(contas, [], ["2026-03"], est);
+
+  const saldo = modulo.linhaFinalExtrato(ex, false);
+  assert.strictEqual(saldo.rotulo, "SALDO FINAL");
+  assert.strictEqual(saldo.total, -1500, "sem entrada, o saldo é o custo no negativo");
+  assert.strictEqual(saldo.negativo, true);
+
+  const custo = modulo.linhaFinalExtrato(ex, true);
+  assert.strictEqual(custo.rotulo, "CUSTO TOTAL");
+  assert.strictEqual(custo.total, 1500, "o mesmo número, positivo");
+  assert.strictEqual(custo.negativo, false);
+  assert.deepStrictEqual(custo.valores, ex.custos.valores);
+});
+
+teste("a coluna Estimado passa a fechar nas duas linhas", () => {
+  const contas = [{ id: "c1", obraId: "o1", contaId: "material", valor: 1000, pago: true, valorPago: 1000, pagoEm: "2026-03-10" }];
+  const comEntrada = modulo.definirEstimativaDaConta(plComCustos(), "deposito_proprio", 900000, "e5");
+  const ex = modulo.extratoMatriz(contas, [], ["2026-03"], modulo.estimativaPorConta(comEntrada));
+  // custo estimado = 400.000 + 250.000 + 50.000
+  assert.strictEqual(modulo.linhaFinalExtrato(ex, true).estimado, 700000);
+  // saldo estimado = 900.000 − 700.000
+  assert.strictEqual(modulo.linhaFinalExtrato(ex, false).estimado, 200000);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

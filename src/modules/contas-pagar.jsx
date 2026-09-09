@@ -543,7 +543,7 @@ function extratoMatriz(contas, entradas, meses, estimativa) {
   const rec = doGrupo("receitas");
   return {
     meses: ms, grupos,
-    entradas: { valores: rec.valores, total: rec.total },
+    entradas: { valores: rec.valores, total: rec.total, estimado: rec.estimado },
     custos: {
       valores: ms.map((_, i) => custoDe((g) => g.valores[i])),
       total: custoDe((g) => g.total),
@@ -552,8 +552,43 @@ function extratoMatriz(contas, entradas, meses, estimativa) {
     saldo: {
       valores: ms.map((_, i) => red(rec.valores[i] - custoDe((g) => g.valores[i]))),
       total: red(rec.total - custoDe((g) => g.total)),
+      estimado: red(rec.estimado - custoDe((g) => g.estimado)),
     },
   };
+}
+
+// ── A última linha do extrato ───────────────────────────────────
+// Quando o cliente paga os fornecedores direto, o escritório não movimenta
+// dinheiro: não há entrada para lançar, e "saldo = entradas − custos" viraria
+// o custo inteiro com sinal de menos, como se a obra desse prejuízo. Nessa
+// obra a última linha é o CUSTO TOTAL, positivo.
+//
+// A coluna "Estimado" era um `<span />` vazio nessa linha — os grupos
+// somavam e o fecho não. Agora fecha nos dois casos: o custo estimado
+// quando o cliente paga, o saldo estimado quando o escritório paga.
+function linhaFinalExtrato(ex, clientePaga) {
+  const e = ex || {};
+  const custos = e.custos || { valores: [], total: 0, estimado: 0 };
+  const saldo = e.saldo || { valores: [], total: 0, estimado: 0 };
+  return clientePaga
+    ? { rotulo: "CUSTO TOTAL", valores: custos.valores || [], total: custos.total || 0, estimado: custos.estimado || 0, negativo: false }
+    : { rotulo: "SALDO FINAL", valores: saldo.valores || [], total: saldo.total || 0, estimado: saldo.estimado || 0, negativo: (saldo.total || 0) < 0 };
+}
+
+// O fecho do quadro de estimativa, pela mesma regra: com o cliente pagando,
+// o que interessa é quanto a obra custa, não um resultado que nunca teve
+// receita para comparar.
+function fechoEstimativaPL(itens, grupos, contas, clientePaga) {
+  const t = totaisEstimativaPL(itens, grupos, contas);
+  if (!clientePaga) {
+    return { rotulo: "Resultado estimado da obra", valor: t.resultado, porGrupo: t.porGrupo,
+      nota: "Entradas menos os custos. “Excluídas” aparece no quadro, mas fica de fora do resultado." };
+  }
+  const custo = (grupos || [])
+    .filter((g) => g.sinal < 0 && g.entra_no_resultado !== false)
+    .reduce((soma, g) => soma + (t.porGrupo[g.id] || 0), 0);
+  return { rotulo: "Custo estimado da obra", valor: Math.round(custo * 100) / 100, porGrupo: t.porGrupo,
+    nota: "O cliente paga os fornecedores direto, então a obra não tem entradas para comparar — o fecho é o custo. “Excluídas” fica de fora." };
 }
 // Estimativa por conta do plano, a partir dos itens do Planejamento.
 function estimativaPorConta(itens) {

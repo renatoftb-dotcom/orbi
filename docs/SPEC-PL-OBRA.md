@@ -700,3 +700,43 @@ efeito em `clientes.jsx` de gravar em looping.
 **Quando o fluxo de dados existir, este bloco inteiro sai**: a constante em
 `obra-financeiro.jsx`, `estimativaCargaUnica()` em `contas-pagar.jsx` e o
 efeito em `clientes.jsx`. As três contas novas ficam.
+
+## Quando o cliente paga os fornecedores direto
+
+Tique no cadastro da obra: **"O cliente realiza os pagamentos"**
+(`obra.clientePagaDireto`). Nessas obras o escritório não movimenta dinheiro
+— não há entrada para lançar —, e "saldo = entradas − custos" viraria o
+custo inteiro com sinal de menos, como se a obra desse prejuízo.
+
+Com o tique, o **fecho** das duas telas do P&L muda de pergunta:
+
+| | sem o tique | com o tique |
+|---|---|---|
+| Planejamento → Preencher | Resultado estimado da obra · − R$ 700.000,00 | Custo estimado da obra · R$ 700.000,00 |
+| Planejamento → Extrato mensal | SALDO FINAL · R$ −1.500,00 | CUSTO TOTAL · R$ 1.500,00 |
+
+É o mesmo número, positivo, respondendo "quanto a obra custa" em vez de
+"quanto sobrou". Os grupos, as contas e as colunas de mês não mudam — só a
+linha de fecho e a nota abaixo dela.
+
+Duas funções guardam a regra, testadas em `contas-pagar.test.mjs`:
+
+- `linhaFinalExtrato(ex, clientePaga)` → `{ rotulo, valores, total, estimado, negativo }`
+- `fechoEstimativaPL(itens, grupos, contas, clientePaga)` → `{ rotulo, valor, porGrupo, nota }`
+
+"Excluídas" continua fora dos dois fechos, e uma entrada lançada por engano
+numa obra com o tique não muda o custo — o fecho soma só os grupos de custo.
+
+### A coluna "Estimado" passou a fechar
+
+Na linha final do extrato a célula de "Estimado" era um `<span />` vazio: os
+grupos somavam e o fecho não. Agora fecha nos dois casos — o **custo
+estimado** quando o cliente paga, o **saldo estimado** (entradas estimadas
+menos custos estimados) quando o escritório paga. Para isso `extratoMatriz`
+passou a devolver `entradas.estimado` e `saldo.estimado`.
+
+### Editar a obra não apaga a marca da carga única
+
+O salvar do formulário remonta a obra a partir de `formObra`, que não
+conhece `estimativaCarregadaEm`. Sem preservá-la explicitamente, editar a
+obra apagaria a marca e a carga única voltaria a rodar.

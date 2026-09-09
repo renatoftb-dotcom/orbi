@@ -17224,7 +17224,7 @@ function extratoMatriz(contas, entradas, meses, estimativa) {
   const rec = doGrupo("receitas");
   return {
     meses: ms, grupos,
-    entradas: { valores: rec.valores, total: rec.total },
+    entradas: { valores: rec.valores, total: rec.total, estimado: rec.estimado },
     custos: {
       valores: ms.map((_, i) => custoDe((g) => g.valores[i])),
       total: custoDe((g) => g.total),
@@ -17233,8 +17233,43 @@ function extratoMatriz(contas, entradas, meses, estimativa) {
     saldo: {
       valores: ms.map((_, i) => red(rec.valores[i] - custoDe((g) => g.valores[i]))),
       total: red(rec.total - custoDe((g) => g.total)),
+      estimado: red(rec.estimado - custoDe((g) => g.estimado)),
     },
   };
+}
+
+// ── A última linha do extrato ───────────────────────────────────
+// Quando o cliente paga os fornecedores direto, o escritório não movimenta
+// dinheiro: não há entrada para lançar, e "saldo = entradas − custos" viraria
+// o custo inteiro com sinal de menos, como se a obra desse prejuízo. Nessa
+// obra a última linha é o CUSTO TOTAL, positivo.
+//
+// A coluna "Estimado" era um `<span />` vazio nessa linha — os grupos
+// somavam e o fecho não. Agora fecha nos dois casos: o custo estimado
+// quando o cliente paga, o saldo estimado quando o escritório paga.
+function linhaFinalExtrato(ex, clientePaga) {
+  const e = ex || {};
+  const custos = e.custos || { valores: [], total: 0, estimado: 0 };
+  const saldo = e.saldo || { valores: [], total: 0, estimado: 0 };
+  return clientePaga
+    ? { rotulo: "CUSTO TOTAL", valores: custos.valores || [], total: custos.total || 0, estimado: custos.estimado || 0, negativo: false }
+    : { rotulo: "SALDO FINAL", valores: saldo.valores || [], total: saldo.total || 0, estimado: saldo.estimado || 0, negativo: (saldo.total || 0) < 0 };
+}
+
+// O fecho do quadro de estimativa, pela mesma regra: com o cliente pagando,
+// o que interessa é quanto a obra custa, não um resultado que nunca teve
+// receita para comparar.
+function fechoEstimativaPL(itens, grupos, contas, clientePaga) {
+  const t = totaisEstimativaPL(itens, grupos, contas);
+  if (!clientePaga) {
+    return { rotulo: "Resultado estimado da obra", valor: t.resultado, porGrupo: t.porGrupo,
+      nota: "Entradas menos os custos. “Excluídas” aparece no quadro, mas fica de fora do resultado." };
+  }
+  const custo = (grupos || [])
+    .filter((g) => g.sinal < 0 && g.entra_no_resultado !== false)
+    .reduce((soma, g) => soma + (t.porGrupo[g.id] || 0), 0);
+  return { rotulo: "Custo estimado da obra", valor: Math.round(custo * 100) / 100, porGrupo: t.porGrupo,
+    nota: "O cliente paga os fornecedores direto, então a obra não tem entradas para comparar — o fecho é o custo. “Excluídas” fica de fora." };
 }
 // Estimativa por conta do plano, a partir dos itens do Planejamento.
 function estimativaPorConta(itens) {
@@ -19789,9 +19824,10 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
 // Uma linha por conta do plano, o valor digitado direto. É o caminho para
 // dar o primeiro número em quarenta contas sem quarenta idas ao formulário;
 // o detalhe item a item continua existindo em "Por conta".
-function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL }) {
+function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, clientePaga }) {
   const linhas = linhasEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
   const totais = totaisEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
+  const fecho = fechoEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS, clientePaga);
   const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 9, padding: "6px 9px", fontSize: 12.5,
     color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%",
     boxSizing: "border-box", textAlign: "right" };
@@ -19851,15 +19887,15 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL }) 
         );
       })}
       <div style={{ ...grade, borderTop: "1.5px solid rgba(38,36,33,0.14)", paddingTop: 10 }}>
-        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Resultado estimado da obra</div>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{fecho.rotulo}</div>
         {!isMobile && <div />}
-        <div style={{ fontSize: 13.5, fontWeight: 700, color: totais.resultado < 0 ? "#dc2626" : "#15803d", textAlign: "right", whiteSpace: "nowrap" }}>
-          {comSinal(totais.resultado)}
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: fecho.valor < 0 ? "#dc2626" : "#15803d", textAlign: "right", whiteSpace: "nowrap" }}>
+          {comSinal(fecho.valor)}
         </div>
       </div>
       <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
-        Entradas menos os custos. “Excluídas” aparece no quadro, mas fica de fora do resultado.
-        {(totais.porGrupo.receitas || 0) < 0.005 && " Sem entrada estimada ainda, o resultado é o custo inteiro."}
+        {fecho.nota}
+        {!clientePaga && (totais.porGrupo.receitas || 0) < 0.005 && " Sem entrada estimada ainda, o resultado é o custo inteiro."}
       </div>
     </div>
   );
@@ -20175,7 +20211,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   }, [imprimirAoAbrir, view, contratoAberto]);
 
   function novaObra() {
-    setFormObra({ id: uid(), clienteId: cliente.id, nome: "", status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "", ativo: true,
+    setFormObra({ id: uid(), clienteId: cliente.id, nome: "", status: "planejamento", dataInicio: "", dataFim: "", responsavel: "", descricao: "", ativo: true, clientePagaDireto: false,
       enderecoProprio: false, cep: "", logradouro: "", numero: "", complemento: "", bairro: "", cidade: "", estado: "" });
     setView("form");
   }
@@ -20211,7 +20247,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const ehNova = !obras.find(o => o.id === formObra.id);
     // ao editar a obra, preserva o que vive dentro dela e não está no formulário
     gravarObras(ehNova ? [...obras, formObra]
-      : obras.map(o => o.id === formObra.id ? { ...formObra, contratos: o.contratos || [], estimativaPL: o.estimativaPL || [] } : o));
+      : obras.map(o => o.id === formObra.id
+          ? { ...formObra, contratos: o.contratos || [], estimativaPL: o.estimativaPL || [],
+              // o formulário não conhece a marca da carga única; sem isto,
+              // editar a obra a apagaria e a carga rodaria de novo
+              estimativaCarregadaEm: o.estimativaCarregadaEm }
+          : o));
     setView("lista");
   }
 
@@ -20262,6 +20303,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={isMobile ? { gridColumn: "1 / -1" } : {}}><label style={C.label}>Responsável</label><input style={C.input} value={formObra.responsavel} onChange={e => setFormObra({ ...formObra, responsavel: e.target.value })} placeholder="Nome do responsável" /></div>
         </div>
         <div style={{ marginBottom: 12 }}><label style={C.label}>Descrição</label><textarea style={{ ...C.input, resize: "vertical" }} value={formObra.descricao} onChange={e => setFormObra({ ...formObra, descricao: e.target.value })} rows={3} /></div>
+
+        {/* Quem paga os fornecedores. Com o cliente pagando direto, o
+            escritório não movimenta dinheiro da obra: não há entrada para
+            lançar, e o P&L fecha no custo em vez de num saldo negativo. */}
+        <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 12 }}>
+          <label style={{ display: "flex", gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+            <input type="checkbox" style={{ marginTop: 2, cursor: "pointer" }}
+              checked={!!formObra.clientePagaDireto}
+              onChange={e => setFormObra({ ...formObra, clientePagaDireto: e.target.checked })} />
+            <span>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>O cliente realiza os pagamentos</span>
+              <span style={{ display: "block", fontSize: 11.5, color: "#6b7280", marginTop: 2 }}>
+                Os fornecedores são pagos direto pelo cliente e o dinheiro não passa pelo escritório.
+                No P&L a obra fecha no custo total, em vez de num saldo negativo que não teve receita para comparar.
+              </span>
+            </span>
+          </label>
+        </div>
 
         {/* Endereço da obra — é o que vai para os contratos. Por padrão a obra
             fica no endereço do cliente; "Endereço diferente" abre os campos. */}
@@ -20435,7 +20494,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
-            fmtBRL={fmtBRL} aoDefinir={definirEstimativa} />
+            fmtBRL={fmtBRL} aoDefinir={definirEstimativa} clientePaga={!!obraAtual.clientePagaDireto} />
         ) : visaoPL === "extrato" ? (() => {
           // no menu, o mês corrente também aparece (para registrar entrada nele);
           // nas colunas, só os meses que têm movimento
@@ -20533,16 +20592,23 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       ))}
                     </div>
                   ))}
-                  <div style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
-                    <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>SALDO FINAL</span>
-                    {ex.saldo.valores.map((v, i) => <span key={i} style={{ ...celula, fontWeight: 700 }}>{num(v)}</span>)}
-                    <span style={{ ...celula, fontWeight: 700 }}>{num(ex.saldo.total)}</span>
-                    {temEstimativa && <span />}
-                  </div>
+                  {(() => {
+                    const fim = linhaFinalExtrato(ex, !!obraAtual.clientePagaDireto);
+                    return (
+                      <div style={{ display: "grid", gridTemplateColumns: grade, gap: 8, padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{fim.rotulo}</span>
+                        {fim.valores.map((v, i) => <span key={i} style={{ ...celula, fontWeight: 700 }}>{num(v)}</span>)}
+                        <span style={{ ...celula, fontWeight: 700 }}>{num(fim.total)}</span>
+                        {temEstimativa && <span style={{ ...celula, fontWeight: 700, color: "#4b5563" }}>{num(fim.estimado)}</span>}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
-                Entradas menos custos, pelo mês da data de contabilização. "Contabilizado" é o acumulado da obra inteira{temEstimativa ? "; “Estimado” vem dos itens do Planejamento" : ""}.
+                {obraAtual.clientePagaDireto
+                  ? "O cliente paga os fornecedores direto, então a obra fecha no custo, não num saldo."
+                  : "Entradas menos custos, pelo mês da data de contabilização."} "Contabilizado" é o acumulado da obra inteira{temEstimativa ? "; “Estimado” vem dos itens do Planejamento" : ""}.
               </div>
 
               {entradasDaObra.length > 0 && (
