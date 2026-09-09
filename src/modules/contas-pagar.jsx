@@ -557,6 +557,63 @@ function extratoMatriz(contas, entradas, meses, estimativa) {
   };
 }
 
+// ── O P&L da obra, conta a conta ────────────────────────────────
+// Estimado (Planejamento) e realizado (o que já foi PAGO em contas a pagar),
+// lado a lado, na estrutura do plano de contas. É a tela de abertura do
+// Planejamento: a pergunta de todo dia é "quanto eu disse que ia custar e
+// quanto já saiu".
+//
+// Só entra conta que tem algum dos dois lados. Mostrar as 42 contas com zero
+// nas duas colunas afogaria as seis que importam.
+function plDaObra(itens, contasPagar, grupos, plano) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const est = estimativaPorConta(itens);
+  const real = realizadoPorConta(contasPagar);
+  const blocos = [];
+  for (const g of grupos || []) {
+    const linhas = [];
+    for (const c of (plano || []).filter((x) => x.grupo === g.id)) {
+      const e = Number(est[c.id]) || 0;
+      const r = Number(real[c.id]) || 0;
+      if (!e && !r) continue;
+      linhas.push({ conta: c, estimado: red(e), realizado: red(r), saldo: red(e - r) });
+    }
+    if (!linhas.length) continue;
+    blocos.push({
+      grupo: g, linhas,
+      estimado: red(linhas.reduce((a, l) => a + l.estimado, 0)),
+      realizado: red(linhas.reduce((a, l) => a + l.realizado, 0)),
+    });
+  }
+  const soma = (filtro, campo) => red(blocos.filter(filtro).reduce((a, b) => a + b[campo], 0));
+  const ehCusto = (b) => b.grupo.sinal < 0 && b.grupo.entra_no_resultado !== false;
+  const ehEntrada = (b) => b.grupo.sinal > 0 && b.grupo.entra_no_resultado !== false;
+  const custo = { estimado: soma(ehCusto, "estimado"), realizado: soma(ehCusto, "realizado") };
+  const entradas = { estimado: soma(ehEntrada, "estimado"), realizado: soma(ehEntrada, "realizado") };
+  return {
+    blocos, custo, entradas,
+    resultado: { estimado: red(entradas.estimado - custo.estimado), realizado: red(entradas.realizado - custo.realizado) },
+    vazio: blocos.length === 0,
+  };
+}
+
+// O anel de progresso: quanto do custo estimado já foi gasto. Sem estimativa
+// não há contra o que medir — o anel some e sobra o número do gasto.
+function progressoCusto(custo) {
+  const c = custo || { estimado: 0, realizado: 0 };
+  const est = Number(c.estimado) || 0;
+  const real = Number(c.realizado) || 0;
+  if (est <= 0) return { medivel: false, pct: 0, arco: 0, acima: false, resta: 0 };
+  const pct = Math.round((real / est) * 100);
+  return {
+    medivel: true,
+    pct,                                   // pode passar de 100: é o aviso
+    arco: Math.min(100, Math.max(0, pct)), // o anel não dá mais que a volta
+    acima: real > est,
+    resta: Math.round((est - real) * 100) / 100,
+  };
+}
+
 // ── A última linha do extrato ───────────────────────────────────
 // Quando o cliente paga os fornecedores direto, o escritório não movimenta
 // dinheiro: não há entrada para lançar, e "saldo = entradas − custos" viraria

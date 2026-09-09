@@ -37,7 +37,7 @@ const modulo = new Function(`
            GRUPOS_PL, linhasEstimativaPL, definirEstimativaDaConta, totaisEstimativaPL,
            itemDeQuadro, itensDetalhados, EST_ORIGEM_QUADRO,
            CARGA_ESTIMATIVA_UNICA, estimativaCargaUnica,
-           linhaFinalExtrato, fechoEstimativaPL,
+           linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -850,6 +850,77 @@ teste("a coluna Estimado passa a fechar nas duas linhas", () => {
   assert.strictEqual(modulo.linhaFinalExtrato(ex, true).estimado, 700000);
   // saldo estimado = 900.000 − 700.000
   assert.strictEqual(modulo.linhaFinalExtrato(ex, false).estimado, 200000);
+});
+
+// ── O P&L da obra, conta a conta ────────────────────────────────
+const pl = (itens, contas) => modulo.plDaObra(itens, contas, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+const pagas = [
+  { id: "c1", obraId: "o1", contaId: "material",    valor: 300000, pago: true, valorPago: 300000, pagoEm: "2026-03-10" },
+  { id: "c2", obraId: "o1", contaId: "empreiteiro", valor: 200000, pago: true, valorPago: 200000, pagoEm: "2026-04-15" },
+  { id: "c3", obraId: "o1", contaId: "material",    valor:  50000, pago: false, vencimento: "2026-05-01" },
+];
+
+teste("o P&L junta estimado e realizado na estrutura do plano", () => {
+  const r = pl(plComCustos(), pagas);
+  const linha = (id) => r.blocos.flatMap(b => b.linhas).find(l => l.conta.id === id);
+  assert.strictEqual(linha("material").estimado, 400000);
+  assert.strictEqual(linha("material").realizado, 300000, "conta NÃO paga não entra no realizado");
+  assert.strictEqual(linha("material").saldo, 100000);
+  assert.strictEqual(linha("empreiteiro").realizado, 200000);
+  assert.strictEqual(linha("impostos").realizado, 0, "estimado sem realizado aparece com zero");
+  // os grupos vêm na ordem do plano
+  assert.deepStrictEqual(r.blocos.map(b => b.grupo.id), ["materiais", "maoDeObra", "servicos", "excluidas"]);
+});
+
+teste("conta sem nenhum dos dois lados não ocupa linha", () => {
+  const r = pl([], pagas);
+  const ids = r.blocos.flatMap(b => b.linhas).map(l => l.conta.id);
+  assert.deepStrictEqual(ids.sort(), ["empreiteiro", "material"], "só o que tem realizado");
+  assert.ok(ids.length < modulo.PLANO_CONTAS.length);
+  assert.strictEqual(pl([], []).vazio, true);
+});
+
+teste("o custo soma só os grupos de custo; excluídas fica de fora", () => {
+  const r = pl(plComCustos(), pagas);
+  assert.strictEqual(r.custo.estimado, 700000, "400 + 250 + 50, sem os 30 de reembolsos");
+  assert.strictEqual(r.custo.realizado, 500000);
+  const exc = r.blocos.find(b => b.grupo.id === "excluidas");
+  assert.strictEqual(exc.estimado, 30000, "aparece no quadro");
+});
+
+teste("entradas e resultado saem dos dois lados", () => {
+  const comEntrada = modulo.definirEstimativaDaConta(plComCustos(), "deposito_proprio", 900000, "e5");
+  const r = pl(comEntrada, pagas);
+  assert.strictEqual(r.entradas.estimado, 900000);
+  assert.strictEqual(r.entradas.realizado, 0, "entrada não vem de conta a pagar");
+  assert.strictEqual(r.resultado.estimado, 200000);
+  assert.strictEqual(r.resultado.realizado, -500000);
+});
+
+console.log("\n--- anel de progresso do custo ---");
+teste("o anel é o realizado sobre o estimado", () => {
+  const p = modulo.progressoCusto({ estimado: 1000000, realizado: 500000 });
+  assert.strictEqual(p.medivel, true);
+  assert.strictEqual(p.pct, 50);
+  assert.strictEqual(p.arco, 50);
+  assert.strictEqual(p.acima, false);
+  assert.strictEqual(p.resta, 500000);
+});
+
+teste("gasto acima do estimado avisa, e o anel não dá mais que a volta", () => {
+  const p = modulo.progressoCusto({ estimado: 100000, realizado: 130000 });
+  assert.strictEqual(p.pct, 130, "o número diz a verdade");
+  assert.strictEqual(p.arco, 100, "o desenho não pode passar de uma volta");
+  assert.strictEqual(p.acima, true);
+  assert.strictEqual(p.resta, -30000);
+});
+
+teste("sem estimativa não há contra o que medir", () => {
+  for (const c of [{ estimado: 0, realizado: 5000 }, { estimado: 0, realizado: 0 }, null]) {
+    assert.strictEqual(modulo.progressoCusto(c).medivel, false, JSON.stringify(c));
+  }
+  // e nada de dividir por zero
+  assert.strictEqual(modulo.progressoCusto({ estimado: 0, realizado: 9 }).pct, 0);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -1127,6 +1127,140 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
 
 // `obraInicial` + `onSairDaObra`: abre direto no detalhe de uma obra (menu
 // lateral Obras) e o "Voltar" do detalhe devolve para quem chamou.
+// ── Anel de progresso do custo ──────────────────────────────────
+// É um MEDIDOR — uma razão contra um limite —, não uma pizza de duas fatias:
+// a trilha é o custo estimado inteiro e o arco é o quanto dele já saiu. Por
+// isso trilha e arco são o mesmo tom em intensidades diferentes.
+//
+// A cor sozinha não diz nada: o número no meio e as duas linhas ao lado
+// carregam o dado. A cor só reforça a gravidade — azul enquanto sobra folga,
+// âmbar chegando no limite, vermelho quando passou.
+function AnelCusto({ progresso, tamanho }) {
+  const p = progresso || { medivel: false, arco: 0, pct: 0, acima: false };
+  const d = tamanho || 104;
+  const grossura = Math.round(d * 0.13);
+  const raio = (d - grossura) / 2;
+  const volta = 2 * Math.PI * raio;
+  const tom = !p.medivel ? { arco: "#9ca3af", trilha: "#f3f4f6" }
+    : p.acima      ? { arco: "#dc2626", trilha: "#fee2e2" }
+    : p.pct >= 90  ? { arco: "#b45309", trilha: "#fef3c7" }
+    :                { arco: "#0474f4", trilha: "#eef5ff" };
+  // arranca do topo e cresce no sentido do relógio
+  const preenchido = volta * (p.arco / 100);
+  return (
+    <svg width={d} height={d} viewBox={`0 0 ${d} ${d}`} role="img"
+      aria-label={p.medivel ? `${p.pct}% do custo estimado já foi gasto` : "sem estimativa para comparar"}>
+      <circle cx={d / 2} cy={d / 2} r={raio} fill="none" stroke={tom.trilha} strokeWidth={grossura} />
+      {p.medivel && p.arco > 0 && (
+        <circle cx={d / 2} cy={d / 2} r={raio} fill="none" stroke={tom.arco} strokeWidth={grossura}
+          strokeLinecap="round" strokeDasharray={`${preenchido} ${volta - preenchido}`}
+          transform={`rotate(-90 ${d / 2} ${d / 2})`}
+          style={{ transition: "stroke-dasharray .6s ease" }} />
+      )}
+      <text x={d / 2} y={d / 2} textAnchor="middle" dominantBaseline="central"
+        style={{ fontSize: Math.round(d * 0.23), fontWeight: 700, fill: p.medivel ? "#111827" : "#9ca3af", fontFamily: "inherit" }}>
+        {p.medivel ? `${p.pct}%` : "—"}
+      </text>
+    </svg>
+  );
+}
+
+// ── P&L da obra: a tela de abertura do Planejamento ─────────────
+// A pergunta de todo dia é "quanto eu disse que ia custar e quanto já saiu".
+// Por isso o Planejamento abre aqui, e não no formulário de preencher.
+function PLDaObraView({ itens, contasPagar, clientePaga, isMobile, fmtBRL }) {
+  const pl = plDaObra(itens, contasPagar, GRUPOS_PL, PLANO_CONTAS);
+  const prog = progressoCusto(pl.custo);
+  const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
+  const grade = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "minmax(0,1fr) 96px 96px" : "minmax(180px, 1fr) 150px 150px 150px",
+    gap: 8, alignItems: "center",
+  };
+  const celula = { fontSize: 12.5, textAlign: "right", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" };
+  const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {/* ── o cartão do topo ── */}
+      <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 14, padding: isMobile ? 14 : "16px 18px",
+        marginBottom: 18, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 190 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827", marginBottom: 8 }}>Custo total realizado</div>
+          <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "4px 14px", alignItems: "baseline" }}>
+            <span style={{ fontSize: 12, color: "#4b5563" }}>Estimado</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{num(pl.custo.estimado)}</span>
+            <span style={{ fontSize: 12, color: "#4b5563" }}>Gasto</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{num(pl.custo.realizado)}</span>
+            {prog.medivel && (
+              <>
+                <span style={{ fontSize: 12, color: "#4b5563" }}>{prog.acima ? "Passou em" : "Falta"}</span>
+                <span style={{ fontSize: 14, fontWeight: 600, color: prog.acima ? "#dc2626" : "#111827", fontVariantNumeric: "tabular-nums" }}>
+                  {num(Math.abs(prog.resta))}
+                </span>
+              </>
+            )}
+          </div>
+          {!prog.medivel && (
+            <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 8 }}>
+              Sem estimativa não há contra o que comparar — preencha na aba Preencher.
+            </div>
+          )}
+        </div>
+        <AnelCusto progresso={prog} tamanho={isMobile ? 92 : 112} />
+      </div>
+
+      {/* ── o P&L conta a conta ── */}
+      {pl.vazio ? (
+        <div style={{ padding: 24, textAlign: "center", color: "#4b5563", fontSize: 12.5,
+          border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
+          Nada estimado nem pago ainda. Preencha a estimativa na aba Preencher; o que for pago em contas a pagar aparece aqui do lado.
+        </div>
+      ) : (
+        <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, overflow: "hidden" }}>
+          <div style={{ ...grade, padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
+            <span style={cab}>Conta</span>
+            <span style={{ ...cab, textAlign: "right" }}>Estimado</span>
+            <span style={{ ...cab, textAlign: "right" }}>Realizado</span>
+            {!isMobile && <span style={{ ...cab, textAlign: "right" }}>Saldo</span>}
+          </div>
+          {pl.blocos.map(b => (
+            <div key={b.grupo.id}>
+              <div style={{ ...grade, padding: "7px 12px", background: "#fafafa", borderTop: "1px solid rgba(38,36,33,0.10)" }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: "#111827" }}>{b.grupo.titulo}</span>
+                <span style={{ ...celula, fontWeight: 700 }}>{num(b.estimado)}</span>
+                <span style={{ ...celula, fontWeight: 700 }}>{num(b.realizado)}</span>
+                {!isMobile && <span style={{ ...celula, fontWeight: 700, color: "#4b5563" }}>{num(b.estimado - b.realizado)}</span>}
+              </div>
+              {b.linhas.map(l => (
+                <div key={l.conta.id} style={{ ...grade, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                  <span style={{ fontSize: 12.5, color: "#4b5563", minWidth: 0 }}>{l.conta.nome}</span>
+                  <span style={{ ...celula, color: "#6b7280" }}>{num(l.estimado)}</span>
+                  <span style={{ ...celula, color: "#111827" }}>{num(l.realizado)}</span>
+                  {!isMobile && <span style={{ ...celula, color: l.saldo < -0.005 ? "#dc2626" : "#6b7280" }}>{num(l.saldo)}</span>}
+                </div>
+              ))}
+            </div>
+          ))}
+          <div style={{ ...grade, padding: "9px 12px", borderTop: "1.5px solid rgba(38,36,33,0.14)", background: "#fafafa" }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>
+              {clientePaga ? "CUSTO TOTAL" : "RESULTADO"}
+            </span>
+            <span style={{ ...celula, fontWeight: 700 }}>{num(clientePaga ? pl.custo.estimado : pl.resultado.estimado)}</span>
+            <span style={{ ...celula, fontWeight: 700 }}>{num(clientePaga ? pl.custo.realizado : pl.resultado.realizado)}</span>
+            {!isMobile && <span />}
+          </div>
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 8 }}>
+        “Realizado” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong> em contas a pagar, acumulado até hoje —
+        conta em aberto não entra. “Estimado” vem da aba Preencher.
+        {clientePaga && " O cliente paga os fornecedores direto, então a obra fecha no custo."}
+      </div>
+    </div>
+  );
+}
+
 // ── Quadro de preenchimento da estimativa ─────────────────────
 // Uma linha por conta do plano, o valor digitado direto. É o caminho para
 // dar o primeiro número em quarenta contas sem quarenta idas ao formulário;
@@ -1250,7 +1384,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [obraSelecionada, setObraSelecionada] = useState(obraInicial || null);
   // Planejamento (P&L estimado) — protótipo iterativo, ver conversa.
   const [formItemPL, setFormItemPL] = useState(null);
-  const [visaoPL, setVisaoPL] = useState("conta"); // "conta" | "prestador"
+  // O Planejamento abre no P&L: a pergunta de todo dia é quanto foi estimado
+  // e quanto já saiu, não o formulário de preencher.
+  const [visaoPL, setVisaoPL] = useState("pl"); // "pl" | "quadro" | "conta" | "prestador" | "extrato"
   // Cadastro do escritório editado de dentro do gerador de contratos: sem ele
   // o contrato do escritório sai sem CNPJ, endereço e responsável técnico.
   const [formEscritorio, setFormEscritorio] = useState(null);
@@ -1767,9 +1903,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, gap: 12, flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Planejamento</div>
-            <div style={{ fontSize: 12, color: "#4b5563" }}>P&L estimado · {obraSelecionada.nome}</div>
+            <div style={{ fontSize: 12, color: "#4b5563" }}>{visaoPL === "pl" ? "Estimado e realizado" : "P&L estimado"} · {obraSelecionada.nome}</div>
           </div>
-          <div style={{ display: "flex", gap: 20, textAlign: "right" }}>
+          {/* Na aba P&L o cartão do anel já traz estimado e gasto; repetir os
+              mesmos números no topo é ruído. */}
+          <div style={{ display: visaoPL === "pl" ? "none" : "flex", gap: 20, textAlign: "right" }}>
             {entradasPL > 0 && (
               <div>
                 <div style={{ fontSize: 11, color: "#4b5563", textTransform: "uppercase", letterSpacing: 0.5 }}>Entradas estimadas</div>
@@ -1791,7 +1929,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {/* Toggle de visão */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"]].map(([v, l]) => (
+          {[["pl", "P&L"], ["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -1799,7 +1937,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           ))}
         </div>
 
-        {visaoPL === "quadro" ? (
+        {visaoPL === "pl" ? (
+          <PLDaObraView itens={itensPL} contasPagar={contasDaObra} clientePaga={!!obraAtual.clientePagaDireto}
+            isMobile={isMobile} fmtBRL={fmtBRL} />
+        ) : visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
             fmtBRL={fmtBRL} aoDefinir={definirEstimativa} clientePaga={!!obraAtual.clientePagaDireto} />
         ) : visaoPL === "extrato" ? (() => {
@@ -1997,7 +2138,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {perm.podeGerenciarObra && itensPL.length > 0 && (
+        {perm.podeGerenciarObra && itensPL.length > 0 && (visaoPL === "conta" || visaoPL === "prestador") && (
           <button style={{ ...C.btn, width: "100%" }} onClick={novoItemPL}>+ Adicionar item</button>
         )}
       </div>

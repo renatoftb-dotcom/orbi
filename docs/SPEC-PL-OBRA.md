@@ -740,3 +740,48 @@ passou a devolver `entradas.estimado` e `saldo.estimado`.
 O salvar do formulário remonta a obra a partir de `formObra`, que não
 conhece `estimativaCarregadaEm`. Sem preservá-la explicitamente, editar a
 obra apagaria a marca e a carga única voltaria a rodar.
+
+## O Planejamento abre no P&L
+
+A aba **P&L** é a primeira e a padrão. A pergunta de todo dia é "quanto eu
+disse que ia custar e quanto já saiu" — não o formulário de preencher, que
+se usa uma vez e depois raramente.
+
+**O cartão do topo.** "Custo total realizado": estimado, gasto, e quanto
+falta (ou quanto passou), com um anel ao lado.
+
+O anel é um **medidor** — uma razão contra um limite —, não uma pizza de
+duas fatias: a trilha é o custo estimado inteiro e o arco é o quanto dele já
+saiu. Por isso trilha e arco são o mesmo tom em intensidades diferentes,
+e não duas cores disputando atenção.
+
+A cor sozinha não diz nada — o número no meio e as linhas ao lado carregam o
+dado. A cor só reforça a gravidade:
+
+| situação | arco | trilha |
+|---|---|---|
+| até 89% | `#0474f4` (o azul do resto do sistema) | `#eef5ff` |
+| 90–100% | `#b45309` | `#fef3c7` |
+| acima de 100% | `#dc2626` | `#fee2e2` |
+
+`progressoCusto()` devolve `pct` e `arco` separados de propósito: o número
+diz 117% quando estourou, mas o desenho não dá mais que uma volta. Sem
+estimativa não há contra o que medir — o anel some, sobra o gasto, e o
+cartão manda preencher.
+
+**A tabela.** Uma linha por conta, na estrutura do plano, com Estimado,
+Realizado e Saldo, subtotal por grupo e o fecho no fim (RESULTADO, ou CUSTO
+TOTAL quando o cliente paga direto). Saldo negativo — gastou mais que o
+estimado naquela conta — sai em vermelho.
+
+"Realizado" é o que já foi **pago** em contas a pagar, acumulado até hoje:
+conta em aberto não entra. `plDaObra()` cruza `estimativaPorConta()` com
+`realizadoPorConta()`.
+
+Só entra conta que tem algum dos dois lados. Mostrar as 42 contas do plano
+com zero nas duas colunas afogaria as seis que importam — quem quer ver
+todas usa a aba Preencher, que é onde elas existem por definição.
+
+Na aba P&L os números do cabeçalho somem: o cartão já os traz, e repetir os
+mesmos valores dois centímetros acima é ruído. "Adicionar item" também some
+— ele pertence ao detalhe item a item, em "Por conta" e "Por prestador".
