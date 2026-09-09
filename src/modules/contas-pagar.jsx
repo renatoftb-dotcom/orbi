@@ -622,30 +622,29 @@ function definirEstimativaDaConta(itens, contaId, valor, novoId) {
   return lista.concat([{ id: novoId, contaId, prestadorId: "", valor: v, observacao: "", origem: EST_ORIGEM_QUADRO }]);
 }
 
-// Carrega a estimativa de referência nas contas do quadro. Só mexe nos
-// itens `origem: "quadro"` — o que foi detalhado à mão em "Por conta" não é
-// tocado, e por isso conta com detalhe fica de fora (a soma dela já é o
-// número certo, e sobrescrever esconderia de onde veio).
-// `novoId` é uma função, não um id: cada conta criada precisa do seu.
-function aplicarEstimativaReferencia(itens, semente, novoId) {
-  let lista = (itens || []).slice();
-  const valores = (semente && semente.valores) || {};
-  for (const contaId of Object.keys(valores)) {
-    if (itensDetalhados(lista, contaId).length) continue;
-    lista = definirEstimativaDaConta(lista, contaId, valores[contaId], novoId());
-  }
-  return lista;
-}
+// ── Carga única da estimativa (temporária) ──────────────────────
+// Devolve a obra com a estimativa preenchida, ou `null` quando não há nada
+// a fazer — é o `null` que impede o efeito de gravar em looping.
+//
+// Três travas, porque isto roda sozinho, sem ninguém confirmar:
+//   1. só a obra nomeada em CARGA_ESTIMATIVA_UNICA;
+//   2. só uma vez — a obra guarda a marca `estimativaCarregadaEm`;
+//   3. só em obra que ainda não tem estimativa nenhuma, para nunca passar
+//      por cima de número que o escritório já digitou.
+const semAcento = (t) => String(t == null ? "" : t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
-// O que o botão vai fazer, para a confirmação poder dizer antes de fazer.
-function previaEstimativaReferencia(itens, semente) {
-  const valores = (semente && semente.valores) || {};
-  const preencher = [], substituir = [], pulados = [];
-  for (const contaId of Object.keys(valores)) {
-    if (itensDetalhados(itens, contaId).length) { pulados.push(contaId); continue; }
-    (itemDeQuadro(itens, contaId) ? substituir : preencher).push(contaId);
+function estimativaCargaUnica(obra, carga, novoId) {
+  const o = obra || {};
+  const c = carga || {};
+  if (!c.obra || semAcento(o.nome) !== semAcento(c.obra)) return null;
+  if (o.estimativaCarregadaEm) return null;
+  if ((o.estimativaPL || []).length) return null;
+  let itens = [];
+  for (const contaId of Object.keys(c.valores || {})) {
+    itens = definirEstimativaDaConta(itens, contaId, c.valores[contaId], novoId());
   }
-  return { preencher, substituir, pulados };
+  if (!itens.length) return null;
+  return { ...o, estimativaPL: itens, estimativaCarregadaEm: new Date().toISOString() };
 }
 
 // Totais do quadro por grupo, e o resultado estimado da obra: entradas

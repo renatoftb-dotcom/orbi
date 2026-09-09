@@ -36,7 +36,7 @@ const modulo = new Function(`
            extratoMatriz, estimativaPorConta,
            GRUPOS_PL, linhasEstimativaPL, definirEstimativaDaConta, totaisEstimativaPL,
            itemDeQuadro, itensDetalhados, EST_ORIGEM_QUADRO,
-           ESTIMATIVA_PL_SEED, aplicarEstimativaReferencia, previaEstimativaReferencia,
+           CARGA_ESTIMATIVA_UNICA, estimativaCargaUnica,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -731,53 +731,60 @@ teste("o resultado estimado é entradas menos custos, sem as excluídas", () => 
   assert.strictEqual(t.resultado, 200000, "mas fica fora do resultado");
 });
 
-// ── Estimativa de referência (planilha ESTIMATIVA PL OBRA) ──────
-teste("toda conta da semente existe no plano", () => {
-  for (const id of Object.keys(modulo.ESTIMATIVA_PL_SEED.valores)) {
+// ── Carga única da estimativa (Reforma Loja Cobop) ──────────────
+const CARGA = modulo.CARGA_ESTIMATIVA_UNICA;
+const ids = () => { let n = 0; return () => "s" + (++n); };
+const obraCobop = (extra) => ({ id: "o1", nome: "Reforma Loja Cobop", ...extra });
+
+teste("toda conta da carga existe no plano", () => {
+  for (const id of Object.keys(CARGA.valores)) {
     assert.ok(modulo.PLANO_CONTAS.some(c => c.id === id), `conta "${id}" não existe no plano`);
   }
 });
 
-teste("a semente soma exatamente o total da planilha", () => {
-  const v = modulo.ESTIMATIVA_PL_SEED.valores;
+teste("a carga soma exatamente o total da planilha", () => {
+  const v = CARGA.valores;
   const soma = Object.keys(v).reduce((a, k) => a + v[k], 0);
-  assert.strictEqual(Math.round(soma * 100) / 100, modulo.ESTIMATIVA_PL_SEED.total);
-  assert.strictEqual(modulo.ESTIMATIVA_PL_SEED.total, 1030000);
+  assert.strictEqual(Math.round(soma * 100) / 100, CARGA.total);
+  assert.strictEqual(CARGA.total, 1030000);
 });
 
-teste("carregar preenche as contas da semente e fecha no total", () => {
-  const itens = modulo.aplicarEstimativaReferencia([], modulo.ESTIMATIVA_PL_SEED, (() => { let n = 0; return () => "s" + (++n); })());
-  assert.strictEqual(itens.length, Object.keys(modulo.ESTIMATIVA_PL_SEED.valores).length);
-  assert.ok(itens.every(i => i.origem === "quadro"), "tudo entra como item de quadro");
-  const t = modulo.totaisEstimativaPL(itens, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+teste("preenche a obra nomeada e fecha no total", () => {
+  const o = modulo.estimativaCargaUnica(obraCobop(), CARGA, ids());
+  assert.ok(o, "a obra alvo tinha que ser preenchida");
+  assert.strictEqual(o.estimativaPL.length, Object.keys(CARGA.valores).length);
+  assert.ok(o.estimativaPL.every(i => i.origem === "quadro"), "entra como item de quadro, editável no Preencher");
+  assert.ok(o.estimativaCarregadaEm, "sem a marca, carregaria de novo a cada render");
+  const t = modulo.totaisEstimativaPL(o.estimativaPL, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
   assert.strictEqual(t.porGrupo.materiais, 367529.57);
   assert.strictEqual(t.porGrupo.maoDeObra, 528470.43);
   assert.strictEqual(t.porGrupo.servicos, 134000);
-  assert.strictEqual(t.resultado, -1030000, "sem entradas, o resultado é o custo inteiro no negativo");
-  const est = modulo.estimativaPorConta(itens);
+  const est = modulo.estimativaPorConta(o.estimativaPL);
   const soma = Object.keys(est).reduce((a, k) => a + est[k], 0);
   assert.strictEqual(Math.round(soma * 100) / 100, 1030000);
 });
 
-teste("carregar não encosta no que foi detalhado à mão", () => {
-  const antes = [{ id: "d1", contaId: "empreiteiro", valor: 999, observacao: "Contrato Zé" }];
-  const p = modulo.previaEstimativaReferencia(antes, modulo.ESTIMATIVA_PL_SEED);
-  assert.deepStrictEqual(p.pulados, ["empreiteiro"]);
-  assert.ok(!p.preencher.includes("empreiteiro"));
-  const depois = modulo.aplicarEstimativaReferencia(antes, modulo.ESTIMATIVA_PL_SEED, (() => { let n = 0; return () => "s" + (++n); })());
-  assert.deepStrictEqual(depois.filter(i => i.contaId === "empreiteiro"), antes, "o item detalhado fica como estava");
+teste("o nome casa sem depender de acento nem de caixa", () => {
+  for (const nome of ["Reforma Loja Cobop", "reforma loja cobop", "REFORMA LOJA COBOP", " Reforma Loja Cóbop "]) {
+    assert.ok(modulo.estimativaCargaUnica(obraCobop({ nome }), CARGA, ids()), `"${nome}" tinha que casar`);
+  }
 });
 
-teste("carregar duas vezes troca o valor, não duplica linha", () => {
-  const gerador = () => { let n = 0; return () => "s" + (++n); };
-  const uma = modulo.aplicarEstimativaReferencia([], modulo.ESTIMATIVA_PL_SEED, gerador());
-  const editada = modulo.definirEstimativaDaConta(uma, "material", 1, "x");
-  const p = modulo.previaEstimativaReferencia(editada, modulo.ESTIMATIVA_PL_SEED);
-  assert.strictEqual(p.preencher.length, 0);
-  assert.strictEqual(p.substituir.length, Object.keys(modulo.ESTIMATIVA_PL_SEED.valores).length);
-  const duas = modulo.aplicarEstimativaReferencia(editada, modulo.ESTIMATIVA_PL_SEED, gerador());
-  assert.strictEqual(duas.length, uma.length, "não pode duplicar");
-  assert.strictEqual(duas.find(i => i.contaId === "material").valor, 310539.19, "volta ao valor da semente");
+teste("nenhuma outra obra é tocada", () => {
+  for (const nome of ["Loja COBOP", "Reforma Loja Cobop 2", "Casa do Renato", "", null]) {
+    assert.strictEqual(modulo.estimativaCargaUnica(obraCobop({ nome }), CARGA, ids()), null, `"${nome}" não podia casar`);
+  }
+});
+
+teste("carrega uma vez só, e nunca por cima do que já foi digitado", () => {
+  const marcada = obraCobop({ estimativaCarregadaEm: "2026-09-09T12:00:00.000Z" });
+  assert.strictEqual(modulo.estimativaCargaUnica(marcada, CARGA, ids()), null, "a marca segura a segunda carga");
+  // e mesmo sem a marca, estimativa existente manda
+  const comDado = obraCobop({ estimativaPL: [{ id: "d1", contaId: "material", valor: 1 }] });
+  assert.strictEqual(modulo.estimativaCargaUnica(comDado, CARGA, ids()), null, "não pode passar por cima de número digitado");
+  // rodar de novo no resultado também não repete
+  const uma = modulo.estimativaCargaUnica(obraCobop(), CARGA, ids());
+  assert.strictEqual(modulo.estimativaCargaUnica(uma, CARGA, ids()), null);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

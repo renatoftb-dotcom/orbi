@@ -650,12 +650,14 @@ preencher as contas de receita, uma obra de 900 mil de entrada e 700 mil de
 custo passou a anunciar "estimado R$ 1.600.000,00". Agora são dois números,
 como no P&L: **Entradas estimadas** (só quando houver) e **Custo estimado**.
 
-### Estimativa de referência do escritório
+### Carga única da Reforma Loja Cobop — TEMPORÁRIO
 
-`ESTIMATIVA_PL_SEED` (em `obra-financeiro.jsx`) traz os números de uma obra
-real do escritório — a planilha ESTIMATIVA PL OBRA, **R$ 1.030.000,00** de
-custo. O botão "Carregar estimativa de referência", na aba Preencher, joga
-esses valores no quadro; dali o escritório ajusta linha a linha.
+`CARGA_ESTIMATIVA_UNICA` (em `obra-financeiro.jsx`) traz os números da
+planilha ESTIMATIVA PL OBRA — **R$ 1.030.000,00** — e eles entram **uma vez**
+na obra "Reforma Loja Cobop", para o escritório não redigitar onze contas à
+mão. Não é semente de obra nova nem botão na tela: é um empurrão de partida
+enquanto o fluxo de dados que monta a estimativa dentro da obra
+(quantitativo, contratos, cotações) não existe.
 
 | Grupo | Contas | Total |
 |---|---|---|
@@ -681,8 +683,20 @@ indistinguíveis.
 15% dos ofícios nomeados; o de material fecha o total em R$ 1.030.000,00
 redondos. A planilha traz quatro casas decimais e o quadro guarda duas: o
 centavo do arredondamento foi tirado do adicional de material, que é
-justamente a linha de fechamento — por isso a semente fecha no total exato.
+justamente a linha de fechamento.
 
-`aplicarEstimativaReferencia()` só escreve em item `origem: "quadro"`, então
-conta com item detalhado é pulada e a confirmação diz quais. Carregar duas
-vezes troca o valor, nunca duplica linha.
+`estimativaCargaUnica()` (em `contas-pagar.jsx`) roda sozinha, sem ninguém
+confirmar, então tem três travas:
+
+1. **só a obra nomeada** — comparação sem acento e sem caixa, para "Cóbop" e
+   "COBOP" casarem e "Loja COBOP" não casar;
+2. **uma vez só** — a obra guarda `estimativaCarregadaEm`;
+3. **só em obra sem estimativa nenhuma** — nunca passa por cima de número
+   que o escritório já digitou.
+
+Devolve `null` quando não há nada a fazer, e é esse `null` que impede o
+efeito em `clientes.jsx` de gravar em looping.
+
+**Quando o fluxo de dados existir, este bloco inteiro sai**: a constante em
+`obra-financeiro.jsx`, `estimativaCargaUnica()` em `contas-pagar.jsx` e o
+efeito em `clientes.jsx`. As três contas novas ficam.

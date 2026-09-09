@@ -85,22 +85,24 @@ const PLANO_CONTAS = [
   { id: "reembolsos",         nome: "Reembolsos",               grupo: "excluidas" },
 ];
 
-// ── Estimativa de referência do P&L ─────────────────────────────
-// Números de uma obra real do escritório, na planilha ESTIMATIVA PL OBRA:
-// R$ 1.030.000,00 de custo total. Servem de ponto de partida para uma obra
-// nova — o escritório carrega, ajusta linha a linha e segue.
+// ── Carga única da estimativa da Reforma Loja Cobop ─────────────
+// TEMPORÁRIO, e de propósito. Os números vieram da planilha ESTIMATIVA PL
+// OBRA e entram UMA VEZ nesta obra, para o escritório não redigitar onze
+// contas à mão. Não é semente de obra nova nem botão: é um empurrão de
+// partida enquanto o fluxo de dados que monta a estimativa dentro da obra
+// (quantitativo, contratos, cotações) não existe.
 //
-// É provisório de propósito. Amanhã quem preenche estas contas são os
-// fluxos do próprio site (quantitativo, contratos, cotações), gravando no
-// mesmo item `origem: "quadro"` que o botão grava hoje.
+// Quando esse fluxo chegar, este bloco inteiro sai — junto com
+// `estimativaCargaUnica` em contas-pagar.jsx e a chamada em clientes.jsx.
 //
 // Sobre "Adicionais": é o fecho de cada grupo, não um serviço. O de mão de
 // obra é exatamente 15% dos ofícios nomeados; o de material fecha o total
-// em R$ 1.030.000,00 redondos. O centavo do arredondamento para duas casas
-// (a planilha traz 4) foi tirado do adicional de material, que é justamente
-// a linha de fechamento.
-const ESTIMATIVA_PL_SEED = {
-  fonte: "planilha ESTIMATIVA PL OBRA — obra de referência do escritório",
+// em R$ 1.030.000,00 redondos. A planilha traz 4 casas e o quadro guarda 2 —
+// o centavo do arredondamento saiu do adicional de material, que é
+// justamente a linha de fechamento.
+const CARGA_ESTIMATIVA_UNICA = {
+  obra: "Reforma Loja Cobop",
+  fonte: "planilha ESTIMATIVA PL OBRA",
   total: 1030000,
   valores: {
     // material & insumos — R$ 367.529,57

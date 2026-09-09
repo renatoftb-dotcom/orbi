@@ -7440,22 +7440,24 @@ const PLANO_CONTAS = [
   { id: "reembolsos",         nome: "Reembolsos",               grupo: "excluidas" },
 ];
 
-// ── Estimativa de referência do P&L ─────────────────────────────
-// Números de uma obra real do escritório, na planilha ESTIMATIVA PL OBRA:
-// R$ 1.030.000,00 de custo total. Servem de ponto de partida para uma obra
-// nova — o escritório carrega, ajusta linha a linha e segue.
+// ── Carga única da estimativa da Reforma Loja Cobop ─────────────
+// TEMPORÁRIO, e de propósito. Os números vieram da planilha ESTIMATIVA PL
+// OBRA e entram UMA VEZ nesta obra, para o escritório não redigitar onze
+// contas à mão. Não é semente de obra nova nem botão: é um empurrão de
+// partida enquanto o fluxo de dados que monta a estimativa dentro da obra
+// (quantitativo, contratos, cotações) não existe.
 //
-// É provisório de propósito. Amanhã quem preenche estas contas são os
-// fluxos do próprio site (quantitativo, contratos, cotações), gravando no
-// mesmo item `origem: "quadro"` que o botão grava hoje.
+// Quando esse fluxo chegar, este bloco inteiro sai — junto com
+// `estimativaCargaUnica` em contas-pagar.jsx e a chamada em clientes.jsx.
 //
 // Sobre "Adicionais": é o fecho de cada grupo, não um serviço. O de mão de
 // obra é exatamente 15% dos ofícios nomeados; o de material fecha o total
-// em R$ 1.030.000,00 redondos. O centavo do arredondamento para duas casas
-// (a planilha traz 4) foi tirado do adicional de material, que é justamente
-// a linha de fechamento.
-const ESTIMATIVA_PL_SEED = {
-  fonte: "planilha ESTIMATIVA PL OBRA — obra de referência do escritório",
+// em R$ 1.030.000,00 redondos. A planilha traz 4 casas e o quadro guarda 2 —
+// o centavo do arredondamento saiu do adicional de material, que é
+// justamente a linha de fechamento.
+const CARGA_ESTIMATIVA_UNICA = {
+  obra: "Reforma Loja Cobop",
+  fonte: "planilha ESTIMATIVA PL OBRA",
   total: 1030000,
   valores: {
     // material & insumos — R$ 367.529,57
@@ -17301,30 +17303,29 @@ function definirEstimativaDaConta(itens, contaId, valor, novoId) {
   return lista.concat([{ id: novoId, contaId, prestadorId: "", valor: v, observacao: "", origem: EST_ORIGEM_QUADRO }]);
 }
 
-// Carrega a estimativa de referência nas contas do quadro. Só mexe nos
-// itens `origem: "quadro"` — o que foi detalhado à mão em "Por conta" não é
-// tocado, e por isso conta com detalhe fica de fora (a soma dela já é o
-// número certo, e sobrescrever esconderia de onde veio).
-// `novoId` é uma função, não um id: cada conta criada precisa do seu.
-function aplicarEstimativaReferencia(itens, semente, novoId) {
-  let lista = (itens || []).slice();
-  const valores = (semente && semente.valores) || {};
-  for (const contaId of Object.keys(valores)) {
-    if (itensDetalhados(lista, contaId).length) continue;
-    lista = definirEstimativaDaConta(lista, contaId, valores[contaId], novoId());
-  }
-  return lista;
-}
+// ── Carga única da estimativa (temporária) ──────────────────────
+// Devolve a obra com a estimativa preenchida, ou `null` quando não há nada
+// a fazer — é o `null` que impede o efeito de gravar em looping.
+//
+// Três travas, porque isto roda sozinho, sem ninguém confirmar:
+//   1. só a obra nomeada em CARGA_ESTIMATIVA_UNICA;
+//   2. só uma vez — a obra guarda a marca `estimativaCarregadaEm`;
+//   3. só em obra que ainda não tem estimativa nenhuma, para nunca passar
+//      por cima de número que o escritório já digitou.
+const semAcento = (t) => String(t == null ? "" : t).normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
 
-// O que o botão vai fazer, para a confirmação poder dizer antes de fazer.
-function previaEstimativaReferencia(itens, semente) {
-  const valores = (semente && semente.valores) || {};
-  const preencher = [], substituir = [], pulados = [];
-  for (const contaId of Object.keys(valores)) {
-    if (itensDetalhados(itens, contaId).length) { pulados.push(contaId); continue; }
-    (itemDeQuadro(itens, contaId) ? substituir : preencher).push(contaId);
+function estimativaCargaUnica(obra, carga, novoId) {
+  const o = obra || {};
+  const c = carga || {};
+  if (!c.obra || semAcento(o.nome) !== semAcento(c.obra)) return null;
+  if (o.estimativaCarregadaEm) return null;
+  if ((o.estimativaPL || []).length) return null;
+  let itens = [];
+  for (const contaId of Object.keys(c.valores || {})) {
+    itens = definirEstimativaDaConta(itens, contaId, c.valores[contaId], novoId());
   }
-  return { preencher, substituir, pulados };
+  if (!itens.length) return null;
+  return { ...o, estimativaPL: itens, estimativaCarregadaEm: new Date().toISOString() };
 }
 
 // Totais do quadro por grupo, e o resultado estimado da obra: entradas
@@ -19788,7 +19789,7 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
 // Uma linha por conta do plano, o valor digitado direto. É o caminho para
 // dar o primeiro número em quarenta contas sem quarenta idas ao formulário;
 // o detalhe item a item continua existindo em "Por conta".
-function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, aoCarregarReferencia }) {
+function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL }) {
   const linhas = linhasEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
   const totais = totaisEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
   const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 9, padding: "6px 9px", fontSize: 12.5,
@@ -19805,22 +19806,10 @@ function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL, ao
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>
+      <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 14 }}>
         Um campo por conta do P&amp;L. Campo em branco é conta sem estimativa — não é conta estimada em zero.
         Contas que já têm itens detalhados em “Por conta” mostram a soma deles e não são editadas aqui.
       </div>
-      {podeEditar && aoCarregarReferencia && (
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
-          <button type="button" onClick={aoCarregarReferencia}
-            style={{ border: "1px solid rgba(38,36,33,0.16)", background: "#fff", color: "#111827", borderRadius: 20,
-              padding: "6px 16px", fontSize: 12.5, cursor: "pointer", fontFamily: "inherit" }}>
-            Carregar estimativa de referência
-          </button>
-          <span style={{ fontSize: 11.5, color: "#6b7280" }}>
-            {fmtBRL(ESTIMATIVA_PL_SEED.total)} de uma obra do escritório — ponto de partida, ajuste depois.
-          </span>
-        </div>
-      )}
       {GRUPOS_PL.map(g => {
         const ls = porGrupo[g.id] || [];
         if (!ls.length) return null;
@@ -20135,33 +20124,6 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setObraSelecionada(obraAtualizada);
   }
 
-  // Carrega a estimativa de referência do escritório. Diz o que vai fazer
-  // antes de fazer: quantas contas preenche, quantas substitui, quais pula.
-  async function carregarEstimativaReferencia() {
-    const itens = obraAtual.estimativaPL || [];
-    const p = previaEstimativaReferencia(itens, ESTIMATIVA_PL_SEED);
-    const nome = (id) => (contaPorId(id) || {}).nome || id;
-    const linhas = [];
-    if (p.preencher.length) linhas.push(`Preenche ${p.preencher.length} conta${p.preencher.length > 1 ? "s" : ""}.`);
-    if (p.substituir.length) linhas.push(`Substitui o valor de ${p.substituir.length}: ${p.substituir.map(nome).join(", ")}.`);
-    if (p.pulados.length) linhas.push(`Não mexe em ${p.pulados.map(nome).join(", ")} — tem item detalhado.`);
-    if (!p.preencher.length && !p.substituir.length) {
-      dialogo.alertar({ titulo: "Nada a carregar", mensagem: linhas.join(" "), tipo: "aviso" });
-      return;
-    }
-    const ok = await dialogo.confirmar({
-      titulo: "Carregar a estimativa de referência?",
-      mensagem: `${linhas.join(" ")} Os valores vêm de uma obra do escritório e são um ponto de partida — ajuste linha a linha depois.`,
-      confirmar: "Carregar",
-      destrutivo: p.substituir.length > 0,
-    });
-    if (!ok) return;
-    const novosItens = aplicarEstimativaReferencia(itens, ESTIMATIVA_PL_SEED, () => uid());
-    const obraAtualizada = { ...obraAtual, estimativaPL: novosItens };
-    gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
-    setObraSelecionada(obraAtualizada);
-  }
-
   async function removerItemPL(itemId) {
     const ok = await dialogo.confirmar({ titulo: "Remover item da estimativa?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
     if (!ok) return;
@@ -20170,6 +20132,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
     setObraSelecionada(obraAtualizada);
   }
+
+  // Carga única da estimativa da Reforma Loja Cobop — TEMPORÁRIO. Sai junto
+  // com CARGA_ESTIMATIVA_UNICA quando o fluxo de dados que monta a
+  // estimativa dentro da obra existir. As travas estão em
+  // estimativaCargaUnica(): obra certa, uma vez só, e nunca por cima de
+  // estimativa já digitada.
+  const carregouEstimativa = useRef(false);
+  useEffect(() => {
+    if (carregouEstimativa.current) return;
+    const alvo = obras.map(o => estimativaCargaUnica(o, CARGA_ESTIMATIVA_UNICA, () => uid())).find(Boolean);
+    if (!alvo) return;
+    carregouEstimativa.current = true;
+    gravarObras(obras.map(o => (o.id === alvo.id ? alvo : o)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obras.length]);
 
   // Migração: o que sobrou em data.contratos entra na obra correspondente na
   // primeira renderização em que der — depois disso a obra é a fonte única.
@@ -20458,7 +20435,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {visaoPL === "quadro" ? (
           <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
-            fmtBRL={fmtBRL} aoDefinir={definirEstimativa} aoCarregarReferencia={carregarEstimativaReferencia} />
+            fmtBRL={fmtBRL} aoDefinir={definirEstimativa} />
         ) : visaoPL === "extrato" ? (() => {
           // no menu, o mês corrente também aparece (para registrar entrada nele);
           // nas colunas, só os meses que têm movimento
