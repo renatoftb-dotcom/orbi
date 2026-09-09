@@ -184,3 +184,22 @@ invente. Os nomes certos:
 `precos-quantitativo.test.mjs` é a trava: roda obra nova e reforma inteiras
 contra a semente e exige que **toda** linha ache preço maior que zero.
 Rodado contra o código anterior, ele acusa exatamente os quatro itens.
+
+## A tela e o motor têm que ler a mesma coisa
+
+`normalizarProjeto()` migra o projeto para o motor; o formulário lê o
+projeto **cru** de `obra.projeto`. Quando só o motor migrava, um projeto
+salvo antes da matriz mostrava a construção existente **em branco** e mesmo
+assim gerava demolição, entulho e material — o formulário procurava
+`existente.alvenaria.remover` (inexistente) e o motor lia
+`existente.paredeDemolir` (40 m²). Linhas no orçamento sem nenhum campo
+correspondente na tela.
+
+`projetoParaFormulario()` faz no rascunho da tela as mesmas migrações que o
+motor faz (cômodos e matriz), e é ela que `OrcamentoObraView` usa ao abrir.
+Como devolve só o formato novo, os campos antigos somem do projeto no
+próximo save — a divergência não volta.
+
+**Regra:** toda migração nova em `normalizarProjeto` precisa de par em
+`projetoParaFormulario`, senão a tela e o orçamento passam a discordar em
+silêncio.

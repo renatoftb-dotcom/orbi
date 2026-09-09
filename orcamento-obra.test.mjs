@@ -38,7 +38,8 @@ const recorte = (nome) => {
 const mClassificacao = srcCompleto.match(/const CLASSIFICACAO_OBRA = \[[^\]]*\];/);
 if (!mClassificacao) throw new Error("const CLASSIFICACAO_OBRA não encontrada");
 const src = mComodos[0] + "\n" + srcSeedComposicoes + "\n" + srcCompleto.slice(0, idx)
-  + "\n" + recorte("projetoVazio") + "\n" + mClassificacao[0] + "\n" + recorte("camposPreenchidos");
+  + "\n" + recorte("projetoVazio") + "\n" + recorte("projetoParaFormulario")
+  + "\n" + mClassificacao[0] + "\n" + recorte("camposPreenchidos");
 
 const modulo = new Function(`
   ${src}
@@ -51,7 +52,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
-    camposPreenchidos, projetoVazio,
+    camposPreenchidos, projetoVazio, projetoParaFormulario,
     demolicoesRemocoes, entulhoDaReforma, execucaoNoExistente, SERVICOS_REFORMA, ITENS_EXISTENTE,
     migrarExistente, medidaExistente, taxaServicoReforma, DRYWALL_CONSUMO,
     consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
@@ -1210,6 +1211,45 @@ teste("nenhum projeto de teste produz linha negativa", () => {
     ["tudo zerado", { tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio", arquitetura: {}, terreo: {} }],
   ];
   for (const [nome, projeto] of casos) semNegativos(modulo.gerarOrcamentoObra(projeto, { materiais: [] }), nome);
+});
+
+
+// ── Formulário e motor leem a mesma coisa ───────────────────────
+teste("o que a tela mostra é o que o motor calcula (projeto salvo antes da matriz)", () => {
+  // Projeto gravado no formato antigo: o formulário lia existente.alvenaria
+  // (inexistente) e mostrava campo em branco, enquanto o motor lia
+  // existente.paredeDemolir e calculava 40 m² de demolição.
+  const salvo = { tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 0 }, terreo: {},
+    existente: { paredeDemolir: 40, pisoRemover: 30, paredeConstruir: 12 } };
+
+  const naTela = modulo.projetoParaFormulario(salvo);
+  assert.strictEqual(modulo.medidaExistente(naTela.existente, "alvenaria", "remover"), 40,
+    "a tela tem que mostrar o valor que o motor usa");
+  assert.strictEqual(modulo.medidaExistente(naTela.existente, "piso", "remover"), 30);
+  assert.strictEqual(modulo.medidaExistente(naTela.existente, "alvenaria", "executar"), 12);
+  assert.strictEqual(naTela.existente.paredeDemolir, undefined,
+    "o campo antigo sai do projeto, senão volta a divergir no próximo save");
+
+  // e o motor, lendo o projeto já migrado, chega no mesmo orçamento
+  const a = modulo.gerarOrcamentoObra(salvo, { materiais: [] });
+  const b = modulo.gerarOrcamentoObra(naTela, { materiais: [] });
+  const resumo = (r) => r.itens.filter(i => /Demolições|Entulho|Construção existente/.test(i.etapa))
+    .map(i => `${i.item}:${i.qtd}`).sort();
+  assert.deepStrictEqual(resumo(b), resumo(a));
+});
+
+teste("formulário em branco continua em branco, e nada é calculado", () => {
+  const naTela = modulo.projetoParaFormulario({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio", arquitetura: {}, terreo: {} });
+  assert.strictEqual(modulo.camposPreenchidos(naTela), 0, "matriz vazia não pode contar como campo preenchido");
+  const r = modulo.gerarOrcamentoObra(naTela, { materiais: [] });
+  assert.strictEqual(r.itens.filter(i => /Demolições|Entulho|Construção existente/.test(i.etapa)).length, 0);
+});
+
+teste("o contador do botão de limpar enxerga a matriz", () => {
+  const naTela = modulo.projetoParaFormulario({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: {}, terreo: {}, existente: { alvenaria: { remover: 40, executar: 12 } } });
+  assert.strictEqual(modulo.camposPreenchidos(naTela), 2);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

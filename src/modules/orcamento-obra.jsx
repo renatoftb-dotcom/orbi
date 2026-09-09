@@ -4668,6 +4668,22 @@ function lerCaminho(obj, caminho) {
   return caminho.split(".").reduce((acc, k) => (acc == null ? acc : acc[k]), obj);
 }
 
+// O projeto como o FORMULÁRIO precisa dele. Migrações que o motor faz em
+// normalizarProjeto (cômodos, matriz da construção existente) têm que ser
+// feitas aqui também, senão a tela mostra campo em branco enquanto o motor
+// calcula pelo valor antigo — foi o que aconteceu com a reforma: o
+// formulário lia existente.alvenaria.remover (inexistente) e o motor lia
+// existente.paredeDemolir (40 m²), e o orçamento saía com linhas que não
+// tinham correspondência em nenhum campo da tela.
+function projetoParaFormulario(projeto) {
+  const p = projeto || projetoVazio();
+  return {
+    ...p,
+    ambientes: p.ambientes ? migrarAmbientes(p.ambientes) : p.ambientes,
+    existente: migrarExistente(p.existente),
+  };
+}
+
 // Quantos campos o usuário realmente preencheu. Serve para o botão de limpar
 // dizer o que vai apagar em vez de perguntar no escuro ("apagar tudo?" sem
 // número não ajuda ninguém a decidir).
@@ -5158,10 +5174,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
   const permBase = getPermissoes();
   const perm = { ...permBase, podeEditar: permBase.podeGerenciarObra === undefined ? permBase.podeEditar : permBase.podeGerenciarObra };
   const [viewInterna, setViewInterna] = useState(obra.orcamento ? "resultado" : obra.projeto ? "form" : "vazio");
-  const [projetoDraft, setProjetoDraft] = useState(() => {
-    const p = obra.projeto || projetoVazio();
-    return p.ambientes ? { ...p, ambientes: migrarAmbientes(p.ambientes) } : p;
-  });
+  const [projetoDraft, setProjetoDraft] = useState(() => projetoParaFormulario(obra.projeto));
   const [blocosAbertos, setBlocosAbertos] = useState({ geral: true });
   const [etapasColapsadas, setEtapasColapsadas] = useState({});
   const [paredeTerreoExpandida, setParedeTerreoExpandida] = useState(false);
