@@ -136,6 +136,15 @@ const MEM_CANTEIRO = (texto) => [MEM.nota(texto || "Quantidade fixa do canteiro:
 // ── Helper de emissão, usado por todo módulo de cálculo (§4) ──
 function emitir(out, { ordem, item, tipo, etapa, subEtapa, unidade, qtd, preco, composicao, confianca, insumoCodigo, memoria }) {
   if (!qtd || qtd === 0) return; // regra do VBA: só emite se qtd ≠ 0
+  // Quantidade negativa NUNCA sai no orçamento. Não existe "menos três sacos
+  // de cimento": quando uma conta dá negativo é erro de dado (área revestida
+  // maior que a parede, telhado mais largo que comprido) e o número entraria
+  // subtraindo do total, escondendo o problema em vez de mostrá-lo. A linha
+  // é suprimida e o caso vira aviso na tela, com o nome do item.
+  if (!(Number(qtd) > 0)) {
+    (out.negativos || (out.negativos = [])).push({ item, etapa, subEtapa, qtd: Number(qtd) });
+    return;
+  }
   const linha = { ordem, item, tipo, etapa, subEtapa, unidade, qtd: Number(qtd), preco: preco ?? null };
   if (composicao) linha.composicao = composicao; // item composto (esquadria): o que forma o preço unitário
   if (memoria) linha.memoria = memoria;          // passos do cálculo da quantidade (tela da engrenagem)
@@ -653,7 +662,13 @@ function paredesTerreo(cp, out) {
 // M_PINTURA.bas — pintura (base + tintas)
 // ═══════════════════════════════════════════════════════════════
 function pintura(cp, out) {
-  const paredeInterna = ((cp.m2ParedesInternas - cp.revestimentoInterno) * 2 + cp.m2ParedesExternas) * PERDA;
+  // A parede revestida de cerâmica não se pinta, então desconta. O piso da
+  // conta é zero: com o revestimento maior que a parede interna (medida em
+  // branco, ou cômodos estimando mais revestimento do que há de parede) a
+  // subtração ficava negativa e TODA a pintura saía com quantidade e valor
+  // negativos, subtraindo do total do orçamento.
+  const internaLiquida = Math.max(0, cp.m2ParedesInternas - cp.revestimentoInterno);
+  const paredeInterna = (internaLiquida * 2 + cp.m2ParedesExternas) * PERDA;
   const paredeExterna = cp.m2ParedesExternas * PERDA;
   const paredeTotal = paredeInterna + paredeExterna;
 
@@ -671,7 +686,10 @@ function pintura(cp, out) {
     MEM.dado("Paredes internas", cp.m2ParedesInternas, "m²", "calculado dos blocos de parede"),
     MEM.dado("Revestimento de parede (cerâmica/porcelanato)", cp.revestimentoInterno, "m²", "bloco Pisos e revestimentos"),
     MEM.dado("Paredes externas (fachada)", cp.m2ParedesExternas, "m²", "calculado dos blocos de parede"),
-    MEM.conta("Área interna, com 10% de perda", "((internas − revestimento) × 2 + externas) × 1,10", [["internas", cp.m2ParedesInternas], ["revestimento", cp.revestimentoInterno], ["externas", cp.m2ParedesExternas]], paredeInterna, "m²"),
+    ...(cp.revestimentoInterno > cp.m2ParedesInternas ? [MEM.nota(
+      "O revestimento cerâmico informado é maior que a área de parede interna, então não sobra parede interna para pintar — a conta usa zero em vez de um número negativo. Confira o m² de parede interna no bloco Geral.")] : []),
+    MEM.conta("Parede interna que sobra para pintar", "internas − revestimento (nunca menos que zero)", [["internas", cp.m2ParedesInternas], ["revestimento", cp.revestimentoInterno]], internaLiquida, "m²"),
+    MEM.conta("Área interna, com 10% de perda", "(sobra × 2 + externas) × 1,10", [["sobra", internaLiquida], ["externas", cp.m2ParedesExternas]], paredeInterna, "m²"),
     MEM.conta("Área externa, com 10% de perda", "externas × 1,10", [["externas", cp.m2ParedesExternas]], paredeExterna, "m²"),
     MEM.conta("Área total a pintar", "interna + externa", [["interna", paredeInterna], ["externa", paredeExterna]], paredeTotal, "m²"),
   ];
@@ -1505,8 +1523,10 @@ function calcularTelhado(t) {
   let cumeVar2 = 0, cumeVar3 = 0;
   if (!(aguas === 1 || aguas === 2)) { cumeVar2 = larg / 2; cumeVar3 = larg / 2; }
   let cumeVar4;
-  if (aguas === 3) cumeVar4 = comp - (larg / 2);
-  else if (aguas === 4) cumeVar4 = comp - larg;
+  // Math.max: telhado digitado mais largo que comprido (larg > comp) fazia a
+  // cumeeira sair com comprimento negativo, e daí telhas negativas.
+  if (aguas === 3) cumeVar4 = Math.max(0, comp - (larg / 2));
+  else if (aguas === 4) cumeVar4 = Math.max(0, comp - larg);
   else cumeVar4 = comp;
 
   const areaTelha = AREA_TELHA[tipo] ?? 0;
@@ -4075,6 +4095,14 @@ function precificarETotalizar(out, data) {
 
   const qualidade = qualidadeDosPrecos(itens);
   const avisos = [];
+  if (out.negativos && out.negativos.length) {
+    const nomes = [...new Set(out.negativos.map((n) => n.item))];
+    avisos.push({
+      tipo: "quantidade_negativa",
+      mensagem: `${out.negativos.length} linha(s) ficaram com quantidade negativa e foram deixadas de fora — confira as medidas que as alimentam`,
+      itens: nomes,
+    });
+  }
   if (qualidade.semPreco.length) {
     avisos.push({ tipo: "sem_preco", mensagem: `${qualidade.semPreco.length} item(ns) sem preço no catálogo de Insumos — entram com R$ 0`, itens: qualidade.semPreco });
   }
@@ -6001,6 +6029,17 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             {orc.qualidade.semPreco.length ? ` · ${orc.qualidade.semPreco.length} sem preço (R$ 0)` : ""}
             <span style={{ color: "#6b7280" }}> — gerado em {new Date(orc.geradoEm).toLocaleDateString("pt-BR")}; recalcule para usar preços novos.</span>
           </div>
+          {/* Quantidade negativa é erro de medida, não de preço: fica em
+              vermelho e aberto, fora do painel recolhível dos preços. */}
+          {(orc.avisos || []).filter((a) => a.tipo === "quantidade_negativa").map((a, i) => (
+            <div key={i} style={{ marginTop: 8, fontSize: 12, color: "#991b1b", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "8px 14px" }}>
+              <div style={{ fontWeight: 700 }}>Medida inconsistente</div>
+              <div style={{ marginTop: 2 }}>{a.mensagem}: {(a.itens || []).join(" · ")}.</div>
+              <div style={{ marginTop: 2, color: "#7f1d1d" }}>
+                Costuma ser área revestida maior que a parede, ou telhado mais largo que comprido. Nada foi somado com sinal negativo.
+              </div>
+            </div>
+          ))}
           {(orc.qualidade.semPreco.length > 0 || orc.qualidade.atencao.length > 0 || (orc.avisos || []).some((a) => a.tipo && a.tipo.startsWith("esquadria"))) && (
             <details style={{ marginTop: 8, fontSize: 12, color: "#92400e", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 10, padding: "8px 14px" }}>
               <summary style={{ cursor: "pointer", fontWeight: 600 }}>Preços que merecem atenção ({orc.qualidade.semPreco.length + orc.qualidade.atencao.length})</summary>

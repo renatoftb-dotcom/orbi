@@ -1140,5 +1140,77 @@ teste("limpar devolve o formulário ao estado em branco", () => {
   assert.strictEqual(modulo.camposPreenchidos(modulo.projetoVazio()), 0);
 });
 
+
+// ── Nada sai com valor negativo ─────────────────────────────────
+const semNegativos = (r, contexto) => {
+  const ruins = r.itens.filter(i => !(i.qtd > 0) || i.total < 0 || i.preco < 0);
+  assert.deepStrictEqual(
+    ruins.map(i => `${i.etapa} / ${i.item}: qtd ${i.qtd}, total ${i.total}`), [],
+    `${contexto}: saiu linha com quantidade, preço ou total negativo`);
+};
+
+teste("revestimento maior que a parede interna não faz a pintura ficar negativa", () => {
+  // 20 m² de parede interna e 60 m² de revestimento: a subtração dava −40,
+  // e a pintura inteira (fundo, selador, massa, tinta) saía negativa
+  const r = modulo.gerarOrcamentoObra({
+    tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 100, m2ParedesInternas: 20, m2ParedesExternas: 30, m2ParedesTotal: 50 },
+    terreo: { area: 100 },
+    pisos: { revestimentoInterno: { m2: 60 } },
+  }, { materiais: [] });
+  semNegativos(r, "revestimento > parede interna");
+  const pintura = r.itens.filter(i => i.etapa === "Pintura");
+  assert.ok(pintura.length > 0, "a fachada ainda se pinta, então a etapa não some");
+  for (const i of pintura) assert.ok(i.qtd > 0, `${i.item} com qtd ${i.qtd}`);
+});
+
+teste("parede interna em branco com cômodos revestidos também não vira negativo", () => {
+  const r = modulo.gerarOrcamentoObra({
+    tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 90 }, terreo: { area: 90 },
+    ambientes: { cozinha: 1, banhoSocial: 2, lavanderia: 1 },
+    existente: { piso: { remover: 30, executar: 30 }, pintura: { executar: 60 } },
+  }, { materiais: [] });
+  semNegativos(r, "reforma sem parede interna digitada");
+});
+
+teste("telhado mais largo que comprido não gera cumeeira negativa", () => {
+  const r = modulo.gerarOrcamentoObra({
+    tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 100 }, terreo: { area: 100 },
+    cobertura: [{ tipo: "Telha Barro Portuguesa", largura: 20, comprimento: 6, aguas: 4, inclinacao: 30 }],
+  }, { materiais: [] });
+  semNegativos(r, "telhado 20 × 6 com 4 águas");
+});
+
+teste("a linha negativa é suprimida e vira aviso, não desconto no total", () => {
+  const out = [];
+  modulo.emitir(out, { ordem: 1, item: "Coisa impossível", tipo: "Bruto", etapa: "X", unidade: "m2", qtd: -5 });
+  modulo.emitir(out, { ordem: 1, item: "Coisa normal", tipo: "Bruto", etapa: "X", unidade: "m2", qtd: 5 });
+  assert.strictEqual(out.length, 1, "só a linha positiva entra");
+  assert.strictEqual(out.negativos.length, 1);
+  assert.strictEqual(out.negativos[0].item, "Coisa impossível");
+  const r = modulo.precificarETotalizar(out, { materiais: [] });
+  assert.ok(r.avisos.some(a => a.tipo === "quantidade_negativa"), "o caso tem que aparecer como aviso");
+  assert.ok(r.totais.geral >= 0);
+});
+
+teste("nenhum projeto de teste produz linha negativa", () => {
+  const casos = [
+    ["obra nova cheia", { tipoObra: "nova", tipologia: "Sobrado", padrao: "Alto",
+      arquitetura: { areaConstruida: 320, m2ParedesInternas: 400, m2ParedesExternas: 260, m2ParedesTotal: 660, gabarito: 2.8, perimetroParedes: 90 },
+      terreo: { area: 160 }, pav1: { area: 160 }, temPiscina: true, piscina: { areaConstruida: 32 } }],
+    ["reforma cheia", { tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+      arquitetura: { areaConstruida: 120 }, terreo: { area: 120 },
+      existente: { contrapiso: { remover: 30, executar: 30 }, alvenaria: { remover: 40, executar: 12 },
+        drywall: { remover: 8, executar: 20 }, forro: { remover: 25, executar: 25 },
+        piso: { remover: 30, executar: 30 }, revestimento: { remover: 18, executar: 18 },
+        calcada: { remover: 10, executar: 10 }, banheiro: { remover: 2, executar: 2 },
+        esquadria: { remover: 4, executar: 4 }, pintura: { executar: 90 } } }],
+    ["tudo zerado", { tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio", arquitetura: {}, terreo: {} }],
+  ];
+  for (const [nome, projeto] of casos) semNegativos(modulo.gerarOrcamentoObra(projeto, { materiais: [] }), nome);
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);

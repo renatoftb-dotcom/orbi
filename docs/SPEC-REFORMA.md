@@ -140,3 +140,24 @@ região, não verdade: a primeira cotação com o empreiteiro substitui cada um.
   em abertura de vão).
 - Remanejamento de instalações no existente: hoje elétrica e hidráulica só
   são calculadas pelo modelo da obra nova.
+
+## Nada sai com valor negativo
+
+`emitir()` recusa quantidade ≤ 0. Não existe "menos três sacos de cimento":
+quando uma conta dá negativo é erro de dado, e o número entraria **subtraindo
+do total**, escondendo o problema em vez de mostrá-lo. A linha é suprimida e
+o caso vira um aviso vermelho no resultado, nomeando os itens.
+
+Dois casos reais que davam negativo, corrigidos na origem:
+
+- **Pintura.** `internas − revestimento` sem piso em zero. Com a parede
+  interna em branco (comum em reforma) e os cômodos estimando revestimento,
+  a subtração ficava negativa e a massa corrida saía com quantidade −3. Agora
+  a sobra de parede é `Math.max(0, …)`, e a memória de cálculo avisa quando o
+  revestimento passou da parede.
+- **Cumeeira.** Telhado digitado mais largo que comprido fazia `comp − larg`
+  negativo, e daí telhas negativas.
+
+O teste `nenhum projeto de teste produz linha negativa` roda obra nova cheia,
+reforma cheia e projeto zerado conferindo quantidade, preço e total de cada
+linha — é ele que guarda a regra para o que vier depois.
