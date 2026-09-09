@@ -74,3 +74,48 @@ cliente NÃO pode fazer nela.**
 clientes — `saveAllData` compara as duas listas e manda `DELETE` no que
 sumiu. Use sempre `mesclarPorCliente(data.obras, clienteId, fatia)`.
 Cronograma e orçamento tinham esse bug e foram corrigidos junto.
+
+## Anexo da proposta
+
+O arquivo que o fornecedor mandou (PDF ou foto) é arrastado para o campo no
+formulário da proposta e vai para o **Cloudinary**, o mesmo storage do logo e
+da capa. A proposta guarda só a referência:
+
+```
+proposta.anexo = { url, public_id, nome, bytes, formato, resourceType, enviadoEm }
+```
+
+### Por que não guardar o arquivo dentro da obra
+
+A obra é gravada como um documento JSON inteiro a cada `save`. Um PDF em
+base64 ali dentro subiria de novo em toda alteração da obra e o app do
+cliente o baixaria em toda abertura. A referência custa ~100 bytes.
+
+### Por que não converter o PDF em imagem
+
+Rasterizar engorda em vez de aliviar: um PDF de proposta é vetorial e
+costuma ter 100–300 KB nas duas páginas; a mesma coisa em PNG legível dá
+200–500 KB **por página**, e some o texto selecionável, o zoom e as páginas
+seguintes. PDF sobe como está.
+
+Foto é o caso oposto: câmera de celular manda 4–6 MB para fotografar um A4.
+`comprimirImagem()` reduz para 1600px no maior lado e reencoda em JPEG 0.72
+antes de enviar — na prática, de ~6 MB para ~60 KB. Se o resultado ficar
+maior que o original (imagem já pequena ou já otimizada), fica com o
+original.
+
+### resource_type: PDF é 'raw', imagem é 'image'
+
+Como `image`, o Cloudinary trata o PDF como documento rasterizável e a
+entrega passa a depender da opção *Allow delivery of PDF and ZIP files* da
+conta, que vem **desligada** — o link voltaria 401. Em `raw` o arquivo é
+servido como está, sempre. Por isso `uploads_log` ganhou a coluna
+`resource_type`: `cloudinary.uploader.destroy()` também precisa do tipo
+certo, senão não acha o arquivo na hora de apagar.
+
+### Permissões
+
+Categoria `proposta_cotacao`, até 5 MB, 500 ativas por empresa. O cliente
+**não** anexa: `POST /api/uploads` é escrita, e a lista branca de escrita
+dele tem só `/obras`. Ele abre o arquivo pelo link, que é público — mesma
+característica do logo e das imagens de projeto.

@@ -49,6 +49,7 @@ function propostaVazia() {
     condicaoPagamento: "",
     validade: "",
     observacao: "",
+    anexo: null,          // { url, public_id, nome, bytes, formato, resourceType }
     recebidaEm: (typeof dataParaIso === "function" ? dataParaIso(new Date()) : ""),
   };
 }
@@ -202,6 +203,79 @@ function cotacoesAguardandoCliente(cotacoes, aprovacoes) {
 function nomeDoFornecedor(prestadores, id) {
   const f = (prestadores || []).find(p => p && p.id === id);
   return f ? f.nome : "";
+}
+
+// ── O anexo da proposta ─────────────────────────────────────────
+// O arquivo NÃO mora na obra. A obra é gravada como um documento JSON
+// inteiro a cada save; um PDF embutido ali subiria de novo em toda
+// alteração e o app do cliente o baixaria em toda abertura. Vai para o
+// mesmo storage do logo e da capa, e a proposta guarda só o endereço.
+const COT_ANEXO_MAX = 5 * 1024 * 1024;
+const COT_IMG_LADO_MAX = 1600;      // foto de proposta não precisa de mais
+const COT_IMG_QUALIDADE = 0.72;
+
+function ehPdf(arquivo) {
+  return String((arquivo || {}).type || "") === "application/pdf"
+      || /\.pdf$/i.test(String((arquivo || {}).name || ""));
+}
+
+function tamanhoLegivel(bytes) {
+  const n = Number(bytes || 0);
+  if (n <= 0) return "";
+  return n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// Foto de proposta vem da câmera do celular com 4 MB para um papel A4.
+// Reduzir para 1600px e reencodar em JPEG deixa em torno de 200 KB sem
+// prejuízo de leitura. PDF passa direto: é vetorial, já é leve, e virar
+// imagem só engordaria o arquivo e perderia o texto.
+function comprimirImagem(arquivo) {
+  return new Promise((resolve) => {
+    if (ehPdf(arquivo) || typeof document === "undefined" || typeof FileReader === "undefined") return resolve(arquivo);
+    if (!/^image\//.test(String(arquivo.type || ""))) return resolve(arquivo);
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const escala = Math.min(1, COT_IMG_LADO_MAX / Math.max(img.width, img.height));
+          if (escala >= 1 && arquivo.size <= 900 * 1024) return resolve(arquivo);
+          const cv = document.createElement("canvas");
+          cv.width = Math.round(img.width * escala);
+          cv.height = Math.round(img.height * escala);
+          cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+          cv.toBlob((blob) => {
+            // se a "compressão" engordou o arquivo, fica com o original
+            if (!blob || blob.size >= arquivo.size) return resolve(arquivo);
+            const nome = String(arquivo.name || "proposta").replace(/\.[^.]+$/, "") + ".jpg";
+            resolve(new File([blob], nome, { type: "image/jpeg" }));
+          }, "image/jpeg", COT_IMG_QUALIDADE);
+        } catch (e) { resolve(arquivo); }
+      };
+      img.onerror = () => resolve(arquivo);
+      img.src = leitor.result;
+    };
+    leitor.onerror = () => resolve(arquivo);
+    leitor.readAsDataURL(arquivo);
+  });
+}
+
+async function enviarAnexoProposta(arquivo) {
+  if (!arquivo) return null;
+  const pronto = await comprimirImagem(arquivo);
+  if (pronto.size > COT_ANEXO_MAX) {
+    throw new Error(`Arquivo muito grande (${tamanhoLegivel(pronto.size)}). O limite é 5 MB.`);
+  }
+  const r = await api.uploads.send(pronto, "proposta_cotacao");
+  return {
+    url: r.url,
+    public_id: r.public_id,
+    nome: arquivo.name || r.nome || "proposta",
+    bytes: r.bytes || pronto.size,
+    formato: r.formato || (ehPdf(pronto) ? "pdf" : "jpg"),
+    resourceType: r.resource_type || (ehPdf(pronto) ? "raw" : "image"),
+    enviadoEm: new Date().toISOString(),
+  };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -384,9 +458,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             <input style={E.input} type="date" value={p.validade} onChange={e => set("validade", e.target.value)} />
           </div>
         </div>
-        <div style={{ marginBottom: 18 }}>
+        <div style={{ marginBottom: 14 }}>
           <label style={E.label}>Observação</label>
           <input style={E.input} value={p.observacao} onChange={e => set("observacao", e.target.value)} placeholder="Não inclui a instalação." />
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <label style={E.label}>Proposta enviada pelo fornecedor</label>
+          <CampoAnexoProposta anexo={p.anexo} onTrocar={a => set("anexo", a)} onErro={setErro} />
         </div>
         {erro && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 12 }}>{erro}</div>}
         <div style={{ display: "flex", gap: 10 }}>
@@ -533,6 +611,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                   {maisBarata && !escolhida && selo("#15803d", "Mais barata")}
                                 </div>
                                 {p.observacao && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{p.observacao}</div>}
+                                {p.anexo && p.anexo.url && (
+                                  <a href={p.anexo.url} target="_blank" rel="noopener noreferrer"
+                                    style={{ fontSize: 11, color: "#0474f4", textDecoration: "none", display: "inline-block", marginTop: 3 }}>
+                                    📎 {p.anexo.formato === "pdf" || p.anexo.resourceType === "raw" ? "Ver proposta (PDF)" : "Ver proposta"}
+                                  </a>
+                                )}
                               </td>
                               <td style={{ padding: "8px", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}</td>
                               <td style={{ padding: "8px", whiteSpace: "nowrap" }}>{p.prazoDias ? `${p.prazoDias} dias` : "—"}</td>
@@ -604,6 +688,70 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           onFechar={() => setFormDecisao(null)}
         />
       )}
+    </div>
+  );
+}
+
+// Campo de anexo: arrasta o PDF do e-mail para cá, ou clica e escolhe.
+function CampoAnexoProposta({ anexo, onTrocar, onErro }) {
+  const [sobre, setSobre] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const refInput = useRef(null);
+  const E = COT_ESTILO;
+
+  async function receber(arquivo) {
+    if (!arquivo) return;
+    setEnviando(true);
+    onErro("");
+    try { onTrocar(await enviarAnexoProposta(arquivo)); }
+    catch (e) { onErro(e.message || "Não foi possível anexar o arquivo."); }
+    finally { setEnviando(false); }
+  }
+
+  async function remover() {
+    const antigo = anexo;
+    onTrocar(null);
+    // o arquivo some da proposta de qualquer jeito; apagar do storage é
+    // permissão de admin, então uma recusa aqui não trava o usuário
+    if (antigo && antigo.public_id) { try { await api.uploads.remove(antigo.public_id); } catch (e) {} }
+  }
+
+  if (anexo) {
+    const pdf = anexo.formato === "pdf" || anexo.resourceType === "raw";
+    return (
+      <div style={{ ...E.quadro, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+        <div style={{ width: 38, height: 46, borderRadius: 6, border: "1px solid rgba(38,36,33,0.14)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 700, color: pdf ? "#dc2626" : "#0474f4", background: "#fafafa", overflow: "hidden" }}>
+          {pdf ? "PDF" : <img src={anexo.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+        </div>
+        <div style={{ flex: 1, minWidth: 140 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", wordBreak: "break-all" }}>{anexo.nome}</div>
+          <div style={{ fontSize: 11, color: "#6b7280" }}>{tamanhoLegivel(anexo.bytes)}</div>
+        </div>
+        <a href={anexo.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btnSec, textDecoration: "none", display: "inline-block" }}>Abrir</a>
+        <button style={E.btnSec} onClick={remover}>Remover</button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setSobre(true); }}
+      onDragLeave={() => setSobre(false)}
+      onDrop={e => { e.preventDefault(); setSobre(false); receber(e.dataTransfer.files && e.dataTransfer.files[0]); }}
+      onClick={() => refInput.current && refInput.current.click()}
+      style={{
+        border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`,
+        borderRadius: 12, padding: "18px 14px", textAlign: "center", cursor: "pointer",
+        background: sobre ? "#f0f7ff" : "#fafafa", transition: "all .15s ease",
+      }}>
+      <input ref={refInput} type="file" accept="application/pdf,image/*" style={{ display: "none" }}
+        onChange={e => { receber(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+      <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
+        {enviando ? "Enviando…" : "Arraste o PDF da proposta aqui"}
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
+        ou clique para escolher — PDF ou foto, até 5 MB
+      </div>
     </div>
   );
 }
