@@ -2928,6 +2928,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     );
   }
 
+  if (view === "cotacoesObra" && obraSelecionada) {
+    return (
+      <CotacoesObraView
+        obra={obraAtual}
+        obras={obras}
+        data={data}
+        save={save}
+        onObraAtualizada={setObraSelecionada}
+        isMobile={isMobile}
+        usuario={perm.usuario}
+        onVoltar={() => setView("detalheObra")}
+      />
+    );
+  }
+
   if (view === "cronogramaObra" && obraSelecionada) {
     return (
       <CronogramaObraView
@@ -2983,6 +2998,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
               {(() => { const t = totaisContas((obraAtual.contasPagar || []), hojeIso);
                 return t.aberto > 0 ? `${fmtMoedaCtr(t.aberto)} em aberto` : "Parcelas dos contratos"; })()}
+            </div>
+          </button>
+          <button onClick={() => setView("cotacoesObra")}
+            style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "20px", background: "#fff", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 4, transition: "all 0.2s ease", fontFamily: "inherit" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", textAlign: "center" }}>Cotações</div>
+            <div style={{ fontSize: 11, color: "#4b5563", textAlign: "center" }}>
+              {(() => {
+                const r = resumoCotacoes(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || []);
+                if (!r.total) return "Comparar preços de fornecedores";
+                // a frase é sempre a próxima ação de quem está olhando
+                if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para lançar" : `${r.aprovadas} prontas para lançar`;
+                if (r.aguardandoCliente) return `${r.aguardandoCliente} aguardando ${perm.podeGerenciarObra ? "o cliente" : "você"}`;
+                if (r.abertas) return r.abertas === 1 ? "1 em andamento" : `${r.abertas} em andamento`;
+                return r.total === 1 ? "1 cotação" : `${r.total} cotações`;
+              })()}
             </div>
           </button>
           <button onClick={() => { dialogo.alertar({ titulo: "Em breve", mensagem: "Documentos será implementado em breve.", tipo: "aviso" }); }}

@@ -665,7 +665,10 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
   function salvar() {
     const cronograma = { ...cfg, prazoMeses: res.ativo ? res.ativo.meses : null, dataFim: res.ativo ? res.ativo.dataFim : null, geradoEm: new Date().toISOString() };
     const obraAtualizada = { ...obra, cronograma };
-    save({ ...data, obras: obras.map((o) => (o.id === obra.id ? obraAtualizada : o)) });
+    // `obras` é só a fatia do cliente atual. Trocar data.obras por ela
+    // apagaria as obras dos outros clientes — saveAllData compara as duas
+    // listas e manda DELETE no que sumiu. Mesclar é obrigatório.
+    save({ ...data, obras: mesclarPorCliente(data.obras, obra.clienteId, obras.map((o) => (o.id === obra.id ? obraAtualizada : o))) });
     if (onObraAtualizada) onObraAtualizada(obraAtualizada);
   }
   function usarEquipeNecessaria() {

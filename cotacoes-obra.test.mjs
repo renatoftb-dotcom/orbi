@@ -1,0 +1,220 @@
+// Testes das cotações de fornecedores (node, sem framework).
+// Roda com: node cotacoes-obra.test.mjs
+
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import assert from "assert";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const mod = (nome) => readFileSync(join(__dirname, "src", "modules", nome), "utf-8");
+
+const contratosSrc = mod("contratos-obra.jsx");
+const corteCtr = contratosSrc.indexOf("// UI — documento e gerador");
+const cronoSrc = mod("cronograma-obra.jsx");
+const corteCrono = cronoSrc.indexOf("// UI — bloco");
+const cpSrc = mod("contas-pagar.jsx");
+const corteCp = (() => { const i = cpSrc.indexOf("// UI — gráfico do fluxo mensal");
+  if (i < 0) throw new Error("Marcador de início da UI não encontrado em contas-pagar.jsx");
+  return cpSrc.lastIndexOf("// ═", i); })();
+const cotSrc = mod("cotacoes-obra.jsx");
+const corteCot = cotSrc.indexOf("// UI — bloco de cotações da obra");
+if (corteCot < 0) throw new Error("Marcador de início da UI não encontrado em cotacoes-obra.jsx");
+
+let seq = 0;
+const modulo = new Function(`
+  var uid = () => "id" + (++__seq);
+  ${mod("obra-financeiro.jsx")}
+  ${cronoSrc.slice(0, corteCrono)}
+  ${contratosSrc.slice(0, corteCtr)}
+  ${cpSrc.slice(0, corteCp)}
+  ${cotSrc.slice(0, cotSrc.lastIndexOf("// ═", corteCot))}
+  return { cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
+           propostaEscolhida, melhorProposta, economiaDaCotacao,
+           aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
+           podeLancarCotacao, contaDaCotacao, resumoCotacoes, cotacoesAguardandoCliente,
+           nomeDoFornecedor, PLANO_CONTAS };
+`.replace(/__seq/g, "globalThis.__seq"))();
+globalThis.__seq = 0;
+
+const M = modulo;
+const testes = [];
+const teste = (nome, fn) => testes.push([nome, fn]);
+
+// ── Modelo ──────────────────────────────────────────────────────
+teste("cotação nasce aberta, sem propostas e exigindo aval do cliente", () => {
+  const c = M.cotacaoVazia("o1");
+  assert.strictEqual(c.obraId, "o1");
+  assert.strictEqual(c.status, "aberta");
+  assert.deepStrictEqual(c.propostas, []);
+  assert.strictEqual(c.precisaAprovacaoCliente, true);
+  assert.strictEqual(c.contaId, M.PLANO_CONTAS[0].id);
+});
+
+teste("valor da proposta lê 12.500,90 e 12500.9 do mesmo jeito", () => {
+  assert.strictEqual(M.valorProposta({ valor: "12.500,90" }), 12500.9);
+  assert.strictEqual(M.valorProposta({ valor: 12500.9 }), 12500.9);
+  assert.strictEqual(M.valorProposta({ valor: "" }), 0);
+  // o bug do ×100: um número com ponto decimal não pode virar 1250090
+  assert.strictEqual(M.valorProposta({ valor: 10833.33 }), 10833.33);
+});
+
+// ── Comparação ──────────────────────────────────────────────────
+const comPropostas = (vals) => ({
+  ...M.cotacaoVazia("o1"),
+  id: "ct1",
+  propostas: vals.map((v, i) => ({ id: "p" + i, favorecido: "F" + i, valor: v })),
+});
+
+teste("propostas saem da mais barata para a mais cara", () => {
+  const c = comPropostas([9000, 7000, 12000]);
+  assert.deepStrictEqual(M.propostasOrdenadas(c).map(p => p.valor), [7000, 9000, 12000]);
+  assert.strictEqual(M.melhorProposta(c).valor, 7000);
+});
+
+teste("proposta sem valor vai para o fim e não vira a mais barata", () => {
+  const c = comPropostas(["", 9000]);
+  assert.deepStrictEqual(M.propostasOrdenadas(c).map(p => p.valor), [9000, ""]);
+  assert.strictEqual(M.melhorProposta(c).valor, 9000);
+});
+
+teste("economia compara a escolhida com a proposta mais cara", () => {
+  const c = { ...comPropostas([9000, 7000, 12000]), escolhidaId: "p0" };
+  const e = M.economiaDaCotacao(c);
+  assert.strictEqual(e.maior, 12000);
+  assert.strictEqual(e.referencia, 9000);
+  assert.strictEqual(e.economia, 3000);
+});
+
+teste("com uma proposta só não há economia a declarar", () => {
+  assert.strictEqual(M.economiaDaCotacao(comPropostas([9000])), null);
+});
+
+// ── Situação ────────────────────────────────────────────────────
+teste("situação acompanha o fluxo, do pedido ao lançamento", () => {
+  const vazia = M.cotacaoVazia("o1");
+  assert.strictEqual(M.situacaoCotacao(vazia, []).id, "coletando");
+
+  const comprando = comPropostas([9000, 7000]);
+  assert.strictEqual(M.situacaoCotacao(comprando, []).id, "comparando");
+
+  const escolhida = { ...comprando, escolhidaId: "p1" };
+  assert.strictEqual(M.situacaoCotacao(escolhida, []).id, "aguardando");
+
+  const semAval = { ...escolhida, precisaAprovacaoCliente: false };
+  assert.strictEqual(M.situacaoCotacao(semAval, []).id, "escolhida");
+
+  const ap = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", propostaId: "p1", status: "aprovada", por: "Cliente" });
+  assert.strictEqual(M.situacaoCotacao(escolhida, ap).id, "aprovada");
+
+  const rec = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", status: "recusada", por: "Cliente" });
+  assert.strictEqual(M.situacaoCotacao(escolhida, rec).id, "recusada");
+
+  assert.strictEqual(M.situacaoCotacao({ ...escolhida, contaGeradaId: "x" }, ap).id, "lancada");
+  assert.strictEqual(M.situacaoCotacao({ ...escolhida, status: "cancelada" }, ap).id, "cancelada");
+});
+
+teste("cliente pode mudar de ideia: a decisão nova substitui a anterior", () => {
+  let ap = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", status: "recusada", motivo: "caro", por: "Alexandre" });
+  ap = M.registrarAprovacaoCotacao(ap, { cotacaoId: "ct1", status: "aprovada", por: "Alexandre" });
+  assert.strictEqual(ap.length, 1);
+  assert.strictEqual(M.aprovacaoDaCotacao(ap, "ct1").status, "aprovada");
+});
+
+teste("decisão de uma cotação não encosta na de outra", () => {
+  let ap = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", status: "aprovada", por: "A" });
+  ap = M.registrarAprovacaoCotacao(ap, { cotacaoId: "ct2", status: "recusada", por: "A" });
+  assert.strictEqual(ap.length, 2);
+  assert.strictEqual(M.aprovacaoDaCotacao(ap, "ct1").status, "aprovada");
+  assert.strictEqual(M.aprovacaoDaCotacao(ap, "ct2").status, "recusada");
+});
+
+// ── Trava do lançamento ─────────────────────────────────────────
+teste("não lança sem escolha, sem valor nem sem o aval do cliente", () => {
+  const comprando = comPropostas([9000, 7000]);
+  assert.strictEqual(M.podeLancarCotacao(comprando, []).pode, false);
+
+  const escolhida = { ...comprando, escolhidaId: "p1" };
+  assert.strictEqual(M.podeLancarCotacao(escolhida, []).pode, false);
+
+  const recusada = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", status: "recusada", por: "C" });
+  assert.strictEqual(M.podeLancarCotacao(escolhida, recusada).pode, false);
+
+  const aprovada = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", status: "aprovada", por: "C" });
+  assert.strictEqual(M.podeLancarCotacao(escolhida, aprovada).pode, true);
+
+  const semValor = { ...comPropostas([""]), escolhidaId: "p0", precisaAprovacaoCliente: false };
+  assert.strictEqual(M.podeLancarCotacao(semValor, []).pode, false);
+
+  const jaLancada = { ...escolhida, contaGeradaId: "c9" };
+  assert.strictEqual(M.podeLancarCotacao(jaLancada, aprovada).pode, false);
+});
+
+teste("cotação sem exigência de aval lança direto após a escolha", () => {
+  const c = { ...comPropostas([9000, 7000]), escolhidaId: "p1", precisaAprovacaoCliente: false };
+  assert.strictEqual(M.podeLancarCotacao(c, []).pode, true);
+});
+
+// ── A conta que nasce da cotação ────────────────────────────────
+teste("a conta gerada carrega fornecedor, valor e a conta do P&L", () => {
+  const c = {
+    ...comPropostas([9000, 7000]), escolhidaId: "p1", titulo: "Esquadrias",
+    contaId: "material", prazoResposta: "2026-10-15",
+  };
+  c.propostas[1] = { ...c.propostas[1], fornecedorId: "f9", favorecido: "MB Viezzer", condicaoPagamento: "50/50" };
+  const conta = M.contaDaCotacao(c, "2026-09-09");
+  assert.strictEqual(conta.origem, "cotacao");
+  assert.strictEqual(conta.cotacaoId, "ct1");
+  assert.strictEqual(conta.contaId, "material");
+  assert.strictEqual(conta.prestadorId, "f9");
+  assert.strictEqual(conta.favorecido, "MB Viezzer");
+  assert.strictEqual(conta.valor, 7000);
+  assert.strictEqual(conta.vencimento, "2026-10-15");
+  assert.ok(/50\/50/.test(conta.observacao));
+  assert.strictEqual(conta.pago, false);
+});
+
+teste("sem prazo de resposta a conta vence hoje", () => {
+  const c = { ...comPropostas([7000]), escolhidaId: "p0" };
+  assert.strictEqual(M.contaDaCotacao(c, "2026-09-09").vencimento, "2026-09-09");
+});
+
+teste("sem proposta escolhida não há conta a gerar", () => {
+  assert.strictEqual(M.contaDaCotacao(comPropostas([7000]), "2026-09-09"), null);
+});
+
+// ── Resumo ──────────────────────────────────────────────────────
+teste("o resumo conta cada cotação uma vez e soma só a economia realizada", () => {
+  const a = { ...comPropostas([9000, 12000]), id: "a", escolhidaId: "p0" };            // aguardando
+  const b = { ...comPropostas([5000, 8000]), id: "b", escolhidaId: "p0" };             // aprovada
+  const c = { ...comPropostas([1000, 4000]), id: "c" };                                 // comparando
+  const aprov = M.registrarAprovacaoCotacao([], { cotacaoId: "b", status: "aprovada", por: "C" });
+  const r = M.resumoCotacoes([a, b, c], aprov);
+  assert.strictEqual(r.total, 3);
+  assert.strictEqual(r.abertas, 1);
+  assert.strictEqual(r.aguardandoCliente, 1);
+  assert.strictEqual(r.aprovadas, 1);
+  assert.strictEqual(r.economia, 3000); // só a de "b"; a de "a" ainda não foi aprovada
+});
+
+teste("a fila do cliente traz só o que depende dele", () => {
+  const a = { ...comPropostas([9000, 12000]), id: "a", escolhidaId: "p0" };
+  const b = { ...comPropostas([5000, 8000]), id: "b" };
+  const fila = M.cotacoesAguardandoCliente([a, b], []);
+  assert.deepStrictEqual(fila.map(c => c.id), ["a"]);
+});
+
+teste("nome do fornecedor sai do cadastro, e some sem quebrar", () => {
+  const p = [{ id: "f1", nome: "MB Viezzer" }];
+  assert.strictEqual(M.nomeDoFornecedor(p, "f1"), "MB Viezzer");
+  assert.strictEqual(M.nomeDoFornecedor(p, "f9"), "");
+  assert.strictEqual(M.nomeDoFornecedor(null, "f1"), "");
+});
+
+let falhas = 0;
+for (const [nome, fn] of testes) {
+  try { fn(); console.log("  ok   " + nome); }
+  catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }
+}
+console.log(`\n${testes.length - falhas}/${testes.length} passaram`);
+process.exit(falhas ? 1 : 0);

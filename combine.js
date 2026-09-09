@@ -39,6 +39,10 @@ const ORDER = [
   // obra) que o gerador e o documento são renderizados.
   "contratos-obra.jsx",
   "contas-pagar.jsx",
+  // cotacoes-obra.jsx depois de contas-pagar.jsx (usa contaAvulsaVazia e o
+  // plano de contas) e antes de clientes.jsx, que é quem renderiza a tela
+  // dentro do painel da obra.
+  "cotacoes-obra.jsx",
   "clientes.jsx",
   "resultado-pdf.jsx",
   // shared-textos.jsx vem antes de quem o consome (modelo-padrao.jsx,

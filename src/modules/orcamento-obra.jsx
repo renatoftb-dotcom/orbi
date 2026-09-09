@@ -4682,7 +4682,9 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
       avisos: resultado.avisos,
     };
     const obraAtualizada = { ...obra, projeto: projetoDraft, orcamento };
-    const novasObras = obras.map((o) => (o.id === obra.id ? obraAtualizada : o));
+    // mesma armadilha do cronograma: `obras` é a fatia deste cliente, e
+    // substituir data.obras por ela apagaria as obras dos demais.
+    const novasObras = mesclarPorCliente(data.obras, obra.clienteId, obras.map((o) => (o.id === obra.id ? obraAtualizada : o)));
     save({ ...data, obras: novasObras });
     onObraAtualizada(obraAtualizada);
     setViewInterna("resultado");
