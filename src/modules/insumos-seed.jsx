@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // INSUMOS — SEMENTE DO CATÁLOGO
 // ═══════════════════════════════════════════════════════════════
-// 127 insumos (110 materiais + 17 prestadores) com código estável, preço de
+// 201 insumos (materiais + prestadores, inclusive os serviços de reforma) com código estável, preço de
 // referência, unidade, grupo e aliases.
 //
 // Origem dos preços (docs/referencia-orcamento/PRECOS-REFERENCIA-VICKE.xlsx):
@@ -129,6 +129,19 @@ var INSUMOS_SEED = [
   { codigo:"PRE-015", nome:"Instalador Equip. Piscina", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"fixo", precoReferencia:5000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalador Equip. Piscina", "Prestadores de Serviços - Equipamentos Piscina"] },
   { codigo:"PRE-016", nome:"Terraplanagem", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"fixo", precoReferencia:8000, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Terraplanagem"] },
   { codigo:"PRE-017", nome:"Gestão Obra", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"regressivo", precoReferencia:null, precoFonte:null, precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gestão Obra"], observacao:"Taxa regressiva por área construída — ver taxaGestaoObra()" },
+  // Reforma — serviços de demolição, remoção e instalação, medidos por m² ou
+  // por peça. Os valores são referência de partida da região; a primeira
+  // cotação com o empreiteiro substitui cada um.
+  { codigo:"PRE-018", nome:"Demolição de alvenaria", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:35, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Demolição de alvenaria","Demolição de parede"] },
+  { codigo:"PRE-019", nome:"Remoção de revestimento de parede", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:22, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Remoção de revestimento de parede","Retirada de azulejo"] },
+  { codigo:"PRE-020", nome:"Remoção de piso", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:18, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Remoção de piso","Retirada de piso"] },
+  { codigo:"PRE-021", nome:"Retirada de contrapiso", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:30, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Retirada de contrapiso","Demolição de contrapiso"] },
+  { codigo:"PRE-022", nome:"Remoção de forro", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:15, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Remoção de forro","Retirada de forro"] },
+  { codigo:"PRE-023", nome:"Retirada de esquadria", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:60, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Retirada de esquadria","Retirada de janela","Retirada de porta"] },
+  { codigo:"PRE-024", nome:"Retirada de louças e metais", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:45, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Retirada de louças e metais"] },
+  { codigo:"PRE-025", nome:"Instalação de louças e metais", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:120, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalação de louças e metais"] },
+  { codigo:"PRE-026", nome:"Caçamba de entulho 5m³", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:320, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Caçamba de entulho 5m³","Caçamba de entulho","Caçamba"] },
+
   // Esquadrias — referência de S_ESQUADRIAS.bas (alumínio R$/kg, vidro R$/m²).
   // Os códigos Alcoa entram como alias: o orçamento acha o preço do kg pelo
   // código do perfil. Acessórios (roldanas, fechos, dobradiças...) não têm
