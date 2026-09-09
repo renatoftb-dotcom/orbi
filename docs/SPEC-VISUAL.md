@@ -124,3 +124,46 @@ mais de um dia continua sendo ajuste manual no item.
 
 A memória de cálculo desses itens agora mostra a medida que os liberou e
 termina na quantidade, como todas as outras linhas.
+
+## Quadro de Prestadores: o resultado, editável
+
+O bloco de Prestadores eram 16 campos com o nome cru do código
+(`equipePedreiros`, `instaladorEquipPiscina`), sem unidade, e o valor
+digitado era uma **verba fechada** que substituía um cálculo que a tela não
+mostrava. Não dava para saber o que entraria deixando em branco.
+
+Agora é o mesmo desenho da tabela do resultado, editável:
+
+```
+[x] Pedreiros Casa              m²   (200)   (1.000)   R$ 200.000,00
+    referência da planilha do escritório
+[x] Gestão Obra                 m²   (200)     (550)   R$ 110.000,00
+    escada regressiva da gestão de obra
+[ ] Serralheiro                 un     (1)       (—)   R$ 0,00
+    sem preço — cadastre em Insumos ou digite aqui
+                                      Total dos prestadores  R$ 383.000,00
+```
+
+- **tique** — se o serviço entra no orçamento;
+- **quantidade** — em branco usa a medida do projeto (área construída, m² de
+  muro, de pavimentação, de piscina; 1 para serviço fechado). O sugerido
+  aparece como placeholder;
+- **preço unitário** — em branco usa o catálogo de Insumos; sem cadastro, a
+  referência da planilha. A linha de baixo diz de onde veio;
+- **total** por linha e do quadro.
+
+`PRESTADORES_OBRA` é fonte única: desenha o quadro e emite o orçamento. Um
+teste confere linha a linha que o que a tela mostra é o que o orçamento
+recebe.
+
+### Sem preço não entra marcado
+
+Linha sem preço de referência e sem preço digitado nasce **desmarcada** — em
+vez de entrar somando R$ 0 e sumir no total. Linha sem medida nem nada
+digitado nem aparece no quadro (carpinteiro antes de lançar o telhado).
+
+### O formato antigo migra preservando o total
+
+Valor fechado de R$ 26.000 no pintor de uma casa de 200 m² vira 200 m² ×
+R$ 130. Onde não há medida (serviço fechado), vira quantidade 1 com o valor
+no preço. O total é o que a migração garante.

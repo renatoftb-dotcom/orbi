@@ -35,7 +35,7 @@ const modulo = new Function(`
   ${insSrc.slice(0, corteIns)}
   ${ler("composicoes-seed.jsx")}
   ${orcSrc.slice(0, corteOrc)}
-  return { INSUMOS_SEED, semearInsumos, gerarOrcamentoObra, resolverInsumo };
+  return { INSUMOS_SEED, semearInsumos, gerarOrcamentoObra, resolverInsumo, normalizarProjeto, linhasPrestadores };
 `)();
 
 // O catálogo como fica depois de "Insumos → Carregar catálogo padrão".
@@ -106,6 +106,41 @@ teste("o tijolo da reforma é o mesmo insumo da obra nova", () => {
   assert.ok(tijRef.preco > 0, "o tijolo da reforma saiu com preço zero");
   // mesma área de parede, mesma quantidade
   assert.strictEqual(tijRef.qtd, tijNova.qtd);
+});
+
+teste("o preço do prestador vem do catálogo de Insumos, não da planilha", () => {
+  const cp = modulo.normalizarProjeto({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 200 }, terreo: { area: 200 } });
+  const comCatalogo = modulo.linhasPrestadores(cp, { materiais: catalogo });
+  const pintor = comCatalogo.find((l) => l.chave === "pintor");
+  assert.strictEqual(pintor.fontePreco, "insumo", "com o insumo cadastrado, o preço tem que vir dele");
+  const doCatalogo = catalogo.find((i) => i.codigo === "PRE-002");
+  assert.strictEqual(pintor.preco, doCatalogo.precoReferencia,
+    `esperava o preço do cadastro (${doCatalogo.precoReferencia}), veio ${pintor.preco}`);
+
+  const semCatalogo = modulo.linhasPrestadores(cp, { materiais: [] });
+  assert.strictEqual(semCatalogo.find((l) => l.chave === "pintor").fontePreco, "referencia",
+    "sem cadastro, cai na referência da planilha");
+});
+
+teste("todo prestador do quadro acha preço depois do catálogo padrão", () => {
+  const cp = modulo.normalizarProjeto({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 200 }, terreo: { area: 200 },
+    externa: { pavimentacao: 60, muroDivisa: { comprimento: 30, altura: 2 } },
+    arrimo: { comprimento: 10, altura: 3 }, temPiscina: true, piscina: { areaConstruida: 32 },
+    cobertura: [{ tipo: "Telha Barro Portuguesa", largura: 10, comprimento: 12, aguas: 4, inclinacao: 30 }] });
+  const linhas = modulo.linhasPrestadores(cp, { materiais: catalogo });
+  // A regra que importa: nenhum prestador entra no orçamento com R$ 0.
+  // Serralheiro é verba fechada e não tem preço de referência — ele aparece
+  // no quadro para o usuário digitar, mas desmarcado.
+  const zerados = linhas.filter((l) => l.incluir && l.preco <= 0).map((l) => l.item);
+  assert.deepStrictEqual(zerados, [], "prestador marcado com preço zero entraria somando nada");
+  const semPreco = linhas.filter((l) => l.disponivel && l.sugerido <= 0).map((l) => l.item);
+  assert.deepStrictEqual(semPreco, ["Serralheiro"],
+    "só o serralheiro fica sem referência; qualquer outro sem preço é cadastro faltando em Insumos");
+  for (const l of linhas.filter((x) => x.disponivel && x.sugerido > 0)) {
+    assert.ok(l.preco > 0 && l.qtd > 0, `${l.item}: quadro com quantidade ou preço zerado`);
+  }
 });
 
 let falhas = 0;

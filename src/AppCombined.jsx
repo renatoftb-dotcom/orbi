@@ -7728,23 +7728,6 @@ function emitBarras(out, base, barras, memoriaDaBitola) {
 }
 // Memória de um prestador: valor total (digitado ou sugerido pela taxa do
 // escritório) dividido pela base de medida, para virar preço unitário.
-function memoriaPrestador(chave, rotuloBase, base, valorTotal, cp, data) {
-  const digitado = numOrZero(cp.prestadores && cp.prestadores[chave]);
-  const taxa = typeof taxaPrestador === "function" ? taxaPrestador(chave, data) : null;
-  const passos = [
-    MEM.nota(digitado !== 0
-      ? "Valor digitado por você no bloco Prestadores — é ele que vale, a sugestão do escritório fica de lado."
-      : `Valor sugerido pelo escritório (tabela de prestadores em Insumos${taxa && taxa.confianca ? `, confiança ${taxa.confianca}` : ""}), porque nada foi digitado no bloco Prestadores.`),
-  ];
-  if (digitado === 0 && taxa && taxa.valor > 0) {
-    passos.push(MEM.dado("Taxa de referência", taxa.valor, "R$ por unidade da base", "tabela de prestadores"));
-  }
-  passos.push(MEM.dado(rotuloBase, base, "", "medidas do projeto"));
-  passos.push(MEM.conta("Valor total do serviço", digitado !== 0 ? "valor digitado" : "taxa × base", digitado !== 0 ? [] : [["taxa", taxa ? taxa.valor : 0], ["base", base]], valorTotal, "R$"));
-  passos.push(MEM.conta("Preço unitário que entra na tabela", "valor ÷ base", [["valor", valorTotal], ["base", base]], base > 0 ? valorTotal / base : 0, "R$ por unidade"));
-  passos.push(MEM.dado("Quantidade no orçamento", base, "", "a própria base de medida"));
-  return passos;
-}
 // Memória de uma bitola lançada como um número só de metros.
 function memoriaBitolaSimples(k, metros, barras, ondeVem) {
   const bruto = numOrZero(metros) / BARRA_FERRO_MTS * PERDA;
@@ -7901,8 +7884,6 @@ function taxaGestaoObra(areaConstruida) {
   return 450; // 401–450 m²
 }
 
-// Valor "sugerido" (default) de um prestador com taxa padrão — o que o
-// PRESTADORES.frm calcula quando o campo do usuário está vazio/zerado.
 // Nome do insumo (tipo "prestador") que guarda a taxa de cada chave.
 const INSUMO_PRESTADOR = {
   equipePedreiros: "Pedreiros Casa", pintor: "Pintor", eletricista: "Eletricista", encanador: "Encanador",
@@ -7910,6 +7891,8 @@ const INSUMO_PRESTADOR = {
   pedreirosPiscina: "Pedreiros Piscina", terraplanagem: "Terraplanagem", instaladorAquecedores: "Instalador Aquecedores",
   instaladorEquipPiscina: "Instalador Equip. Piscina", carpinteiro: "Carpinteiro", impermeabilizador: "Impermeabilizador",
   marceneiroPortas: "Marceneiro Portas Internas", serralheiro: "Serralheiro",
+  // faltavam no mapa: sem eles o preço cadastrado em Insumos era ignorado
+  instaladorAr: "Instalador AR", gestaoObra: "Gestão Obra",
 };
 
 // Taxa de um prestador: o catálogo de Insumos vence (é onde o escritório
@@ -7924,21 +7907,6 @@ function taxaPrestador(chave, data) {
   return t ? { valor: t.valor, fonte: "vba", confianca: "modulo" } : null;
 }
 
-function valorPadraoPrestador(chave, cp, data) {
-  const t = TAXAS_PRESTADORES[chave];
-  const taxa = taxaPrestador(chave, data);
-  if (!taxa || !(taxa.valor > 0)) return 0;
-  const base = t ? t.base : "areaConstruida";
-  switch (base) {
-    case "areaConstruida": return cp.areaConstruida * taxa.valor;
-    case "areaPavimentacao": return cp.pavimentacaoExterna * taxa.valor;
-    case "m2MuroDivisa": return cp.comprimentoMuroDivisa * cp.alturaMuroDivisa * taxa.valor;
-    case "m2MuroArrimo": return cp.comprimentoArrimo * cp.alturaArrimo * taxa.valor;
-    case "areaPiscina": return cp.areaConstruidaPiscina * taxa.valor;
-    case "fixo": return taxa.valor;
-    default: return 0;
-  }
-}
 
 // Valor final de um prestador com taxa padrão: override do usuário
 // (projeto.prestadores.<chave>) se não-zero, senão o valor sugerido —
@@ -7946,30 +7914,7 @@ function valorPadraoPrestador(chave, cp, data) {
 // Prestadores que o VBA emitia "só com valor" (qtd = valor, sem preço):
 // impermeabilizador, marceneiro, serralheiro. Agora: valor digitado → 1 verba
 // com esse preço; sem valor digitado → taxa do catálogo × área construída.
-function emitirPrestadorVerba(out, base, item, chave, cp, data) {
-  const digitado = numOrZero(cp.prestadores && cp.prestadores[chave]);
-  if (digitado !== 0) {
-    emitir(out, { ...base, item, unidade: "Verba", qtd: 1, preco: digitado, memoria: [
-      MEM.nota(`${item}: serviço sem taxa de referência no escritório — entra como verba fechada, com o valor que você digitou no bloco Prestadores.`),
-      MEM.conta("Valor da verba", "valor digitado", [], digitado, "R$"),
-      MEM.dado("Quantidade no orçamento", 1, "verba", "serviço fechado"),
-    ] });
-    return;
-  }
-  const taxa = taxaPrestador(chave, data);
-  if (taxa && taxa.valor > 0 && cp.areaConstruida > 0) {
-    emitir(out, { ...base, item, unidade: "m2", qtd: cp.areaConstruida, preco: taxa.valor, confianca: taxa.confianca, memoria: [
-      MEM.nota(`${item}: nada digitado no bloco Prestadores, então entra a taxa de referência do escritório, medida por m² de área construída.`),
-      MEM.dado("Taxa de referência", taxa.valor, "R$/m²", "tabela de prestadores"),
-      MEM.dado("Quantidade no orçamento", cp.areaConstruida, "m²", "bloco Geral"),
-    ] });
-  }
-}
 
-function valorPrestador(chave, cp, data) {
-  const override = numOrZero(cp.prestadores && cp.prestadores[chave]);
-  return override !== 0 ? override : valorPadraoPrestador(chave, cp, data);
-}
 
 // P_PRESTADORES.bas: lê os CALC_PRESTADORES_* (já resolvidos pelo
 // PRESTADORES.frm, com default aplicado quando o usuário deixou vazio) e
@@ -7980,6 +7925,122 @@ function valorPrestador(chave, cp, data) {
 //   equip. piscina): qtd = 1, preco = valor.
 // - itens sem taxa padrão (impermeabilizador, marceneiro, serralheiro):
 //   só têm um valor digitado, sem qtd/preco separados — qtd = valor.
+// ── Prestadores de serviços ─────────────────────────────────────
+// Uma linha por ofício, e a MESMA tabela desenha o quadro de entrada e
+// emite o orçamento. Cada linha tem três coisas que o usuário controla:
+// se entra, quantos (a metragem) e por quanto. Deixando em branco, a
+// quantidade vem da medida do projeto e o preço vem do catálogo de Insumos
+// (ou da referência da planilha do escritório, quando não há cadastro).
+//
+// `base` é de onde sai a metragem automática. "fixo" é serviço de verba —
+// terraplanagem, instalador — que não se mede por metro.
+const PRESTADORES_OBRA = [
+  { chave: "equipePedreiros",        item: "Pedreiros Casa",             base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
+  { chave: "gestaoObra",             item: "Gestão Obra",                base: "areaConstruida",       rotulo: "Área construída da casa (m²)", regressiva: true },
+  { chave: "eletricista",            item: "Eletricista",                base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
+  { chave: "encanador",              item: "Encanador",                  base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
+  { chave: "pintor",                 item: "Pintor",                     base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
+  { chave: "carpinteiro",            item: "Carpinteiro",                base: "areaCoberturaTotal",   rotulo: "Área inclinada total dos telhados (m²)" },
+  { chave: "impermeabilizador",      item: "Impermeabilizador",          base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
+  { chave: "marceneiroPortas",       item: "Marceneiro Portas Internas", base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
+  { chave: "serralheiro",            item: "Serralheiro",                base: "fixo",                 rotulo: "Serviço fechado" },
+  { chave: "instaladorAr",           item: "Instalador AR",              base: "fixo",                 rotulo: "Serviço fechado" },
+  { chave: "pavimentacaoExterna",    item: "Pedreiros Pavim. Externa",   base: "pavimentacaoExterna",  rotulo: "Área de pavimentação externa (m²)" },
+  { chave: "muroDivisa",             item: "Pedreiros Muro Divisa",      base: "m2MuroDivisa",         rotulo: "Área do muro de divisa (m²)" },
+  { chave: "muroArrimo",             item: "Pedreiros Muro Arrimo",      base: "m2Arrimo",             rotulo: "Área do muro de arrimo (m²)" },
+  { chave: "pedreirosPiscina",       item: "Pedreiros Piscina",          base: "areaConstruidaPiscina", rotulo: "Área construída da piscina (m²)", sohComPiscina: true },
+  { chave: "terraplanagem",          item: "Terraplanagem",              base: "fixo",                 rotulo: "Serviço fechado" },
+  { chave: "instaladorAquecedores",  item: "Instalador Aquecedores",     base: "fixo",                 rotulo: "Serviço fechado" },
+  { chave: "instaladorEquipPiscina", item: "Instalador Equip. Piscina",  base: "fixo",                 rotulo: "Serviço fechado", sohComPiscina: true },
+];
+const prestadorPorChave = (chave) => PRESTADORES_OBRA.find((p) => p.chave === chave) || null;
+
+// Metragem automática de uma linha, lida do projeto.
+function baseAutomaticaPrestador(p, cp) {
+  if (!p) return 0;
+  switch (p.base) {
+    case "fixo": return 1;
+    case "areaConstruida": return numOrZero(cp.areaConstruida);
+    case "areaCoberturaTotal": return numOrZero(cp.areaCoberturaTotal);
+    case "pavimentacaoExterna": return numOrZero(cp.pavimentacaoExterna);
+    case "m2MuroDivisa": return numOrZero(cp.comprimentoMuroDivisa) * numOrZero(cp.alturaMuroDivisa);
+    case "m2Arrimo": return numOrZero(cp.comprimentoArrimo) * numOrZero(cp.alturaArrimo);
+    case "areaConstruidaPiscina": return numOrZero(cp.areaConstruidaPiscina);
+    default: return 0;
+  }
+}
+
+// Preço unitário sugerido: catálogo de Insumos primeiro (é onde o escritório
+// gerencia preço), depois a referência da planilha. A gestão de obra é a
+// exceção — a taxa dela cai conforme a obra cresce.
+function precoSugeridoPrestador(p, cp, data) {
+  if (!p) return { valor: 0, fonte: "sem_referencia" };
+  if (p.regressiva) {
+    const doCatalogo = taxaPrestador(p.chave, data);
+    if (doCatalogo && doCatalogo.fonte === "insumo") return { valor: doCatalogo.valor, fonte: "insumo", confianca: doCatalogo.confianca };
+    return { valor: taxaGestaoObra(numOrZero(cp.areaConstruida)), fonte: "escada", confianca: "modulo" };
+  }
+  const t = taxaPrestador(p.chave, data);
+  if (t && t.valor > 0) return { valor: t.valor, fonte: t.fonte === "insumo" ? "insumo" : "referencia", confianca: t.confianca };
+  return { valor: 0, fonte: "sem_referencia" };
+}
+
+// O formato antigo guardava um número por prestador: o VALOR FECHADO do
+// serviço inteiro. O quadro novo guarda { incluir, qtd, preco }. A conversão
+// preserva o total: o valor fechado vira o preço unitário da metragem que o
+// projeto já tinha, e onde não há metragem vira uma verba de quantidade 1.
+function migrarPrestadores(bruto, cp) {
+  const de = bruto || {};
+  const novo = {};
+  for (const p of PRESTADORES_OBRA) {
+    const atual = de[p.chave];
+    if (atual && typeof atual === "object") {
+      novo[p.chave] = { incluir: atual.incluir, qtd: atual.qtd, preco: atual.preco };
+      continue;
+    }
+    const fechado = numOrZero(atual);
+    if (!(fechado > 0)) { novo[p.chave] = {}; continue; }
+    const q = baseAutomaticaPrestador(p, cp || {});
+    novo[p.chave] = q > 0
+      ? { incluir: true, preco: Math.round((fechado / q) * 100) / 100 }
+      : { incluir: true, qtd: 1, preco: fechado };
+  }
+  return novo;
+}
+
+// A linha pronta: o que a tela mostra e o que o orçamento emite.
+// `disponivel` é falso quando a obra não tem aquela frente (sem piscina, sem
+// muro) — a linha some do quadro em vez de aparecer zerada.
+function linhasPrestadores(cp, data) {
+  const guardados = migrarPrestadores(cp.prestadores, cp);
+  const linhas = [];
+  for (const p of PRESTADORES_OBRA) {
+    if (p.sohComPiscina && !cp.temPiscina) continue;
+    const g = guardados[p.chave] || {};
+    const auto = baseAutomaticaPrestador(p, cp);
+    const sugerido = precoSugeridoPrestador(p, cp, data);
+    const qtdDigitada = g.qtd === "" || g.qtd == null ? null : numOrZero(g.qtd);
+    const precoDigitado = g.preco === "" || g.preco == null ? null : numOrZero(g.preco);
+    const qtd = qtdDigitada == null ? auto : qtdDigitada;
+    const preco = precoDigitado == null ? sugerido.valor : precoDigitado;
+    linhas.push({
+      chave: p.chave, item: p.item, rotulo: p.rotulo, base: p.base,
+      unidade: p.base === "fixo" ? "Unidades" : "m2",
+      auto, sugerido: sugerido.valor, fontePreco: sugerido.fonte, confianca: sugerido.confianca,
+      qtdDigitada, precoDigitado, qtd, preco,
+      total: Math.round(qtd * preco * 100) / 100,
+      // sem tique salvo, entra quando há metragem e preço para entrar
+      incluir: g.incluir == null ? (qtd > 0 && preco > 0) : !!g.incluir,
+      disponivel: auto > 0 || qtdDigitada != null || precoDigitado != null,
+    });
+  }
+  return linhas;
+}
+
+function totalPrestadores(cp, data) {
+  return linhasPrestadores(cp, data).filter((l) => l.incluir).reduce((s, l) => s + l.total, 0);
+}
+
 function prestadores(cp, out, data) {
   const base = {
     ordem: ORD.prestadores,
@@ -7987,92 +8048,28 @@ function prestadores(cp, out, data) {
     etapa: "Prestadores de serviços",
     subEtapa: "Prestadores de serviços",
   };
-
-  const valorPedreiros = valorPrestador("equipePedreiros", cp, data);
-  emitir(out, { ...base, item: "Pedreiros Casa", unidade: "m2", qtd: cp.areaConstruida, preco: valorPedreiros / cp.areaConstruida, memoria: memoriaPrestador("equipePedreiros", "Área construída da casa (m²)", cp.areaConstruida, valorPedreiros, cp, data) });
-
-  const valorEletricista = valorPrestador("eletricista", cp, data);
-  emitir(out, { ...base, item: "Eletricista", unidade: "m2", qtd: cp.areaConstruida, preco: valorEletricista / cp.areaConstruida, memoria: memoriaPrestador("eletricista", "Área construída da casa (m²)", cp.areaConstruida, valorEletricista, cp, data) });
-
-  const valorEncanador = valorPrestador("encanador", cp, data);
-  emitir(out, { ...base, item: "Encanador", unidade: "m2", qtd: cp.areaConstruida, preco: valorEncanador / cp.areaConstruida, memoria: memoriaPrestador("encanador", "Área construída da casa (m²)", cp.areaConstruida, valorEncanador, cp, data) });
-
-  const valorPintor = valorPrestador("pintor", cp, data);
-  emitir(out, { ...base, item: "Pintor", unidade: "m2", qtd: cp.areaConstruida, preco: valorPintor / cp.areaConstruida, memoria: memoriaPrestador("pintor", "Área construída da casa (m²)", cp.areaConstruida, valorPintor, cp, data) });
-
-  // Carpinteiro: base é a área TOTAL de cobertura (CALC_AREA_COBERTURA_TOTAL
-  // no .bas), não a área construída — ainda 0 aqui porque cobertura() é um
-  // módulo futuro (passo 4 da spec, §10). Sem taxa padrão no .frm.
-  const valorCarpinteiro = numOrZero(cp.prestadores && cp.prestadores.carpinteiro) || valorPadraoPrestador("carpinteiro", cp, data);
-  if (cp.areaCoberturaTotal > 0) emitir(out, { ...base, item: "Carpinteiro", unidade: "m2", qtd: cp.areaCoberturaTotal, preco: valorCarpinteiro / cp.areaCoberturaTotal, memoria: memoriaPrestador("carpinteiro", "Área inclinada total dos telhados (m²)", cp.areaCoberturaTotal, valorCarpinteiro, cp, data) });
-
-  // Sem taxa padrão no .frm — só o valor digitado.
-  emitirPrestadorVerba(out, base, "Impermeabilizador", "impermeabilizador", cp, data);
-
-  // No VBA, esta linha testava `CCALC_PRESTADORES_INSTALADOR_AR` (com "C"
-  // duplicado) — uma variável que nunca era atribuída, então o Instalador AR
-  // nunca era emitido, por mais que o usuário digitasse o valor. Corrigido
-  // em set/2026: entra como verba, igual aos outros prestadores sem taxa
-  // padrão. A infra dos pontos de ar (eletroduto, cabo, dreno, tomada) já
-  // vem pelo ponto elétrico de ar condicionado, na etapa de Elétrica.
-  emitirPrestadorVerba(out, base, "Instalador AR", "instaladorAr", cp, data);
-
-  // Sem taxa padrão no .frm — só o valor digitado.
-  emitirPrestadorVerba(out, base, "Marceneiro Portas Internas", "marceneiroPortas", cp, data);
-
-  const valorGestao = (() => {
-    const override = numOrZero(cp.prestadores && cp.prestadores.gestaoObra);
-    return override !== 0 ? override : taxaGestaoObra(cp.areaConstruida) * cp.areaConstruida;
-  })();
-  emitir(out, { ...base, item: "Gestão Obra", unidade: "m2", qtd: cp.areaConstruida, preco: valorGestao / cp.areaConstruida, memoria: [
-    MEM.nota("Gestão de obra: o escritório cobra por m² numa escada regressiva — quanto maior a obra, menor o valor por metro. Valor digitado no bloco Prestadores vence a escada."),
-    MEM.dado("Área construída da casa", cp.areaConstruida, "m²", "bloco Geral"),
-    MEM.conta("Taxa da escada para esta área", "tabela de gestão de obra", [], taxaGestaoObra(cp.areaConstruida), "R$/m²"),
-    MEM.conta("Valor total da gestão", "taxa × área", [["taxa", taxaGestaoObra(cp.areaConstruida)], ["área", cp.areaConstruida]], valorGestao, "R$"),
-    MEM.conta("Preço unitário na tabela", "valor ÷ área", [["valor", valorGestao], ["área", cp.areaConstruida]], cp.areaConstruida > 0 ? valorGestao / cp.areaConstruida : 0, "R$/m²"),
-    MEM.dado("Quantidade no orçamento", cp.areaConstruida, "m²", "a própria área construída"),
-  ] });
-
-  // [VBA] emitia sempre; aqui só quando a obra tem piscina (campo "Piscina" do bloco Geral).
-  if (cp.temPiscina !== false) {
-    const valorInstaladorEquipPiscina = valorPrestador("instaladorEquipPiscina", cp, data);
-    emitir(out, { ...base, item: "Instalador Equip. Piscina", unidade: "Unidades", qtd: 1, preco: valorInstaladorEquipPiscina, memoria: [
-    MEM.nota("Instalação dos equipamentos da piscina (bomba, filtro, aquecimento): valor fechado, uma vez por obra."),
-    MEM.conta("Valor do serviço", numOrZero(cp.prestadores && cp.prestadores.instaladorEquipPiscina) !== 0 ? "valor digitado" : "sugestão do escritório", [], valorInstaladorEquipPiscina, "R$"),
-    MEM.dado("Quantidade no orçamento", 1, "verba", "serviço fechado"),
-  ] });
+  for (const l of linhasPrestadores(cp, data)) {
+    if (!l.incluir || !(l.qtd > 0) || !(l.preco > 0)) continue;
+    const p = prestadorPorChave(l.chave);
+    const fonte = l.precoDigitado != null ? "digitado no quadro de Prestadores"
+      : l.fontePreco === "insumo" ? "catálogo de Insumos"
+      : l.fontePreco === "escada" ? "escada regressiva da gestão de obra"
+      : "referência da planilha do escritório";
+    emitir(out, {
+      ...base, item: l.item, unidade: l.unidade, qtd: l.qtd, preco: l.preco,
+      confianca: l.precoDigitado != null ? "manual" : (l.confianca || "modulo"),
+      memoria: [
+        MEM.nota(`${l.item}: ${l.base === "fixo" ? "serviço de valor fechado" : "medido por m²"}. Quantidade e preço saem do quadro de Prestadores; em branco, valem a medida do projeto e o preço do catálogo.`),
+        ...(p && p.regressiva && l.precoDigitado == null
+          ? [MEM.nota("A gestão de obra cobra numa escada regressiva: quanto maior a obra, menor o valor por metro.")] : []),
+        MEM.dado(l.rotulo, l.qtd, l.unidade === "m2" ? "m²" : "un",
+          l.qtdDigitada != null ? "digitado no quadro de Prestadores" : "medida do projeto"),
+        MEM.dado("Preço unitário", l.preco, l.unidade === "m2" ? "R$/m²" : "R$", fonte),
+        MEM.conta("Total do serviço", "quantidade × preço", [["quantidade", l.qtd], ["preço", l.preco]], l.total, "R$"),
+        MEM.dado("Quantidade no orçamento", l.qtd, l.unidade === "m2" ? "m²" : "un", "a própria medida acima"),
+      ],
+    });
   }
-
-  const valorPedreirosPiscina = valorPrestador("pedreirosPiscina", cp, data);
-  emitir(out, { ...base, item: "Pedreiros Piscina", unidade: "m2", qtd: cp.areaConstruidaPiscina, preco: valorPedreirosPiscina / cp.areaConstruidaPiscina, memoria: memoriaPrestador("pedreirosPiscina", "Área construída da piscina (m²)", cp.areaConstruidaPiscina, valorPedreirosPiscina, cp, data) });
-
-  const valorMuroArrimo = valorPrestador("muroArrimo", cp, data);
-  const baseMuroArrimo = cp.alturaArrimo * cp.comprimentoArrimo;
-  emitir(out, { ...base, item: "Pedreiros Muro Arrimo", unidade: "m2", qtd: baseMuroArrimo, preco: valorMuroArrimo / baseMuroArrimo, memoria: memoriaPrestador("muroArrimo", "Área do muro de arrimo (altura × comprimento, m²)", baseMuroArrimo, valorMuroArrimo, cp, data) });
-
-  const valorMuroDivisa = valorPrestador("muroDivisa", cp, data);
-  const baseMuroDivisa = cp.comprimentoMuroDivisa * cp.alturaMuroDivisa;
-  emitir(out, { ...base, item: "Pedreiros Muro Divisa", unidade: "m2", qtd: baseMuroDivisa, preco: valorMuroDivisa / baseMuroDivisa, memoria: memoriaPrestador("muroDivisa", "Área do muro de divisa (comprimento × altura, m²)", baseMuroDivisa, valorMuroDivisa, cp, data) });
-
-  const valorPavimentacaoExterna = valorPrestador("pavimentacaoExterna", cp, data);
-  emitir(out, { ...base, item: "Pedreiros Pavim. Externa", unidade: "m2", qtd: cp.pavimentacaoExterna, preco: valorPavimentacaoExterna / cp.pavimentacaoExterna, memoria: memoriaPrestador("pavimentacaoExterna", "Área de pavimentação externa (m²)", cp.pavimentacaoExterna, valorPavimentacaoExterna, cp, data) });
-
-  const valorTerraplanagem = valorPrestador("terraplanagem", cp, data);
-  emitir(out, { ...base, item: "Terraplanagem", unidade: "Unidades", qtd: 1, preco: valorTerraplanagem, memoria: [
-    MEM.nota("Terraplanagem: valor fechado para a obra, não medido por m²."),
-    MEM.conta("Valor do serviço", numOrZero(cp.prestadores && cp.prestadores.terraplanagem) !== 0 ? "valor digitado" : "sugestão do escritório", [], valorTerraplanagem, "R$"),
-    MEM.dado("Quantidade no orçamento", 1, "verba", "serviço fechado"),
-  ] });
-
-  const valorInstaladorAquecedores = valorPrestador("instaladorAquecedores", cp, data);
-  emitir(out, { ...base, item: "Instalador Aquecedores", unidade: "Unidades", qtd: 1, preco: valorInstaladorAquecedores, memoria: [
-    MEM.nota("Instalação dos aquecedores: valor fechado, uma vez por obra."),
-    MEM.conta("Valor do serviço", numOrZero(cp.prestadores && cp.prestadores.instaladorAquecedores) !== 0 ? "valor digitado" : "sugestão do escritório", [], valorInstaladorAquecedores, "R$"),
-    MEM.dado("Quantidade no orçamento", 1, "verba", "serviço fechado"),
-  ] });
-
-  // Sem taxa padrão no .frm — só o valor digitado.
-  emitirPrestadorVerba(out, base, "Serralheiro", "serralheiro", cp, data);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -11618,25 +11615,10 @@ function normalizarProjeto(projeto) {
       qtd: numOrZero(it && it.qtd),
     })),
 
-    prestadores: {
-      equipePedreiros: numOrZero(prestadoresIn.equipePedreiros),
-      eletricista: numOrZero(prestadoresIn.eletricista),
-      encanador: numOrZero(prestadoresIn.encanador),
-      pintor: numOrZero(prestadoresIn.pintor),
-      carpinteiro: numOrZero(prestadoresIn.carpinteiro),
-      impermeabilizador: numOrZero(prestadoresIn.impermeabilizador),
-      instaladorAr: numOrZero(prestadoresIn.instaladorAr),
-      marceneiroPortas: numOrZero(prestadoresIn.marceneiroPortas),
-      gestaoObra: numOrZero(prestadoresIn.gestaoObra),
-      instaladorEquipPiscina: numOrZero(prestadoresIn.instaladorEquipPiscina),
-      pedreirosPiscina: numOrZero(prestadoresIn.pedreirosPiscina),
-      muroArrimo: numOrZero(prestadoresIn.muroArrimo),
-      muroDivisa: numOrZero(prestadoresIn.muroDivisa),
-      pavimentacaoExterna: numOrZero(prestadoresIn.pavimentacaoExterna),
-      terraplanagem: numOrZero(prestadoresIn.terraplanagem),
-      instaladorAquecedores: numOrZero(prestadoresIn.instaladorAquecedores),
-      serralheiro: numOrZero(prestadoresIn.serralheiro),
-    },
+    // O quadro de prestadores guarda { incluir, qtd, preco } por ofício —
+    // numOrZero achataria cada objeto em 0. Passa cru; linhasPrestadores()
+    // é quem lê, migra o formato antigo e aplica os sugeridos.
+    prestadores: prestadoresIn,
   };
 }
 
@@ -12369,10 +12351,15 @@ function lerCaminho(obj, caminho) {
 // tinham correspondência em nenhum campo da tela.
 function projetoParaFormulario(projeto) {
   const p = projeto || projetoVazio();
+  // migrarPrestadores precisa das medidas do projeto para converter o valor
+  // fechado do formato antigo em preço unitário — normalizarProjeto é quem
+  // as calcula, e é pura, então dá para chamá-la aqui.
+  const cp = normalizarProjeto(p);
   return {
     ...p,
     ambientes: p.ambientes ? migrarAmbientes(p.ambientes) : p.ambientes,
     existente: migrarExistente(p.existente),
+    prestadores: migrarPrestadores(p.prestadores, cp),
   };
 }
 
@@ -12813,6 +12800,89 @@ function MemoriaCalculo({ item, passos, onFechar }) {
 // A matriz da reforma: uma linha por elemento, duas colunas — o que sai e o
 // que entra. As linhas vêm de ITENS_EXISTENTE, a mesma tabela que dirige o
 // cálculo, então acrescentar um elemento é acrescentar uma linha lá.
+// Quadro dos prestadores: o mesmo desenho da tabela do resultado, mas
+// editável. Uma linha por ofício, com tique de incluir, metragem e preço.
+// Em branco, a metragem vem da medida do projeto e o preço do catálogo de
+// Insumos — o campo mostra esse valor como placeholder, então dá para ver o
+// que vai entrar sem precisar gerar o orçamento.
+function QuadroPrestadores({ projetoDraft, data, get, set, isMobile }) {
+  const cp = normalizarProjeto(projetoDraft);
+  const linhas = linhasPrestadores(cp, data).filter((l) => l.disponivel);
+  const total = linhas.filter((l) => l.incluir).reduce((soma, l) => soma + l.total, 0);
+  const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 9, padding: "6px 9px", fontSize: 12.5,
+    color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box", textAlign: "right" };
+  const cab = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600, padding: "0 4px 6px" };
+  const grade = {
+    display: "grid",
+    gridTemplateColumns: isMobile ? "auto 1fr" : "26px minmax(150px, 1.6fr) 62px 110px 130px 120px",
+    gap: 8, alignItems: "center",
+  };
+  const fonteTexto = (l) => l.precoDigitado != null ? "preço digitado"
+    : l.fontePreco === "insumo" ? "preço do catálogo de Insumos"
+    : l.fontePreco === "escada" ? "escada regressiva da gestão de obra"
+    : l.fontePreco === "referencia" ? "referência da planilha do escritório"
+    : "sem preço — cadastre em Insumos ou digite aqui";
+  const cor = (l) => l.precoDigitado != null ? "#0474f4"
+    : l.fontePreco === "insumo" ? "#16a34a"
+    : l.fontePreco === "sem_referencia" ? "#dc2626" : "#ca8a04";
+
+  if (!linhas.length) {
+    return (
+      <div style={{ gridColumn: "1 / -1", fontSize: 12.5, color: "#4b5563", padding: "8px 0" }}>
+        Nenhum prestador para medir ainda — preencha a área construída no bloco Geral e as frentes da obra (muro, pavimentação, piscina).
+      </div>
+    );
+  }
+  return (
+    <div style={{ gridColumn: "1 / -1" }}>
+      <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 10 }}>
+        Campo em branco usa o valor sugerido, que aparece em cinza. Digite para substituir; desmarque para o serviço não entrar no orçamento.
+      </div>
+      {!isMobile && (
+        <div style={grade}>
+          <div />
+          <div style={cab}>Item</div>
+          <div style={{ ...cab, textAlign: "center" }}>Un.</div>
+          <div style={{ ...cab, textAlign: "right" }}>Qtd</div>
+          <div style={{ ...cab, textAlign: "right" }}>Preço</div>
+          <div style={{ ...cab, textAlign: "right" }}>Total</div>
+        </div>
+      )}
+      {linhas.map((l) => {
+        const apagado = !l.incluir;
+        return (
+          <div key={l.chave} style={{ ...grade, marginBottom: 8, opacity: apagado ? 0.45 : 1 }}>
+            <input type="checkbox" checked={l.incluir} title={l.incluir ? "Entra no orçamento" : "Fora do orçamento"}
+              onChange={(e) => set(`prestadores.${l.chave}.incluir`, e.target.checked)} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{l.item}</div>
+              <div style={{ fontSize: 10.5, color: cor(l) }}>{fonteTexto(l)}</div>
+            </div>
+            <div style={{ fontSize: 11.5, color: "#6b7280", textAlign: "center" }}>{l.unidade === "m2" ? "m²" : "un"}</div>
+            <input style={cel} type="number" step="0.01" disabled={apagado}
+              value={l.qtdDigitada == null ? "" : l.qtdDigitada}
+              placeholder={numMem(l.auto)}
+              onChange={(e) => set(`prestadores.${l.chave}.qtd`, e.target.value === "" ? "" : Number(e.target.value))} />
+            <input style={cel} type="number" step="0.01" disabled={apagado}
+              value={l.precoDigitado == null ? "" : l.precoDigitado}
+              placeholder={l.sugerido > 0 ? numMem(l.sugerido) : "—"}
+              onChange={(e) => set(`prestadores.${l.chave}.preco`, e.target.value === "" ? "" : Number(e.target.value))} />
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", textAlign: "right", whiteSpace: "nowrap" }}>
+              {formatoBRL(l.total)}
+            </div>
+          </div>
+        );
+      })}
+      <div style={{ ...grade, borderTop: "1px solid rgba(38,36,33,0.12)", paddingTop: 10, marginTop: 4 }}>
+        <div />
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Total dos prestadores</div>
+        <div /><div /><div />
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: "#111827", textAlign: "right", whiteSpace: "nowrap" }}>{formatoBRL(total)}</div>
+      </div>
+    </div>
+  );
+}
+
 const padraoObra_ = (p) => (typeof padraoObra === "function" ? padraoObra(p) : (p && p.padrao) || "Médio");
 function MatrizExistente({ projetoDraft, get, set, isMobile }) {
   const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "8px 10px", fontSize: 13,
@@ -13734,15 +13804,8 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         </BlocoColapsavel>
         )}
 
-        <BlocoColapsavel titulo="Prestadores" subtitulo="valores sugeridos, editáveis" aberto={!!blocosAbertos.prestadores} onToggle={() => toggleBloco("prestadores")}>
-          {Object.keys(TAXAS_PRESTADORES).filter((chave) => temPiscina || (chave !== "pedreirosPiscina" && chave !== "instaladorEquipPiscina")).map((chave) => (
-            <CampoNum key={chave} label={chave} valor={get(`prestadores.${chave}`)} onChange={(v) => set(`prestadores.${chave}`, v)} />
-          ))}
-          <CampoNum label="gestaoObra" valor={get("prestadores.gestaoObra")} onChange={(v) => set("prestadores.gestaoObra", v)} />
-          <CampoNum label="carpinteiro" valor={get("prestadores.carpinteiro")} onChange={(v) => set("prestadores.carpinteiro", v)} />
-          <CampoNum label="impermeabilizador" valor={get("prestadores.impermeabilizador")} onChange={(v) => set("prestadores.impermeabilizador", v)} />
-          <CampoNum label="marceneiroPortas" valor={get("prestadores.marceneiroPortas")} onChange={(v) => set("prestadores.marceneiroPortas", v)} />
-          <CampoNum label="serralheiro" valor={get("prestadores.serralheiro")} onChange={(v) => set("prestadores.serralheiro", v)} />
+        <BlocoColapsavel titulo="Prestadores de serviços" subtitulo="quantidade e preço sugeridos, editáveis" aberto={!!blocosAbertos.prestadores} onToggle={() => toggleBloco("prestadores")}>
+          <QuadroPrestadores projetoDraft={projetoDraft} data={data} get={get} set={set} isMobile={isMobile} />
         </BlocoColapsavel>
 
         {perm.podeEditar && (

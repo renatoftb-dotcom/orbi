@@ -56,6 +56,7 @@ const modulo = new Function(`
     demolicoesRemocoes, entulhoDaReforma, execucaoNoExistente, SERVICOS_REFORMA, ITENS_EXISTENTE,
     migrarExistente, medidaExistente, taxaServicoReforma, DRYWALL_CONSUMO,
     padroesDoItem, facesDaPintura, PINTURA_PAREDE, cacambasDaReforma, volumeEntulhoReforma,
+    PRESTADORES_OBRA, linhasPrestadores, migrarPrestadores, baseAutomaticaPrestador, totalPrestadores,
     consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
 `)();
@@ -768,10 +769,13 @@ teste("ponto de ar condicionado por cômodo e prestador Instalador AR", () => {
   // cozinha e WC não levam ponto de ar
   const so = gerarOrcamentoObra({ tipologia: "Térrea", arquitetura: { areaConstruida: 60 }, ambientes: { cozinha: 1, wc: 2 } }, { materiais: [] });
   assert.ok(!so.itens.some((i) => /ar condicionado/i.test(i.item)));
-  // o Instalador AR, que o VBA nunca emitia, entra como verba
+  // o Instalador AR, que o VBA nunca emitia, entra no quadro de prestadores
+  // como verba fechada (é o que o cadastro diz: baseCalculo "fixo"). O valor
+  // do formato antigo vira o preço da verba, preservando o total.
   const inst = r.itens.find((i) => i.item === "Instalador AR");
+  assert.strictEqual(inst.total, 6000);
   assert.strictEqual(inst.qtd, 1);
-  assert.strictEqual(inst.preco, 6000);
+  assert.strictEqual(inst.unidade, "Unidades");
 });
 
 teste("correções das heranças do VBA: pav. 1 (área, paredes 50%, tábuas de 30, CA60 4,2), rótulo da telha e pedra do contrapiso externo", () => {
@@ -1512,6 +1516,128 @@ teste("a mão de obra do banheiro diz que é mão de obra", () => {
   const mo = out.find(i => /Montagem de banheiro/.test(i.item));
   assert.strictEqual(mo.item, "Montagem de banheiro (mão de obra)");
   assert.strictEqual(mo.tipo, "Prestadores de serviços");
+});
+
+
+// ── Quadro dos prestadores ──────────────────────────────────────
+const obraP = (extra) => modulo.normalizarProjeto({
+  tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+  arquitetura: { areaConstruida: 200, m2ParedesTotal: 300, m2ParedesInternas: 180, m2ParedesExternas: 120 },
+  terreo: { area: 200, m2Parede20: 300 },
+  ...extra,
+});
+const linha = (cp, chave, data) => modulo.linhasPrestadores(cp, data || { materiais: [] }).find(l => l.chave === chave);
+
+teste("a linha vem com a metragem do projeto e o preço de referência", () => {
+  const l = linha(obraP(), "equipePedreiros");
+  assert.strictEqual(l.qtd, 200, "a quantidade padrão é a área construída");
+  assert.strictEqual(l.auto, 200);
+  assert.strictEqual(l.preco, 1000);
+  assert.strictEqual(l.total, 200000);
+  assert.strictEqual(l.unidade, "m2");
+  assert.strictEqual(l.incluir, true, "com metragem e preço, entra por padrão");
+  assert.strictEqual(l.qtdDigitada, null, "nada digitado ainda");
+});
+
+teste("cada base puxa a medida certa do projeto", () => {
+  const cp = obraP({ externa: { pavimentacao: 60, muroDivisa: { comprimento: 30, altura: 2 } },
+    arrimo: { comprimento: 10, altura: 3 }, temPiscina: true, piscina: { areaConstruida: 32 } });
+  assert.strictEqual(linha(cp, "pavimentacaoExterna").qtd, 60);
+  assert.strictEqual(linha(cp, "muroDivisa").qtd, 60);      // 30 × 2
+  assert.strictEqual(linha(cp, "muroArrimo").qtd, 30);      // 10 × 3
+  assert.strictEqual(linha(cp, "pedreirosPiscina").qtd, 32);
+  assert.strictEqual(linha(cp, "terraplanagem").qtd, 1, "serviço fechado é quantidade 1");
+  assert.strictEqual(linha(cp, "terraplanagem").unidade, "Unidades");
+});
+
+teste("quantidade e preço digitados vencem o sugerido, um sem o outro", () => {
+  const soQtd = linha(obraP({ prestadores: { pintor: { qtd: 150 } } }), "pintor");
+  assert.strictEqual(soQtd.qtd, 150);
+  assert.strictEqual(soQtd.preco, 100, "preço continua o de referência");
+  assert.strictEqual(soQtd.total, 15000);
+
+  const soPreco = linha(obraP({ prestadores: { pintor: { preco: 130 } } }), "pintor");
+  assert.strictEqual(soPreco.qtd, 200, "quantidade continua a do projeto");
+  assert.strictEqual(soPreco.preco, 130);
+  assert.strictEqual(soPreco.total, 26000);
+});
+
+teste("zero digitado é zero, não é 'em branco'", () => {
+  const l = linha(obraP({ prestadores: { pintor: { qtd: 0 } } }), "pintor");
+  assert.strictEqual(l.qtd, 0);
+  assert.strictEqual(l.total, 0);
+  const emBranco = linha(obraP({ prestadores: { pintor: { qtd: "" } } }), "pintor");
+  assert.strictEqual(emBranco.qtd, 200, "string vazia volta para o sugerido");
+});
+
+teste("desmarcar tira o prestador do orçamento", () => {
+  const cp = obraP({ prestadores: { equipePedreiros: { incluir: false } } });
+  assert.strictEqual(linha(cp, "equipePedreiros").incluir, false);
+  const out = [];
+  modulo.prestadores(cp, out, { materiais: [] });
+  assert.ok(!out.some(i => i.item === "Pedreiros Casa"), "desmarcado não pode ser emitido");
+  assert.ok(out.some(i => i.item === "Eletricista"), "os outros continuam");
+});
+
+teste("a piscina só aparece no quadro quando a obra tem piscina", () => {
+  const sem = modulo.linhasPrestadores(obraP(), { materiais: [] }).map(l => l.chave);
+  assert.ok(!sem.includes("pedreirosPiscina"));
+  assert.ok(!sem.includes("instaladorEquipPiscina"));
+  const com = modulo.linhasPrestadores(obraP({ temPiscina: true, piscina: { areaConstruida: 32 } }), { materiais: [] }).map(l => l.chave);
+  assert.ok(com.includes("pedreirosPiscina") && com.includes("instaladorEquipPiscina"));
+});
+
+teste("a gestão de obra usa a escada regressiva, e o digitado a substitui", () => {
+  assert.strictEqual(linha(obraP(), "gestaoObra").preco, 550, "200 m² cai na primeira faixa da escada");
+  const grande = obraP({ arquitetura: { areaConstruida: 500 }, terreo: { area: 500 } });
+  assert.strictEqual(linha(grande, "gestaoObra").preco, 430, "acima de 450 m² a taxa cai para 430");
+  const digitado = linha(obraP({ prestadores: { gestaoObra: { preco: 600 } } }), "gestaoObra");
+  assert.strictEqual(digitado.preco, 600);
+  assert.strictEqual(digitado.total, 120000);
+});
+
+// (o preço vindo do catálogo é testado em precos-quantitativo.test.mjs,
+//  que é o harness que carrega o módulo de Insumos)
+
+teste("o formato antigo (valor fechado) migra preservando o total", () => {
+  const cp = obraP({ prestadores: { pintor: 26000, terraplanagem: 9500 } });
+  const pintor = linha(cp, "pintor");
+  assert.strictEqual(pintor.total, 26000, "o total tem que sobreviver à migração");
+  assert.strictEqual(pintor.qtd, 200);
+  assert.strictEqual(pintor.preco, 130);   // 26.000 ÷ 200 m²
+  const terra = linha(cp, "terraplanagem");
+  assert.strictEqual(terra.total, 9500, "serviço fechado vira quantidade 1 com o valor no preço");
+  assert.strictEqual(terra.qtd, 1);
+});
+
+teste("o total do quadro soma só o que está marcado", () => {
+  const todos = modulo.totalPrestadores(obraP(), { materiais: [] });
+  const semPedreiros = modulo.totalPrestadores(obraP({ prestadores: { equipePedreiros: { incluir: false } } }), { materiais: [] });
+  assert.strictEqual(Math.round(todos - semPedreiros), 200000, "tirar os pedreiros tem que tirar 200 × 1.000");
+});
+
+teste("linha sem medida e sem nada digitado não ocupa o quadro", () => {
+  const l = modulo.linhasPrestadores(obraP(), { materiais: [] }).find(x => x.chave === "carpinteiro");
+  assert.strictEqual(l.auto, 0, "sem telhado lançado não há área de cobertura");
+  assert.strictEqual(l.disponivel, false, "e a linha não aparece no quadro");
+  const comQtd = linha(obraP({ prestadores: { carpinteiro: { qtd: 90 } } }), "carpinteiro");
+  assert.strictEqual(comQtd.disponivel, true, "digitando a metragem, a linha volta");
+});
+
+teste("o orçamento emitido bate com o quadro, linha por linha", () => {
+  const cp = obraP({ prestadores: { pintor: { preco: 130 }, eletricista: { incluir: false } },
+    externa: { pavimentacao: 60 } });
+  const out = [];
+  modulo.prestadores(cp, out, { materiais: [] });
+  const doQuadro = modulo.linhasPrestadores(cp, { materiais: [] }).filter(l => l.incluir && l.qtd > 0 && l.preco > 0);
+  assert.deepStrictEqual(out.map(i => i.item).sort(), doQuadro.map(l => l.item).sort());
+  for (const i of out) {
+    const l = doQuadro.find(x => x.item === i.item);
+    assert.strictEqual(i.qtd, l.qtd, `${i.item}: quantidade`);
+    assert.strictEqual(i.preco, l.preco, `${i.item}: preço`);
+  }
+  assert.ok(!out.some(i => i.item === "Eletricista"));
+  assert.strictEqual(out.find(i => i.item === "Pintor").preco, 130);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
