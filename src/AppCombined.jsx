@@ -2350,16 +2350,31 @@ const api = {
 // em paralelo, pra ficar disponível no orçamento desde o boot.
 // Se estado for null (empresa sem onboarding), pula a busca do CUB
 // — orçamento usa fallback R$ 45 fixo nesse caso.
+// O acesso do cliente final só enxerga uma lista curta de caminhos no backend
+// (clientes, obras, fornecedores, escritório, orçamentos, CUB). Pedir
+// /materiais, /lancamentos ou /receitas devolve 403 e derrubava o
+// carregamento inteiro — o app caía no SEED e o cliente via "Acesso sem obra
+// vinculada". Para ele, essas listas vêm vazias; o painel da obra não usa
+// nenhuma delas.
+function ehAcessoDeCliente() {
+  try {
+    const u = JSON.parse(localStorage.getItem("vicke-user") || "null");
+    return u?.perfil === "cliente";
+  } catch { return false; }
+}
+
 async function loadAllData(estado = null) {
+  const cliente = ehAcessoDeCliente();
+  const soEscritorio = (fn) => (cliente ? Promise.resolve([]) : fn());
   // Promises base (sempre carregadas)
   const promisesBase = [
     api.clientes.list(),
     api.fornecedores.list(),
-    api.materiais.list(),
+    soEscritorio(() => api.materiais.list()),
     api.obras.list(),
-    api.lancamentos.list(),
+    soEscritorio(() => api.lancamentos.list()),
     api.orcamentos.list(),
-    api.receitas.list(),
+    soEscritorio(() => api.receitas.list()),
     api.escritorio.get(),
     // Parâmetros SINAPI (globais; null enquanto o backend não coletou)
     api.admin.sinapi.parametros().catch(() => null),
@@ -12047,7 +12062,11 @@ function MemoriaCalculo({ item, passos, onFechar }) {
 }
 
 function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar }) {
-  const perm = getPermissoes();
+  // O orçamento/quantitativo é do escritório: o cliente final só consulta.
+  // podeEditar é verdadeiro para ele (é o que libera baixar conta e lançar
+  // despesa), então aqui o portão certo é podeGerenciarObra.
+  const permBase = getPermissoes();
+  const perm = { ...permBase, podeEditar: permBase.podeGerenciarObra === undefined ? permBase.podeEditar : permBase.podeGerenciarObra };
   const [viewInterna, setViewInterna] = useState(obra.orcamento ? "resultado" : obra.projeto ? "form" : "vazio");
   const [projetoDraft, setProjetoDraft] = useState(() => {
     const p = obra.projeto || projetoVazio();
@@ -13975,7 +13994,9 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
 // molde de OrcamentoObraView. Lê obra.projeto e obra.orcamento; sem projeto,
 // manda preencher o orçamento primeiro.
 function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, onIrParaOrcamento }) {
-  const perm = getPermissoes();
+  // Prazo, etapas e equipe são do escritório; o cliente final só consulta.
+  const permBase = getPermissoes();
+  const perm = { ...permBase, podeEditar: permBase.podeGerenciarObra === undefined ? permBase.podeEditar : permBase.podeGerenciarObra };
   const temProjeto = !!(obra.projeto && obra.projeto.arquitetura && numOrZero(obra.projeto.arquitetura.areaConstruida) > 0);
   const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 16, marginBottom: 20 };
   return (
@@ -14112,7 +14133,8 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
   const regime = cfg.regimeHora === "onerado" ? "onerado" : "desonerado";
   const precoAtivo = precosHoraAtivos(data, regime);
   const be = sinapiBackend(data);
-  const perm = typeof getPermissoes === "function" ? getPermissoes() : {};
+  const permCron = typeof getPermissoes === "function" ? getPermissoes() : {};
+  const perm = { ...permCron, podeEditar: permCron.podeGerenciarObra === undefined ? permCron.podeEditar : permCron.podeGerenciarObra };
   const [atualizando, setAtualizando] = useState(false);
   async function atualizarAgora(forcar) {
     if (typeof api === "undefined" || !api.admin || !api.admin.sinapi) return;

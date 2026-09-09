@@ -984,7 +984,9 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
 // molde de OrcamentoObraView. Lê obra.projeto e obra.orcamento; sem projeto,
 // manda preencher o orçamento primeiro.
 function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, onIrParaOrcamento }) {
-  const perm = getPermissoes();
+  // Prazo, etapas e equipe são do escritório; o cliente final só consulta.
+  const permBase = getPermissoes();
+  const perm = { ...permBase, podeEditar: permBase.podeGerenciarObra === undefined ? permBase.podeEditar : permBase.podeGerenciarObra };
   const temProjeto = !!(obra.projeto && obra.projeto.arquitetura && numOrZero(obra.projeto.arquitetura.areaConstruida) > 0);
   const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 16, marginBottom: 20 };
   return (
@@ -1121,7 +1123,8 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
   const regime = cfg.regimeHora === "onerado" ? "onerado" : "desonerado";
   const precoAtivo = precosHoraAtivos(data, regime);
   const be = sinapiBackend(data);
-  const perm = typeof getPermissoes === "function" ? getPermissoes() : {};
+  const permCron = typeof getPermissoes === "function" ? getPermissoes() : {};
+  const perm = { ...permCron, podeEditar: permCron.podeGerenciarObra === undefined ? permCron.podeEditar : permCron.podeGerenciarObra };
   const [atualizando, setAtualizando] = useState(false);
   async function atualizarAgora(forcar) {
     if (typeof api === "undefined" || !api.admin || !api.admin.sinapi) return;

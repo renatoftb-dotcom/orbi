@@ -327,16 +327,31 @@ const api = {
 // em paralelo, pra ficar disponível no orçamento desde o boot.
 // Se estado for null (empresa sem onboarding), pula a busca do CUB
 // — orçamento usa fallback R$ 45 fixo nesse caso.
+// O acesso do cliente final só enxerga uma lista curta de caminhos no backend
+// (clientes, obras, fornecedores, escritório, orçamentos, CUB). Pedir
+// /materiais, /lancamentos ou /receitas devolve 403 e derrubava o
+// carregamento inteiro — o app caía no SEED e o cliente via "Acesso sem obra
+// vinculada". Para ele, essas listas vêm vazias; o painel da obra não usa
+// nenhuma delas.
+function ehAcessoDeCliente() {
+  try {
+    const u = JSON.parse(localStorage.getItem("vicke-user") || "null");
+    return u?.perfil === "cliente";
+  } catch { return false; }
+}
+
 async function loadAllData(estado = null) {
+  const cliente = ehAcessoDeCliente();
+  const soEscritorio = (fn) => (cliente ? Promise.resolve([]) : fn());
   // Promises base (sempre carregadas)
   const promisesBase = [
     api.clientes.list(),
     api.fornecedores.list(),
-    api.materiais.list(),
+    soEscritorio(() => api.materiais.list()),
     api.obras.list(),
-    api.lancamentos.list(),
+    soEscritorio(() => api.lancamentos.list()),
     api.orcamentos.list(),
-    api.receitas.list(),
+    soEscritorio(() => api.receitas.list()),
     api.escritorio.get(),
     // Parâmetros SINAPI (globais; null enquanto o backend não coletou)
     api.admin.sinapi.parametros().catch(() => null),

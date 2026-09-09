@@ -4587,7 +4587,11 @@ function MemoriaCalculo({ item, passos, onFechar }) {
 }
 
 function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar }) {
-  const perm = getPermissoes();
+  // O orçamento/quantitativo é do escritório: o cliente final só consulta.
+  // podeEditar é verdadeiro para ele (é o que libera baixar conta e lançar
+  // despesa), então aqui o portão certo é podeGerenciarObra.
+  const permBase = getPermissoes();
+  const perm = { ...permBase, podeEditar: permBase.podeGerenciarObra === undefined ? permBase.podeEditar : permBase.podeGerenciarObra };
   const [viewInterna, setViewInterna] = useState(obra.orcamento ? "resultado" : obra.projeto ? "form" : "vazio");
   const [projetoDraft, setProjetoDraft] = useState(() => {
     const p = obra.projeto || projetoVazio();
