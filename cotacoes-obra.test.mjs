@@ -35,7 +35,7 @@ const modulo = new Function(`
            podeLancarCotacao, contaDaCotacao, resumoCotacoes, cotacoesAguardandoCliente,
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
-           prestadorRapidoVazio, criarPrestadorRapido };
+           prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -303,6 +303,24 @@ teste("o que foi digitado vence o vazio do modelo", () => {
   assert.strictEqual(r.estado, "SP", "o que não foi digitado fica com o padrão");
   // e o cadastro novo é achável pelo mesmo caminho de sempre
   assert.strictEqual(M.nomeDoFornecedor([r], "f2"), "Alumisantos");
+});
+
+// ── O arquivo é mesmo um PDF? ───────────────────────────────────
+const bytesDe = (txt) => Array.from(txt).map(c => c.charCodeAt(0));
+
+teste("PDF de verdade começa com %PDF-", () => {
+  assert.strictEqual(M.pareceMesmoPdf(bytesDe("%PDF-1.7\n%âãÏÓ")), true);
+  assert.strictEqual(M.pareceMesmoPdf(bytesDe("%PDF-1.4")), true);
+});
+
+teste("o que não é PDF é reprovado", () => {
+  assert.strictEqual(M.pareceMesmoPdf(bytesDe("<!DOCTYPE html>")), false, "página de erro do compressor");
+  assert.strictEqual(M.pareceMesmoPdf(bytesDe("PK\u0003\u0004")), false, "zip");
+  assert.strictEqual(M.pareceMesmoPdf(bytesDe("\u00ff\u00d8\u00ff")), false, "jpeg");
+  assert.strictEqual(M.pareceMesmoPdf(bytesDe("%PDF")), false, "cortado antes do traço");
+  assert.strictEqual(M.pareceMesmoPdf(bytesDe("")), false);
+  assert.strictEqual(M.pareceMesmoPdf(null), false);
+  assert.strictEqual(M.pareceMesmoPdf(bytesDe(" %PDF-")), false, "assinatura tem que estar no byte 0");
 });
 
 let falhas = 0;

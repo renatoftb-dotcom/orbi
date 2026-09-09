@@ -221,3 +221,25 @@ o anexo antigo, que chegava sem extensão, agora salva como
 Imagem não passa por nada disso — vai direto num `<img>`. A janela fecha com
 Esc, com o botão Fechar ou clicando fora, e o blob é revogado ao fechar para
 não segurar o arquivo na memória da aba.
+
+### A janela diz o que há de errado
+
+Um iframe vazio não informa nada: o usuário não sabe se o problema é o
+arquivo, a internet ou o sistema. Antes de montar o visor, a janela confere
+o que veio e explica:
+
+| o que veio | o que a janela diz |
+|---|---|
+| 404 no storage | "O arquivo não está mais no storage. Anexe a proposta de novo." |
+| outro status | "O storage respondeu \<n\> ao buscar o arquivo." |
+| menos de 1 KB e não é PDF | "O arquivo tem só \<n\> bytes e não é um PDF — o upload deve ter falhado pela metade." |
+| não começa com `%PDF-` | "O arquivo anexado não é um PDF válido… tente anexar o PDF original, sem comprimir." |
+
+`pareceMesmoPdf(bytes)` olha os cinco primeiros bytes. A validação do upload
+confere o **mimetype**, que o navegador deduz da extensão — então página de
+erro de compressor online, zip renomeado e arquivo cortado no meio do upload
+passam por ela e só aparecem aqui.
+
+Um PDF que começa certo mas está truncado passa nesta checagem e cai no
+visor do navegador; cinco bytes não têm como saber. A mensagem cobre o caso
+comum, não todos.

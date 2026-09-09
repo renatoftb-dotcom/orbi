@@ -17888,6 +17888,17 @@ function anexosDasPropostas(propostas) {
 //
 // Os campos são os mesmos do cadastro rápido do gerador de contratos — quem
 // cadastra aqui já serve para contrato, sem redigitar.
+// Todo PDF começa com "%PDF-". Compressor online que devolveu uma página de
+// erro, arquivo cortado no meio do upload, imagem renomeada — tudo isso passa
+// pela validação de mimetype (que olha a extensão) e só aparece aqui.
+// Sem esta checagem o visor monta um iframe vazio e o usuário fica sem saber
+// se o problema é o arquivo, a internet ou o sistema.
+function pareceMesmoPdf(bytes) {
+  const b = bytes || [];
+  if (b.length < 5) return false;
+  return b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46 && b[4] === 0x2d; // %PDF-
+}
+
 function prestadorRapidoVazio() {
   return {
     // "Outro" e não a primeira da lista: a primeira é "Carpinteiro", e sair
@@ -18610,6 +18621,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 // servido como octet-stream, abre igual — sem precisar reanexar.
 function VisorProposta({ anexo, aoFechar }) {
   const [estado, setEstado] = useState("carregando"); // carregando | pronto | direto | erro
+  const [motivo, setMotivo] = useState("");
   const [blobUrl, setBlobUrl] = useState("");
   const a = anexo || {};
   const pdf = a.formato === "pdf" || a.resourceType === "raw";
@@ -18627,9 +18639,24 @@ function VisorProposta({ anexo, aoFechar }) {
     (async () => {
       try {
         const r = await fetch(a.url);
-        if (!r.ok) throw new Error("resposta " + r.status);
+        if (!r.ok) {
+          if (!vivo) return;
+          setMotivo(r.status === 404
+            ? "O arquivo não está mais no storage. Anexe a proposta de novo."
+            : `O storage respondeu ${r.status} ao buscar o arquivo.`);
+          setEstado("erro");
+          return;
+        }
         const bruto = await r.blob();
         if (!vivo) return;
+        const cabeca = new Uint8Array(await bruto.slice(0, 5).arrayBuffer());
+        if (!pareceMesmoPdf(cabeca)) {
+          setMotivo(bruto.size < 1024
+            ? `O arquivo tem só ${bruto.size} bytes e não é um PDF — o upload deve ter falhado pela metade. Anexe a proposta de novo.`
+            : "O arquivo anexado não é um PDF válido. Isso costuma acontecer quando o compressor devolve outra coisa no lugar do arquivo — tente anexar o PDF original, sem comprimir.");
+          setEstado("erro");
+          return;
+        }
         criada = URL.createObjectURL(new Blob([bruto], { type: "application/pdf" }));
         setBlobUrl(criada);
         setEstado("pronto");
@@ -18676,10 +18703,10 @@ function VisorProposta({ anexo, aoFechar }) {
           )}
           {estado === "erro" && (
             <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", justifyContent: "center", padding: 20, textAlign: "center" }}>
-              <div style={{ fontSize: 12.5, color: "#4b5563", maxWidth: 380 }}>
-                Não deu para mostrar a proposta aqui. O arquivo continua inteiro — dá para baixar e abrir no leitor de PDF do computador.
+              <div style={{ fontSize: 12.5, color: "#4b5563", maxWidth: 420 }}>
+                {motivo || "Não deu para mostrar a proposta aqui. O arquivo continua inteiro — dá para baixar e abrir no leitor de PDF do computador."}
               </div>
-              <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btn, textDecoration: "none" }}>Baixar a proposta</a>
+              <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btn, textDecoration: "none" }}>Baixar assim mesmo</a>
             </div>
           )}
           {(estado === "pronto" || estado === "direto") && (pdf
