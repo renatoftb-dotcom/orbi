@@ -1015,7 +1015,7 @@ teste("sem demolição não há caçamba", () => {
 teste("parede a construir usa os mesmos 40 tijolos por m² da obra nova", () => {
   const out = [];
   modulo.execucaoNoExistente(projetoReforma({ alvenaria: { executar: 10 } }), out, { materiais: [] });
-  const tij = out.find(i => i.item === "Tijolos 6 Furos");
+  const tij = out.find(i => /Bloco {1,2}6 Furos/.test(i.item));
   assert.strictEqual(tij.qtd, Math.ceil(10 * 40 * 1.1 - 1e-9)); // 440
   assert.strictEqual(tij.etapa, "Construção existente");
 });
@@ -1034,7 +1034,7 @@ teste("reboco sozinho, sem parede nova, também entra", () => {
   const out = [];
   modulo.execucaoNoExistente(projetoReforma({ reboco: { executar: 30 } }), out, { materiais: [] });
   assert.ok(out.some(i => i.subEtapa === "Chapisco e reboco"));
-  assert.ok(!out.some(i => i.item === "Tijolos 6 Furos"), "não inventa parede que não existe");
+  assert.ok(!out.some(i => /Bloco {1,2}6 Furos/.test(i.item)), "não inventa parede que não existe");
 });
 
 teste("piso a assentar traz peças, argamassa e rejunte", () => {
@@ -1043,8 +1043,8 @@ teste("piso a assentar traz peças, argamassa e rejunte", () => {
   const sub = out.filter(i => i.subEtapa === "Piso");
   assert.strictEqual(sub.length, 3);
   assert.strictEqual(sub.find(i => /Porcelanato|Cerâmica/.test(i.item)).qtd, 60); // 50 × 1,20
-  assert.ok(sub.some(i => /Argamassa AC-III/.test(i.item)), "60x60 é porcelanato, pede AC-III");
-  assert.ok(sub.some(i => i.item === "Rejunte 1kg"));
+  assert.ok(sub.some(i => /Argamassa AC 3/.test(i.item)), "60x60 é porcelanato, pede AC-III");
+  assert.ok(sub.some(i => i.item === "Rejunte - 5kg"), "rejunte vem em embalagem de 5 kg, como no bloco de pisos");
 });
 
 teste("forro a instalar traz a placa e os consumíveis do tipo escolhido", () => {
@@ -1062,7 +1062,7 @@ teste("pintura sai com as quatro linhas de tinta", () => {
   const itens = out.filter(i => i.subEtapa === "Pintura").map(i => i.item);
   assert.strictEqual(itens.length, 4);
   assert.ok(itens.some(i => /Selador/.test(i)));
-  assert.ok(itens.some(i => /Tinta Acrílica/.test(i)));
+  assert.ok(itens.some(i => /Tintas - Tintas 18L/.test(i)));
 });
 
 teste("banheiro e esquadria são mão de obra, contados por unidade", () => {

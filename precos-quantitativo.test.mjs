@@ -1,0 +1,117 @@
+// Todo item que o quantitativo emite tem que existir no catálogo de Insumos.
+//   node precos-quantitativo.test.mjs
+//
+// Por que este teste existe: o nome do item é uma string solta. Escrever
+// "Tijolos 6 Furos" em vez de "Cerâmicas - Tijolo - Bloco  6 Furos" (com o
+// espaço duplo do cadastro) não quebra nada — o item simplesmente sai com
+// R$ 0,00 no orçamento, e ninguém percebe até somar o total à mão. Foi
+// exatamente o que aconteceu com o tijolo da reforma. Este teste roda o
+// motor inteiro contra a semente e exige que cada linha ache seu preço.
+
+import { readFileSync } from "fs";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import assert from "assert";
+
+const raiz = dirname(fileURLToPath(import.meta.url));
+const MODULES = join(raiz, "src", "modules");
+const ler = (n) => readFileSync(join(MODULES, n), "utf8");
+
+const orcSrc = ler("orcamento-obra.jsx");
+const corteOrc = orcSrc.indexOf("// UI (§7)");
+if (corteOrc < 0) throw new Error('Marcador "// UI (§7)" não encontrado em orcamento-obra.jsx');
+const insSrc = ler("insumos.jsx");
+const corteIns = insSrc.indexOf("// UI");
+if (corteIns < 0) throw new Error('Marcador "// UI" não encontrado em insumos.jsx');
+const sharedSrc = ler("shared.jsx");
+const mComodos = sharedSrc.match(/var COMODOS = \{[\s\S]*?\n\};/);
+if (!mComodos) throw new Error("var COMODOS não encontrado em shared.jsx");
+
+const modulo = new Function(`
+  var uid = () => "id1";
+  ${mComodos[0]}
+  ${ler("insumos-seed-cadastro.jsx")}
+  ${ler("insumos-seed.jsx")}
+  ${insSrc.slice(0, corteIns)}
+  ${ler("composicoes-seed.jsx")}
+  ${orcSrc.slice(0, corteOrc)}
+  return { INSUMOS_SEED, semearInsumos, gerarOrcamentoObra, resolverInsumo };
+`)();
+
+// O catálogo como fica depois de "Insumos → Carregar catálogo padrão".
+const catalogo = modulo.semearInsumos([], modulo.INSUMOS_SEED).materiais;
+
+const testes = [];
+const teste = (nome, fn) => testes.push([nome, fn]);
+
+const conferir = (nome, projeto) => {
+  const r = modulo.gerarOrcamentoObra(projeto, { materiais: catalogo });
+  const semPreco = r.itens.filter((i) => i.semPreco).map((i) => `${i.etapa} / ${i.subEtapa || "—"} → "${i.item}"`);
+  assert.deepStrictEqual([...new Set(semPreco)], [],
+    `${nome}: item(ns) que não existem no catálogo de Insumos — saem com R$ 0`);
+  assert.ok(r.itens.length > 0, `${nome}: não gerou nenhuma linha`);
+  return r;
+};
+
+teste("obra nova: todo item emitido acha preço no catálogo", () => {
+  conferir("obra nova", {
+    tipoObra: "nova", tipologia: "Sobrado", padrao: "Médio",
+    arquitetura: { areaConstruida: 260, m2ParedesInternas: 320, m2ParedesExternas: 210, m2ParedesTotal: 530, gabarito: 2.8, perimetroParedes: 78 },
+    terreo: { area: 130 }, pav1: { area: 130 },
+    externa: { pavimentacaoExterna: 60, perimetroPavimentacao: 40, muroDivisa: { comprimento: 30, altura: 2.2 } },
+    cobertura: [{ tipo: "Telha Barro Portuguesa", largura: 10, comprimento: 14, aguas: 4, inclinacao: 30 }],
+    pisos: { pisoInterno: { m2: 120 }, revestimentoInterno: { m2: 40 }, rodapeM: 90, soleirasM: 12 },
+  });
+});
+
+teste("reforma: todo item da construção existente acha preço no catálogo", () => {
+  const r = conferir("reforma", {
+    tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 120, m2ParedesInternas: 150, m2ParedesExternas: 90, m2ParedesTotal: 240 },
+    terreo: { area: 120 },
+    existente: {
+      contrapiso: { remover: 30, executar: 30 }, alvenaria: { remover: 40, executar: 12 },
+      drywall: { remover: 8, executar: 20 }, forro: { remover: 25, executar: 25 },
+      piso: { remover: 30, executar: 30 }, revestimento: { remover: 18, executar: 18 },
+      calcada: { remover: 10, executar: 10 }, banheiro: { remover: 2, executar: 2 },
+      esquadria: { remover: 4, executar: 4 }, pintura: { executar: 90 },
+    },
+  });
+  // as linhas da reforma existem mesmo e têm preço > 0
+  const daReforma = r.itens.filter((i) => /Demolições|Entulho|Construção existente/.test(i.etapa));
+  assert.ok(daReforma.length >= 20, `esperava a reforma inteira, vieram ${daReforma.length} linhas`);
+  for (const i of daReforma) {
+    assert.ok(i.preco > 0, `${i.etapa} / ${i.item}: preço ${i.preco}`);
+    assert.ok(i.total > 0, `${i.etapa} / ${i.item}: total ${i.total}`);
+  }
+});
+
+teste("o tijolo da reforma é o mesmo insumo da obra nova", () => {
+  const nova = modulo.gerarOrcamentoObra({
+    tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 100, m2ParedesTotal: 200, m2ParedesInternas: 120, m2ParedesExternas: 80 },
+    terreo: { area: 100, m2Parede20: 200 },
+  }, { materiais: catalogo });
+  const reforma = modulo.gerarOrcamentoObra({
+    tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: {}, terreo: {}, existente: { alvenaria: { executar: 200 } },
+  }, { materiais: catalogo });
+  const tijNova = nova.itens.find((i) => /Bloco {1,2}6 Furos/.test(i.item));
+  const tijRef = reforma.itens.find((i) => /Bloco {1,2}6 Furos/.test(i.item));
+  assert.ok(tijNova, "obra nova não emitiu tijolo de 6 furos");
+  assert.ok(tijRef, "reforma não emitiu tijolo de 6 furos");
+  assert.strictEqual(tijRef.item, tijNova.item, "os dois têm que usar o MESMO nome de insumo");
+  assert.strictEqual(tijRef.insumoCodigo, tijNova.insumoCodigo);
+  assert.strictEqual(tijRef.preco, tijNova.preco);
+  assert.ok(tijRef.preco > 0, "o tijolo da reforma saiu com preço zero");
+  // mesma área de parede, mesma quantidade
+  assert.strictEqual(tijRef.qtd, tijNova.qtd);
+});
+
+let falhas = 0;
+for (const [nome, fn] of testes) {
+  try { fn(); console.log("  ok   " + nome); }
+  catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message.split("\n").slice(0, 6).join("\n         ")); }
+}
+console.log(`\n${testes.length - falhas}/${testes.length} passaram`);
+process.exit(falhas ? 1 : 0);

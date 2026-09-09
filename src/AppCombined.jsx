@@ -11836,7 +11836,9 @@ function execucaoNoExistente(cp, out, data) {
     const cimento = teto(cimentoBruto);
     const memParede = memMedida("alvenaria");
     const sub = "Parede de alvenaria";
-    emitir(out, { ...bruto, subEtapa: sub, item: "Tijolos 6 Furos", unidade: "Unidades", qtd: tijolos, memoria: [
+    // Nome EXATO do catálogo, espaço duplo incluído — é assim que o cadastro
+    // do escritório grafa, e é por ele que o preço é encontrado.
+    emitir(out, { ...bruto, subEtapa: sub, item: "Cerâmicas - Tijolo - Bloco  6 Furos", unidade: "Unidades", qtd: tijolos, memoria: [
       MEM.nota("Parede de 20 cm: 40 tijolos de 6 furos por m², o mesmo consumo da obra nova."),
       memParede,
       MEM.conta("Tijolos, com 10% de perda", "área × 40 × 1,10", [["área", m2Parede]], tijolosBruto, "tijolos"),
@@ -11969,17 +11971,19 @@ function execucaoNoExistente(cp, out, data) {
       MEM.conta(`Peças com ${Math.round((PERDA_PECAS - 1) * 100)}% de perda (recortes e quebras)`, "área × 1,20", [["área", area]], area * PERDA_PECAS, "m²"),
       MEM.teto(area * PERDA_PECAS, pecas, "m²", "Arredonda em centésimos de m²"),
     ] });
-    emitir(out, { ...acab, subEtapa: sub, item: c.argamassa === "AC3" ? "Argamassa AC-III 20kg" : "Argamassa AC-II 20kg", unidade: "Unidades", qtd: teto(argKg / 20 * PERDA), memoria: [
+    emitir(out, { ...acab, subEtapa: sub, item: c.argamassa === "AC3" ? "Argamassa AC 3 GF - 20kg" : "Argamassa AC 2 - 20kg", unidade: "Unidades", qtd: teto(argKg / 20 * PERDA), memoria: [
       MEM.nota(`${c.porcelanato ? "Porcelanato pede AC-III" : "Cerâmica pede AC-II"}: ${numMem(c.argamassaKg)} kg por m², saco de 20 kg.`),
       memArea,
       MEM.conta("Argamassa", `área × ${numMem(c.argamassaKg)}`, [["área", area]], argKg, "kg"),
       MEM.teto(argKg / 20 * PERDA, teto(argKg / 20 * PERDA), "sacos de 20 kg", "Arredonda para cima (saco fechado)"),
     ] });
-    emitir(out, { ...acab, subEtapa: sub, item: "Rejunte 1kg", unidade: "Unidades", qtd: teto(rejKg * PERDA), memoria: [
-      MEM.nota(`Rejunte calculado pela junta do formato ${c.formato.nome}: ${numMem(c.rejunteKg)} kg por m².`),
+    // Rejunte vem em embalagem de 5 kg, como no bloco de pisos — contar em
+    // quilos daria uma quantidade que não existe para comprar.
+    emitir(out, { ...acab, subEtapa: sub, item: "Rejunte - 5kg", unidade: "Unidades", qtd: teto(rejKg / 5), memoria: [
+      MEM.nota(`Rejunte calculado pela junta do formato ${c.formato.nome}: ${numMem(c.rejunteKg)} kg por m². Embalagem de 5 kg.`),
       memArea,
-      MEM.conta("Rejunte, com 10% de perda", `área × ${numMem(c.rejunteKg)} × 1,10`, [["área", area]], rejKg * PERDA, "kg"),
-      MEM.teto(rejKg * PERDA, teto(rejKg * PERDA), "kg", "Arredonda para cima (embalagem fechada)"),
+      MEM.conta("Rejunte necessário", `área × ${numMem(c.rejunteKg)}`, [["área", area]], rejKg, "kg"),
+      MEM.teto(rejKg / 5, teto(rejKg / 5), "embalagens de 5 kg", "Arredonda para cima (embalagem fechada)"),
     ] });
   }
 
@@ -12023,7 +12027,7 @@ function execucaoNoExistente(cp, out, data) {
       ["Tintas - Fundo Preparador 18L", fundoBruto, "Fundo preparador: 0,2 litro por m², lata que rende 8."],
       ["Tintas - Selador 18L", seladorBruto, "Selador: 0,2 litro por m², lata que rende 10."],
       ["Tintas - Massa Corrida 25KG", massaBruto, "Massa corrida: um terço da área, 2,5 kg por m², saco que rende 15."],
-      ["Tintas - Tinta Acrílica 18L", tintaBruto, "Tinta: 0,15 litro por m², lata que rende 9."],
+      ["Tintas - Tintas 18L", tintaBruto, "Tinta: 0,15 litro por m², lata que rende 9."],
     ]) {
       emitir(out, { ...acab, subEtapa: sub, item, unidade: "Unidades", qtd: teto(brutoQtd), memoria: [
         notaComum, memArea, MEM.nota(texto),

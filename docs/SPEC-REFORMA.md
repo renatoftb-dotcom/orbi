@@ -161,3 +161,26 @@ Dois casos reais que davam negativo, corrigidos na origem:
 O teste `nenhum projeto de teste produz linha negativa` roda obra nova cheia,
 reforma cheia e projeto zerado conferindo quantidade, preço e total de cada
 linha — é ele que guarda a regra para o que vier depois.
+
+## O nome do insumo é o do catálogo, letra por letra
+
+O preço de cada linha é achado pelo **nome do item**. Uma string solta:
+escrever `"Tijolos 6 Furos"` em vez de `"Cerâmicas - Tijolo - Bloco  6 Furos"`
+(com o espaço duplo que o cadastro tem) não quebra nada — o item sai com
+**R$ 0,00** e ninguém percebe até somar o total à mão. Foi o que aconteceu
+com o tijolo da reforma, e junto com ele a argamassa, o rejunte e a tinta.
+
+Ao emitir um item, copie o nome do bloco equivalente da obra nova, não
+invente. Os nomes certos:
+
+| o que é | nome no catálogo |
+|---|---|
+| tijolo de 6 furos | `Cerâmicas - Tijolo - Bloco  6 Furos` (dois espaços) |
+| argamassa de porcelanato | `Argamassa AC 3 GF - 20kg` |
+| argamassa de cerâmica | `Argamassa AC 2 - 20kg` |
+| rejunte | `Rejunte - 5kg` (embalagem de 5 kg, não quilos) |
+| tinta | `Tintas - Tintas 18L` |
+
+`precos-quantitativo.test.mjs` é a trava: roda obra nova e reforma inteiras
+contra a semente e exige que **toda** linha ache preço maior que zero.
+Rodado contra o código anterior, ele acusa exatamente os quatro itens.
