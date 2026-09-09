@@ -155,6 +155,50 @@ function podeLancarCotacao(cot, aprovacoes) {
   return { pode: true, motivo: "" };
 }
 
+// ── Apagar ──────────────────────────────────────────────────────
+// Duas exclusões, com pesos diferentes: tirar um fornecedor que entrou
+// errado é correção de rotina; apagar a cotação inteira leva junto a
+// decisão que o cliente já registrou. As duas param no mesmo lugar — o que
+// virou conta a pagar tem um lançamento financeiro do outro lado e não
+// pode sumir por aqui.
+function podeExcluirCotacao(cot) {
+  const c = cot || {};
+  if (c.contaGeradaId) return { pode: false, motivo: "Já foi lançada em contas a pagar — cancele a conta primeiro." };
+  return { pode: true, motivo: "" };
+}
+
+// Tira uma proposta da cotação. Se era a escolhida, a cotação volta a não
+// ter escolha: manter o id apontaria para uma proposta que não existe mais,
+// e o card diria "Escolhida" sem ninguém marcado.
+function removerProposta(cotacao, propostaId) {
+  const c = cotacao || {};
+  const restantes = propostasDaCotacao(c).filter(p => p.id !== propostaId);
+  return {
+    ...c,
+    propostas: restantes,
+    escolhidaId: c.escolhidaId === propostaId ? "" : (c.escolhidaId || ""),
+  };
+}
+
+// Tira a cotação inteira. A decisão do cliente vai junto — guardada, ficaria
+// órfã na obra e voltaria a valer se um dia outra cotação nascesse com o
+// mesmo id.
+function removerCotacao(cotacoes, aprovacoes, cotacaoId) {
+  return {
+    cotacoes: (cotacoes || []).filter(c => c && c.id !== cotacaoId),
+    aprovacoes: (aprovacoes || []).filter(a => a && a.cotacaoId !== cotacaoId),
+  };
+}
+
+// Os anexos que saem do ar junto com o que foi apagado. Devolve os
+// public_id para a tela tentar limpar o storage — best-effort: o arquivo
+// já não está mais em lugar nenhum da obra de qualquer jeito.
+function anexosDasPropostas(propostas) {
+  return (propostas || [])
+    .map(p => p && p.anexo && p.anexo.public_id)
+    .filter(Boolean);
+}
+
 // A conta avulsa que nasce da cotação escolhida. Vence no prazo de
 // resposta quando houver, senão hoje — o escritório ajusta na baixa.
 function contaDaCotacao(cot, hoje) {
@@ -305,6 +349,10 @@ function selo(cor, texto) {
 function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario }) {
   const perm = getPermissoes();
   const podeGerenciar = !!perm.podeGerenciarObra;
+  // Apagar a cotação inteira leva junto a decisão do cliente: é do admin.
+  // Tirar um fornecedor que entrou errado é correção de rotina, e segue
+  // com quem já edita a obra.
+  const podeExcluir = podeGerenciar && !!perm.podeExcluir;
   const E = COT_ESTILO;
   const prestadores = (data.fornecedores || []).filter(f => f && f.ativo !== false);
   const cotacoes = obra.cotacoes || [];
@@ -484,6 +532,51 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     setFormDecisao(null);
   }
 
+  // ── Apagar ────────────────────────────────────────────────────
+  // Best-effort: o anexo some da obra de qualquer jeito; apagar do storage
+  // é permissão de admin, e uma recusa ali não pode travar a exclusão.
+  async function limparAnexos(ids) {
+    for (const id of ids) { try { await api.uploads.remove(id); } catch (e) {} }
+  }
+
+  async function excluirProposta(cot, prop) {
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir a proposta de ${prop.favorecido || "fornecedor sem nome"}?`,
+      mensagem: prop.id === cot.escolhidaId
+        ? "Era a proposta escolhida — a cotação volta a ficar sem escolha, e o cliente terá que aprovar de novo depois que você escolher outra."
+        : "A proposta sai da comparação. As outras continuam como estão.",
+      confirmar: "Excluir proposta",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    setErro("");
+    trocarCotacao(cot.id, c => removerProposta(c, prop.id));
+    limparAnexos(anexosDasPropostas([prop]));
+  }
+
+  async function excluirCotacao(cot) {
+    const trava = podeExcluirCotacao(cot);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    const props = propostasDaCotacao(cot);
+    const ap = aprovacaoDaCotacao(aprovacoes, cot.id);
+    const partes = [];
+    if (props.length) partes.push(props.length === 1 ? "1 proposta" : `${props.length} propostas`);
+    if (ap.status !== "pendente") partes.push(`a decisão do cliente (${ap.status === "aprovada" ? "aprovada" : "recusada"})`);
+    const ok = await dialogo.confirmar({
+      titulo: `Excluir a cotação "${cot.titulo || "sem nome"}"?`,
+      mensagem: partes.length
+        ? `Vai junto: ${partes.join(" e ")}. Não dá para desfazer.`
+        : "A cotação ainda não tem propostas. Não dá para desfazer.",
+      confirmar: "Excluir cotação",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    setErro("");
+    const r = removerCotacao(cotacoes, aprovacoes, cot.id);
+    gravar({ ...obra, cotacoes: r.cotacoes, aprovacoesCotacao: r.aprovacoes });
+    limparAnexos(anexosDasPropostas(props));
+  }
+
   // ── Lançar em contas a pagar (escritório) ─────────────────────
   function lancar(cot) {
     const trava = podeLancarCotacao(cot, aprovacoes);
@@ -631,6 +724,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                   )}
                                   <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5 }}
                                     onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: p }); }}>Editar</button>
+                                  {!cot.contaGeradaId && (
+                                    <button title="Excluir esta proposta"
+                                      style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginLeft: 6, color: "#dc2626" }}
+                                      onClick={() => excluirProposta(cot, p)}>Excluir</button>
+                                  )}
                                 </td>
                               )}
                             </tr>
@@ -661,6 +759,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       <button style={E.btnSec} onClick={() => { setErro(""); setFormCotacao(cot); }}>Editar cotação</button>
                       <button style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45 }} onClick={() => lancar(cot)}>Lançar em contas a pagar</button>
                       {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
+                      {podeExcluir && (
+                        <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
+                          onClick={() => excluirCotacao(cot)}>Excluir cotação</button>
+                      )}
                     </>
                   )}
                   {!podeGerenciar && s.id === "aguardando" && (

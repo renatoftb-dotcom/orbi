@@ -119,3 +119,31 @@ Categoria `proposta_cotacao`, até 5 MB, 500 ativas por empresa. O cliente
 **não** anexa: `POST /api/uploads` é escrita, e a lista branca de escrita
 dele tem só `/obras`. Ele abre o arquivo pelo link, que é público — mesma
 característica do logo e das imagens de projeto.
+
+## Apagar: duas exclusões, com pesos diferentes
+
+**Tirar um fornecedor** da comparação é correção de rotina — nome errado,
+proposta duplicada, fornecedor que desistiu. Fica na própria linha da
+tabela, ao lado de Editar, e é liberado para quem já gerencia a obra.
+Se a proposta apagada era a **escolhida**, `removerProposta()` limpa também o
+`escolhidaId`: manter o id apontaria para uma proposta que não existe mais e
+o card diria "Escolhida" sem ninguém marcado. A confirmação avisa disso com
+todas as letras, porque significa que o cliente vai ter que aprovar de novo.
+
+**Apagar a cotação inteira** leva junto a decisão que o cliente registrou,
+então é do admin (`podeExcluir`) e fica separado dos demais botões, no canto
+do rodapé. `removerCotacao()` devolve as duas listas — cotações e aprovações
+— porque uma decisão órfã em `obra.aprovacoesCotacao` voltaria a valer se um
+dia outra cotação nascesse com o mesmo id. A confirmação diz o que vai
+junto: quantas propostas e, se houver, a decisão do cliente.
+
+As duas param no mesmo lugar: `podeExcluirCotacao()` recusa o que já tem
+`contaGeradaId`. Do outro lado existe um lançamento em contas a pagar, e
+apagar por aqui deixaria a conta sem origem — o caminho é cancelar a conta
+primeiro. Na tela, os botões nem aparecem nesse estado, como já acontecia
+com Escolher, Editar cotação e Lançar.
+
+Os anexos das propostas apagadas voltam de `anexosDasPropostas()` e a tela
+tenta removê-los do storage. É best-effort de propósito: apagar arquivo é
+permissão de admin, o arquivo já não está mais em lugar nenhum da obra, e
+uma recusa ali não pode travar a exclusão.

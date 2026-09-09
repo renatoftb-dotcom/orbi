@@ -33,7 +33,8 @@ const modulo = new Function(`
            propostaEscolhida, melhorProposta, economiaDaCotacao,
            aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
            podeLancarCotacao, contaDaCotacao, resumoCotacoes, cotacoesAguardandoCliente,
-           nomeDoFornecedor, PLANO_CONTAS };
+           nomeDoFornecedor, PLANO_CONTAS,
+           podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -209,6 +210,64 @@ teste("nome do fornecedor sai do cadastro, e some sem quebrar", () => {
   assert.strictEqual(M.nomeDoFornecedor(p, "f1"), "MB Viezzer");
   assert.strictEqual(M.nomeDoFornecedor(p, "f9"), "");
   assert.strictEqual(M.nomeDoFornecedor(null, "f1"), "");
+});
+
+// ── Apagar ──────────────────────────────────────────────────────
+const comDuas = () => ({
+  ...M.cotacaoVazia("o1"), id: "cot1", titulo: "Esquadrias de alumínio", escolhidaId: "p2",
+  propostas: [
+    { ...M.propostaVazia(), id: "p1", favorecido: "Engevidros", valor: 50000 },
+    { ...M.propostaVazia(), id: "p2", favorecido: "Alumisantos", valor: 1200000, anexo: { public_id: "vicke/prop2", url: "u" } },
+  ],
+});
+
+teste("excluir a proposta escolhida desfaz a escolha", () => {
+  const r = M.removerProposta(comDuas(), "p2");
+  assert.strictEqual(r.propostas.length, 1);
+  assert.strictEqual(r.propostas[0].id, "p1");
+  assert.strictEqual(r.escolhidaId, "", "id da escolhida não pode sobreviver à proposta");
+  assert.strictEqual(M.propostaEscolhida(r), null);
+  // e a cotação volta a se declarar em comparação, não "escolhida"
+  assert.strictEqual(M.situacaoCotacao(r, []).id, "comparando");
+});
+
+teste("excluir outra proposta não mexe na escolha", () => {
+  const r = M.removerProposta(comDuas(), "p1");
+  assert.strictEqual(r.escolhidaId, "p2");
+  assert.strictEqual(M.propostaEscolhida(r).favorecido, "Alumisantos");
+});
+
+teste("excluir proposta que não existe não estraga a cotação", () => {
+  const r = M.removerProposta(comDuas(), "p9");
+  assert.strictEqual(r.propostas.length, 2);
+  assert.strictEqual(r.escolhidaId, "p2");
+});
+
+teste("excluir a cotação leva junto a decisão do cliente", () => {
+  const cot = comDuas();
+  const outra = { ...M.cotacaoVazia("o1"), id: "cot2", titulo: "Piso" };
+  const aprov = M.registrarAprovacaoCotacao([], { cotacaoId: "cot1", propostaId: "p2", status: "aprovada", por: "COBOP" });
+  const comOutra = M.registrarAprovacaoCotacao(aprov, { cotacaoId: "cot2", status: "recusada", por: "COBOP" });
+  const r = M.removerCotacao([cot, outra], comOutra, "cot1");
+  assert.deepStrictEqual(r.cotacoes.map(c => c.id), ["cot2"]);
+  assert.strictEqual(M.aprovacaoDaCotacao(r.aprovacoes, "cot1").status, "pendente",
+    "a decisão órfã voltaria a valer se outra cotação nascesse com o mesmo id");
+  assert.strictEqual(M.aprovacaoDaCotacao(r.aprovacoes, "cot2").status, "recusada", "a do vizinho fica");
+});
+
+teste("o que já virou conta a pagar não pode ser excluído", () => {
+  const lancada = { ...comDuas(), contaGeradaId: "cta1" };
+  const t = M.podeExcluirCotacao(lancada);
+  assert.strictEqual(t.pode, false);
+  assert.ok(/contas a pagar/.test(t.motivo), t.motivo);
+  assert.strictEqual(M.podeExcluirCotacao(comDuas()).pode, true);
+});
+
+teste("os anexos das propostas apagadas voltam para limpar o storage", () => {
+  assert.deepStrictEqual(M.anexosDasPropostas(comDuas().propostas), ["vicke/prop2"]);
+  assert.deepStrictEqual(M.anexosDasPropostas([]), []);
+  assert.deepStrictEqual(M.anexosDasPropostas(null), []);
+  assert.deepStrictEqual(M.anexosDasPropostas([{ anexo: { url: "u" } }]), [], "anexo sem public_id não vira chamada");
 });
 
 let falhas = 0;
