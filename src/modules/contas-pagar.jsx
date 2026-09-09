@@ -565,6 +565,77 @@ function estimativaPorConta(itens) {
   }
   return r;
 }
+
+// ── Quadro de preenchimento da estimativa ───────────────────────
+// O Planejamento nasceu item a item: cada item traz conta, prestador e
+// observação. Isso é bom para detalhar um contrato, e péssimo para dar o
+// primeiro número em 40 contas — são 40 idas ao formulário.
+//
+// O quadro é o outro caminho: uma linha por conta do plano, um valor por
+// linha, tudo na mesma tela. Ele grava no MESMO `estimativaPL`, num item
+// marcado `origem: "quadro"` — é esse item que os fluxos automáticos do
+// site vão sobrescrever no futuro, sem encostar no que foi detalhado à mão.
+const EST_ORIGEM_QUADRO = "quadro";
+
+// O item de quadro de uma conta, se existir. Detalhado é todo o resto.
+const itemDeQuadro = (itens, contaId) =>
+  (itens || []).find(i => i && i.contaId === contaId && i.origem === EST_ORIGEM_QUADRO) || null;
+const itensDetalhados = (itens, contaId) =>
+  (itens || []).filter(i => i && i.contaId === contaId && i.origem !== EST_ORIGEM_QUADRO);
+
+// Uma linha por conta do P&L, na ordem do plano. `editavel` é falso quando a
+// conta já tem itens detalhados: ali o número é a soma deles, e mexer no
+// quadro esconderia de onde o valor veio.
+function linhasEstimativaPL(itens, grupos, contas) {
+  // Todos os grupos, "Excluídas" incluída: ela tem contas de verdade e
+  // precisa de campo. Quem a deixa de fora é o RESULTADO, não o quadro.
+  const linhas = [];
+  for (const g of (grupos || [])) {
+    for (const c of (contas || []).filter(x => x.grupo === g.id)) {
+      const quadro = itemDeQuadro(itens, c.id);
+      const detalhados = itensDetalhados(itens, c.id);
+      const somaDet = detalhados.reduce((a, i) => a + (Number(i.valor) || 0), 0);
+      const doQuadro = quadro ? Number(quadro.valor) || 0 : 0;
+      linhas.push({
+        contaId: c.id, nome: c.nome, grupoId: g.id, grupoTitulo: g.titulo, sinal: g.sinal,
+        valorQuadro: quadro ? doQuadro : null,
+        detalhados: detalhados.length,
+        total: Math.round((doQuadro + somaDet) * 100) / 100,
+        editavel: detalhados.length === 0,
+      });
+    }
+  }
+  return linhas;
+}
+
+// Escreve o valor de uma conta no item de quadro. Zero e vazio APAGAM o
+// item em vez de gravar 0: uma conta sem estimativa não é uma conta
+// estimada em zero, e a diferença aparece no extrato.
+function definirEstimativaDaConta(itens, contaId, valor, novoId) {
+  const lista = (itens || []).slice();
+  const i = lista.findIndex(x => x && x.contaId === contaId && x.origem === EST_ORIGEM_QUADRO);
+  const n = Number(valor);
+  const zerado = valor === "" || valor == null || !Number.isFinite(n) || n <= 0;
+  if (zerado) return i < 0 ? lista : lista.slice(0, i).concat(lista.slice(i + 1));
+  const v = Math.round(n * 100) / 100;
+  if (i >= 0) { lista[i] = { ...lista[i], valor: v }; return lista; }
+  return lista.concat([{ id: novoId, contaId, prestadorId: "", valor: v, observacao: "", origem: EST_ORIGEM_QUADRO }]);
+}
+
+// Totais do quadro por grupo, e o resultado estimado da obra: entradas
+// menos os grupos de custo. "Excluídas" fica de fora, como no P&L realizado.
+function totaisEstimativaPL(itens, grupos, contas) {
+  const linhas = linhasEstimativaPL(itens, grupos, contas);
+  const porGrupo = {};
+  for (const l of linhas) porGrupo[l.grupoId] = Math.round(((porGrupo[l.grupoId] || 0) + l.total) * 100) / 100;
+  let resultado = 0;
+  for (const g of grupos || []) {
+    if (g.entra_no_resultado === false) continue;
+    resultado += (g.sinal || 0) * (porGrupo[g.id] || 0);
+  }
+  return { porGrupo, resultado: Math.round(resultado * 100) / 100 };
+}
+
 // Meses com movimento (pagamento contabilizado ou entrada), do mais antigo
 // para o mais novo. O mês corrente entra sempre, para a tela nunca abrir vazia.
 function mesesDoExtrato(contas, entradas, hoje) {

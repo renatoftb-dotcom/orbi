@@ -17202,6 +17202,77 @@ function estimativaPorConta(itens) {
   }
   return r;
 }
+
+// ── Quadro de preenchimento da estimativa ───────────────────────
+// O Planejamento nasceu item a item: cada item traz conta, prestador e
+// observação. Isso é bom para detalhar um contrato, e péssimo para dar o
+// primeiro número em 40 contas — são 40 idas ao formulário.
+//
+// O quadro é o outro caminho: uma linha por conta do plano, um valor por
+// linha, tudo na mesma tela. Ele grava no MESMO `estimativaPL`, num item
+// marcado `origem: "quadro"` — é esse item que os fluxos automáticos do
+// site vão sobrescrever no futuro, sem encostar no que foi detalhado à mão.
+const EST_ORIGEM_QUADRO = "quadro";
+
+// O item de quadro de uma conta, se existir. Detalhado é todo o resto.
+const itemDeQuadro = (itens, contaId) =>
+  (itens || []).find(i => i && i.contaId === contaId && i.origem === EST_ORIGEM_QUADRO) || null;
+const itensDetalhados = (itens, contaId) =>
+  (itens || []).filter(i => i && i.contaId === contaId && i.origem !== EST_ORIGEM_QUADRO);
+
+// Uma linha por conta do P&L, na ordem do plano. `editavel` é falso quando a
+// conta já tem itens detalhados: ali o número é a soma deles, e mexer no
+// quadro esconderia de onde o valor veio.
+function linhasEstimativaPL(itens, grupos, contas) {
+  // Todos os grupos, "Excluídas" incluída: ela tem contas de verdade e
+  // precisa de campo. Quem a deixa de fora é o RESULTADO, não o quadro.
+  const linhas = [];
+  for (const g of (grupos || [])) {
+    for (const c of (contas || []).filter(x => x.grupo === g.id)) {
+      const quadro = itemDeQuadro(itens, c.id);
+      const detalhados = itensDetalhados(itens, c.id);
+      const somaDet = detalhados.reduce((a, i) => a + (Number(i.valor) || 0), 0);
+      const doQuadro = quadro ? Number(quadro.valor) || 0 : 0;
+      linhas.push({
+        contaId: c.id, nome: c.nome, grupoId: g.id, grupoTitulo: g.titulo, sinal: g.sinal,
+        valorQuadro: quadro ? doQuadro : null,
+        detalhados: detalhados.length,
+        total: Math.round((doQuadro + somaDet) * 100) / 100,
+        editavel: detalhados.length === 0,
+      });
+    }
+  }
+  return linhas;
+}
+
+// Escreve o valor de uma conta no item de quadro. Zero e vazio APAGAM o
+// item em vez de gravar 0: uma conta sem estimativa não é uma conta
+// estimada em zero, e a diferença aparece no extrato.
+function definirEstimativaDaConta(itens, contaId, valor, novoId) {
+  const lista = (itens || []).slice();
+  const i = lista.findIndex(x => x && x.contaId === contaId && x.origem === EST_ORIGEM_QUADRO);
+  const n = Number(valor);
+  const zerado = valor === "" || valor == null || !Number.isFinite(n) || n <= 0;
+  if (zerado) return i < 0 ? lista : lista.slice(0, i).concat(lista.slice(i + 1));
+  const v = Math.round(n * 100) / 100;
+  if (i >= 0) { lista[i] = { ...lista[i], valor: v }; return lista; }
+  return lista.concat([{ id: novoId, contaId, prestadorId: "", valor: v, observacao: "", origem: EST_ORIGEM_QUADRO }]);
+}
+
+// Totais do quadro por grupo, e o resultado estimado da obra: entradas
+// menos os grupos de custo. "Excluídas" fica de fora, como no P&L realizado.
+function totaisEstimativaPL(itens, grupos, contas) {
+  const linhas = linhasEstimativaPL(itens, grupos, contas);
+  const porGrupo = {};
+  for (const l of linhas) porGrupo[l.grupoId] = Math.round(((porGrupo[l.grupoId] || 0) + l.total) * 100) / 100;
+  let resultado = 0;
+  for (const g of grupos || []) {
+    if (g.entra_no_resultado === false) continue;
+    resultado += (g.sinal || 0) * (porGrupo[g.id] || 0);
+  }
+  return { porGrupo, resultado: Math.round(resultado * 100) / 100 };
+}
+
 // Meses com movimento (pagamento contabilizado ou entrada), do mais antigo
 // para o mais novo. O mês corrente entra sempre, para a tela nunca abrir vazia.
 function mesesDoExtrato(contas, entradas, hoje) {
@@ -19526,6 +19597,80 @@ function ProjetosPanel({ cliente, data, onAbrirOrcamento }) {
 
 // `obraInicial` + `onSairDaObra`: abre direto no detalhe de uma obra (menu
 // lateral Obras) e o "Voltar" do detalhe devolve para quem chamou.
+// ── Quadro de preenchimento da estimativa ─────────────────────
+// Uma linha por conta do plano, o valor digitado direto. É o caminho para
+// dar o primeiro número em quarenta contas sem quarenta idas ao formulário;
+// o detalhe item a item continua existindo em "Por conta".
+function QuadroEstimativaPL({ itens, podeEditar, isMobile, aoDefinir, fmtBRL }) {
+  const linhas = linhasEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
+  const totais = totaisEstimativaPL(itens, GRUPOS_PL, PLANO_CONTAS);
+  const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 9, padding: "6px 9px", fontSize: 12.5,
+    color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%",
+    boxSizing: "border-box", textAlign: "right" };
+  const grade = { display: "grid", gridTemplateColumns: isMobile ? "1fr 130px" : "minmax(190px, 1fr) 150px 150px", gap: 10, alignItems: "center" };
+  const porGrupo = {};
+  for (const l of linhas) (porGrupo[l.grupoId] || (porGrupo[l.grupoId] = [])).push(l);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 14 }}>
+        Um campo por conta do P&amp;L. Campo em branco é conta sem estimativa — não é conta estimada em zero.
+        Contas que já têm itens detalhados em “Por conta” mostram a soma deles e não são editadas aqui.
+      </div>
+      {GRUPOS_PL.map(g => {
+        const ls = porGrupo[g.id] || [];
+        if (!ls.length) return null;
+        return (
+          <div key={g.id} style={{ marginBottom: 18 }}>
+            <div style={{ ...grade, borderBottom: "1.5px solid rgba(38,36,33,0.14)", paddingBottom: 6, marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "#111827", textTransform: "uppercase", letterSpacing: 0.5 }}>{g.titulo}</div>
+              {!isMobile && <div />}
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", textAlign: "right" }}>{fmtBRL(totais.porGrupo[g.id] || 0)}</div>
+            </div>
+            {ls.map(l => (
+              <div key={l.contaId} style={{ ...grade, marginBottom: 7 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, color: "#111827" }}>{l.nome}</div>
+                  {!l.editavel && (
+                    <div style={{ fontSize: 10.5, color: "#6b7280" }}>
+                      {l.detalhados === 1 ? "1 item detalhado" : `${l.detalhados} itens detalhados`} — edite em “Por conta”
+                    </div>
+                  )}
+                </div>
+                {!isMobile && (
+                  l.editavel && podeEditar ? (
+                    <CampoNumeroBR estilo={cel} casas={2} valor={l.valorQuadro} placeholder="—"
+                      aoMudar={(v) => aoDefinir(l.contaId, v)} />
+                  ) : <div />
+                )}
+                <div style={{ fontSize: 12.5, fontWeight: l.total > 0 ? 600 : 400, color: l.total > 0 ? "#111827" : "#9ca3af", textAlign: "right", whiteSpace: "nowrap" }}>
+                  {l.total > 0 ? fmtBRL(l.total) : "—"}
+                </div>
+                {isMobile && l.editavel && podeEditar && (
+                  <div style={{ gridColumn: "1 / -1" }}>
+                    <CampoNumeroBR estilo={cel} casas={2} valor={l.valorQuadro} placeholder="—"
+                      aoMudar={(v) => aoDefinir(l.contaId, v)} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      <div style={{ ...grade, borderTop: "1.5px solid rgba(38,36,33,0.14)", paddingTop: 10 }}>
+        <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>Resultado estimado da obra</div>
+        {!isMobile && <div />}
+        <div style={{ fontSize: 13.5, fontWeight: 700, color: totais.resultado < 0 ? "#dc2626" : "#15803d", textAlign: "right", whiteSpace: "nowrap" }}>
+          {fmtBRL(totais.resultado)}
+        </div>
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+        Entradas menos os custos. “Excluídas” aparece no quadro, mas fica de fora do resultado.
+      </div>
+    </div>
+  );
+}
+
 function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaObra }) {
   const perm = getPermissoes();
   const [view, setView] = useState(obraInicial ? "detalheObra" : "lista");
@@ -19776,6 +19921,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setFormItemPL(null);
   }
 
+  // O quadro grava direto, sem formulário: uma conta, um valor. Parte do
+  // registro fresco da obra pelo mesmo motivo de salvarItemPL.
+  function definirEstimativa(contaId, valor) {
+    const novosItens = definirEstimativaDaConta(obraAtual.estimativaPL || [], contaId, valor, uid());
+    const obraAtualizada = { ...obraAtual, estimativaPL: novosItens };
+    gravarObras(obras.map(o => o.id === obraAtualizada.id ? obraAtualizada : o));
+    setObraSelecionada(obraAtualizada);
+  }
+
   async function removerItemPL(itemId) {
     const ok = await dialogo.confirmar({ titulo: "Remover item da estimativa?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true });
     if (!ok) return;
@@ -19942,7 +20096,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
   if (view === "planejamento" && obraSelecionada) {
     const itensPL = obraAtual.estimativaPL || [];
-    const totalPL = itensPL.reduce((s, i) => s + (Number(i.valor) || 0), 0);
+    // Somar TODOS os itens misturava entrada com custo: uma obra de 900 mil
+    // de entrada e 700 mil de custo mostrava "estimado 1,6 milhão". O topo
+    // agora separa os dois lados, como o P&L faz.
+    const totaisPL = totaisEstimativaPL(itensPL, GRUPOS_PL, PLANO_CONTAS);
+    const entradasPL = totaisPL.porGrupo.receitas || 0;
+    const totalPL = GRUPOS_PL
+      .filter(g => g.sinal < 0 && g.entra_no_resultado !== false)
+      .reduce((soma, g) => soma + (totaisPL.porGrupo[g.id] || 0), 0);
     const fmtBRL = v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     // ── Formulário de item (novo/editar) ──────────────────────
@@ -20034,8 +20195,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ fontSize: 12, color: "#4b5563" }}>P&L estimado · {obraSelecionada.nome}</div>
           </div>
           <div style={{ display: "flex", gap: 20, textAlign: "right" }}>
+            {entradasPL > 0 && (
+              <div>
+                <div style={{ fontSize: 11, color: "#4b5563", textTransform: "uppercase", letterSpacing: 0.5 }}>Entradas estimadas</div>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtBRL(entradasPL)}</div>
+              </div>
+            )}
             <div>
-              <div style={{ fontSize: 11, color: "#4b5563", textTransform: "uppercase", letterSpacing: 0.5 }}>Total estimado</div>
+              <div style={{ fontSize: 11, color: "#4b5563", textTransform: "uppercase", letterSpacing: 0.5 }}>Custo estimado</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: "#111827" }}>{fmtBRL(totalPL)}</div>
             </div>
             {totalRealizado > 0 && (
@@ -20049,7 +20216,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {/* Toggle de visão */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          {[["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"]].map(([v, l]) => (
+          {[["quadro", "Preencher"], ["conta", "Por conta"], ["prestador", "Por prestador"], ["extrato", "Extrato mensal"]].map(([v, l]) => (
             <button key={v} onClick={() => setVisaoPL(v)}
               style={{ border: visaoPL === v ? `1.5px solid ${AZUL_VK}` : "1px solid rgba(38,36,33,0.16)", background: "#fff", color: visaoPL === v ? "#111827" : "#4b5563", borderRadius: 20, padding: "6px 16px", fontSize: 12.5, fontWeight: visaoPL === v ? 700 : 500, cursor: "pointer", fontFamily: "inherit" }}>
               {l}
@@ -20057,7 +20224,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           ))}
         </div>
 
-        {visaoPL === "extrato" ? (() => {
+        {visaoPL === "quadro" ? (
+          <QuadroEstimativaPL itens={itensPL} podeEditar={perm.podeGerenciarObra} isMobile={isMobile}
+            fmtBRL={fmtBRL} aoDefinir={definirEstimativa} />
+        ) : visaoPL === "extrato" ? (() => {
           // no menu, o mês corrente também aparece (para registrar entrada nele);
           // nas colunas, só os meses que têm movimento
           const meses = mesesDoExtrato(contasDaObra, entradasDaObra, hojeIso);

@@ -609,3 +609,43 @@ padrão neste projeto.
   — só estender.
 - Não implementar orçado × realizado nesta entrega; só deixar o campo.
 - Não renomear `id` de conta ou de etapa depois que houver dado gravado.
+
+## Quadro de preenchimento da estimativa (Planejamento → Preencher)
+
+O Planejamento nasceu item a item: cada item traz conta, prestador e
+observação. Isso é bom para detalhar um contrato e péssimo para dar o
+primeiro número em quarenta contas — são quarenta idas ao formulário.
+
+A aba **Preencher** é o outro caminho: uma linha por conta do plano, um
+valor por linha, tudo na mesma tela, com subtotal por grupo e o resultado
+estimado no rodapé. Grava no MESMO `obra.estimativaPL`, num item marcado
+`origem: "quadro"`.
+
+Essa marca é o ponto de entrada dos fluxos automáticos: quando o
+quantitativo, os contratos e as cotações passarem a alimentar a estimativa,
+é o item de quadro que eles sobrescrevem — o que foi detalhado à mão fica
+onde está.
+
+Regras que o motor garante (`contas-pagar.jsx`, testadas em
+`contas-pagar.test.mjs`):
+
+- `linhasEstimativaPL()` devolve **uma linha por conta do plano**, na ordem
+  do plano, grupo por grupo. "Excluídas" entra no quadro — tem contas de
+  verdade; quem a deixa de fora é o resultado.
+- `definirEstimativaDaConta()` cria o item de quadro na primeira digitação e
+  troca o valor do mesmo item depois: nunca duplica a linha da conta.
+- **Campo vazio ou zero APAGA o item**, não grava 0. Conta sem estimativa não
+  é conta estimada em zero, e a diferença aparece no extrato.
+- Conta que já tem itens detalhados não é editável pelo quadro: a linha
+  mostra a soma deles e manda para "Por conta". Mexer ali esconderia de onde
+  o número veio. Quadro e detalhe convivem e somam na mesma conta.
+- `totaisEstimativaPL()` dá o total por grupo e o **resultado estimado** —
+  entradas menos os grupos de custo, com "Excluídas" fora.
+
+### O topo separava mal
+
+O cabeçalho somava TODOS os itens num "Total estimado". Enquanto ninguém
+lançava entrada na estimativa isso passava; com o quadro convidando a
+preencher as contas de receita, uma obra de 900 mil de entrada e 700 mil de
+custo passou a anunciar "estimado R$ 1.600.000,00". Agora são dois números,
+como no P&L: **Entradas estimadas** (só quando houver) e **Custo estimado**.

@@ -34,6 +34,8 @@ const modulo = new Function(`
            sincronizarContasDaObra, contasDesatualizadas, somarDias, contasDoContrato,
            extratoMensal, mesesDoExtrato, acumuladoAte, entradaObraVazia, mesDe,
            extratoMatriz, estimativaPorConta,
+           GRUPOS_PL, linhasEstimativaPL, definirEstimativaDaConta, totaisEstimativaPL,
+           itemDeQuadro, itensDetalhados, EST_ORIGEM_QUADRO,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -655,6 +657,77 @@ teste("quinzenal de 15 dias corridos: data fixa, sem dia da semana nem feriado",
   // a quinzena de sextas continua como antes
   const sextas = modulo.parcelasAPagar({ ...c, periodicidade: "quinzenais" }).map(x => x.vencimento);
   assert.strictEqual(sextas[0], "2026-03-20");
+});
+
+// ── Quadro de estimativa por conta do P&L ───────────────────────
+const linhas = (itens) => modulo.linhasEstimativaPL(itens, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+const daConta = (itens, id) => linhas(itens).find(l => l.contaId === id);
+
+teste("o quadro tem uma linha para cada conta do plano, na ordem do plano", () => {
+  const ls = linhas([]);
+  assert.strictEqual(ls.length, modulo.PLANO_CONTAS.length, "toda conta precisa de um campo");
+  assert.deepStrictEqual(ls.map(l => l.contaId).slice(0, 3), modulo.PLANO_CONTAS.slice(0, 3).map(c => c.id));
+  // conta sem estimativa vem vazia, não zerada
+  assert.strictEqual(daConta([], "material").valorQuadro, null);
+  assert.strictEqual(daConta([], "material").total, 0);
+  assert.strictEqual(daConta([], "material").editavel, true);
+});
+
+teste("digitar um valor cria o item de quadro; digitar de novo troca o mesmo", () => {
+  const um = modulo.definirEstimativaDaConta([], "material", 120000, "e1");
+  assert.strictEqual(um.length, 1);
+  assert.strictEqual(um[0].origem, "quadro");
+  assert.strictEqual(um[0].valor, 120000);
+  assert.strictEqual(daConta(um, "material").valorQuadro, 120000);
+  const dois = modulo.definirEstimativaDaConta(um, "material", 135500.5, "e2");
+  assert.strictEqual(dois.length, 1, "não pode duplicar a linha da mesma conta");
+  assert.strictEqual(dois[0].id, "e1", "o item é o mesmo, só o valor muda");
+  assert.strictEqual(dois[0].valor, 135500.5);
+});
+
+teste("apagar o campo tira a conta da estimativa, não a estima em zero", () => {
+  const com = modulo.definirEstimativaDaConta([], "frete", 3000, "e1");
+  for (const vazio of ["", null, 0, "0"]) {
+    const sem = modulo.definirEstimativaDaConta(com, "frete", vazio, "e2");
+    assert.deepStrictEqual(sem, [], `"${vazio}" tinha que apagar o item`);
+    assert.strictEqual(daConta(sem, "frete").valorQuadro, null);
+  }
+});
+
+teste("conta com item detalhado não é editável pelo quadro", () => {
+  const detalhado = [{ id: "d1", contaId: "empreiteiro", valor: 200000, observacao: "Contrato Zé" }];
+  const l = daConta(detalhado, "empreiteiro");
+  assert.strictEqual(l.editavel, false, "mexer no quadro esconderia de onde o valor veio");
+  assert.strictEqual(l.detalhados, 1);
+  assert.strictEqual(l.total, 200000);
+  assert.strictEqual(l.valorQuadro, null);
+});
+
+teste("quadro e detalhe convivem na mesma conta e somam", () => {
+  const misto = modulo.definirEstimativaDaConta(
+    [{ id: "d1", contaId: "material", valor: 50000 }], "material", 20000, "e1");
+  const l = daConta(misto, "material");
+  assert.strictEqual(l.total, 70000);
+  assert.strictEqual(l.valorQuadro, 20000);
+  assert.strictEqual(l.detalhados, 1);
+  // e o total por conta continua batendo com quem já lia a estimativa
+  assert.strictEqual(modulo.estimativaPorConta(misto).material, 70000);
+});
+
+teste("o resultado estimado é entradas menos custos, sem as excluídas", () => {
+  let itens = [];
+  itens = modulo.definirEstimativaDaConta(itens, "deposito_proprio", 900000, "e1");
+  itens = modulo.definirEstimativaDaConta(itens, "material", 400000, "e2");
+  itens = modulo.definirEstimativaDaConta(itens, "empreiteiro", 250000, "e3");
+  itens = modulo.definirEstimativaDaConta(itens, "impostos", 50000, "e4");
+  itens = modulo.definirEstimativaDaConta(itens, "reembolsos", 30000, "e5");
+  const t = modulo.totaisEstimativaPL(itens, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+  assert.strictEqual(t.porGrupo.receitas, 900000);
+  assert.strictEqual(t.porGrupo.materiais, 400000);
+  assert.strictEqual(t.porGrupo.maoDeObra, 250000);
+  assert.strictEqual(t.porGrupo.servicos, 50000);
+  assert.strictEqual(t.porGrupo.excluidas, 30000, "aparece no quadro");
+  assert.strictEqual(t.resultado, 200000, "mas fica fora do resultado");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
