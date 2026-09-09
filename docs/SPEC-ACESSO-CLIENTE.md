@@ -27,3 +27,23 @@ por isso não derrubam nada.
 lançar despesa. Por isso, em `OrcamentoObraView` e `CronogramaObraView`, o
 portão de edição usa `podeGerenciarObra` (falso para o cliente), não
 `podeEditar`.
+
+## O Chrome preenchia a "senha temporária recebida" sozinho
+
+Sintoma: o cliente entra pela primeira vez, cai na tela de troca obrigatória e
+o campo "Senha temporária recebida" já vem preenchido — com a senha salva do
+escritório naquele navegador. Quem não reparasse enviava a senha errada.
+
+Causa: os três campos de `CampoSenha` não tinham `name` nem `autocomplete`. Sem
+isso o Chrome trata o primeiro `input[type=password]` da página como o campo de
+login do site e preenche com o que está salvo para o domínio.
+
+Correção: os três campos declaram `autocomplete="new-password"` — inclusive o
+da senha temporária, que semanticamente seria `current-password`, mas é
+justamente esse valor que dispara o preenchimento. `new-password` é o único que
+o Chrome respeita como "não preencha". Vão junto `name` próprio,
+`autoCorrect/autoCapitalize=off`, `spellCheck=false` e os opt-outs de
+LastPass/1Password.
+
+O texto da tela também passou a distinguir primeiro acesso do cliente
+("Digite a senha que o escritório te passou") do reset feito por admin.

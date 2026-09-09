@@ -42762,7 +42762,7 @@ function HomeMenu({ data, setAba, tentarTrocar, isMaster }) {
 // Input de senha com botão "olho" pra revelar conteúdo. Usado pelos 3
 // campos da tela de troca obrigatória. type alterna entre password (oculto,
 // default) e text (revelado). Visibilidade é controlada pelo pai.
-function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus }) {
+function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus, nome }) {
   return (
     <div style={{ position:"relative" }}>
       <input
@@ -42771,6 +42771,18 @@ function CampoSenha({ valor, onChange, visivel, setVisivel, disabled, autoFocus 
         onChange={e => onChange(e.target.value)}
         disabled={disabled}
         autoFocus={autoFocus}
+        // Todos os três campos são "new-password" de propósito, inclusive o da
+        // senha temporária: com "current-password" (ou sem nada) o Chrome
+        // preenchia o campo com a senha salva do escritório, e o usuário
+        // enviava a senha errada sem perceber. "new-password" é o único valor
+        // que o Chrome respeita como "não preencha".
+        name={nome}
+        autoComplete="new-password"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        data-lpignore="true"
+        data-1p-ignore="true"
         style={{
           width:"100%", border:"2px solid #d1d5db", borderRadius: 12,
           padding:"10px 40px 10px 12px", // padding direito maior pro botão
@@ -42868,7 +42880,9 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
           Trocar senha
         </div>
         <div style={{ fontSize:13, color:"#4b5563", marginBottom:20, lineHeight:1.5 }}>
-          Sua senha foi resetada por um administrador. Para continuar, escolha uma senha nova que só você saiba.
+          {usuario?.perfil === "cliente"
+            ? "Este é o seu primeiro acesso. Digite a senha que o escritório te passou e escolha uma nova, que só você saiba."
+            : "Sua senha foi resetada por um administrador. Para continuar, escolha uma senha nova que só você saiba."}
         </div>
 
         <div style={{ marginBottom:14 }}>
@@ -42876,6 +42890,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
             Senha temporária recebida
           </label>
           <CampoSenha
+            nome="vk-senha-temporaria"
             valor={senhaAtual}
             onChange={setSenhaAtual}
             visivel={verAtual}
@@ -42890,6 +42905,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
             Nova senha (mínimo 6 caracteres)
           </label>
           <CampoSenha
+            nome="vk-senha-nova"
             valor={senhaNova}
             onChange={setSenhaNova}
             visivel={verNova}
@@ -42903,6 +42919,7 @@ function TelaTrocarSenhaObrigatoria({ usuario, onTrocada, onLogout }) {
             Confirme a nova senha
           </label>
           <CampoSenha
+            nome="vk-senha-confirmar"
             valor={confirmar}
             onChange={setConfirmar}
             visivel={verConfirmar}
