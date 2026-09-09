@@ -269,3 +269,35 @@ inteira ao prazo. Pré-obra e limpeza ficam sempre. Reforma **com** ampliação
 A tela do cronograma também exigia área construída para abrir — justamente a
 obra em que o prazo mais muda ficava sem tela. Agora abre com a construção
 existente medida.
+
+## Canteiro novo: o poste não vem de graça
+
+As "Instalações pré obra" eram uma lista fixa, presente em todo orçamento:
+padrão de entrada de energia (poste trifásico), serra circular, furadeira,
+mangueira, pás, cavadeiras, luvas. Em terreno vazio isso é obrigatório. Numa
+reforma o imóvel já tem poste, água e luz, e o cliente não compra serra
+circular de novo — mas a lista entrava assim mesmo.
+
+Agora há **Canteiro novo (poste e ferramentas)** no bloco Geral:
+
+- **obra nova** → ligado por padrão;
+- **reforma** → desligado por padrão;
+- o tique manda nos dois sentidos: reforma que precisa de padrão de entrada
+  novo liga; obra nova em terreno que já tem canteiro desliga.
+
+O **gabarito** (tábuas e sarrafos da marcação) não depende disso — ele já
+sai da medida de gabarito, e uma ampliação precisa dele mesmo sem canteiro
+novo. O compactador também não: é aluguel de equipamento de uma atividade,
+não enxoval de canteiro.
+
+## De onde vem o valor da montagem do banheiro
+
+`Montagem de banheiro (mão de obra)`, R$ 600 por banheiro, é **referência do
+módulo** — um chute calibrado meu, não uma cotação. Cobre só a mão de obra
+de instalar; as louças e os metais entram pelo kit, em linhas próprias. O
+nome do item leva "(mão de obra)" justamente porque, sem isso, a linha de
+R$ 600 ao lado das peças fica ambígua.
+
+Está na semente como PRE-025: assim que você cotar com o seu instalador,
+edite em Insumos e o orçamento passa a usar o seu preço. A memória de
+cálculo diz, em cada linha, se o preço veio do catálogo ou da referência.

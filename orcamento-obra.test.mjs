@@ -713,7 +713,9 @@ teste("memória de cálculo: instalações pré obra e fundação, com o último
   assert.strictEqual(achar("Maquinário - Perfuração").qtd, 92); // 20 × 4 × 1,15
   // item de canteiro tem só a explicação, sem conta
   const poste = achar("Elétrica - Poste Padrão - Trifásica C3");
-  assert.deepStrictEqual(poste.memoria.map((x) => x.tipo), ["nota"]);
+  // o poste ganhou o motivo de estar ali (canteiro novo) e termina na qtd
+  assert.deepStrictEqual(poste.memoria.map((x) => x.tipo), ["nota", "nota", "conta"]);
+  assert.ok(poste.memoria.some((x) => /canteiro novo/i.test(x.texto || "")));
   // a memória não é gravada com o orçamento: quem grava tira o campo
   assert.ok(!("memoria" in JSON.parse(JSON.stringify({ ...poste, memoria: undefined }))));
 });
@@ -1070,7 +1072,7 @@ teste("pintura sai com as quatro linhas de tinta", () => {
 teste("banheiro e esquadria são mão de obra, contados por unidade", () => {
   const out = [];
   modulo.execucaoNoExistente(projetoReforma({ banheiro: { executar: 2 }, esquadria: { executar: 5 } }), out, { materiais: [] });
-  const b = out.find(i => i.item === "Montagem de banheiro");
+  const b = out.find(i => /^Montagem de banheiro/.test(i.item));
   assert.strictEqual(b.qtd, 2);
   assert.strictEqual(b.preco, 600);
   assert.strictEqual(b.tipo, "Prestadores de serviços");
@@ -1355,7 +1357,7 @@ teste("a mão de obra de montar continua separada das peças", () => {
   const out = [];
   modulo.execucaoNoExistente(modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
     existente: { banheiro: { executar: 2 } } }), out, comKits);
-  const mo = out.find(i => i.item === "Montagem de banheiro");
+  const mo = out.find(i => /^Montagem de banheiro/.test(i.item));
   assert.strictEqual(mo.qtd, 2);
   assert.strictEqual(mo.tipo, "Prestadores de serviços");
   assert.ok(out.some(i => /louças e metais/i.test(i.subEtapa || "")), "e as peças vêm junto");
@@ -1464,6 +1466,52 @@ teste("reforma pura não carrega bomba nem compactador da obra nova", () => {
   const canteiro = r.itens.filter(i => /Concreto - Bomba|Compactador/.test(i.item));
   assert.deepStrictEqual(canteiro.map(i => `${i.etapa}/${i.item}`), [],
     "nenhum item de canteiro da obra nova pode entrar numa reforma sem laje nem contrapiso do térreo");
+});
+
+
+// ── Canteiro novo: poste e ferramentas ──────────────────────────
+const canteiro = (projeto) => modulo.gerarOrcamentoObra(projeto, { materiais: [] })
+  // "Locação Ferramentas" é aluguel de equipamento de uma atividade
+  // (compactador do contrapiso) — não faz parte do enxoval do canteiro.
+  .itens.filter(i => /Poste Padrão|Disco Serra|Torneira Jardim|^Ferramentas - /.test(i.item)).map(i => i.item);
+
+teste("obra nova continua montando o canteiro inteiro", () => {
+  const itens = canteiro({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 120, gabarito: 60 }, terreo: { area: 120 } });
+  assert.ok(itens.includes("Elétrica - Poste Padrão - Trifásica C3"), "obra nova precisa do padrão de entrada");
+  assert.ok(itens.length > 10, `esperava o enxoval de ferramentas, vieram ${itens.length}`);
+});
+
+teste("reforma não compra poste nem enxoval de ferramentas", () => {
+  const itens = canteiro({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: {}, terreo: {}, existente: { alvenaria: { remover: 40, executar: 12 } } });
+  assert.deepStrictEqual(itens, [],
+    "o imóvel da reforma já tem poste, água e ferramenta — nada disso entra sozinho");
+});
+
+teste("o tique manda nos dois sentidos", () => {
+  const reformaComCanteiro = canteiro({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    canteiroNovo: true, arquitetura: { gabarito: 40 }, terreo: {}, existente: { alvenaria: { executar: 20 } } });
+  assert.ok(reformaComCanteiro.includes("Elétrica - Poste Padrão - Trifásica C3"),
+    "reforma que precisa de padrão de entrada novo pode ligar o canteiro");
+  const novaSemCanteiro = canteiro({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    canteiroNovo: false, arquitetura: { areaConstruida: 120, gabarito: 60 }, terreo: { area: 120 } });
+  assert.deepStrictEqual(novaSemCanteiro, [], "obra nova em terreno que já tem canteiro pode desligar");
+});
+
+teste("o gabarito não depende do canteiro — quem manda é a medida", () => {
+  const r = modulo.gerarOrcamentoObra({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { gabarito: 40 }, terreo: {}, existente: { alvenaria: { executar: 20 } } }, { materiais: [] });
+  assert.ok(r.itens.some(i => /Tábuas de 10cm/.test(i.item)), "com gabarito medido, a marcação sai mesmo sem canteiro novo");
+});
+
+teste("a mão de obra do banheiro diz que é mão de obra", () => {
+  const out = [];
+  modulo.execucaoNoExistente(modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    existente: { banheiro: { executar: 1 } } }), out, { materiais: [] });
+  const mo = out.find(i => /Montagem de banheiro/.test(i.item));
+  assert.strictEqual(mo.item, "Montagem de banheiro (mão de obra)");
+  assert.strictEqual(mo.tipo, "Prestadores de serviços");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

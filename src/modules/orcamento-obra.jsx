@@ -742,25 +742,37 @@ function instalacoesObraProjetos(cp, out) {
   const baseInst = { ordem: ORD.instalacoes, tipo: "Bruto", etapa: "Instalações pré obra e projetos" };
   const baseFund = { ordem: ORD.instalacoes, tipo: "Bruto", etapa: "Fundação" };
 
-  // Quantidades fixas — sempre presentes em qualquer orçamento (não dependem
-  // de nenhum CP_ de projeto), exatamente como no .bas.
-  const memPoste = MEM_CANTEIRO("Padrão de entrada de energia da obra: um por obra. Trifásico C3 é o padrão adotado pelo escritório; se a obra for monofásica, troque o item.");
+  // Canteiro novo: o padrão de entrada de energia e o enxoval de ferramentas
+  // que se monta ao abrir uma obra. Em terreno vazio isso é obrigatório; numa
+  // reforma o imóvel já tem poste, água e luz, e o cliente não compra serra
+  // circular de novo. Por isso o bloco é ligado por padrão em obra nova e
+  // desligado em reforma — e o tique no bloco Geral manda nos dois casos.
   const memFerramenta = MEM_CANTEIRO();
-  emitir(out, { ...baseInst, subEtapa: "Bruto - Elétrica", item: "Elétrica - Poste Padrão - Trifásica C3", unidade: "Unidades", qtd: 1, memoria: memPoste });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Serra Circular Dewalt DWE560-B2", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Furadeira Dewalt 1/2 DWD502-BR 710W", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Nível", unidade: "Mts", qtd: 25, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Lapis", unidade: "Rolos", qtd: 4, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Disco Serra Circular", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Metal - Hidráulica - Torneira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Pá de bico com cabo", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Cavadeira", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Jardim", unidade: "Mts", qtd: 30, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Engate Rápido Mangueira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Torquesa Ferragem", unidade: "Unidades", qtd: 5, memoria: memFerramenta });
-  emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Luva Mucambo", unidade: "Unidades", qtd: 10, memoria: memFerramenta });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Linha de pedreiro", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
-  emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Carrinho Pedreiro", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+  if (cp.canteiroNovo) {
+    emitir(out, { ...baseInst, subEtapa: "Bruto - Elétrica", item: "Elétrica - Poste Padrão - Trifásica C3", unidade: "Unidades", qtd: 1, memoria: [
+      MEM.nota("Padrão de entrada de energia da obra: um por obra. Trifásico C3 é o padrão adotado pelo escritório; se a obra for monofásica, troque o item."),
+      MEM.nota("Entra porque a obra está marcada como canteiro novo, no bloco Geral. Reforma de imóvel que já tem energia costuma desmarcar."),
+      MEM.conta("Padrões de entrada", "um por obra", [], 1, "unidade"),
+    ] });
+  }
+  if (cp.canteiroNovo) {
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Serra Circular Dewalt DWE560-B2", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Furadeira Dewalt 1/2 DWD502-BR 710W", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Nível", unidade: "Mts", qtd: 25, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Lapis", unidade: "Rolos", qtd: 4, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Disco Serra Circular", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Metal - Hidráulica - Torneira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Pá de bico com cabo", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Cavadeira", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Mangueira de Jardim", unidade: "Mts", qtd: 30, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Engate Rápido Mangueira Jardim", unidade: "Unidades", qtd: 1, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Torquesa Ferragem", unidade: "Unidades", qtd: 5, memoria: memFerramenta });
+    emitir(out, { ...baseInst, subEtapa: "Marcação Obra", item: "Ferramentas - Luva Mucambo", unidade: "Unidades", qtd: 10, memoria: memFerramenta });
+  }
+  if (cp.canteiroNovo) {
+    emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Linha de pedreiro", unidade: "Unidades", qtd: 2, memoria: memFerramenta });
+    emitir(out, { ...baseFund, subEtapa: "Marcação Obra", item: "Ferramentas - Carrinho Pedreiro", unidade: "Unidades", qtd: 4, memoria: memFerramenta });
+  }
 
   const gab = cp.gabarito;
   const tabua10Bruto = gab / 3 * 1.2;
@@ -3821,6 +3833,11 @@ function normalizarProjeto(projeto) {
     tipologia,
     tipoObra,
     padrao,
+    // Canteiro novo (poste de entrada e enxoval de ferramentas): obra nova
+    // liga por padrão, reforma desliga. Projeto antigo sem o campo segue o
+    // mesmo critério, então nada muda no que já estava orçado como nova.
+    canteiroNovo: p.canteiroNovo == null ? tipoObra !== "reforma" : !!p.canteiroNovo,
+
     // Reforma: as medidas da visita, na matriz demolir × construir. Só são
     // lidas quando tipoObra = "reforma"; em obra nova o bloco nem aparece no
     // formulário. migrarExistente lê também o formato antigo (um campo por
@@ -4199,12 +4216,12 @@ const ITENS_EXISTENTE = [
   // visita: "dois banheiros" se responde na hora; "onze peças" exige contar
   // vaso, lavatório, torneira, ducha, registros e acessórios um a um.
   { id: "banheiro",     nome: "Banheiros",              unidade: "un", entulhoM3: 0.30,
-    remover:  { item: "Desmontagem de banheiro", valor: 220 },
+    remover:  { item: "Desmontagem de banheiro (mão de obra)", valor: 220 },
     // além da mão de obra, o banheiro montado leva as peças: é o mesmo kit
     // LOUCAS_BANHEIRO da obra nova, aplicado uma vez por banheiro, com o
     // padrão escolhido banheiro a banheiro (a suíte costuma ser de padrão
     // mais alto que o social, e cobrar o mesmo dos dois falseia o total).
-    executar: { item: "Montagem de banheiro",    valor: 600 }, kit: "LOUCAS_BANHEIRO", porPadrao: true },
+    executar: { item: "Montagem de banheiro (mão de obra)", valor: 600 }, kit: "LOUCAS_BANHEIRO", porPadrao: true },
   { id: "esquadria",    nome: "Esquadrias",             unidade: "un", entulhoM3: 0.05,
     remover:  { item: "Retirada de esquadria",   valor: 60 },
     executar: { item: "Instalação de esquadria", valor: 90 } },
@@ -4875,6 +4892,7 @@ function projetoVazio() {
   return {
     tipologia: "Sobrado",
     tipoObra: "nova",
+    canteiroNovo: true,
     padrao: "Médio",
     tamanhoComodos: "Médio",
     temPiscina: false,
@@ -5669,6 +5687,10 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoSelect label="Padrão" valor={padraoObra(projetoDraft)} onChange={(v) => set("padrao", v)} opcoes={PADROES_OBRA} />
           <CampoSelect label="Tamanho dos cômodos" valor={projetoDraft.tamanhoComodos || "Médio"} onChange={(v) => set("tamanhoComodos", v)} opcoes={TAMANHOS_COMODOS} />
           <CampoSelect label="Piscina" valor={temPiscina ? "sim" : "nao"} onChange={(v) => set("temPiscina", v === "sim")} opcoes={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]} />
+          <CampoSelect label="Canteiro novo (poste e ferramentas)"
+            valor={(projetoDraft.canteiroNovo == null ? (projetoDraft.tipoObra !== "reforma") : !!projetoDraft.canteiroNovo) ? "sim" : "nao"}
+            onChange={(v) => set("canteiroNovo", v === "sim")}
+            opcoes={[{ value: "sim", label: "Sim" }, { value: "nao", label: "Não — já existe no local" }]} />
           {ehTerrea ? (
             <CampoNum label="Área construída (m²)" valor={get("arquitetura.areaConstruida")} onChange={setAreaConstruidaTerrea} />
           ) : (
