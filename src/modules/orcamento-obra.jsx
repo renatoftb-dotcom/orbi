@@ -878,7 +878,13 @@ function fundacao(cp, out) {
     MEM.conta("Volume com 10% de perda", `(${partesConcreto.map(([nome]) => nome).join(" + ")}) × 1,10`, partesConcreto, concretoBruto, "m³"),
     MEM.teto(concretoBruto, concreto, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
   ] });
-  emitir(out, { ...base, item: "Concreto - Bomba", unidade: "Unidades", qtd: 1, memoria: MEM_CANTEIRO("Uma bombeada de concreto por obra na fundação. Se a concretagem for feita em mais de um dia, aumente a quantidade no item.") });
+  if (concreto > 0) {
+    emitir(out, { ...base, item: "Concreto - Bomba", unidade: "Unidades", qtd: 1, memoria: [
+      MEM.nota("Uma bombeada de concreto por obra na fundação. Se a concretagem for feita em mais de um dia, aumente a quantidade no item."),
+      MEM.dado("Concreto da fundação", concreto, "m³", "passo anterior"),
+      MEM.conta("Bombeadas", "uma concretagem", [], 1, "bombeada"),
+    ] });
+  }
   emitir(out, { ...base, subEtapa: "Impermeabilização", item: "Impermeabilizantes - Vedatop 18KG", unidade: "Baldes 18L", qtd: vedatop, memoria: [
     MEM.nota("Impermeabilização do baldrame: as duas faces (30 cm de altura cada) mais o topo (15 cm de largura), com 3 kg por m² e 10% de perda. Balde de 18 kg."),
     memPerim,
@@ -912,7 +918,13 @@ function contrapisoInternoTerreo(cp, out) {
   const notaMassiam = MEM.nota("Massiamento: a camada fina de 5 cm de argamassa que nivela o contrapiso para receber o piso.");
 
   const base = { ordem: ORD.contrapisoInterno, tipo: "Bruto", etapa: "Contrapiso Interno" };
-  emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Locação Ferramentas -  Compactador", unidade: "Dias", qtd: 2, memoria: MEM_CANTEIRO("Dois dias de compactador alugado para apiloar o solo antes de concretar o contrapiso. Terreno mole ou obra grande pede mais dias — ajuste no item.") });
+  if (area > 0) {
+    emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Locação Ferramentas -  Compactador", unidade: "Dias", qtd: 2, memoria: [
+      MEM.nota("Dois dias de compactador alugado para apiloar o solo antes de concretar o contrapiso. Terreno mole ou obra grande pede mais dias — ajuste no item."),
+      memArea,
+      MEM.conta("Diárias do compactador", "dois dias", [], 2, "dias"),
+    ] });
+  }
   emitir(out, { ...base, subEtapa: "Contrapiso Interno Pav. Térreo", item: "Areia Grossa", unidade: "m3", qtd: areiaGrossaContrap, memoria: [
     notaContrap, memArea,
     MEM.conta("Areia do concreto magro, com 10% de perda", "área × 0,60 × 0,10 × 1,10", [["área", area]], areiaGrossaContrapBruto, "m³"),
@@ -1070,7 +1082,17 @@ function vigaRespaldoLajeTerreo(cp, out) {
     MEM.teto(qtdLojeBruto, qtdLoje, "m²"),
   ] });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Locação Ferramentas - Escoras", unidade: "Unidade", qtd: qtdEscoras, memoria: memEscoras(t.areaLoje, qtdEscorasBruto, qtdEscoras) });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Concreto - Bomba", unidade: "Unidade", qtd: 1, memoria: MEM_CANTEIRO("Uma bombeada de concreto para a laje do térreo. Concretagem em mais de um dia pede mais — ajuste no item.") });
+  // A bombeada só existe se houver laje para concretar. Sem m² de laje —
+  // térrea com telhado direto sobre a parede, reforma sem laje nova — a
+  // bomba entrava assim mesmo, com quantidade fixa 1, e cobrava um caminhão
+  // que ninguém chamou.
+  if (t.areaLoje > 0 || lojeMacica > 0) {
+    emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: "Concreto - Bomba", unidade: "Unidade", qtd: 1, memoria: [
+      MEM.nota("Uma bombeada de concreto para a laje do térreo. Concretagem em mais de um dia pede mais — ajuste no item."),
+      MEM.dado("Área de laje a concretar", t.areaLoje + t.areaLojeMacica, "m²", "blocos Laje (forro) e Laje maciça"),
+      MEM.conta("Bombeadas", "uma concretagem", [], 1, "bombeada"),
+    ] });
+  }
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: t.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: lojeMacica, memoria: [
     MEM.nota("Trecho de laje maciça (concretada no lugar), com 15 cm de espessura."),
     MEM.dado("Área de laje maciça no térreo", t.areaLojeMacica, "m²", "bloco Laje (forro)"),
@@ -1315,7 +1337,13 @@ function vigaRespaldoLajePav1(cp, out) {
     MEM.conta("Escoras, com 10% de perda", p1.tipoLoje === "Protendida" ? "área × 0,60 × 1,50 × 1,10" : "área × 1,50 × 1,10", [["área", p1.areaLoje]], qtdEscorasBruto, "escoras"),
     MEM.teto(qtdEscorasBruto, qtdEscoras, "escoras"),
   ] });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Concreto - Bomba", unidade: "Unidade", qtd: 1, memoria: MEM_CANTEIRO("Uma bombeada de concreto para a laje do pav. 1.") });
+  if (p1.areaLoje > 0 || lojeMacica > 0) {
+    emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: "Concreto - Bomba", unidade: "Unidade", qtd: 1, memoria: [
+      MEM.nota("Uma bombeada de concreto para a laje do pav. 1."),
+      MEM.dado("Área de laje a concretar", p1.areaLoje + p1.areaLojeMacica, "m²", "blocos Laje Pav. 1 e Laje maciça"),
+      MEM.conta("Bombeadas", "uma concretagem", [], 1, "bombeada"),
+    ] });
+  }
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: p1.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: lojeMacica, memoria: [
     MEM.nota("Trecho de laje maciça do pav. 1, com 15 cm de espessura."),
     MEM.dado("Área de laje maciça no pav. 1", p1.areaLojeMacica, "m²", "bloco Laje Pav. 1"),
@@ -2183,7 +2211,13 @@ function piscina(cp, out) {
     MEM.dado("Profundidade de cada estaca", p.profundidadeEstacas, "m", "bloco Piscina"),
     MEM.conta("Metros perfurados", "estacas × profundidade × 1,15", [["estacas", p.qtdEstacas], ["profundidade", p.profundidadeEstacas]], perfuracaoEstacas, "m"),
   ] });
-  emitir(out, { ...base, subEtapa: "Contrapiso", item: "Locação Ferramentas -  Compactador", unidade: "Unidades", qtd: 2, memoria: MEM_CANTEIRO("Dois dias de compactador para apiloar o fundo da cava antes de concretar o contrapiso da piscina.") });
+  if (cp.areaConstruidaPiscina > 0) {
+    emitir(out, { ...base, subEtapa: "Contrapiso", item: "Locação Ferramentas -  Compactador", unidade: "Unidades", qtd: 2, memoria: [
+      MEM.nota("Dois dias de compactador para apiloar o fundo da cava antes de concretar o contrapiso da piscina."),
+      MEM.dado("Área construída da piscina", cp.areaConstruidaPiscina, "m²", "bloco Piscina"),
+      MEM.conta("Diárias do compactador", "dois dias", [], 2, "dias"),
+    ] });
+  }
   emitir(out, { ...base, subEtapa: "Contrapiso", item: "Pedra", unidade: "m3", qtd: pedraContrap, memoria: [
     MEM.nota("Contrapiso do fundo da piscina: 10 cm de concreto."),
     ...memPiscina,

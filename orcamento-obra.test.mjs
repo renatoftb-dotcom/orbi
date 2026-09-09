@@ -1411,5 +1411,60 @@ teste("o volume e as caçambas do entulho são funções puras, reusáveis", () 
   assert.strictEqual(modulo.cacambasDaReforma({}), 0);
 });
 
+
+// ── Item de canteiro só quando a atividade acontece ─────────────
+const bombas = (projeto) => modulo.gerarOrcamentoObra(projeto, { materiais: [] })
+  .itens.filter(i => i.item === "Concreto - Bomba");
+
+teste("sem m² de laje não entra bomba de concreto", () => {
+  // térrea com telhado direto sobre a parede: paredes e contrapiso sim, laje não
+  const semLaje = bombas({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 120, m2ParedesTotal: 240, m2ParedesInternas: 140, m2ParedesExternas: 100 },
+    terreo: { area: 120, m2Parede20: 240 } });
+  assert.deepStrictEqual(semLaje.map(i => i.subEtapa), [],
+    "sem laje e sem concreto de fundação a bomba não pode aparecer");
+});
+
+teste("com m² de laje a bomba volta", () => {
+  const comLaje = bombas({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 120, m2ParedesTotal: 240, m2ParedesInternas: 140, m2ParedesExternas: 100 },
+    terreo: { area: 120, m2Parede20: 240, areaLoje: 110 } });
+  assert.ok(comLaje.some(i => i.subEtapa === "Laje Térreo"), "laje de 110 m² pede bombeada");
+  assert.ok(comLaje.every(i => i.qtd === 1));
+});
+
+teste("laje maciça sozinha também pede bomba", () => {
+  const so = bombas({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 100 }, terreo: { area: 100, areaLojeMacica: 40 } });
+  assert.ok(so.some(i => i.subEtapa === "Laje Térreo"));
+});
+
+teste("a bomba da fundação segue o concreto da fundação", () => {
+  const sem = bombas({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 100 }, terreo: { area: 100 }, engenharia: { fundacao: {} } });
+  assert.ok(!sem.some(i => i.etapa === "Fundação"));
+  const com = bombas({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 100 }, terreo: { area: 100 },
+    engenharia: { fundacao: { concreto: { sapatas: 6 } } } });
+  assert.ok(com.some(i => i.etapa === "Fundação"), "com concreto de fundação a bomba entra");
+});
+
+teste("compactador só onde há contrapiso a apiloar", () => {
+  const r = modulo.gerarOrcamentoObra({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: {}, terreo: {}, existente: { alvenaria: { executar: 20 } } }, { materiais: [] });
+  assert.deepStrictEqual(r.itens.filter(i => /Compactador/.test(i.item)).map(i => i.etapa), [],
+    "reforma sem contrapiso do térreo não aluga compactador");
+});
+
+teste("reforma pura não carrega bomba nem compactador da obra nova", () => {
+  const r = modulo.gerarOrcamentoObra({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: {}, terreo: {},
+    existente: { alvenaria: { remover: 40, executar: 12 }, piso: { remover: 30, executar: 30 },
+      contrapiso: { remover: 30, executar: 30 } } }, { materiais: [] });
+  const canteiro = r.itens.filter(i => /Concreto - Bomba|Compactador/.test(i.item));
+  assert.deepStrictEqual(canteiro.map(i => `${i.etapa}/${i.item}`), [],
+    "nenhum item de canteiro da obra nova pode entrar numa reforma sem laje nem contrapiso do térreo");
+});
+
 console.log(`\n${passou} passou, ${falhou} falhou`);
 if (falhou > 0) process.exit(1);

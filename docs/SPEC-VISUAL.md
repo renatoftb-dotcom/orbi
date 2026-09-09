@@ -99,3 +99,28 @@ título com o nome do serviço e o subtotal dele:
 Com uma sub-etapa só, o título não aparece — o da etapa já diz. Vale para
 todas as etapas, não só a reforma: "Contrapiso Interno" também separa o
 contrapiso do massiamento.
+
+## Item de canteiro só quando a atividade acontece
+
+Alguns itens entravam com quantidade fixa, sem olhar se a atividade existia
+na obra: a bombeada de concreto (1 por laje, 1 na fundação) e o compactador
+(2 dias). Numa térrea com telhado direto sobre a parede, ou numa reforma sem
+laje nova, a bomba da laje entrava assim mesmo — cobrando um caminhão que
+ninguém chamou.
+
+Agora cada um depende do que ele serve:
+
+| item | só entra se |
+|---|---|
+| Concreto - Bomba (laje térreo) | área de laje ou de laje maciça do térreo > 0 |
+| Concreto - Bomba (laje pav. 1) | área de laje ou de laje maciça do pav. 1 > 0 |
+| Concreto - Bomba (fundação) | volume de concreto da fundação > 0 |
+| Compactador (contrapiso do térreo) | área do térreo > 0 |
+| Compactador (piscina) | área construída da piscina > 0 |
+
+A quantidade continua fixa — uma bombeada, dois dias — porque é o que a
+planilha do escritório sempre usou; o que mudou é o **se**. Concretagem em
+mais de um dia continua sendo ajuste manual no item.
+
+A memória de cálculo desses itens agora mostra a medida que os liberou e
+termina na quantidade, como todas as outras linhas.
