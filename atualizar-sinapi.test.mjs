@@ -26,11 +26,21 @@ function teste(nome, fn) {
 }
 
 const lista = JSON.parse(rodar("listar"));
-teste("listar: 62 composições (11 horistas + receitas), 14 insumos, 2 serviços manuais", () => {
+// "Manual" = serviço sem receita SINAPI: o coletor não tem de onde puxar as
+// horas, então elas só mudam se o escritório editar. Os serviços de reforma
+// nascem assim de propósito — são referência de partida para calibrar com a
+// equipe, não composição publicada.
+const MANUAIS_ESPERADOS = [
+  "HIDRO_BANHEIRO", "ESGOTO_BANHEIRO",
+  "DEMOLICAO_ALVENARIA", "DEMOLICAO_DRYWALL", "REMOCAO_REVESTIMENTO", "REMOCAO_PISO",
+  "RETIRADA_CONTRAPISO", "REMOCAO_FORRO", "DEMOLICAO_CALCADA", "RETIRADA_ESQUADRIA",
+  "DESMONTAGEM_BANHEIRO", "MONTAGEM_BANHEIRO", "CARGA_ENTULHO", "DRYWALL_PAREDE",
+];
+teste("listar: 62 composições (11 horistas + receitas), 14 insumos, serviços manuais conhecidos", () => {
   assert.strictEqual(lista.composicoes.length, 62);
   assert.strictEqual(lista.composicoes.filter((c) => c.horista).length, 11);
   assert.strictEqual(lista.insumos.length, 14);
-  assert.deepStrictEqual(lista.servicosManuais, ["HIDRO_BANHEIRO", "ESGOTO_BANHEIRO"]);
+  assert.deepStrictEqual(lista.servicosManuais, MANUAIS_ESPERADOS);
   assert.ok(lista.composicoes.every((c) => /^https:\/\/buscadorsinapi\.com\.br\/sp\/composicao\/\d+$/.test(c.url)));
 });
 

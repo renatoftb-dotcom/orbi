@@ -4166,7 +4166,11 @@ const ITENS_EXISTENTE = [
   // vaso, lavatório, torneira, ducha, registros e acessórios um a um.
   { id: "banheiro",     nome: "Banheiros",              unidade: "un", entulhoM3: 0.30,
     remover:  { item: "Desmontagem de banheiro", valor: 220 },
-    executar: { item: "Montagem de banheiro",    valor: 600 } },
+    // além da mão de obra, o banheiro montado leva as peças: é o mesmo kit
+    // LOUCAS_BANHEIRO da obra nova, aplicado uma vez por banheiro, com o
+    // padrão escolhido banheiro a banheiro (a suíte costuma ser de padrão
+    // mais alto que o social, e cobrar o mesmo dos dois falseia o total).
+    executar: { item: "Montagem de banheiro",    valor: 600 }, kit: "LOUCAS_BANHEIRO", porPadrao: true },
   { id: "esquadria",    nome: "Esquadrias",             unidade: "un", entulhoM3: 0.05,
     remover:  { item: "Retirada de esquadria",   valor: 60 },
     executar: { item: "Instalação de esquadria", valor: 90 } },
@@ -4225,7 +4229,9 @@ function migrarExistente(ex) {
   for (const it of ITENS_EXISTENTE) {
     const atual = bruto[it.id];
     novo[it.id] = atual && typeof atual === "object"
-      ? { remover: atual.remover, executar: atual.executar, tipo: atual.tipo }
+      ? { remover: atual.remover, executar: atual.executar, tipo: atual.tipo,
+          padroes: Array.isArray(atual.padroes) ? atual.padroes.slice() : undefined,
+          pintar: atual.pintar }
       : {};
   }
   for (const [chaveAntiga, [id, lado]] of Object.entries(EXISTENTE_LEGADO)) {
@@ -4240,6 +4246,35 @@ function migrarExistente(ex) {
 function medidaExistente(ex, id, lado) {
   const linha = (ex || {})[id] || {};
   return numOrZero(linha[lado]);
+}
+
+// Padrão de cada unidade de um item contado por peça (hoje, cada banheiro).
+// A lista acompanha a quantidade: sobrou posição sem escolha, vale o padrão
+// da obra; digitou 3 banheiros com 2 padrões salvos, o terceiro herda.
+function padroesDoItem(ex, id, quantidade, padraoObra) {
+  const salvos = ((ex || {})[id] || {}).padroes || [];
+  const n = Math.max(0, Math.round(numOrZero(quantidade)));
+  const lista = [];
+  for (let i = 0; i < n; i++) {
+    const p = salvos[i];
+    lista.push(PADROES_OBRA.includes(p) ? p : (PADROES_OBRA.includes(padraoObra) ? padraoObra : "Médio"));
+  }
+  return lista;
+}
+
+// Escopo da pintura de uma parede nova: só a face de dentro, só a de fora,
+// ou as duas. Uma parede interna tem duas faces para pintar; uma de divisa
+// com a rua, uma de cada lado — por isso a escolha, em vez de um simples
+// "×2" que erraria metade dos casos.
+const PINTURA_PAREDE = [
+  { id: "", nome: "Não pintar", faces: 0 },
+  { id: "interna", nome: "Só a face interna", faces: 1 },
+  { id: "externa", nome: "Só a face externa", faces: 1 },
+  { id: "ambas", nome: "Interna e externa", faces: 2 },
+];
+function facesDaPintura(escopo) {
+  const e = PINTURA_PAREDE.find((x) => x.id === (escopo || ""));
+  return e ? e.faces : 0;
 }
 
 // ── Coluna "Demolir / Desmontar" ────────────────────────────────
@@ -4268,23 +4303,38 @@ function demolicoesRemocoes(cp, out, data) {
   }
 }
 
-function entulhoDaReforma(cp, out, data) {
-  const ex = cp.existente || {};
-  const passos = [];
+// Volume e caçambas do entulho — fora do emitir() porque o cronograma
+// precisa do mesmo número para as horas de carga. Duas contas do entulho em
+// lugares diferentes acabariam divergindo.
+function volumeEntulhoReforma(ex) {
   let volume = 0;
   for (const it of ITENS_EXISTENTE) {
     if (!it.entulhoM3) continue;
     const qtd = medidaExistente(ex, it.id, "remover");
-    if (!(qtd > 0)) continue;
-    const v = qtd * it.entulhoM3;
-    volume += v;
-    const un = it.unidade === "un" ? "unidades" : "m²";
-    passos.push(MEM.conta(it.nome, `${un} × ${numMem(it.entulhoM3)}`, [[un, qtd]], v, "m³"));
+    if (qtd > 0) volume += qtd * it.entulhoM3;
   }
+  return volume;
+}
+function cacambasDaReforma(ex) {
+  const volume = volumeEntulhoReforma(ex);
+  return volume > 0 ? teto(volume * ENTULHO_EMPOLAMENTO / CACAMBA_M3) : 0;
+}
+
+function entulhoDaReforma(cp, out, data) {
+  const ex = cp.existente || {};
+  const passos = [];
+  for (const it of ITENS_EXISTENTE) {
+    if (!it.entulhoM3) continue;
+    const qtd = medidaExistente(ex, it.id, "remover");
+    if (!(qtd > 0)) continue;
+    const un = it.unidade === "un" ? "unidades" : "m²";
+    passos.push(MEM.conta(it.nome, `${un} × ${numMem(it.entulhoM3)}`, [[un, qtd]], qtd * it.entulhoM3, "m³"));
+  }
+  const volume = volumeEntulhoReforma(ex);
   if (!(volume > 0)) return;
   const solto = volume * ENTULHO_EMPOLAMENTO;
   const cacambasBruto = solto / CACAMBA_M3;
-  const cacambas = teto(cacambasBruto);
+  const cacambas = cacambasDaReforma(ex);
   const r = precoDoInsumo(CACAMBA_ITEM, data);
   const temPreco = r.preco != null && r.preco > 0;
   emitir(out, {
@@ -4517,7 +4567,11 @@ function execucaoNoExistente(cp, out, data) {
   }
 
   // ── Pintura ──
-  const m2Pintura = medida("pintura");
+  // Área digitada na linha da pintura + a parede nova, quando marcada para
+  // pintar. Uma face por m² de parede, duas se for interna e externa.
+  const faces = facesDaPintura(((ex.alvenaria || {}).pintar));
+  const pinturaDaParede = m2Parede * faces;
+  const m2Pintura = medida("pintura") + pinturaDaParede;
   if (m2Pintura > 0) {
     const area = m2Pintura * PERDA;
     const seladorBruto = (0.2 * area) / 10 * PERDA;
@@ -4525,7 +4579,12 @@ function execucaoNoExistente(cp, out, data) {
     const fundoBruto = (0.2 * area) / 8 * PERDA;
     const tintaBruto = 0.15 * area / 9 * PERDA;
     const sub = "Pintura";
-    const memArea = memMedida("pintura");
+    const escopo = PINTURA_PAREDE.find((x) => x.id === (ex.alvenaria || {}).pintar);
+    const memArea = pinturaDaParede > 0
+      ? MEM.conta(
+          `Área a pintar (${numMem(medida("pintura"))} m² da linha Pintura + a parede nova, ${(escopo && escopo.nome ? escopo.nome.toLowerCase() : "")})`,
+          "pintura + parede × faces", [["pintura", medida("pintura")], ["parede", m2Parede], ["faces", faces]], m2Pintura, "m²")
+      : memMedida("pintura");
     const notaComum = MEM.nota("Mesmos rendimentos da pintura da obra nova. Parede velha costuma pedir mais massa; ajuste o item se for o caso.");
     for (const [item, brutoQtd, texto] of [
       ["Tintas - Fundo Preparador 18L", fundoBruto, "Fundo preparador: 0,2 litro por m², lata que rende 8."],
@@ -4538,6 +4597,48 @@ function execucaoNoExistente(cp, out, data) {
         MEM.conta("Área com 10% de perda", "área × 1,10", [["área", m2Pintura]], area, "m²"),
         MEM.teto(brutoQtd, teto(brutoQtd), "latas", "Arredonda para cima (embalagem fechada)"),
       ] });
+    }
+  }
+
+  // ── Peças de louças e metais dos banheiros montados ──
+  // Mesmo kit da obra nova (LOUCAS_BANheiro / _ALTO), aplicado uma vez por
+  // banheiro. O padrão troca o kit (Alto tem monocomando e ralo oculto) e o
+  // nome do produto ("{padrão}" vira "Alto"), então banheiros de padrões
+  // diferentes geram linhas diferentes — que é o certo.
+  for (const it of ITENS_EXISTENTE) {
+    if (!it.kit) continue;
+    const quantos = medida(it.id);
+    if (!(quantos > 0)) continue;
+    const kits = typeof composicoesAtivas === "function" ? composicoesAtivas(data) : {};
+    if (!kits || !Object.keys(kits).length) continue;
+    const padroes = padroesDoItem(ex, it.id, quantos, padrao);
+    const porPadrao = {};
+    for (const p of padroes) porPadrao[p] = (porPadrao[p] || 0) + 1;
+    const somado = {};
+    for (const [p, vezes] of Object.entries(porPadrao)) {
+      const kit = escolherKit(kits, it.kit, p);
+      if (!kit) continue;
+      for (const item of kit.itens || []) {
+        if (!item || !item.nome || !(Number(item.qtd) > 0)) continue;
+        const nome = nomeItemKit(item.nome, p);
+        const k = nome + "|" + (item.unidade || "Unidades");
+        const a2 = somado[k] || (somado[k] = { nome, unidade: item.unidade || "Unidades", qtd: 0, origens: [] });
+        a2.qtd += Number(item.qtd) * vezes;
+        a2.origens.push(`${vezes} banheiro(s) padrão ${p}: ${numMem(item.qtd)} × ${vezes}`);
+      }
+    }
+    for (const a2 of Object.values(somado)) {
+      emitir(out, {
+        ordem: ORD.existente, tipo: "Acabamento", etapa: "Construção existente",
+        subEtapa: `${it.nome} — louças e metais`, item: a2.nome, unidade: a2.unidade, qtd: a2.qtd,
+        memoria: [
+          MEM.nota(`Peça do conjunto de louças e metais do banheiro, o mesmo da obra nova. A mão de obra de montar está na linha "Montagem de banheiro".`),
+          MEM.dado("Banheiros a montar", quantos, "unidades", 'linha "Banheiros", coluna Instalar'),
+          MEM.nota(`Padrão de cada banheiro: ${padroes.join(", ")}.`),
+          ...a2.origens.map((o) => MEM.nota(o)),
+          MEM.conta("Quantidade", "soma dos banheiros", [], a2.qtd, a2.unidade),
+        ],
+      });
     }
   }
 
@@ -5142,6 +5243,7 @@ function MemoriaCalculo({ item, passos, onFechar }) {
 // A matriz da reforma: uma linha por elemento, duas colunas — o que sai e o
 // que entra. As linhas vêm de ITENS_EXISTENTE, a mesma tabela que dirige o
 // cálculo, então acrescentar um elemento é acrescentar uma linha lá.
+const padraoObra_ = (p) => (typeof padraoObra === "function" ? padraoObra(p) : (p && p.padrao) || "Médio");
 function MatrizExistente({ projetoDraft, get, set, isMobile }) {
   const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "8px 10px", fontSize: 13,
     color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
@@ -5161,21 +5263,75 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
           <div style={cab}>Construir / Instalar</div>
         </div>
       )}
-      {ITENS_EXISTENTE.map((it) => (
-        <div key={it.id} style={{ ...grade, marginBottom: 10 }}>
-          <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-            {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "un" : "m²"})</span>
-          </label>
-          <div>
-            {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Demolir / desmontar</div>}
-            {it.remover ? campo(it.id, "remover") : vazio}
+      {ITENS_EXISTENTE.map((it) => {
+        const quantos = numOrZero(get(`existente.${it.id}.executar`));
+        const padraoObra = padraoObra_(projetoDraft);
+        return (
+        <div key={it.id} style={{ marginBottom: 10 }}>
+          <div style={grade}>
+            <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
+              {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "un" : "m²"})</span>
+            </label>
+            <div>
+              {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Demolir / desmontar</div>}
+              {it.remover ? campo(it.id, "remover") : vazio}
+            </div>
+            <div>
+              {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Construir / instalar</div>}
+              {it.executar ? campo(it.id, "executar") : vazio}
+            </div>
           </div>
-          <div>
-            {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Construir / instalar</div>}
-            {it.executar ? campo(it.id, "executar") : vazio}
-          </div>
+
+          {/* Parede nova: pintar ou não, e de que lado */}
+          {it.id === "alvenaria" && quantos > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "6px 0 0", paddingLeft: isMobile ? 0 : 4 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "#111827", cursor: "pointer" }}>
+                <input type="checkbox" checked={!!get("existente.alvenaria.pintar")}
+                  onChange={(e) => set("existente.alvenaria.pintar", e.target.checked ? "ambas" : "")} />
+                Incluir a pintura desta parede
+              </label>
+              {!!get("existente.alvenaria.pintar") && (
+                <select style={{ ...cel, width: "auto", minWidth: 190 }} value={get("existente.alvenaria.pintar")}
+                  onChange={(e) => set("existente.alvenaria.pintar", e.target.value)}>
+                  {PINTURA_PAREDE.filter((x) => x.id).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                </select>
+              )}
+              {!!get("existente.alvenaria.pintar") && (
+                <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+                  soma {numOrZero(quantos) * facesDaPintura(get("existente.alvenaria.pintar"))} m² à pintura
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Banheiros: o padrão de cada um decide as peças */}
+          {it.porPadrao && quantos > 0 && (
+            <div style={{ margin: "8px 0 0", paddingLeft: isMobile ? 0 : 4 }}>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 5 }}>
+                Padrão de cada banheiro — define as louças e os metais que entram no orçamento.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {Array.from({ length: Math.min(20, Math.round(quantos)) }).map((_, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11.5, color: "#6b7280" }}>{i + 1}º</span>
+                    <select style={{ ...cel, width: "auto", minWidth: 120 }}
+                      value={(get(`existente.${it.id}.padroes`) || [])[i] || padraoObra}
+                      onChange={(e) => {
+                        const lista = (get(`existente.${it.id}.padroes`) || []).slice();
+                        while (lista.length < Math.round(quantos)) lista.push(padraoObra);
+                        lista[i] = e.target.value;
+                        set(`existente.${it.id}.padroes`, lista.slice(0, Math.round(quantos)));
+                      }}>
+                      {PADROES_OBRA.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      ))}
+        );
+      })}
       <div style={{ ...grade, marginTop: 4 }}>
         <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>Tipo do forro</label>
         <div style={{ gridColumn: isMobile ? "auto" : "2 / -1" }}>

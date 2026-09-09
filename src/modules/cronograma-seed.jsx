@@ -92,6 +92,24 @@ var PRODUTIVIDADE_SEED = {
   PINTURA_EXT:    { nome: "Pintura externa (selador, tinta 2 demãos)",   unidade: "m²", fonte: "SINAPI 88485 + 88489", horas: { pintor: 0.23, servente: 0.077 }, receita: [{ c: "88485", f: 1 }, { c: "88489", f: 1 }] },
   ESQUADRIA:      { nome: "Instalação de esquadria de alumínio",         unidade: "m²", fonte: "SINAPI 94570",  horas: { pedreiro: 0.313, servente: 0.157 }, receita: [{ c: "94570", f: 1 }] },
   PORTA:          { nome: "Porta interna completa (batente, folha, fechadura, alizar)", unidade: "un", fonte: "SINAPI 90843", horas: { carpinteiro: 9.015, pedreiro: 1.673, servente: 3.02 }, receita: [{ c: "90806", f: 1 }, { c: "90822", f: 1 }, { c: "90830", f: 1 }, { c: "100659", f: 10 }] },
+
+  // ── Reforma ──────────────────────────────────────────────────
+  // Estes NÃO vêm do SINAPI: são referência de partida para o prazo, para a
+  // reforma deixar de valer zero hora no cronograma. Calibre com a sua
+  // equipe em Insumos → Composições → Cronograma; a primeira obra medida
+  // vale mais que qualquer tabela.
+  DEMOLICAO_ALVENARIA: { nome: "Demolição de alvenaria (manual, sem reaproveitamento)", unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.6, pedreiro: 0.1 }, receita: null },
+  DEMOLICAO_DRYWALL:   { nome: "Demolição de parede de drywall",              unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.25 }, receita: null },
+  REMOCAO_REVESTIMENTO:{ nome: "Remoção de revestimento de parede",           unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.45 }, receita: null },
+  REMOCAO_PISO:        { nome: "Remoção de piso",                             unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.35 }, receita: null },
+  RETIRADA_CONTRAPISO: { nome: "Retirada de contrapiso",                      unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.7, pedreiro: 0.1 }, receita: null },
+  REMOCAO_FORRO:       { nome: "Remoção de forro",                            unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.2 }, receita: null },
+  DEMOLICAO_CALCADA:   { nome: "Demolição de calçada / piso de concreto",     unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.1 }, receita: null },
+  RETIRADA_ESQUADRIA:  { nome: "Retirada de esquadria",                       unidade: "un", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.4 }, receita: null },
+  DESMONTAGEM_BANHEIRO:{ nome: "Desmontagem de banheiro (louças e metais)",   unidade: "un", fonte: "referência — calibrar com a equipe", horas: { encanador: 2, servente: 2 }, receita: null },
+  MONTAGEM_BANHEIRO:   { nome: "Montagem de banheiro (louças e metais)",      unidade: "un", fonte: "referência — calibrar com a equipe", horas: { encanador: 6, servente: 3 }, receita: null },
+  CARGA_ENTULHO:       { nome: "Carga de entulho na caçamba",                 unidade: "un", fonte: "referência — calibrar com a equipe", horas: { servente: 4 }, receita: null },
+  DRYWALL_PAREDE:      { nome: "Parede de drywall (estrutura, placas, tratamento de junta)", unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { gesseiro: 0.8, servente: 0.4 }, receita: null },
 };
 
 // Rede de etapas. `duracaoBase` em meses de uma obra-base (pesos relativos
@@ -104,7 +122,11 @@ var PRODUTIVIDADE_SEED = {
 // etapa (para o físico-financeiro).
 var ETAPAS_CRONOGRAMA_SEED = [
   { id: "PRE_OBRA",          nome: "Instalações pré-obra e projetos",         grupo: "Bruto", duracaoBase: 1,   predecessoras: [], custoEtapas: ["Instalações pré obra e projetos"] },
-  { id: "TERRAPLANAGEM",     nome: "Terraplanagem e marcação",                grupo: "Bruto", duracaoBase: 0.5, predecessoras: [{ id: "PRE_OBRA", tipo: "SS", avanco: 0.5 }] },
+  // Só existe em reforma. Quando a obra é nova a etapa sai da rede e quem
+  // dependia dela passa a depender de PRE_OBRA — que já é a predecessora
+  // dela, então o encadeamento da obra nova fica exatamente como era.
+  { id: "DEMOLICAO",         nome: "Demolições, remoções e entulho",          grupo: "Bruto", duracaoBase: 1,   condicao: "reforma", predecessoras: [{ id: "PRE_OBRA", tipo: "SS", avanco: 0.5 }], custoEtapas: ["Demolições e remoções", "Entulho"] },
+  { id: "TERRAPLANAGEM",     nome: "Terraplanagem e marcação",                grupo: "Bruto", duracaoBase: 0.5, predecessoras: [{ id: "DEMOLICAO", tipo: "FS" }, { id: "PRE_OBRA", tipo: "SS", avanco: 0.5 }] },
   { id: "ARRIMO",            nome: "Muro de arrimo",                          grupo: "Bruto", duracaoBase: 2,   condicao: "arrimo", predecessoras: [{ id: "TERRAPLANAGEM", tipo: "FS" }], custoOrdens: [15] },
   { id: "FUNDACAO",          nome: "Fundação (brocas, sapatas, baldrames)",   grupo: "Bruto", duracaoBase: 2,   predecessoras: [{ id: "ARRIMO", tipo: "FS" }, { id: "TERRAPLANAGEM", tipo: "FS" }], custoOrdens: [2], custoEtapas: ["Fundação"] },
   { id: "IMPERM_BALDRAME",   nome: "Impermeabilização de baldrames",          grupo: "Bruto", duracaoBase: 0.5, predecessoras: [{ id: "FUNDACAO", tipo: "FS" }] },

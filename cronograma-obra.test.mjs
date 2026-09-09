@@ -298,5 +298,89 @@ teste("backend vence a semente; escritório vence o backend; referência acompan
   assert.strictEqual(sv.REBOCO_INT.horas.pedreiro, 0.472);
 });
 
+
+// ── Reforma no cronograma ───────────────────────────────────────
+const reforma = (existente) => ({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+  arquitetura: {}, terreo: {}, existente });
+
+teste("a construção existente vira medição, e a demolição ganha etapa própria", () => {
+  const { medicoes } = M.medicoesCronograma(reforma({
+    alvenaria: { remover: 40, executar: 12 }, piso: { remover: 30, executar: 30 },
+    banheiro: { remover: 2, executar: 3 },
+  }), {});
+  const dem = medicoes.filter(m => m.etapa === "DEMOLICAO");
+  const porServico = Object.fromEntries(dem.map(m => [m.servico, m.qtd]));
+  assert.strictEqual(porServico.DEMOLICAO_ALVENARIA, 40);
+  assert.strictEqual(porServico.REMOCAO_PISO, 30);
+  assert.strictEqual(porServico.DESMONTAGEM_BANHEIRO, 2);
+  assert.ok(porServico.CARGA_ENTULHO > 0, "a carga do entulho tem que entrar nas horas");
+  // e o que se refaz cai nas etapas que já existem
+  assert.ok(medicoes.some(m => m.etapa === "PAREDES_TERREO" && m.servico === "ALVENARIA" && m.qtd === 12));
+  assert.ok(medicoes.some(m => m.etapa === "REVESTIMENTOS" && m.servico === "PISO_CERAMICO" && m.qtd === 30));
+  assert.ok(medicoes.some(m => m.etapa === "ACABAMENTO_INST" && m.servico === "MONTAGEM_BANHEIRO" && m.qtd === 3));
+});
+
+teste("o entulho do cronograma é a mesma caçamba do orçamento", () => {
+  const p = reforma({ alvenaria: { remover: 40 }, piso: { remover: 30 }, contrapiso: { remover: 30 } });
+  const { medicoes } = M.medicoesCronograma(p, {});
+  const cronograma = medicoes.find(m => m.servico === "CARGA_ENTULHO").qtd;
+  const orc = M.gerarOrcamentoObra(p, { materiais: [] });
+  const cacamba = orc.itens.find(i => /Caçamba/.test(i.item));
+  assert.strictEqual(cronograma, cacamba.qtd, "as duas contas do entulho têm que dar o mesmo número");
+});
+
+teste("reforma sem área construída tem prazo, e ele cresce com a obra", () => {
+  const pequena = reforma({ alvenaria: { remover: 40, executar: 12 }, piso: { remover: 30, executar: 30 } });
+  const grande = reforma({ alvenaria: { remover: 160, executar: 90 }, piso: { remover: 220, executar: 220 },
+    contrapiso: { remover: 220, executar: 220 }, forro: { remover: 200, executar: 200 }, pintura: { executar: 400 } });
+  const cp = M.gerarCronogramaObra(pequena, M.gerarOrcamentoObra(pequena, { materiais: [] }), {}, {});
+  const cg = M.gerarCronogramaObra(grande, M.gerarOrcamentoObra(grande, { materiais: [] }), {}, {});
+  assert.strictEqual(cp.modo, "produtividade", "sem tabela por m², o prazo sai das horas medidas");
+  assert.ok(cp.ativo.meses > 0, "reforma tem que ter prazo");
+  assert.ok(cg.ativo.meses > cp.ativo.meses, `reforma maior tem que demorar mais (${cp.ativo.meses} → ${cg.ativo.meses})`);
+});
+
+teste("reforma pura não carrega fundação, laje nem telhado", () => {
+  const p = reforma({ alvenaria: { remover: 40, executar: 12 }, piso: { executar: 30 } });
+  const c = M.gerarCronogramaObra(p, M.gerarOrcamentoObra(p, { materiais: [] }), {}, {});
+  const ids = c.ativo.etapas.map(e => e.id);
+  for (const fora of ["FUNDACAO", "LAJE_TERREO", "COBERTURA", "TERRAPLANAGEM", "IMPERM_BALDRAME"]) {
+    assert.ok(!ids.includes(fora), `${fora} não acontece numa reforma sem ampliação`);
+  }
+  assert.ok(ids.includes("DEMOLICAO") && ids.includes("PRE_OBRA") && ids.includes("LIMPEZA"));
+  assert.strictEqual(ids[0], "PRE_OBRA");
+  assert.strictEqual(ids[1], "DEMOLICAO", "demolir vem antes de levantar");
+});
+
+teste("reforma com ampliação continua com a obra nova inteira", () => {
+  const p = { tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 60, m2ParedesTotal: 120, m2ParedesInternas: 70, m2ParedesExternas: 50 },
+    terreo: { area: 60, m2Parede20: 120 },
+    existente: { alvenaria: { remover: 40 }, piso: { remover: 30 } } };
+  const c = M.gerarCronogramaObra(p, M.gerarOrcamentoObra(p, { materiais: [] }), {}, {});
+  const ids = c.ativo.etapas.map(e => e.id);
+  assert.ok(ids.includes("FUNDACAO"), "o que foi ampliado tem fundação");
+  assert.ok(ids.includes("DEMOLICAO"), "e o que foi demolido continua na conta");
+});
+
+teste("obra nova não ganha etapa de demolição", () => {
+  const p = { tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 150, m2ParedesTotal: 300, m2ParedesInternas: 180, m2ParedesExternas: 120 },
+    terreo: { area: 150, m2Parede20: 300 } };
+  const c = M.gerarCronogramaObra(p, M.gerarOrcamentoObra(p, { materiais: [] }), {}, {});
+  assert.ok(!c.ativo.etapas.some(e => e.id === "DEMOLICAO"));
+  assert.strictEqual(c.modo, "simplificado");
+});
+
+teste("marcar como reforma sem medir nada não muda o cronograma", () => {
+  const comum = { tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 150, m2ParedesTotal: 300, m2ParedesInternas: 180, m2ParedesExternas: 120 },
+    terreo: { area: 150, m2Parede20: 300 } };
+  const nova = M.gerarCronogramaObra({ ...comum, tipoObra: "nova" }, M.gerarOrcamentoObra({ ...comum, tipoObra: "nova" }, { materiais: [] }), {}, {});
+  const marcada = M.gerarCronogramaObra({ ...comum, tipoObra: "reforma" }, M.gerarOrcamentoObra({ ...comum, tipoObra: "reforma" }, { materiais: [] }), {}, {});
+  assert.strictEqual(marcada.ativo.meses, nova.ativo.meses);
+  assert.ok(!marcada.ativo.etapas.some(e => e.id === "DEMOLICAO"));
+});
+
 console.log(`\n${passou} passaram, ${falhou} falharam`);
 if (falhou) process.exit(1);

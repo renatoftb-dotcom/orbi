@@ -203,3 +203,69 @@ próximo save — a divergência não volta.
 **Regra:** toda migração nova em `normalizarProjeto` precisa de par em
 `projetoParaFormulario`, senão a tela e o orçamento passam a discordar em
 silêncio.
+
+## Banheiro montado: mão de obra E peças
+
+A linha "Banheiros / Instalar" gera duas coisas:
+
+- **Montagem de banheiro** — mão de obra, um por banheiro (prestador).
+- **As peças** — o mesmo kit `LOUCAS_BANHEIRO` da obra nova, aplicado uma vez
+  por banheiro, na sub-etapa "Banheiros — louças e metais".
+
+O **padrão é de cada banheiro**, não da obra: a suíte costuma ser de padrão
+mais alto que o social, e cobrar o mesmo dos dois falseia o total.
+`existente.banheiro.padroes` é uma lista que acompanha a quantidade — posição
+sem escolha herda o padrão da obra. O padrão troca o kit (Alto usa
+monocomando e ralo oculto, Médio usa misturador) e entra no nome do produto,
+então três banheiros "Alto, Médio, Médio" saem como 1 sanitário Alto e 2
+Médio, com o Box somando 3.
+
+## Parede nova: pintar, e de que lado
+
+Tique na linha "Paredes de alvenaria" com três escopos: só a face interna,
+só a externa, ou as duas. A área entra somada à linha de Pintura. Uma parede
+interna tem duas faces para pintar; uma de divisa com a rua, uma de cada
+lado — um "×2" fixo erraria metade dos casos.
+
+## Onde entram as caçambas
+
+Na etapa **Entulho**, item "Caçamba de entulho 5m³", tipo *Prestadores de
+serviços*. A quantidade sai do que foi marcado para demolir; no P&L cai na
+conta que a linha carrega. `cacambasDaReforma()` é função pura e é a MESMA
+usada pelo cronograma para as horas de carga — duas contas do entulho em
+lugares diferentes acabariam divergindo.
+
+## O prazo da reforma
+
+Antes, o cronograma ignorava a construção existente: 40 m² de parede
+demolida e 30 de piso novo valiam zero hora, e o prazo não mudava por mais
+que o orçamento crescesse. Três mudanças:
+
+1. **Etapa `DEMOLICAO`** na rede, com `condicao: "reforma"`, entre a pré-obra
+   e a terraplanagem. Em obra nova ela sai da rede e quem dependia dela passa
+   a depender de PRE_OBRA — que já era a predecessora dela, então o
+   encadeamento da obra nova fica idêntico (conferido: 19,8 meses antes e
+   depois, mesmas etapas).
+2. **Serviços de reforma** em `PRODUTIVIDADE_SEED` (demolição, remoções,
+   montagem de banheiro, drywall, carga de entulho). **Não são SINAPI**: são
+   referência de partida, marcados como manuais, para calibrar com a equipe
+   em Insumos → Composições → Cronograma.
+3. **Medições** da construção existente: a demolição vai para `DEMOLICAO`, e
+   o que se refaz entra nas etapas que já existem (alvenaria em
+   PAREDES_TERREO, piso em REVESTIMENTOS, e assim por diante).
+
+### Reforma pura cai no modo produtividade
+
+A tabela de prazo é por m² de área construída. Reforma sem ampliação não tem
+área construída nenhuma, então não há prazo-alvo para calibrar o modo
+simplificado — mas há horas medidas, e é delas que o prazo sai. Nesse caso o
+cronograma usa produtividade sozinho e avisa na tela.
+
+E **etapa sem nada medido sai da rede**: uma reforma não tem fundação, laje
+nem telhado, e cada uma dessas etapas somaria a duração-base de uma casa
+inteira ao prazo. Pré-obra e limpeza ficam sempre. Reforma **com** ampliação
+(área construída > 0) mantém a obra nova inteira e ganha a demolição junto.
+
+A tela do cronograma também exigia área construída para abrir — justamente a
+obra em que o prazo mais muda ficava sem tela. Agora abre com a construção
+existente medida.

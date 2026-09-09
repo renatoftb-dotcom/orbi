@@ -5979,6 +5979,24 @@ var PRODUTIVIDADE_SEED = {
   PINTURA_EXT:    { nome: "Pintura externa (selador, tinta 2 demãos)",   unidade: "m²", fonte: "SINAPI 88485 + 88489", horas: { pintor: 0.23, servente: 0.077 }, receita: [{ c: "88485", f: 1 }, { c: "88489", f: 1 }] },
   ESQUADRIA:      { nome: "Instalação de esquadria de alumínio",         unidade: "m²", fonte: "SINAPI 94570",  horas: { pedreiro: 0.313, servente: 0.157 }, receita: [{ c: "94570", f: 1 }] },
   PORTA:          { nome: "Porta interna completa (batente, folha, fechadura, alizar)", unidade: "un", fonte: "SINAPI 90843", horas: { carpinteiro: 9.015, pedreiro: 1.673, servente: 3.02 }, receita: [{ c: "90806", f: 1 }, { c: "90822", f: 1 }, { c: "90830", f: 1 }, { c: "100659", f: 10 }] },
+
+  // ── Reforma ──────────────────────────────────────────────────
+  // Estes NÃO vêm do SINAPI: são referência de partida para o prazo, para a
+  // reforma deixar de valer zero hora no cronograma. Calibre com a sua
+  // equipe em Insumos → Composições → Cronograma; a primeira obra medida
+  // vale mais que qualquer tabela.
+  DEMOLICAO_ALVENARIA: { nome: "Demolição de alvenaria (manual, sem reaproveitamento)", unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.6, pedreiro: 0.1 }, receita: null },
+  DEMOLICAO_DRYWALL:   { nome: "Demolição de parede de drywall",              unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.25 }, receita: null },
+  REMOCAO_REVESTIMENTO:{ nome: "Remoção de revestimento de parede",           unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.45 }, receita: null },
+  REMOCAO_PISO:        { nome: "Remoção de piso",                             unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.35 }, receita: null },
+  RETIRADA_CONTRAPISO: { nome: "Retirada de contrapiso",                      unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.7, pedreiro: 0.1 }, receita: null },
+  REMOCAO_FORRO:       { nome: "Remoção de forro",                            unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.2 }, receita: null },
+  DEMOLICAO_CALCADA:   { nome: "Demolição de calçada / piso de concreto",     unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.1 }, receita: null },
+  RETIRADA_ESQUADRIA:  { nome: "Retirada de esquadria",                       unidade: "un", fonte: "referência — calibrar com a equipe", horas: { servente: 0.8, pedreiro: 0.4 }, receita: null },
+  DESMONTAGEM_BANHEIRO:{ nome: "Desmontagem de banheiro (louças e metais)",   unidade: "un", fonte: "referência — calibrar com a equipe", horas: { encanador: 2, servente: 2 }, receita: null },
+  MONTAGEM_BANHEIRO:   { nome: "Montagem de banheiro (louças e metais)",      unidade: "un", fonte: "referência — calibrar com a equipe", horas: { encanador: 6, servente: 3 }, receita: null },
+  CARGA_ENTULHO:       { nome: "Carga de entulho na caçamba",                 unidade: "un", fonte: "referência — calibrar com a equipe", horas: { servente: 4 }, receita: null },
+  DRYWALL_PAREDE:      { nome: "Parede de drywall (estrutura, placas, tratamento de junta)", unidade: "m²", fonte: "referência — calibrar com a equipe", horas: { gesseiro: 0.8, servente: 0.4 }, receita: null },
 };
 
 // Rede de etapas. `duracaoBase` em meses de uma obra-base (pesos relativos
@@ -5991,7 +6009,11 @@ var PRODUTIVIDADE_SEED = {
 // etapa (para o físico-financeiro).
 var ETAPAS_CRONOGRAMA_SEED = [
   { id: "PRE_OBRA",          nome: "Instalações pré-obra e projetos",         grupo: "Bruto", duracaoBase: 1,   predecessoras: [], custoEtapas: ["Instalações pré obra e projetos"] },
-  { id: "TERRAPLANAGEM",     nome: "Terraplanagem e marcação",                grupo: "Bruto", duracaoBase: 0.5, predecessoras: [{ id: "PRE_OBRA", tipo: "SS", avanco: 0.5 }] },
+  // Só existe em reforma. Quando a obra é nova a etapa sai da rede e quem
+  // dependia dela passa a depender de PRE_OBRA — que já é a predecessora
+  // dela, então o encadeamento da obra nova fica exatamente como era.
+  { id: "DEMOLICAO",         nome: "Demolições, remoções e entulho",          grupo: "Bruto", duracaoBase: 1,   condicao: "reforma", predecessoras: [{ id: "PRE_OBRA", tipo: "SS", avanco: 0.5 }], custoEtapas: ["Demolições e remoções", "Entulho"] },
+  { id: "TERRAPLANAGEM",     nome: "Terraplanagem e marcação",                grupo: "Bruto", duracaoBase: 0.5, predecessoras: [{ id: "DEMOLICAO", tipo: "FS" }, { id: "PRE_OBRA", tipo: "SS", avanco: 0.5 }] },
   { id: "ARRIMO",            nome: "Muro de arrimo",                          grupo: "Bruto", duracaoBase: 2,   condicao: "arrimo", predecessoras: [{ id: "TERRAPLANAGEM", tipo: "FS" }], custoOrdens: [15] },
   { id: "FUNDACAO",          nome: "Fundação (brocas, sapatas, baldrames)",   grupo: "Bruto", duracaoBase: 2,   predecessoras: [{ id: "ARRIMO", tipo: "FS" }, { id: "TERRAPLANAGEM", tipo: "FS" }], custoOrdens: [2], custoEtapas: ["Fundação"] },
   { id: "IMPERM_BALDRAME",   nome: "Impermeabilização de baldrames",          grupo: "Bruto", duracaoBase: 0.5, predecessoras: [{ id: "FUNDACAO", tipo: "FS" }] },
@@ -11662,7 +11684,11 @@ const ITENS_EXISTENTE = [
   // vaso, lavatório, torneira, ducha, registros e acessórios um a um.
   { id: "banheiro",     nome: "Banheiros",              unidade: "un", entulhoM3: 0.30,
     remover:  { item: "Desmontagem de banheiro", valor: 220 },
-    executar: { item: "Montagem de banheiro",    valor: 600 } },
+    // além da mão de obra, o banheiro montado leva as peças: é o mesmo kit
+    // LOUCAS_BANHEIRO da obra nova, aplicado uma vez por banheiro, com o
+    // padrão escolhido banheiro a banheiro (a suíte costuma ser de padrão
+    // mais alto que o social, e cobrar o mesmo dos dois falseia o total).
+    executar: { item: "Montagem de banheiro",    valor: 600 }, kit: "LOUCAS_BANHEIRO", porPadrao: true },
   { id: "esquadria",    nome: "Esquadrias",             unidade: "un", entulhoM3: 0.05,
     remover:  { item: "Retirada de esquadria",   valor: 60 },
     executar: { item: "Instalação de esquadria", valor: 90 } },
@@ -11721,7 +11747,9 @@ function migrarExistente(ex) {
   for (const it of ITENS_EXISTENTE) {
     const atual = bruto[it.id];
     novo[it.id] = atual && typeof atual === "object"
-      ? { remover: atual.remover, executar: atual.executar, tipo: atual.tipo }
+      ? { remover: atual.remover, executar: atual.executar, tipo: atual.tipo,
+          padroes: Array.isArray(atual.padroes) ? atual.padroes.slice() : undefined,
+          pintar: atual.pintar }
       : {};
   }
   for (const [chaveAntiga, [id, lado]] of Object.entries(EXISTENTE_LEGADO)) {
@@ -11736,6 +11764,35 @@ function migrarExistente(ex) {
 function medidaExistente(ex, id, lado) {
   const linha = (ex || {})[id] || {};
   return numOrZero(linha[lado]);
+}
+
+// Padrão de cada unidade de um item contado por peça (hoje, cada banheiro).
+// A lista acompanha a quantidade: sobrou posição sem escolha, vale o padrão
+// da obra; digitou 3 banheiros com 2 padrões salvos, o terceiro herda.
+function padroesDoItem(ex, id, quantidade, padraoObra) {
+  const salvos = ((ex || {})[id] || {}).padroes || [];
+  const n = Math.max(0, Math.round(numOrZero(quantidade)));
+  const lista = [];
+  for (let i = 0; i < n; i++) {
+    const p = salvos[i];
+    lista.push(PADROES_OBRA.includes(p) ? p : (PADROES_OBRA.includes(padraoObra) ? padraoObra : "Médio"));
+  }
+  return lista;
+}
+
+// Escopo da pintura de uma parede nova: só a face de dentro, só a de fora,
+// ou as duas. Uma parede interna tem duas faces para pintar; uma de divisa
+// com a rua, uma de cada lado — por isso a escolha, em vez de um simples
+// "×2" que erraria metade dos casos.
+const PINTURA_PAREDE = [
+  { id: "", nome: "Não pintar", faces: 0 },
+  { id: "interna", nome: "Só a face interna", faces: 1 },
+  { id: "externa", nome: "Só a face externa", faces: 1 },
+  { id: "ambas", nome: "Interna e externa", faces: 2 },
+];
+function facesDaPintura(escopo) {
+  const e = PINTURA_PAREDE.find((x) => x.id === (escopo || ""));
+  return e ? e.faces : 0;
 }
 
 // ── Coluna "Demolir / Desmontar" ────────────────────────────────
@@ -11764,23 +11821,38 @@ function demolicoesRemocoes(cp, out, data) {
   }
 }
 
-function entulhoDaReforma(cp, out, data) {
-  const ex = cp.existente || {};
-  const passos = [];
+// Volume e caçambas do entulho — fora do emitir() porque o cronograma
+// precisa do mesmo número para as horas de carga. Duas contas do entulho em
+// lugares diferentes acabariam divergindo.
+function volumeEntulhoReforma(ex) {
   let volume = 0;
   for (const it of ITENS_EXISTENTE) {
     if (!it.entulhoM3) continue;
     const qtd = medidaExistente(ex, it.id, "remover");
-    if (!(qtd > 0)) continue;
-    const v = qtd * it.entulhoM3;
-    volume += v;
-    const un = it.unidade === "un" ? "unidades" : "m²";
-    passos.push(MEM.conta(it.nome, `${un} × ${numMem(it.entulhoM3)}`, [[un, qtd]], v, "m³"));
+    if (qtd > 0) volume += qtd * it.entulhoM3;
   }
+  return volume;
+}
+function cacambasDaReforma(ex) {
+  const volume = volumeEntulhoReforma(ex);
+  return volume > 0 ? teto(volume * ENTULHO_EMPOLAMENTO / CACAMBA_M3) : 0;
+}
+
+function entulhoDaReforma(cp, out, data) {
+  const ex = cp.existente || {};
+  const passos = [];
+  for (const it of ITENS_EXISTENTE) {
+    if (!it.entulhoM3) continue;
+    const qtd = medidaExistente(ex, it.id, "remover");
+    if (!(qtd > 0)) continue;
+    const un = it.unidade === "un" ? "unidades" : "m²";
+    passos.push(MEM.conta(it.nome, `${un} × ${numMem(it.entulhoM3)}`, [[un, qtd]], qtd * it.entulhoM3, "m³"));
+  }
+  const volume = volumeEntulhoReforma(ex);
   if (!(volume > 0)) return;
   const solto = volume * ENTULHO_EMPOLAMENTO;
   const cacambasBruto = solto / CACAMBA_M3;
-  const cacambas = teto(cacambasBruto);
+  const cacambas = cacambasDaReforma(ex);
   const r = precoDoInsumo(CACAMBA_ITEM, data);
   const temPreco = r.preco != null && r.preco > 0;
   emitir(out, {
@@ -12013,7 +12085,11 @@ function execucaoNoExistente(cp, out, data) {
   }
 
   // ── Pintura ──
-  const m2Pintura = medida("pintura");
+  // Área digitada na linha da pintura + a parede nova, quando marcada para
+  // pintar. Uma face por m² de parede, duas se for interna e externa.
+  const faces = facesDaPintura(((ex.alvenaria || {}).pintar));
+  const pinturaDaParede = m2Parede * faces;
+  const m2Pintura = medida("pintura") + pinturaDaParede;
   if (m2Pintura > 0) {
     const area = m2Pintura * PERDA;
     const seladorBruto = (0.2 * area) / 10 * PERDA;
@@ -12021,7 +12097,12 @@ function execucaoNoExistente(cp, out, data) {
     const fundoBruto = (0.2 * area) / 8 * PERDA;
     const tintaBruto = 0.15 * area / 9 * PERDA;
     const sub = "Pintura";
-    const memArea = memMedida("pintura");
+    const escopo = PINTURA_PAREDE.find((x) => x.id === (ex.alvenaria || {}).pintar);
+    const memArea = pinturaDaParede > 0
+      ? MEM.conta(
+          `Área a pintar (${numMem(medida("pintura"))} m² da linha Pintura + a parede nova, ${(escopo && escopo.nome ? escopo.nome.toLowerCase() : "")})`,
+          "pintura + parede × faces", [["pintura", medida("pintura")], ["parede", m2Parede], ["faces", faces]], m2Pintura, "m²")
+      : memMedida("pintura");
     const notaComum = MEM.nota("Mesmos rendimentos da pintura da obra nova. Parede velha costuma pedir mais massa; ajuste o item se for o caso.");
     for (const [item, brutoQtd, texto] of [
       ["Tintas - Fundo Preparador 18L", fundoBruto, "Fundo preparador: 0,2 litro por m², lata que rende 8."],
@@ -12034,6 +12115,48 @@ function execucaoNoExistente(cp, out, data) {
         MEM.conta("Área com 10% de perda", "área × 1,10", [["área", m2Pintura]], area, "m²"),
         MEM.teto(brutoQtd, teto(brutoQtd), "latas", "Arredonda para cima (embalagem fechada)"),
       ] });
+    }
+  }
+
+  // ── Peças de louças e metais dos banheiros montados ──
+  // Mesmo kit da obra nova (LOUCAS_BANheiro / _ALTO), aplicado uma vez por
+  // banheiro. O padrão troca o kit (Alto tem monocomando e ralo oculto) e o
+  // nome do produto ("{padrão}" vira "Alto"), então banheiros de padrões
+  // diferentes geram linhas diferentes — que é o certo.
+  for (const it of ITENS_EXISTENTE) {
+    if (!it.kit) continue;
+    const quantos = medida(it.id);
+    if (!(quantos > 0)) continue;
+    const kits = typeof composicoesAtivas === "function" ? composicoesAtivas(data) : {};
+    if (!kits || !Object.keys(kits).length) continue;
+    const padroes = padroesDoItem(ex, it.id, quantos, padrao);
+    const porPadrao = {};
+    for (const p of padroes) porPadrao[p] = (porPadrao[p] || 0) + 1;
+    const somado = {};
+    for (const [p, vezes] of Object.entries(porPadrao)) {
+      const kit = escolherKit(kits, it.kit, p);
+      if (!kit) continue;
+      for (const item of kit.itens || []) {
+        if (!item || !item.nome || !(Number(item.qtd) > 0)) continue;
+        const nome = nomeItemKit(item.nome, p);
+        const k = nome + "|" + (item.unidade || "Unidades");
+        const a2 = somado[k] || (somado[k] = { nome, unidade: item.unidade || "Unidades", qtd: 0, origens: [] });
+        a2.qtd += Number(item.qtd) * vezes;
+        a2.origens.push(`${vezes} banheiro(s) padrão ${p}: ${numMem(item.qtd)} × ${vezes}`);
+      }
+    }
+    for (const a2 of Object.values(somado)) {
+      emitir(out, {
+        ordem: ORD.existente, tipo: "Acabamento", etapa: "Construção existente",
+        subEtapa: `${it.nome} — louças e metais`, item: a2.nome, unidade: a2.unidade, qtd: a2.qtd,
+        memoria: [
+          MEM.nota(`Peça do conjunto de louças e metais do banheiro, o mesmo da obra nova. A mão de obra de montar está na linha "Montagem de banheiro".`),
+          MEM.dado("Banheiros a montar", quantos, "unidades", 'linha "Banheiros", coluna Instalar'),
+          MEM.nota(`Padrão de cada banheiro: ${padroes.join(", ")}.`),
+          ...a2.origens.map((o) => MEM.nota(o)),
+          MEM.conta("Quantidade", "soma dos banheiros", [], a2.qtd, a2.unidade),
+        ],
+      });
     }
   }
 
@@ -12638,6 +12761,7 @@ function MemoriaCalculo({ item, passos, onFechar }) {
 // A matriz da reforma: uma linha por elemento, duas colunas — o que sai e o
 // que entra. As linhas vêm de ITENS_EXISTENTE, a mesma tabela que dirige o
 // cálculo, então acrescentar um elemento é acrescentar uma linha lá.
+const padraoObra_ = (p) => (typeof padraoObra === "function" ? padraoObra(p) : (p && p.padrao) || "Médio");
 function MatrizExistente({ projetoDraft, get, set, isMobile }) {
   const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "8px 10px", fontSize: 13,
     color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
@@ -12657,21 +12781,75 @@ function MatrizExistente({ projetoDraft, get, set, isMobile }) {
           <div style={cab}>Construir / Instalar</div>
         </div>
       )}
-      {ITENS_EXISTENTE.map((it) => (
-        <div key={it.id} style={{ ...grade, marginBottom: 10 }}>
-          <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-            {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "un" : "m²"})</span>
-          </label>
-          <div>
-            {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Demolir / desmontar</div>}
-            {it.remover ? campo(it.id, "remover") : vazio}
+      {ITENS_EXISTENTE.map((it) => {
+        const quantos = numOrZero(get(`existente.${it.id}.executar`));
+        const padraoObra = padraoObra_(projetoDraft);
+        return (
+        <div key={it.id} style={{ marginBottom: 10 }}>
+          <div style={grade}>
+            <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
+              {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "un" : "m²"})</span>
+            </label>
+            <div>
+              {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Demolir / desmontar</div>}
+              {it.remover ? campo(it.id, "remover") : vazio}
+            </div>
+            <div>
+              {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Construir / instalar</div>}
+              {it.executar ? campo(it.id, "executar") : vazio}
+            </div>
           </div>
-          <div>
-            {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Construir / instalar</div>}
-            {it.executar ? campo(it.id, "executar") : vazio}
-          </div>
+
+          {/* Parede nova: pintar ou não, e de que lado */}
+          {it.id === "alvenaria" && quantos > 0 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", margin: "6px 0 0", paddingLeft: isMobile ? 0 : 4 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "#111827", cursor: "pointer" }}>
+                <input type="checkbox" checked={!!get("existente.alvenaria.pintar")}
+                  onChange={(e) => set("existente.alvenaria.pintar", e.target.checked ? "ambas" : "")} />
+                Incluir a pintura desta parede
+              </label>
+              {!!get("existente.alvenaria.pintar") && (
+                <select style={{ ...cel, width: "auto", minWidth: 190 }} value={get("existente.alvenaria.pintar")}
+                  onChange={(e) => set("existente.alvenaria.pintar", e.target.value)}>
+                  {PINTURA_PAREDE.filter((x) => x.id).map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                </select>
+              )}
+              {!!get("existente.alvenaria.pintar") && (
+                <span style={{ fontSize: 11.5, color: "#6b7280" }}>
+                  soma {numOrZero(quantos) * facesDaPintura(get("existente.alvenaria.pintar"))} m² à pintura
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Banheiros: o padrão de cada um decide as peças */}
+          {it.porPadrao && quantos > 0 && (
+            <div style={{ margin: "8px 0 0", paddingLeft: isMobile ? 0 : 4 }}>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 5 }}>
+                Padrão de cada banheiro — define as louças e os metais que entram no orçamento.
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {Array.from({ length: Math.min(20, Math.round(quantos)) }).map((_, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 11.5, color: "#6b7280" }}>{i + 1}º</span>
+                    <select style={{ ...cel, width: "auto", minWidth: 120 }}
+                      value={(get(`existente.${it.id}.padroes`) || [])[i] || padraoObra}
+                      onChange={(e) => {
+                        const lista = (get(`existente.${it.id}.padroes`) || []).slice();
+                        while (lista.length < Math.round(quantos)) lista.push(padraoObra);
+                        lista[i] = e.target.value;
+                        set(`existente.${it.id}.padroes`, lista.slice(0, Math.round(quantos)));
+                      }}>
+                      {PADROES_OBRA.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-      ))}
+        );
+      })}
       <div style={{ ...grade, marginTop: 4 }}>
         <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>Tipo do forro</label>
         <div style={{ gridColumn: isMobile ? "auto" : "2 / -1" }}>
@@ -13896,7 +14074,17 @@ function condicoesObra(cp) {
     muro: cp.comprimentoMuroDivisa > 0 && cp.alturaMuroDivisa > 0,
     piscina: cp.piscina.areaConstruida > 0,
     pavimentacao: cp.pavimentacaoExterna > 0,
+    reforma: cp.tipoObra === "reforma" && algumaMedidaExistente(cp.existente),
   };
+}
+// Reforma sem nada medido no bloco Construção existente não acrescenta
+// etapa nenhuma — é uma obra nova que só está marcada como reforma.
+function algumaMedidaExistente(ex) {
+  for (const linha of Object.values(ex || {})) {
+    if (!linha || typeof linha !== "object") continue;
+    if (numOrZero(linha.remover) > 0 || numOrZero(linha.executar) > 0) return true;
+  }
+  return false;
 }
 const ALTURA_PILAR_M = 2.8;
 function medicoesCronograma(projeto, data) {
@@ -14027,6 +14215,43 @@ function medicoesCronograma(projeto, data) {
   add("PINTURA", "PINTURA_INT", Math.max(0, cp.m2ParedesInternas - cp.revestimentoInterno) * 2 + cp.m2ParedesExternas);
   add("PINTURA", "PINTURA_EXT", cp.m2ParedesExternas + m2Muro * 2);
   add("PORTAS", "PORTA", portas);
+
+  // ── Reforma ────────────────────────────────────────────────────
+  // Sem isto o cronograma ignorava a construção existente: uma reforma de
+  // 40 m² de parede demolida e 30 de piso novo valia zero hora, e o prazo
+  // não mudava por mais que o orçamento crescesse.
+  const ex = cp.existente || {};
+  const med = (id, lado) => numOrZero((ex[id] || {})[lado]);
+  add("DEMOLICAO", "DEMOLICAO_ALVENARIA",  med("alvenaria", "remover"));
+  add("DEMOLICAO", "DEMOLICAO_DRYWALL",    med("drywall", "remover"));
+  add("DEMOLICAO", "REMOCAO_REVESTIMENTO", med("revestimento", "remover"));
+  add("DEMOLICAO", "REMOCAO_PISO",         med("piso", "remover"));
+  add("DEMOLICAO", "RETIRADA_CONTRAPISO",  med("contrapiso", "remover"));
+  add("DEMOLICAO", "REMOCAO_FORRO",        med("forro", "remover"));
+  add("DEMOLICAO", "DEMOLICAO_CALCADA",    med("calcada", "remover"));
+  add("DEMOLICAO", "RETIRADA_ESQUADRIA",   med("esquadria", "remover"));
+  add("DEMOLICAO", "DESMONTAGEM_BANHEIRO", med("banheiro", "remover"));
+  // O entulho é a mesma conta do orçamento: volume por unidade demolida,
+  // empolamento e caçamba de 5 m³ — mantida aqui em uma linha só.
+  if (typeof cacambasDaReforma === "function") {
+    add("DEMOLICAO", "CARGA_ENTULHO", cacambasDaReforma(ex), "caçambas calculadas do que foi demolido");
+  }
+
+  // O que se refaz sobre o existente entra nas etapas que já existem
+  add("PAREDES_TERREO",     "ALVENARIA",      med("alvenaria", "executar"));
+  add("PAREDES_TERREO",     "DRYWALL_PAREDE", med("drywall", "executar"));
+  const rebocoRef = med("reboco", "executar") || med("alvenaria", "executar");
+  add("REBOCO",             "CHAPISCO_INT",   rebocoRef);
+  add("REBOCO",             "REBOCO_INT",     rebocoRef);
+  add("CONTRAPISO_TERREO",  "CONTRAPISO",     med("contrapiso", "executar"));
+  add("CONTRAPISO_EXTERNO", "CALCADA",        med("calcada", "executar"));
+  add("REVESTIMENTOS",      "PISO_CERAMICO",  med("piso", "executar"));
+  add("REVESTIMENTOS",      "AZULEJO",        med("revestimento", "executar"));
+  add("FORROS",             "FORRO_GESSO",    med("forro", "executar"));
+  add("ESQUADRIAS",         "ESQUADRIA",      med("esquadria", "executar") * 2, "2 m² por esquadria instalada");
+  add("ACABAMENTO_INST",    "MONTAGEM_BANHEIRO", med("banheiro", "executar"));
+  const facesParede = typeof facesDaPintura === "function" ? facesDaPintura((ex.alvenaria || {}).pintar) : 0;
+  add("PINTURA",            "PINTURA_INT",    med("pintura", "executar") + med("alvenaria", "executar") * facesParede);
 
   return { cp, medicoes: m, telhado };
 }
@@ -14222,14 +14447,31 @@ function gerarCronogramaObra(projeto, orcamento, data, config) {
   const cfg = config || {};
   const { cp, medicoes, telhado } = medicoesCronograma(projeto, data);
   const cond = condicoesObra(cp);
-  const rede = resolverRedeCronograma(etapasCronogramaAtivas(data), cond);
   const servicos = servicosCronogramaAtivos(data);
   const avisos = [];
 
   const prazoTabela = prazoParametricoMeses(cp.areaConstruida, cp.tipologia, data);
   const prazoAlvo = numOrZero(cfg.prazoAlvoMeses) > 0 ? numOrZero(cfg.prazoAlvoMeses) : prazoTabela;
   const alvoDias = prazoAlvo * DIAS_UTEIS_MES;
-  if (!(prazoAlvo > 0)) avisos.push({ tipo: "sem_prazo", mensagem: "Sem área construída não há prazo pela tabela — informe um prazo-alvo." });
+
+  // Reforma pura (nada de área construída nova): a obra não tem fundação,
+  // laje nem telhado, e cada etapa sem nada medido somaria a duração-base de
+  // uma casa inteira ao prazo. Aqui essas etapas saem da rede pelo mesmo
+  // caminho das condicionais — quem dependia delas passa a depender das
+  // predecessoras. Pré-obra e limpeza ficam: acontecem em qualquer obra.
+  const soReforma = !(prazoAlvo > 0) && cond.reforma;
+  const ETAPAS_SEMPRE = new Set(["PRE_OBRA", "LIMPEZA"]);
+  const comMedicao = new Set(medicoes.map((x) => x.etapa));
+  cond.__semMedicao = false;
+  const etapasDaObra = etapasCronogramaAtivas(data).map((e) =>
+    (!soReforma || ETAPAS_SEMPRE.has(e.id) || comMedicao.has(e.id)) ? e : { ...e, condicao: "__semMedicao" });
+  const rede = resolverRedeCronograma(etapasDaObra, cond);
+  // A tabela de prazo é por m² de área construída. Reforma costuma não ter
+  // área construída nenhuma (ninguém ampliou), então não há prazo-alvo para
+  // calibrar o modo simplificado — mas há horas-homem medidas, e é delas
+  // que o prazo sai. Por isso a reforma cai no modo produtividade sozinha.
+  if (!(prazoAlvo > 0) && !soReforma) avisos.push({ tipo: "sem_prazo", mensagem: "Sem área construída não há prazo pela tabela — informe um prazo-alvo." });
+  if (soReforma) avisos.push({ tipo: "prazo_por_produtividade", mensagem: "Reforma sem área construída: o prazo vem das horas medidas na construção existente, não da tabela por m². Informe um prazo-alvo se quiser comparar." });
 
   // Horas-homem por etapa e por ofício
   const hh = {}, hhOficio = {}, medicoesDetalhe = [];
@@ -14299,7 +14541,7 @@ function gerarCronogramaObra(projeto, orcamento, data, config) {
     if (kEquipe >= 19.99) avisos.push({ tipo: "prazo_inalcancavel", mensagem: "Mesmo com a equipe 20× maior o prazo-alvo não fecha: as etapas paramétricas (sem serviço medido) já ocupam esse prazo." });
   }
 
-  const modo = cfg.modo === "produtividade" ? "produtividade" : "simplificado";
+  const modo = (cfg.modo === "produtividade" || soReforma) ? "produtividade" : "simplificado";
   const ativo = modo === "produtividade" ? produtividade : simplificado;
 
   // Calendário
@@ -14698,7 +14940,14 @@ function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobil
   // Prazo, etapas e equipe são do escritório; o cliente final só consulta.
   const permBase = getPermissoes();
   const perm = { ...permBase, podeEditar: permBase.podeGerenciarObra === undefined ? permBase.podeEditar : permBase.podeGerenciarObra };
-  const temProjeto = !!(obra.projeto && obra.projeto.arquitetura && numOrZero(obra.projeto.arquitetura.areaConstruida) > 0);
+  // Reforma pura não tem área construída — ninguém ampliou nada — e mesmo
+  // assim tem cronograma: o prazo vem das horas da construção existente.
+  // Exigir área construída deixava a tela do cronograma fechada justamente
+  // na obra em que ela mais muda de mês para mês.
+  const arq = (obra.projeto || {}).arquitetura || {};
+  const temExistente = typeof algumaMedidaExistente === "function"
+    && obra.projeto && algumaMedidaExistente(migrarExistente(obra.projeto.existente));
+  const temProjeto = numOrZero(arq.areaConstruida) > 0 || !!temExistente;
   const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 16, marginBottom: 20 };
   return (
     <div style={wrap}>
@@ -14709,7 +14958,7 @@ function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobil
       </div>
       {!temProjeto ? (
         <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "14px 16px", fontSize: 12.5, color: "#92400e" }}>
-          O cronograma usa as áreas, volumes e ambientes do orçamento da obra. Preencha os dados do projeto e gere o orçamento primeiro.
+          O cronograma usa as áreas, volumes e ambientes do orçamento da obra. Preencha os dados do projeto — em reforma, basta medir a construção existente — e gere o orçamento.
           {onIrParaOrcamento && <div style={{ marginTop: 10 }}><button style={C.btn} onClick={onIrParaOrcamento}>Ir para o orçamento</button></div>}
         </div>
       ) : (

@@ -55,6 +55,7 @@ const modulo = new Function(`
     camposPreenchidos, projetoVazio, projetoParaFormulario, agruparPorSubEtapa,
     demolicoesRemocoes, entulhoDaReforma, execucaoNoExistente, SERVICOS_REFORMA, ITENS_EXISTENTE,
     migrarExistente, medidaExistente, taxaServicoReforma, DRYWALL_CONSUMO,
+    padroesDoItem, facesDaPintura, PINTURA_PAREDE, cacambasDaReforma, volumeEntulhoReforma,
     consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
 `)();
@@ -1308,6 +1309,106 @@ teste("o agrupamento não perde nem duplica nenhuma linha do orçamento", () => 
   const nomes = existente.map(g => g.subEtapa);
   assert.ok(nomes.includes("Contrapiso") && nomes.includes("Calçada"),
     "contrapiso e calçada têm que aparecer separados, não como areia e cimento repetidos");
+});
+
+
+// ── Banheiros: peças com padrão por banheiro ────────────────────
+const comKits = { materiais: [], composicoes: undefined };
+
+teste("cada banheiro leva o padrão dele, e o padrão da obra preenche o resto", () => {
+  const ex = { banheiro: { executar: 3, padroes: ["Alto"] } };
+  assert.deepStrictEqual(modulo.padroesDoItem(ex, "banheiro", 3, "Médio"), ["Alto", "Médio", "Médio"]);
+  // padrão salvo que não existe mais cai no da obra
+  assert.deepStrictEqual(modulo.padroesDoItem({ banheiro: { padroes: ["Inventado"] } }, "banheiro", 1, "Baixo"), ["Baixo"]);
+  // lista maior que a quantidade é cortada
+  assert.deepStrictEqual(modulo.padroesDoItem({ banheiro: { padroes: ["Alto", "Alto", "Alto"] } }, "banheiro", 2, "Médio"), ["Alto", "Alto"]);
+});
+
+teste("o banheiro montado traz as peças, e o padrão Alto muda o kit", () => {
+  const p = (padroes) => modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    existente: { banheiro: { executar: padroes.length, padroes } } });
+  const medio = [];
+  modulo.execucaoNoExistente(p(["Médio"]), medio, comKits);
+  const pecas = medio.filter(i => /louças e metais/i.test(i.subEtapa || ""));
+  assert.ok(pecas.length > 5, `esperava o conjunto de louças e metais, vieram ${pecas.length} linhas`);
+  assert.ok(pecas.some(i => /Sanitário padrão Médio/.test(i.item)), "o padrão entra no nome do produto");
+  assert.ok(pecas.some(i => /Misturador Chuveiro/.test(i.item)), "padrão Médio usa misturador");
+
+  const alto = [];
+  modulo.execucaoNoExistente(p(["Alto"]), alto, comKits);
+  const pecasAlto = alto.filter(i => /louças e metais/i.test(i.subEtapa || ""));
+  assert.ok(pecasAlto.some(i => /Monocomando Chuveiro/.test(i.item)), "padrão Alto usa monocomando");
+  assert.ok(pecasAlto.some(i => /Sanitário padrão Alto/.test(i.item)));
+});
+
+teste("banheiros de padrões diferentes geram linhas diferentes", () => {
+  const out = [];
+  modulo.execucaoNoExistente(modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    existente: { banheiro: { executar: 3, padroes: ["Alto", "Médio", "Médio"] } } }), out, comKits);
+  const sanitarios = out.filter(i => /Sanitário padrão/.test(i.item));
+  const porItem = Object.fromEntries(sanitarios.map(i => [i.item, i.qtd]));
+  assert.strictEqual(porItem["Louças - Sanitário padrão Alto"], 1);
+  assert.strictEqual(porItem["Louças - Sanitário padrão Médio"], 2);
+});
+
+teste("a mão de obra de montar continua separada das peças", () => {
+  const out = [];
+  modulo.execucaoNoExistente(modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    existente: { banheiro: { executar: 2 } } }), out, comKits);
+  const mo = out.find(i => i.item === "Montagem de banheiro");
+  assert.strictEqual(mo.qtd, 2);
+  assert.strictEqual(mo.tipo, "Prestadores de serviços");
+  assert.ok(out.some(i => /louças e metais/i.test(i.subEtapa || "")), "e as peças vêm junto");
+});
+
+// ── Pintura da parede nova ──────────────────────────────────────
+teste("o escopo da pintura decide quantas faces entram", () => {
+  assert.strictEqual(modulo.facesDaPintura(""), 0);
+  assert.strictEqual(modulo.facesDaPintura("interna"), 1);
+  assert.strictEqual(modulo.facesDaPintura("externa"), 1);
+  assert.strictEqual(modulo.facesDaPintura("ambas"), 2);
+  assert.strictEqual(modulo.facesDaPintura("qualquer coisa"), 0);
+});
+
+teste("parede nova sem o tique não pinta nada", () => {
+  const out = [];
+  modulo.execucaoNoExistente(modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    existente: { alvenaria: { executar: 30 } } }), out, { materiais: [] });
+  assert.strictEqual(out.filter(i => i.subEtapa === "Pintura").length, 0);
+});
+
+teste("com o tique, a área pintada segue as faces escolhidas", () => {
+  const tinta = (pintar) => {
+    const out = [];
+    modulo.execucaoNoExistente(modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+      existente: { alvenaria: { executar: 30, pintar } } }), out, { materiais: [] });
+    const t = out.find(i => i.subEtapa === "Pintura" && /Selador/.test(i.item));
+    return t ? t.qtd : 0;
+  };
+  const umaFace = tinta("interna");
+  const duasFaces = tinta("ambas");
+  assert.ok(umaFace > 0, "uma face tem que gerar pintura");
+  assert.ok(duasFaces > umaFace, `duas faces têm que pedir mais material (${umaFace} → ${duasFaces})`);
+  assert.strictEqual(tinta("externa"), umaFace, "interna e externa são uma face cada");
+});
+
+teste("a pintura da parede soma com a área digitada na linha de pintura", () => {
+  const out = [];
+  modulo.execucaoNoExistente(modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    existente: { alvenaria: { executar: 20, pintar: "ambas" }, pintura: { executar: 60 } } }), out, { materiais: [] });
+  const so60 = [];
+  modulo.execucaoNoExistente(modulo.normalizarProjeto({ tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
+    existente: { pintura: { executar: 100 } } }), so60, { materiais: [] });
+  const q = (l) => l.find(i => i.subEtapa === "Pintura" && /Selador/.test(i.item)).qtd;
+  assert.strictEqual(q(out), q(so60), "60 + 20×2 tem que dar o mesmo que 100 m² digitados");
+});
+
+// ── Entulho: uma conta só ───────────────────────────────────────
+teste("o volume e as caçambas do entulho são funções puras, reusáveis", () => {
+  const ex = { alvenaria: { remover: 40 } };
+  assert.strictEqual(modulo.volumeEntulhoReforma(ex), 10);   // 40 × 0,25
+  assert.strictEqual(modulo.cacambasDaReforma(ex), 3);       // 10 × 1,4 ÷ 5 → 2,8 → 3
+  assert.strictEqual(modulo.cacambasDaReforma({}), 0);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

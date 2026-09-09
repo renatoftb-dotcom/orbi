@@ -188,7 +188,17 @@ function condicoesObra(cp) {
     muro: cp.comprimentoMuroDivisa > 0 && cp.alturaMuroDivisa > 0,
     piscina: cp.piscina.areaConstruida > 0,
     pavimentacao: cp.pavimentacaoExterna > 0,
+    reforma: cp.tipoObra === "reforma" && algumaMedidaExistente(cp.existente),
   };
+}
+// Reforma sem nada medido no bloco Construção existente não acrescenta
+// etapa nenhuma — é uma obra nova que só está marcada como reforma.
+function algumaMedidaExistente(ex) {
+  for (const linha of Object.values(ex || {})) {
+    if (!linha || typeof linha !== "object") continue;
+    if (numOrZero(linha.remover) > 0 || numOrZero(linha.executar) > 0) return true;
+  }
+  return false;
 }
 const ALTURA_PILAR_M = 2.8;
 function medicoesCronograma(projeto, data) {
@@ -319,6 +329,43 @@ function medicoesCronograma(projeto, data) {
   add("PINTURA", "PINTURA_INT", Math.max(0, cp.m2ParedesInternas - cp.revestimentoInterno) * 2 + cp.m2ParedesExternas);
   add("PINTURA", "PINTURA_EXT", cp.m2ParedesExternas + m2Muro * 2);
   add("PORTAS", "PORTA", portas);
+
+  // ── Reforma ────────────────────────────────────────────────────
+  // Sem isto o cronograma ignorava a construção existente: uma reforma de
+  // 40 m² de parede demolida e 30 de piso novo valia zero hora, e o prazo
+  // não mudava por mais que o orçamento crescesse.
+  const ex = cp.existente || {};
+  const med = (id, lado) => numOrZero((ex[id] || {})[lado]);
+  add("DEMOLICAO", "DEMOLICAO_ALVENARIA",  med("alvenaria", "remover"));
+  add("DEMOLICAO", "DEMOLICAO_DRYWALL",    med("drywall", "remover"));
+  add("DEMOLICAO", "REMOCAO_REVESTIMENTO", med("revestimento", "remover"));
+  add("DEMOLICAO", "REMOCAO_PISO",         med("piso", "remover"));
+  add("DEMOLICAO", "RETIRADA_CONTRAPISO",  med("contrapiso", "remover"));
+  add("DEMOLICAO", "REMOCAO_FORRO",        med("forro", "remover"));
+  add("DEMOLICAO", "DEMOLICAO_CALCADA",    med("calcada", "remover"));
+  add("DEMOLICAO", "RETIRADA_ESQUADRIA",   med("esquadria", "remover"));
+  add("DEMOLICAO", "DESMONTAGEM_BANHEIRO", med("banheiro", "remover"));
+  // O entulho é a mesma conta do orçamento: volume por unidade demolida,
+  // empolamento e caçamba de 5 m³ — mantida aqui em uma linha só.
+  if (typeof cacambasDaReforma === "function") {
+    add("DEMOLICAO", "CARGA_ENTULHO", cacambasDaReforma(ex), "caçambas calculadas do que foi demolido");
+  }
+
+  // O que se refaz sobre o existente entra nas etapas que já existem
+  add("PAREDES_TERREO",     "ALVENARIA",      med("alvenaria", "executar"));
+  add("PAREDES_TERREO",     "DRYWALL_PAREDE", med("drywall", "executar"));
+  const rebocoRef = med("reboco", "executar") || med("alvenaria", "executar");
+  add("REBOCO",             "CHAPISCO_INT",   rebocoRef);
+  add("REBOCO",             "REBOCO_INT",     rebocoRef);
+  add("CONTRAPISO_TERREO",  "CONTRAPISO",     med("contrapiso", "executar"));
+  add("CONTRAPISO_EXTERNO", "CALCADA",        med("calcada", "executar"));
+  add("REVESTIMENTOS",      "PISO_CERAMICO",  med("piso", "executar"));
+  add("REVESTIMENTOS",      "AZULEJO",        med("revestimento", "executar"));
+  add("FORROS",             "FORRO_GESSO",    med("forro", "executar"));
+  add("ESQUADRIAS",         "ESQUADRIA",      med("esquadria", "executar") * 2, "2 m² por esquadria instalada");
+  add("ACABAMENTO_INST",    "MONTAGEM_BANHEIRO", med("banheiro", "executar"));
+  const facesParede = typeof facesDaPintura === "function" ? facesDaPintura((ex.alvenaria || {}).pintar) : 0;
+  add("PINTURA",            "PINTURA_INT",    med("pintura", "executar") + med("alvenaria", "executar") * facesParede);
 
   return { cp, medicoes: m, telhado };
 }
@@ -514,14 +561,31 @@ function gerarCronogramaObra(projeto, orcamento, data, config) {
   const cfg = config || {};
   const { cp, medicoes, telhado } = medicoesCronograma(projeto, data);
   const cond = condicoesObra(cp);
-  const rede = resolverRedeCronograma(etapasCronogramaAtivas(data), cond);
   const servicos = servicosCronogramaAtivos(data);
   const avisos = [];
 
   const prazoTabela = prazoParametricoMeses(cp.areaConstruida, cp.tipologia, data);
   const prazoAlvo = numOrZero(cfg.prazoAlvoMeses) > 0 ? numOrZero(cfg.prazoAlvoMeses) : prazoTabela;
   const alvoDias = prazoAlvo * DIAS_UTEIS_MES;
-  if (!(prazoAlvo > 0)) avisos.push({ tipo: "sem_prazo", mensagem: "Sem área construída não há prazo pela tabela — informe um prazo-alvo." });
+
+  // Reforma pura (nada de área construída nova): a obra não tem fundação,
+  // laje nem telhado, e cada etapa sem nada medido somaria a duração-base de
+  // uma casa inteira ao prazo. Aqui essas etapas saem da rede pelo mesmo
+  // caminho das condicionais — quem dependia delas passa a depender das
+  // predecessoras. Pré-obra e limpeza ficam: acontecem em qualquer obra.
+  const soReforma = !(prazoAlvo > 0) && cond.reforma;
+  const ETAPAS_SEMPRE = new Set(["PRE_OBRA", "LIMPEZA"]);
+  const comMedicao = new Set(medicoes.map((x) => x.etapa));
+  cond.__semMedicao = false;
+  const etapasDaObra = etapasCronogramaAtivas(data).map((e) =>
+    (!soReforma || ETAPAS_SEMPRE.has(e.id) || comMedicao.has(e.id)) ? e : { ...e, condicao: "__semMedicao" });
+  const rede = resolverRedeCronograma(etapasDaObra, cond);
+  // A tabela de prazo é por m² de área construída. Reforma costuma não ter
+  // área construída nenhuma (ninguém ampliou), então não há prazo-alvo para
+  // calibrar o modo simplificado — mas há horas-homem medidas, e é delas
+  // que o prazo sai. Por isso a reforma cai no modo produtividade sozinha.
+  if (!(prazoAlvo > 0) && !soReforma) avisos.push({ tipo: "sem_prazo", mensagem: "Sem área construída não há prazo pela tabela — informe um prazo-alvo." });
+  if (soReforma) avisos.push({ tipo: "prazo_por_produtividade", mensagem: "Reforma sem área construída: o prazo vem das horas medidas na construção existente, não da tabela por m². Informe um prazo-alvo se quiser comparar." });
 
   // Horas-homem por etapa e por ofício
   const hh = {}, hhOficio = {}, medicoesDetalhe = [];
@@ -591,7 +655,7 @@ function gerarCronogramaObra(projeto, orcamento, data, config) {
     if (kEquipe >= 19.99) avisos.push({ tipo: "prazo_inalcancavel", mensagem: "Mesmo com a equipe 20× maior o prazo-alvo não fecha: as etapas paramétricas (sem serviço medido) já ocupam esse prazo." });
   }
 
-  const modo = cfg.modo === "produtividade" ? "produtividade" : "simplificado";
+  const modo = (cfg.modo === "produtividade" || soReforma) ? "produtividade" : "simplificado";
   const ativo = modo === "produtividade" ? produtividade : simplificado;
 
   // Calendário
@@ -990,7 +1054,14 @@ function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobil
   // Prazo, etapas e equipe são do escritório; o cliente final só consulta.
   const permBase = getPermissoes();
   const perm = { ...permBase, podeEditar: permBase.podeGerenciarObra === undefined ? permBase.podeEditar : permBase.podeGerenciarObra };
-  const temProjeto = !!(obra.projeto && obra.projeto.arquitetura && numOrZero(obra.projeto.arquitetura.areaConstruida) > 0);
+  // Reforma pura não tem área construída — ninguém ampliou nada — e mesmo
+  // assim tem cronograma: o prazo vem das horas da construção existente.
+  // Exigir área construída deixava a tela do cronograma fechada justamente
+  // na obra em que ela mais muda de mês para mês.
+  const arq = (obra.projeto || {}).arquitetura || {};
+  const temExistente = typeof algumaMedidaExistente === "function"
+    && obra.projeto && algumaMedidaExistente(migrarExistente(obra.projeto.existente));
+  const temProjeto = numOrZero(arq.areaConstruida) > 0 || !!temExistente;
   const wrap = { border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 16, marginBottom: 20 };
   return (
     <div style={wrap}>
@@ -1001,7 +1072,7 @@ function CronogramaObraView({ obra, obras, data, save, onObraAtualizada, isMobil
       </div>
       {!temProjeto ? (
         <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 12, padding: "14px 16px", fontSize: 12.5, color: "#92400e" }}>
-          O cronograma usa as áreas, volumes e ambientes do orçamento da obra. Preencha os dados do projeto e gere o orçamento primeiro.
+          O cronograma usa as áreas, volumes e ambientes do orçamento da obra. Preencha os dados do projeto — em reforma, basta medir a construção existente — e gere o orçamento.
           {onIrParaOrcamento && <div style={{ marginTop: 10 }}><button style={C.btn} onClick={onIrParaOrcamento}>Ir para o orçamento</button></div>}
         </div>
       ) : (
