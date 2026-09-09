@@ -52,7 +52,8 @@ const modulo = new Function(`
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
     camposPreenchidos, projetoVazio,
-    demolicoesRemocoes, entulhoDaReforma, execucaoNoExistente, SERVICOS_REFORMA, ENTULHO_M3_POR_M2, taxaServicoReforma,
+    demolicoesRemocoes, entulhoDaReforma, execucaoNoExistente, SERVICOS_REFORMA, ITENS_EXISTENTE,
+    migrarExistente, medidaExistente, taxaServicoReforma, DRYWALL_CONSUMO,
     consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
 `)();
@@ -916,119 +917,164 @@ teste("ilha (cozinha e área de lazer): 1 m menor que a parede maior, laterais d
 
 
 // ── Reforma: construção existente ───────────────────────────────
-const projetoReforma = (existente) => ({
-  ...modulo.normalizarProjeto({ tipoObra: "reforma", padrao: "Médio", tipologia: "Térrea", existente }),
-});
+const projetoReforma = (existente) =>
+  modulo.normalizarProjeto({ tipoObra: "reforma", padrao: "Médio", tipologia: "Térrea", existente });
+const par = (id, remover, executar) => ({ [id]: { remover, executar } });
 
 teste("obra nova não emite nada de reforma", () => {
   const r = modulo.gerarOrcamentoObra({ tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
     arquitetura: { areaConstruida: 100 }, terreo: { area: 100 },
-    existente: { paredeDemolir: 50, pisoAssentar: 40 } }, { materiais: [] });
+    existente: { alvenaria: { remover: 50 }, piso: { executar: 40 } } }, { materiais: [] });
   const daReforma = r.itens.filter(i => /Demolições|Entulho|Construção existente/.test(i.etapa));
   assert.strictEqual(daReforma.length, 0, "obra nova não pode puxar o bloco da reforma");
 });
 
+teste("a matriz tem os itens da tela, cada um com os lados certos", () => {
+  const ids = modulo.ITENS_EXISTENTE.map(i => i.id);
+  for (const id of ["contrapiso", "alvenaria", "drywall", "forro", "piso", "revestimento", "calcada"]) {
+    assert.ok(ids.includes(id), `faltou ${id} na matriz`);
+  }
+  const reboco = modulo.ITENS_EXISTENTE.find(i => i.id === "reboco");
+  assert.ok(!reboco.remover, "reboco não tem coluna de demolir — sai junto com a parede");
+  assert.ok(reboco.executar);
+  const pintura = modulo.ITENS_EXISTENTE.find(i => i.id === "pintura");
+  assert.ok(!pintura.remover);
+});
+
+teste("o formato antigo (um campo por serviço) continua sendo lido", () => {
+  const ex = modulo.migrarExistente({ paredeDemolir: 40, pisoAssentar: 30, loucaMetalInstalar: 2, rebocoNovo: 12 });
+  assert.strictEqual(modulo.medidaExistente(ex, "alvenaria", "remover"), 40);
+  assert.strictEqual(modulo.medidaExistente(ex, "piso", "executar"), 30);
+  assert.strictEqual(modulo.medidaExistente(ex, "banheiro", "executar"), 2);
+  assert.strictEqual(modulo.medidaExistente(ex, "reboco", "executar"), 12);
+});
+
+teste("o formato novo vence o antigo quando os dois estão presentes", () => {
+  const ex = modulo.migrarExistente({ alvenaria: { remover: 99 }, paredeDemolir: 40 });
+  assert.strictEqual(modulo.medidaExistente(ex, "alvenaria", "remover"), 99);
+});
+
 teste("cada demolição medida vira um serviço, e só as medidas entram", () => {
   const out = [];
-  modulo.demolicoesRemocoes(projetoReforma({ paredeDemolir: 40, pisoRemover: 25 }), out, { materiais: [] });
+  modulo.demolicoesRemocoes(projetoReforma({ ...par("alvenaria", 40), ...par("piso", 25) }), out, { materiais: [] });
   assert.deepStrictEqual(out.map(i => i.item), ["Demolição de alvenaria", "Remoção de piso"]);
   assert.strictEqual(out[0].qtd, 40);
-  assert.strictEqual(out[0].preco, modulo.SERVICOS_REFORMA.paredeDemolir.valor);
+  assert.strictEqual(out[0].preco, 35);
   assert.strictEqual(out[0].tipo, "Prestadores de serviços");
   assert.ok(out[0].ordem < 0, "demolição vem antes de tudo");
 });
 
+teste("drywall e calçada têm os dois lados", () => {
+  const demolir = [];
+  modulo.demolicoesRemocoes(projetoReforma({ ...par("drywall", 20), ...par("calcada", 15) }), demolir, { materiais: [] });
+  assert.deepStrictEqual(demolir.map(i => i.item), ["Demolição de parede de drywall", "Demolição de calçada"]);
+  const construir = [];
+  modulo.execucaoNoExistente(projetoReforma({ drywall: { executar: 20 }, calcada: { executar: 15 } }), construir, { materiais: [] });
+  assert.ok(construir.some(i => i.subEtapa === "Parede de drywall" && i.item === "Gesso - Drywall"));
+  assert.ok(construir.some(i => i.subEtapa === "Calçada" && i.item === "Pedra"));
+});
+
+teste("drywall: uma placa por face, montante e guia em barras de 3 m", () => {
+  const out = [];
+  modulo.execucaoNoExistente(projetoReforma({ drywall: { executar: 20 } }), out, { materiais: [] });
+  const placa = out.find(i => i.item === "Gesso - Drywall");
+  assert.strictEqual(placa.qtd, 44); // 20 × 2 × 1,10
+  const montante = out.find(i => /Montante/.test(i.item));
+  assert.strictEqual(montante.qtd, Math.ceil(20 * (1.67 / 3) * 1.1 - 1e-9));
+  assert.ok(out.some(i => /Massa para juntas/.test(i.item)));
+});
+
 teste("o preço do catálogo de Insumos vence a referência do módulo", () => {
-  const data = { materiais: [{ codigo: "X1", nome: "Demolição de alvenaria", tipo: "prestador", precos: [{ preco: 52, mes: "2026-09" }] }] };
-  const taxa = modulo.taxaServicoReforma("paredeDemolir", data);
-  // sem catálogo utilizável, cai na referência — o importante é não quebrar
-  assert.ok(taxa.valor > 0);
-  const semCatalogo = modulo.taxaServicoReforma("paredeDemolir", { materiais: [] });
+  const semCatalogo = modulo.taxaServicoReforma("alvenaria:remover", { materiais: [] });
   assert.strictEqual(semCatalogo.valor, 35);
   assert.strictEqual(semCatalogo.fonte, "referencia");
 });
 
 teste("entulho sai do que foi demolido, em caçambas inteiras", () => {
   const out = [];
-  // 40 m² de parede × 0,25 = 10 m³; × 1,4 de empolamento = 14 m³; ÷ 5 = 2,8 → 3
-  modulo.entulhoDaReforma(projetoReforma({ paredeDemolir: 40 }), out, { materiais: [] });
+  // 40 m² de parede × 0,25 = 10 m³; × 1,4 = 14 m³; ÷ 5 = 2,8 → 3
+  modulo.entulhoDaReforma(projetoReforma(par("alvenaria", 40)), out, { materiais: [] });
   assert.strictEqual(out.length, 1);
   assert.strictEqual(out[0].item, "Caçamba de entulho 5m³");
   assert.strictEqual(out[0].qtd, 3);
 });
 
+teste("banheiro desmontado e calçada demolida também geram entulho", () => {
+  const out = [];
+  // 2 banheiros × 0,3 + 10 m² de calçada × 0,12 = 1,8 m³; × 1,4 = 2,52; ÷ 5 → 1
+  modulo.entulhoDaReforma(projetoReforma({ ...par("banheiro", 2), ...par("calcada", 10) }), out, { materiais: [] });
+  assert.strictEqual(out[0].qtd, 1);
+});
+
 teste("sem demolição não há caçamba", () => {
   const out = [];
-  modulo.entulhoDaReforma(projetoReforma({ pisoAssentar: 100 }), out, { materiais: [] });
+  modulo.entulhoDaReforma(projetoReforma({ piso: { executar: 100 } }), out, { materiais: [] });
   assert.strictEqual(out.length, 0);
 });
 
 teste("parede a construir usa os mesmos 40 tijolos por m² da obra nova", () => {
   const out = [];
-  modulo.execucaoNoExistente(projetoReforma({ paredeConstruir: 10 }), out, { materiais: [] });
+  modulo.execucaoNoExistente(projetoReforma({ alvenaria: { executar: 10 } }), out, { materiais: [] });
   const tij = out.find(i => i.item === "Tijolos 6 Furos");
   assert.strictEqual(tij.qtd, Math.ceil(10 * 40 * 1.1 - 1e-9)); // 440
   assert.strictEqual(tij.etapa, "Construção existente");
 });
 
-teste("chapisco e reboco herdam a área da parede quando não informados", () => {
+teste("chapisco e reboco herdam a parede de alvenaria quando não informados", () => {
   const semCampo = [];
-  modulo.execucaoNoExistente(projetoReforma({ paredeConstruir: 10 }), semCampo, { materiais: [] });
+  modulo.execucaoNoExistente(projetoReforma({ alvenaria: { executar: 10 } }), semCampo, { materiais: [] });
   const comCampo = [];
-  modulo.execucaoNoExistente(projetoReforma({ paredeConstruir: 10, rebocoNovo: 10 }), comCampo, { materiais: [] });
-  const areia = (l) => l.filter(i => i.subEtapa === "Chapisco e reboco no existente" && i.item === "Areia Fina")[0];
-  assert.ok(areia(semCampo), "sem o campo, o reboco tem que sair pela parede construída");
+  modulo.execucaoNoExistente(projetoReforma({ alvenaria: { executar: 10 }, reboco: { executar: 10 } }), comCampo, { materiais: [] });
+  const areia = (l) => l.filter(i => i.subEtapa === "Chapisco e reboco" && i.item === "Areia Fina")[0];
+  assert.ok(areia(semCampo), "sem o campo, o reboco sai pela parede construída");
   assert.strictEqual(areia(semCampo).qtd, areia(comCampo).qtd);
 });
 
-teste("reboco só do existente, sem parede nova, também entra", () => {
+teste("reboco sozinho, sem parede nova, também entra", () => {
   const out = [];
-  modulo.execucaoNoExistente(projetoReforma({ rebocoNovo: 30 }), out, { materiais: [] });
-  assert.ok(out.some(i => i.subEtapa === "Chapisco e reboco no existente"));
+  modulo.execucaoNoExistente(projetoReforma({ reboco: { executar: 30 } }), out, { materiais: [] });
+  assert.ok(out.some(i => i.subEtapa === "Chapisco e reboco"));
   assert.ok(!out.some(i => i.item === "Tijolos 6 Furos"), "não inventa parede que não existe");
 });
 
 teste("piso a assentar traz peças, argamassa e rejunte", () => {
   const out = [];
-  modulo.execucaoNoExistente(projetoReforma({ pisoAssentar: 50 }), out, { materiais: [] });
-  const sub = out.filter(i => i.subEtapa === "Piso a assentar");
+  modulo.execucaoNoExistente(projetoReforma({ piso: { executar: 50 } }), out, { materiais: [] });
+  const sub = out.filter(i => i.subEtapa === "Piso");
   assert.strictEqual(sub.length, 3);
-  const pecas = sub.find(i => /Porcelanato|Cerâmica/.test(i.item));
-  assert.strictEqual(pecas.qtd, 60); // 50 × 1,20
+  assert.strictEqual(sub.find(i => /Porcelanato|Cerâmica/.test(i.item)).qtd, 60); // 50 × 1,20
   assert.ok(sub.some(i => /Argamassa AC-III/.test(i.item)), "60x60 é porcelanato, pede AC-III");
   assert.ok(sub.some(i => i.item === "Rejunte 1kg"));
 });
 
-teste("pintura do existente sai com as quatro linhas de tinta", () => {
+teste("forro a instalar traz a placa e os consumíveis do tipo escolhido", () => {
   const out = [];
-  modulo.execucaoNoExistente(projetoReforma({ pinturaExistente: 80 }), out, { materiais: [] });
-  const itens = out.filter(i => i.subEtapa === "Pintura do existente").map(i => i.item);
+  modulo.execucaoNoExistente(projetoReforma({ forro: { executar: 40, tipo: "pvc" } }), out, { materiais: [] });
+  const doForro = out.filter(i => i.subEtapa === "Forro");
+  assert.ok(doForro.some(i => i.item === "Forro - PVC"), "a placa é a do tipo escolhido");
+  assert.ok(doForro.some(i => /Sarrafo/.test(i.item)), "barroteamento do PVC");
+  assert.ok(!doForro.some(i => /PERFIL F530/.test(i.item)), "perfil F530 é do gesso acartonado, não do PVC");
+});
+
+teste("pintura sai com as quatro linhas de tinta", () => {
+  const out = [];
+  modulo.execucaoNoExistente(projetoReforma({ pintura: { executar: 80 } }), out, { materiais: [] });
+  const itens = out.filter(i => i.subEtapa === "Pintura").map(i => i.item);
   assert.strictEqual(itens.length, 4);
   assert.ok(itens.some(i => /Selador/.test(i)));
   assert.ok(itens.some(i => /Tinta Acrílica/.test(i)));
 });
 
-teste("banheiro é a unidade: montar e desmontar contam por banheiro", () => {
-  const montar = [];
-  modulo.execucaoNoExistente(projetoReforma({ banheiroMontar: 2 }), montar, { materiais: [] });
-  const m = montar.find(i => i.item === "Montagem de banheiro");
-  assert.strictEqual(m.qtd, 2);
-  assert.strictEqual(m.tipo, "Prestadores de serviços");
-  assert.strictEqual(m.preco, 600);
-
-  const desmontar = [];
-  modulo.demolicoesRemocoes(projetoReforma({ banheiroDesmontar: 2 }), desmontar, { materiais: [] });
-  const d = desmontar.find(i => i.item === "Desmontagem de banheiro");
-  assert.strictEqual(d.qtd, 2);
-  assert.strictEqual(d.preco, 220);
-});
-
-teste("banheiro desmontado também gera entulho", () => {
+teste("banheiro e esquadria são mão de obra, contados por unidade", () => {
   const out = [];
-  // 2 banheiros × 0,3 = 0,6 m³; × 1,4 = 0,84; ÷ 5 = 0,168 → 1 caçamba
-  modulo.entulhoDaReforma(projetoReforma({ banheiroDesmontar: 2 }), out, { materiais: [] });
-  assert.strictEqual(out.length, 1);
-  assert.strictEqual(out[0].qtd, 1);
+  modulo.execucaoNoExistente(projetoReforma({ banheiro: { executar: 2 }, esquadria: { executar: 5 } }), out, { materiais: [] });
+  const b = out.find(i => i.item === "Montagem de banheiro");
+  assert.strictEqual(b.qtd, 2);
+  assert.strictEqual(b.preco, 600);
+  assert.strictEqual(b.tipo, "Prestadores de serviços");
+  const e = out.find(i => i.item === "Instalação de esquadria");
+  assert.strictEqual(e.qtd, 5);
+  assert.strictEqual(e.preco, 90);
 });
 
 teste("bloco vazio não emite linha nenhuma", () => {
@@ -1043,17 +1089,23 @@ teste("a reforma inteira entra no orçamento, ordenada e somada", () => {
   const r = modulo.gerarOrcamentoObra({
     tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
     arquitetura: { areaConstruida: 0 }, terreo: {},
-    existente: { paredeDemolir: 40, pisoRemover: 30, paredeConstruir: 12, pisoAssentar: 30, banheiroMontar: 2 },
+    existente: {
+      alvenaria: { remover: 40, executar: 12 }, piso: { remover: 30, executar: 30 },
+      drywall: { executar: 20 }, calcada: { remover: 10, executar: 10 },
+      forro: { remover: 25, executar: 25 }, banheiro: { remover: 2, executar: 2 },
+    },
   }, { materiais: [] });
   const etapas = [...new Set(r.itens.map(i => i.etapa))];
   assert.ok(etapas.includes("Demolições e remoções"));
   assert.ok(etapas.includes("Entulho"));
   assert.ok(etapas.includes("Construção existente"));
-  const dem = r.itens.find(i => i.item === "Demolição de alvenaria");
-  assert.strictEqual(dem.total, 40 * 35);
+  assert.strictEqual(r.itens.find(i => i.item === "Demolição de alvenaria").total, 40 * 35);
   assert.ok(r.totais.geral > 0);
+  // toda linha da reforma tem memória com o último passo batendo com a qtd
+  for (const i of r.itens.filter(x => /Demolições|Entulho|Construção existente/.test(x.etapa))) {
+    assert.ok(Array.isArray(i.memoria) && i.memoria.length, `${i.item} sem memória de cálculo`);
+  }
 });
-
 
 // ── Botão de limpar o formulário ────────────────────────────────
 teste("formulário em branco não tem nada preenchido", () => {

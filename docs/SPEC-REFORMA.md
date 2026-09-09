@@ -11,22 +11,60 @@ comportam como obra nova.
 
 **A parte existente** ganhou o bloco **Construção existente**, que só aparece
 quando `tipoObra = "reforma"`. Ali não há modelo de prédio nenhum: entra o
-que o arquiteto mediu na visita.
+que o arquiteto mediu na visita, numa matriz de duas colunas.
+
+## A matriz
+
+Uma linha por elemento, duas colunas — **Demolir / Desmontar** e
+**Construir / Instalar**. O mesmo item aparece dos dois lados porque é assim
+que a reforma se mede: "arranco 30 m² de piso e assento 30 m² de piso novo".
+
+| linha | demolir | construir | unidade |
+|---|:-:|:-:|---|
+| Contrapiso | • | • | m² |
+| Paredes de alvenaria | • | • | m² |
+| Paredes de drywall | • | • | m² |
+| Forros | • | • | m² |
+| Piso | • | • | m² |
+| Revestimento de parede | • | • | m² |
+| Calçada | • | • | m² |
+| Banheiros | • | • | un |
+| Esquadrias | • | • | un |
+| Chapisco e reboco | | • | m² |
+| Pintura de parede | | • | m² |
+
+Reboco e pintura não têm coluna de demolir: não se derruba reboco por conta
+própria — ele sai junto com a parede ou com o revestimento. Na tela essas
+células são um placeholder tracejado, não um campo desabilitado.
+
+**`ITENS_EXISTENTE` é a fonte única.** A mesma tabela desenha o formulário e
+dirige o cálculo: acrescentar um elemento novo à reforma é acrescentar uma
+linha nela, e ela já aparece na tela, no entulho e no orçamento.
 
 ```
 projeto.existente = {
-  // demolir e remover
-  paredeDemolir, revestimentoRemover, pisoRemover, contrapisoRemover,
-  forroRemover, esquadriaRetirar, banheiroDesmontar,
-  // construir e assentar
-  paredeConstruir, rebocoNovo, contrapisoNovo, pisoAssentar,
-  revestimentoAssentar, pinturaExistente, banheiroMontar,
+  contrapiso: { remover, executar },
+  alvenaria:  { remover, executar },
+  drywall:    { remover, executar },
+  forro:      { remover, executar, tipo },   // tipo: gesso, PVC, madeira
+  piso:       { remover, executar },
+  revestimento: { remover, executar },
+  calcada:    { remover, executar },
+  banheiro:   { remover, executar },
+  esquadria:  { remover, executar },
+  reboco:     { executar },
+  pintura:    { executar },
 }
 ```
 
-`rebocoNovo` vazio herda a área de `paredeConstruir` — parede nova sempre
-leva chapisco e reboco, e obrigar a digitar duas vezes a mesma medida só
-gera divergência.
+`reboco.executar` vazio herda `alvenaria.executar` — parede nova sempre leva
+chapisco e reboco, e obrigar a digitar duas vezes a mesma medida só gera
+divergência.
+
+O bloco nasceu com um campo por serviço (`paredeDemolir`, `pisoAssentar`) e
+virou esta matriz. `migrarExistente()` lê as duas formas, então projeto salvo
+antes da mudança não perde o que já estava digitado; onde as duas existem, a
+matriz vence.
 
 ## Ordem no orçamento
 
@@ -55,8 +93,23 @@ Sai sozinho do que foi marcado para demolir, por volume gerado por m²:
 | revestimento de parede | 0,03 |
 | piso | 0,02 |
 | forro | 0,01 |
+| drywall | 0,05 |
+| calçada | 0,12 |
 
-Mais 0,3 m³ por banheiro desmontado (vaso, cuba e acessórios).
+E por unidade: 0,30 m³ por banheiro desmontado (vaso, cuba e acessórios) e
+0,05 m³ por esquadria retirada.
+
+## Drywall e calçada
+
+Drywall usa os consumos de parede simples com montante de 70 mm a cada 60 cm:
+uma placa por face (2 m² de placa por m² de parede), montante e guia em
+barras de 3 m, 30 parafusos por m², 2,5 m de junta e 0,6 kg de massa. Os
+perfis de parede e a massa de junta entraram na semente (GES-901..903); a
+placa, o parafuso e a fita já existiam, usados no forro.
+
+Calçada usa os mesmos coeficientes do contrapiso externo — laje de 10 cm com
+tela. A forma de madeira **não** entra: depende do perímetro, que esta tela
+não mede.
 
 ## Banheiro é a unidade, não a peça
 

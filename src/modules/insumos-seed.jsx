@@ -1,7 +1,7 @@
 // ═══════════════════════════════════════════════════════════════
 // INSUMOS — SEMENTE DO CATÁLOGO
 // ═══════════════════════════════════════════════════════════════
-// 201 insumos (materiais + prestadores, inclusive os serviços de reforma) com código estável, preço de
+// 207 insumos (materiais + prestadores, inclusive os serviços de reforma) com código estável, preço de
 // referência, unidade, grupo e aliases.
 //
 // Origem dos preços (docs/referencia-orcamento/PRECOS-REFERENCIA-VICKE.xlsx):
@@ -140,6 +140,14 @@ var INSUMOS_SEED = [
   { codigo:"PRE-023", nome:"Retirada de esquadria", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:60, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Retirada de esquadria","Retirada de janela","Retirada de porta"] },
   { codigo:"PRE-024", nome:"Desmontagem de banheiro", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:220, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Desmontagem de banheiro","Retirada de louças e metais"], observacao:"Banheiro completo: vaso, lavatório, torneira, ducha, registros e acessórios" },
   { codigo:"PRE-025", nome:"Montagem de banheiro", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:600, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Montagem de banheiro","Instalação de louças e metais"], observacao:"Banheiro completo: vaso, lavatório, torneira, ducha, registros e acessórios" },
+  { codigo:"PRE-027", nome:"Demolição de parede de drywall", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:18, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Demolição de parede de drywall","Remoção de drywall"] },
+  { codigo:"PRE-028", nome:"Demolição de calçada", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:40, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Demolição de calçada","Quebra de calçada"] },
+  { codigo:"PRE-029", nome:"Instalação de esquadria", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:90, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalação de esquadria","Colocação de esquadria"] },
+  // Drywall de parede — o cadastro do escritório já tem placa, parafuso e
+  // fita (usados no forro); faltavam os perfis de parede e a massa de junta.
+  { codigo:"GES-901", nome:"Gesso - Montante 70mm 3,00m", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:22, precoFonte:"mercado", precoData:"2026-09-09", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gesso - Montante 70mm 3,00m","Montante 70","Montante drywall 70mm"] },
+  { codigo:"GES-902", nome:"Gesso - Guia 70mm 3,00m", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:19, precoFonte:"mercado", precoData:"2026-09-09", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gesso - Guia 70mm 3,00m","Guia 70","Guia drywall 70mm"] },
+  { codigo:"GES-903", nome:"Gesso - Massa para juntas 30kg", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:78, precoFonte:"mercado", precoData:"2026-09-09", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gesso - Massa para juntas 30kg","Massa drywall","Massa para juntas"] },
   { codigo:"PRE-026", nome:"Caçamba de entulho 5m³", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:320, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Caçamba de entulho 5m³","Caçamba de entulho","Caçamba"] },
 
   // Esquadrias — referência de S_ESQUADRIAS.bas (alumínio R$/kg, vidro R$/m²).

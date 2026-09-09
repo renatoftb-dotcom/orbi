@@ -5137,7 +5137,7 @@ var INSUMOS_SEED_CADASTRO = [
 // ═══════════════════════════════════════════════════════════════
 // INSUMOS — SEMENTE DO CATÁLOGO
 // ═══════════════════════════════════════════════════════════════
-// 201 insumos (materiais + prestadores, inclusive os serviços de reforma) com código estável, preço de
+// 207 insumos (materiais + prestadores, inclusive os serviços de reforma) com código estável, preço de
 // referência, unidade, grupo e aliases.
 //
 // Origem dos preços (docs/referencia-orcamento/PRECOS-REFERENCIA-VICKE.xlsx):
@@ -5276,6 +5276,14 @@ var INSUMOS_SEED = [
   { codigo:"PRE-023", nome:"Retirada de esquadria", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:60, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Retirada de esquadria","Retirada de janela","Retirada de porta"] },
   { codigo:"PRE-024", nome:"Desmontagem de banheiro", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:220, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Desmontagem de banheiro","Retirada de louças e metais"], observacao:"Banheiro completo: vaso, lavatório, torneira, ducha, registros e acessórios" },
   { codigo:"PRE-025", nome:"Montagem de banheiro", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:600, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Montagem de banheiro","Instalação de louças e metais"], observacao:"Banheiro completo: vaso, lavatório, torneira, ducha, registros e acessórios" },
+  { codigo:"PRE-027", nome:"Demolição de parede de drywall", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:18, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Demolição de parede de drywall","Remoção de drywall"] },
+  { codigo:"PRE-028", nome:"Demolição de calçada", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:40, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Demolição de calçada","Quebra de calçada"] },
+  { codigo:"PRE-029", nome:"Instalação de esquadria", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:90, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalação de esquadria","Colocação de esquadria"] },
+  // Drywall de parede — o cadastro do escritório já tem placa, parafuso e
+  // fita (usados no forro); faltavam os perfis de parede e a massa de junta.
+  { codigo:"GES-901", nome:"Gesso - Montante 70mm 3,00m", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:22, precoFonte:"mercado", precoData:"2026-09-09", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gesso - Montante 70mm 3,00m","Montante 70","Montante drywall 70mm"] },
+  { codigo:"GES-902", nome:"Gesso - Guia 70mm 3,00m", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:19, precoFonte:"mercado", precoData:"2026-09-09", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gesso - Guia 70mm 3,00m","Guia 70","Guia drywall 70mm"] },
+  { codigo:"GES-903", nome:"Gesso - Massa para juntas 30kg", grupo:"Forros e gesso", unidade:"Unidades", tipo:"material", precoReferencia:78, precoFonte:"mercado", precoData:"2026-09-09", precoNCompras:0, precoFatorInccAplicado:1, aliases:["Gesso - Massa para juntas 30kg","Massa drywall","Massa para juntas"] },
   { codigo:"PRE-026", nome:"Caçamba de entulho 5m³", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:320, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Caçamba de entulho 5m³","Caçamba de entulho","Caçamba"] },
 
   // Esquadrias — referência de S_ESQUADRIAS.bas (alumínio R$/kg, vidro R$/m²).
@@ -11255,9 +11263,11 @@ function normalizarProjeto(projeto) {
     tipologia,
     tipoObra,
     padrao,
-    // Reforma: as áreas medidas na visita. Só são lidas quando
-    // tipoObra = "reforma"; em obra nova o bloco nem aparece no formulário.
-    existente: p.existente || {},
+    // Reforma: as medidas da visita, na matriz demolir × construir. Só são
+    // lidas quando tipoObra = "reforma"; em obra nova o bloco nem aparece no
+    // formulário. migrarExistente lê também o formato antigo (um campo por
+    // serviço), para projeto salvo antes da matriz não perder o digitado.
+    existente: migrarExistente(p.existente),
     tamanhoComodos: TAMANHOS_COMODOS.includes(p.tamanhoComodos) ? p.tamanhoComodos : "Médio",
     temPiscina,
 
@@ -11590,49 +11600,71 @@ function qualidadeDosPrecos(itens) {
 // campos são os mesmos. O que faltava é a parte que mexe no que já está
 // construído: derrubar, arrancar, e refazer por cima.
 //
-// Este bloco só roda quando tipoObra = "reforma", e lê um punhado de áreas
-// que o arquiteto mede na visita: parede a demolir, revestimento a remover,
-// piso a assentar, e assim por diante. Não há modelo de prédio aqui — o que
-// entra é o que foi medido.
+// O bloco é uma matriz de duas colunas — Demolir/Desmontar e
+// Construir/Instalar — com uma linha por elemento. O mesmo item aparece
+// dos dois lados porque é assim que a reforma se mede na visita: "arranco
+// 30 m² de piso e assento 30 m² de piso novo". A tabela ITENS_EXISTENTE
+// abaixo é a fonte única: ela desenha o formulário E dirige o cálculo, de
+// modo que acrescentar um elemento novo é acrescentar uma linha nela.
 //
 // Os coeficientes de material são os MESMOS do resto do motor (40 tijolos
 // por m² de parede de 20, chapisco de 5 mm e reboco de 25, contrapiso de
 // 10 cm, argamassa e rejunte por formato de peça). Reforma não muda a
 // física da construção: muda o que é feito, não como.
 
-// Serviços de demolição e instalação: mão de obra medida por m² ou por
-// unidade. O preço vem do catálogo de Insumos quando o escritório cadastra
-// o serviço; sem cadastro, vale a referência abaixo — que é ponto de
-// partida, não verdade, e cada escritório calibra com o próprio empreiteiro.
-const SERVICOS_REFORMA = {
-  paredeDemolir:        { item: "Demolição de alvenaria",              unidade: "m2",       valor: 35  },
-  revestimentoRemover:  { item: "Remoção de revestimento de parede",   unidade: "m2",       valor: 22  },
-  pisoRemover:          { item: "Remoção de piso",                     unidade: "m2",       valor: 18  },
-  contrapisoRemover:    { item: "Retirada de contrapiso",              unidade: "m2",       valor: 30  },
-  forroRemover:         { item: "Remoção de forro",                    unidade: "m2",       valor: 15  },
-  esquadriaRetirar:     { item: "Retirada de esquadria",               unidade: "Unidades", valor: 60  },
-  // Banheiro é a unidade natural aqui: o empreiteiro cobra por banheiro
-  // desmontado ou montado, não por peça. Um banheiro completo é vaso,
-  // lavatório, torneira, ducha, registros e acessórios — contar peça a peça
-  // dava um número que ninguém confere na visita.
-  banheiroDesmontar:    { item: "Desmontagem de banheiro",             unidade: "Unidades", valor: 220 },
-  banheiroMontar:       { item: "Montagem de banheiro",                unidade: "Unidades", valor: 600 },
-};
+// Cada linha da matriz. `entulhoM3` é o volume de entulho gerado por
+// unidade demolida; `remover`/`executar` dizem quais colunas a linha tem.
+const ITENS_EXISTENTE = [
+  { id: "contrapiso",   nome: "Contrapiso",             unidade: "m2", entulhoM3: 0.07,
+    remover: { item: "Retirada de contrapiso",              valor: 30  }, executar: true },
+  { id: "alvenaria",    nome: "Paredes de alvenaria",   unidade: "m2", entulhoM3: 0.25,
+    remover: { item: "Demolição de alvenaria",              valor: 35  }, executar: true },
+  { id: "drywall",      nome: "Paredes de drywall",     unidade: "m2", entulhoM3: 0.05,
+    remover: { item: "Demolição de parede de drywall",      valor: 18  }, executar: true },
+  { id: "forro",        nome: "Forros",                 unidade: "m2", entulhoM3: 0.01,
+    remover: { item: "Remoção de forro",                    valor: 15  }, executar: true },
+  { id: "piso",         nome: "Piso",                   unidade: "m2", entulhoM3: 0.02,
+    remover: { item: "Remoção de piso",                     valor: 18  }, executar: true },
+  { id: "revestimento", nome: "Revestimento de parede", unidade: "m2", entulhoM3: 0.03,
+    remover: { item: "Remoção de revestimento de parede",   valor: 22  }, executar: true },
+  { id: "calcada",      nome: "Calçada",                unidade: "m2", entulhoM3: 0.12,
+    remover: { item: "Demolição de calçada",                valor: 40  }, executar: true },
+  // Banheiro é a unidade que o empreiteiro cobra e que o arquiteto conta na
+  // visita: "dois banheiros" se responde na hora; "onze peças" exige contar
+  // vaso, lavatório, torneira, ducha, registros e acessórios um a um.
+  { id: "banheiro",     nome: "Banheiros",              unidade: "un", entulhoM3: 0.30,
+    remover:  { item: "Desmontagem de banheiro", valor: 220 },
+    executar: { item: "Montagem de banheiro",    valor: 600 } },
+  { id: "esquadria",    nome: "Esquadrias",             unidade: "un", entulhoM3: 0.05,
+    remover:  { item: "Retirada de esquadria",   valor: 60 },
+    executar: { item: "Instalação de esquadria", valor: 90 } },
+  // Só do lado de construir: não se "demole" reboco nem pintura por conta
+  // própria — isso sai junto com a parede ou com o revestimento.
+  { id: "reboco",       nome: "Chapisco e reboco",      unidade: "m2", executar: true },
+  { id: "pintura",      nome: "Pintura de parede",      unidade: "m2", executar: true },
+];
+const itemExistente = (id) => ITENS_EXISTENTE.find((i) => i.id === id) || null;
+
 const CACAMBA_ITEM = "Caçamba de entulho 5m³";
 const CACAMBA_VALOR = 320;   // R$ por caçamba retirada
 const CACAMBA_M3 = 5;
-// Volume de entulho gerado por m² de cada demolição, em m³. Parede de 20 cm
-// com reboco dos dois lados dá 0,25; piso cerâmico com a cola, 0,02.
-const ENTULHO_M3_POR_M2 = {
-  paredeDemolir: 0.25, revestimentoRemover: 0.03, pisoRemover: 0.02,
-  contrapisoRemover: 0.07, forroRemover: 0.01,
-};
-// Entulho por unidade: um banheiro desmontado sai com vaso, cuba e acessórios.
-const ENTULHO_M3_POR_UN = { banheiroDesmontar: 0.3 };
 // Entulho solto ocupa mais espaço que o material inteiro que saiu da parede.
 const ENTULHO_EMPOLAMENTO = 1.4;
 
-// Preço de um serviço de reforma: Insumos vence; sem cadastro, a referência.
+// Serviços de mão de obra da reforma, achatados da tabela acima: o preço vem
+// do catálogo de Insumos quando o escritório cadastra o serviço; sem
+// cadastro, vale a referência — que é ponto de partida, não verdade, e cada
+// escritório calibra com o próprio empreiteiro.
+const SERVICOS_REFORMA = (() => {
+  const m = {};
+  for (const it of ITENS_EXISTENTE) {
+    const un = it.unidade === "un" ? "Unidades" : "m2";
+    if (it.remover && it.remover.item) m[it.id + ":remover"] = { item: it.remover.item, unidade: un, valor: it.remover.valor };
+    if (it.executar && it.executar.item) m[it.id + ":executar"] = { item: it.executar.item, unidade: un, valor: it.executar.valor };
+  }
+  return m;
+})();
+
 function taxaServicoReforma(chave, data) {
   const s = SERVICOS_REFORMA[chave];
   if (!s) return null;
@@ -11641,14 +11673,55 @@ function taxaServicoReforma(chave, data) {
   return { valor: s.valor, fonte: "referencia", confianca: "modulo" };
 }
 
+// O bloco começou com um campo por serviço ("paredeDemolir", "pisoAssentar")
+// e virou a matriz de duas colunas. Esta função lê as duas formas, para um
+// projeto salvo antes da mudança não perder o que já estava digitado.
+const EXISTENTE_LEGADO = {
+  paredeDemolir: ["alvenaria", "remover"],        paredeConstruir: ["alvenaria", "executar"],
+  revestimentoRemover: ["revestimento", "remover"], revestimentoAssentar: ["revestimento", "executar"],
+  pisoRemover: ["piso", "remover"],               pisoAssentar: ["piso", "executar"],
+  contrapisoRemover: ["contrapiso", "remover"],   contrapisoNovo: ["contrapiso", "executar"],
+  forroRemover: ["forro", "remover"],
+  esquadriaRetirar: ["esquadria", "remover"],
+  banheiroDesmontar: ["banheiro", "remover"],     banheiroMontar: ["banheiro", "executar"],
+  loucaMetalRetirar: ["banheiro", "remover"],     loucaMetalInstalar: ["banheiro", "executar"],
+  rebocoNovo: ["reboco", "executar"],             pinturaExistente: ["pintura", "executar"],
+};
+function migrarExistente(ex) {
+  const bruto = ex || {};
+  const novo = {};
+  for (const it of ITENS_EXISTENTE) {
+    const atual = bruto[it.id];
+    novo[it.id] = atual && typeof atual === "object"
+      ? { remover: atual.remover, executar: atual.executar, tipo: atual.tipo }
+      : {};
+  }
+  for (const [chaveAntiga, [id, lado]] of Object.entries(EXISTENTE_LEGADO)) {
+    const v = bruto[chaveAntiga];
+    if (v === undefined || v === "" || v === null) continue;
+    if (novo[id][lado] === undefined || novo[id][lado] === "") novo[id][lado] = v;
+  }
+  if (bruto.forroTipo && !novo.forro.tipo) novo.forro.tipo = bruto.forroTipo;
+  return novo;
+}
+// Medida de um lado da matriz, já normalizada.
+function medidaExistente(ex, id, lado) {
+  const linha = (ex || {})[id] || {};
+  return numOrZero(linha[lado]);
+}
+
+// ── Coluna "Demolir / Desmontar" ────────────────────────────────
 function demolicoesRemocoes(cp, out, data) {
   const ex = cp.existente || {};
   const base = { ordem: ORD.demolicao, tipo: "Prestadores de serviços", etapa: "Demolições e remoções", subEtapa: "Construção existente" };
-  for (const chave of ["paredeDemolir", "revestimentoRemover", "pisoRemover", "contrapisoRemover", "forroRemover", "esquadriaRetirar", "banheiroDesmontar"]) {
-    const qtd = numOrZero(ex[chave]);
+  for (const it of ITENS_EXISTENTE) {
+    if (!it.remover || !it.remover.item) continue;
+    const qtd = medidaExistente(ex, it.id, "remover");
     if (!(qtd > 0)) continue;
+    const chave = it.id + ":remover";
     const s = SERVICOS_REFORMA[chave];
     const taxa = taxaServicoReforma(chave, data);
+    const unidadeTexto = it.unidade === "un" ? "unidades" : "m²";
     emitir(out, {
       ...base, item: s.item, unidade: s.unidade, qtd, preco: taxa.valor,
       confianca: taxa.confianca, insumoCodigo: taxa.codigo,
@@ -11656,8 +11729,8 @@ function demolicoesRemocoes(cp, out, data) {
         MEM.nota(taxa.fonte === "insumo"
           ? `${s.item}: preço do catálogo de Insumos.`
           : `${s.item}: o serviço não está no catálogo de Insumos, então entra a referência do módulo. Cadastre-o em Insumos para usar o preço do seu empreiteiro.`),
-        MEM.dado("Quantidade medida na visita", qtd, s.unidade === "m2" ? "m²" : "unidades", "bloco Construção existente"),
-        MEM.dado("Preço unitário", taxa.valor, s.unidade === "m2" ? "R$/m²" : "R$/un", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
+        MEM.dado("Quantidade medida na visita", qtd, unidadeTexto, `linha "${it.nome}", coluna Demolir`),
+        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/un" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
       ],
     });
   }
@@ -11667,33 +11740,27 @@ function entulhoDaReforma(cp, out, data) {
   const ex = cp.existente || {};
   const passos = [];
   let volume = 0;
-  for (const [chave, coef] of Object.entries(ENTULHO_M3_POR_M2)) {
-    const m2 = numOrZero(ex[chave]);
-    if (!(m2 > 0)) continue;
-    const v = m2 * coef;
+  for (const it of ITENS_EXISTENTE) {
+    if (!it.entulhoM3) continue;
+    const qtd = medidaExistente(ex, it.id, "remover");
+    if (!(qtd > 0)) continue;
+    const v = qtd * it.entulhoM3;
     volume += v;
-    passos.push(MEM.conta(SERVICOS_REFORMA[chave].item, `m² × ${numMem(coef)}`, [["m²", m2]], v, "m³"));
-  }
-  for (const [chave, coef] of Object.entries(ENTULHO_M3_POR_UN)) {
-    const un = numOrZero(ex[chave]);
-    if (!(un > 0)) continue;
-    const v = un * coef;
-    volume += v;
-    passos.push(MEM.conta(SERVICOS_REFORMA[chave].item, `unidades × ${numMem(coef)}`, [["unidades", un]], v, "m³"));
+    const un = it.unidade === "un" ? "unidades" : "m²";
+    passos.push(MEM.conta(it.nome, `${un} × ${numMem(it.entulhoM3)}`, [[un, qtd]], v, "m³"));
   }
   if (!(volume > 0)) return;
   const solto = volume * ENTULHO_EMPOLAMENTO;
   const cacambasBruto = solto / CACAMBA_M3;
   const cacambas = teto(cacambasBruto);
   const r = precoDoInsumo(CACAMBA_ITEM, data);
-  const preco = r.preco != null && r.preco > 0 ? r.preco : CACAMBA_VALOR;
+  const temPreco = r.preco != null && r.preco > 0;
   emitir(out, {
     ordem: ORD.entulho, tipo: "Prestadores de serviços", etapa: "Entulho", subEtapa: "Construção existente",
-    item: CACAMBA_ITEM, unidade: "Unidades", qtd: cacambas, preco,
-    confianca: r.preco != null && r.preco > 0 ? r.confianca : "modulo",
-    insumoCodigo: r.preco != null && r.preco > 0 ? r.codigo : null,
+    item: CACAMBA_ITEM, unidade: "Unidades", qtd: cacambas, preco: temPreco ? r.preco : CACAMBA_VALOR,
+    confianca: temPreco ? r.confianca : "modulo", insumoCodigo: temPreco ? r.codigo : null,
     memoria: [
-      MEM.nota("O entulho sai do que foi demolido. Cada demolição gera um volume por m², somado aqui."),
+      MEM.nota("O entulho sai do que foi demolido. Cada demolição gera um volume por unidade, somado aqui."),
       ...passos,
       MEM.conta("Volume demolido", "soma das demolições", [], volume, "m³"),
       MEM.conta("Entulho solto (o material quebrado ocupa mais espaço que na parede)", `volume × ${numMem(ENTULHO_EMPOLAMENTO)}`, [["volume", volume]], solto, "m³"),
@@ -11703,17 +11770,33 @@ function entulhoDaReforma(cp, out, data) {
   });
 }
 
-// Execução sobre o que já existe: parede nova em área existente, reboco,
-// contrapiso, piso, revestimento, pintura e a instalação das louças.
+// ── Coluna "Construir / Instalar" ───────────────────────────────
+// Parede de drywall, por m² de parede (montante e guia de 70 mm, uma placa
+// por face). Referência da prática de mercado; os consumos por m² são os
+// que o fabricante publica para parede simples com montante a cada 60 cm.
+const DRYWALL_CONSUMO = [
+  { nome: "Gesso - Drywall",                            porM2: 2,        unidade: "m2",       nota: "uma placa em cada face: 2 m² de placa por m² de parede" },
+  { nome: "Gesso - Montante 70mm 3,00m",                porM2: 1.67 / 3, unidade: "Unidades", nota: "montantes a cada 60 cm, em barras de 3 m" },
+  { nome: "Gesso - Guia 70mm 3,00m",                    porM2: 0.72 / 3, unidade: "Unidades", nota: "guia no piso e no teto, em barras de 3 m" },
+  { nome: "Gesso - PARAFUSO 3,5X25mm PA - CX/1000Q",    porM2: 30 / 1000, unidade: "Unidades", nota: "30 parafusos por m² (duas faces), caixa de 1.000" },
+  { nome: "Gesso - FITA TELADA 90M",                    porM2: 2.5 / 90, unidade: "Unidades", nota: "2,5 m de junta por m², rolo de 90 m" },
+  { nome: "Gesso - Massa para juntas 30kg",             porM2: 0.6 / 30, unidade: "Unidades", nota: "0,6 kg de massa por m², saco de 30 kg" },
+];
+
 function execucaoNoExistente(cp, out, data) {
   const ex = cp.existente || {};
   const padrao = cp.padrao || "Médio";
   const base = { ordem: ORD.existente, etapa: "Construção existente" };
   const bruto = { ...base, tipo: "Bruto" };
   const acab = { ...base, tipo: "Acabamento" };
+  const medida = (id) => medidaExistente(ex, id, "executar");
+  const memMedida = (id, unidade) => {
+    const it = itemExistente(id);
+    return MEM.dado(it.nome, medida(id), unidade || "m²", `linha "${it.nome}", coluna Construir`);
+  };
 
-  // ── Parede a construir (20 cm, os mesmos 40 tijolos por m²) ──
-  const m2Parede = numOrZero(ex.paredeConstruir);
+  // ── Parede de alvenaria (os mesmos 40 tijolos por m² da obra nova) ──
+  const m2Parede = medida("alvenaria");
   if (m2Parede > 0) {
     const tijolosBruto = m2Parede * 40 * PERDA;
     const tijolos = teto(tijolosBruto);
@@ -11723,8 +11806,8 @@ function execucaoNoExistente(cp, out, data) {
     const vedalit = teto(vedalitBruto);
     const cimentoBruto = areia * 2 * PERDA;
     const cimento = teto(cimentoBruto);
-    const memParede = MEM.dado("Parede a construir", m2Parede, "m²", "bloco Construção existente");
-    const sub = "Parede nova no existente";
+    const memParede = memMedida("alvenaria");
+    const sub = "Parede de alvenaria";
     emitir(out, { ...bruto, subEtapa: sub, item: "Tijolos 6 Furos", unidade: "Unidades", qtd: tijolos, memoria: [
       MEM.nota("Parede de 20 cm: 40 tijolos de 6 furos por m², o mesmo consumo da obra nova."),
       memParede,
@@ -11749,8 +11832,24 @@ function execucaoNoExistente(cp, out, data) {
     ] });
   }
 
-  // ── Chapisco e reboco (parede nova e parede existente a revestir) ──
-  const m2Reboco = numOrZero(ex.rebocoNovo) || m2Parede;
+  // ── Parede de drywall ──
+  const m2Drywall = medida("drywall");
+  if (m2Drywall > 0) {
+    const memDry = memMedida("drywall");
+    for (const c of DRYWALL_CONSUMO) {
+      const brutoQtd = m2Drywall * c.porM2 * PERDA;
+      const qtd = c.unidade === "m2" ? ceil2(brutoQtd) : teto(brutoQtd);
+      emitir(out, { ...bruto, subEtapa: "Parede de drywall", item: c.nome, unidade: c.unidade, qtd, memoria: [
+        MEM.nota(`Parede simples de drywall com montante de 70 mm a cada 60 cm. ${c.nota}.`),
+        memDry,
+        MEM.conta("Consumo, com 10% de perda", `área × ${numMem(c.porM2)} × 1,10`, [["área", m2Drywall]], brutoQtd, c.unidade),
+        MEM.teto(brutoQtd, qtd, c.unidade, c.unidade === "m2" ? "Arredonda em centésimos" : "Arredonda para cima (peça inteira)"),
+      ] });
+    }
+  }
+
+  // ── Chapisco e reboco (herda a parede de alvenaria quando não informado) ──
+  const m2Reboco = medida("reboco") || m2Parede;
   if (m2Reboco > 0) {
     const volChapisco = m2Reboco * PERDA * 2 * 0.005;
     const volReboco = m2Reboco * PERDA * 2 * 0.025;
@@ -11760,8 +11859,9 @@ function execucaoNoExistente(cp, out, data) {
     const areiaGrossa = teto(areiaGrossaBruto);
     const areiaFinaBruto = volReboco * 0.875 * PERDA;
     const areiaFina = teto(areiaFinaBruto);
-    const sub = "Chapisco e reboco no existente";
-    const memArea = MEM.dado("Área a chapiscar e rebocar", m2Reboco, "m²", numOrZero(ex.rebocoNovo) > 0 ? "bloco Construção existente" : "igual à parede a construir");
+    const sub = "Chapisco e reboco";
+    const memArea = MEM.dado("Área a chapiscar e rebocar", m2Reboco, "m²",
+      medida("reboco") > 0 ? 'linha "Chapisco e reboco", coluna Construir' : "igual à parede de alvenaria a construir");
     const notaCamadas = MEM.nota("Duas faces por parede, chapisco de 5 mm e reboco de 25 mm — os mesmos coeficientes da obra nova.");
     emitir(out, { ...bruto, subEtapa: sub, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimento, memoria: [
       notaCamadas, memArea,
@@ -11782,55 +11882,59 @@ function execucaoNoExistente(cp, out, data) {
     ] });
   }
 
-  // ── Contrapiso novo (10 cm + massiamento, como no térreo) ──
-  const m2Contrapiso = numOrZero(ex.contrapisoNovo);
-  if (m2Contrapiso > 0) {
-    const areiaBruto = m2Contrapiso * 0.6 * 0.1 * PERDA;
+  // ── Contrapiso e calçada (mesma laje de 10 cm com tela) ──
+  for (const [id, sub, nota] of [
+    ["contrapiso", "Contrapiso", "Contrapiso de 10 cm com tela, os mesmos coeficientes do contrapiso do térreo."],
+    ["calcada", "Calçada", "Calçada de 10 cm com tela, os mesmos coeficientes do contrapiso externo. A forma de madeira não entra: depende do perímetro, que não é medido aqui."],
+  ]) {
+    const area = medida(id);
+    if (!(area > 0)) continue;
+    const areiaBruto = area * 0.6 * 0.1 * PERDA;
     const areia = teto(areiaBruto);
-    const pedraBruto = m2Contrapiso * 0.1 * PERDA;
+    const pedraBruto = area * 0.1 * PERDA;
     const pedra = teto(pedraBruto);
     const cimentoBruto = pedra * 6 * PERDA;
     const cimento = teto(cimentoBruto);
-    const malhaBruto = m2Contrapiso / (2.9 * 1.9 * PERDA);
+    const malhaBruto = area / (2.9 * 1.9 * PERDA);
     const malha = teto(malhaBruto);
-    const sub = "Contrapiso novo";
-    const memArea = MEM.dado("Contrapiso a executar", m2Contrapiso, "m²", "bloco Construção existente");
-    const nota = MEM.nota("Contrapiso de 10 cm com tela, os mesmos coeficientes do contrapiso do térreo.");
+    const memArea = memMedida(id);
+    const memNota = MEM.nota(nota);
     emitir(out, { ...bruto, subEtapa: sub, item: "Areia Grossa", unidade: "m3", qtd: areia, memoria: [
-      nota, memArea,
-      MEM.conta("Areia, com 10% de perda", "área × 0,60 × 0,10 × 1,10", [["área", m2Contrapiso]], areiaBruto, "m³"),
+      memNota, memArea,
+      MEM.conta("Areia, com 10% de perda", "área × 0,60 × 0,10 × 1,10", [["área", area]], areiaBruto, "m³"),
       MEM.teto(areiaBruto, areia, "m³", "Arredonda para cima (a areia vem em m³ inteiro)"),
     ] });
     emitir(out, { ...bruto, subEtapa: sub, item: "Pedra", unidade: "m3", qtd: pedra, memoria: [
-      nota, memArea,
-      MEM.conta("Pedra da camada de 10 cm, com 10% de perda", "área × 0,10 × 1,10", [["área", m2Contrapiso]], pedraBruto, "m³"),
+      memNota, memArea,
+      MEM.conta("Pedra da camada de 10 cm, com 10% de perda", "área × 0,10 × 1,10", [["área", area]], pedraBruto, "m³"),
       MEM.teto(pedraBruto, pedra, "m³", "Arredonda para cima (a pedra vem em m³ inteiro)"),
     ] });
     emitir(out, { ...bruto, subEtapa: sub, item: "Sacos de cimento 50kg", unidade: "Unidades", qtd: cimento, memoria: [
-      nota, MEM.dado("Pedra do contrapiso", pedra, "m³", "passo anterior"),
+      memNota, MEM.dado("Pedra da camada", pedra, "m³", "passo anterior"),
       MEM.conta("Cimento: 6 sacos por m³ de pedra, com 10% de perda", "pedra × 6 × 1,10", [["pedra", pedra]], cimentoBruto, "sacos"),
       MEM.teto(cimentoBruto, cimento, "sacos de 50 kg", "Arredonda para cima (saco fechado)"),
     ] });
     emitir(out, { ...bruto, subEtapa: sub, item: "Aço - Malha Pop EQ061 3.4mm 15x15", unidade: "Unidade", qtd: malha, memoria: [
-      MEM.nota("Tela soldada do contrapiso: painel de 2,90 × 1,90 m. A perda entra dividindo, porque as telas se sobrepõem."),
+      MEM.nota("Tela soldada: painel de 2,90 × 1,90 m. A perda entra dividindo, porque as telas se sobrepõem."),
       memArea,
-      MEM.conta("Painéis", "área ÷ (2,90 × 1,90 × 1,10)", [["área", m2Contrapiso]], malhaBruto, "painéis"),
+      MEM.conta("Painéis", "área ÷ (2,90 × 1,90 × 1,10)", [["área", area]], malhaBruto, "painéis"),
       MEM.teto(malhaBruto, malha, "painéis", "Arredonda para cima (painel inteiro)"),
     ] });
   }
 
-  // ── Piso e revestimento a assentar ──
-  for (const [campo, supId, nome] of [["pisoAssentar", "pisoInterno", "Piso a assentar"], ["revestimentoAssentar", "revestimentoInterno", "Revestimento a assentar"]]) {
-    const area = numOrZero(ex[campo]);
+  // ── Piso e revestimento ──
+  for (const [id, supId] of [["piso", "pisoInterno"], ["revestimento", "revestimentoInterno"]]) {
+    const area = medida(id);
     if (!(area > 0)) continue;
+    const it = itemExistente(id);
     const formatoId = FORMATO_PADRAO[supId][padrao] || "60x60";
     const c = consumoRevestimento(formatoId, false, 0);
     const produto = PISOS_GENERICOS[supId][padrao] || PISOS_GENERICOS[supId]["Médio"];
     const pecas = ceil2(area * PERDA_PECAS);
     const argKg = area * c.argamassaKg;
     const rejKg = area * c.rejunteKg;
-    const sub = nome;
-    const memArea = MEM.dado(nome, area, "m²", "bloco Construção existente");
+    const sub = it.nome;
+    const memArea = memMedida(id);
     emitir(out, { ...acab, subEtapa: sub, item: produto, unidade: "m2", qtd: pecas, memoria: [
       MEM.nota(`Sem produto escolhido nesta etapa, entra o genérico do padrão ${padrao}, formato ${c.formato.nome}. Para especificar marca e formato, use o bloco Pisos e revestimentos.`),
       memArea,
@@ -11851,44 +11955,72 @@ function execucaoNoExistente(cp, out, data) {
     ] });
   }
 
-  // ── Pintura do existente ──
-  const m2Pintura = numOrZero(ex.pinturaExistente);
+  // ── Forro a instalar ──
+  const m2Forro = medida("forro");
+  if (m2Forro > 0) {
+    const tipo = typeof forroTipo === "function" ? forroTipo((ex.forro || {}).tipo) : { id: "gessoAcartonado", nome: "Gesso acartonado (drywall)", produto: "Gesso - Drywall" };
+    const c = (typeof FORRO_CONSUMO !== "undefined" && FORRO_CONSUMO[tipo.id]) || { itens: [] };
+    const memArea = memMedida("forro");
+    const sub = "Forro";
+    emitir(out, { ...acab, subEtapa: sub, item: tipo.produto, unidade: "m2", qtd: ceil2(m2Forro * PERDA), memoria: [
+      MEM.nota(`Forro de ${tipo.nome.toLowerCase()} — o tipo é escolhido na própria linha do bloco.`),
+      memArea,
+      MEM.conta("Área com 10% de perda", "área × 1,10", [["área", m2Forro]], m2Forro * PERDA, "m²"),
+      MEM.teto(m2Forro * PERDA, ceil2(m2Forro * PERDA), "m²", "Arredonda em centésimos de m²"),
+    ] });
+    for (const item of c.itens) {
+      const brutoQtd = m2Forro * item.porM2 * PERDA;
+      const qtd = teto(brutoQtd);
+      emitir(out, { ...acab, subEtapa: sub, item: item.nome, unidade: item.unidade, qtd, memoria: [
+        MEM.nota(`${item.nome}: ${item.nota}.`),
+        memArea,
+        MEM.conta("Consumo, com 10% de perda", `área × ${numMem(item.porM2)} × 1,10`, [["área", m2Forro]], brutoQtd, item.unidade),
+        MEM.teto(brutoQtd, qtd, item.unidade, "Arredonda para cima (peça inteira)"),
+      ] });
+    }
+  }
+
+  // ── Pintura ──
+  const m2Pintura = medida("pintura");
   if (m2Pintura > 0) {
     const area = m2Pintura * PERDA;
     const seladorBruto = (0.2 * area) / 10 * PERDA;
     const massaBruto = ((area / 3) * 2.5) / 15 * PERDA;
     const fundoBruto = (0.2 * area) / 8 * PERDA;
     const tintaBruto = 0.15 * area / 9 * PERDA;
-    const sub = "Pintura do existente";
-    const memArea = MEM.dado("Área a pintar", m2Pintura, "m²", "bloco Construção existente");
+    const sub = "Pintura";
+    const memArea = memMedida("pintura");
     const notaComum = MEM.nota("Mesmos rendimentos da pintura da obra nova. Parede velha costuma pedir mais massa; ajuste o item se for o caso.");
-    for (const [item, bruto2, texto] of [
+    for (const [item, brutoQtd, texto] of [
       ["Tintas - Fundo Preparador 18L", fundoBruto, "Fundo preparador: 0,2 litro por m², lata que rende 8."],
       ["Tintas - Selador 18L", seladorBruto, "Selador: 0,2 litro por m², lata que rende 10."],
       ["Tintas - Massa Corrida 25KG", massaBruto, "Massa corrida: um terço da área, 2,5 kg por m², saco que rende 15."],
       ["Tintas - Tinta Acrílica 18L", tintaBruto, "Tinta: 0,15 litro por m², lata que rende 9."],
     ]) {
-      emitir(out, { ...acab, subEtapa: sub, item, unidade: "Unidades", qtd: teto(bruto2), memoria: [
+      emitir(out, { ...acab, subEtapa: sub, item, unidade: "Unidades", qtd: teto(brutoQtd), memoria: [
         notaComum, memArea, MEM.nota(texto),
         MEM.conta("Área com 10% de perda", "área × 1,10", [["área", m2Pintura]], area, "m²"),
-        MEM.teto(bruto2, teto(bruto2), "latas", "Arredonda para cima (embalagem fechada)"),
+        MEM.teto(brutoQtd, teto(brutoQtd), "latas", "Arredonda para cima (embalagem fechada)"),
       ] });
     }
   }
 
-  // ── Montagem dos banheiros ──
-  const banheiros = numOrZero(ex.banheiroMontar);
-  if (banheiros > 0) {
-    const taxa = taxaServicoReforma("banheiroMontar", data);
-    const sv = SERVICOS_REFORMA.banheiroMontar;
+  // ── Serviços de instalação (banheiro, esquadria) ──
+  for (const it of ITENS_EXISTENTE) {
+    if (!it.executar || !it.executar.item) continue;
+    const qtd = medida(it.id);
+    if (!(qtd > 0)) continue;
+    const chave = it.id + ":executar";
+    const sv = SERVICOS_REFORMA[chave];
+    const taxa = taxaServicoReforma(chave, data);
     emitir(out, {
       ordem: ORD.existente, tipo: "Prestadores de serviços", etapa: "Construção existente",
-      subEtapa: "Banheiros", item: sv.item, unidade: sv.unidade, qtd: banheiros, preco: taxa.valor,
+      subEtapa: it.nome, item: sv.item, unidade: sv.unidade, qtd, preco: taxa.valor,
       confianca: taxa.confianca, insumoCodigo: taxa.codigo,
       memoria: [
-        MEM.nota("Mão de obra de montar o banheiro completo — vaso, lavatório, torneira, ducha, registros e acessórios. As peças em si entram pelo bloco de itens do projeto."),
-        MEM.dado("Banheiros a montar", banheiros, "unidades", "bloco Construção existente"),
-        MEM.dado("Preço por banheiro", taxa.valor, "R$/un", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
+        MEM.nota(`${sv.item}: mão de obra. As peças em si entram pelo bloco de itens do projeto.`),
+        MEM.dado(`${it.nome} a instalar`, qtd, it.unidade === "un" ? "unidades" : "m²", `linha "${it.nome}", coluna Instalar`),
+        MEM.dado("Preço unitário", taxa.valor, it.unidade === "un" ? "R$/un" : "R$/m²", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
       ],
     });
   }
@@ -12433,6 +12565,56 @@ function MemoriaCalculo({ item, passos, onFechar }) {
   );
 }
 
+// A matriz da reforma: uma linha por elemento, duas colunas — o que sai e o
+// que entra. As linhas vêm de ITENS_EXISTENTE, a mesma tabela que dirige o
+// cálculo, então acrescentar um elemento é acrescentar uma linha lá.
+function MatrizExistente({ projetoDraft, get, set, isMobile }) {
+  const cel = { border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 10, padding: "8px 10px", fontSize: 13,
+    color: "#111827", outline: "none", background: "#fff", fontFamily: "inherit", width: "100%", boxSizing: "border-box" };
+  const cab = { fontSize: 11.5, fontWeight: 700, color: "#111827", textAlign: "center", paddingBottom: 2 };
+  const grade = { display: "grid", gridTemplateColumns: isMobile ? "1fr" : "minmax(140px, 1.4fr) 1fr 1fr", gap: 10, alignItems: "center" };
+  const campo = (id, lado) => (
+    <input style={cel} type="number" step="0.01" value={get(`existente.${id}.${lado}`) ?? ""}
+      onChange={(e) => set(`existente.${id}.${lado}`, e.target.value === "" ? "" : Number(e.target.value))} />
+  );
+  const vazio = <div style={{ ...cel, background: "#fafafa", border: "1.5px dashed rgba(38,36,33,0.10)", color: "transparent" }}>—</div>;
+  return (
+    <div style={{ gridColumn: "1 / -1" }}>
+      {!isMobile && (
+        <div style={{ ...grade, marginBottom: 8 }}>
+          <div />
+          <div style={cab}>Demolir / Desmontar</div>
+          <div style={cab}>Construir / Instalar</div>
+        </div>
+      )}
+      {ITENS_EXISTENTE.map((it) => (
+        <div key={it.id} style={{ ...grade, marginBottom: 10 }}>
+          <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
+            {it.nome} <span style={{ color: "#6b7280", fontWeight: 400 }}>({it.unidade === "un" ? "un" : "m²"})</span>
+          </label>
+          <div>
+            {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Demolir / desmontar</div>}
+            {it.remover ? campo(it.id, "remover") : vazio}
+          </div>
+          <div>
+            {isMobile && <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Construir / instalar</div>}
+            {it.executar ? campo(it.id, "executar") : vazio}
+          </div>
+        </div>
+      ))}
+      <div style={{ ...grade, marginTop: 4 }}>
+        <label style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>Tipo do forro</label>
+        <div style={{ gridColumn: isMobile ? "auto" : "2 / -1" }}>
+          <select style={cel} value={get("existente.forro.tipo") || FORRO_TIPO_PADRAO}
+            onChange={(e) => set("existente.forro.tipo", e.target.value)}>
+            {FORRO_TIPOS.map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+          </select>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar }) {
   // O orçamento/quantitativo é do escritório: o cliente final só consulta.
   // podeEditar é verdadeiro para ele (é o que libera baixar conta e lançar
@@ -12769,36 +12951,15 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
         {(projetoDraft.tipoObra === "reforma") && (
           <BlocoColapsavel titulo="Construção existente" aberto={!!blocosAbertos.existente} onToggle={() => toggleBloco("existente")}>
-            <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563", marginBottom: 4 }}>
+            <div style={{ gridColumn: "1 / -1", fontSize: 12, color: "#4b5563", marginBottom: 10 }}>
               O que será feito no que já está construído. A parte <b>nova</b> da reforma (ampliação, laje, telhado)
-              continua nos blocos de sempre — este bloco é só o que se derruba e se refaz por cima do existente.
+              continua nos blocos de sempre — aqui é só o que se derruba e o que se refaz por cima do existente.
             </div>
-            <div style={{ gridColumn: "1 / -1", fontSize: 11.5, fontWeight: 700, color: "#111827", marginTop: 8 }}>Demolir e remover</div>
-            <CampoNum label="Parede a demolir (m²)" valor={get("existente.paredeDemolir")} onChange={(v) => set("existente.paredeDemolir", v)} />
-            <CampoNum label="Revestimento de parede a remover (m²)" valor={get("existente.revestimentoRemover")} onChange={(v) => set("existente.revestimentoRemover", v)} />
-            <CampoNum label="Piso a remover (m²)" valor={get("existente.pisoRemover")} onChange={(v) => set("existente.pisoRemover", v)} />
-            <CampoNum label="Contrapiso a retirar (m²)" valor={get("existente.contrapisoRemover")} onChange={(v) => set("existente.contrapisoRemover", v)} />
-            <CampoNum label="Forro a remover (m²)" valor={get("existente.forroRemover")} onChange={(v) => set("existente.forroRemover", v)} />
-            <CampoNum label="Esquadrias a retirar (un)" valor={get("existente.esquadriaRetirar")} onChange={(v) => set("existente.esquadriaRetirar", v)} />
-            <CampoNum label="Banheiros a desmontar (un)" valor={get("existente.banheiroDesmontar")} onChange={(v) => set("existente.banheiroDesmontar", v)} />
-
-            <div style={{ gridColumn: "1 / -1", fontSize: 11.5, fontWeight: 700, color: "#111827", marginTop: 8 }}>Construir e assentar</div>
-            <CampoNum label="Parede a construir (m²)" valor={get("existente.paredeConstruir")} onChange={(v) => set("existente.paredeConstruir", v)} />
-            <div style={CAMPO_CELULA}>
-              <label style={C.label}>Chapisco e reboco (m²)</label>
-              <input style={C.input} type="number" step="0.01" value={get("existente.rebocoNovo") ?? ""}
-                placeholder={`vazio: igual à parede a construir (${numOrZero(get("existente.paredeConstruir"))})`}
-                onChange={(e) => set("existente.rebocoNovo", e.target.value === "" ? "" : Number(e.target.value))} />
-            </div>
-            <CampoNum label="Contrapiso novo (m²)" valor={get("existente.contrapisoNovo")} onChange={(v) => set("existente.contrapisoNovo", v)} />
-            <CampoNum label="Piso a assentar (m²)" valor={get("existente.pisoAssentar")} onChange={(v) => set("existente.pisoAssentar", v)} />
-            <CampoNum label="Revestimento a assentar (m²)" valor={get("existente.revestimentoAssentar")} onChange={(v) => set("existente.revestimentoAssentar", v)} />
-            <CampoNum label="Parede a pintar (m²)" valor={get("existente.pinturaExistente")} onChange={(v) => set("existente.pinturaExistente", v)} />
-            <CampoNum label="Banheiros a montar (un)" valor={get("existente.banheiroMontar")} onChange={(v) => set("existente.banheiroMontar", v)} />
-            <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
-              O entulho e as caçambas saem sozinhos do que você marcou para demolir.
-              Os serviços de demolição usam o preço do catálogo de Insumos quando cadastrados;
-              sem cadastro, entram com a referência do módulo e aparecem na memória de cálculo.
+            <MatrizExistente projetoDraft={projetoDraft} get={get} set={set} isMobile={isMobile} />
+            <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#6b7280", marginTop: 8 }}>
+              O entulho e as caçambas saem sozinhos da coluna da esquerda. Os serviços de demolição e instalação
+              usam o preço do catálogo de Insumos quando cadastrados; sem cadastro, entram com a referência do
+              módulo, e a memória de cálculo diz qual foi usada.
             </div>
           </BlocoColapsavel>
         )}
