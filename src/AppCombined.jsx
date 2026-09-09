@@ -16843,9 +16843,26 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             {aberto && (
               <div style={{ borderTop: "1px solid rgba(38,36,33,0.08)", padding: "12px 14px" }}>
                 {cot.escopo && <div style={{ fontSize: 12.5, color: "#374151", marginBottom: 12, whiteSpace: "pre-wrap" }}>{cot.escopo}</div>}
-                {(cot.quantidade || cot.unidade) && (
-                  <div style={{ fontSize: 12, color: "#4b5563", marginBottom: 12 }}>Quantidade: {cot.quantidade} {cot.unidade}</div>
-                )}
+                {(() => {
+                  // conta do P&L e etapa ficavam só no formulário; sem isto,
+                  // depois de salvar não dava para saber onde a cotação cai
+                  const etapa = typeof ETAPAS_OBRA !== "undefined" ? ETAPAS_OBRA.find(e => e.id === cot.etapaId) : null;
+                  const linhas = [];
+                  if (conta) linhas.push(["Conta do P&L", conta.nome]);
+                  if (etapa) linhas.push(["Etapa da obra", etapa.nome]);
+                  if (cot.quantidade || cot.unidade) linhas.push(["Quantidade", `${cot.quantidade} ${cot.unidade}`.trim()]);
+                  if (!linhas.length) return null;
+                  return (
+                    <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 12 }}>
+                      {linhas.map(([r, v]) => (
+                        <div key={r}>
+                          <div style={{ fontSize: 10.5, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{r}</div>
+                          <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600, marginTop: 2 }}>{v}</div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
 
                 {!props.length ? (
                   <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 12 }}>Nenhuma proposta registrada ainda.</div>
