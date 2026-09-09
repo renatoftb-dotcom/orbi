@@ -35,7 +35,7 @@ const modulo = new Function(`
   ${insSrc.slice(0, corteIns)}
   ${ler("composicoes-seed.jsx")}
   ${orcSrc.slice(0, corteOrc)}
-  return { INSUMOS_SEED, semearInsumos, gerarOrcamentoObra, resolverInsumo, normalizarProjeto, linhasPrestadores };
+  return { INSUMOS_SEED, semearInsumos, gerarOrcamentoObra, resolverInsumo, normalizarProjeto, linhasPrestadores, OPCOES_FCK, nomeConcreto };
 `)();
 
 // O catálogo como fica depois de "Insumos → Carregar catálogo padrão".
@@ -106,6 +106,46 @@ teste("o tijolo da reforma é o mesmo insumo da obra nova", () => {
   assert.ok(tijRef.preco > 0, "o tijolo da reforma saiu com preço zero");
   // mesma área de parede, mesma quantidade
   assert.strictEqual(tijRef.qtd, tijNova.qtd);
+});
+
+teste("o concreto sai com a resistência no nome mesmo sem tocar no select", () => {
+  // O defeito: o formulário MOSTRAVA "Concreto - FCK25" selecionado, mas só
+  // gravava a escolha se o usuário mexesse no campo. Quem preenchia o projeto
+  // estrutural e deixava o select como estava recebia um item chamado
+  // "Concreto" — nome que não existe no catálogo — e a fundação inteira saía
+  // com R$ 0,00 sem nenhum aviso.
+  const r = conferir("estrutural sem escolher a resistência", {
+    tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 150, m2ParedesTotal: 260, m2ParedesInternas: 160, m2ParedesExternas: 100, perimetroParedes: 60 },
+    terreo: { area: 150, m2Parede20: 260, lajeArea: 150, concretoVigaRespaldo: 4 },
+    engenharia: { fundacao: { qtdEstacas: 20, profEstacas: 4, concreto: { estacas: 3, baldrames: 5 } } },
+  });
+  const concretos = r.itens.filter((i) => /^Concreto/.test(i.item) && i.item !== "Concreto - Bomba");
+  assert.ok(concretos.length >= 2, `esperava concreto na fundação e na laje, vieram ${concretos.length}`);
+  for (const i of concretos) {
+    assert.ok(/FCK\d+$/.test(i.item), `"${i.item}" (${i.subEtapa}) não carrega a resistência`);
+    assert.ok(i.preco > 0, `${i.item} em ${i.subEtapa} saiu sem preço`);
+  }
+  assert.ok(!r.itens.some((i) => i.item === "Concreto"), '"Concreto" pelado nunca pode ser emitido');
+});
+
+teste("cada resistência oferecida no formulário existe no catálogo", () => {
+  // O select oferecia FCK35, que não tinha cadastro nenhum: escolher a mais
+  // resistente das quatro era a única que zerava a linha.
+  for (const nome of modulo.OPCOES_FCK) {
+    const achado = modulo.resolverInsumo(nome, catalogo);
+    assert.ok(achado && achado.insumo, `"${nome}" está no select e não existe em Insumos`);
+    assert.ok(achado.insumo.precoReferencia > 0, `"${nome}" existe mas está sem preço`);
+  }
+  // e a escolha vira mesmo o nome do item
+  const comFck35 = modulo.gerarOrcamentoObra({
+    tipoObra: "nova", tipologia: "Térrea", padrao: "Médio",
+    arquitetura: { areaConstruida: 150 }, terreo: { area: 150 },
+    engenharia: { fundacao: { resistenciaConcreto: "Concreto - FCK35", concreto: { baldrames: 5 } } },
+  }, { materiais: catalogo });
+  const linha = comFck35.itens.find((i) => i.item === "Concreto - FCK35");
+  assert.ok(linha, "escolher FCK35 tem que emitir FCK35");
+  assert.ok(linha.preco > 0, "FCK35 saiu sem preço");
 });
 
 teste("o preço do prestador vem do catálogo de Insumos, não da planilha", () => {

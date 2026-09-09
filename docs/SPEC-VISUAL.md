@@ -194,3 +194,35 @@ digitado nem aparece no quadro (carpinteiro antes de lançar o telhado).
 Valor fechado de R$ 26.000 no pintor de uma casa de 200 m² vira 200 m² ×
 R$ 130. Onde não há medida (serviço fechado), vira quantidade 1 com o valor
 no preço. O total é o que a migração garante.
+
+## O nome do item carrega a resistência do concreto
+
+O item que o quantitativo emite **é** a chave de preço: o catálogo tem
+`Concreto - FCK20/25/30/35`, não tem nenhum "Concreto". Quem emitia um nome
+pelado emitia uma linha de R$ 0,00 sem aviso.
+
+O select de resistência mostrava `Concreto - FCK25` como escolhido, mas isso
+era só `get(...) || "Concreto - FCK25"` na tela — **nada era gravado até o
+usuário mexer no campo**. Quem preenchia o projeto estrutural e deixava o
+select como estava recebia `"Concreto"` na fundação e na laje, zerado.
+
+Agora há uma função só, `nomeConcreto()`, entre a escolha e o nome do item:
+devolve a resistência escolhida se ela for uma das quatro do catálogo, e o
+padrão da casa (FCK25) em qualquer outro caso — vazio, lixo, ou um valor
+antigo. Ela é usada nos sete pontos que emitem concreto (fundação, laje e
+laje maciça do térreo e do pav. 1, arrimo, piscina), na `normalizarProjeto`
+(o padrão passa a ser guardado, não desenhado) e nos próprios selects, para
+que tela e motor leiam a mesma constante.
+
+`OPCOES_FCK` e `FCK_PADRAO` subiram para o lado do motor — estavam na região
+da UI, abaixo do corte `// UI (§7)`, onde o cálculo não os enxergava.
+
+FCK35 estava no select sem existir em Insumos: escolher a mais resistente das
+quatro era a única opção que zerava a linha. Entrou como **CON-005**, com
+preço extrapolado da escada FCK20→25→30 e a observação dizendo que é um
+provisório à espera da cotação da usina.
+
+Dois testes guardam isso em `precos-quantitativo.test.mjs`: um preenche o
+projeto estrutural sem tocar no select e exige que todo concreto emitido
+termine em `FCK<n>` e tenha preço; o outro percorre `OPCOES_FCK` e exige que
+cada opção oferecida exista no catálogo com preço.

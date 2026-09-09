@@ -51,7 +51,7 @@ const {
 const HOJE = "2026-09-05T12:00:00Z";
 
 // ── semente ──────────────────────────────────────────────────
-t("semente tem 207 insumos", () => eq(INSUMOS_SEED.length, 207));
+t("semente tem 208 insumos", () => eq(INSUMOS_SEED.length, 208));
 
 t("todo código da semente é único", () => {
   const s = new Set(INSUMOS_SEED.map(x => x.codigo));
@@ -63,8 +63,8 @@ t("todo insumo da semente tem preço, exceto os 2 prestadores em aberto", () => 
   eq(semPreco.map(x => x.nome).sort(), ["Gestão Obra", "Serralheiro"]);
 });
 
-t("semente tem 178 materiais e 29 prestadores", () => {
-  eq(INSUMOS_SEED.filter(x => x.tipo === "material").length, 178);
+t("semente tem 179 materiais e 29 prestadores", () => {
+  eq(INSUMOS_SEED.filter(x => x.tipo === "material").length, 179);
   eq(INSUMOS_SEED.filter(x => x.tipo === "prestador").length, 29);
 });
 
@@ -258,10 +258,10 @@ t("migração é idempotente", () => {
 });
 
 // ── semeadura ────────────────────────────────────────────────
-t("semeadura em base vazia cria os 207", () => {
+t("semeadura em base vazia cria os 208", () => {
   const r = semearInsumos([], INSUMOS_SEED);
-  eq(r.criados, 207);
-  eq(r.materiais.length, 207);
+  eq(r.criados, 208);
+  eq(r.materiais.length, 208);
 });
 
 t("semeadura é idempotente — segunda vez não cria nem altera", () => {
@@ -269,7 +269,7 @@ t("semeadura é idempotente — segunda vez não cria nem altera", () => {
   const b = semearInsumos(a.materiais, INSUMOS_SEED);
   eq(b.criados, 0);
   eq(b.atualizados, 0);
-  eq(b.materiais.length, 207);
+  eq(b.materiais.length, 208);
 });
 
 t("semeadura não sobrescreve preço definido à mão", () => {
@@ -297,7 +297,7 @@ t("semeadura casa material legado por nome e não duplica", () => {
   const r = semearInsumos(legado, INSUMOS_SEED);
   const cimentos = r.materiais.filter(x => normalizarTexto(x.nome) === "sacos de cimento 50kg");
   eq(cimentos.length, 1);
-  eq(r.materiais.length, 207);
+  eq(r.materiais.length, 208);
 });
 
 t("todo insumo semeado resolve por si mesmo", () => {

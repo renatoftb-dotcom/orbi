@@ -5179,6 +5179,7 @@ var INSUMOS_SEED = [
   { codigo:"CON-002", nome:"Concreto - FCK20", grupo:"Concreto", unidade:"m3", tipo:"material", precoReferencia:472.29, precoFonte:"compra_corrigida", precoData:"2025-05-22", precoNCompras:11, precoFatorInccAplicado:1.0983, aliases:["Concreto - FCK20"] },
   { codigo:"CON-003", nome:"Concreto - FCK25", grupo:"Concreto", unidade:"m3", tipo:"material", precoReferencia:488.76, precoFonte:"compra_corrigida", precoData:"2025-05-22", precoNCompras:31, precoFatorInccAplicado:1.0983, aliases:["Concreto - FCK25"] },
   { codigo:"CON-004", nome:"Concreto - FCK30", grupo:"Concreto", unidade:"m3", tipo:"material", precoReferencia:505.24, precoFonte:"compra_corrigida", precoData:"2025-05-22", precoNCompras:4, precoFatorInccAplicado:1.0983, aliases:["Concreto - FCK30"] },
+  { codigo:"CON-005", nome:"Concreto - FCK35", grupo:"Concreto", unidade:"m3", tipo:"material", precoReferencia:521.71, precoFonte:"mercado", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Concreto - FCK35"], observacao:"Sem compra própria. Preço extrapolado da escada FCK20→FCK25→FCK30 (+16,47/faixa) só para o item não sair zerado — troque pela cotação real da usina." },
   { codigo:"CXA-001", nome:"Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:215.0, precoFonte:"cotacao", precoData:null, precoNCompras:1, precoFatorInccAplicado:1, aliases:["Madeira Caixaria - Madeirite Plastif. Preto 2,10x1,10mts 18mm"], observacao:"Linha marcada COTAÇÃO na base" },
   { codigo:"CXA-002", nome:"Madeira Caixaria - Sarrafos de 05cm x 3mts", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:11.42, precoFonte:"compra_corrigida", precoData:"2025-07-03", precoNCompras:26, precoFatorInccAplicado:1.0876, aliases:["Madeira Caixaria - Sarrafos de 05cm x 3mts"] },
   { codigo:"CXA-003", nome:"Madeira Caixaria - Tábuas de 10cm x 3mts", grupo:"Madeira de caixaria", unidade:"Unidades", tipo:"material", precoReferencia:11.88, precoFonte:"compra", precoData:"2026-08-11", precoNCompras:21, precoFatorInccAplicado:1, aliases:["Madeira Caixaria - Tábuas de 10cm x 3mts"] },
@@ -7619,6 +7620,18 @@ function precoDoInsumo(nomeItem, data, opts) {
   return { preco: p.preco, confianca: p.confianca, codigo: r.insumo.codigo, meses: p.meses, corrigido: p.corrigido, insumo: r.insumo };
 }
 
+// ── Resistência do concreto ─────────────────────────────────────
+// O nome do item TEM que carregar o FCK, senão não existe insumo com esse
+// nome no catálogo e a linha sai sem preço. Um "Concreto" pelado nunca é
+// nome válido: quando o projeto estrutural não disse a resistência, vale o
+// padrão da casa, que é o mesmo que o formulário já mostra selecionado.
+const OPCOES_FCK = ["Concreto - FCK20", "Concreto - FCK25", "Concreto - FCK30", "Concreto - FCK35"];
+const FCK_PADRAO = "Concreto - FCK25";
+function nomeConcreto(escolhido) {
+  const t = String(escolhido == null ? "" : escolhido).trim();
+  return OPCOES_FCK.includes(t) ? t : FCK_PADRAO;
+}
+
 // ── Memória de cálculo (§ memória) ─────────────────────────────
 // Todo item emitido pode levar `memoria`: a sequência de passos que leva do
 // dado do projeto até a quantidade final, para a tela da engrenagem no
@@ -8428,8 +8441,8 @@ function fundacao(cp, out) {
     MEM.conta("Sarrafos, com 10% de perda", "(perímetro × 2 ÷ 0,70 × 0,45 + perímetro ÷ 0,75 × 0,30) ÷ 3 × 1,10", [["perímetro", perim]], sarrafo5Bruto, "sarrafos"),
     MEM.teto(sarrafo5Bruto, sarrafo5, "sarrafos de 3 m", "Arredonda para cima (sarrafo inteiro)"),
   ] });
-  emitir(out, { ...base, item: f.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto, memoria: [
-    MEM.nota(`Volume de concreto lançado no bloco Engenharia — Fundação, elemento por elemento. Resistência escolhida: ${f.resistenciaConcreto || "Concreto"}.`),
+  emitir(out, { ...base, item: nomeConcreto(f.resistenciaConcreto), unidade: "m3", qtd: concreto, memoria: [
+    MEM.nota(`Volume de concreto lançado no bloco Engenharia — Fundação, elemento por elemento. Resistência escolhida: ${nomeConcreto(f.resistenciaConcreto)}.`),
     ...partesConcreto.map(([nome, v]) => MEM.dado(nome[0].toUpperCase() + nome.slice(1), v, "m³", "bloco Engenharia — Fundação")),
     MEM.conta("Volume com 10% de perda", `(${partesConcreto.map(([nome]) => nome).join(" + ")}) × 1,10`, partesConcreto, concretoBruto, "m³"),
     MEM.teto(concretoBruto, concreto, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
@@ -8618,7 +8631,7 @@ function vigaRespaldoLajeTerreo(cp, out) {
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memViga("CA60_5MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: MEMB.arameDoPeso(peso, arameBruto, arame) });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Térreo", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: t.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: volumeConcretoLoje, memoria: [
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Térreo", item: nomeConcreto(t.resistenciaConcretoLoje), unidade: "m3", qtd: volumeConcretoLoje, memoria: [
     MEM.nota("Capa de concreto da laje pré-moldada (10 cm) somada ao volume da viga de respaldo."),
     MEM.dado("Área da laje do térreo", t.areaLoje, "m²", "bloco Laje (forro)"),
     MEM.dado("Concreto da viga de respaldo", t.concretoVigaRespaldo, "m³", "bloco Laje (forro)"),
@@ -8649,7 +8662,7 @@ function vigaRespaldoLajeTerreo(cp, out) {
       MEM.conta("Bombeadas", "uma concretagem", [], 1, "bombeada"),
     ] });
   }
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: t.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: lojeMacica, memoria: [
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Térreo", item: nomeConcreto(t.resistenciaConcretoLoje), unidade: "m3", qtd: lojeMacica, memoria: [
     MEM.nota("Trecho de laje maciça (concretada no lugar), com 15 cm de espessura."),
     MEM.dado("Área de laje maciça no térreo", t.areaLojeMacica, "m²", "bloco Laje (forro)"),
     MEM.conta("Volume com 10% de perda", "área × 0,15 × 1,10", [["área", t.areaLojeMacica]], lojeMacicaBruto, "m³"),
@@ -8868,7 +8881,7 @@ function vigaRespaldoLajePav1(cp, out) {
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Barras de CA60 5.0mm 12mts", unidade: "Barras 12mts", qtd: ca60_5mm, memoria: memVigaP1("CA60_5MM") });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Arame Recozido", unidade: "KG", qtd: arame, memoria: MEMB.arameDoPeso(peso, arameBruto, arame) });
   emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Viga Respaldo Pav 1", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: p1.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: volumeConcretoLoje, memoria: [
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Pav 1", item: nomeConcreto(p1.resistenciaConcretoLoje), unidade: "m3", qtd: volumeConcretoLoje, memoria: [
     MEM.nota("Capa de concreto da laje pré-moldada do pav. 1 (10 cm) somada ao volume da viga de respaldo."),
     MEM.dado("Área da laje do pav. 1", p1.areaLoje, "m²", "bloco Laje Pav. 1"),
     MEM.dado("Concreto da viga de respaldo", p1.concretoVigaRespaldo, "m³", "bloco Laje Pav. 1"),
@@ -8900,7 +8913,7 @@ function vigaRespaldoLajePav1(cp, out) {
       MEM.conta("Bombeadas", "uma concretagem", [], 1, "bombeada"),
     ] });
   }
-  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: p1.resistenciaConcretoLoje || "Concreto", unidade: "m3", qtd: lojeMacica, memoria: [
+  emitir(out, { ordem: o, tipo: "Bruto", etapa, subEtapa: "Laje Maciça Pav 1", item: nomeConcreto(p1.resistenciaConcretoLoje), unidade: "m3", qtd: lojeMacica, memoria: [
     MEM.nota("Trecho de laje maciça do pav. 1, com 15 cm de espessura."),
     MEM.dado("Área de laje maciça no pav. 1", p1.areaLojeMacica, "m²", "bloco Laje Pav. 1"),
     MEM.conta("Volume com 10% de perda", "área × 0,15 × 1,10", [["área", p1.areaLojeMacica]], lojeMacicaBruto, "m³"),
@@ -9621,8 +9634,8 @@ function muroArrimo(cp, out) {
   ] });
   emitir(out, { ...base, subEtapa: "Caixaria", item: "Aço - Pregos 18x27", unidade: "KG", qtd: prego, memoria: MEMB.pregoDoArame(arame, pregoBruto, prego) });
   emitBarras(out, { ...base, subEtapa: "Supra Estrutura" }, barras, (k) => memoriaBitola(k, [["estacas", a.ferro.estacas[k]], ["sapatas", a.ferro.sapatas[k]], ["arranques", a.ferro.arranques[k]], ["baldrame", a.ferro.baldrame[k]], ["gigante", a.ferro.gigante[k]], ["colunas", a.ferro.colunas[k]], ["vigas", a.ferro.vigas[k]]], barras));
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: a.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto, memoria: [
-    MEM.nota(`Concreto do arrimo lançado no bloco Muro de arrimo, elemento por elemento. Resistência: ${a.resistenciaConcreto || "Concreto"}.`),
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: nomeConcreto(a.resistenciaConcreto), unidade: "m3", qtd: concreto, memoria: [
+    MEM.nota(`Concreto do arrimo lançado no bloco Muro de arrimo, elemento por elemento. Resistência: ${nomeConcreto(a.resistenciaConcreto)}.`),
     ...partesConcretoArrimo.map(([nome, v]) => MEM.dado(nome[0].toUpperCase() + nome.slice(1), v, "m³", "bloco Muro de arrimo")),
     MEM.conta("Volume com 10% de perda", `(${partesConcretoArrimo.map(([nome]) => nome).join(" + ")}) × 1,10`, partesConcretoArrimo, concretoBruto, "m³"),
     MEM.teto(concretoBruto, concreto, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
@@ -9857,8 +9870,8 @@ function piscina(cp, out) {
     MEM.teto(malhaPopContrapBruto, malhaPopContrap, "painéis", "Arredonda para cima (painel inteiro)"),
   ] });
   emitBarras(out, { ...base, subEtapa: "Supra Estrutura" }, barras, (k) => memoriaBitola(k, [["estacas", p.ferro.estacas[k]], ["sapatas", p.ferro.sapatas[k]], ["arranques", p.ferro.arranques[k]], ["baldrame", p.ferro.baldrame[k]], ["contrapiso", p.ferro.contrapiso[k]], ["colunas", p.ferro.colunas[k]], ["vigas", p.ferro.vigas[k]]], barras));
-  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: p.resistenciaConcreto || "Concreto", unidade: "m3", qtd: concreto, memoria: [
-    MEM.nota(`Concreto da piscina lançado no bloco Piscina, elemento por elemento. Resistência: ${p.resistenciaConcreto || "Concreto"}.`),
+  emitir(out, { ...base, subEtapa: "Supra Estrutura", item: nomeConcreto(p.resistenciaConcreto), unidade: "m3", qtd: concreto, memoria: [
+    MEM.nota(`Concreto da piscina lançado no bloco Piscina, elemento por elemento. Resistência: ${nomeConcreto(p.resistenciaConcreto)}.`),
     ...partesConcPisc.map(([nome, v]) => MEM.dado(nome[0].toUpperCase() + nome.slice(1), v, "m³", "bloco Piscina")),
     MEM.conta("Volume com 10% de perda", `(${partesConcPisc.map(([nome]) => nome).join(" + ")}) × 1,10`, partesConcPisc, concretoBruto, "m³"),
     MEM.teto(concretoBruto, concreto, "m³", "Arredonda para cima (a usina entrega em m³ inteiro)"),
@@ -11429,7 +11442,7 @@ function normalizarProjeto(projeto) {
       areaLoje: numOrZero(terreoIn.areaLoje),
       areaLojeMacica: numOrZero(terreoIn.areaLojeMacica),
       tipoLoje: terreoIn.tipoLoje || "",
-      resistenciaConcretoLoje: terreoIn.resistenciaConcretoLoje || "",
+      resistenciaConcretoLoje: nomeConcreto(terreoIn.resistenciaConcretoLoje),
       concretoVigaRespaldo: numOrZero(terreoIn.concretoVigaRespaldo),
       vigaRespaldo: normalizarFerro(terreoIn.vigaRespaldo),
     },
@@ -11454,7 +11467,7 @@ function normalizarProjeto(projeto) {
       areaLoje: numOrZero(pav1In.areaLoje),
       areaLojeMacica: numOrZero(pav1In.areaLojeMacica),
       tipoLoje: pav1In.tipoLoje || "",
-      resistenciaConcretoLoje: pav1In.resistenciaConcretoLoje || "",
+      resistenciaConcretoLoje: nomeConcreto(pav1In.resistenciaConcretoLoje),
       concretoVigaRespaldo: numOrZero(pav1In.concretoVigaRespaldo),
       vigaRespaldo: normalizarFerro(pav1In.vigaRespaldo),
     },
@@ -11463,7 +11476,7 @@ function normalizarProjeto(projeto) {
     fundacao: {
       qtdEstacas: numOrZero(fundacaoIn.qtdEstacas),
       profEstacas: numOrZero(fundacaoIn.profEstacas),
-      resistenciaConcreto: fundacaoIn.resistenciaConcreto || "",
+      resistenciaConcreto: nomeConcreto(fundacaoIn.resistenciaConcreto),
       ferro: {
         estacas: normalizarFerro(ferroFund.estacas),
         sapatas: normalizarFerro(ferroFund.sapatas),
@@ -11515,7 +11528,7 @@ function normalizarProjeto(projeto) {
       colunas20: numOrZero(colunasArrimo["20"]),
       colunas30: numOrZero(colunasArrimo["30"]),
       areaFormaColunaMaior25cm: numOrZero(arrimoIn.areaFormaColunaMaior25cm),
-      resistenciaConcreto: arrimoIn.resistenciaConcreto || "",
+      resistenciaConcreto: nomeConcreto(arrimoIn.resistenciaConcreto),
       ferro: {
         estacas: normalizarFerro(ferroArrimo.estacas),
         sapatas: normalizarFerro(ferroArrimo.sapatas),
@@ -11551,7 +11564,7 @@ function normalizarProjeto(projeto) {
       colunas20: numOrZero(colunasPiscinaAtiva["20"]),
       colunas25: numOrZero(colunasPiscinaAtiva["25"]),
       areaFormaColunaMaior25cm: numOrZero(piscinaAtiva.areaFormaColunaMaior25cm),
-      resistenciaConcreto: piscinaAtiva.resistenciaConcreto || "",
+      resistenciaConcreto: nomeConcreto(piscinaAtiva.resistenciaConcreto),
       ferro: {
         estacas: normalizarFerro(ferroPiscinaAtiva.estacas),
         sapatas: normalizarFerro(ferroPiscinaAtiva.sapatas),
@@ -12352,7 +12365,6 @@ function rotuloConfianca(i) {
 // ═══════════════════════════════════════════════════════════════
 
 const TIPOS_TELHA_UI = Object.keys(AREA_TELHA);
-const OPCOES_FCK = ["Concreto - FCK20", "Concreto - FCK25", "Concreto - FCK30", "Concreto - FCK35"];
 
 function setEmCaminho(obj, caminho, valor) {
   const partes = caminho.split(".");
@@ -13442,7 +13454,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="Área maciça (m²)" valor={get("terreo.areaLojeMacica")} onChange={(v) => set("terreo.areaLojeMacica", v)} />
           <CampoSelect label="Tipo" valor={get("terreo.tipoLoje")} onChange={(v) => set("terreo.tipoLoje", v)}
             opcoes={[{ value: "", label: "—" }, { value: "Treliça", label: "Treliça" }, { value: "Protendida", label: "Protendida" }]} />
-          <CampoSelect label="Resistência do concreto" valor={get("terreo.resistenciaConcretoLoje") || "Concreto - FCK25"} onChange={(v) => set("terreo.resistenciaConcretoLoje", v)} opcoes={OPCOES_FCK} />
+          <CampoSelect label="Resistência do concreto" valor={nomeConcreto(get("terreo.resistenciaConcretoLoje"))} onChange={(v) => set("terreo.resistenciaConcretoLoje", v)} opcoes={OPCOES_FCK} />
         </BlocoColapsavel>
 
         {projetoDraft.tipologia === "Sobrado" && (
@@ -13492,7 +13504,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
               <CampoNum label="Área maciça (m²)" valor={get("pav1.areaLojeMacica")} onChange={(v) => set("pav1.areaLojeMacica", v)} />
               <CampoSelect label="Tipo" valor={get("pav1.tipoLoje")} onChange={(v) => set("pav1.tipoLoje", v)}
                 opcoes={[{ value: "", label: "—" }, { value: "Treliça", label: "Treliça" }, { value: "Protendida", label: "Protendida" }]} />
-              <CampoSelect label="Resistência do concreto" valor={get("pav1.resistenciaConcretoLoje") || "Concreto - FCK25"} onChange={(v) => set("pav1.resistenciaConcretoLoje", v)} opcoes={OPCOES_FCK} />
+              <CampoSelect label="Resistência do concreto" valor={nomeConcreto(get("pav1.resistenciaConcretoLoje"))} onChange={(v) => set("pav1.resistenciaConcretoLoje", v)} opcoes={OPCOES_FCK} />
             </BlocoColapsavel>
           </>
         )}
@@ -13774,7 +13786,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
         <BlocoColapsavel titulo="Engenharia — Fundação" subtitulo="brocas, sapatas, arranques e baldrames" aberto={!!blocosAbertos.fundacao} onToggle={() => toggleBloco("fundacao")}>
           <CampoNum label="Qtd. de estacas (brocas)" valor={get("engenharia.fundacao.qtdEstacas")} onChange={(v) => set("engenharia.fundacao.qtdEstacas", v)} />
           <CampoNum label="Profundidade (m)" valor={get("engenharia.fundacao.profEstacas")} onChange={(v) => set("engenharia.fundacao.profEstacas", v)} />
-          <CampoSelect label="Resistência do concreto" valor={get("engenharia.fundacao.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("engenharia.fundacao.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
+          <CampoSelect label="Resistência do concreto" valor={nomeConcreto(get("engenharia.fundacao.resistenciaConcreto"))} onChange={(v) => set("engenharia.fundacao.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
           <GradeFerro get={get} set={set}
             pathFerro="engenharia.fundacao.ferro" pathConcreto="engenharia.fundacao.concreto"
             elementos={[
@@ -13828,7 +13840,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="Nº de vigas" valor={get("arrimo.numeroVigas")} onChange={(v) => set("arrimo.numeroVigas", v)} />
           <CampoNum label="Qtd. de estacas" valor={get("arrimo.qtdEstacas")} onChange={(v) => set("arrimo.qtdEstacas", v)} />
           <CampoNum label="Profundidade estacas (m)" valor={get("arrimo.profEstacas")} onChange={(v) => set("arrimo.profEstacas", v)} />
-          <CampoSelect label="Resistência do concreto" valor={get("arrimo.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("arrimo.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
+          <CampoSelect label="Resistência do concreto" valor={nomeConcreto(get("arrimo.resistenciaConcreto"))} onChange={(v) => set("arrimo.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
           <CampoNum label="Qtd. pilares 15cm" valor={get("arrimo.colunas.15")} onChange={(v) => set("arrimo.colunas.15", v)} />
           <CampoNum label="Qtd. pilares 20cm" valor={get("arrimo.colunas.20")} onChange={(v) => set("arrimo.colunas.20", v)} />
           <CampoNum label="Qtd. pilares 30cm" valor={get("arrimo.colunas.30")} onChange={(v) => set("arrimo.colunas.30", v)} />
@@ -13855,7 +13867,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
           <CampoNum label="Qtd. de estacas" valor={get("piscina.qtdEstacas")} onChange={(v) => set("piscina.qtdEstacas", v)} />
           <CampoNum label="Profundidade estacas (m)" valor={get("piscina.profundidadeEstacas")} onChange={(v) => set("piscina.profundidadeEstacas", v)} />
           <CampoNum label="Gabarito da obra" valor={get("piscina.gabaritoObra")} onChange={(v) => set("piscina.gabaritoObra", v)} />
-          <CampoSelect label="Resistência do concreto" valor={get("piscina.resistenciaConcreto") || "Concreto - FCK25"} onChange={(v) => set("piscina.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
+          <CampoSelect label="Resistência do concreto" valor={nomeConcreto(get("piscina.resistenciaConcreto"))} onChange={(v) => set("piscina.resistenciaConcreto", v)} opcoes={OPCOES_FCK} />
           <CampoNum label="Qtd. pilares 15cm" valor={get("piscina.colunas.15")} onChange={(v) => set("piscina.colunas.15", v)} />
           <CampoNum label="Qtd. pilares 20cm" valor={get("piscina.colunas.20")} onChange={(v) => set("piscina.colunas.20", v)} />
           <CampoNum label="Qtd. pilares 25cm" valor={get("piscina.colunas.25")} onChange={(v) => set("piscina.colunas.25", v)} />
