@@ -4499,6 +4499,36 @@ function lerCaminho(obj, caminho) {
   return caminho.split(".").reduce((acc, k) => (acc == null ? acc : acc[k]), obj);
 }
 
+// Quantos campos o usuário realmente preencheu. Serve para o botão de limpar
+// dizer o que vai apagar em vez de perguntar no escuro ("apagar tudo?" sem
+// número não ajuda ninguém a decidir).
+//
+// O que NÃO conta: a classificação da obra (tipo, tipologia, padrão, tamanho
+// dos cômodos) e os cômodos essenciais que já nascem marcados — são escolhas
+// de partida do formulário, não medidas digitadas. Zero, vazio e false também
+// não contam: campo em branco não é campo preenchido.
+const CLASSIFICACAO_OBRA = ["tipoObra", "tipologia", "padrao", "tamanhoComodos", "temPiscina"];
+function camposPreenchidos(projeto) {
+  const vazio = projetoVazio();
+  let n = 0;
+  const anda = (valor, padrao) => {
+    if (Array.isArray(valor)) { n += valor.length; return; }
+    if (valor && typeof valor === "object") {
+      for (const k of Object.keys(valor)) anda(valor[k], padrao && typeof padrao === "object" ? padrao[k] : undefined);
+      return;
+    }
+    if (valor === padrao) return;                       // igual ao formulário em branco
+    if (valor === "" || valor == null || valor === false) return;
+    if (typeof valor === "number" && valor === 0) return;
+    n++;
+  };
+  for (const k of Object.keys(projeto || {})) {
+    if (CLASSIFICACAO_OBRA.includes(k)) continue;
+    anda(projeto[k], vazio[k]);
+  }
+  return n;
+}
+
 function projetoVazio() {
   return {
     tipologia: "Sobrado",
@@ -4933,6 +4963,36 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
 
   const memorias = useMemo(() => (viewInterna === "resultado" && obra.orcamento ? mapaMemorias(obra.projeto, data) : {}), [viewInterna, obra.projeto, obra.orcamento, data]);
 
+  const preenchidos = useMemo(() => camposPreenchidos(projetoDraft), [projetoDraft]);
+
+  // Zera o formulário inteiro. Só mexe no rascunho da tela: o orçamento já
+  // salvo na obra continua onde está até você gerar outro.
+  async function limparFormulario() {
+    const ok = await dialogo.confirmar({
+      titulo: "Limpar o formulário?",
+      mensagem: `Apaga os ${preenchidos} campo(s) preenchidos — medidas, cômodos, esquadrias, cobertura e itens do projeto. ` +
+        "O tipo de obra, a tipologia e o padrão continuam como estão. " +
+        (obra.orcamento ? "O orçamento já gerado continua salvo até você gerar outro." : "Nada foi gerado ainda, então não há orçamento a perder.") +
+        " Não dá para desfazer.",
+      confirmar: "Limpar tudo",
+      cancelar: "Cancelar",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    // A classificação da obra fica: é a mesma coisa que o contador ignora, e
+    // perder "Reforma" ao limpar as medidas seria uma surpresa desagradável.
+    setProjetoDraft((p) => {
+      const limpo = projetoVazio();
+      for (const k of CLASSIFICACAO_OBRA) if (p[k] !== undefined) limpo[k] = p[k];
+      return limpo;
+    });
+    setBlocosAbertos({ geral: true });
+    setComodoAberto(null);
+    setParedeTerreoExpandida(false);
+    setParedePav1Expandida(false);
+    setEspessuraTerreaAberta(false);
+  }
+
   function toggleBloco(k) { setBlocosAbertos((b) => ({ ...b, [k]: !b[k] })); }
   function toggleEtapa(k) { setEtapasColapsadas((b) => ({ ...b, [k]: !b[k] })); }
   function set(caminho, valor) { setProjetoDraft((p) => setEmCaminho(p, caminho, valor)); }
@@ -5145,8 +5205,18 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
     return (
       <div style={wrap}>
         <button onClick={() => setViewInterna(obra.orcamento ? "resultado" : "vazio")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
-        <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Dados do projeto</div>
-        <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 16 }}>Campo vazio = 0. Um bloco sem nenhum dado não entra no orçamento.</div>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 4 }}>Dados do projeto</div>
+            <div style={{ fontSize: 12, color: "#6b7280" }}>Campo vazio = 0. Um bloco sem nenhum dado não entra no orçamento.</div>
+          </div>
+          {perm.podeEditar && preenchidos > 0 && (
+            <button onClick={limparFormulario}
+              style={{ background: "#fff", color: "#b91c1c", border: "1.5px solid rgba(185,28,28,0.30)", borderRadius: 12, padding: "8px 14px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+              Limpar formulário ({preenchidos})
+            </button>
+          )}
+        </div>
 
         <BlocoColapsavel titulo="Geral" aberto={!!blocosAbertos.geral} onToggle={() => toggleBloco("geral")}>
           <CampoSelect label="Tipo de obra" valor={projetoDraft.tipoObra || "nova"} onChange={(v) => set("tipoObra", v)} opcoes={TIPOS_OBRA} />

@@ -26,7 +26,19 @@ const srcSeedComposicoes = readFileSync(join(__dirname, "src", "modules", "compo
 const srcShared = readFileSync(join(__dirname, "src", "modules", "shared.jsx"), "utf-8");
 const mComodos = srcShared.match(/var COMODOS = \{[\s\S]*?\n\};/);
 if (!mComodos) throw new Error("var COMODOS não encontrado em shared.jsx");
-const src = mComodos[0] + "\n" + srcSeedComposicoes + "\n" + srcCompleto.slice(0, idx);
+// projetoVazio() e camposPreenchidos() moram depois do marcador de UI (são
+// usadas pelo formulário), mas são JS puro e o botão de limpar depende delas
+// — recorta as duas e junta ao motor.
+const recorte = (nome) => {
+  const i = srcCompleto.indexOf(`function ${nome}(`);
+  if (i === -1) throw new Error(`function ${nome} não encontrada em orcamento-obra.jsx`);
+  const fim = srcCompleto.indexOf("\n}", i);
+  return srcCompleto.slice(i, fim + 2);
+};
+const mClassificacao = srcCompleto.match(/const CLASSIFICACAO_OBRA = \[[^\]]*\];/);
+if (!mClassificacao) throw new Error("const CLASSIFICACAO_OBRA não encontrada");
+const src = mComodos[0] + "\n" + srcSeedComposicoes + "\n" + srcCompleto.slice(0, idx)
+  + "\n" + recorte("projetoVazio") + "\n" + mClassificacao[0] + "\n" + recorte("camposPreenchidos");
 
 const modulo = new Function(`
   ${src}
@@ -39,6 +51,7 @@ const modulo = new Function(`
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
     instalacoesPorAmbiente, composicoesAtivas, COMPOSICOES_SEED, AMBIENTES_TIPOS, PONTOS_ELETRICOS,
+    camposPreenchidos, projetoVazio,
     demolicoesRemocoes, entulhoDaReforma, execucaoNoExistente, SERVICOS_REFORMA, ENTULHO_M3_POR_M2, taxaServicoReforma,
     consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
@@ -1025,6 +1038,40 @@ teste("a reforma inteira entra no orçamento, ordenada e somada", () => {
   const dem = r.itens.find(i => i.item === "Demolição de alvenaria");
   assert.strictEqual(dem.total, 40 * 35);
   assert.ok(r.totais.geral > 0);
+});
+
+
+// ── Botão de limpar o formulário ────────────────────────────────
+teste("formulário em branco não tem nada preenchido", () => {
+  assert.strictEqual(modulo.camposPreenchidos(modulo.projetoVazio()), 0);
+});
+
+teste("a classificação da obra não conta como campo preenchido", () => {
+  const p = { ...modulo.projetoVazio(), tipoObra: "reforma", tipologia: "Térrea", padrao: "Alto", tamanhoComodos: "Grande", temPiscina: true };
+  assert.strictEqual(modulo.camposPreenchidos(p), 0, "trocar o tipo de obra não é preencher medida");
+});
+
+teste("zero, vazio e nulo não contam", () => {
+  const p = modulo.projetoVazio();
+  p.arquitetura = { areaConstruida: 0, m2ParedesInternas: "", gabarito: null };
+  assert.strictEqual(modulo.camposPreenchidos(p), 0);
+});
+
+teste("conta medida digitada, item de lista e campo aninhado", () => {
+  const p = modulo.projetoVazio();
+  p.arquitetura = { areaConstruida: 180, gabarito: 2.8 };
+  p.existente = { paredeDemolir: 40 };
+  p.esquadrias = [{ id: "e1" }, { id: "e2" }];
+  p.cobertura = [{ tipo: "x" }];
+  assert.strictEqual(modulo.camposPreenchidos(p), 6); // 2 + 1 + 2 + 1
+});
+
+teste("limpar devolve o formulário ao estado em branco", () => {
+  const cheio = modulo.projetoVazio();
+  cheio.arquitetura = { areaConstruida: 200, m2ParedesInternas: 300 };
+  cheio.esquadrias = [{ id: "e1" }];
+  assert.ok(modulo.camposPreenchidos(cheio) > 0);
+  assert.strictEqual(modulo.camposPreenchidos(modulo.projetoVazio()), 0);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
