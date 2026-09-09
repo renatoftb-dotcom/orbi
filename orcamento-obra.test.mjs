@@ -1008,13 +1008,27 @@ teste("pintura do existente sai com as quatro linhas de tinta", () => {
   assert.ok(itens.some(i => /Tinta Acrílica/.test(i)));
 });
 
-teste("instalação de louças é mão de obra, medida por peça", () => {
+teste("banheiro é a unidade: montar e desmontar contam por banheiro", () => {
+  const montar = [];
+  modulo.execucaoNoExistente(projetoReforma({ banheiroMontar: 2 }), montar, { materiais: [] });
+  const m = montar.find(i => i.item === "Montagem de banheiro");
+  assert.strictEqual(m.qtd, 2);
+  assert.strictEqual(m.tipo, "Prestadores de serviços");
+  assert.strictEqual(m.preco, 600);
+
+  const desmontar = [];
+  modulo.demolicoesRemocoes(projetoReforma({ banheiroDesmontar: 2 }), desmontar, { materiais: [] });
+  const d = desmontar.find(i => i.item === "Desmontagem de banheiro");
+  assert.strictEqual(d.qtd, 2);
+  assert.strictEqual(d.preco, 220);
+});
+
+teste("banheiro desmontado também gera entulho", () => {
   const out = [];
-  modulo.execucaoNoExistente(projetoReforma({ loucaMetalInstalar: 6 }), out, { materiais: [] });
-  const l = out.find(i => i.item === "Instalação de louças e metais");
-  assert.strictEqual(l.qtd, 6);
-  assert.strictEqual(l.tipo, "Prestadores de serviços");
-  assert.strictEqual(l.preco, 120);
+  // 2 banheiros × 0,3 = 0,6 m³; × 1,4 = 0,84; ÷ 5 = 0,168 → 1 caçamba
+  modulo.entulhoDaReforma(projetoReforma({ banheiroDesmontar: 2 }), out, { materiais: [] });
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].qtd, 1);
 });
 
 teste("bloco vazio não emite linha nenhuma", () => {
@@ -1029,7 +1043,7 @@ teste("a reforma inteira entra no orçamento, ordenada e somada", () => {
   const r = modulo.gerarOrcamentoObra({
     tipoObra: "reforma", tipologia: "Térrea", padrao: "Médio",
     arquitetura: { areaConstruida: 0 }, terreo: {},
-    existente: { paredeDemolir: 40, pisoRemover: 30, paredeConstruir: 12, pisoAssentar: 30, loucaMetalInstalar: 4 },
+    existente: { paredeDemolir: 40, pisoRemover: 30, paredeConstruir: 12, pisoAssentar: 30, banheiroMontar: 2 },
   }, { materiais: [] });
   const etapas = [...new Set(r.itens.map(i => i.etapa))];
   assert.ok(etapas.includes("Demolições e remoções"));

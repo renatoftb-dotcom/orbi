@@ -17,10 +17,10 @@ que o arquiteto mediu na visita.
 projeto.existente = {
   // demolir e remover
   paredeDemolir, revestimentoRemover, pisoRemover, contrapisoRemover,
-  forroRemover, esquadriaRetirar, loucaMetalRetirar,
+  forroRemover, esquadriaRetirar, banheiroDesmontar,
   // construir e assentar
   paredeConstruir, rebocoNovo, contrapisoNovo, pisoAssentar,
-  revestimentoAssentar, pinturaExistente, loucaMetalInstalar,
+  revestimentoAssentar, pinturaExistente, banheiroMontar,
 }
 ```
 
@@ -55,6 +55,16 @@ Sai sozinho do que foi marcado para demolir, por volume gerado por m²:
 | revestimento de parede | 0,03 |
 | piso | 0,02 |
 | forro | 0,01 |
+
+Mais 0,3 m³ por banheiro desmontado (vaso, cuba e acessórios).
+
+## Banheiro é a unidade, não a peça
+
+Desmontagem e montagem são contadas **por banheiro**, não por louça ou
+metal. É como o empreiteiro cobra e como o arquiteto conta na visita:
+"dois banheiros" se responde na hora, "onze peças" exige contar vaso,
+lavatório, torneira, ducha, registros e acessórios um a um — e ninguém
+confere esse número depois. Um banheiro completo é o conjunto todo.
 
 Sobre o total incide **empolamento de 1,4**: entulho quebrado ocupa mais
 espaço do que o material ocupava íntegro na parede. Só então divide por

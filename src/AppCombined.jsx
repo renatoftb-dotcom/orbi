@@ -5274,8 +5274,8 @@ var INSUMOS_SEED = [
   { codigo:"PRE-021", nome:"Retirada de contrapiso", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:30, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Retirada de contrapiso","Demolição de contrapiso"] },
   { codigo:"PRE-022", nome:"Remoção de forro", grupo:"Prestadores de serviços", unidade:"m2", tipo:"prestador", baseCalculo:"medido", precoReferencia:15, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Remoção de forro","Retirada de forro"] },
   { codigo:"PRE-023", nome:"Retirada de esquadria", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:60, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Retirada de esquadria","Retirada de janela","Retirada de porta"] },
-  { codigo:"PRE-024", nome:"Retirada de louças e metais", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:45, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Retirada de louças e metais"] },
-  { codigo:"PRE-025", nome:"Instalação de louças e metais", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:120, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Instalação de louças e metais"] },
+  { codigo:"PRE-024", nome:"Desmontagem de banheiro", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:220, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Desmontagem de banheiro","Retirada de louças e metais"], observacao:"Banheiro completo: vaso, lavatório, torneira, ducha, registros e acessórios" },
+  { codigo:"PRE-025", nome:"Montagem de banheiro", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:600, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Montagem de banheiro","Instalação de louças e metais"], observacao:"Banheiro completo: vaso, lavatório, torneira, ducha, registros e acessórios" },
   { codigo:"PRE-026", nome:"Caçamba de entulho 5m³", grupo:"Prestadores de serviços", unidade:"Unidades", tipo:"prestador", baseCalculo:"medido", precoReferencia:320, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Caçamba de entulho 5m³","Caçamba de entulho","Caçamba"] },
 
   // Esquadrias — referência de S_ESQUADRIAS.bas (alumínio R$/kg, vidro R$/m²).
@@ -11611,8 +11611,12 @@ const SERVICOS_REFORMA = {
   contrapisoRemover:    { item: "Retirada de contrapiso",              unidade: "m2",       valor: 30  },
   forroRemover:         { item: "Remoção de forro",                    unidade: "m2",       valor: 15  },
   esquadriaRetirar:     { item: "Retirada de esquadria",               unidade: "Unidades", valor: 60  },
-  loucaMetalRetirar:    { item: "Retirada de louças e metais",         unidade: "Unidades", valor: 45  },
-  loucaMetalInstalar:   { item: "Instalação de louças e metais",       unidade: "Unidades", valor: 120 },
+  // Banheiro é a unidade natural aqui: o empreiteiro cobra por banheiro
+  // desmontado ou montado, não por peça. Um banheiro completo é vaso,
+  // lavatório, torneira, ducha, registros e acessórios — contar peça a peça
+  // dava um número que ninguém confere na visita.
+  banheiroDesmontar:    { item: "Desmontagem de banheiro",             unidade: "Unidades", valor: 220 },
+  banheiroMontar:       { item: "Montagem de banheiro",                unidade: "Unidades", valor: 600 },
 };
 const CACAMBA_ITEM = "Caçamba de entulho 5m³";
 const CACAMBA_VALOR = 320;   // R$ por caçamba retirada
@@ -11623,6 +11627,8 @@ const ENTULHO_M3_POR_M2 = {
   paredeDemolir: 0.25, revestimentoRemover: 0.03, pisoRemover: 0.02,
   contrapisoRemover: 0.07, forroRemover: 0.01,
 };
+// Entulho por unidade: um banheiro desmontado sai com vaso, cuba e acessórios.
+const ENTULHO_M3_POR_UN = { banheiroDesmontar: 0.3 };
 // Entulho solto ocupa mais espaço que o material inteiro que saiu da parede.
 const ENTULHO_EMPOLAMENTO = 1.4;
 
@@ -11638,7 +11644,7 @@ function taxaServicoReforma(chave, data) {
 function demolicoesRemocoes(cp, out, data) {
   const ex = cp.existente || {};
   const base = { ordem: ORD.demolicao, tipo: "Prestadores de serviços", etapa: "Demolições e remoções", subEtapa: "Construção existente" };
-  for (const chave of ["paredeDemolir", "revestimentoRemover", "pisoRemover", "contrapisoRemover", "forroRemover", "esquadriaRetirar", "loucaMetalRetirar"]) {
+  for (const chave of ["paredeDemolir", "revestimentoRemover", "pisoRemover", "contrapisoRemover", "forroRemover", "esquadriaRetirar", "banheiroDesmontar"]) {
     const qtd = numOrZero(ex[chave]);
     if (!(qtd > 0)) continue;
     const s = SERVICOS_REFORMA[chave];
@@ -11667,6 +11673,13 @@ function entulhoDaReforma(cp, out, data) {
     const v = m2 * coef;
     volume += v;
     passos.push(MEM.conta(SERVICOS_REFORMA[chave].item, `m² × ${numMem(coef)}`, [["m²", m2]], v, "m³"));
+  }
+  for (const [chave, coef] of Object.entries(ENTULHO_M3_POR_UN)) {
+    const un = numOrZero(ex[chave]);
+    if (!(un > 0)) continue;
+    const v = un * coef;
+    volume += v;
+    passos.push(MEM.conta(SERVICOS_REFORMA[chave].item, `unidades × ${numMem(coef)}`, [["unidades", un]], v, "m³"));
   }
   if (!(volume > 0)) return;
   const solto = volume * ENTULHO_EMPOLAMENTO;
@@ -11863,19 +11876,19 @@ function execucaoNoExistente(cp, out, data) {
     }
   }
 
-  // ── Instalação de louças e metais ──
-  const un = numOrZero(ex.loucaMetalInstalar);
-  if (un > 0) {
-    const taxa = taxaServicoReforma("loucaMetalInstalar", data);
-    const s = SERVICOS_REFORMA.loucaMetalInstalar;
+  // ── Montagem dos banheiros ──
+  const banheiros = numOrZero(ex.banheiroMontar);
+  if (banheiros > 0) {
+    const taxa = taxaServicoReforma("banheiroMontar", data);
+    const sv = SERVICOS_REFORMA.banheiroMontar;
     emitir(out, {
       ordem: ORD.existente, tipo: "Prestadores de serviços", etapa: "Construção existente",
-      subEtapa: "Louças e metais", item: s.item, unidade: s.unidade, qtd: un, preco: taxa.valor,
+      subEtapa: "Banheiros", item: sv.item, unidade: sv.unidade, qtd: banheiros, preco: taxa.valor,
       confianca: taxa.confianca, insumoCodigo: taxa.codigo,
       memoria: [
-        MEM.nota("Mão de obra de instalação — a louça e o metal em si entram pelo bloco de itens do projeto."),
-        MEM.dado("Peças a instalar", un, "unidades", "bloco Construção existente"),
-        MEM.dado("Preço unitário", taxa.valor, "R$/un", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
+        MEM.nota("Mão de obra de montar o banheiro completo — vaso, lavatório, torneira, ducha, registros e acessórios. As peças em si entram pelo bloco de itens do projeto."),
+        MEM.dado("Banheiros a montar", banheiros, "unidades", "bloco Construção existente"),
+        MEM.dado("Preço por banheiro", taxa.valor, "R$/un", taxa.fonte === "insumo" ? "catálogo de Insumos" : "referência do módulo"),
       ],
     });
   }
@@ -12767,7 +12780,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             <CampoNum label="Contrapiso a retirar (m²)" valor={get("existente.contrapisoRemover")} onChange={(v) => set("existente.contrapisoRemover", v)} />
             <CampoNum label="Forro a remover (m²)" valor={get("existente.forroRemover")} onChange={(v) => set("existente.forroRemover", v)} />
             <CampoNum label="Esquadrias a retirar (un)" valor={get("existente.esquadriaRetirar")} onChange={(v) => set("existente.esquadriaRetirar", v)} />
-            <CampoNum label="Louças e metais a retirar (un)" valor={get("existente.loucaMetalRetirar")} onChange={(v) => set("existente.loucaMetalRetirar", v)} />
+            <CampoNum label="Banheiros a desmontar (un)" valor={get("existente.banheiroDesmontar")} onChange={(v) => set("existente.banheiroDesmontar", v)} />
 
             <div style={{ gridColumn: "1 / -1", fontSize: 11.5, fontWeight: 700, color: "#111827", marginTop: 8 }}>Construir e assentar</div>
             <CampoNum label="Parede a construir (m²)" valor={get("existente.paredeConstruir")} onChange={(v) => set("existente.paredeConstruir", v)} />
@@ -12781,7 +12794,7 @@ function OrcamentoObraView({ obra, obras, data, save, onObraAtualizada, isMobile
             <CampoNum label="Piso a assentar (m²)" valor={get("existente.pisoAssentar")} onChange={(v) => set("existente.pisoAssentar", v)} />
             <CampoNum label="Revestimento a assentar (m²)" valor={get("existente.revestimentoAssentar")} onChange={(v) => set("existente.revestimentoAssentar", v)} />
             <CampoNum label="Parede a pintar (m²)" valor={get("existente.pinturaExistente")} onChange={(v) => set("existente.pinturaExistente", v)} />
-            <CampoNum label="Louças e metais a instalar (un)" valor={get("existente.loucaMetalInstalar")} onChange={(v) => set("existente.loucaMetalInstalar", v)} />
+            <CampoNum label="Banheiros a montar (un)" valor={get("existente.banheiroMontar")} onChange={(v) => set("existente.banheiroMontar", v)} />
             <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "#6b7280", marginTop: 6 }}>
               O entulho e as caçambas saem sozinhos do que você marcou para demolir.
               Os serviços de demolição usam o preço do catálogo de Insumos quando cadastrados;
