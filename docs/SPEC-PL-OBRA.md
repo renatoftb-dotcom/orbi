@@ -791,3 +791,31 @@ todas usa a aba Preencher, que é onde elas existem por definição.
 Na aba P&L os números do cabeçalho somem: o cartão já os traz, e repetir os
 mesmos valores dois centímetros acima é ruído. "Adicionar item" também some
 — ele pertence ao detalhe item a item, em "Por conta" e "Por prestador".
+
+## Por prestador: um anel por ofício
+
+A aba agrupava por `prestadorId` do cadastro. Como o quadro de preenchimento
+não pede prestador, quase tudo caía em "Sem prestador definido" — a aba
+existia sem ter o que mostrar.
+
+Agora ela é uma grade de **pequenos múltiplos do mesmo medidor** do cartão de
+custo: um cartão por ofício, com estimado, gasto, quanto falta e um anel de
+74 px. O olho compara preenchimento entre cartões sem ler número nenhum, e
+quem estourou salta em vermelho no meio dos azuis.
+
+Cada anel mede o ofício contra o **próprio** estimado — não a fatia dele no
+total da obra, que é outra pergunta e não é a que se faz aqui.
+
+**Quem é "prestador"** (`prestadoresDoPL`): o grupo MÃO DE OBRA &
+PRESTADORES inteiro, mais o **Gerenciamento de obra** — que mora em Serviços
+& Taxas por ser taxa, mas é serviço de terceiro como os outros e é o maior
+deles em muita obra. Imposto, tarifa bancária e contabilidade ficam de fora:
+são custo do escritório, não gente trabalhando na obra. A lista de exceções é
+`CONTAS_PRESTADOR_EXTRA`, para acrescentar sem mexer na lógica.
+
+Ordem: do maior orçamento para o menor; ofício sem estimativa entra pelo que
+já saiu. Ofício sem nenhum dos dois lados não ocupa cartão, e ofício com
+pagamento mas sem estimativa aparece sem anel — não há contra o que medir.
+
+"Adicionar item" saiu desta aba junto com o agrupamento antigo: ele pertence
+ao detalhe item a item, que agora só existe em "Por conta".

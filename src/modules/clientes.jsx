@@ -1169,6 +1169,72 @@ function AnelCusto({ progresso, tamanho }) {
   );
 }
 
+// ── Prestadores: um anel por ofício ─────────────────────────────
+// Pequenos múltiplos do MESMO medidor do cartão de custo: o olho compara
+// preenchimento entre cartões sem precisar ler número nenhum, e quem
+// estourou salta em vermelho no meio dos azuis. Cada anel mede o ofício
+// contra o SEU estimado — não a fatia dele no total da obra, que é outra
+// pergunta e não é a que se faz aqui.
+function PrestadoresPLView({ itens, contasPagar, isMobile, fmtBRL }) {
+  const r = prestadoresDoPL(itens, contasPagar, GRUPOS_PL, PLANO_CONTAS);
+  const num = (v) => (Math.abs(v) < 0.005 ? "—" : fmtBRL(v));
+
+  if (r.vazio) {
+    return (
+      <div style={{ padding: 24, textAlign: "center", color: "#4b5563", fontSize: 12.5,
+        border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
+        Nenhum prestador com estimativa ou pagamento ainda. Preencha os ofícios na aba Preencher;
+        o que for pago em contas a pagar aparece aqui do lado.
+      </div>
+    );
+  }
+
+  const totalProg = progressoCusto(r.total);
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+        <span style={{ fontSize: 12.5, color: "#4b5563" }}>
+          {r.linhas.length === 1 ? "1 prestador" : `${r.linhas.length} prestadores`} · estimado{" "}
+          <strong style={{ color: "#111827" }}>{num(r.total.estimado)}</strong> · gasto{" "}
+          <strong style={{ color: "#111827" }}>{num(r.total.realizado)}</strong>
+          {totalProg.medivel ? ` (${totalProg.pct}%)` : ""}
+        </span>
+      </div>
+      <div style={{ display: "grid", gap: 12,
+        gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fill, minmax(232px, 1fr))" }}>
+        {r.linhas.map(l => (
+          <div key={l.conta.id} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12,
+            padding: "12px 14px", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", marginBottom: 6 }}>{l.conta.nome}</div>
+              <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "2px 10px", alignItems: "baseline" }}>
+                <span style={{ fontSize: 11, color: "#6b7280" }}>Estimado</span>
+                <span style={{ fontSize: 12.5, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{num(l.estimado)}</span>
+                <span style={{ fontSize: 11, color: "#6b7280" }}>Gasto</span>
+                <span style={{ fontSize: 12.5, color: "#111827", fontVariantNumeric: "tabular-nums" }}>{num(l.realizado)}</span>
+                {l.progresso.medivel && (
+                  <>
+                    <span style={{ fontSize: 11, color: "#6b7280" }}>{l.progresso.acima ? "Passou em" : "Falta"}</span>
+                    <span style={{ fontSize: 12.5, color: l.progresso.acima ? "#dc2626" : "#111827", fontVariantNumeric: "tabular-nums" }}>
+                      {num(Math.abs(l.saldo))}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+            <AnelCusto progresso={l.progresso} tamanho={74} />
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 10 }}>
+        Cada anel é o ofício contra o próprio estimado. Entram a mão de obra inteira e o gerenciamento de obra —
+        material, imposto e tarifa não são prestador. “Gasto” é o que já foi <strong style={{ color: "#4b5563" }}>pago</strong>;
+        conta em aberto não entra.
+      </div>
+    </div>
+  );
+}
+
 // ── P&L da obra: a tela de abertura do Planejamento ─────────────
 // A pergunta de todo dia é "quanto eu disse que ia custar e quanto já saiu".
 // Por isso o Planejamento abre aqui, e não no formulário de preencher.
@@ -1873,25 +1939,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return { grupo: g, contas: contasComItens, total: totalGrupo };
     }).filter(g => g.contas.length > 0);
 
-    // ── Agrupamento "por prestador" ────────────────────────────
-    const porPrestadorMap = {};
-    itensPL.forEach(i => {
-      const chave = i.prestadorId || "__sem_prestador__";
-      if (!porPrestadorMap[chave]) porPrestadorMap[chave] = { itens: [], total: 0 };
-      porPrestadorMap[chave].itens.push(i);
-      porPrestadorMap[chave].total += Number(i.valor) || 0;
-    });
-    const porPrestador = Object.entries(porPrestadorMap).map(([chave, v]) => ({
-      chave,
-      nome: chave === "__sem_prestador__" ? "Sem prestador definido" : (prestadores.find(p => p.id === chave)?.nome || "Prestador removido"),
-      itens: v.itens,
-      total: v.total,
-    })).sort((a, b) => b.total - a.total);
+    // A aba de prestadores agrupava por `prestadorId` do cadastro, e como o
+    // quadro não pede prestador quase tudo caía em "Sem prestador definido".
+    // Agora ela é a grade de anéis por ofício (PrestadoresPLView), que é onde
+    // o dado realmente está — o agrupamento antigo saiu junto.
 
     // Realizado: o que já foi pago nas Contas a pagar, pela mesma conta do
     // plano de contas — é o outro lado da estimativa.
     const realConta = realizadoPorConta(contasDaObra);
-    const realPrestador = realizadoPorPrestador(contasDaObra);
     const totalRealizado = Object.values(realConta).reduce((a, v) => a + v, 0);
     const comparativo = (estimado, realizado) => {
       if (!realizado) return null;
@@ -2123,26 +2178,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             ))}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
-            {porPrestador.map(p => {
-              const pct = totalPL > 0 ? (p.total / totalPL) * 100 : 0;
-              return (
-                <div key={p.nome} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 12, padding: "12px 14px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{p.nome}{comparativo(p.total, realPrestador[p.chave] || 0)}</div>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{fmtBRL(p.total)}</div>
-                  </div>
-                  <div style={{ height: 6, background: "#f3f4f6", borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                    <div style={{ height: "100%", width: `${pct}%`, background: "#111827", borderRadius: 4 }} />
-                  </div>
-                  <div style={{ fontSize: 11, color: "#4b5563" }}>{pct.toFixed(1)}% do total · {p.itens.length} {p.itens.length !== 1 ? "itens" : "item"}</div>
-                </div>
-              );
-            })}
-          </div>
+          <PrestadoresPLView itens={itensPL} contasPagar={contasDaObra} isMobile={isMobile} fmtBRL={fmtBRL} />
         )}
 
-        {perm.podeGerenciarObra && itensPL.length > 0 && (visaoPL === "conta" || visaoPL === "prestador") && (
+        {perm.podeGerenciarObra && itensPL.length > 0 && visaoPL === "conta" && (
           <button style={{ ...C.btn, width: "100%" }} onClick={novoItemPL}>+ Adicionar item</button>
         )}
       </div>

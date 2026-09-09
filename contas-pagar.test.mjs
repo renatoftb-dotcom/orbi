@@ -38,6 +38,7 @@ const modulo = new Function(`
            itemDeQuadro, itensDetalhados, EST_ORIGEM_QUADRO,
            CARGA_ESTIMATIVA_UNICA, estimativaCargaUnica,
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
+           prestadoresDoPL, CONTAS_PRESTADOR_EXTRA,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -921,6 +922,65 @@ teste("sem estimativa não há contra o que medir", () => {
   }
   // e nada de dividir por zero
   assert.strictEqual(modulo.progressoCusto({ estimado: 0, realizado: 9 }).pct, 0);
+});
+
+console.log("\n--- prestadores, um anel por ofício ---");
+const prest = (itens, contas) => modulo.prestadoresDoPL(itens, contas, modulo.GRUPOS_PL, modulo.PLANO_CONTAS);
+const estOficios = () => {
+  let i = [];
+  const por = { empreiteiro: 174800, eletricista: 34960, pintor: 43700, gesseiro: 85440,
+                serralheiro: 117362, lixador_concreto: 3277.5, taxa_admin_obra: 134000 };
+  let n = 0;
+  for (const k of Object.keys(por)) i = modulo.definirEstimativaDaConta(i, k, por[k], "p" + (++n));
+  return i;
+};
+
+teste("traz a mão de obra inteira mais o gerenciamento", () => {
+  const r = prest(estOficios(), []);
+  const ids = r.linhas.map(l => l.conta.id);
+  assert.ok(ids.includes("taxa_admin_obra"), "gerenciamento é prestador, mesmo morando em Serviços");
+  assert.ok(ids.includes("empreiteiro") && ids.includes("gesseiro") && ids.includes("serralheiro"));
+  assert.strictEqual(r.total.estimado, 593539.5);
+});
+
+teste("do maior orçamento para o menor", () => {
+  const r = prest(estOficios(), []);
+  assert.deepStrictEqual(r.linhas.map(l => l.conta.id),
+    ["empreiteiro", "taxa_admin_obra", "serralheiro", "gesseiro", "pintor", "eletricista", "lixador_concreto"]);
+});
+
+teste("material e imposto não são prestador", () => {
+  const comMaterial = modulo.definirEstimativaDaConta(estOficios(), "material", 999999, "x1");
+  const r = prest(modulo.definirEstimativaDaConta(comMaterial, "impostos", 50000, "x2"), []);
+  const ids = r.linhas.map(l => l.conta.id);
+  assert.ok(!ids.includes("material"), "material é insumo, não gente");
+  assert.ok(!ids.includes("impostos"), "imposto é custo do escritório");
+});
+
+teste("cada ofício traz o seu anel", () => {
+  const pagas = [
+    { id: "c1", obraId: "o1", contaId: "empreiteiro", valor: 87400, pago: true, valorPago: 87400, pagoEm: "2026-03-10" },
+    { id: "c2", obraId: "o1", contaId: "gesseiro", valor: 100000, pago: true, valorPago: 100000, pagoEm: "2026-04-10" },
+    { id: "c3", obraId: "o1", contaId: "pintor", valor: 10000, pago: false, vencimento: "2026-05-10" },
+  ];
+  const r = prest(estOficios(), pagas);
+  const de = (id) => r.linhas.find(l => l.conta.id === id);
+  assert.strictEqual(de("empreiteiro").progresso.pct, 50);
+  assert.strictEqual(de("empreiteiro").progresso.acima, false);
+  assert.strictEqual(de("gesseiro").progresso.pct, 117, "gesseiro estourou");
+  assert.strictEqual(de("gesseiro").progresso.acima, true);
+  assert.strictEqual(de("gesseiro").progresso.arco, 100, "o anel não dá mais que a volta");
+  assert.strictEqual(de("pintor").progresso.pct, 0, "conta em aberto não é realizado");
+  assert.strictEqual(de("serralheiro").realizado, 0);
+  assert.strictEqual(r.total.realizado, 187400);
+});
+
+teste("ofício que só tem pagamento aparece; sem nenhum lado, não", () => {
+  const soPago = [{ id: "c1", obraId: "o1", contaId: "encanador", valor: 5000, pago: true, valorPago: 5000, pagoEm: "2026-03-01" }];
+  const r = prest([], soPago);
+  assert.deepStrictEqual(r.linhas.map(l => l.conta.id), ["encanador"]);
+  assert.strictEqual(r.linhas[0].progresso.medivel, false, "sem estimativa não há anel");
+  assert.strictEqual(prest([], []).vazio, true);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

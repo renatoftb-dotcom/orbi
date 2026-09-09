@@ -614,6 +614,38 @@ function progressoCusto(custo) {
   };
 }
 
+// ── Prestadores: um anel por ofício ─────────────────────────────
+// "Prestador" no P&L é o grupo MÃO DE OBRA & PRESTADORES inteiro, mais o
+// Gerenciamento de obra — que mora em Serviços & Taxas por ser taxa, mas é
+// serviço de terceiro como os outros e é o maior deles em muita obra.
+// Impostos, tarifas e contabilidade ficam de fora: são custo do escritório,
+// não gente trabalhando na obra.
+const CONTAS_PRESTADOR_EXTRA = ["taxa_admin_obra"];
+
+function prestadoresDoPL(itens, contasPagar, grupos, plano) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const est = estimativaPorConta(itens);
+  const real = realizadoPorConta(contasPagar);
+  const daMaoDeObra = (plano || []).filter((c) => c.grupo === "maoDeObra");
+  const extras = CONTAS_PRESTADOR_EXTRA
+    .map((id) => (plano || []).find((c) => c.id === id))
+    .filter(Boolean);
+  const linhas = [];
+  for (const c of daMaoDeObra.concat(extras)) {
+    const e = red(Number(est[c.id]) || 0);
+    const r = red(Number(real[c.id]) || 0);
+    if (!e && !r) continue;
+    linhas.push({ conta: c, estimado: e, realizado: r, saldo: red(e - r), progresso: progressoCusto({ estimado: e, realizado: r }) });
+  }
+  // do maior orçamento para o menor; sem estimativa, pelo que já saiu
+  linhas.sort((a, b) => (b.estimado - a.estimado) || (b.realizado - a.realizado));
+  return {
+    linhas,
+    total: { estimado: red(linhas.reduce((a, l) => a + l.estimado, 0)), realizado: red(linhas.reduce((a, l) => a + l.realizado, 0)) },
+    vazio: linhas.length === 0,
+  };
+}
+
 // ── A última linha do extrato ───────────────────────────────────
 // Quando o cliente paga os fornecedores direto, o escritório não movimenta
 // dinheiro: não há entrada para lançar, e "saldo = entradas − custos" viraria
