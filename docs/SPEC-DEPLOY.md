@@ -11,6 +11,19 @@ npx vercel --prod
 O push é sempre manual. O Vercel (projeto `orbi-pouk`) roda `vite build`, que
 gera `dist/assets/index-<hash>.js` — **o hash muda a cada build**.
 
+O backend (`vicke-backend`, Railway) publica no push para `main`:
+
+```
+cd C:\Users\renat\vicke-backend
+git add server.js
+git commit -m "<mensagem>"
+git push
+```
+
+**Os comandos vão sempre agrupados num único bloco**, um por linha, para o
+usuário colar de uma vez — nunca um comando por bloco. Quando as duas pontas
+mudam, o backend vai primeiro (o frontend novo depende dos endpoints novos).
+
 ## A tela branca depois de publicar
 
 Sintoma: publica, atualiza a página e o site fica em branco, sem mensagem.
