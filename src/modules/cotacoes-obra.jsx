@@ -398,6 +398,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [formProposta, setFormProposta] = useState(null); // { cotacaoId, proposta }
   const [formDecisao, setFormDecisao] = useState(null);   // { cotacao, status }
   const [novoPrestador, setNovoPrestador] = useState(null); // objeto quando o cadastro está aberto
+  const [visor, setVisor] = useState(null);                 // anexo aberto na janela
   const [erro, setErro] = useState("");
 
   // Grava a obra sem encostar nas obras dos outros clientes: `obras` aqui é
@@ -824,10 +825,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                 </div>
                                 {p.observacao && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{p.observacao}</div>}
                                 {p.anexo && p.anexo.url && (
-                                  <a href={p.anexo.url} target="_blank" rel="noopener noreferrer"
-                                    style={{ fontSize: 11, color: "#0474f4", textDecoration: "none", display: "inline-block", marginTop: 3 }}>
+                                  <button type="button" onClick={() => setVisor(p.anexo)}
+                                    style={{ fontSize: 11, color: "#0474f4", background: "none", border: "none", padding: 0,
+                                      cursor: "pointer", fontFamily: "inherit", display: "inline-block", marginTop: 3 }}>
                                     📎 {p.anexo.formato === "pdf" || p.anexo.resourceType === "raw" ? "Ver proposta (PDF)" : "Ver proposta"}
-                                  </a>
+                                  </button>
                                 )}
                               </td>
                               <td style={{ padding: "8px", textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{valorProposta(p) > 0 ? dinheiro(valorProposta(p)) : "—"}</td>
@@ -909,6 +911,105 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           onFechar={() => setFormDecisao(null)}
         />
       )}
+
+      {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
+    </div>
+  );
+}
+
+// ── Visor da proposta ───────────────────────────────────────────
+// Clicar no anexo abria a URL do Cloudinary numa aba, e o navegador
+// baixava o arquivo em vez de mostrar. Aqui a proposta abre DENTRO do
+// sistema, numa janela sobre a tela.
+//
+// O PDF é buscado e reembalado num Blob com `application/pdf` antes de ir
+// para o iframe. Parece rodeio, mas é o que torna o visor independente do
+// cabeçalho que o storage manda: anexo antigo, que subiu sem extensão e é
+// servido como octet-stream, abre igual — sem precisar reanexar.
+function VisorProposta({ anexo, aoFechar }) {
+  const [estado, setEstado] = useState("carregando"); // carregando | pronto | direto | erro
+  const [blobUrl, setBlobUrl] = useState("");
+  const a = anexo || {};
+  const pdf = a.formato === "pdf" || a.resourceType === "raw";
+
+  useEffect(() => {
+    const fechaComEsc = (e) => { if (e.key === "Escape") aoFechar(); };
+    document.addEventListener("keydown", fechaComEsc);
+    return () => document.removeEventListener("keydown", fechaComEsc);
+  }, [aoFechar]);
+
+  useEffect(() => {
+    if (!a.url) { setEstado("erro"); return; }
+    if (!pdf) { setEstado("pronto"); return; }
+    let vivo = true, criada = "";
+    (async () => {
+      try {
+        const r = await fetch(a.url);
+        if (!r.ok) throw new Error("resposta " + r.status);
+        const bruto = await r.blob();
+        if (!vivo) return;
+        criada = URL.createObjectURL(new Blob([bruto], { type: "application/pdf" }));
+        setBlobUrl(criada);
+        setEstado("pronto");
+      } catch (e) {
+        // Sem CORS não dá para reembalar o arquivo. Ainda assim vale tentar o
+        // iframe na URL direta: para os anexos novos, que sobem com .pdf no
+        // nome, o navegador abre inteiro. Só se isso também falhar é que
+        // sobra o download.
+        if (vivo) setEstado("direto");
+      }
+    })();
+    // revoga ao fechar: sem isso o arquivo fica na memória da aba
+    return () => { vivo = false; if (criada) URL.revokeObjectURL(criada); };
+  }, [a.url, pdf]);
+
+  const E = COT_ESTILO;
+  const barra = { display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+    borderBottom: "1px solid rgba(38,36,33,0.12)", flexWrap: "wrap" };
+
+  return (
+    <div onClick={aoFechar}
+      style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.55)", zIndex: 9000,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 14, width: "min(1000px, 96vw)", height: "min(88vh, 900px)",
+          display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 50px rgba(0,0,0,0.25)" }}>
+        <div style={barra}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", wordBreak: "break-all" }}>{a.nome || "Proposta"}</div>
+            <div style={{ fontSize: 11, color: "#6b7280" }}>{pdf ? "PDF" : "Imagem"}{a.bytes ? ` · ${tamanhoLegivel(a.bytes)}` : ""}</div>
+          </div>
+          {/* Com o arquivo já reembalado, o download sai com o nome certo —
+              é o que conserta o anexo antigo, que chegava sem extensão. */}
+          {blobUrl
+            ? <a href={blobUrl} download={a.nome || "proposta.pdf"} style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a>
+            : <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a>}
+          <button style={E.btnSec} onClick={aoFechar}>Fechar</button>
+        </div>
+        <div style={{ flex: 1, background: "#f3f4f6", position: "relative" }}>
+          {estado === "carregando" && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#4b5563" }}>
+              Abrindo a proposta…
+            </div>
+          )}
+          {estado === "erro" && (
+            <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", gap: 10, alignItems: "center", justifyContent: "center", padding: 20, textAlign: "center" }}>
+              <div style={{ fontSize: 12.5, color: "#4b5563", maxWidth: 380 }}>
+                Não deu para mostrar a proposta aqui. O arquivo continua inteiro — dá para baixar e abrir no leitor de PDF do computador.
+              </div>
+              <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btn, textDecoration: "none" }}>Baixar a proposta</a>
+            </div>
+          )}
+          {(estado === "pronto" || estado === "direto") && (pdf
+            ? <iframe title="Proposta" src={estado === "direto" ? a.url : blobUrl} style={{ width: "100%", height: "100%", border: "none" }} />
+            : <img src={a.url} alt="Proposta" style={{ width: "100%", height: "100%", objectFit: "contain" }} />)}
+          {estado === "direto" && (
+            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "6px 12px", background: "rgba(17,24,39,0.75)", color: "#fff", fontSize: 11 }}>
+              Se a proposta não aparecer aqui, use “Baixar”.
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

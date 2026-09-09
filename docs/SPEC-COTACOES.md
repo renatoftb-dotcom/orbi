@@ -181,3 +181,43 @@ Duas travas pequenas: o select fica desabilitado enquanto o cadastro está
 aberto (senão trocar de fornecedor no meio deixaria um formulário órfão na
 tela), e salvar a proposta com o cadastro aberto avisa em vez de jogar fora
 o que já foi digitado nele.
+
+## O anexo abre numa janela, não baixa
+
+Clicar no anexo abria a URL do storage numa aba e o navegador **baixava** o
+arquivo. Pior: baixava sem extensão — um `a3f9c1d2e8b4` de 154 KB que o
+Windows não sabe abrir, embora fosse um PDF íntegro.
+
+Duas causas, duas correções.
+
+**A causa no storage.** Arquivo `raw` no Cloudinary é entregue pelo nome, e o
+nome é o `public_id`. Com `unique_filename` o Cloudinary gerava um id
+aleatório sem extensão, e servia o PDF como `application/octet-stream`. O
+upload passou a acrescentar `.pdf` ao id (que segue aleatório — o nome do
+fornecedor pode ter acento, espaço e barra). Vale só para anexos novos: o
+`public_id` é o próprio nome do arquivo no storage, então o que já subiu não
+muda.
+
+**A causa na tela**, e é ela que conserta também o que já subiu. O anexo
+agora abre em `VisorProposta`, uma janela sobre a tela com o PDF dentro. O
+arquivo é buscado e **reembalado num Blob com `application/pdf`** antes de ir
+para o `<iframe>`. Parece rodeio, mas é o que torna o visor independente do
+cabeçalho que o storage manda: anexo antigo, servido como octet-stream, abre
+igual — sem reanexar.
+
+Três camadas, da melhor para a pior:
+
+1. **Blob** — o caminho normal. Funciona para anexo novo e antigo.
+2. **URL direta no iframe** — se o `fetch` falhar por CORS. Para os anexos
+   novos, que terminam em `.pdf`, o navegador abre inteiro; aparece um aviso
+   discreto no rodapé da janela.
+3. **Baixar** — se nem isso, a janela explica que o arquivo está inteiro e
+   oferece o download.
+
+Com o arquivo reembalado, o botão "Baixar" usa o blob com `download={nome}`:
+o anexo antigo, que chegava sem extensão, agora salva como
+"Proposta Rossito.pdf".
+
+Imagem não passa por nada disso — vai direto num `<img>`. A janela fecha com
+Esc, com o botão Fechar ou clicando fora, e o blob é revogado ao fechar para
+não segurar o arquivo na memória da aba.
