@@ -198,13 +198,15 @@ function statusCliente(cliente, data) {
 function AcessoDoCliente({ cliente, card, secTit, btn, btnSec, isMobile }) {
   const perm = getPermissoes();
   const [acesso, setAcesso] = useState(undefined); // undefined = carregando
-  const [email, setEmail] = useState("");
+  // O e-mail já vem do cadastro do cliente; o escritório só ajusta se quiser outro.
+  const [email, setEmail] = useState(cliente.email || "");
   const [senhaNova, setSenhaNova] = useState("");
   const [erro, setErro] = useState("");
   const [ocupado, setOcupado] = useState(false);
 
   useEffect(() => {
     let vivo = true;
+    setEmail(cliente.email || "");
     if (!perm.isAdmin) { setAcesso(null); return; }
     api.clientes.acesso.get(cliente.id)
       .then(a => { if (vivo) setAcesso(a || null); })
@@ -240,6 +242,11 @@ function AcessoDoCliente({ cliente, card, secTit, btn, btnSec, isMobile }) {
             <input style={C.input} type="email" value={email} onChange={e => setEmail(e.target.value)}
               placeholder="e-mail do cliente" />
             <button style={btn} disabled={ocupado || !email.trim()} onClick={criar}>Criar acesso</button>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 6 }}>
+            {cliente.email
+              ? "E-mail do cadastro do cliente — dá para trocar aqui se o acesso for de outra pessoa."
+              : "O cadastro deste cliente ainda não tem e-mail. Informe um aqui (ele também não será salvo no cadastro)."}
           </div>
         </>
       ) : (
