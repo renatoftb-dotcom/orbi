@@ -243,3 +243,29 @@ passam por ela e só aparecem aqui.
 Um PDF que começa certo mas está truncado passa nesta checagem e cai no
 visor do navegador; cinco bytes não têm como saber. A mensagem cobre o caso
 comum, não todos.
+
+### A imagem rola, não é cortada
+
+Uma captura de tela de conversa é alta, e o preço costuma estar no fim dela.
+A área do visor era `flex: 1` sem `minHeight: 0` — e item de flex nasce com
+`min-height: auto`, ou seja, **cresce até caber o conteúdo**. A área ficava do
+tamanho da imagem (1919 px numa janela de 826), o painel cortava o que
+passava, e a imagem aparecia só até a metade.
+
+`minHeight: 0` + `overflow: auto` na área, e a imagem em `width: 100%;
+height: auto`: a janela fica do tamanho que tem e o conteúdo rola. Vale para
+o PDF também. A barra de aviso do caminho de reserva virou `position:
+sticky` para acompanhar a rolagem em vez de ficar colada no fundo.
+
+### Limite de anexo: 10 MB
+
+Era 5 MB. Proposta com plantas escaneadas passa disso com facilidade, e o
+usuário acabava comprimindo por fora — foi assim que chegou o arquivo
+quebrado. Subiu para 10 MB no frontend (`COT_ANEXO_MAX`), na categoria
+`proposta_cotacao` do backend e no teto do multer, que acompanha a maior
+categoria; logo (200 KB) e capa (2 MB) seguem barradas pelos limites
+próprios.
+
+10 MB é o teto do plano do Cloudinary — acima disso é o storage que recusa,
+não o VICKE. Foto continua sendo reduzida no navegador antes de subir
+(1600 px, JPEG 0,72), então quem chega perto do teto é PDF.

@@ -17980,7 +17980,11 @@ function nomeDoFornecedor(prestadores, id) {
 // inteiro a cada save; um PDF embutido ali subiria de novo em toda
 // alteração e o app do cliente o baixaria em toda abertura. Vai para o
 // mesmo storage do logo e da capa, e a proposta guarda só o endereço.
-const COT_ANEXO_MAX = 5 * 1024 * 1024;
+// 10 MB: é o teto do storage. Era 5, e proposta de fornecedor com plantas
+// escaneadas passa disso com facilidade — o usuário ia comprimir por fora e
+// voltava com arquivo quebrado. Foto de proposta continua sendo reduzida
+// aqui antes de subir, então quem chega perto do teto é PDF.
+const COT_ANEXO_MAX = 10 * 1024 * 1024;
 const COT_IMG_LADO_MAX = 1600;      // foto de proposta não precisa de mais
 const COT_IMG_QUALIDADE = 0.72;
 
@@ -18034,7 +18038,7 @@ async function enviarAnexoProposta(arquivo) {
   if (!arquivo) return null;
   const pronto = await comprimirImagem(arquivo);
   if (pronto.size > COT_ANEXO_MAX) {
-    throw new Error(`Arquivo muito grande (${tamanhoLegivel(pronto.size)}). O limite é 5 MB.`);
+    throw new Error(`Arquivo muito grande (${tamanhoLegivel(pronto.size)}). O limite é 10 MB — se for um PDF escaneado, peça ao fornecedor a versão em PDF “normal”, que costuma ser bem menor.`);
   }
   const r = await api.uploads.send(pronto, "proposta_cotacao");
   return {
@@ -18695,7 +18699,12 @@ function VisorProposta({ anexo, aoFechar }) {
             : <a href={a.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btnSec, textDecoration: "none" }}>Baixar</a>}
           <button style={E.btnSec} onClick={aoFechar}>Fechar</button>
         </div>
-        <div style={{ flex: 1, background: "#f3f4f6", position: "relative" }}>
+        {/* `minHeight: 0` não é enfeite: item de flex nasce com min-height auto
+            e cresce até caber o conteúdo. Sem isso a área virava do tamanho da
+            imagem, o painel cortava o que passava, e uma captura de tela alta
+            aparecia só até a metade — o preço, que costuma estar no fim,
+            ficava fora. Agora a área fica do tamanho da janela e ROLA. */}
+        <div style={{ flex: 1, minHeight: 0, overflow: "auto", background: "#f3f4f6", position: "relative" }}>
           {estado === "carregando" && (
             <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "#4b5563" }}>
               Abrindo a proposta…
@@ -18711,9 +18720,9 @@ function VisorProposta({ anexo, aoFechar }) {
           )}
           {(estado === "pronto" || estado === "direto") && (pdf
             ? <iframe title="Proposta" src={estado === "direto" ? a.url : blobUrl} style={{ width: "100%", height: "100%", border: "none" }} />
-            : <img src={a.url} alt="Proposta" style={{ width: "100%", height: "100%", objectFit: "contain" }} />)}
+            : <img src={a.url} alt="Proposta" style={{ display: "block", width: "100%", height: "auto" }} />)}
           {estado === "direto" && (
-            <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "6px 12px", background: "rgba(17,24,39,0.75)", color: "#fff", fontSize: 11 }}>
+            <div style={{ position: "sticky", bottom: 0, padding: "6px 12px", background: "rgba(17,24,39,0.75)", color: "#fff", fontSize: 11 }}>
               Se a proposta não aparecer aqui, use “Baixar”.
             </div>
           )}
