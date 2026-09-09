@@ -60,17 +60,26 @@ function getPermissoes() {
   const u = getUsuarioAtual();
   const nivel = getNivelUsuario();
   const isMaster = u?.perfil === "master";
-  const isAdmin  = nivel === "admin";
-  const isEditor = nivel === "editor";
+  // Acesso do CLIENTE final: entra no mesmo app, mas só na obra dele. Pode
+  // dar baixa, lançar despesa, registrar aporte e dar aceite; não mexe no
+  // cadastro da obra, nos contratos nem na estimativa — isso é do escritório
+  // (e o backend também recusa, não só a tela).
+  const isCliente = u?.perfil === "cliente";
+  const isAdmin  = !isCliente && nivel === "admin";
+  const isEditor = !isCliente && nivel === "editor";
   return {
     usuario: u,
     nivel,
     isMaster,
     isAdmin,
     isEditor,
-    isVisualizador: nivel === "visualizador",
-    podeEditar: isAdmin || isEditor,
-    podeExcluir: isAdmin,
+    isCliente,
+    clienteId: isCliente ? (u?.cliente_id || null) : null,
+    isVisualizador: !isCliente && nivel === "visualizador",
+    podeEditar: isCliente || isAdmin || isEditor,
+    podeExcluir: !isCliente && isAdmin,
+    // o que é do escritório: cadastro de obra, contratos, estimativa do P&L
+    podeGerenciarObra: !isCliente && (isAdmin || isEditor),
     podeGerenciarUsuarios: isAdmin,
     podeAlterarConfig: isAdmin,
     podeGerenciar: isAdmin, // alias legado

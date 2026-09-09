@@ -378,3 +378,36 @@ e **toda leitura** de dado da obra (contas, cronograma, `estimativaPL`) sai de
 `obraAtual`; a cópia do estado serve só de reserva enquanto a obra não estiver
 na coleção. Toda escrita continua partindo de `obraAtual` também — foi o que
 já impedia que salvar a estimativa apagasse contratos salvos depois.
+
+## Acesso do cliente
+
+O cliente final entra no mesmo site, com **login e senha próprios**, e vê a
+área de acompanhamento das obras dele — não o app do escritório.
+
+**Como se cria.** No cadastro do cliente, o bloco "Acesso do cliente" (só para
+admin do escritório) pede o e-mail e devolve a **senha inicial uma única vez**,
+para você passar ao cliente; ele troca no primeiro acesso. Dali dá para gerar
+nova senha ou desativar o acesso quando a obra acabar.
+
+**O que ele pode.** Ver as obras dele por inteiro — contas a pagar, extrato
+mensal, contratos, cronograma e orçamento — e agir onde é dele:
+
+| pode | não pode |
+| --- | --- |
+| dar baixa em conta (data de contabilização e valor) | cadastrar ou editar obra |
+| lançar conta avulsa (despesa) | gerar, editar ou remover contrato |
+| registrar entrada/aporte | mexer na estimativa do Planejamento |
+| dar **aceite** em contrato | recalibrar datas de contrato |
+| abrir e imprimir o contrato | ver outros clientes |
+
+**Aceite.** No contrato aberto, o botão "Dar aceite" grava quem deu e quando
+(`obra.aceites`), e o selo passa a aparecer na lista de contratos para os dois
+lados.
+
+**Como o cerco é feito.** Não é só a tela: o usuário tem `perfil='cliente'` e
+`cliente_id` no backend, e ali (a) a lista de caminhos que ele pode chamar é
+curta (ler clientes/obras/fornecedores/escritório/orçamentos; gravar só obras),
+(b) cada endpoint filtra pelo `cliente_id` do token, e (c) ao gravar uma obra o
+servidor **aceita apenas** `contasPagar`, `entradas` e `aceites` — o resto do
+documento fica como o escritório gravou, mesmo que a requisição venha
+adulterada.

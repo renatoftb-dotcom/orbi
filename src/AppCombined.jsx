@@ -64,17 +64,26 @@ function getPermissoes() {
   const u = getUsuarioAtual();
   const nivel = getNivelUsuario();
   const isMaster = u?.perfil === "master";
-  const isAdmin  = nivel === "admin";
-  const isEditor = nivel === "editor";
+  // Acesso do CLIENTE final: entra no mesmo app, mas só na obra dele. Pode
+  // dar baixa, lançar despesa, registrar aporte e dar aceite; não mexe no
+  // cadastro da obra, nos contratos nem na estimativa — isso é do escritório
+  // (e o backend também recusa, não só a tela).
+  const isCliente = u?.perfil === "cliente";
+  const isAdmin  = !isCliente && nivel === "admin";
+  const isEditor = !isCliente && nivel === "editor";
   return {
     usuario: u,
     nivel,
     isMaster,
     isAdmin,
     isEditor,
-    isVisualizador: nivel === "visualizador",
-    podeEditar: isAdmin || isEditor,
-    podeExcluir: isAdmin,
+    isCliente,
+    clienteId: isCliente ? (u?.cliente_id || null) : null,
+    isVisualizador: !isCliente && nivel === "visualizador",
+    podeEditar: isCliente || isAdmin || isEditor,
+    podeExcluir: !isCliente && isAdmin,
+    // o que é do escritório: cadastro de obra, contratos, estimativa do P&L
+    podeGerenciarObra: !isCliente && (isAdmin || isEditor),
     podeGerenciarUsuarios: isAdmin,
     podeAlterarConfig: isAdmin,
     podeGerenciar: isAdmin, // alias legado
@@ -2081,6 +2090,13 @@ const api = {
     save:   (c)      => post("/api/clientes", c),
     update: (id, c)  => put(`/api/clientes/${id}`, c),
     delete: (id)     => del(`/api/clientes/${id}`),
+    // Acesso do cliente final à obra dele (login próprio, perfil "cliente").
+    acesso: {
+      get:      (id)         => get(`/api/clientes/${id}/acesso`),
+      criar:    (id, email)  => post(`/api/clientes/${id}/acesso`, { email }),
+      ativar:   (id, ativo)  => put(`/api/clientes/${id}/acesso`, { ativo }),
+      resetar:  (id)         => put(`/api/clientes/${id}/acesso`, { resetarSenha: true }),
+    },
   },
 
   fornecedores: {
@@ -16505,6 +16521,93 @@ function statusCliente(cliente, data) {
   return { chips, inativaEm, temAtividade };
 }
 
+// ── Acesso do cliente à obra dele ────────────────────────────────
+// O escritório cria um login (perfil "cliente") amarrado a este cadastro.
+// Com ele, o cliente entra no mesmo site e só enxerga as obras dele: pode
+// dar baixa em conta, lançar despesa, registrar aporte e dar aceite — o
+// cadastro da obra e os contratos continuam sendo do escritório.
+function AcessoDoCliente({ cliente, card, secTit, btn, btnSec, isMobile }) {
+  const perm = getPermissoes();
+  const [acesso, setAcesso] = useState(undefined); // undefined = carregando
+  const [email, setEmail] = useState("");
+  const [senhaNova, setSenhaNova] = useState("");
+  const [erro, setErro] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    if (!perm.isAdmin) { setAcesso(null); return; }
+    api.clientes.acesso.get(cliente.id)
+      .then(a => { if (vivo) setAcesso(a || null); })
+      .catch(() => { if (vivo) setAcesso(null); });
+    return () => { vivo = false; };
+  }, [cliente.id]);
+
+  if (!perm.isAdmin) return null;
+
+  const rodar = (fn) => {
+    setErro(""); setOcupado(true);
+    fn().catch(e => setErro(e.message || "Não foi possível concluir")).finally(() => setOcupado(false));
+  };
+  const criar = () => rodar(() => api.clientes.acesso.criar(cliente.id, email.trim())
+    .then(a => { setAcesso({ ...a, ativo: true }); setSenhaNova(a.senha_temporaria); setEmail(""); }));
+  const resetar = () => rodar(() => api.clientes.acesso.resetar(cliente.id)
+    .then(a => setSenhaNova(a.senha_temporaria)));
+  const alternar = () => rodar(() => api.clientes.acesso.ativar(cliente.id, !acesso.ativo)
+    .then(a => setAcesso({ ...acesso, ativo: a.ativo })));
+
+  return (
+    <div style={card}>
+      <div style={secTit}>Acesso do cliente</div>
+      {acesso === undefined ? (
+        <div style={{ fontSize: 12.5, color: "#4b5563" }}>Carregando…</div>
+      ) : acesso === null ? (
+        <>
+          <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 10 }}>
+            Crie um login para {cliente.nome} acompanhar as obras dele: contas a pagar, extrato mensal, contratos e cronograma.
+            Ele registra pagamentos, lança despesas e dá aceites; o cadastro da obra e os contratos continuam com você.
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr auto", gap: 10, alignItems: "center" }}>
+            <input style={C.input} type="email" value={email} onChange={e => setEmail(e.target.value)}
+              placeholder="e-mail do cliente" />
+            <button style={btn} disabled={ocupado || !email.trim()} onClick={criar}>Criar acesso</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginBottom: 3 }}>E-mail de acesso</div>
+              <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{acesso.email}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginBottom: 3 }}>Situação</div>
+              <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>{acesso.ativo ? "Ativo" : "Desativado"}</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: "#4b5563", marginBottom: 3 }}>Último acesso</div>
+              <div style={{ fontSize: 13, color: "#111827", fontWeight: 600 }}>
+                {acesso.ultimo_login ? new Date(acesso.ultimo_login).toLocaleString("pt-BR") : "nunca entrou"}
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button style={btnSec} disabled={ocupado} onClick={resetar}>Gerar nova senha</button>
+            <button style={btnSec} disabled={ocupado} onClick={alternar}>{acesso.ativo ? "Desativar acesso" : "Reativar acesso"}</button>
+          </div>
+        </>
+      )}
+      {senhaNova && (
+        <div style={{ marginTop: 12, border: `1.5px solid ${AZUL_VK}`, borderRadius: 12, padding: "10px 12px", background: "#fff" }}>
+          <div style={{ fontSize: 11.5, color: "#4b5563" }}>Senha inicial — anote e passe ao cliente; ela não aparece de novo. Ele troca no primeiro acesso.</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: "#111827", letterSpacing: 1, marginTop: 4 }}>{senhaNova}</div>
+        </div>
+      )}
+      {erro && <div style={{ marginTop: 10, fontSize: 12, color: "#dc2626" }}>{erro}</div>}
+    </div>
+  );
+}
+
 function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar, onRemover, onMoverColuna }) {
   const [abertos, setAbertos] = useState({ financeiro:false });
   const toggle = k => setAbertos(p => ({...p, [k]:!p[k]}));
@@ -16534,6 +16637,8 @@ function CadastroPanel({ cliente, data, waLink, isMobile, colunaAtual, onEditar,
         <div style={{ flex:1 }} />
         <button style={{ background:"none", border:"none", color:"#dc2626", cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={onRemover}>Remover cliente</button>
       </div>
+
+      <AcessoDoCliente cliente={cliente} card={card} secTit={secTit} btn={btn} btnSec={btnSec} isMobile={isMobile} />
 
       {/* Dados principais */}
       <div style={card}>
@@ -17523,6 +17628,30 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!alvo) return;
     gravarObras(obras.map(o => o.id === alvo ? { ...o, entradas: novas } : o));
   };
+  // ── Aceite do cliente ────────────────────────────────────────
+  // O cliente marca "de acordo" no contrato; fica gravado quem deu e quando,
+  // e o escritório vê o selo na lista de contratos.
+  const registrarAceite = async (contrato) => {
+    const u = perm.usuario || {};
+    const ok = await dialogo.confirmar({
+      titulo: "Dar aceite neste contrato?",
+      mensagem: "Fica registrado o seu nome e a data.",
+      confirmar: "Dar aceite",
+    });
+    if (!ok) return;
+    const alvo = obras.find(o => (o.contratos || []).some(c => c.id === contrato.id)) || obraAtual;
+    if (!alvo || (alvo.aceites || []).some(a => a.contratoId === contrato.id)) return;
+    const aceite = { contratoId: contrato.id, por: u.nome || u.email || "Cliente", em: new Date().toISOString() };
+    gravarObras(obras.map(o => o.id === alvo.id ? { ...o, aceites: [...(o.aceites || []), aceite] } : o));
+  };
+  const aceiteDoContrato = (contratoId) => {
+    for (const o of obras) {
+      const a = (o.aceites || []).find(x => x.contratoId === contratoId);
+      if (a) return a;
+    }
+    return null;
+  };
+
   const salvarEntrada = () => {
     const f = formEntrada; if (!f) return;
     const valor = numeroDeCampo(f.valor);
@@ -17983,7 +18112,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           );
         })() : itensPL.length === 0 ? (
           <div style={{ padding: "24px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa", marginBottom: 16 }}>
-            Nenhum item na estimativa ainda. {perm.podeEditar && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
+            Nenhum item na estimativa ainda. {perm.podeGerenciarObra && <button onClick={novoItemPL} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Adicionar o primeiro</button>}
           </div>
         ) : visaoPL === "conta" ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 16 }}>
@@ -18000,9 +18129,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       <div style={{ fontSize: 13, fontWeight: 600, color: "#111827" }}>{fmtBRL(totalConta)}</div>
                     </div>
                     {itensDaConta.map(item => (
-                      <div key={item.id} onClick={() => perm.podeEditar && editarItemPL(item)}
-                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", marginLeft: 8, borderRadius: 8, cursor: perm.podeEditar ? "pointer" : "default", transition: "background 0.15s" }}
-                        onMouseEnter={e => { if (perm.podeEditar) e.currentTarget.style.backgroundColor = "#fafafa"; }}
+                      <div key={item.id} onClick={() => perm.podeGerenciarObra && editarItemPL(item)}
+                        style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", marginLeft: 8, borderRadius: 8, cursor: perm.podeGerenciarObra ? "pointer" : "default", transition: "background 0.15s" }}
+                        onMouseEnter={e => { if (perm.podeGerenciarObra) e.currentTarget.style.backgroundColor = "#fafafa"; }}
                         onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}>
                         <div style={{ fontSize: 12, color: "#4b5563" }}>
                           {item.prestadorId ? (prestadores.find(p => p.id === item.prestadorId)?.nome || "Prestador removido") : "—"}
@@ -18010,7 +18139,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                         </div>
                         <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                           <div style={{ fontSize: 12, color: "#4b5563" }}>{fmtBRL(Number(item.valor) || 0)}</div>
-                          {perm.podeEditar && (
+                          {perm.podeGerenciarObra && (
                             <button onClick={e => { e.stopPropagation(); removerItemPL(item.id); }} style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Remover</button>
                           )}
                         </div>
@@ -18041,7 +18170,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {perm.podeEditar && itensPL.length > 0 && (
+        {perm.podeGerenciarObra && itensPL.length > 0 && (
           <button style={{ ...C.btn, width: "100%" }} onClick={novoItemPL}>+ Adicionar item</button>
         )}
       </div>
@@ -18059,9 +18188,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         <div data-vk-noprint="1" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
           <button onClick={() => { setContratoAberto(null); setView("contratosDaObra"); }} style={{ ...C.btnGhost, fontSize: 12 }}>← Voltar</button>
           <div style={{ flex: 1 }} />
-          {perm.podeEditar && (
+          {perm.podeGerenciarObra && (
             <button style={C.btnSec} onClick={() => { setContratoSalvoEm(0); setContratoGerando(contratoAberto); setContratoAberto(null); setView("gerarContrato"); }}>Editar dados</button>
           )}
+          {(() => {
+            const ac = aceiteDoContrato(contratoAberto.id);
+            if (ac) return (
+              <span style={{ fontSize: 12, color: "#111827", border: `1.5px solid ${AZUL_VK}`, borderRadius: 20, padding: "6px 12px" }}>
+                Aceite de {ac.por} em {new Date(ac.em).toLocaleDateString("pt-BR")}
+              </span>
+            );
+            return perm.isCliente ? (
+              <button style={C.btnSec} onClick={() => registrarAceite(contratoAberto)}>Dar aceite</button>
+            ) : null;
+          })()}
           <button style={C.btn} onClick={() => window.print()}>Gerar PDF</button>
         </div>
         <ContratoDocumento contrato={contratoAberto} cliente={cliente} obra={obraDoContrato} prestador={prest} />
@@ -18784,7 +18924,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ) : (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
-            {(obraAtual.contratos || []).length > 0 && (
+            {perm.podeGerenciarObra && (obraAtual.contratos || []).length > 0 && (
               <button style={C.btnSec} onClick={() => {
                 const primeiro = (obraAtual.contratos || [])[0];
                 setFormRecalibrar({ contratoId: primeiro.id, novaData: primeiroVencimentoContrato(primeiro) || hojeIso,
@@ -19042,7 +19182,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {contratosDaObra.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
-            Nenhum contrato nesta obra. {perm.podeEditar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
+            Nenhum contrato nesta obra. {perm.podeGerenciarObra && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
@@ -19062,19 +19202,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       {contrato.dataVencimento && <span>Vence: {new Date(contrato.dataVencimento).toLocaleDateString("pt-BR")}</span>}
                     </div>
                     {contrato.descricaoServico && <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>{contrato.descricaoServico}</div>}
+                    {aceiteDoContrato(contrato.id) && (
+                      <div style={{ fontSize: 11.5, color: AZUL_VK, marginTop: 6, fontWeight: 600 }}>
+                        Aceite de {aceiteDoContrato(contrato.id).por} em {new Date(aceiteDoContrato(contrato.id).em).toLocaleDateString("pt-BR")}
+                      </div>
+                    )}
                   </div>
-                  {perm.podeEditar && (
+                  {(perm.podeGerenciarObra || contrato.gerado) && (
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       {contrato.gerado && <button onClick={() => { setContratoAberto(contrato); setView("verContrato"); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Abrir</button>}
-                      <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
-                      <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) {
+                      {perm.podeGerenciarObra && <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
+                      {perm.podeGerenciarObra && <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) {
                         const restantes = contratos.filter(c => c.id !== contrato.id);
                         save({ ...data,
                           obras: mesclarPorCliente(data.obras, cliente.id,
                             contratosNasObras(obras, restantes, cliente.id, obraSelecionada.id)
                               .map(o => o.id === obraSelecionada.id ? { ...o, contasPagar: removerContasDoContrato(contasDaObra, contrato.id) } : o)),
                           contratos: (data.contratos || []).filter(c => c.clienteId !== cliente.id) });
-                      } }); }} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>
+                      } }); }} style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12 }}>Remover</button>}
                     </div>
                   )}
                 </div>
@@ -19083,7 +19228,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {perm.podeEditar && (
+        {perm.podeGerenciarObra && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
             <button style={{ ...C.btn, flex: 1, minWidth: 200 }} onClick={() => { setContratoSalvoEm(0); setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id, "")); setView("gerarContrato"); }}>📄 Gerar contrato</button>
             <button style={{ ...C.btnSec, flex: 1, minWidth: 160 }} onClick={() => { setFormContrato({ id: uid(), clienteId: cliente.id, obraId: obraSelecionada.id, nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" }); setView("formContrato"); }}>+ Só registrar contrato</button>
@@ -19131,7 +19276,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ fontSize: 16, fontWeight: 700, color: "#111827" }}>{obraSelecionada.nome}</div>
             <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.responsavel || "Sem responsável"}</div>
           </div>
-          {perm.podeEditar && (
+          {perm.podeGerenciarObra && (
             <button onClick={() => editarObra(obraSelecionada)} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>
           )}
         </div>
@@ -19203,7 +19348,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {perm.podeEditar && (
+        {perm.podeGerenciarObra && (
           <button style={{ ...C.btnGhost, color: "#dc2626", fontSize: 12, width: "100%" }} onClick={() => { dialogo.confirmar({ titulo: "Remover obra?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) deletarObra(obraSelecionada.id); }); }}>Remover esta obra</button>
         )}
       </div>
@@ -19227,7 +19372,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Obras</div>
           <div style={{ fontSize: 12, color: "#4b5563" }}>{obras.length} obra{obras.length !== 1 ? "s" : ""}</div>
         </div>
-        {perm.podeEditar && <button style={C.btn} onClick={novaObra}>+ Nova obra</button>}
+        {perm.podeGerenciarObra && <button style={C.btn} onClick={novaObra}>+ Nova obra</button>}
       </div>
 
       {obras.length === 0 ? (
@@ -19251,7 +19396,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 </div>
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }} onClick={e => e.stopPropagation()}>
                   <span style={{ fontSize: 12, color: "#111827", fontWeight: 600 }}>{sts.label}</span>
-                  {perm.podeEditar && (
+                  {perm.podeGerenciarObra && (
                     <button onClick={() => editarObra(obra)}
                       style={{ fontSize: 12, color: "#4b5563", background: "none", border: "1.5px solid rgba(38,36,33,0.16)", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontFamily: "inherit" }}>Editar</button>
                   )}
@@ -19265,6 +19410,52 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   );
 }
 
+// ── Área do cliente ──────────────────────────────────────────────
+// O que o cliente final vê ao entrar: as obras dele, com o mesmo painel de
+// gestão que o escritório usa — contas a pagar, extrato, contratos e
+// cronograma. As ações de escritório ficam escondidas (perm.podeGerenciarObra
+// é falso para ele), e o backend recusa qualquer coisa fora da obra dele.
+function AreaCliente({ data, save, usuario, onLogout, isMobile }) {
+  const perm = getPermissoes();
+  const cliente = (data.clientes || []).find(c => c.id === perm.clienteId) || (data.clientes || [])[0] || null;
+  const obras = (data.obras || []).filter(o => cliente && o.clienteId === cliente.id);
+  const escritorio = data.escritorio || {};
+
+  if (!cliente) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#fafafb", fontFamily: "'Inter', system-ui, sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <div style={{ textAlign: "center", maxWidth: 420 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 6 }}>Acesso sem obra vinculada</div>
+          <div style={{ fontSize: 13, color: "#4b5563" }}>Fale com {escritorio.nome || "o escritório"} para liberar o acompanhamento da sua obra.</div>
+          <button onClick={onLogout} style={{ ...C.btnSec, marginTop: 16 }}>Sair</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div data-vk-ui="1" style={{ minHeight: "100vh", background: "#fafafb", fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+      <div style={{ background: "#fff", borderBottom: "1px solid rgba(38,36,33,0.10)", padding: isMobile ? "12px 16px" : "14px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{cliente.nome}</div>
+          <div style={{ fontSize: 12, color: "#4b5563" }}>
+            Acompanhamento da obra{obras.length === 1 ? "" : "s"}{escritorio.nome ? ` · ${escritorio.nome}` : ""}
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <span style={{ fontSize: 12, color: "#4b5563" }}>{usuario?.nome || usuario?.email || ""}</span>
+          <button onClick={onLogout} style={{ ...C.btnSec, fontSize: 12, padding: "6px 14px" }}>Sair</button>
+        </div>
+      </div>
+      <div style={{ padding: isMobile ? "16px" : "24px 28px", maxWidth: 1100, margin: "0 auto" }}>
+        <GestaoObraPanel cliente={cliente} data={data} save={save} isMobile={isMobile} />
+      </div>
+      <div style={{ padding: isMobile ? "0 16px 24px" : "0 28px 32px", maxWidth: 1100, margin: "0 auto", fontSize: 11.5, color: "#6b7280" }}>
+        Dúvida sobre um lançamento? Fale com {escritorio.nome || "o escritório"}.
+      </div>
+    </div>
+  );
+}
 
 
 // ════════════════════════════════════════════════════════════
@@ -43510,6 +43701,19 @@ export default function ModuloClientesFornecedores() {
     {conflitoModal}
     </>
   );
+
+  // Acesso do cliente final: ele não vê o app do escritório, e sim a área de
+  // acompanhamento das obras dele.
+  if (usuario?.perfil === "cliente" && data) {
+    return (
+      <>
+      <AreaCliente data={data} save={save} usuario={usuario} onLogout={handleLogout} isMobile={isMobile} />
+      <DialogosHost />
+      <VersionWatcher />
+      {conflitoModal}
+      </>
+    );
+  }
 
   if (!data) {
     return (

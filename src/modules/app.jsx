@@ -1463,6 +1463,19 @@ export default function ModuloClientesFornecedores() {
     </>
   );
 
+  // Acesso do cliente final: ele não vê o app do escritório, e sim a área de
+  // acompanhamento das obras dele.
+  if (usuario?.perfil === "cliente" && data) {
+    return (
+      <>
+      <AreaCliente data={data} save={save} usuario={usuario} onLogout={handleLogout} isMobile={isMobile} />
+      <DialogosHost />
+      <VersionWatcher />
+      {conflitoModal}
+      </>
+    );
+  }
+
   if (!data) {
     return (
       <>

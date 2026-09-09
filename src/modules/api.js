@@ -67,6 +67,13 @@ const api = {
     save:   (c)      => post("/api/clientes", c),
     update: (id, c)  => put(`/api/clientes/${id}`, c),
     delete: (id)     => del(`/api/clientes/${id}`),
+    // Acesso do cliente final à obra dele (login próprio, perfil "cliente").
+    acesso: {
+      get:      (id)         => get(`/api/clientes/${id}/acesso`),
+      criar:    (id, email)  => post(`/api/clientes/${id}/acesso`, { email }),
+      ativar:   (id, ativo)  => put(`/api/clientes/${id}/acesso`, { ativo }),
+      resetar:  (id)         => put(`/api/clientes/${id}/acesso`, { resetarSenha: true }),
+    },
   },
 
   fornecedores: {
