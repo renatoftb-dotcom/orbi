@@ -231,8 +231,14 @@ function podeGerarContrato(cot, aprovacoes, contratos) {
 // cliente quem registrou, sem ter que perguntar.
 function nomeDeQuem(usuario) {
   const u = usuario || {};
-  return String(u.nome || u.email || "").trim() || "alguém";
+  const bruto = String(u.nome || u.email || "").trim();
+  // O nome vem do JWT. Enquanto o decode antigo esteve no ar ele chegava com
+  // os acentos quebrados, e é assim que ficou gravado em registro antigo —
+  // por isso passa pelo conserto na entrada e na saída.
+  return (typeof textoUtf8Recuperado === "function" ? textoUtf8Recuperado(bruto) : bruto) || "alguém";
 }
+
+const nomeGravado = (txt) => (typeof textoUtf8Recuperado === "function" ? textoUtf8Recuperado(txt) : String(txt == null ? "" : txt));
 
 // Carimba a criação na primeira vez e a edição em todas. São dois pares
 // porque "cadastrado por" e "salvo por" respondem perguntas diferentes:
@@ -254,8 +260,9 @@ const dataCurta = (iso) => {
 // A linha que aparece na tela. Enquanto ninguém editou depois de criar, é só
 // "Cadastrado por X"; quando alguém mexe, o que interessa passa a ser quem
 // mexeu por último, e a criação vira o complemento.
-function textoAutoria(obj) {
-  const o = obj || {};
+function textoAutoria(objBruto) {
+  const o0 = objBruto || {};
+  const o = { ...o0, criadoPor: nomeGravado(o0.criadoPor), salvoPor: nomeGravado(o0.salvoPor) };
   if (!o.criadoPor && !o.salvoPor) return "";
   const mesmaMao = o.salvoPor === o.criadoPor && String(o.salvoEm || "").slice(0, 10) === String(o.criadoEm || "").slice(0, 10);
   if (!o.salvoPor || mesmaMao) {
@@ -1041,7 +1048,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                   {escolhida && selo("#0474f4", "Escolhida")}
                                   {escolhida && cot.escolhidoPor && (
                                     <span style={{ fontSize: 10.5, color: "#6b7280" }}>
-                                      por {cot.escolhidoPor}{dataCurta(cot.escolhidoEm) ? ` em ${dataCurta(cot.escolhidoEm)}` : ""}
+                                      por {nomeGravado(cot.escolhidoPor)}{dataCurta(cot.escolhidoEm) ? ` em ${dataCurta(cot.escolhidoEm)}` : ""}
                                     </span>
                                   )}
                                   {maisBarata && !escolhida && selo("#15803d", "Mais barata")}
@@ -1105,15 +1112,15 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     border: ehEscritorio ? "none" : "1px solid rgba(4,116,244,0.22)",
                     borderRadius: 10, padding: ehEscritorio ? 0 : "8px 10px", marginBottom: 12 }}>
                     {ehEscritorio
-                      ? `Escolha enviada ao cliente em ${dataCurta(cot.enviadaClienteEm)}${cot.enviadaClientePor ? ` por ${cot.enviadaClientePor}` : ""} — aguardando a resposta.`
+                      ? `Escolha enviada ao cliente em ${dataCurta(cot.enviadaClienteEm)}${cot.enviadaClientePor ? ` por ${nomeGravado(cot.enviadaClientePor)}` : ""} — aguardando a resposta.`
                       : `O escritório escolheu ${esc ? `${esc.favorecido}, ${dinheiro(valorProposta(esc))}` : "uma proposta"} e enviou em ${dataCurta(cot.enviadaClienteEm)} para a sua aprovação.`}
                   </div>
                 )}
 
                 {ap.status !== "pendente" && (
                   <div style={{ fontSize: 12, color: ap.status === "aprovada" ? "#15803d" : "#dc2626", marginBottom: 12 }}>
-                    {ap.status === "aprovada" ? "Aprovada" : "Recusada"} por {ap.por} em {new Date(ap.em).toLocaleDateString("pt-BR")}
-                    {ap.registradaPor ? ` (registrado por ${ap.registradaPor})` : ""}
+                    {ap.status === "aprovada" ? "Aprovada" : "Recusada"} por {nomeGravado(ap.por)} em {new Date(ap.em).toLocaleDateString("pt-BR")}
+                    {ap.registradaPor ? ` (registrado por ${nomeGravado(ap.registradaPor)})` : ""}
                     {ap.motivo ? ` — ${ap.motivo}` : ""}
                   </div>
                 )}

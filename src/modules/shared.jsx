@@ -14,6 +14,20 @@ const API_URL = (typeof import.meta !== "undefined" && import.meta.env && import
 // ═══════════════════════════════════════════════════════════════
 // JWT usa base64url (não base64 padrão). A conversão abaixo normaliza.
 // Retorna o payload decodado ou null se inválido/corrompido.
+//
+// atob() devolve UM BYTE POR CARACTERE (latin-1), e o payload do JWT é
+// UTF-8: sem reinterpretar os bytes, "COMÉRCIO" chega como "COMÃ‰RCIO" e vai
+// gravado assim em todo lugar que carimba o nome de quem fez — aceite de
+// contrato, autoria da cotação, aprovação. Por isso o decode passa pelos
+// bytes antes de virar texto.
+function textoDeBase64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  if (typeof TextDecoder !== "undefined") return new TextDecoder("utf-8").decode(bytes);
+  return decodeURIComponent(bin.split("").map(c => "%" + ("0" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+}
+
 function decodeJWT(token) {
   if (!token || typeof token !== "string") return null;
   try {
@@ -21,8 +35,25 @@ function decodeJWT(token) {
     if (partes.length !== 3) return null;
     const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
-    return JSON.parse(atob(padded));
+    return JSON.parse(textoDeBase64(padded));
   } catch { return null; }
+}
+
+// Conserta, na hora de mostrar, o nome que já foi gravado torto pelo decode
+// antigo. Só age quando o texto tem a assinatura do estrago (o "Ã"/"Â" de um
+// byte UTF-8 lido como latin-1) e cabe inteiro em um byte por caractere —
+// nome legítimo com acento não passa pelos dois filtros ao mesmo tempo.
+function textoUtf8Recuperado(txt) {
+  const t = String(txt == null ? "" : txt);
+  if (!t || !/[\u00c3\u00c2][\u0080-\u00bf]/.test(t)) return t;
+  for (let i = 0; i < t.length; i++) if (t.charCodeAt(i) > 255) return t;
+  try {
+    const bytes = new Uint8Array(t.length);
+    for (let i = 0; i < t.length; i++) bytes[i] = t.charCodeAt(i);
+    if (typeof TextDecoder === "undefined") return t;
+    const limpo = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return limpo.indexOf("\ufffd") >= 0 ? t : limpo;
+  } catch (e) { return t; }
 }
 
 // Checa se o token está expirado. Retorna true se exp < agora.

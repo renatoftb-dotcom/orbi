@@ -58,17 +58,9 @@ function Escritorio({ data, save }) {
   const [senhaGerada, setSenhaGerada]               = useState(null);
   // JWT (fonte: localStorage), pra identificar o usuário logado e não desativar/excluir a si mesmo
   const tokenAtual = (typeof localStorage !== "undefined") ? localStorage.getItem("vicke-token") : null;
-  const usuarioLogadoId = (() => {
-    if (!tokenAtual) return null;
-    try {
-      // JWT usa base64url; precisa converter pra base64 padrão antes do atob
-      const part = tokenAtual.split(".")[1];
-      const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-      const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
-      const payload = JSON.parse(atob(padded));
-      return payload?.id || null;
-    } catch { return null; }
-  })();
+  // Uma cópia a menos do decodificador: o de shared.jsx já trata base64url
+  // e o UTF-8 do payload.
+  const usuarioLogadoId = (decodeJWT(tokenAtual) || {}).id || null;
 
   const emptyUsuario = {
     id: "",

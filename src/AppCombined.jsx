@@ -18,6 +18,20 @@ const API_URL = (typeof import.meta !== "undefined" && import.meta.env && import
 // ═══════════════════════════════════════════════════════════════
 // JWT usa base64url (não base64 padrão). A conversão abaixo normaliza.
 // Retorna o payload decodado ou null se inválido/corrompido.
+//
+// atob() devolve UM BYTE POR CARACTERE (latin-1), e o payload do JWT é
+// UTF-8: sem reinterpretar os bytes, "COMÉRCIO" chega como "COMÃ‰RCIO" e vai
+// gravado assim em todo lugar que carimba o nome de quem fez — aceite de
+// contrato, autoria da cotação, aprovação. Por isso o decode passa pelos
+// bytes antes de virar texto.
+function textoDeBase64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  if (typeof TextDecoder !== "undefined") return new TextDecoder("utf-8").decode(bytes);
+  return decodeURIComponent(bin.split("").map(c => "%" + ("0" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+}
+
 function decodeJWT(token) {
   if (!token || typeof token !== "string") return null;
   try {
@@ -25,8 +39,25 @@ function decodeJWT(token) {
     if (partes.length !== 3) return null;
     const b64 = partes[1].replace(/-/g, "+").replace(/_/g, "/");
     const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
-    return JSON.parse(atob(padded));
+    return JSON.parse(textoDeBase64(padded));
   } catch { return null; }
+}
+
+// Conserta, na hora de mostrar, o nome que já foi gravado torto pelo decode
+// antigo. Só age quando o texto tem a assinatura do estrago (o "Ã"/"Â" de um
+// byte UTF-8 lido como latin-1) e cabe inteiro em um byte por caractere —
+// nome legítimo com acento não passa pelos dois filtros ao mesmo tempo.
+function textoUtf8Recuperado(txt) {
+  const t = String(txt == null ? "" : txt);
+  if (!t || !/[\u00c3\u00c2][\u0080-\u00bf]/.test(t)) return t;
+  for (let i = 0; i < t.length; i++) if (t.charCodeAt(i) > 255) return t;
+  try {
+    const bytes = new Uint8Array(t.length);
+    for (let i = 0; i < t.length; i++) bytes[i] = t.charCodeAt(i);
+    if (typeof TextDecoder === "undefined") return t;
+    const limpo = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return limpo.indexOf("\ufffd") >= 0 ? t : limpo;
+  } catch (e) { return t; }
 }
 
 // Checa se o token está expirado. Retorna true se exp < agora.
@@ -18108,8 +18139,14 @@ function podeGerarContrato(cot, aprovacoes, contratos) {
 // cliente quem registrou, sem ter que perguntar.
 function nomeDeQuem(usuario) {
   const u = usuario || {};
-  return String(u.nome || u.email || "").trim() || "alguém";
+  const bruto = String(u.nome || u.email || "").trim();
+  // O nome vem do JWT. Enquanto o decode antigo esteve no ar ele chegava com
+  // os acentos quebrados, e é assim que ficou gravado em registro antigo —
+  // por isso passa pelo conserto na entrada e na saída.
+  return (typeof textoUtf8Recuperado === "function" ? textoUtf8Recuperado(bruto) : bruto) || "alguém";
 }
+
+const nomeGravado = (txt) => (typeof textoUtf8Recuperado === "function" ? textoUtf8Recuperado(txt) : String(txt == null ? "" : txt));
 
 // Carimba a criação na primeira vez e a edição em todas. São dois pares
 // porque "cadastrado por" e "salvo por" respondem perguntas diferentes:
@@ -18131,8 +18168,9 @@ const dataCurta = (iso) => {
 // A linha que aparece na tela. Enquanto ninguém editou depois de criar, é só
 // "Cadastrado por X"; quando alguém mexe, o que interessa passa a ser quem
 // mexeu por último, e a criação vira o complemento.
-function textoAutoria(obj) {
-  const o = obj || {};
+function textoAutoria(objBruto) {
+  const o0 = objBruto || {};
+  const o = { ...o0, criadoPor: nomeGravado(o0.criadoPor), salvoPor: nomeGravado(o0.salvoPor) };
   if (!o.criadoPor && !o.salvoPor) return "";
   const mesmaMao = o.salvoPor === o.criadoPor && String(o.salvoEm || "").slice(0, 10) === String(o.criadoEm || "").slice(0, 10);
   if (!o.salvoPor || mesmaMao) {
@@ -18918,7 +18956,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                   {escolhida && selo("#0474f4", "Escolhida")}
                                   {escolhida && cot.escolhidoPor && (
                                     <span style={{ fontSize: 10.5, color: "#6b7280" }}>
-                                      por {cot.escolhidoPor}{dataCurta(cot.escolhidoEm) ? ` em ${dataCurta(cot.escolhidoEm)}` : ""}
+                                      por {nomeGravado(cot.escolhidoPor)}{dataCurta(cot.escolhidoEm) ? ` em ${dataCurta(cot.escolhidoEm)}` : ""}
                                     </span>
                                   )}
                                   {maisBarata && !escolhida && selo("#15803d", "Mais barata")}
@@ -18982,15 +19020,15 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     border: ehEscritorio ? "none" : "1px solid rgba(4,116,244,0.22)",
                     borderRadius: 10, padding: ehEscritorio ? 0 : "8px 10px", marginBottom: 12 }}>
                     {ehEscritorio
-                      ? `Escolha enviada ao cliente em ${dataCurta(cot.enviadaClienteEm)}${cot.enviadaClientePor ? ` por ${cot.enviadaClientePor}` : ""} — aguardando a resposta.`
+                      ? `Escolha enviada ao cliente em ${dataCurta(cot.enviadaClienteEm)}${cot.enviadaClientePor ? ` por ${nomeGravado(cot.enviadaClientePor)}` : ""} — aguardando a resposta.`
                       : `O escritório escolheu ${esc ? `${esc.favorecido}, ${dinheiro(valorProposta(esc))}` : "uma proposta"} e enviou em ${dataCurta(cot.enviadaClienteEm)} para a sua aprovação.`}
                   </div>
                 )}
 
                 {ap.status !== "pendente" && (
                   <div style={{ fontSize: 12, color: ap.status === "aprovada" ? "#15803d" : "#dc2626", marginBottom: 12 }}>
-                    {ap.status === "aprovada" ? "Aprovada" : "Recusada"} por {ap.por} em {new Date(ap.em).toLocaleDateString("pt-BR")}
-                    {ap.registradaPor ? ` (registrado por ${ap.registradaPor})` : ""}
+                    {ap.status === "aprovada" ? "Aprovada" : "Recusada"} por {nomeGravado(ap.por)} em {new Date(ap.em).toLocaleDateString("pt-BR")}
+                    {ap.registradaPor ? ` (registrado por ${nomeGravado(ap.registradaPor)})` : ""}
                     {ap.motivo ? ` — ${ap.motivo}` : ""}
                   </div>
                 )}
@@ -21121,7 +21159,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!ok) return;
     const alvo = obras.find(o => (o.contratos || []).some(c => c.id === contrato.id)) || obraAtual;
     if (!alvo || (alvo.aceites || []).some(a => a.contratoId === contrato.id)) return;
-    const aceite = { contratoId: contrato.id, por: u.nome || u.email || "Cliente", em: new Date().toISOString() };
+    const aceite = { contratoId: contrato.id, por: textoUtf8Recuperado(u.nome || u.email || "") || "Cliente", em: new Date().toISOString() };
     gravarObras(obras.map(o => o.id === alvo.id ? { ...o, aceites: [...(o.aceites || []), aceite] } : o));
   };
   const aceiteDoContrato = (contratoId) => {
@@ -21723,7 +21761,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             const ac = aceiteDoContrato(contratoAberto.id);
             if (ac) return (
               <span style={{ fontSize: 12, color: "#111827", border: `1.5px solid ${AZUL_VK}`, borderRadius: 20, padding: "6px 12px" }}>
-                Aceite de {ac.por} em {new Date(ac.em).toLocaleDateString("pt-BR")}
+                Aceite de {textoUtf8Recuperado(ac.por)} em {new Date(ac.em).toLocaleDateString("pt-BR")}
               </span>
             );
             return perm.isCliente ? (
@@ -22836,7 +22874,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     {contrato.descricaoServico && <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>{contrato.descricaoServico}</div>}
                     {aceiteDoContrato(contrato.id) && (
                       <div style={{ fontSize: 11.5, color: AZUL_VK, marginTop: 6, fontWeight: 600 }}>
-                        Aceite de {aceiteDoContrato(contrato.id).por} em {new Date(aceiteDoContrato(contrato.id).em).toLocaleDateString("pt-BR")}
+                        Aceite de {textoUtf8Recuperado(aceiteDoContrato(contrato.id).por)} em {new Date(aceiteDoContrato(contrato.id).em).toLocaleDateString("pt-BR")}
                       </div>
                     )}
                   </div>
@@ -37890,17 +37928,9 @@ function Escritorio({ data, save }) {
   const [senhaGerada, setSenhaGerada]               = useState(null);
   // JWT (fonte: localStorage), pra identificar o usuário logado e não desativar/excluir a si mesmo
   const tokenAtual = (typeof localStorage !== "undefined") ? localStorage.getItem("vicke-token") : null;
-  const usuarioLogadoId = (() => {
-    if (!tokenAtual) return null;
-    try {
-      // JWT usa base64url; precisa converter pra base64 padrão antes do atob
-      const part = tokenAtual.split(".")[1];
-      const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
-      const padded = b64 + "=".repeat((4 - b64.length % 4) % 4);
-      const payload = JSON.parse(atob(padded));
-      return payload?.id || null;
-    } catch { return null; }
-  })();
+  // Uma cópia a menos do decodificador: o de shared.jsx já trata base64url
+  // e o UTF-8 do payload.
+  const usuarioLogadoId = (decodeJWT(tokenAtual) || {}).id || null;
 
   const emptyUsuario = {
     id: "",

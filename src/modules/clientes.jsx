@@ -1793,7 +1793,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!ok) return;
     const alvo = obras.find(o => (o.contratos || []).some(c => c.id === contrato.id)) || obraAtual;
     if (!alvo || (alvo.aceites || []).some(a => a.contratoId === contrato.id)) return;
-    const aceite = { contratoId: contrato.id, por: u.nome || u.email || "Cliente", em: new Date().toISOString() };
+    const aceite = { contratoId: contrato.id, por: textoUtf8Recuperado(u.nome || u.email || "") || "Cliente", em: new Date().toISOString() };
     gravarObras(obras.map(o => o.id === alvo.id ? { ...o, aceites: [...(o.aceites || []), aceite] } : o));
   };
   const aceiteDoContrato = (contratoId) => {
@@ -2395,7 +2395,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             const ac = aceiteDoContrato(contratoAberto.id);
             if (ac) return (
               <span style={{ fontSize: 12, color: "#111827", border: `1.5px solid ${AZUL_VK}`, borderRadius: 20, padding: "6px 12px" }}>
-                Aceite de {ac.por} em {new Date(ac.em).toLocaleDateString("pt-BR")}
+                Aceite de {textoUtf8Recuperado(ac.por)} em {new Date(ac.em).toLocaleDateString("pt-BR")}
               </span>
             );
             return perm.isCliente ? (
@@ -3508,7 +3508,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     {contrato.descricaoServico && <div style={{ fontSize: 11, color: "#4b5563", marginTop: 6 }}>{contrato.descricaoServico}</div>}
                     {aceiteDoContrato(contrato.id) && (
                       <div style={{ fontSize: 11.5, color: AZUL_VK, marginTop: 6, fontWeight: 600 }}>
-                        Aceite de {aceiteDoContrato(contrato.id).por} em {new Date(aceiteDoContrato(contrato.id).em).toLocaleDateString("pt-BR")}
+                        Aceite de {textoUtf8Recuperado(aceiteDoContrato(contrato.id).por)} em {new Date(aceiteDoContrato(contrato.id).em).toLocaleDateString("pt-BR")}
                       </div>
                     )}
                   </div>

@@ -21,9 +21,21 @@ const cotSrc = mod("cotacoes-obra.jsx");
 const corteCot = cotSrc.indexOf("// UI — bloco de cotações da obra");
 if (corteCot < 0) throw new Error("Marcador de início da UI não encontrado em cotacoes-obra.jsx");
 
+// O conserto de acentuação mora em shared.jsx; aqui entra só ele, recortado,
+// porque o resto do arquivo é código de navegador.
+const sharedSrc = mod("shared.jsx");
+const recorte = (src, assinatura) => {
+  const i = src.indexOf(assinatura);
+  if (i < 0) throw new Error("Função não encontrada: " + assinatura);
+  const fim = src.indexOf("\n}", i);
+  return src.slice(i, fim + 2);
+};
+const utf8Src = recorte(sharedSrc, "function textoUtf8Recuperado(");
+
 let seq = 0;
 const modulo = new Function(`
   var uid = () => "id" + (++__seq);
+  ${utf8Src}
   ${mod("obra-financeiro.jsx")}
   ${cronoSrc.slice(0, corteCrono)}
   ${contratosSrc.slice(0, corteCtr)}
@@ -39,7 +51,7 @@ const modulo = new Function(`
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
            nomeDeQuem, carimbar, textoAutoria, arquivoColado, nomeDoColado,
            aprovacaoDaEscolha, podeEnviarAoCliente, enviarCotacaoAoCliente,
-           limparEnvioAoCliente, cotacoesProntasParaContrato };
+           limparEnvioAoCliente, cotacoesProntasParaContrato, textoUtf8Recuperado };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -321,6 +333,25 @@ teste("a resposta registrada pelo escritório guarda quem transcreveu", () => {
   assert.strictEqual(ap[0].registradaPor, "Renato");
   const doCliente = M.registrarAprovacaoCotacao([], { cotacaoId: "ct2", status: "aprovada", por: "Alexandre" });
   assert.strictEqual(doCliente[0].registradaPor, "");
+});
+
+// ── Acentuação vinda do JWT ─────────────────────────────────────
+teste("nome gravado torto pelo decode antigo volta ao normal na tela", () => {
+  assert.strictEqual(M.textoUtf8Recuperado("COBOP COMÃ\u0089RCIO DE BOMBAS E PISCINAS"),
+    "COBOP COMÉRCIO DE BOMBAS E PISCINAS");
+  assert.strictEqual(M.textoUtf8Recuperado("JoÃ£o AntÃ´nio"), "João Antônio");
+});
+
+teste("nome que já está certo não é mexido", () => {
+  for (const nome of ["COBOP COMÉRCIO DE BOMBAS E PISCINAS", "João Antônio", "Renato", "", "Ação & Cia"]) {
+    assert.strictEqual(M.textoUtf8Recuperado(nome), nome, nome);
+  }
+  assert.strictEqual(M.textoUtf8Recuperado(null), "");
+});
+
+teste("a autoria mostra o nome consertado", () => {
+  const t = M.textoAutoria({ criadoPor: "COBOP COMÃ\u0089RCIO", criadoEm: "2026-09-10T12:00:00.000Z" });
+  assert.match(t, /COBOP COMÉRCIO/);
 });
 
 teste("nome do fornecedor sai do cadastro, e some sem quebrar", () => {
