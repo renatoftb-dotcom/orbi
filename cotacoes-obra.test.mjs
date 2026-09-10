@@ -37,7 +37,9 @@ const modulo = new Function(`
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
-           nomeDeQuem, carimbar, textoAutoria, arquivoColado, nomeDoColado };
+           nomeDeQuem, carimbar, textoAutoria, arquivoColado, nomeDoColado,
+           aprovacaoDaEscolha, podeEnviarAoCliente, enviarCotacaoAoCliente,
+           limparEnvioAoCliente, cotacoesProntasParaContrato };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -102,10 +104,15 @@ teste("situação acompanha o fluxo, do pedido ao contrato", () => {
   const comprando = comPropostas([9000, 7000]);
   assert.strictEqual(M.situacaoCotacao(comprando, []).id, "comparando");
 
-  const escolhida = { ...comprando, escolhidaId: "p1" };
+  // escolher não é avisar: enquanto a escolha não sai para o cliente, quem
+  // tem a próxima ação é o escritório
+  const soEscolhida = { ...comprando, escolhidaId: "p1" };
+  assert.strictEqual(M.situacaoCotacao(soEscolhida, []).id, "aEnviar");
+
+  const escolhida = M.enviarCotacaoAoCliente(soEscolhida, "Renato", "2026-09-10T12:00:00.000Z");
   assert.strictEqual(M.situacaoCotacao(escolhida, []).id, "aguardando");
 
-  const semAval = { ...escolhida, precisaAprovacaoCliente: false };
+  const semAval = { ...soEscolhida, precisaAprovacaoCliente: false };
   assert.strictEqual(M.situacaoCotacao(semAval, []).id, "escolhida");
 
   const ap = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", propostaId: "p1", status: "aprovada", por: "Cliente" });
@@ -218,23 +225,102 @@ teste("contratoDaCotacao acha pelo vínculo, não pelo palpite", () => {
 
 // ── Resumo ──────────────────────────────────────────────────────
 teste("o resumo conta cada cotação uma vez e soma só a economia realizada", () => {
-  const a = { ...comPropostas([9000, 12000]), id: "a", escolhidaId: "p0" };            // aguardando
+  const a = { ...comPropostas([9000, 12000]), id: "a", escolhidaId: "p0",
+              enviadaClienteEm: "2026-09-10T12:00:00.000Z" };                           // aguardando
   const b = { ...comPropostas([5000, 8000]), id: "b", escolhidaId: "p0" };             // aprovada
   const c = { ...comPropostas([1000, 4000]), id: "c" };                                 // comparando
+  const d = { ...comPropostas([2000, 3000]), id: "d", escolhidaId: "p0" };              // falta enviar
   const aprov = M.registrarAprovacaoCotacao([], { cotacaoId: "b", status: "aprovada", por: "C" });
-  const r = M.resumoCotacoes([a, b, c], aprov);
-  assert.strictEqual(r.total, 3);
+  const r = M.resumoCotacoes([a, b, c, d], aprov);
+  assert.strictEqual(r.total, 4);
   assert.strictEqual(r.abertas, 1);
+  assert.strictEqual(r.aEnviar, 1);
   assert.strictEqual(r.aguardandoCliente, 1);
   assert.strictEqual(r.aprovadas, 1);
   assert.strictEqual(r.economia, 3000); // só a de "b"; a de "a" ainda não foi aprovada
 });
 
 teste("a fila do cliente traz só o que depende dele", () => {
-  const a = { ...comPropostas([9000, 12000]), id: "a", escolhidaId: "p0" };
+  const a = { ...comPropostas([9000, 12000]), id: "a", escolhidaId: "p0",
+              enviadaClienteEm: "2026-09-10T12:00:00.000Z" };
   const b = { ...comPropostas([5000, 8000]), id: "b" };
-  const fila = M.cotacoesAguardandoCliente([a, b], []);
-  assert.deepStrictEqual(fila.map(c => c.id), ["a"]);
+  const c = { ...comPropostas([4000, 6000]), id: "c", escolhidaId: "p0" }; // escolhida, não enviada
+  const fila = M.cotacoesAguardandoCliente([a, b, c], []);
+  assert.deepStrictEqual(fila.map(x => x.id), ["a"], "só o que já foi enviado depende do cliente");
+});
+
+// ── Enviar a escolha ao cliente ─────────────────────────────────
+teste("só dá para enviar depois de escolher, e não depois de aprovado", () => {
+  const semEscolha = comPropostas([9000, 12000]);
+  assert.strictEqual(M.podeEnviarAoCliente(semEscolha, [], []).pode, false);
+
+  const escolhida = { ...semEscolha, escolhidaId: "p0" };
+  assert.strictEqual(M.podeEnviarAoCliente(escolhida, [], []).pode, true);
+
+  // reenviar enquanto espera é permitido — serve de cobrança
+  const enviada = M.enviarCotacaoAoCliente(escolhida, "Renato", "2026-09-10T12:00:00.000Z");
+  assert.strictEqual(M.podeEnviarAoCliente(enviada, [], []).pode, true);
+
+  const ap = M.registrarAprovacaoCotacao([], { cotacaoId: enviada.id, propostaId: "p0", status: "aprovada", por: "Alexandre" });
+  assert.strictEqual(M.podeEnviarAoCliente(enviada, ap, []).pode, false);
+
+  const semAval = { ...escolhida, precisaAprovacaoCliente: false };
+  assert.strictEqual(M.podeEnviarAoCliente(semAval, [], []).pode, false);
+
+  const contratada = [{ id: "ctr1", cotacaoId: escolhida.id }];
+  assert.strictEqual(M.podeEnviarAoCliente(escolhida, [], contratada).pode, false);
+});
+
+teste("o envio carimba quem mandou e quando", () => {
+  const c = { ...comPropostas([9000]), escolhidaId: "p0" };
+  const e = M.enviarCotacaoAoCliente(c, "Renato", "2026-09-10T12:00:00.000Z");
+  assert.strictEqual(e.enviadaClienteEm, "2026-09-10T12:00:00.000Z");
+  assert.strictEqual(e.enviadaClientePor, "Renato");
+  assert.strictEqual(c.enviadaClienteEm, "", "não altera o original");
+  const limpa = M.limparEnvioAoCliente(e);
+  assert.strictEqual(limpa.enviadaClienteEm, "");
+  assert.strictEqual(M.situacaoCotacao(limpa, []).id, "aEnviar");
+});
+
+teste("trocar a proposta escolhida derruba o aval do preço antigo", () => {
+  const c = comPropostas([9000, 12000]);
+  const escolhida = M.enviarCotacaoAoCliente({ ...c, escolhidaId: "p0" }, "Renato", "2026-09-10T12:00:00.000Z");
+  const ap = M.registrarAprovacaoCotacao([], { cotacaoId: c.id, propostaId: "p0", status: "aprovada", por: "Alexandre" });
+  assert.strictEqual(M.situacaoCotacao(escolhida, ap).id, "aprovada");
+  assert.strictEqual(M.podeGerarContrato(escolhida, ap, []).pode, true);
+
+  // o escritório muda para a outra proposta: o cliente aprovou outro preço
+  const trocada = M.limparEnvioAoCliente({ ...escolhida, escolhidaId: "p1" });
+  assert.strictEqual(M.situacaoCotacao(trocada, ap).id, "aEnviar");
+  assert.strictEqual(M.podeGerarContrato(trocada, ap, []).pode, false);
+
+  // registro antigo, sem propostaId, continua valendo
+  const legado = M.registrarAprovacaoCotacao([], { cotacaoId: c.id, status: "aprovada", por: "Alexandre" });
+  assert.strictEqual(M.situacaoCotacao(escolhida, legado).id, "aprovada");
+});
+
+teste("o bloqueio do contrato diz o passo que falta", () => {
+  const c = { ...comPropostas([9000]), escolhidaId: "p0" };
+  assert.match(M.podeGerarContrato(c, [], []).motivo, /Envie a escolha/);
+  const enviada = M.enviarCotacaoAoCliente(c, "Renato", "2026-09-10T12:00:00.000Z");
+  assert.match(M.podeGerarContrato(enviada, [], []).motivo, /Aguardando a aprovação/);
+});
+
+teste("a fila de contratos traz só cotação aprovada e ainda sem contrato", () => {
+  const a = M.enviarCotacaoAoCliente({ ...comPropostas([9000, 12000]), id: "a", escolhidaId: "p0" }, "R", "2026-09-10T12:00:00.000Z");
+  const b = { ...comPropostas([5000]), id: "b", escolhidaId: "p0" };                    // falta enviar
+  const cc = { ...comPropostas([4000]), id: "c" };                                       // comparando
+  const ap = M.registrarAprovacaoCotacao([], { cotacaoId: "a", propostaId: "p0", status: "aprovada", por: "Alexandre" });
+  assert.deepStrictEqual(M.cotacoesProntasParaContrato([a, b, cc], ap, []).map(x => x.id), ["a"]);
+  assert.deepStrictEqual(M.cotacoesProntasParaContrato([a, b, cc], ap, [{ id: "ctr1", cotacaoId: "a" }]).map(x => x.id), []);
+});
+
+teste("a resposta registrada pelo escritório guarda quem transcreveu", () => {
+  const ap = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", propostaId: "p0", status: "aprovada", por: "Alexandre", registradaPor: "Renato" });
+  assert.strictEqual(ap[0].por, "Alexandre");
+  assert.strictEqual(ap[0].registradaPor, "Renato");
+  const doCliente = M.registrarAprovacaoCotacao([], { cotacaoId: "ct2", status: "aprovada", por: "Alexandre" });
+  assert.strictEqual(doCliente[0].registradaPor, "");
 });
 
 teste("nome do fornecedor sai do cadastro, e some sem quebrar", () => {

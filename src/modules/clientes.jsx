@@ -3417,8 +3417,35 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     );
   }
 
+  // A cotação escolhida abre o gerador de contrato já preenchido: ofício
+  // vindo da conta do P&L, contratado e valor da proposta vencedora, e o que
+  // foi cotado no escopo. Prazo, parcelas e cláusulas seguem sendo do
+  // formulário do contrato. Mora aqui porque dois lugares chamam: o cartão
+  // da cotação e a lista de cotações aprovadas dentro de Contratos.
+  function abrirContratoDaCotacao(dados) {
+    if (!dados || !obraAtual) return;
+    const novo = {
+      ...contratoVazio("empreitadaMaoDeObra", cliente.id, obraAtual.id, dados.tipoId),
+      cotacaoId: dados.cotacaoId,
+      prestadorId: dados.prestadorId,
+      nomeContratado: dados.nomeContratado,
+      valor: dados.valor,
+    };
+    if (dados.escopo || dados.titulo) {
+      novo.escopo = [{ titulo: dados.titulo || "Escopo cotado", texto: dados.escopo || "" }];
+    }
+    setContratoSalvoEm(0);
+    setContratoGerando(novo);
+    setView("gerarContrato");
+  }
+
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
+    // O contrato nasce da cotação aprovada, e é aqui que se geram contratos —
+    // então a fila de aprovadas fica à vista, sem ter que voltar em Cotações.
+    const prontas = perm.podeGerenciarObra
+      ? cotacoesProntasParaContrato(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || [], contratos)
+      : [];
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
@@ -3428,6 +3455,34 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.nome}</div>
           </div>
         </div>
+
+        {prontas.length > 0 && (
+          <div style={{ border: "1px solid rgba(4,116,244,0.22)", background: "#eef5ff", borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
+              {prontas.length === 1 ? "1 cotação aprovada, pronta para virar contrato" : `${prontas.length} cotações aprovadas, prontas para virar contrato`}
+            </div>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
+              O contrato já abre preenchido com o fornecedor e o valor da proposta escolhida.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {prontas.map(cot => {
+                const dados = dadosDoContratoDaCotacao(cot);
+                if (!dados) return null;
+                return (
+                  <div key={cot.id} style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{cot.titulo || "Cotação sem nome"}</div>
+                      <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 1 }}>
+                        {dados.nomeContratado || "Sem fornecedor"} · {fmtMoedaCtr(dados.valor)}
+                      </div>
+                    </div>
+                    <button onClick={() => abrirContratoDaCotacao(dados)} style={{ ...C.btn, fontSize: 12, padding: "7px 14px" }}>Gerar contrato</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {contratosDaObra.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
@@ -3512,25 +3567,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         isMobile={isMobile}
         usuario={perm.usuario}
         onVoltar={() => setView("detalheObra")}
-        onGerarContrato={(dados) => {
-          // A cotação escolhida abre o gerador de contrato já preenchido:
-          // ofício vindo da conta do P&L, contratado e valor da proposta
-          // vencedora, e o que foi cotado no escopo. Prazo, parcelas e
-          // cláusulas seguem sendo do formulário do contrato.
-          const novo = {
-            ...contratoVazio("empreitadaMaoDeObra", cliente.id, obraAtual.id, dados.tipoId),
-            cotacaoId: dados.cotacaoId,
-            prestadorId: dados.prestadorId,
-            nomeContratado: dados.nomeContratado,
-            valor: dados.valor,
-          };
-          if (dados.escopo || dados.titulo) {
-            novo.escopo = [{ titulo: dados.titulo || "Escopo cotado", texto: dados.escopo || "" }];
-          }
-          setContratoSalvoEm(0);
-          setContratoGerando(novo);
-          setView("gerarContrato");
-        }}
+        onGerarContrato={abrirContratoDaCotacao}
       />
     );
   }
@@ -3600,7 +3637,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 const r = resumoCotacoes(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || []);
                 if (!r.total) return "Comparar preços de fornecedores";
                 // a frase é sempre a próxima ação de quem está olhando
-                if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para lançar" : `${r.aprovadas} prontas para lançar`;
+                if (perm.podeGerenciarObra && r.aEnviar) return r.aEnviar === 1 ? "1 escolha para enviar ao cliente" : `${r.aEnviar} escolhas para enviar ao cliente`;
+                if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para virar contrato" : `${r.aprovadas} prontas para virar contrato`;
                 if (r.aguardandoCliente) return `${r.aguardandoCliente} aguardando ${perm.podeGerenciarObra ? "o cliente" : "você"}`;
                 if (r.abertas) return r.abertas === 1 ? "1 em andamento" : `${r.abertas} em andamento`;
                 return r.total === 1 ? "1 cotação" : `${r.total} cotações`;

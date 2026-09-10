@@ -17910,6 +17910,8 @@ function cotacaoVazia(obraId) {
     precisaAprovacaoCliente: true,
     status: "aberta",       // aberta | decidida | cancelada
     escolhidaId: "",
+    enviadaClienteEm: "",   // quando a escolha foi mandada para o cliente ver
+    enviadaClientePor: "",
     decididaEm: "",
     contaGeradaId: "",
     propostas: [],
@@ -17987,6 +17989,18 @@ function aprovacaoDaCotacao(aprovacoes, cotacaoId) {
   return (aprovacoes || []).find(a => a && a.cotacaoId === cotacaoId) || COT_SEM_APROVACAO;
 }
 
+// A decisão do cliente vale para a proposta que ele viu. Se o escritório
+// trocar a escolhida depois, o aval antigo não vale para o preço novo — a
+// cotação volta a precisar de resposta. Registro antigo, sem propostaId,
+// continua valendo (não dá para saber o que ele aprovou).
+function aprovacaoDaEscolha(cot, aprovacoes) {
+  const c = cot || {};
+  const ap = aprovacaoDaCotacao(aprovacoes, c.id);
+  if (ap.status === "pendente") return ap;
+  if (ap.propostaId && c.escolhidaId && ap.propostaId !== c.escolhidaId) return COT_SEM_APROVACAO;
+  return ap;
+}
+
 // Substitui a decisão anterior da mesma cotação — o cliente pode mudar de
 // ideia enquanto o escritório não lançou a conta.
 function registrarAprovacaoCotacao(aprovacoes, dados) {
@@ -17997,6 +18011,10 @@ function registrarAprovacaoCotacao(aprovacoes, dados) {
     status: dados.status === "recusada" ? "recusada" : "aprovada",
     motivo: dados.motivo || "",
     por: dados.por || "Cliente",
+    // Quando a resposta chega por fora do sistema — WhatsApp, telefone — o
+    // escritório registra por ele. `por` continua sendo quem decidiu; aqui
+    // fica quem digitou, para a linha na tela não parecer aval do portal.
+    registradaPor: dados.registradaPor || "",
     em: new Date().toISOString(),
   }]);
 }
@@ -18005,7 +18023,7 @@ function registrarAprovacaoCotacao(aprovacoes, dados) {
 // A ordem dos testes é a ordem do fluxo; o primeiro que casar manda.
 function situacaoCotacao(cot, aprovacoes, contratos) {
   const c = cot || {};
-  const ap = aprovacaoDaCotacao(aprovacoes, c.id);
+  const ap = aprovacaoDaEscolha(c, aprovacoes);
   if (c.status === "cancelada")            return { id: "cancelada",  rotulo: "Cancelada",                 cor: "#6b7280" };
   // `contaGeradaId` é herança do fluxo antigo, que lançava direto em contas a
   // pagar. Cotação gravada naquela época continua lendo como concluída.
@@ -18016,6 +18034,11 @@ function situacaoCotacao(cot, aprovacoes, contratos) {
   if (!c.escolhidaId && !propostasDaCotacao(c).length)
                                            return { id: "coletando",  rotulo: "Aguardando propostas",      cor: "#b45309" };
   if (!c.escolhidaId)                      return { id: "comparando", rotulo: "Comparando propostas",      cor: "#0474f4" };
+  // Escolher não é avisar. Enquanto o escritório não manda a escolha, o
+  // cliente não tem o que aprovar — e era aqui que a tela parava: dizia
+  // "aguardando o cliente" sem nunca ter falado com ele.
+  if (c.precisaAprovacaoCliente && !c.enviadaClienteEm)
+                                           return { id: "aEnviar",    rotulo: "Escolhida — falta enviar",  cor: "#0474f4" };
   if (c.precisaAprovacaoCliente)           return { id: "aguardando", rotulo: "Aguardando o cliente",      cor: "#b45309" };
   return { id: "escolhida", rotulo: "Escolhida", cor: "#15803d" };
 }
@@ -18068,9 +18091,13 @@ function podeGerarContrato(cot, aprovacoes, contratos) {
   const esc = propostaEscolhida(c);
   if (!esc)                      return { pode: false, motivo: "Escolha uma proposta primeiro." };
   if (valorProposta(esc) <= 0)   return { pode: false, motivo: "A proposta escolhida está sem valor." };
-  const ap = aprovacaoDaCotacao(aprovacoes, c.id);
+  const ap = aprovacaoDaEscolha(c, aprovacoes);
   if (c.precisaAprovacaoCliente && ap.status === "recusada") return { pode: false, motivo: "O cliente recusou esta escolha." };
-  if (c.precisaAprovacaoCliente && ap.status !== "aprovada") return { pode: false, motivo: "Aguardando a aprovação do cliente." };
+  if (c.precisaAprovacaoCliente && ap.status !== "aprovada") {
+    return { pode: false, motivo: c.enviadaClienteEm
+      ? "Aguardando a aprovação do cliente."
+      : "Envie a escolha ao cliente e espere a aprovação." };
+  }
   return { pode: true, motivo: "" };
 }
 
@@ -18217,10 +18244,11 @@ function criarPrestadorRapido(campos, novoId) {
 // Contadores do cartão da obra e do topo da tela.
 function resumoCotacoes(cotacoes, aprovacoes) {
   const lista = (cotacoes || []).filter(c => c && c.id);
-  const r = { total: lista.length, abertas: 0, aguardandoCliente: 0, aprovadas: 0, recusadas: 0, lancadas: 0, economia: 0 };
+  const r = { total: lista.length, abertas: 0, aEnviar: 0, aguardandoCliente: 0, aprovadas: 0, recusadas: 0, lancadas: 0, economia: 0 };
   for (const c of lista) {
     const s = situacaoCotacao(c, aprovacoes);
     if (s.id === "coletando" || s.id === "comparando") r.abertas++;
+    if (s.id === "aEnviar")     r.aEnviar++;
     if (s.id === "aguardando")  r.aguardandoCliente++;
     if (s.id === "aprovada")    r.aprovadas++;
     if (s.id === "recusada")    r.recusadas++;
@@ -18231,6 +18259,41 @@ function resumoCotacoes(cotacoes, aprovacoes) {
     }
   }
   return r;
+}
+
+// ── Mandar a escolha para o cliente ─────────────────────────────
+// Um carimbo, não um e-mail: o cliente entra na obra dele e vê a cotação
+// pedindo resposta, e o escritório vê desde quando está esperando. Reenviar
+// só atualiza a data — serve de "cobrei de novo".
+function podeEnviarAoCliente(cot, aprovacoes, contratos) {
+  const c = cot || {};
+  if (c.status === "cancelada") return { pode: false, motivo: "A cotação foi cancelada." };
+  if (contratoDaCotacao(contratos, c.id) || c.contaGeradaId)
+                                return { pode: false, motivo: "O contrato desta cotação já foi gerado." };
+  if (!c.precisaAprovacaoCliente) return { pode: false, motivo: "Esta cotação não pede aprovação do cliente." };
+  if (!propostaEscolhida(c))      return { pode: false, motivo: "Escolha uma proposta primeiro." };
+  const ap = aprovacaoDaEscolha(c, aprovacoes);
+  if (ap.status === "aprovada")   return { pode: false, motivo: "O cliente já aprovou esta escolha." };
+  return { pode: true, motivo: "" };
+}
+
+function enviarCotacaoAoCliente(cot, quem, agoraIso) {
+  const c = cot || {};
+  return { ...c, enviadaClienteEm: agoraIso || new Date().toISOString(), enviadaClientePor: quem || "" };
+}
+
+// Trocar a proposta escolhida invalida o que já tinha sido mandado: o
+// cliente aprovou outro preço. Volta para "falta enviar".
+function limparEnvioAoCliente(cot) {
+  const c = cot || {};
+  if (!c.enviadaClienteEm && !c.enviadaClientePor) return c;
+  return { ...c, enviadaClienteEm: "", enviadaClientePor: "" };
+}
+
+// As cotações que já podem virar contrato — é isso que o módulo de
+// contratos mostra, para o contrato nascer de onde ele é gerado.
+function cotacoesProntasParaContrato(cotacoes, aprovacoes, contratos) {
+  return (cotacoes || []).filter(c => c && c.id && podeGerarContrato(c, aprovacoes, contratos).pode);
 }
 
 // O que o cliente precisa olhar agora: escolha feita, aval pendente.
@@ -18382,7 +18445,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
   // cada um faz fica carimbado com o nome de quem fez.
+  // O cliente gerencia a cotação igual ao escritório — mas quem APROVA é
+  // ele, e quem manda a escolha para aprovação é o escritório. Sem separar
+  // os dois papéis, o cliente ficava sem os botões de aprovar e a cotação
+  // parava em "aguardando o cliente" para sempre.
   const podeGerenciar = !!perm.podeGerenciarObra || !!perm.isCliente;
+  const ehCliente = !!perm.isCliente;
+  const ehEscritorio = !!perm.podeGerenciarObra;
   // A exceção é apagar a cotação inteira: leva junto a decisão registrada e
   // não deixa rastro de quem apagou. Segue só com o admin do escritório.
   const podeExcluir = !!perm.podeGerenciarObra && !!perm.podeExcluir;
@@ -18647,11 +18716,27 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     );
   }
 
+  // ── Mandar a escolha para o cliente ───────────────────────────
+  function enviarAoCliente(cot) {
+    const trava = podeEnviarAoCliente(cot, aprovacoes, contratos);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    setErro("");
+    trocarCotacao(cot.id, c => enviarCotacaoAoCliente(c, nomeDeQuem(usuario)));
+  }
+
   // ── Aprovar / recusar (cliente) ───────────────────────────────
-  function confirmarDecisao(motivo) {
-    const { cotacao, status } = formDecisao;
-    const quem = usuario?.nome || usuario?.email || "Cliente";
-    const novas = registrarAprovacaoCotacao(aprovacoes, { cotacaoId: cotacao.id, propostaId: cotacao.escolhidaId, status, motivo, por: quem });
+  // O mesmo formulário serve os dois lados: o cliente responde por si, e o
+  // escritório registra a resposta que chegou por fora — aí `por` é o nome
+  // que ele digitou, e fica gravado quem transcreveu.
+  function confirmarDecisao(motivo, quemRespondeu, statusEscolhido) {
+    const { cotacao, registrando } = formDecisao;
+    const status = statusEscolhido || formDecisao.status;
+    const eu = nomeDeQuem(usuario);
+    const quem = registrando ? (String(quemRespondeu || "").trim() || "Cliente") : (usuario?.nome || usuario?.email || "Cliente");
+    const novas = registrarAprovacaoCotacao(aprovacoes, {
+      cotacaoId: cotacao.id, propostaId: cotacao.escolhidaId, status, motivo, por: quem,
+      registradaPor: registrando ? eu : "",
+    });
     gravar({ ...obra, aprovacoesCotacao: novas });
     setFormDecisao(null);
   }
@@ -18737,7 +18822,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
 
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 12, marginBottom: 18 }}>
         {quadro("Em andamento", resumo.abertas)}
-        {quadro(podeGerenciar ? "Aguardando o cliente" : "Aguardando você", resumo.aguardandoCliente, resumo.aguardandoCliente > 0 ? "#b45309" : "#111827")}
+        {ehEscritorio && resumo.aEnviar > 0
+          ? quadro("Falta enviar ao cliente", resumo.aEnviar, "#0474f4")
+          : quadro(ehEscritorio ? "Aguardando o cliente" : "Aguardando você", resumo.aguardandoCliente, resumo.aguardandoCliente > 0 ? "#b45309" : "#111827")}
         {quadro("Aprovadas", resumo.aprovadas + resumo.lancadas)}
         {quadro("Economia", dinheiro(resumo.economia), resumo.economia > 0 ? "#15803d" : "#111827")}
       </div>
@@ -18752,7 +18839,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         </div>
       ) : cotacoes.map(cot => {
         const s = situacaoCotacao(cot, aprovacoes, contratos);
-        const ap = aprovacaoDaCotacao(aprovacoes, cot.id);
+        const ap = aprovacaoDaEscolha(cot, aprovacoes);
         const props = propostasOrdenadas(cot);
         const esc = propostaEscolhida(cot);
         const melhor = melhorProposta(cot);
@@ -18856,8 +18943,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                   {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                                     <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginRight: 6 }}
                                       onClick={() => trocarCotacao(cot.id, c => (escolhida
-                                        ? { ...c, escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
-                                        : { ...c, escolhidaId: p.id, escolhidoPor: nomeDeQuem(usuario), escolhidoEm: new Date().toISOString() }))}>
+                                        ? { ...limparEnvioAoCliente(c), escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
+                                        : { ...limparEnvioAoCliente(c), escolhidaId: p.id, escolhidoPor: nomeDeQuem(usuario), escolhidoEm: new Date().toISOString() }))}>
                                       {escolhida ? "Desfazer" : "Escolher"}
                                     </button>
                                   )}
@@ -18884,9 +18971,26 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   </div>
                 )}
 
+                {ap.status === "pendente" && s.id === "aEnviar" && ehEscritorio && esc && (
+                  <div style={{ fontSize: 12, color: "#0474f4", background: "#eef5ff", border: "1px solid rgba(4,116,244,0.22)", borderRadius: 10, padding: "8px 10px", marginBottom: 12 }}>
+                    Escolha feita: {esc.favorecido} por {dinheiro(valorProposta(esc))}. O cliente ainda não foi avisado — envie a escolha para ele aprovar.
+                  </div>
+                )}
+                {ap.status === "pendente" && cot.enviadaClienteEm && (
+                  <div style={{ fontSize: 12, color: ehEscritorio ? "#4b5563" : "#0474f4",
+                    background: ehEscritorio ? "transparent" : "#eef5ff",
+                    border: ehEscritorio ? "none" : "1px solid rgba(4,116,244,0.22)",
+                    borderRadius: 10, padding: ehEscritorio ? 0 : "8px 10px", marginBottom: 12 }}>
+                    {ehEscritorio
+                      ? `Escolha enviada ao cliente em ${dataCurta(cot.enviadaClienteEm)}${cot.enviadaClientePor ? ` por ${cot.enviadaClientePor}` : ""} — aguardando a resposta.`
+                      : `O escritório escolheu ${esc ? `${esc.favorecido}, ${dinheiro(valorProposta(esc))}` : "uma proposta"} e enviou em ${dataCurta(cot.enviadaClienteEm)} para a sua aprovação.`}
+                  </div>
+                )}
+
                 {ap.status !== "pendente" && (
                   <div style={{ fontSize: 12, color: ap.status === "aprovada" ? "#15803d" : "#dc2626", marginBottom: 12 }}>
                     {ap.status === "aprovada" ? "Aprovada" : "Recusada"} por {ap.por} em {new Date(ap.em).toLocaleDateString("pt-BR")}
+                    {ap.registradaPor ? ` (registrado por ${ap.registradaPor})` : ""}
                     {ap.motivo ? ` — ${ap.motivo}` : ""}
                   </div>
                 )}
@@ -18896,15 +19000,30 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     <>
                       <button style={E.btnSec} onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: propostaVazia() }); }}>+ Registrar proposta</button>
                       <button style={E.btnSec} onClick={() => { setErro(""); setFormCotacao(cot); }}>Editar cotação</button>
-                      <button style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45 }} onClick={() => gerarContrato(cot)}>Gerar contrato</button>
-                      {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
+                      {s.id === "aEnviar" && ehEscritorio && (
+                        <button style={E.btn} onClick={() => enviarAoCliente(cot)}>Enviar ao cliente</button>
+                      )}
+                      {s.id === "aguardando" && ehEscritorio && (
+                        <>
+                          <button style={E.btnSec} onClick={() => enviarAoCliente(cot)}>Reenviar aviso</button>
+                          <button style={E.btnSec} onClick={() => { setErro(""); setFormDecisao({ cotacao: cot, status: "aprovada", registrando: true }); }}>
+                            Registrar resposta do cliente
+                          </button>
+                        </>
+                      )}
+                      {ehEscritorio && (
+                        <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
+                          style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
+                          onClick={() => gerarContrato(cot)}>Gerar contrato</button>
+                      )}
+                      {ehEscritorio && !trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
                       {podeExcluir && (
                         <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
                           onClick={() => excluirCotacao(cot)}>Excluir cotação</button>
                       )}
                     </>
                   )}
-                  {!podeGerenciar && s.id === "aguardando" && (
+                  {ehCliente && (s.id === "aguardando" || s.id === "aEnviar") && (
                     <>
                       <button style={E.btn} onClick={() => setFormDecisao({ cotacao: cot, status: "aprovada" })}>Aprovar</button>
                       <button style={E.btnSec} onClick={() => setFormDecisao({ cotacao: cot, status: "recusada" })}>Recusar</button>
@@ -18929,6 +19048,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         <CotacaoDecisao
           cotacao={formDecisao.cotacao}
           status={formDecisao.status}
+          registrando={!!formDecisao.registrando}
           dinheiro={dinheiro}
           onConfirmar={confirmarDecisao}
           onFechar={() => setFormDecisao(null)}
@@ -19161,8 +19281,9 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
 
 // Telinha de aprovar/recusar. Fica separada para o motivo ter estado
 // próprio — dentro da lista, cada tecla digitada rerenderizaria tudo.
-function CotacaoDecisao({ cotacao, status, dinheiro, onConfirmar, onFechar }) {
+function CotacaoDecisao({ cotacao, status, registrando, dinheiro, onConfirmar, onFechar }) {
   const [motivo, setMotivo] = useState("");
+  const [quem, setQuem] = useState("");
   const E = COT_ESTILO;
   const esc = propostaEscolhida(cotacao);
   const aprovar = status === "aprovada";
@@ -19170,15 +19291,29 @@ function CotacaoDecisao({ cotacao, status, dinheiro, onConfirmar, onFechar }) {
     <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
       <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 420 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 6 }}>
-          {aprovar ? "Aprovar esta escolha" : "Recusar esta escolha"}
+          {registrando ? "Registrar a resposta do cliente" : aprovar ? "Aprovar esta escolha" : "Recusar esta escolha"}
         </div>
         <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 14 }}>
           {cotacao.titulo} — {esc ? `${esc.favorecido}, ${dinheiro(valorProposta(esc))}` : "sem proposta escolhida"}.
+          {registrando ? " A resposta veio por fora do sistema; fica gravado que foi você quem registrou." : ""}
         </div>
-        <label style={E.label}>{aprovar ? "Observação (opcional)" : "Por que está recusando?"}</label>
+        {registrando && (
+          <div style={{ marginBottom: 12 }}>
+            <label style={E.label}>Quem respondeu</label>
+            <input style={E.input} value={quem} onChange={e => setQuem(e.target.value)} placeholder="Nome do cliente" />
+          </div>
+        )}
+        <label style={E.label}>{aprovar || registrando ? "Observação (opcional)" : "Por que está recusando?"}</label>
         <textarea style={{ ...E.input, minHeight: 64, resize: "vertical", marginBottom: 16 }} value={motivo} onChange={e => setMotivo(e.target.value)} />
-        <div style={{ display: "flex", gap: 10 }}>
-          <button style={E.btn} onClick={() => onConfirmar(motivo)}>{aprovar ? "Aprovar" : "Recusar"}</button>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {registrando ? (
+            <>
+              <button style={E.btn} onClick={() => onConfirmar(motivo, quem, "aprovada")}>Registrar aprovação</button>
+              <button style={{ ...E.btnSec, color: "#dc2626" }} onClick={() => onConfirmar(motivo, quem, "recusada")}>Registrar recusa</button>
+            </>
+          ) : (
+            <button style={E.btn} onClick={() => onConfirmar(motivo)}>{aprovar ? "Aprovar" : "Recusar"}</button>
+          )}
           <button style={E.btnSec} onClick={onFechar}>Cancelar</button>
         </div>
       </div>
@@ -22610,8 +22745,35 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     );
   }
 
+  // A cotação escolhida abre o gerador de contrato já preenchido: ofício
+  // vindo da conta do P&L, contratado e valor da proposta vencedora, e o que
+  // foi cotado no escopo. Prazo, parcelas e cláusulas seguem sendo do
+  // formulário do contrato. Mora aqui porque dois lugares chamam: o cartão
+  // da cotação e a lista de cotações aprovadas dentro de Contratos.
+  function abrirContratoDaCotacao(dados) {
+    if (!dados || !obraAtual) return;
+    const novo = {
+      ...contratoVazio("empreitadaMaoDeObra", cliente.id, obraAtual.id, dados.tipoId),
+      cotacaoId: dados.cotacaoId,
+      prestadorId: dados.prestadorId,
+      nomeContratado: dados.nomeContratado,
+      valor: dados.valor,
+    };
+    if (dados.escopo || dados.titulo) {
+      novo.escopo = [{ titulo: dados.titulo || "Escopo cotado", texto: dados.escopo || "" }];
+    }
+    setContratoSalvoEm(0);
+    setContratoGerando(novo);
+    setView("gerarContrato");
+  }
+
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
+    // O contrato nasce da cotação aprovada, e é aqui que se geram contratos —
+    // então a fila de aprovadas fica à vista, sem ter que voltar em Cotações.
+    const prontas = perm.podeGerenciarObra
+      ? cotacoesProntasParaContrato(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || [], contratos)
+      : [];
     return (
       <div data-vk-ui="1" style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: "16px", marginBottom: 20 }}>
         <button onClick={() => setView("detalheObra")} style={{ ...C.btnGhost, marginBottom: 16, fontSize: 12 }}>← Voltar</button>
@@ -22621,6 +22783,34 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 2 }}>{obraSelecionada.nome}</div>
           </div>
         </div>
+
+        {prontas.length > 0 && (
+          <div style={{ border: "1px solid rgba(4,116,244,0.22)", background: "#eef5ff", borderRadius: 12, padding: "12px 14px", marginBottom: 16 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
+              {prontas.length === 1 ? "1 cotação aprovada, pronta para virar contrato" : `${prontas.length} cotações aprovadas, prontas para virar contrato`}
+            </div>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
+              O contrato já abre preenchido com o fornecedor e o valor da proposta escolhida.
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {prontas.map(cot => {
+                const dados = dadosDoContratoDaCotacao(cot);
+                if (!dados) return null;
+                return (
+                  <div key={cot.id} style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, padding: "10px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{cot.titulo || "Cotação sem nome"}</div>
+                      <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 1 }}>
+                        {dados.nomeContratado || "Sem fornecedor"} · {fmtMoedaCtr(dados.valor)}
+                      </div>
+                    </div>
+                    <button onClick={() => abrirContratoDaCotacao(dados)} style={{ ...C.btn, fontSize: 12, padding: "7px 14px" }}>Gerar contrato</button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {contratosDaObra.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
@@ -22705,25 +22895,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         isMobile={isMobile}
         usuario={perm.usuario}
         onVoltar={() => setView("detalheObra")}
-        onGerarContrato={(dados) => {
-          // A cotação escolhida abre o gerador de contrato já preenchido:
-          // ofício vindo da conta do P&L, contratado e valor da proposta
-          // vencedora, e o que foi cotado no escopo. Prazo, parcelas e
-          // cláusulas seguem sendo do formulário do contrato.
-          const novo = {
-            ...contratoVazio("empreitadaMaoDeObra", cliente.id, obraAtual.id, dados.tipoId),
-            cotacaoId: dados.cotacaoId,
-            prestadorId: dados.prestadorId,
-            nomeContratado: dados.nomeContratado,
-            valor: dados.valor,
-          };
-          if (dados.escopo || dados.titulo) {
-            novo.escopo = [{ titulo: dados.titulo || "Escopo cotado", texto: dados.escopo || "" }];
-          }
-          setContratoSalvoEm(0);
-          setContratoGerando(novo);
-          setView("gerarContrato");
-        }}
+        onGerarContrato={abrirContratoDaCotacao}
       />
     );
   }
@@ -22793,7 +22965,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 const r = resumoCotacoes(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || []);
                 if (!r.total) return "Comparar preços de fornecedores";
                 // a frase é sempre a próxima ação de quem está olhando
-                if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para lançar" : `${r.aprovadas} prontas para lançar`;
+                if (perm.podeGerenciarObra && r.aEnviar) return r.aEnviar === 1 ? "1 escolha para enviar ao cliente" : `${r.aEnviar} escolhas para enviar ao cliente`;
+                if (perm.podeGerenciarObra && r.aprovadas) return r.aprovadas === 1 ? "1 pronta para virar contrato" : `${r.aprovadas} prontas para virar contrato`;
                 if (r.aguardandoCliente) return `${r.aguardandoCliente} aguardando ${perm.podeGerenciarObra ? "o cliente" : "você"}`;
                 if (r.abertas) return r.abertas === 1 ? "1 em andamento" : `${r.abertas} em andamento`;
                 return r.total === 1 ? "1 cotação" : `${r.total} cotações`;

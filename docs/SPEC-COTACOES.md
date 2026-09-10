@@ -24,6 +24,7 @@ valor, fornecedor e vencedor. É o mesmo desenho dos aceites de contrato.
 ```
 { id, obraId, criadaEm, titulo, escopo, contaId, etapaId, quantidade, unidade,
   prazoResposta, precisaAprovacaoCliente, status, escolhidaId, contaGeradaId,
+  enviadaClienteEm, enviadaClientePor,
   propostas: [{ id, fornecedorId, favorecido, valor, prazoDias,
                 condicaoPagamento, validade, observacao, recebidaEm }] }
 ```
@@ -33,11 +34,65 @@ gasto cai no P&L quando a cotação virar conta a pagar.
 
 ## Situação — a ordem dos testes é a ordem do fluxo
 
-cancelada → lançada → recusada → aprovada → aguardando propostas →
-comparando propostas → aguardando o cliente → escolhida.
+cancelada → contratada → recusada → aprovada → aguardando propostas →
+comparando propostas → **escolhida, falta enviar** → aguardando o cliente →
+escolhida.
 
-O primeiro que casar manda, e é isso que faz "lançada" continuar aparecendo
-mesmo depois de o cliente ter aprovado.
+O primeiro que casar manda, e é isso que faz "contratada" continuar
+aparecendo mesmo depois de o cliente ter aprovado.
+
+## Escolher não é avisar
+
+Escolher grava `escolhidaId`. Enquanto o escritório não manda a escolha, o
+cliente não tem o que aprovar — e a tela ficava dizendo "aguardando o
+cliente" sem nunca ter falado com ele, com o botão de contrato travado e sem
+saída. Por isso existe o passo do envio:
+
+- `podeEnviarAoCliente(cot, aprovacoes, contratos)` → `{ pode, motivo }`.
+  Precisa de escolha, precisa exigir aval, e para depois que o cliente
+  aprova. Reenviar enquanto espera é permitido — vale como cobrança.
+- `enviarCotacaoAoCliente(cot, quem, agoraIso)` carimba `enviadaClienteEm` e
+  `enviadaClientePor`. Nada é disparado por fora do sistema: o cliente entra
+  na obra dele e vê a cotação pedindo resposta.
+- `limparEnvioAoCliente(cot)` zera o carimbo. A tela chama isso ao escolher
+  ou desfazer uma escolha: proposta nova é preço novo, o cliente precisa ver
+  de novo.
+
+## O aval vale para a proposta que o cliente viu
+
+`aprovacaoDaEscolha(cot, aprovacoes)` devolve a decisão só quando o
+`propostaId` do registro bate com o `escolhidaId` atual. Trocar a escolhida
+depois do aval derruba a aprovação — o cliente aprovou outro valor. Registro
+antigo, gravado sem `propostaId`, continua valendo (não dá para saber o que
+ele aprovou).
+
+## Os dois papéis, no mesmo módulo
+
+O cliente tem paridade com o escritório em criar, editar, registrar e
+escolher. O que NÃO é paridade:
+
+| ação | escritório | cliente |
+| --- | --- | --- |
+| enviar a escolha para aprovação | sim | não |
+| aprovar / recusar | não (só registra a resposta) | sim |
+| gerar contrato | sim | não |
+| excluir cotação | sim (admin) | não |
+
+Na tela isso é `ehEscritorio` (`perm.podeGerenciarObra`) e `ehCliente`
+(`perm.isCliente`) — não `podeGerenciar`, que é verdadeiro para os dois.
+
+Quando a resposta chega por fora do sistema — WhatsApp, telefone — o
+escritório usa **Registrar resposta do cliente**: grava `por` com o nome que
+ele digitou e `registradaPor` com o dele, e a linha na tela mostra os dois,
+para não parecer aval dado no portal.
+
+## De onde nasce o contrato
+
+`cotacoesProntasParaContrato(cotacoes, aprovacoes, contratos)` é a fila das
+cotações que já podem virar contrato. O módulo **Contratos** da obra mostra
+essa fila no topo, com um botão por cotação, porque contrato é o que se gera
+ali — quem já aprovou não precisa voltar em Cotações para isso. Os dois
+caminhos chamam a mesma função (`abrirContratoDaCotacao` em clientes.jsx).
 
 ## Trava do lançamento
 
