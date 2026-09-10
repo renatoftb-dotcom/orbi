@@ -1201,7 +1201,10 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
     return () => { try { document.head.removeChild(tag); } catch (e) { /* já removido */ } };
   }, []);
   useEffect(() => {
-    const el = alvo.current;
+    // O ref é quem entrega a folha; se algum dia ele se perder, o seletor
+    // acha a mesma folha pelo atributo — sem ela, a impressão sai com o app
+    // inteiro por baixo e só o primeiro comprovante cabe na página.
+    const el = alvo.current || (typeof document !== "undefined" && document.querySelector('[data-vk-comprovantes="1"]'));
     if (!el || typeof window === "undefined" || !window.addEventListener) return;
     const pai = el.parentNode, proximo = el.nextSibling;
     let movido = false;
@@ -1227,7 +1230,7 @@ function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }
   const rotulo = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
 
   return (
-    <div data-vk-comprovantes="1"
+    <div data-vk-comprovantes="1" ref={alvo}
       style={{ position: "fixed", inset: 0, background: "#fff", zIndex: 9100, overflowY: "auto", padding: "20px 22px" }}>
       <div data-vk-so-tela="1" style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginBottom: 14, position: "sticky", top: 0, background: "#fff", paddingBottom: 8 }}>
         <button type="button" style={C.btnSec} onClick={aoFechar}>Fechar</button>
