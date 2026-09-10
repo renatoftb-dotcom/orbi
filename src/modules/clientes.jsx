@@ -1591,13 +1591,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // mensais que andavam de 30 em 30 dias, escorregando o dia do mês) se
   // corrigem sozinhas ao abrir a tela — sem precisar salvar o contrato de
   // novo. O que já foi pago é preservado; só se grava quando algo muda.
+  //
+  // Aqui também sai a faxina das órfãs: parcela de contrato que não existe
+  // mais. A obra sem contrato nenhum também passa por isso — era o caso que
+  // escapava, porque o efeito desistia antes quando a lista vinha vazia.
   useEffect(() => {
     if (view !== "contasPagar" || !obraAtual) return;
     const contratosDaObra = obraAtual.contratos || [];
-    if (!contratosDaObra.length) return;
-    if (!contasDesatualizadas(contasDaObra, contratosDaObra)) return;
-    gravarContas(sincronizarContasDaObra(contasDaObra, contratosDaObra), obraAtual.id);
-  }, [view, obraAtual && obraAtual.id, assinaturaContas(contasDaObra), JSON.stringify((obraAtual && obraAtual.contratos) || [])]);
+    // `contratos` é a lista completa do cliente (obras + coleção antiga) —
+    // com uma lista parcial a faxina apagaria parcela boa
+    const semOrfas = removerOrfasDeContrato(contasDaObra, contratos);
+    const novas = contratosDaObra.length ? sincronizarContasDaObra(semOrfas, contratosDaObra) : semOrfas;
+    if (assinaturaContas(novas) === assinaturaContas(contasDaObra)) return;
+    gravarContas(novas, obraAtual.id);
+  }, [view, obraAtual && obraAtual.id, assinaturaContas(contasDaObra),
+      JSON.stringify((obraAtual && obraAtual.contratos) || []), contratos.map(c => c.id).join("|")]);
 
   const salvarContaAvulsa = () => {
     const f = formConta;

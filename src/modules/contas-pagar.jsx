@@ -360,6 +360,27 @@ function removerContasDoContrato(contas, contratoId) {
   return (contas || []).filter((x) => x.origem !== "contrato" || x.contratoId !== contratoId || x.pago);
 }
 
+// Faxina das órfãs: parcela de contrato que não existe mais em lugar nenhum.
+// Remover o contrato já limpa as parcelas dele, mas quem removeu ANTES dessa
+// limpeza existir ficou com parcelas presas na obra, aparecendo em contas a
+// pagar sob o título "Contrato removido" e somando num total que ninguém
+// deve.
+//
+// `contratos` tem que ser a lista COMPLETA de contratos conhecidos do
+// cliente — a da obra mais os que ainda estão na coleção antiga. Com uma
+// lista parcial isto apagaria parcela boa.
+//
+// Parcela paga NUNCA sai: o dinheiro saiu de verdade, e escondê-la
+// falsificaria o realizado da obra.
+function removerOrfasDeContrato(contas, contratos) {
+  const conhecidos = new Set((contratos || []).map((c) => c && c.id).filter(Boolean));
+  return (contas || []).filter((x) => {
+    if (!x || x.origem !== "contrato" || !x.contratoId) return true;
+    if (x.pago) return true;
+    return conhecidos.has(x.contratoId);
+  });
+}
+
 // ── Situação e totais ───────────────────────────────────────────
 function situacaoConta(conta, hoje) {
   const c = conta || {};

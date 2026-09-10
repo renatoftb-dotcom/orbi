@@ -40,6 +40,7 @@ const modulo = new Function(`
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
            prestadoresDoPL, CONTAS_PRESTADOR_EXTRA,
            aneisDosGrupos, visaoUsaAnel, VISOES_CONTAS_EM_ANEL,
+           removerOrfasDeContrato, assinaturaContas,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -1033,6 +1034,54 @@ teste("grupo sem valor nenhum não ocupa cartão", () => {
   assert.strictEqual(r.vazio, true);
   assert.strictEqual(modulo.aneisDosGrupos([]).vazio, true);
   assert.strictEqual(modulo.aneisDosGrupos(null).vazio, true);
+});
+
+console.log("\n--- parcelas órfãs de contrato removido ---");
+const ctr = { id: "ctr1", obraId: "o1", tipoProfissional: "empreitadaMaoDeObra", nomeContratado: "Zé",
+              valor: 120000, parcelas: 2, primeiroVencimento: "2026-03-10", periodicidade: "mensais" };
+const parcelas = () => modulo.contasDoContrato(ctr);
+
+teste("remover o contrato leva as parcelas em aberto junto", () => {
+  const antes = parcelas();
+  assert.strictEqual(antes.length, 2);
+  const depois = modulo.removerContasDoContrato(antes, "ctr1");
+  assert.deepStrictEqual(depois, [], "nenhuma parcela em aberto pode sobrar");
+});
+
+teste("parcela paga fica, mesmo com o contrato removido", () => {
+  const comPaga = parcelas().map((p, i) => (i === 0 ? { ...p, pago: true, valorPago: p.valor, pagoEm: "2026-03-10" } : p));
+  const depois = modulo.removerContasDoContrato(comPaga, "ctr1");
+  assert.strictEqual(depois.length, 1);
+  assert.strictEqual(depois[0].pago, true, "o dinheiro saiu — esconder falsificaria o realizado");
+});
+
+teste("a faxina tira a órfã que sobrou de uma remoção antiga", () => {
+  const orfas = parcelas();                        // contrato "ctr1" não existe mais
+  const avulsa = { id: "a1", obraId: "o1", descricao: "Areia", valor: 500, pago: false };
+  const r = modulo.removerOrfasDeContrato(orfas.concat([avulsa]), []);
+  assert.deepStrictEqual(r.map(c => c.id), ["a1"], "só a avulsa fica");
+});
+
+teste("a faxina não encosta em parcela de contrato que existe", () => {
+  const r = modulo.removerOrfasDeContrato(parcelas(), [ctr]);
+  assert.strictEqual(r.length, 2);
+  // e reconhece o contrato pela coleção antiga também
+  const r2 = modulo.removerOrfasDeContrato(parcelas(), [{ id: "ctr1", clienteId: "c1" }]);
+  assert.strictEqual(r2.length, 2, "lista completa inclui os contratos legados");
+});
+
+teste("órfã paga sobrevive à faxina", () => {
+  const comPaga = parcelas().map((p, i) => (i === 0 ? { ...p, pago: true, valorPago: p.valor, pagoEm: "2026-03-10" } : p));
+  const r = modulo.removerOrfasDeContrato(comPaga, []);
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r[0].pago, true);
+});
+
+teste("a faxina muda a assinatura, então a tela grava sozinha", () => {
+  const antes = parcelas();
+  const depois = modulo.removerOrfasDeContrato(antes, []);
+  assert.notStrictEqual(modulo.assinaturaContas(depois), modulo.assinaturaContas(antes),
+    "sem mudar a assinatura o efeito não gravaria e a órfã voltaria a aparecer");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

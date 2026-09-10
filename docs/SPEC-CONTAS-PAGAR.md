@@ -441,3 +441,28 @@ Os anéis, não: "pago de total" precisa dos dois lados, e o filtro padrão é
 "a pagar", que esconde justamente as pagas — todo anel sairia em 0%. Por isso
 `gruposCheios` reagrupa `contasDaObra` sem filtro algum, e a nota abaixo dos
 cartões diz isso.
+
+## Parcela órfã: contrato removido não deixa fatura para trás
+
+Remover um contrato já levava as parcelas em aberto junto
+(`removerContasDoContrato`) — mas quem removeu **antes dessa limpeza
+existir** ficou com parcelas presas na obra. Elas apareciam em contas a
+pagar sob o título "Contrato removido", somando num total que ninguém deve.
+
+Agora o efeito que reconcilia as contas ao abrir a tela faz também a faxina
+(`removerOrfasDeContrato`): parcela com `origem: "contrato"` cujo
+`contratoId` não existe em contrato nenhum sai, e a obra grava sem ela.
+
+Três cuidados:
+
+- **Parcela paga nunca sai**, órfã ou não. O dinheiro saiu de verdade, e
+  escondê-la falsificaria o realizado da obra. Ela continua aparecendo no
+  filtro "Pago", sob o grupo "Contrato removido" — que é a descrição honesta
+  do que aconteceu.
+- A faxina compara com a lista **completa** de contratos conhecidos do
+  cliente: os das obras **mais** os que ainda estão na coleção antiga
+  (`data.contratos`), que a migração ainda pode não ter movido. Com uma
+  lista parcial isto apagaria parcela boa.
+- O efeito desistia antes quando a obra não tinha contrato nenhum — que é
+  justamente o caso de quem removeu o único contrato. Agora a comparação de
+  assinatura decide se grava, e a obra sem contrato também passa pela faxina.
