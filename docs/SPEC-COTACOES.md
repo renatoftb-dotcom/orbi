@@ -190,13 +190,21 @@ Windows não sabe abrir, embora fosse um PDF íntegro.
 
 Duas causas, duas correções.
 
-**A causa no storage.** Arquivo `raw` no Cloudinary é entregue pelo nome, e o
-nome é o `public_id`. Com `unique_filename` o Cloudinary gerava um id
-aleatório sem extensão, e servia o PDF como `application/octet-stream`. O
-upload passou a acrescentar `.pdf` ao id (que segue aleatório — o nome do
-fornecedor pode ter acento, espaço e barra). Vale só para anexos novos: o
-`public_id` é o próprio nome do arquivo no storage, então o que já subiu não
-muda.
+**A causa no storage — e a tentativa que deu errado.** Arquivo `raw` no
+Cloudinary é entregue pelo nome, e o nome é o `public_id`. Sem extensão o
+Cloudinary serve como `application/octet-stream`, e o navegador baixa um
+arquivo que o Windows não abre.
+
+Acrescentar `.pdf` ao `public_id` resolvia isso e trouxe coisa pior: a conta
+tem **"Allow delivery of PDF and ZIP files" desligada**, e a entrega passou a
+voltar **401**. De "baixa torto" para "não abre de jeito nenhum" — e nos
+arquivos que já tinham subido com o nome novo, de forma permanente, porque o
+`public_id` é o nome do arquivo no storage.
+
+Revertido: o `raw` volta a subir sem extensão. **Quem resolve a leitura é o
+visor**, que não depende do cabeçalho do storage. Um PDF que subiu na janela
+em que o `.pdf` esteve ativo precisa ser reanexado — a janela explica isso
+quando recebe 401 ou 403.
 
 **A causa na tela**, e é ela que conserta também o que já subiu. O anexo
 agora abre em `VisorProposta`, uma janela sobre a tela com o PDF dentro. O

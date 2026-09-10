@@ -18792,9 +18792,15 @@ function VisorProposta({ anexo, aoFechar }) {
         const r = await fetch(a.url);
         if (!r.ok) {
           if (!vivo) return;
+          // 401 é o storage recusando ENTREGAR um arquivo que existe: os
+          // PDFs que subiram com ".pdf" no nome enquanto a conta bloqueia
+          // entrega de PDF. Reanexar resolve, porque o upload voltou a
+          // gravar sem a extensão.
           setMotivo(r.status === 404
             ? "O arquivo não está mais no storage. Anexe a proposta de novo."
-            : `O storage respondeu ${r.status} ao buscar o arquivo.`);
+            : r.status === 401 || r.status === 403
+              ? "O storage recusou entregar este arquivo. Anexe a proposta de novo — o arquivo novo sobe num formato que abre."
+              : `O storage respondeu ${r.status} ao buscar o arquivo.`);
           setEstado("erro");
           return;
         }
