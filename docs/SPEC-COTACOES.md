@@ -277,3 +277,46 @@ próprios.
 10 MB é o teto do plano do Cloudinary — acima disso é o storage que recusa,
 não o VICKE. Foto continua sendo reduzida no navegador antes de subir
 (1600 px, JPEG 0,72), então quem chega perto do teto é PDF.
+
+## O mesmo módulo dos dois lados, com o nome de quem fez
+
+O cliente via a cotação e só podia dizer sim ou não. Agora o módulo é o
+mesmo: ele cria cotação, registra a proposta que recebeu do fornecedor,
+escolhe, edita e lança em contas a pagar, como o escritório
+(`podeGerenciar = podeGerenciarObra || isCliente`).
+
+No backend, `cotacoes` entrou em `CAMPOS_DO_CLIENTE` — a lista já liberava
+`contasPagar` e `entradas`, então o cliente já mexia no financeiro da obra;
+faltava a cotação. Cadastro da obra, contratos e estimativa do P&L seguem
+fora: o que o cliente manda nesses campos é ignorado.
+
+`aprovacoesCotacao` continua um campo separado de propósito. É o "sim" ou
+"não" formal, e não se confunde com quem editou o quê.
+
+**A única exceção é "Excluir cotação"**, que segue com o admin do
+escritório: ela leva junto a decisão registrada e não deixa rastro de quem
+apagou — o oposto do que esta mudança inteira quer. Excluir uma *proposta*,
+que é correção de rotina, o cliente faz.
+
+### O carimbo
+
+Cada coisa gravada leva o nome de quem gravou. Não é auditoria de
+desconfiança: é para o escritório abrir a cotação e saber que aquela
+proposta foi o cliente quem registrou, sem ter que perguntar.
+
+| campo | onde |
+|---|---|
+| `criadoPor`, `criadoEm` | cotação e proposta, na primeira gravação |
+| `salvoPor`, `salvoEm` | cotação e proposta, em toda gravação |
+| `escolhidoPor`, `escolhidoEm` | cotação, ao escolher (limpos ao desfazer) |
+
+`carimbar(obj, usuario, ehNovo)` grava, `textoAutoria(obj)` desenha:
+"Cadastrado por Alexandre em 10/09/2026" enquanto ninguém editou depois, e
+"Salvo por Renato em 12/09/2026 · cadastrado por Alexandre" quando alguém
+mexeu. Registro antigo, sem carimbo, ganha um na primeira vez que for salvo
+— quem salvou vira o criador, que é o mais próximo da verdade que dá para
+saber.
+
+Na tela: "Registro" ao lado de Conta do P&L e Etapa; uma linha em 10,5 px
+sob o nome do fornecedor em cada proposta; e "por Fulano em dd/mm" ao lado
+do selo "Escolhida".

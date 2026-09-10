@@ -155,6 +155,47 @@ function podeLancarCotacao(cot, aprovacoes) {
   return { pode: true, motivo: "" };
 }
 
+// ── Quem fez, e quando ──────────────────────────────────────────
+// O módulo é o mesmo para o escritório e para o cliente, então cada coisa
+// gravada leva o nome de quem gravou. Não é auditoria de desconfiança: é
+// para o escritório abrir a cotação e saber que aquela proposta foi o
+// cliente quem registrou, sem ter que perguntar.
+function nomeDeQuem(usuario) {
+  const u = usuario || {};
+  return String(u.nome || u.email || "").trim() || "alguém";
+}
+
+// Carimba a criação na primeira vez e a edição em todas. São dois pares
+// porque "cadastrado por" e "salvo por" respondem perguntas diferentes:
+// quem trouxe isto para cá, e quem mexeu por último.
+function carimbar(obj, usuario, ehNovo) {
+  const quem = nomeDeQuem(usuario);
+  const agora = new Date().toISOString();
+  const base = { ...(obj || {}), salvoPor: quem, salvoEm: agora };
+  if (ehNovo || !base.criadoPor) { base.criadoPor = quem; base.criadoEm = base.criadoEm || agora; }
+  return base;
+}
+
+const dataCurta = (iso) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleDateString("pt-BR");
+};
+
+// A linha que aparece na tela. Enquanto ninguém editou depois de criar, é só
+// "Cadastrado por X"; quando alguém mexe, o que interessa passa a ser quem
+// mexeu por último, e a criação vira o complemento.
+function textoAutoria(obj) {
+  const o = obj || {};
+  if (!o.criadoPor && !o.salvoPor) return "";
+  const mesmaMao = o.salvoPor === o.criadoPor && String(o.salvoEm || "").slice(0, 10) === String(o.criadoEm || "").slice(0, 10);
+  if (!o.salvoPor || mesmaMao) {
+    return `Cadastrado por ${o.criadoPor || o.salvoPor}${dataCurta(o.criadoEm || o.salvoEm) ? ` em ${dataCurta(o.criadoEm || o.salvoEm)}` : ""}`;
+  }
+  const salvo = `Salvo por ${o.salvoPor}${dataCurta(o.salvoEm) ? ` em ${dataCurta(o.salvoEm)}` : ""}`;
+  return o.criadoPor ? `${salvo} · cadastrado por ${o.criadoPor}` : salvo;
+}
+
 // ── Apagar ──────────────────────────────────────────────────────
 // Duas exclusões, com pesos diferentes: tirar um fornecedor que entrou
 // errado é correção de rotina; apagar a cotação inteira leva junto a
@@ -396,11 +437,13 @@ function selo(cor, texto) {
 
 function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario }) {
   const perm = getPermissoes();
-  const podeGerenciar = !!perm.podeGerenciarObra;
-  // Apagar a cotação inteira leva junto a decisão do cliente: é do admin.
-  // Tirar um fornecedor que entrou errado é correção de rotina, e segue
-  // com quem já edita a obra.
-  const podeExcluir = podeGerenciar && !!perm.podeExcluir;
+  // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
+  // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
+  // cada um faz fica carimbado com o nome de quem fez.
+  const podeGerenciar = !!perm.podeGerenciarObra || !!perm.isCliente;
+  // A exceção é apagar a cotação inteira: leva junto a decisão registrada e
+  // não deixa rastro de quem apagou. Segue só com o admin do escritório.
+  const podeExcluir = !!perm.podeGerenciarObra && !!perm.podeExcluir;
   const E = COT_ESTILO;
   const prestadores = (data.fornecedores || []).filter(f => f && f.ativo !== false);
   const cotacoes = obra.cotacoes || [];
@@ -438,7 +481,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     if (!String(f.titulo || "").trim()) { setErro("Dê um nome à cotação (ex.: Esquadrias de alumínio)."); return; }
     setErro("");
     const existe = cotacoes.some(c => c.id === f.id);
-    gravarCotacoes(existe ? cotacoes.map(c => (c.id === f.id ? f : c)) : cotacoes.concat([f]));
+    const marcada = carimbar(f, usuario, !existe);
+    gravarCotacoes(existe ? cotacoes.map(c => (c.id === f.id ? marcada : c)) : cotacoes.concat([marcada]));
     setFormCotacao(null);
   }
 
@@ -532,10 +576,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const nome = proposta.favorecido || nomeDoFornecedor(prestadores, proposta.fornecedorId);
     if (!String(nome || "").trim()) { setErro("Diga de quem é a proposta."); return; }
     setErro("");
-    const p = { ...proposta, favorecido: nome };
     trocarCotacao(cotacaoId, c => {
       const lista = c.propostas || [];
-      return { ...c, propostas: lista.some(x => x.id === p.id) ? lista.map(x => (x.id === p.id ? p : x)) : lista.concat([p]) };
+      const existe = lista.some(x => x.id === proposta.id);
+      const p = carimbar({ ...proposta, favorecido: nome }, usuario, !existe);
+      return { ...c, propostas: existe ? lista.map(x => (x.id === p.id ? p : x)) : lista.concat([p]) };
     });
     setFormProposta(null);
   }
@@ -799,13 +844,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   if (conta) linhas.push(["Conta do P&L", conta.nome]);
                   if (etapa) linhas.push(["Etapa da obra", etapa.nome]);
                   if (cot.quantidade || cot.unidade) linhas.push(["Quantidade", `${cot.quantidade} ${cot.unidade}`.trim()]);
+                  const autoria = textoAutoria(cot);
+                  if (autoria) linhas.push(["Registro", autoria]);
                   if (!linhas.length) return null;
                   return (
                     <div style={{ display: "flex", gap: 20, flexWrap: "wrap", marginBottom: 12 }}>
                       {linhas.map(([r, v]) => (
                         <div key={r}>
                           <div style={{ fontSize: 10.5, color: "#6b7280", fontWeight: 600, textTransform: "uppercase", letterSpacing: 0.4 }}>{r}</div>
-                          <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600, marginTop: 2 }}>{v}</div>
+                          <div style={{ fontSize: 12.5, marginTop: 2,
+                            color: r === "Registro" ? "#4b5563" : "#111827",
+                            fontWeight: r === "Registro" ? 400 : 600 }}>{v}</div>
                         </div>
                       ))}
                     </div>
@@ -836,9 +885,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                 <div style={{ fontWeight: escolhida ? 700 : 500, color: "#111827" }}>{p.favorecido || "—"}</div>
                                 <div style={{ display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
                                   {escolhida && selo("#0474f4", "Escolhida")}
+                                  {escolhida && cot.escolhidoPor && (
+                                    <span style={{ fontSize: 10.5, color: "#6b7280" }}>
+                                      por {cot.escolhidoPor}{dataCurta(cot.escolhidoEm) ? ` em ${dataCurta(cot.escolhidoEm)}` : ""}
+                                    </span>
+                                  )}
                                   {maisBarata && !escolhida && selo("#15803d", "Mais barata")}
                                 </div>
                                 {p.observacao && <div style={{ fontSize: 11, color: "#6b7280", marginTop: 3 }}>{p.observacao}</div>}
+                                {textoAutoria(p) && (
+                                  <div style={{ fontSize: 10.5, color: "#6b7280", marginTop: 3 }}>{textoAutoria(p)}</div>
+                                )}
                                 {p.anexo && p.anexo.url && (
                                   <button type="button" onClick={() => setVisor(p.anexo)}
                                     style={{ fontSize: 11, color: "#0474f4", background: "none", border: "none", padding: 0,
@@ -854,7 +911,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                 <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
                                   {!cot.contaGeradaId && (
                                     <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginRight: 6 }}
-                                      onClick={() => trocarCotacao(cot.id, c => ({ ...c, escolhidaId: escolhida ? "" : p.id }))}>
+                                      onClick={() => trocarCotacao(cot.id, c => (escolhida
+                                        ? { ...c, escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
+                                        : { ...c, escolhidaId: p.id, escolhidoPor: nomeDeQuem(usuario), escolhidoEm: new Date().toISOString() }))}>
                                       {escolhida ? "Desfazer" : "Escolher"}
                                     </button>
                                   )}

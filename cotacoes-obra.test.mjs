@@ -35,7 +35,8 @@ const modulo = new Function(`
            podeLancarCotacao, contaDaCotacao, resumoCotacoes, cotacoesAguardandoCliente,
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
-           prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf };
+           prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
+           nomeDeQuem, carimbar, textoAutoria };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -321,6 +322,50 @@ teste("o que não é PDF é reprovado", () => {
   assert.strictEqual(M.pareceMesmoPdf(bytesDe("")), false);
   assert.strictEqual(M.pareceMesmoPdf(null), false);
   assert.strictEqual(M.pareceMesmoPdf(bytesDe(" %PDF-")), false, "assinatura tem que estar no byte 0");
+});
+
+// ── Quem fez, e quando ──────────────────────────────────────────
+const alex = { nome: "Alexandre", email: "alexandre@cobop.com.br" };
+const renato = { nome: "Renato", email: "r@padovan.com" };
+
+teste("o nome vem do cadastro, e o e-mail é a reserva", () => {
+  assert.strictEqual(M.nomeDeQuem(alex), "Alexandre");
+  assert.strictEqual(M.nomeDeQuem({ email: "so@email.com" }), "so@email.com");
+  assert.strictEqual(M.nomeDeQuem({ nome: "   " }), "alguém");
+  assert.strictEqual(M.nomeDeQuem(null), "alguém");
+});
+
+teste("criar carimba os dois lados; salvar de novo só o de cima", () => {
+  const nova = M.carimbar(M.cotacaoVazia("o1"), alex, true);
+  assert.strictEqual(nova.criadoPor, "Alexandre");
+  assert.strictEqual(nova.salvoPor, "Alexandre");
+  assert.ok(nova.criadoEm && nova.salvoEm);
+  const editada = M.carimbar({ ...nova, titulo: "Esquadrias" }, renato, false);
+  assert.strictEqual(editada.criadoPor, "Alexandre", "quem cadastrou não muda nunca");
+  assert.strictEqual(editada.criadoEm, nova.criadoEm);
+  assert.strictEqual(editada.salvoPor, "Renato");
+});
+
+teste("registro antigo, sem carimbo, ganha um ao ser salvo", () => {
+  const velha = { id: "c1", titulo: "Piso" };            // gravada antes disto existir
+  const r = M.carimbar(velha, renato, false);
+  assert.strictEqual(r.criadoPor, "Renato", "sem criador, quem salvou vira o criador");
+  assert.strictEqual(r.salvoPor, "Renato");
+});
+
+teste("o texto diz cadastrado enquanto ninguém mexeu, e salvo depois", () => {
+  const nova = M.carimbar(M.cotacaoVazia("o1"), alex, true);
+  assert.ok(/^Cadastrado por Alexandre em \d{2}\/\d{2}\/\d{4}$/.test(M.textoAutoria(nova)), M.textoAutoria(nova));
+  const outroDia = { ...nova, salvoPor: "Renato", salvoEm: "2026-12-01T10:00:00.000Z" };
+  const t = M.textoAutoria(outroDia);
+  assert.ok(/^Salvo por Renato em 01\/12\/2026 · cadastrado por Alexandre$/.test(t), t);
+  assert.strictEqual(M.textoAutoria({}), "", "sem carimbo, sem linha na tela");
+  assert.strictEqual(M.textoAutoria(null), "");
+});
+
+teste("data quebrada não vira 'Invalid Date' na tela", () => {
+  const t = M.textoAutoria({ criadoPor: "Alexandre", criadoEm: "não é data" });
+  assert.strictEqual(t, "Cadastrado por Alexandre");
 });
 
 let falhas = 0;
