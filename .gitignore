@@ -29,3 +29,4 @@ backend/orbi.db-shm
 backend/orbi.db-wal
 dist
 .vercel
+Claude outputs/
