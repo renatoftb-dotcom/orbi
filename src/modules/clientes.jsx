@@ -2423,6 +2423,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const pz = prazoContrato(g);
     const escopo = escopoContrato(g);
     const gerenciamento = g.modelo === "gerenciamentoObra";
+    // Máquina não tem "valor do item": tem preço por hora, por viagem ou por
+    // metro, vezes a quantidade. O quadro abaixo troca de colunas por isso.
+    const porUnidade = g.modelo === "servicoEquipamento";
     // saldo pago item a item: muda o bloco de valor (coluna de previsão) e as
     // datas estimadas que vão para contas a pagar
     const porItem = modalidadeContrato(g) === "entradaFinal" && (g.entradaEscopo || "contrato") === "item";
@@ -2703,33 +2706,147 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
+        {/* Serviço com equipamento: o que o contrato precisa saber antes de
+            escrever a medição — quem assina o boletim e como se conta a hora. */}
+        {porUnidade && (
+          <div style={bloco}>
+            <div style={tituloBloco}>Serviço com equipamento e operador</div>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
+              A medição é o que sustenta este contrato: sem alguém na obra para assinar o boletim do dia, não há como conferir hora, viagem nem metro.
+            </div>
+            <div style={{ ...grade("1fr 150px 150px"), marginBottom: 10 }}>
+              <div>
+                <label style={C.label}>Responsável pela obra (assina os boletins)</label>
+                <input style={C.input} value={g.responsavelObra || ""} onChange={e => setG("responsavelObra", e.target.value)} placeholder="Nome de quem acompanha e confere as horas" />
+              </div>
+              <div>
+                <label style={C.label}>Hora parada (%)</label>
+                <CampoCtrNum tipo="pct" valor={g.horaParadaPct} onChange={v => setG("horaParadaPct", v)} style={C.input} placeholder="50%" />
+              </div>
+              <div>
+                <label style={C.label}>Troca em caso de quebra (horas)</label>
+                <CampoCtrNum tipo="inteiro" valor={g.substituicaoHoras} onChange={v => setG("substituicaoHoras", v)} style={C.input} placeholder="24" />
+              </div>
+            </div>
+            <div style={{ ...grade("150px 150px 1fr"), marginBottom: 10 }}>
+              <div>
+                <label style={C.label}>Jornada — início</label>
+                <input style={C.input} type="time" value={g.jornadaInicio || ""} onChange={e => setG("jornadaInicio", e.target.value)} />
+              </div>
+              <div>
+                <label style={C.label}>Jornada — fim</label>
+                <input style={C.input} type="time" value={g.jornadaFim || ""} onChange={e => setG("jornadaFim", e.target.value)} />
+              </div>
+              <div>
+                <label style={C.label}>Mobilização (prancha)</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, color: "#111827", whiteSpace: "nowrap" }}>
+                    <input type="checkbox" checked={g.mobilizacaoInclusa !== false} onChange={e => setG("mobilizacaoInclusa", e.target.checked)} />
+                    inclusa no preço
+                  </label>
+                  {g.mobilizacaoInclusa === false && (
+                    <CampoCtrNum tipo="moeda" valor={g.mobilizacaoValor} onChange={v => setG("mobilizacaoValor", v)} style={C.input} placeholder="0,00 por viagem" />
+                  )}
+                </div>
+              </div>
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, color: "#111827" }}>
+              <input type="checkbox" checked={!!g.chuvaPaga} onChange={e => setG("chuvaPaga", e.target.checked)} />
+              Parada por chuva é paga como hora parada
+            </label>
+          </div>
+        )}
+
         {/* Valor: itens discriminados ou valor único — vale o que for preenchido.
             No gerenciamento o valor é um só: os itens não aparecem. */}
         <div style={bloco}>
-          <div style={tituloBloco}>Valor do contrato</div>
+          <div style={tituloBloco}>{porUnidade ? "Equipamentos, unidades e preços" : "Valor do contrato"}</div>
           <div style={{ ...grade("240px 1fr"), marginBottom: 10 }}>
-            <div>
-              <label style={C.label}>Valor total (R$)</label>
-              <CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" disabled={(g.itens || []).some(i => Number(i.valor) > 0)} />
-              <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
-            </div>
+            {porUnidade ? (
+              <div style={{ fontSize: 11.5, color: "#4b5563" }}>
+                Preencha o preço unitário e a quantidade estimada de cada equipamento. O total é a soma das linhas e vai para o contrato
+                como <strong style={{ color: "#111827" }}>valor estimado</strong> — o que se paga é o que for medido.
+              </div>
+            ) : (
+              <div>
+                <label style={C.label}>Valor total (R$)</label>
+                <CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" disabled={(g.itens || []).some(i => Number(i.valor) > 0)} />
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "flex-end", fontSize: 14, fontWeight: 700, color: "#111827" }}>
-              Total: {fmtMoedaCtr(total)}
+              {porUnidade ? "Total estimado: " : "Total: "}{fmtMoedaCtr(total)}
             </div>
           </div>
-          {!gerenciamento && porItem && (g.itens || []).some(i => Number(i.valor) > 0) && (
+          {!porUnidade && !gerenciamento && porItem && (g.itens || []).some(i => Number(i.valor) > 0) && (
             <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 6 }}>
               Por item, duas datas: o <strong style={{ color: "#111827" }}>início</strong> (quando o item é liberado para produção, quando vence a entrada dele) e a
               <strong style={{ color: "#111827" }}> previsão</strong> de conclusão (quando vence o saldo). Ambas entram em contas a pagar marcadas como estimadas.
             </div>
           )}
-          {!gerenciamento && porItem && !isMobile && (
+          {porUnidade && (g.itens || []).map((it, idx) => {
+            const uni = unidadeEquip(it.unidade);
+            return (
+              <div key={idx} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
+                <div style={{ ...grade("1fr 170px 150px auto"), marginBottom: 8 }}>
+                  <div>
+                    <label style={C.label}>Equipamento / serviço</label>
+                    <input style={C.input} value={it.descricao || ""} onChange={e => setLista("itens", idx, "descricao", e.target.value)}
+                      placeholder={uni.ehBroca ? "Perfuração de broca" : "Mini escavadeira, pá carregadeira, caminhão…"} />
+                  </div>
+                  <div>
+                    <label style={C.label}>Unidade</label>
+                    <select style={C.input} value={it.unidade || "hora"} onChange={e => setLista("itens", idx, "unidade", e.target.value)}>
+                      {UNIDADES_EQUIP.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={C.label}>Valor por {uni.abrev} (R$)</label>
+                    <CampoCtrNum tipo="moeda" valor={it.valorUnitario} onChange={v => setLista("itens", idx, "valorUnitario", v)} style={C.input} placeholder="0,00" />
+                  </div>
+                  <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36, alignSelf: "end" }}>×</button>
+                </div>
+                <div style={grade(uni.ehBroca ? "150px 150px 150px 1fr" : "170px 170px 1fr")}>
+                  {uni.ehBroca && (
+                    <div>
+                      <label style={C.label}>Diâmetro</label>
+                      <input style={C.input} value={it.diametro || ""} onChange={e => setLista("itens", idx, "diametro", e.target.value)} placeholder="25 cm" />
+                    </div>
+                  )}
+                  <div>
+                    <label style={C.label}>{uni.ehBroca ? "Metros (total)" : `Quantidade estimada (${uni.abrev})`}</label>
+                    <CampoCtrNum tipo="inteiro" valor={it.quantidade} onChange={v => setLista("itens", idx, "quantidade", v)} style={C.input} placeholder="0" />
+                  </div>
+                  {uni.ehBroca && (
+                    <div>
+                      <label style={C.label}>Quantidade de furos</label>
+                      <CampoCtrNum tipo="inteiro" valor={it.furos} onChange={v => setLista("itens", idx, "furos", v)} style={C.input} placeholder="0" />
+                    </div>
+                  )}
+                  {uni.temMinimo && (
+                    <div>
+                      <label style={C.label}>Mínimo por acionamento (horas)</label>
+                      <CampoCtrNum tipo="inteiro" valor={it.minimo} onChange={v => setLista("itens", idx, "minimo", v)} style={C.input} placeholder="6" />
+                    </div>
+                  )}
+                  <div style={{ display: "flex", alignItems: "end", justifyContent: isMobile ? "flex-start" : "flex-end", fontSize: 13, fontWeight: 700, color: "#111827", paddingBottom: 8 }}>
+                    {fmtMoedaCtr(valorItemEquip(it))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {porUnidade && (
+            <button type="button" style={C.btnSec} onClick={() => addLinha("itens", itemEquipVazio("hora"))}>＋ Adicionar equipamento</button>
+          )}
+
+          {!porUnidade && !gerenciamento && porItem && !isMobile && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 140px 140px auto", gap: 8, marginBottom: 4 }}>
               <span style={C.label}>Item</span><span style={C.label}>Valor</span>
               <span style={C.label}>Início</span><span style={C.label}>Previsão de conclusão</span><span />
             </div>
           )}
-          {!gerenciamento && (g.itens || []).map((it, idx) => (
+          {!porUnidade && !gerenciamento && (g.itens || []).map((it, idx) => (
             <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (porItem ? "1fr 160px 140px 140px auto" : "1fr 160px auto"), gap: 8, alignItems: "start", marginBottom: 8 }}>
               <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do item (opcional)" />
               <CampoCtrNum tipo="moeda" valor={it.valor} onChange={v => setLista("itens", idx, "valor", v)} style={C.input} placeholder="0,00" />
@@ -2742,7 +2859,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
             </div>
           ))}
-          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "", inicio: "", previsao: "" })}>＋ Adicionar item</button>}
+          {!porUnidade && !gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "", inicio: "", previsao: "" })}>＋ Adicionar item</button>}
         </div>
 
         {/* Modalidade de pagamento — igual para todo contrato de prestação de
@@ -3439,11 +3556,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setView("gerarContrato");
   }
 
+  // Gerar e editar contrato passou a valer também para o cliente; REMOVER
+  // continua só do escritório, porque apagar contrato leva as parcelas junto.
+  const podeContratar = !!perm.podeGerenciarObra || !!perm.isCliente;
+
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     // O contrato nasce da cotação aprovada, e é aqui que se geram contratos —
     // então a fila de aprovadas fica à vista, sem ter que voltar em Cotações.
-    const prontas = perm.podeGerenciarObra
+    const prontas = podeContratar
       ? cotacoesProntasParaContrato(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || [], contratos)
       : [];
     return (
@@ -3486,7 +3607,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {contratosDaObra.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
-            Nenhum contrato nesta obra. {perm.podeGerenciarObra && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
+            Nenhum contrato nesta obra. {podeContratar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
@@ -3512,10 +3633,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       </div>
                     )}
                   </div>
-                  {(perm.podeGerenciarObra || contrato.gerado) && (
+                  {(podeContratar || contrato.gerado) && (
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       {contrato.gerado && <button onClick={() => { setContratoAberto(contrato); setView("verContrato"); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Abrir</button>}
-                      {perm.podeGerenciarObra && <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
+                      {podeContratar && <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                       {perm.podeGerenciarObra && <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) {
                         const restantes = contratos.filter(c => c.id !== contrato.id);
                         save({ ...data,
@@ -3532,7 +3653,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {perm.podeGerenciarObra && (
+        {podeContratar && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
             <button style={{ ...C.btn, flex: 1, minWidth: 200 }} onClick={() => { setContratoSalvoEm(0); setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id, "")); setView("gerarContrato"); }}>📄 Gerar contrato</button>
             <button style={{ ...C.btnSec, flex: 1, minWidth: 160 }} onClick={() => { setFormContrato({ id: uid(), clienteId: cliente.id, obraId: obraSelecionada.id, nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" }); setView("formContrato"); }}>+ Só registrar contrato</button>

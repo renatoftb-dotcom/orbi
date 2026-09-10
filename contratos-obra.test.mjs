@@ -190,8 +190,9 @@ teste("sem prestador escolhido o contrato sai com o nome digitado e sem qualific
   assert.strictEqual(d.assinaturas[1].nome, "Fulano Empreiteira");
 });
 
-teste("três modelos disponíveis, cada um com o seu padrão", () => {
-  assert.deepStrictEqual(modulo.CONTRATO_MODELOS.map((m) => m.id), ["empreitadaMaoDeObra", "empreitadaGlobal", "gerenciamentoObra"]);
+teste("quatro modelos disponíveis, cada um com o seu padrão", () => {
+  assert.deepStrictEqual(modulo.CONTRATO_MODELOS.map((m) => m.id),
+    ["empreitadaMaoDeObra", "empreitadaGlobal", "gerenciamentoObra", "servicoEquipamento"]);
   assert.strictEqual(modulo.contratoModelo("empreitadaGlobal").padrao.garantiaMeses, 12);
   assert.strictEqual(modulo.contratoModelo("empreitadaMaoDeObra").padrao.garantiaMeses, 6);
   assert.strictEqual(modulo.contratoModelo("inexistente").id, "empreitadaMaoDeObra"); // fallback
@@ -214,7 +215,8 @@ teste("três modelos disponíveis, cada um com o seu padrão", () => {
 teste("tipos de profissional cobrem os prestadores do catálogo e sugerem regime e objeto", () => {
   const nomes = modulo.TIPOS_PROFISSIONAL.map((t) => t.nome);
   for (const n of ["Empreiteiro", "Eletricista", "Serralheiro", "Pintor", "Carpinteiro", "Encanador",
-                   "Impermeabilizador", "Instalador de ar condicionado", "Marceneiro", "Terraplanagem"]) {
+                   "Impermeabilizador", "Instalador de ar condicionado", "Marceneiro", "Terraplanagem",
+                   "Perfuração de brocas"]) {
     assert.ok(nomes.includes(n), `falta o tipo ${n}`);
   }
   // a lista sai em ordem alfabética, com "Outro" fechando
@@ -230,6 +232,9 @@ teste("tipos de profissional cobrem os prestadores do catálogo e sugerem regime
   assert.strictEqual(modulo.tipoProfissional("empreiteiro").modelo, "empreitadaMaoDeObra");
   assert.strictEqual(modulo.tipoProfissional("serralheiro").modelo, "empreitadaGlobal");
   assert.strictEqual(modulo.tipoProfissional("marceneiro").modelo, "empreitadaGlobal");
+  // máquina não tem material: terraplanagem e broca saíram do regime global
+  assert.strictEqual(modulo.tipoProfissional("terraplanagem").modelo, "servicoEquipamento");
+  assert.strictEqual(modulo.tipoProfissional("perfuracaoBrocas").modelo, "servicoEquipamento");
   assert.strictEqual(modulo.tipoProfissional("inexistente"), null);
   // todo tipo (menos "Outro") nomeia o seu serviço, que é o que escreve o objeto
   for (const t of modulo.TIPOS_PROFISSIONAL) {

@@ -1141,12 +1141,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           </button>
                         </>
                       )}
-                      {ehEscritorio && (
-                        <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
-                          style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
-                          onClick={() => gerarContrato(cot)}>Gerar contrato</button>
-                      )}
-                      {ehEscritorio && !trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
+                      <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
+                        style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
+                        onClick={() => gerarContrato(cot)}>Gerar contrato</button>
+                      {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
                       {podeExcluir && (
                         <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
                           onClick={() => excluirCotacao(cot)}>Excluir cotação</button>

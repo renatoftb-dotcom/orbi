@@ -15531,8 +15531,222 @@ const CONTRATO_MODELOS = [
       materialPorContaDo: "contratante",
     },
   },
+  {
+    id: "servicoEquipamento",
+    nome: "Serviço com equipamento e operador",
+    subtitulo: "Serviços executados com equipamento e operador",
+    resumo: "A contratada executa com máquina própria e operador. O objeto é um quadro de equipamentos medidos por hora, viagem, m³ ou metro perfurado; paga-se o que for medido, por medição.",
+    generoContratado: "a CONTRATADA",
+    porUnidade: true,          // o objeto é quadro de unidades, não de itens fechados
+    padrao: {
+      prazoDias: 30, garantiaMeses: 0, toleranciaDias: 0, multaDiaPct: 0, multaTetoPct: 0,
+      medicaoPeriodicidade: "quinzenal", medicaoPrazoDias: 5,
+      materialPorContaDo: "contratado",
+      horaParadaPct: 50, substituicaoHoras: 24,
+      jornadaInicio: "07:30", jornadaFim: "17:30", chuvaPaga: false,
+      mobilizacaoInclusa: true, mobilizacaoValor: "",
+    },
+  },
 ];
 function contratoModelo(id) { return CONTRATO_MODELOS.find((m) => m.id === id) || CONTRATO_MODELOS[0]; }
+
+// ── Unidades de medição do serviço com equipamento ──────────────
+// Numa mesma terraplanagem convivem três formas de cobrar: escavadeira e
+// pá por HORA (com mínimo por acionamento), caminhão por VIAGEM (a caçamba
+// tem tamanho) e broca por METRO PERFURADO (com diâmetro e número de furos).
+// Por isso a unidade é da LINHA, não do contrato — e o texto da medição só
+// fala das unidades que aparecerem no quadro.
+const UNIDADES_EQUIP = [
+  { id: "hora",   nome: "Hora-máquina",     abrev: "hora",   plural: "horas",   temMinimo: true },
+  { id: "viagem", nome: "Viagem",           abrev: "viagem", plural: "viagens" },
+  { id: "m3",     nome: "Metro cúbico",     abrev: "m³",     plural: "m³" },
+  { id: "metro",  nome: "Metro perfurado",  abrev: "metro",  plural: "m",       ehBroca: true },
+];
+function unidadeEquip(id) { return UNIDADES_EQUIP.find((u) => u.id === id) || UNIDADES_EQUIP[0]; }
+function itemEquipVazio(unidade) {
+  return { descricao: "", unidade: unidade || "hora", valorUnitario: "", quantidade: "",
+           minimo: "", diametro: "", furos: "", valor: "" };
+}
+// O valor da linha é quantidade × valor unitário. Fica gravado em `valor`
+// para o resto do sistema (total do contrato, parcelas, contas a pagar)
+// continuar lendo o item do mesmo jeito de sempre.
+function valorItemEquip(it) {
+  const i = it || {};
+  const direto = Number(i.valor);
+  const q = Number(i.quantidade) || 0, v = Number(i.valorUnitario) || 0;
+  const calc = Math.round(q * v * 100) / 100;
+  return calc > 0 ? calc : (Number.isFinite(direto) ? direto : 0);
+}
+function unidadesDoQuadro(itens) {
+  const vistas = {};
+  for (const i of itens || []) if (i && Number(i.valorUnitario) > 0) vistas[i.unidade || "hora"] = true;
+  return vistas;
+}
+// A descrição da broca se escreve sozinha a partir do diâmetro.
+function descricaoItemEquip(it) {
+  const i = it || {};
+  const base = String(i.descricao || "").trim();
+  if ((i.unidade || "") !== "metro") return base || "Equipamento";
+  const d = String(i.diametro || "").trim();
+  const nome = base || "Perfuração de broca";
+  return d ? `${nome} — Ø ${d}` : nome;
+}
+
+
+// ── Cláusulas do serviço com equipamento e operador ─────────────
+// Modelo próprio porque quase nada do regime de empreitada serve aqui: não
+// há material a garantir, não há última parcela a reter e não faz sentido
+// multa por dia de atraso — o prazo é estimativa, e se o solo render menos
+// gastam-se mais horas. O que sustenta este contrato é a MEDIÇÃO, e por
+// isso o responsável pela obra tem cláusula própria: sem alguém que assine
+// o boletim do dia, não há como conferir hora, viagem nem metro.
+function clausulasEquipamento(c, ctx) {
+  const { enderecoObra, total, foro, add, marcas, objetoTexto, temAnexo, cliente } = ctx;
+  const itens = (c.itens || []).filter((i) => i && Number(i.valorUnitario) > 0);
+  const u = unidadesDoQuadro(itens);
+  const responsavel = String(c.responsavelObra || "").trim();
+  const temEquip = itens.length > 0;
+
+  // ── Objeto ──
+  const objeto = [
+    `Constitui objeto deste contrato a execução, pela CONTRATADA, dos serviços de ${objetoTexto} na OBRA${enderecoObra ? ` situada ${enderecoObra}` : ""}, executados com equipamento próprio e operado por profissional de seu quadro.`,
+  ];
+  if (temAnexo) objeto.push("Os serviços compreendidos no objeto estão descritos no ANEXO I.");
+  objeto.push("Este contrato NÃO compreende o fornecimento de material. Concreto, armação, lançamento e a execução de blocos e baldrames, quando houver, correm por conta da CONTRATANTE.");
+  let equipApos = null;
+  if (temEquip) {
+    objeto.push("Os serviços serão remunerados pelas unidades e preços do quadro abaixo:");
+    marcas.equip = { id: "objeto", i: objeto.length - 1 };
+    equipApos = objeto.length - 1;
+    objeto.push("As quantidades do quadro são ESTIMATIVAS, apuradas para orientar o planejamento da OBRA, e não vinculam as partes. A CONTRATANTE pagará exclusivamente pelas quantidades efetivamente medidas na forma da {{cl:medicao}}, ainda que superiores ou inferiores às estimadas.");
+    if (u.hora) objeto.push("Os equipamentos remunerados por hora observarão o mínimo de horas indicado no quadro a cada acionamento, devido ainda que o serviço se encerre antes de atingido esse mínimo.");
+    objeto.push("Os valores são fixos e irreajustáveis pelo prazo deste contrato e compreendem o operador e seus encargos, o combustível, os lubrificantes, a manutenção, as peças, os tributos e os demais custos diretos e indiretos.");
+  }
+  add("objeto", "DO OBJETO", objeto, { tabelaEquip: temEquip, tabelaEquipApos: equipApos });
+
+  // ── Responsável pela obra ──
+  // A cláusula que faz o resto funcionar: é a assinatura dele que transforma
+  // horímetro em fatura.
+  add("responsavel", "DO RESPONSÁVEL PELA OBRA", [
+    `A CONTRATANTE manterá na OBRA, durante toda a execução dos serviços, responsável ou preposto formalmente indicado${responsavel ? `, na pessoa de ${responsavel},` : ""} com poderes para acompanhar os trabalhos, conferir as medições diárias e decidir as questões de campo.`,
+    "Somente serão válidos, para fins de medição e de pagamento, os boletins diários de horas, de viagens e de furos assinados pelo responsável pela obra indicado pela CONTRATANTE.",
+    "A ausência do responsável na OBRA não suspende a execução dos serviços, mas as quantidades do período somente serão faturadas após a sua conferência e assinatura.",
+    "A substituição do responsável será comunicada por escrito à CONTRATADA.",
+  ]);
+
+  // ── Medição ──
+  const med = [];
+  if (u.hora) {
+    med.push("Considera-se hora trabalhada a hora efetivamente registrada no horímetro do equipamento, apurada em boletim diário de campo, com registro fotográfico do horímetro no início e no encerramento de cada jornada. As frações serão medidas proporcionalmente, em minutos.");
+    med.push("Não se computam como hora trabalhada o deslocamento do equipamento até a OBRA e o seu retorno, o abastecimento, a manutenção, a parada por quebra e o intervalo de refeição.");
+    med.push(`Ficando o equipamento à disposição sem poder operar por causa atribuível à CONTRATANTE, a hora será medida como hora parada, no percentual de ${pctCtr(c.horaParadaPct)} do respectivo valor unitário.`);
+    med.push(c.chuvaPaga
+      ? "A paralisação por chuva ou por condição climática que impeça a operação segura do equipamento será medida como hora parada, no mesmo percentual do item anterior."
+      : "A paralisação por chuva ou por condição climática que impeça a operação segura do equipamento não será medida, não cabendo remuneração por esse período.");
+  }
+  if (u.viagem || u.m3) {
+    med.push("Considera-se viagem o transporte de uma caçamba carregada até o destino indicado pela CONTRATANTE, observada a capacidade declarada no quadro do {{it:equip}}, anotada em controle diário firmado pelas partes.");
+  }
+  if (u.metro) {
+    med.push("Considera-se metro perfurado o metro linear efetivamente executado, aferido pela profundidade do furo na presença do responsável pela obra e lançado em planilha de furos — número do furo, diâmetro e profundidade —, que integrará a medição do período.");
+    med.push("O preço da perfuração considera solo sem rocha. Encontrada rocha ou material impenetrável ao equipamento, a CONTRATADA interromperá o furo e comunicará imediatamente a CONTRATANTE, sendo devida a metragem efetivamente perfurada até a interrupção.");
+    med.push("A definição sobre reposicionar o furo, alterar a cota de assentamento ou empregar equipamento especial cabe à CONTRATANTE, ouvido o projetista de fundações, e será formalizada por escrito.");
+    med.push("A CONTRATANTE providenciará a concretagem das brocas no mesmo dia da respectiva perfuração.");
+  }
+  med.push("Os boletins e as planilhas de que trata esta cláusula integram a medição do período e são a base do faturamento.");
+  add("medicao", "DA MEDIÇÃO DOS SERVIÇOS", med);
+
+  // ── Mobilização ──
+  add("mobilizacao", "DA MOBILIZAÇÃO E DA DESMOBILIZAÇÃO", [
+    c.mobilizacaoInclusa === false && Number(c.mobilizacaoValor) > 0
+      ? `O transporte do equipamento até a OBRA e o seu retorno serão remunerados à parte, no valor de ${fmtMoedaCtr(c.mobilizacaoValor)} (${moedaExtensoCtr(c.mobilizacaoValor)}) por viagem de prancha.`
+      : "O transporte do equipamento até a OBRA e o seu retorno correm por conta da CONTRATADA e já estão compreendidos nos valores do quadro do {{it:equip}}.",
+    "Interrompida a OBRA por causa atribuível à CONTRATANTE, com necessidade de retirada e posterior retorno do equipamento, será devida nova mobilização.",
+  ]);
+
+  // ── Operador, combustível e manutenção ──
+  add("operador", "DO OPERADOR, DO COMBUSTÍVEL E DA MANUTENÇÃO", [
+    "Correm por conta exclusiva da CONTRATADA o operador e os respectivos encargos, o combustível, os lubrificantes, a manutenção preventiva e corretiva, as peças e os pneus dos equipamentos.",
+    `Ocorrendo quebra, o período de paralisação não será medido, e a CONTRATADA providenciará o reparo ou a substituição do equipamento no prazo de ${numCtr(c.substituicaoHoras, "horas")}.`,
+  ]);
+
+  // ── Obrigações ──
+  add("obrigacoesContratado", "DAS OBRIGAÇÕES DA CONTRATADA", [
+    "Executar os serviços com zelo e técnica, em observância ao objeto contratado e às boas práticas aplicáveis.",
+    "Empregar operador habilitado, com treinamento nas normas regulamentadoras aplicáveis e portando os equipamentos de proteção individual exigidos.",
+    "Manter os equipamentos em condições de uso e segurança, com a documentação e os seguros em dia.",
+    "Registrar diariamente as horas, as viagens e os furos executados, submetendo os boletins à conferência e à assinatura do responsável pela obra.",
+    "Comunicar por escrito, antes de prosseguir, qualquer condição do terreno que altere a produtividade prevista, tais como rocha, matacão, lençol freático ou solo instável.",
+    "Responsabilizar-se integralmente pelos encargos trabalhistas, previdenciários, fiscais e securitários relativos aos seus empregados e prepostos.",
+    "Responder pelos danos que causar à CONTRATANTE, à OBRA ou a terceiros, por ação ou omissão de sua equipe, observada a {{cl:redes}}.",
+    "Emitir a nota fiscal correspondente a cada medição.",
+  ]);
+
+  add("obrigacoesContratante", "DAS OBRIGAÇÕES DA CONTRATANTE", [
+    "Manter na OBRA o responsável de que trata a {{cl:responsavel}} e conferir os boletins diários no próprio dia, apontando divergências por escrito.",
+    "Liberar a frente de serviço desimpedida e franquear o acesso ao equipamento, inclusive à prancha de transporte.",
+    "Fornecer a locação dos serviços, as divisas do terreno e as cotas de projeto, respondendo pela topografia.",
+    "Indicar o local de destinação do material excedente e providenciar as licenças exigidas pelo Poder Público.",
+    "Informar por escrito, antes do início dos trabalhos, a posição das redes enterradas e das benfeitorias existentes.",
+    "Efetuar os pagamentos nas condições e nos prazos ajustados na {{cl:pagamento}}.",
+  ]);
+
+  add("redes", "DAS REDES ENTERRADAS E DOS DANOS", [
+    "A CONTRATADA responde pelos danos decorrentes de imperícia, imprudência ou negligência de sua equipe.",
+    "A CONTRATADA não responde por danos a redes enterradas, dutos, cabos ou benfeitorias cuja posição não lhe tenha sido informada por escrito pela CONTRATANTE antes do início dos trabalhos.",
+  ]);
+
+  // ── Prazo e jornada ──
+  add("prazo", "DO PRAZO E DA JORNADA", [
+    `Os serviços serão executados no prazo estimado de ${numCtr(c.prazoDias, "dias úteis")}, contados da liberação formal da frente de serviço pela CONTRATANTE.`,
+    `A jornada normal de trabalho é de segunda a sexta-feira, das ${c.jornadaInicio || "______"} às ${c.jornadaFim || "______"}. Trabalhos em sábados, domingos, feriados ou fora da jornada dependem de acordo prévio e escrito entre as partes.`,
+    "O prazo acima é estimativa fundada nas quantidades previstas e será ajustado na medida em que as quantidades efetivamente medidas dele se afastarem.",
+  ]);
+
+  add("extraordinarios", "DOS SERVIÇOS EXTRAORDINÁRIOS", [
+    "Serviço não previsto no quadro do {{it:equip}} — inclusive o emprego de equipamento especial, como rompedor hidráulico ou escarificador — somente será executado mediante acordo prévio e escrito entre as partes, com a definição do respectivo valor unitário, por meio de termo aditivo.",
+    "A execução sem o correspondente aditivo escrito não gerará à CONTRATADA direito a pagamento adicional.",
+  ]);
+
+  // ── Preço e pagamento ──
+  const perMed = c.medicaoPeriodicidade === "semanal" ? "semanal" : c.medicaoPeriodicidade === "mensal" ? "mensal" : "quinzenal";
+  add("pagamento", "DO PREÇO E DA FORMA DE PAGAMENTO", [
+    `O valor estimado deste contrato é de ${fmtMoedaCtr(total)} (${moedaExtensoCtr(total)}), correspondente à soma das quantidades previstas no quadro do {{it:equip}}.`,
+    `O pagamento será feito por medição ${perMed}: ao final de cada período as partes apurarão, em conjunto, as horas, as viagens e os metros efetivamente executados, aplicando-se os preços unitários do {{it:equip}}.`,
+    `A medição será formalizada por escrito, admitido o meio eletrônico, acompanhada dos boletins diários e da planilha de furos, e o respectivo pagamento será realizado em até ${numCtr(c.medicaoPrazoDias, "dias")} contados da sua aprovação pela CONTRATANTE.`,
+    "Divergências apontadas na medição serão discriminadas por escrito, liberando-se de imediato a parcela incontroversa.",
+    meioPagamento(c.meioPagamento).frase("da CONTRATADA", "à CONTRATADA"),
+    "O atraso no pagamento de qualquer medição sujeitará a CONTRATANTE à multa de 2% (dois por cento) sobre o valor em atraso, acrescida de juros de 1% (um por cento) ao mês, calculados pro rata die.",
+  ]);
+
+  add("aceite", "DO ACEITE DOS SERVIÇOS", [
+    "Concluídos os serviços, a CONTRATANTE verificará, em até 5 (cinco) dias úteis, a conformidade do terreno com as cotas de projeto e, quando aplicável, o grau de compactação exigido, apontando pendências por escrito.",
+    "A responsabilidade da CONTRATADA limita-se à execução conforme a locação e as cotas fornecidas pela CONTRATANTE, não respondendo pelo dimensionamento do projeto nem pela capacidade de carga das fundações.",
+  ]);
+
+  add("vinculo", "DA AUSÊNCIA DE VÍNCULO", [
+    "O presente contrato não gera vínculo empregatício, societário ou de qualquer outra natureza entre as partes, tampouco entre a CONTRATANTE e os empregados, prepostos ou auxiliares da CONTRATADA.",
+    "Caso a CONTRATANTE venha a ser demandada judicial ou administrativamente em razão de obrigação de responsabilidade da CONTRATADA, esta se obriga a assumir a defesa e a reembolsar integralmente os valores que a CONTRATANTE for compelida a desembolsar, inclusive custas e honorários.",
+  ]);
+
+  add("rescisao", "DA RESCISÃO", [
+    "O contrato poderá ser rescindido por qualquer das partes, em caso de descumprimento de suas cláusulas, mediante notificação escrita com prazo de 10 (dez) dias para a correção da falha apontada.",
+    "É facultada a rescisão imotivada por qualquer das partes, mediante aviso prévio escrito de 15 (quinze) dias.",
+    "A paralisação dos serviços por prazo superior a 10 (dez) dias corridos, sem justificativa aceita pela CONTRATANTE, caracteriza inadimplemento contratual.",
+    "Em qualquer hipótese de rescisão, as partes apurarão o valor correspondente aos serviços efetivamente medidos até a data, que será pago à CONTRATADA.",
+  ]);
+
+  add("gerais", "DAS DISPOSIÇÕES GERAIS", [
+    temEquip && "O quadro de equipamentos e preços do {{it:equip}} é parte integrante e inseparável deste contrato.",
+    temAnexo && "O ANEXO I — Descritivo dos Serviços é parte integrante e inseparável deste contrato.",
+    "Qualquer alteração deste contrato somente terá validade se formalizada por escrito e assinada por ambas as partes.",
+    "As comunicações entre as partes serão feitas por escrito, admitidos os meios eletrônicos usualmente utilizados por elas.",
+  ]);
+
+  add("foro", "DO FORO", [
+    `As partes elegem o foro da Comarca de ${foro || "______________________"}, Estado de ${(cliente && cliente.estado) || "São Paulo"}, para dirimir quaisquer dúvidas ou controvérsias oriundas deste contrato, com renúncia a qualquer outro, por mais privilegiado que seja.`,
+  ]);
+}
 
 // ── Tipos de profissional ───────────────────────────────────────
 // A primeira escolha do gerador. A lista, em ordem alfabética, espelha os
@@ -15558,9 +15772,13 @@ const TIPOS_PROFISSIONAL = [
   { id: "instaladorAr", nome: "Instalador de ar condicionado", categorias: ["Instalador de Ar Condicionado"], servico: "instalação de ar condicionado", modelo: "empreitadaGlobal", insumos: ["PRE-013"] },
   { id: "equipPiscina", nome: "Instalador de equipamentos de piscina", categorias: ["Instalador de Equipamentos de Piscina"], servico: "instalação de equipamentos de piscina", modelo: "empreitadaGlobal", insumos: ["PRE-015"] },
   { id: "marceneiro", nome: "Marceneiro", categorias: ["Marceneiro"], servico: "marcenaria", modelo: "empreitadaGlobal", insumos: ["PRE-007"] },
+  { id: "perfuracaoBrocas", nome: "Perfuração de brocas", categorias: ["Terraplanagem", "Perfuração de Brocas", "Fundações"], servico: "perfuração de brocas de fundação", modelo: "servicoEquipamento", insumos: ["PRE-016"] },
   { id: "pintor", nome: "Pintor", categorias: ["Pintor"], servico: "pintura", modelo: "empreitadaMaoDeObra", insumos: ["PRE-002"] },
   { id: "serralheiro", nome: "Serralheiro", categorias: ["Serralheiro", "Esquadria de Alumínio"], servico: "serralheria", modelo: "empreitadaGlobal", insumos: ["PRE-008"] },
-  { id: "terraplanagem", nome: "Terraplanagem", categorias: ["Terraplanagem"], servico: "terraplanagem e movimentação de terra", modelo: "empreitadaGlobal", insumos: ["PRE-016"] },
+  // Terraplanagem e broca não têm material: o que se compra é máquina com
+  // operador, medida em hora, viagem ou metro. Por isso saíram do regime
+  // global — nele o objeto era "material e mão de obra", que aqui não existe.
+  { id: "terraplanagem", nome: "Terraplanagem", categorias: ["Terraplanagem"], servico: "terraplanagem e movimentação de terra", modelo: "servicoEquipamento", insumos: ["PRE-016"] },
   // "Outro" fecha a lista de propósito — é a saída para o que não tem tipo.
   { id: "outro", nome: "Outro", categorias: [], servico: "", modelo: "empreitadaMaoDeObra", insumos: [] },
 ];
@@ -15573,12 +15791,14 @@ const ESCOPOS_FORNECIMENTO = [
   { id: "ambos", nome: "Material e mão de obra", trecho: "incluindo mão de obra e fornecimento de material", modelo: "empreitadaGlobal" },
   { id: "maoDeObra", nome: "Somente mão de obra", trecho: "incluindo somente a mão de obra, sendo o material fornecido pelo CONTRATANTE", modelo: "empreitadaMaoDeObra" },
   { id: "material", nome: "Somente material", trecho: "incluindo somente o fornecimento de material, sem mão de obra", modelo: "empreitadaGlobal" },
+  { id: "equipamento", nome: "Serviço com equipamento e operador", trecho: "executados com equipamento e operador da CONTRATADA, sem fornecimento de material", modelo: "servicoEquipamento" },
 ];
 function escopoFornecimento(id) { return ESCOPOS_FORNECIMENTO.find((e) => e.id === id) || null; }
 // Contratos gravados antes deste campo tinham a informação no modelo.
 function escopoContrato(c) {
   const o = c || {};
   if (escopoFornecimento(o.escopoFornecimento)) return o.escopoFornecimento;
+  if (o.modelo === "servicoEquipamento") return "equipamento";
   return o.modelo === "empreitadaGlobal" ? "ambos" : "maoDeObra";
 }
 function escopoDoTipo(tipoId) {
@@ -16008,7 +16228,9 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
     exclusoes: "",
     // o formulário é o mesmo para qualquer prestador: itens e descritivo
     // estão sempre disponíveis, e vale o que for preenchido
-    itens: [{ descricao: "", valor: "", inicio: "", previsao: "" }],
+    itens: m.porUnidade
+      ? [itemEquipVazio("hora")]
+      : [{ descricao: "", valor: "", inicio: "", previsao: "" }],
     escopo: [{ titulo: "", texto: "" }],
     valor: "",
     // prazo em branco de propósito — quem escolhe a unidade e o número é o usuário
@@ -16058,8 +16280,10 @@ function contratoVazio(modeloId, clienteId, obraId, tipoId, escopoId) {
 // linha de item em branco não pode zerar o contrato.
 function valorContrato(c) {
   const o = c || {};
-  const itens = (o.itens || []).filter((i) => i && Number(i.valor) > 0);
-  if (itens.length) return itens.reduce((acc, i) => acc + Number(i.valor), 0);
+  // No quadro por unidade o valor da linha é quantidade × valor unitário e
+  // pode nem estar gravado em `valor` — some pelo cálculo, sempre.
+  const itens = (o.itens || []).map((i) => ({ i, v: valorItemEquip(i) })).filter((x) => x.v > 0);
+  if (itens.length) return Math.round(itens.reduce((acc, x) => acc + x.v, 0) * 100) / 100;
   return Number(o.valor) || 0;
 }
 // Parcelas: divide o total e joga o resíduo de arredondamento na última,
@@ -16248,10 +16472,26 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
   const cidadeAss = c.cidadeAssinatura || (cliente && cliente.cidade ? `${cliente.cidade}/${cliente.estado || "SP"}` : "");
 
   // Itens e anexo valem para qualquer prestador: o que estiver preenchido entra.
-  const tabelaItens = (c.itens || []).filter((i) => i && (String(i.descricao || "").trim() || Number(i.valor)))
+  const porUnidade = !!m.porUnidade;
+  const tabelaEquip = porUnidade
+    ? (c.itens || []).filter((i) => i && (String(i.descricao || "").trim() || Number(i.valorUnitario) > 0))
+        .map((i, idx) => ({
+          n: idx + 1,
+          descricao: descricaoItemEquip(i),
+          unidade: unidadeEquip(i.unidade).abrev,
+          unitario: Number(i.valorUnitario) || 0,
+          minimo: unidadeEquip(i.unidade).temMinimo && Number(i.minimo) > 0 ? `${textoNumeroCtr(i.minimo, 0)} horas por acionamento` : "—",
+          quantidade: (i.unidade === "metro" && Number(i.furos) > 0)
+            ? `${textoNumeroCtr(i.quantidade, 0)} m em ${textoNumeroCtr(i.furos, 0)} furos`
+            : (Number(i.quantidade) > 0 ? `${textoNumeroCtr(i.quantidade, 0)} ${unidadeEquip(i.unidade).plural}` : "—"),
+          valor: valorItemEquip(i),
+        }))
+    : [];
+  const tabelaItens = porUnidade ? [] : (c.itens || []).filter((i) => i && (String(i.descricao || "").trim() || Number(i.valor)))
     .map((i, idx) => ({ n: idx + 1, descricao: i.descricao || "", valor: Number(i.valor) || 0 }));
   const anexo = (c.escopo || []).filter((e) => e && (String(e.titulo || "").trim() || String(e.texto || "").trim()));
   const temItens = tabelaItens.length > 0;
+  const temEquip = tabelaEquip.length > 0;
   const temAnexo = anexo.length > 0;
 
   const preambulo = m.preambuloSimples ? [
@@ -16276,6 +16516,9 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     // a modalidade do gerenciamento é a mesma dos demais contratos de
     // prestação de serviço; o padrão do modelo é parcelado mensal
     clausulasGerenciamento(c, { enderecoObra, total, foro, add });
+  } else if (m.id === "servicoEquipamento") {
+    modo = "medicao";
+    clausulasEquipamento(c, { enderecoObra, total, foro, add, marcas, objetoTexto, temAnexo, cliente });
   } else {
 
   // ── Objeto ──
@@ -16501,6 +16744,8 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     // no estilo simples, cláusula de um item só é parágrafo corrido
     itens: x.itens.map((t, j) => (simples && x.itens.length === 1 ? resolver(t) : `${i + 1}.${j + 1}${simples ? "" : "."} ${resolver(t)}`)),
     tabelaItens: !!x.tabelaItens,
+    tabelaEquip: !!x.tabelaEquip,
+    tabelaEquipApos: x.tabelaEquipApos == null ? null : x.tabelaEquipApos,
     tabelaParcelas: !!x.tabelaParcelas,
     // índice do item que anuncia a tabela — ela é desenhada logo abaixo dele
     tabelaItensApos: x.tabelaItensApos == null ? null : x.tabelaItensApos,
@@ -16517,7 +16762,7 @@ function montarContrato(contrato, { cliente, obra, prestador }) {
     nomeDoContrato,
     numeroContrato: c.numeroContrato || "",
     escopoFornecimento: escId,
-    preambulo, clausulas, tabelaItens, tabelaParcelas,
+    preambulo, clausulas, tabelaItens, tabelaParcelas, tabelaEquip,
     anexo,
     cidadeAssinatura: cidadeAss,
     dataAssinaturaExtenso: dataExtensoCtr(c.dataAssinatura),
@@ -16629,6 +16874,38 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
       </tbody>
     </table>
   );
+  // Quadro do serviço com equipamento: a unidade muda por linha, então ela
+  // é coluna. O total é "estimado" de propósito — quem manda é a medição.
+  const tabelaEquipEl = (k) => (
+    <table key={k} style={CTR_S.tabela}>
+      <thead><tr>
+        <th style={{ ...CTR_S.th, width: 34 }}>#</th>
+        <th style={CTR_S.th}>Equipamento / serviço</th>
+        <th style={{ ...CTR_S.th, width: 74 }}>Unidade</th>
+        <th style={{ ...CTR_S.th, textAlign: "right", width: 92 }}>Valor unit. (R$)</th>
+        <th style={{ ...CTR_S.th, width: 118 }}>Mínimo</th>
+        <th style={{ ...CTR_S.th, width: 118 }}>Qtd. estimada</th>
+        <th style={{ ...CTR_S.th, textAlign: "right", width: 96 }}>Total (R$)</th>
+      </tr></thead>
+      <tbody>
+        {(d.tabelaEquip || []).map((it) => (
+          <tr key={it.n}>
+            <td style={CTR_S.td}>{it.n}</td>
+            <td style={CTR_S.td}>{it.descricao}</td>
+            <td style={CTR_S.td}>{it.unidade}</td>
+            <td style={CTR_S.tdNum}>{moeda(it.unitario)}</td>
+            <td style={CTR_S.td}>{it.minimo}</td>
+            <td style={CTR_S.td}>{it.quantidade}</td>
+            <td style={CTR_S.tdNum}>{moeda(it.valor)}</td>
+          </tr>
+        ))}
+        <tr>
+          <td style={CTR_S.td} colSpan={6}><span style={{ fontWeight: 700 }}>VALOR TOTAL ESTIMADO</span></td>
+          <td style={{ ...CTR_S.tdNum, fontWeight: 700 }}>{moeda(d.total)}</td>
+        </tr>
+      </tbody>
+    </table>
+  );
   const tabelaParcelasEl = (k) => (
     <table key={k} style={CTR_S.tabela}>
       <thead><tr><th style={{ ...CTR_S.th, width: 44 }}>Item</th><th style={CTR_S.th}>Serviço</th><th style={{ ...CTR_S.th, textAlign: "right" }}>1ª parcela</th><th style={{ ...CTR_S.th, textAlign: "right" }}>2ª parcela</th></tr></thead>
@@ -16660,10 +16937,12 @@ function ContratoDocumento({ contrato, cliente, obra, prestador }) {
             // fim da cláusula, senão ela cai depois das exclusões do objeto.
             const saida = [<p key={`p${j}`} style={CTR_S.p}>{t}</p>];
             if (cl.tabelaItens && cl.tabelaItensApos === j) saida.push(tabelaItensEl(`ti${j}`));
+            if (cl.tabelaEquip && cl.tabelaEquipApos === j) saida.push(tabelaEquipEl(`te${j}`));
             if (cl.tabelaParcelas && cl.tabelaParcelasApos === j) saida.push(tabelaParcelasEl(`tp${j}`));
             return saida;
           })}
           {cl.tabelaItens && cl.tabelaItensApos == null ? tabelaItensEl("ti") : null}
+          {cl.tabelaEquip && cl.tabelaEquipApos == null ? tabelaEquipEl("te") : null}
           {cl.tabelaParcelas && cl.tabelaParcelasApos == null ? tabelaParcelasEl("tp") : null}
         </div>
       ))}
@@ -19049,12 +19328,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                           </button>
                         </>
                       )}
-                      {ehEscritorio && (
-                        <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
-                          style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
-                          onClick={() => gerarContrato(cot)}>Gerar contrato</button>
-                      )}
-                      {ehEscritorio && !trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
+                      <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
+                        style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
+                        onClick={() => gerarContrato(cot)}>Gerar contrato</button>
+                      {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
                       {podeExcluir && (
                         <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
                           onClick={() => excluirCotacao(cot)}>Excluir cotação</button>
@@ -21789,6 +22066,9 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const pz = prazoContrato(g);
     const escopo = escopoContrato(g);
     const gerenciamento = g.modelo === "gerenciamentoObra";
+    // Máquina não tem "valor do item": tem preço por hora, por viagem ou por
+    // metro, vezes a quantidade. O quadro abaixo troca de colunas por isso.
+    const porUnidade = g.modelo === "servicoEquipamento";
     // saldo pago item a item: muda o bloco de valor (coluna de previsão) e as
     // datas estimadas que vão para contas a pagar
     const porItem = modalidadeContrato(g) === "entradaFinal" && (g.entradaEscopo || "contrato") === "item";
@@ -22069,33 +22349,147 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
+        {/* Serviço com equipamento: o que o contrato precisa saber antes de
+            escrever a medição — quem assina o boletim e como se conta a hora. */}
+        {porUnidade && (
+          <div style={bloco}>
+            <div style={tituloBloco}>Serviço com equipamento e operador</div>
+            <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
+              A medição é o que sustenta este contrato: sem alguém na obra para assinar o boletim do dia, não há como conferir hora, viagem nem metro.
+            </div>
+            <div style={{ ...grade("1fr 150px 150px"), marginBottom: 10 }}>
+              <div>
+                <label style={C.label}>Responsável pela obra (assina os boletins)</label>
+                <input style={C.input} value={g.responsavelObra || ""} onChange={e => setG("responsavelObra", e.target.value)} placeholder="Nome de quem acompanha e confere as horas" />
+              </div>
+              <div>
+                <label style={C.label}>Hora parada (%)</label>
+                <CampoCtrNum tipo="pct" valor={g.horaParadaPct} onChange={v => setG("horaParadaPct", v)} style={C.input} placeholder="50%" />
+              </div>
+              <div>
+                <label style={C.label}>Troca em caso de quebra (horas)</label>
+                <CampoCtrNum tipo="inteiro" valor={g.substituicaoHoras} onChange={v => setG("substituicaoHoras", v)} style={C.input} placeholder="24" />
+              </div>
+            </div>
+            <div style={{ ...grade("150px 150px 1fr"), marginBottom: 10 }}>
+              <div>
+                <label style={C.label}>Jornada — início</label>
+                <input style={C.input} type="time" value={g.jornadaInicio || ""} onChange={e => setG("jornadaInicio", e.target.value)} />
+              </div>
+              <div>
+                <label style={C.label}>Jornada — fim</label>
+                <input style={C.input} type="time" value={g.jornadaFim || ""} onChange={e => setG("jornadaFim", e.target.value)} />
+              </div>
+              <div>
+                <label style={C.label}>Mobilização (prancha)</label>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <label style={{ display: "flex", gap: 6, alignItems: "center", fontSize: 12.5, color: "#111827", whiteSpace: "nowrap" }}>
+                    <input type="checkbox" checked={g.mobilizacaoInclusa !== false} onChange={e => setG("mobilizacaoInclusa", e.target.checked)} />
+                    inclusa no preço
+                  </label>
+                  {g.mobilizacaoInclusa === false && (
+                    <CampoCtrNum tipo="moeda" valor={g.mobilizacaoValor} onChange={v => setG("mobilizacaoValor", v)} style={C.input} placeholder="0,00 por viagem" />
+                  )}
+                </div>
+              </div>
+            </div>
+            <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12.5, color: "#111827" }}>
+              <input type="checkbox" checked={!!g.chuvaPaga} onChange={e => setG("chuvaPaga", e.target.checked)} />
+              Parada por chuva é paga como hora parada
+            </label>
+          </div>
+        )}
+
         {/* Valor: itens discriminados ou valor único — vale o que for preenchido.
             No gerenciamento o valor é um só: os itens não aparecem. */}
         <div style={bloco}>
-          <div style={tituloBloco}>Valor do contrato</div>
+          <div style={tituloBloco}>{porUnidade ? "Equipamentos, unidades e preços" : "Valor do contrato"}</div>
           <div style={{ ...grade("240px 1fr"), marginBottom: 10 }}>
-            <div>
-              <label style={C.label}>Valor total (R$)</label>
-              <CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" disabled={(g.itens || []).some(i => Number(i.valor) > 0)} />
-              <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
-            </div>
+            {porUnidade ? (
+              <div style={{ fontSize: 11.5, color: "#4b5563" }}>
+                Preencha o preço unitário e a quantidade estimada de cada equipamento. O total é a soma das linhas e vai para o contrato
+                como <strong style={{ color: "#111827" }}>valor estimado</strong> — o que se paga é o que for medido.
+              </div>
+            ) : (
+              <div>
+                <label style={C.label}>Valor total (R$)</label>
+                <CampoCtrNum tipo="moeda" valor={g.valor} onChange={v => setG("valor", v)} style={C.input} placeholder="0,00" disabled={(g.itens || []).some(i => Number(i.valor) > 0)} />
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 5 }}>Discrimine itens abaixo se quiser; havendo itens, o total é a soma deles.</div>
+              </div>
+            )}
             <div style={{ display: "flex", alignItems: "center", justifyContent: isMobile ? "flex-start" : "flex-end", fontSize: 14, fontWeight: 700, color: "#111827" }}>
-              Total: {fmtMoedaCtr(total)}
+              {porUnidade ? "Total estimado: " : "Total: "}{fmtMoedaCtr(total)}
             </div>
           </div>
-          {!gerenciamento && porItem && (g.itens || []).some(i => Number(i.valor) > 0) && (
+          {!porUnidade && !gerenciamento && porItem && (g.itens || []).some(i => Number(i.valor) > 0) && (
             <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 6 }}>
               Por item, duas datas: o <strong style={{ color: "#111827" }}>início</strong> (quando o item é liberado para produção, quando vence a entrada dele) e a
               <strong style={{ color: "#111827" }}> previsão</strong> de conclusão (quando vence o saldo). Ambas entram em contas a pagar marcadas como estimadas.
             </div>
           )}
-          {!gerenciamento && porItem && !isMobile && (
+          {porUnidade && (g.itens || []).map((it, idx) => {
+            const uni = unidadeEquip(it.unidade);
+            return (
+              <div key={idx} style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, padding: "10px 12px", marginBottom: 8 }}>
+                <div style={{ ...grade("1fr 170px 150px auto"), marginBottom: 8 }}>
+                  <div>
+                    <label style={C.label}>Equipamento / serviço</label>
+                    <input style={C.input} value={it.descricao || ""} onChange={e => setLista("itens", idx, "descricao", e.target.value)}
+                      placeholder={uni.ehBroca ? "Perfuração de broca" : "Mini escavadeira, pá carregadeira, caminhão…"} />
+                  </div>
+                  <div>
+                    <label style={C.label}>Unidade</label>
+                    <select style={C.input} value={it.unidade || "hora"} onChange={e => setLista("itens", idx, "unidade", e.target.value)}>
+                      {UNIDADES_EQUIP.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={C.label}>Valor por {uni.abrev} (R$)</label>
+                    <CampoCtrNum tipo="moeda" valor={it.valorUnitario} onChange={v => setLista("itens", idx, "valorUnitario", v)} style={C.input} placeholder="0,00" />
+                  </div>
+                  <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36, alignSelf: "end" }}>×</button>
+                </div>
+                <div style={grade(uni.ehBroca ? "150px 150px 150px 1fr" : "170px 170px 1fr")}>
+                  {uni.ehBroca && (
+                    <div>
+                      <label style={C.label}>Diâmetro</label>
+                      <input style={C.input} value={it.diametro || ""} onChange={e => setLista("itens", idx, "diametro", e.target.value)} placeholder="25 cm" />
+                    </div>
+                  )}
+                  <div>
+                    <label style={C.label}>{uni.ehBroca ? "Metros (total)" : `Quantidade estimada (${uni.abrev})`}</label>
+                    <CampoCtrNum tipo="inteiro" valor={it.quantidade} onChange={v => setLista("itens", idx, "quantidade", v)} style={C.input} placeholder="0" />
+                  </div>
+                  {uni.ehBroca && (
+                    <div>
+                      <label style={C.label}>Quantidade de furos</label>
+                      <CampoCtrNum tipo="inteiro" valor={it.furos} onChange={v => setLista("itens", idx, "furos", v)} style={C.input} placeholder="0" />
+                    </div>
+                  )}
+                  {uni.temMinimo && (
+                    <div>
+                      <label style={C.label}>Mínimo por acionamento (horas)</label>
+                      <CampoCtrNum tipo="inteiro" valor={it.minimo} onChange={v => setLista("itens", idx, "minimo", v)} style={C.input} placeholder="6" />
+                    </div>
+                  )}
+                  <div style={{ display: "flex", alignItems: "end", justifyContent: isMobile ? "flex-start" : "flex-end", fontSize: 13, fontWeight: 700, color: "#111827", paddingBottom: 8 }}>
+                    {fmtMoedaCtr(valorItemEquip(it))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {porUnidade && (
+            <button type="button" style={C.btnSec} onClick={() => addLinha("itens", itemEquipVazio("hora"))}>＋ Adicionar equipamento</button>
+          )}
+
+          {!porUnidade && !gerenciamento && porItem && !isMobile && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 160px 140px 140px auto", gap: 8, marginBottom: 4 }}>
               <span style={C.label}>Item</span><span style={C.label}>Valor</span>
               <span style={C.label}>Início</span><span style={C.label}>Previsão de conclusão</span><span />
             </div>
           )}
-          {!gerenciamento && (g.itens || []).map((it, idx) => (
+          {!porUnidade && !gerenciamento && (g.itens || []).map((it, idx) => (
             <div key={idx} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : (porItem ? "1fr 160px 140px 140px auto" : "1fr 160px auto"), gap: 8, alignItems: "start", marginBottom: 8 }}>
               <textarea style={{ ...C.input, resize: "vertical" }} rows={2} value={it.descricao} onChange={e => setLista("itens", idx, "descricao", e.target.value)} placeholder="Descrição do item (opcional)" />
               <CampoCtrNum tipo="moeda" valor={it.valor} onChange={v => setLista("itens", idx, "valor", v)} style={C.input} placeholder="0,00" />
@@ -22108,7 +22502,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               <button type="button" onClick={() => delLinha("itens", idx)} style={{ ...C.btnGhost, color: "#dc2626", height: 36 }}>×</button>
             </div>
           ))}
-          {!gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "", inicio: "", previsao: "" })}>＋ Adicionar item</button>}
+          {!porUnidade && !gerenciamento && <button type="button" style={C.btnSec} onClick={() => addLinha("itens", { descricao: "", valor: "", inicio: "", previsao: "" })}>＋ Adicionar item</button>}
         </div>
 
         {/* Modalidade de pagamento — igual para todo contrato de prestação de
@@ -22805,11 +23199,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     setView("gerarContrato");
   }
 
+  // Gerar e editar contrato passou a valer também para o cliente; REMOVER
+  // continua só do escritório, porque apagar contrato leva as parcelas junto.
+  const podeContratar = !!perm.podeGerenciarObra || !!perm.isCliente;
+
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     // O contrato nasce da cotação aprovada, e é aqui que se geram contratos —
     // então a fila de aprovadas fica à vista, sem ter que voltar em Cotações.
-    const prontas = perm.podeGerenciarObra
+    const prontas = podeContratar
       ? cotacoesProntasParaContrato(obraAtual.cotacoes || [], obraAtual.aprovacoesCotacao || [], contratos)
       : [];
     return (
@@ -22852,7 +23250,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {contratosDaObra.length === 0 ? (
           <div style={{ padding: "20px", textAlign: "center", color: "#4b5563", fontSize: 12.5, border: "1px dashed rgba(38,36,33,0.18)", borderRadius: 9, background: "#fafafa" }}>
-            Nenhum contrato nesta obra. {perm.podeGerenciarObra && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
+            Nenhum contrato nesta obra. {podeContratar && <button onClick={() => { setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id)); setView("gerarContrato"); }} style={{ background: "transparent", border: "none", color: AZUL_VK, cursor: "pointer", padding: 0, fontSize: 12.5, fontFamily: "inherit", textDecoration: "underline" }}>Gerar o primeiro contrato</button>}
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
@@ -22878,10 +23276,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       </div>
                     )}
                   </div>
-                  {(perm.podeGerenciarObra || contrato.gerado) && (
+                  {(podeContratar || contrato.gerado) && (
                     <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
                       {contrato.gerado && <button onClick={() => { setContratoAberto(contrato); setView("verContrato"); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Abrir</button>}
-                      {perm.podeGerenciarObra && <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
+                      {podeContratar && <button onClick={() => { if (contrato.gerado) { setContratoSalvoEm(0); setContratoGerando(contrato); setView("gerarContrato"); } else setFormContrato(contrato); }} style={{ ...C.btnSec, fontSize: 12, padding: "6px 12px" }}>Editar</button>}
                       {perm.podeGerenciarObra && <button onClick={() => { dialogo.confirmar({ titulo: "Remover contrato?", mensagem: "Esta ação não pode ser desfeita.", confirmar: "Remover", destrutivo: true }).then(ok => { if (ok) {
                         const restantes = contratos.filter(c => c.id !== contrato.id);
                         save({ ...data,
@@ -22898,7 +23296,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           </div>
         )}
 
-        {perm.podeGerenciarObra && (
+        {podeContratar && (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 12 }}>
             <button style={{ ...C.btn, flex: 1, minWidth: 200 }} onClick={() => { setContratoSalvoEm(0); setContratoGerando(contratoVazio("empreitadaMaoDeObra", cliente.id, obraSelecionada.id, "")); setView("gerarContrato"); }}>📄 Gerar contrato</button>
             <button style={{ ...C.btnSec, flex: 1, minWidth: 160 }} onClick={() => { setFormContrato({ id: uid(), clienteId: cliente.id, obraId: obraSelecionada.id, nomeContratado: "", descricaoServico: "", valor: "", dataAssinatura: "", dataVencimento: "", status: "ativo", observacoes: "" }); setView("formContrato"); }}>+ Só registrar contrato</button>
