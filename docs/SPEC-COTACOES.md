@@ -358,3 +358,31 @@ o contrato sem a origem que explica o preço. Remova o contrato primeiro.
 
 `contaGeradaId` continua sendo lido: cotação lançada pelo fluxo antigo segue
 aparecendo como concluída, e não volta a pedir contrato.
+
+## Colar o print no campo de anexo
+
+Print de tela é o jeito mais comum de guardar um comprovante ou uma
+proposta: aperta Print Screen e cola. Salvar num arquivo antes só para
+arrastar é trabalho à toa.
+
+O campo aceita **Ctrl+V** além de arrastar e clicar. `arquivoColado()` olha
+os dois caminhos da área de transferência — `items` (print de tela, que
+chega como imagem crua) e `files` (arquivo copiado do explorador) — e o
+primeiro aceitável ganha, com `files` na frente quando vêm os dois.
+
+O evento é escutado **no documento inteiro**, não só no campo, porque
+ninguém clica no campo antes de colar. Daí três guardas:
+
+- **Pasta dentro de um campo de texto é texto.** Quem copia um valor e cola
+  em "Valor pago" não pode ver o sistema tentar subir arquivo.
+- **Com um anexo já posto, colar não troca o que está lá.** Remover é uma
+  ação consciente; trocar por acidente, não.
+- **Só imagem e PDF.** Planilha ou qualquer outro formato colado é ignorado
+  em silêncio, como já era no arrastar.
+
+O arquivo colado chega chamado "image.png". `nomeDoColado()` troca por
+`comprovante-2026-09-10.png` (ou `proposta-…`), que é o nome que aparece
+depois no visor e no download.
+
+Imagem colada passa pela mesma redução do arrastar — 1600 px e JPEG —,
+então um print de tela cheia não sobe com 4 MB.

@@ -37,7 +37,7 @@ const modulo = new Function(`
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
-           nomeDeQuem, carimbar, textoAutoria };
+           nomeDeQuem, carimbar, textoAutoria, arquivoColado, nomeDoColado };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -396,6 +396,38 @@ teste("o texto diz cadastrado enquanto ninguém mexeu, e salvo depois", () => {
 teste("data quebrada não vira 'Invalid Date' na tela", () => {
   const t = M.textoAutoria({ criadoPor: "Alexandre", criadoEm: "não é data" });
   assert.strictEqual(t, "Cadastrado por Alexandre");
+});
+
+// ── Colar o print ───────────────────────────────────────────────
+const arqFalso = (nome, tipo) => ({ name: nome, type: tipo });
+const item = (tipo, arq) => ({ kind: "file", type: tipo, getAsFile: () => arq });
+
+teste("print colado vem pelos items", () => {
+  const img = arqFalso("image.png", "image/png");
+  assert.strictEqual(M.arquivoColado({ items: [item("image/png", img)] }), img);
+});
+
+teste("arquivo copiado do explorador vem pelos files", () => {
+  const pdf = arqFalso("recibo.pdf", "application/pdf");
+  assert.strictEqual(M.arquivoColado({ files: [pdf] }), pdf);
+  // files ganha dos items quando os dois vêm
+  const img = arqFalso("image.png", "image/png");
+  assert.strictEqual(M.arquivoColado({ files: [pdf], items: [item("image/png", img)] }), pdf);
+});
+
+teste("texto colado não vira anexo", () => {
+  assert.strictEqual(M.arquivoColado({ items: [{ kind: "string", type: "text/plain" }] }), null);
+  assert.strictEqual(M.arquivoColado({ files: [arqFalso("planilha.xlsx", "application/vnd.ms-excel")] }), null,
+    "formato que o anexo não aceita também não passa");
+  assert.strictEqual(M.arquivoColado({}), null);
+  assert.strictEqual(M.arquivoColado(null), null);
+});
+
+teste("o print colado ganha nome com data", () => {
+  const hoje = new Date().toISOString().slice(0, 10);
+  assert.strictEqual(M.nomeDoColado("comprovante_pagamento", "image/png"), `comprovante-${hoje}.png`);
+  assert.strictEqual(M.nomeDoColado("proposta_cotacao", "image/jpeg"), `proposta-${hoje}.jpeg`);
+  assert.strictEqual(M.nomeDoColado("comprovante_pagamento", "application/pdf"), `comprovante-${hoje}.pdf`);
 });
 
 let falhas = 0;

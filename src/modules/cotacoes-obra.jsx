@@ -425,6 +425,34 @@ function comprimirImagem(arquivo) {
   });
 }
 
+// O que veio na área de transferência. Print de tela chega como imagem
+// crua (items), arquivo copiado do explorador chega em `files` — os dois
+// caminhos valem, e o primeiro arquivo aceitável ganha.
+//
+// Texto colado não é anexo: quem copia um número e cola no campo do lado
+// não pode ver o sistema tentar subir arquivo nenhum.
+function arquivoColado(dados) {
+  const d = dados || {};
+  const aceita = (f) => !!f && (/^image\//.test(f.type || "") || String(f.type) === "application/pdf");
+  const dosArquivos = Array.from(d.files || []).filter(aceita);
+  if (dosArquivos.length) return dosArquivos[0];
+  for (const it of Array.from(d.items || [])) {
+    if (!it || it.kind !== "file") continue;
+    const f = typeof it.getAsFile === "function" ? it.getAsFile() : null;
+    if (aceita(f)) return f;
+  }
+  return null;
+}
+
+// Print colado chega sem nome de verdade ("image.png"). Um nome com data
+// ajuda quando o arquivo é baixado depois, na folha ou no visor.
+function nomeDoColado(categoria, tipo) {
+  const ext = String(tipo) === "application/pdf" ? "pdf" : (String(tipo || "").split("/")[1] || "png");
+  const base = categoria === "comprovante_pagamento" ? "comprovante" : "proposta";
+  const hoje = new Date().toISOString().slice(0, 10);
+  return `${base}-${hoje}.${ext}`;
+}
+
 // O mesmo envio serve a proposta do fornecedor e o comprovante da baixa:
 // os dois são "um arquivo que chegou de fora e vira anexo de um registro".
 // Muda só a categoria, que é o que o backend usa para cota e pasta.
@@ -1175,6 +1203,34 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
     finally { setEnviando(false); }
   }
 
+  // Print de tela colado com Ctrl+V. O evento é escutado no documento
+  // inteiro, e não só no campo, porque ninguém clica no campo antes de
+  // colar — dá o Print Screen e cola.
+  //
+  // Duas guardas: pasta feita DENTRO de um campo de texto é texto de quem
+  // está digitando, não anexo; e com um anexo já posto, colar não troca
+  // sozinho o que está lá (remova primeiro, que é uma ação consciente).
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const aoColar = (e) => {
+      if (anexo || enviando) return;
+      const alvo = e.target;
+      const digitando = alvo && (alvo.tagName === "INPUT" || alvo.tagName === "TEXTAREA" || alvo.isContentEditable);
+      if (digitando) return;
+      const f = arquivoColado(e.clipboardData);
+      if (!f) return;
+      e.preventDefault();
+      // o arquivo colado vem sem nome de verdade; damos um com data
+      const comNome = (typeof File === "function" && f.name === "image.png")
+        ? new File([f], nomeDoColado(categoria, f.type), { type: f.type })
+        : f;
+      receber(comNome);
+    };
+    document.addEventListener("paste", aoColar);
+    return () => document.removeEventListener("paste", aoColar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anexo, enviando, categoria]);
+
   async function remover() {
     const antigo = anexo;
     onTrocar(null);
@@ -1206,6 +1262,9 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
       onDragLeave={() => setSobre(false)}
       onDrop={e => { e.preventDefault(); setSobre(false); receber(e.dataTransfer.files && e.dataTransfer.files[0]); }}
       onClick={() => refInput.current && refInput.current.click()}
+      onPaste={e => { const f = arquivoColado(e.clipboardData); if (f) { e.preventDefault(); receber(f); } }}
+      tabIndex={0}
+      onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); refInput.current && refInput.current.click(); } }}
       style={{
         border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`,
         borderRadius: 12, padding: "18px 14px", textAlign: "center", cursor: "pointer",
@@ -1217,7 +1276,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
         {enviando ? "Enviando…" : (chamada || "Arraste o PDF da proposta aqui")}
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
-        {apoio || "ou clique para escolher — PDF ou foto, até 10 MB"}
+        {apoio || "clique para escolher, ou cole com Ctrl+V — PDF ou foto, até 10 MB"}
       </div>
     </div>
   );
