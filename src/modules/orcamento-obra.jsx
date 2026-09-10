@@ -443,8 +443,8 @@ const PRESTADORES_OBRA = [
   { chave: "encanador",              item: "Encanador",                  base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
   { chave: "pintor",                 item: "Pintor",                     base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
   { chave: "carpinteiro",            item: "Carpinteiro",                base: "areaCoberturaTotal",   rotulo: "Área inclinada total dos telhados (m²)" },
-  { chave: "impermeabilizador",      item: "Impermeabilizador",          base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
-  { chave: "marceneiroPortas",       item: "Marceneiro Portas Internas", base: "areaConstruida",       rotulo: "Área construída da casa (m²)" },
+  { chave: "impermeabilizador",      item: "Impermeabilizador",          base: "areaImpermeabilizacao", rotulo: "Área de impermeabilização (m²)" },
+  { chave: "marceneiroPortas",       item: "Marceneiro Portas Internas", base: "portasInternas",       rotulo: "Portas internas (unidades)", unidade: "Unidades" },
   { chave: "serralheiro",            item: "Serralheiro",                base: "fixo",                 rotulo: "Serviço fechado" },
   { chave: "instaladorAr",           item: "Instalador AR",              base: "fixo",                 rotulo: "Serviço fechado" },
   { chave: "terraplanagem",          item: "Terraplanagem",              base: "fixo",                 rotulo: "Serviço fechado" },
@@ -455,6 +455,58 @@ const prestadorPorChave = (chave) => PRESTADORES_OBRA.find((p) => p.chave === ch
 // Nome com que o serviço aparece no orçamento — é por ele que o cronograma
 // acha o valor contratado de cada ofício.
 const itemDoPrestador = (chave) => { const p = prestadorPorChave(chave); return p ? p.item : null; };
+
+// Área de impermeabilização da obra — a metragem que paga o impermeabilizador.
+//
+// Ela NÃO é inventada aqui: sai das mesmas fórmulas de consumo de Vedatop que
+// vieram do modelo antigo. Lá o material era calculado a 3 kg/m², com 10% de
+// perda, em balde de 18 kg; dividindo o consumo de volta pelo rendimento
+// aparece a área que cada frente impermeabiliza:
+//
+//   fundação      CALC_VEDATOP_FUND      → perímetro × (2 × 0,30 + 0,15)
+//   muro divisa   CALC_VEDATOP           → o consumo do modelo equivale a
+//                                          1,54 m² por metro de muro (ele
+//                                          mistura dois rendimentos; aqui vale
+//                                          a área que aquele consumo cobre)
+//   muro arrimo   CALC_VEDATOP_ARRIMO    → altura × comprimento (face inteira)
+//   piscina       CALC_VEDATOP_TOTAL     → baldrames + paredes + fundo
+//
+// A parcela de áreas molhadas (banheiros, lavabos, cozinha e lavanderia) é a
+// única que o modelo antigo não tinha: ele impermeabilizava base de parede,
+// muros e piscina, e nunca o box. Fica separada para poder sair.
+const IMPER_FAIXA_BALDRAME = 0.75;    // 2 × 0,30 (faces) + 0,15 (topo)
+const IMPER_M2_POR_M_DIVISA = 1.54;   // área implícita no consumo do muro de divisa
+const IMPER_ALTURA_MOLHADA = 1.5;     // faixa impermeabilizada na parede molhada
+function areaImpermeabilizacao(cp) {
+  const p = cp || {};
+  const r1 = (x) => Math.round(x * 10) / 10;
+
+  const fundacao = numOrZero(p.perimetroParedesTerreo) * IMPER_FAIXA_BALDRAME;
+  const muroDivisa = numOrZero(p.comprimentoMuroDivisa) * IMPER_M2_POR_M_DIVISA;
+  const muroArrimo = numOrZero(p.comprimentoArrimo) * numOrZero(p.alturaArrimo);
+
+  let piscina = 0;
+  if (p.temPiscina) {
+    const pi = p.piscina || {};
+    piscina = numOrZero(pi.perimetroParedes) * IMPER_FAIXA_BALDRAME
+            + numOrZero(pi.paredesM2Total) + numOrZero(pi.areaConstruida);
+  }
+
+  let molhadas = 0;
+  const ambientes = migrarAmbientes(p.ambientes || {});
+  for (const id of Object.keys(COMODO_OBRA_PROJETO)) {
+    if ((COMODO_OBRA_PROJETO[id] || {}).revestir !== "todas") continue;
+    const n = Math.max(0, Math.round(numOrZero(ambientes[id])));
+    if (!n) continue;
+    const c = calcularComodo(comodoConfig(p, id));
+    if (!(c.area > 0)) continue;
+    molhadas += n * (c.area + c.perimetro * IMPER_ALTURA_MOLHADA);
+  }
+
+  const total = fundacao + muroDivisa + muroArrimo + piscina + molhadas;
+  return { fundacao: r1(fundacao), muroDivisa: r1(muroDivisa), muroArrimo: r1(muroArrimo),
+           piscina: r1(piscina), molhadas: r1(molhadas), total: r1(total) };
+}
 
 // Metragem automática de uma linha, lida do projeto.
 function baseAutomaticaPrestador(p, cp) {
@@ -467,6 +519,10 @@ function baseAutomaticaPrestador(p, cp) {
     case "m2MuroDivisa": return numOrZero(cp.comprimentoMuroDivisa) * numOrZero(cp.alturaMuroDivisa);
     case "m2Arrimo": return numOrZero(cp.comprimentoArrimo) * numOrZero(cp.alturaArrimo);
     case "areaConstruidaPiscina": return numOrZero(cp.areaConstruidaPiscina);
+    // Porta interna não se mede em metro de casa: o motor já conta uma por
+    // ambiente com kit de porta, e é esse número que paga o marceneiro.
+    case "portasInternas": return numOrZero(vaosAutomaticos(cp).portasInternas);
+    case "areaImpermeabilizacao": return numOrZero(areaImpermeabilizacao(cp).total);
     default: return 0;
   }
 }
@@ -527,7 +583,7 @@ function linhasPrestadores(cp, data) {
     linhas.push({
       chave: p.chave, item: p.item, rotulo: p.rotulo, base: p.base,
       grupo: p.grupo || null, sub: p.sub || p.item,
-      unidade: p.base === "fixo" ? "Unidades" : "m2",
+      unidade: p.unidade || (p.base === "fixo" ? "Unidades" : "m2"),
       auto, sugerido: sugerido.valor, fontePreco: sugerido.fonte, confianca: sugerido.confianca,
       qtdDigitada, precoDigitado, qtd, preco,
       total: Math.round(qtd * preco * 100) / 100,

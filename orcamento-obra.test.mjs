@@ -57,6 +57,7 @@ const modulo = new Function(`
     migrarExistente, medidaExistente, taxaServicoReforma, DRYWALL_CONSUMO,
     padroesDoItem, facesDaPintura, PINTURA_PAREDE, cacambasDaReforma, volumeEntulhoReforma,
     PRESTADORES_OBRA, linhasPrestadores, migrarPrestadores, baseAutomaticaPrestador, totalPrestadores,
+    vaosAutomaticos, areaImpermeabilizacao,
     itemDoPrestador, numeroDigitadoBR, textoNumeroBR,
     consumoRevestimento, pisosRevestimentos, FORMATOS_PECA, medirBancada, estimarPelosComodos, vaosAutomaticos, autosPisos, padraoObra, PISOS_GENERICOS, nomeItemKit, comodoConfig, calcularComodo, numMem, contaMem, MEM, teto, autosForros, FORRO_TIPOS,
   };
@@ -1528,6 +1529,60 @@ const obraP = (extra) => modulo.normalizarProjeto({
   ...extra,
 });
 const linha = (cp, chave, data) => modulo.linhasPrestadores(cp, data || { materiais: [] }).find(l => l.chave === chave);
+
+teste("o impermeabilizador mede a área de impermeabilização, não a casa inteira", () => {
+  const cp = obraP({ terreo: { area: 200, m2Parede20: 300, perimetroParedes: 60 },
+                     ambientes: { banheiro: 2, suite: 1, cozinha: 1, lavanderia: 1, dormitorio: 3 } });
+  const a = modulo.areaImpermeabilizacao(cp);
+  // a fundação é a mesma faixa do CALC_VEDATOP_FUND do modelo antigo:
+  // perímetro × (2 × 0,30 + 0,15)
+  assert.strictEqual(a.fundacao, 45, "60 m de perímetro × 0,75");
+  assert.ok(a.molhadas > 0, "banheiro, cozinha e lavanderia entram");
+  assert.strictEqual(a.piscina, 0, "sem piscina não há parcela de piscina");
+  assert.strictEqual(a.muroDivisa, 0);
+  assert.strictEqual(a.muroArrimo, 0);
+  assert.strictEqual(a.total, Math.round((a.fundacao + a.molhadas) * 10) / 10);
+
+  const l = linha(cp, "impermeabilizador");
+  assert.strictEqual(l.base, "areaImpermeabilizacao");
+  assert.strictEqual(l.auto, a.total);
+  assert.notStrictEqual(l.auto, 200, "não é mais a área construída");
+  assert.strictEqual(l.unidade, "m2");
+
+  // com piscina, a superfície molhada entra
+  const comPiscina = obraP({ terreo: { area: 200, m2Parede20: 300, perimetroParedes: 60 },
+                             ambientes: { banheiro: 1 }, temPiscina: true,
+                             piscina: { comprimento: 8, largura: 4, profundidade: 1.5, areaConstruida: 32 } });
+  const b2 = modulo.areaImpermeabilizacao(comPiscina);
+  // a mesma conta do CALC_VEDATOP_TOTAL_PISCINA: baldrames + paredes + fundo
+  const pi = comPiscina.piscina;
+  assert.strictEqual(b2.piscina,
+    Math.round((pi.perimetroParedes * 0.75 + pi.paredesM2Total + pi.areaConstruida) * 10) / 10);
+  assert.ok(b2.piscina > 0, "com piscina a parcela entra");
+
+  // os muros entram com a área que o consumo de Vedatop do modelo cobre
+  const comMuros = obraP({ terreo: { area: 200, m2Parede20: 300, perimetroParedes: 60 },
+                           externa: { comprimentoMuroDivisa: 30, alturaMuroDivisa: 2,
+                                      comprimentoArrimo: 10, alturaArrimo: 2.5 } });
+  const c3 = modulo.areaImpermeabilizacao(comMuros);
+  assert.strictEqual(c3.muroDivisa, Math.round(comMuros.comprimentoMuroDivisa * 1.54 * 10) / 10);
+  assert.strictEqual(c3.muroArrimo,
+    Math.round(comMuros.comprimentoArrimo * comMuros.alturaArrimo * 10) / 10);
+});
+
+teste("o marceneiro conta portas internas, não metro de casa", () => {
+  // três dormitórios, dois banheiros e a suíte: cada ambiente com kit de
+  // porta conta uma porta interna
+  const cp = obraP({ ambientes: { dormitorio: 3, banheiro: 2, suite: 1, cozinha: 1, lavanderia: 1 } });
+  const l = linha(cp, "marceneiroPortas");
+  assert.strictEqual(l.unidade, "Unidades", "porta não se mede em m²");
+  assert.strictEqual(l.base, "portasInternas");
+  assert.strictEqual(l.auto, modulo.vaosAutomaticos(cp).portasInternas);
+  assert.ok(l.auto > 0 && l.auto < 30, `quantidade de portas fora do razoável: ${l.auto}`);
+  assert.notStrictEqual(l.auto, 200, "não pode ser a área construída");
+  // sem ambiente nenhum não há porta a instalar
+  assert.strictEqual(linha(obraP(), "marceneiroPortas").auto, 0);
+});
 
 teste("a linha vem com a metragem do projeto e o preço de referência", () => {
   const l = linha(obraP(), "equipePedreiros");
