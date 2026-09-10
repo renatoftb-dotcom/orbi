@@ -1169,6 +1169,120 @@ function AnelCusto({ progresso, tamanho }) {
   );
 }
 
+// ── Folha de comprovantes ───────────────────────────────────────
+// Um fornecedor, todos os comprovantes, uma folha só — para imprimir ou
+// salvar em PDF de uma vez, em vez de abrir pagamento por pagamento.
+//
+// A técnica de impressão é a mesma do contrato: na hora de imprimir a folha
+// sobe para o body, porque dentro dos painéis do app ela herdava larguras e
+// recortes que cortavam o conteúdo nas laterais da página.
+const CP_COMPROV_PRINT_CSS = `
+@media print {
+  html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; overflow: visible !important; }
+  body[data-vk-imprimindo-comprov="1"] > *:not([data-vk-comprovantes="1"]) { display: none !important; }
+  body[data-vk-imprimindo-comprov="1"] [data-vk-comprovantes="1"] {
+    position: static !important; inset: auto !important; width: auto !important; max-width: none !important;
+    max-height: none !important; margin: 0 !important; padding: 0 !important; overflow: visible !important; background: #fff !important;
+  }
+  [data-vk-comprovantes="1"] [data-vk-so-tela="1"] { display: none !important; }
+  [data-vk-comprovantes="1"] [data-vk-pagamento="1"] { break-inside: avoid; page-break-inside: avoid; }
+  [data-vk-comprovantes="1"] img { max-height: 200mm !important; }
+  @page { size: A4; margin: 14mm 12mm; }
+}
+`;
+
+function FolhaComprovantes({ folha, obraNome, escritorioNome, fmtBRL, aoFechar }) {
+  const alvo = useRef(null);
+  useEffect(() => {
+    const tag = document.createElement("style");
+    tag.setAttribute("data-vk-comprov-print", "1");
+    tag.textContent = CP_COMPROV_PRINT_CSS;
+    document.head.appendChild(tag);
+    return () => { try { document.head.removeChild(tag); } catch (e) { /* já removido */ } };
+  }, []);
+  useEffect(() => {
+    const el = alvo.current;
+    if (!el || typeof window === "undefined" || !window.addEventListener) return;
+    const pai = el.parentNode, proximo = el.nextSibling;
+    let movido = false;
+    const antes = () => { if (movido) return;
+      try { document.body.appendChild(el); document.body.setAttribute("data-vk-imprimindo-comprov", "1"); movido = true; } catch (e) {} };
+    const depois = () => { if (!movido) return;
+      try { if (pai) pai.insertBefore(el, proximo); } catch (e) {}
+      try { document.body.removeAttribute("data-vk-imprimindo-comprov"); } catch (e) {}
+      movido = false; };
+    window.addEventListener("beforeprint", antes);
+    window.addEventListener("afterprint", depois);
+    const esc = (e) => { if (e.key === "Escape") aoFechar(); };
+    document.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("beforeprint", antes);
+      window.removeEventListener("afterprint", depois);
+      document.removeEventListener("keydown", esc);
+      depois();
+    };
+  }, [aoFechar]);
+
+  const dataBR = (iso) => (iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "—");
+  const rotulo = { fontSize: 10, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4, fontWeight: 600 };
+
+  return (
+    <div data-vk-comprovantes="1"
+      style={{ position: "fixed", inset: 0, background: "#fff", zIndex: 9100, overflowY: "auto", padding: "20px 22px" }}>
+      <div data-vk-so-tela="1" style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginBottom: 14, position: "sticky", top: 0, background: "#fff", paddingBottom: 8 }}>
+        <button type="button" style={C.btnSec} onClick={aoFechar}>Fechar</button>
+        <button type="button" style={C.btn} onClick={() => { try { window.print(); } catch (e) {} }}>Imprimir / salvar PDF</button>
+      </div>
+
+      <div style={{ maxWidth: 880, margin: "0 auto" }}>
+        <div style={{ borderBottom: "1.5px solid rgba(38,36,33,0.16)", paddingBottom: 10, marginBottom: 16 }}>
+          <div style={{ fontSize: 11, color: "#6b7280" }}>{escritorioNome || "Comprovantes de pagamento"}</div>
+          <div style={{ fontSize: 17, fontWeight: 700, color: "#111827", marginTop: 2 }}>{folha.titulo}</div>
+          <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{obraNome}</div>
+          <div style={{ display: "flex", gap: 22, flexWrap: "wrap", marginTop: 10 }}>
+            <div><div style={rotulo}>Pagamentos</div><div style={{ fontSize: 13, fontWeight: 600 }}>{folha.linhas.length}</div></div>
+            <div><div style={rotulo}>Total pago</div><div style={{ fontSize: 13, fontWeight: 600 }}>{fmtBRL(folha.total)}</div></div>
+            <div><div style={rotulo}>Período</div><div style={{ fontSize: 13, fontWeight: 600 }}>{dataBR(folha.periodo.de)} a {dataBR(folha.periodo.ate)}</div></div>
+            <div><div style={rotulo}>Comprovantes</div><div style={{ fontSize: 13, fontWeight: 600 }}>
+              {folha.comImagem} na folha{folha.emPdf ? ` · ${folha.emPdf} em PDF` : ""}{folha.semComprovante ? ` · ${folha.semComprovante} sem` : ""}
+            </div></div>
+          </div>
+        </div>
+
+        {folha.linhas.map((l, i) => (
+          <div key={l.id} data-vk-pagamento="1" style={{ marginBottom: 18, paddingBottom: 14, borderBottom: "1px solid rgba(38,36,33,0.10)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 8 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827" }}>{i + 1}. {l.titulo}</div>
+                {l.apoio && <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 1 }}>{l.apoio}</div>}
+              </div>
+              <div style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#111827" }}>{fmtBRL(l.valor)}</div>
+                <div style={{ fontSize: 11.5, color: "#4b5563" }}>pago em {dataBR(l.pagoEm)}</div>
+              </div>
+            </div>
+            {l.temImagem ? (
+              <img src={l.comprovante.url} alt={`Comprovante ${i + 1}`}
+                style={{ display: "block", maxWidth: "100%", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 6 }} />
+            ) : l.ehPdf ? (
+              <div style={{ fontSize: 11.5, color: "#4b5563", background: "#fafafa", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 8, padding: "8px 10px" }}>
+                Comprovante em PDF ({l.comprovante.nome || "arquivo"}) — vai como anexo à parte, o navegador não o imprime junto das fotos.
+              </div>
+            ) : (
+              <div style={{ fontSize: 11.5, color: "#b45309", background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "8px 10px" }}>
+                Sem comprovante anexado.
+              </div>
+            )}
+          </div>
+        ))}
+        <div style={{ fontSize: 10.5, color: "#6b7280", marginTop: 8 }}>
+          Emitido em {new Date().toLocaleDateString("pt-BR")}. Os valores são os efetivamente pagos, na data de contabilização de cada baixa.
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Anéis por grupo, no lugar da barra ──────────────────────────
 // Agrupando por fornecedor ou por contrato, a pergunta deixa de ser "quando
 // vou pagar" e passa a ser "quanto do que devo a cada um já saiu". O mesmo
@@ -1524,6 +1638,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const [formEscritorio, setFormEscritorio] = useState(null);
   // Baixa de conta: telinha com a data de contabilização e o valor pago.
   const [formPagamento, setFormPagamento] = useState(null);
+  const [folhaComprov, setFolhaComprov] = useState(null); // { titulo, contas } quando aberta
   // Extrato mensal (P&L realizado): mês escolhido e formulário de entrada.
   const [mesExtrato, setMesExtrato] = useState("");
   const [formEntrada, setFormEntrada] = useState(null);
@@ -1625,7 +1740,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       return;
     }
     setFormPagamento({ conta, dataContab: conta.vencimento && conta.vencimento <= hojeIso ? conta.vencimento : hojeIso,
-      valorPago: Number(conta.valor) || 0 });
+      valorPago: Number(conta.valor) || 0, comprovante: conta.comprovante || null, erroAnexo: "" });
   };
   // Confirma a baixa: a despesa entra no mês da data de contabilização
   // escolhida (`pagoEm`); `contabilizadoEm` guarda o dia em que se registrou.
@@ -1633,7 +1748,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const f = formPagamento; if (!f) return;
     const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
     if (!f.dataContab) { dialogo.alertar({ titulo: "Informe a data de contabilização", tipo: "aviso" }); return; }
-    const atualizada = { ...f.conta, pago: true, pagoEm: f.dataContab, valorPago: valor, contabilizadoEm: hojeIso };
+    const atualizada = { ...f.conta, pago: true, pagoEm: f.dataContab, valorPago: valor, contabilizadoEm: hojeIso,
+      comprovante: f.comprovante || null };
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
     setFormPagamento(null);
   };
@@ -2902,11 +3018,20 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
         {/* Baixa da conta: a data de contabilização é o que define em que mês
             a despesa entra no extrato da obra. */}
+        {folhaComprov && (
+          <FolhaComprovantes
+            folha={folhaDeComprovantes(folhaComprov.contas, folhaComprov.titulo)}
+            obraNome={obraSelecionada.nome}
+            escritorioNome={(data.escritorio || {}).nome || ""}
+            fmtBRL={fmtMoedaCtr}
+            aoFechar={() => setFolhaComprov(null)} />
+        )}
+
         {formPagamento && (
           <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.35)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}
             onClick={() => setFormPagamento(null)}>
             <div data-vk-ui="1" onClick={e => e.stopPropagation()}
-              style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 420, boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+              style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 460, maxHeight: "88vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Registrar pagamento</div>
               <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>{tituloConta(formPagamento.conta)}</div>
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12 }}>
@@ -2922,6 +3047,22 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               </div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
                 A despesa entra no extrato da obra no mês desta data. O dia de hoje ({new Date(hojeIso + "T12:00:00").toLocaleDateString("pt-BR")}) fica registrado como a data em que foi contabilizada.
+              </div>
+              {/* O comprovante fica junto da baixa, e não numa pasta à parte:
+                  é aqui que ele existe, e é daqui que sai a folha por
+                  fornecedor. */}
+              <div style={{ marginTop: 14 }}>
+                <label style={C.label}>Comprovante (opcional)</label>
+                <CampoAnexoProposta
+                  anexo={formPagamento.comprovante}
+                  categoria="comprovante_pagamento"
+                  chamada="Arraste o comprovante aqui"
+                  apoio="print do banco, foto do recibo ou PDF — até 10 MB"
+                  onTrocar={a => setFormPagamento(f => f && ({ ...f, comprovante: a }))}
+                  onErro={m => setFormPagamento(f => f && ({ ...f, erroAnexo: m }))} />
+                {formPagamento.erroAnexo && (
+                  <div style={{ fontSize: 11.5, color: "#dc2626", marginTop: 6 }}>{formPagamento.erroAnexo}</div>
+                )}
               </div>
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
                 <button type="button" style={C.btnSec} onClick={() => setFormPagamento(null)}>Cancelar</button>
@@ -3176,10 +3317,25 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                         <span style={{ display: "inline-block", width: 12, color: "#6b7280", fontSize: 10 }}>{oculto ? "▶" : "▼"}</span>
                         {g.titulo}
                       </span>
-                      <span style={{ fontSize: 12, color: "#4b5563" }}>
-                        {g.itens.length} {g.itens.length === 1 ? "conta" : "contas"}
-                        {g.totais.aberto > 0 ? ` · ${fmtMoedaCtr(g.totais.aberto)} em aberto` : " · tudo pago"}
-                        {g.totais.vencido > 0 ? ` · ${fmtMoedaCtr(g.totais.vencido)} vencido` : ""}
+                      <span style={{ fontSize: 12, color: "#4b5563", display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                        <span>
+                          {g.itens.length} {g.itens.length === 1 ? "conta" : "contas"}
+                          {g.totais.aberto > 0 ? ` · ${fmtMoedaCtr(g.totais.aberto)} em aberto` : " · tudo pago"}
+                          {g.totais.vencido > 0 ? ` · ${fmtMoedaCtr(g.totais.vencido)} vencido` : ""}
+                        </span>
+                        {/* Só onde a folha faz sentido: por fornecedor ou por
+                            contrato. Agrupado por mês, "os comprovantes de
+                            março" não é um documento que se entregue a
+                            alguém. */}
+                        {visaoUsaAnel(visaoContas) && g.itens.some(c => c.pago) && (
+                          <span role="button" tabIndex={0}
+                            onClick={e => { e.stopPropagation(); setFolhaComprov({ titulo: g.titulo, contas: g.itens }); }}
+                            onKeyDown={e => { if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setFolhaComprov({ titulo: g.titulo, contas: g.itens }); } }}
+                            style={{ border: "1px solid rgba(38,36,33,0.16)", borderRadius: 20, padding: "3px 10px",
+                              fontSize: 11.5, color: "#111827", background: "#fff", cursor: "pointer" }}>
+                            Comprovantes (PDF)
+                          </span>
+                        )}
                       </span>
                     </button>
                     {!oculto && (

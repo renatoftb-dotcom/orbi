@@ -466,3 +466,37 @@ Três cuidados:
 - O efeito desistia antes quando a obra não tinha contrato nenhum — que é
   justamente o caso de quem removeu o único contrato. Agora a comparação de
   assinatura decide se grava, e a obra sem contrato também passa pela faxina.
+
+## Comprovante na baixa, e a folha por fornecedor
+
+**No pagamento.** A telinha de "Registrar pagamento" ganhou um campo de
+comprovante — print do banco, foto do recibo ou PDF, até 10 MB. Ele fica em
+`conta.comprovante`, junto da baixa: é ali que ele existe, e é dali que sai
+a folha. O envio é o mesmo dos anexos de proposta (`enviarAnexo`), só muda a
+categoria: `comprovante_pagamento`, com pasta e cota próprias no backend
+(5.000 ativos — uma obra longa passa de mil pagamentos).
+
+**A folha.** Agrupando por Fornecedor ou por Contrato, cada grupo ganha
+"Comprovantes (PDF)": abre uma folha com todos os pagamentos daquele
+fornecedor, um embaixo do outro, e o botão **Imprimir / salvar PDF**. Não
+aparece agrupando por mês ou ano — "os comprovantes de março" não é um
+documento que se entregue a alguém.
+
+A folha traz cabeçalho com obra, fornecedor, período, total pago e quantos
+comprovantes existem; depois um bloco por pagamento com descrição, data,
+valor e a imagem. A impressão usa a mesma técnica do contrato: a folha sobe
+para o `body` no `beforeprint`, porque dentro dos painéis do app herdava
+larguras e recortes que cortavam o conteúdo na lateral da página.
+
+Três coisas que `folhaDeComprovantes()` resolve de propósito:
+
+- **Só o que foi pago.** Comprovante de conta em aberto não existe.
+- **Pagamento sem comprovante entra na lista**, marcado como pendência.
+  Esconder faria a folha parecer completa quando não está — e o cabeçalho
+  conta quantos faltam.
+- **Comprovante em PDF vai listado, não desenhado.** A impressão do navegador
+  não embute arquivo de outro domínio; ele é anexo à parte, e a folha diz
+  isso. Print e foto, que é a maioria, entram na folha.
+
+O total é o **efetivamente pago** (`valorPago`), não o previsto: pagamento
+parcial ou com desconto aparece pelo que saiu.

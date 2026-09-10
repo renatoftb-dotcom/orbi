@@ -40,7 +40,7 @@ const modulo = new Function(`
            linhaFinalExtrato, fechoEstimativaPL, plDaObra, progressoCusto,
            prestadoresDoPL, CONTAS_PRESTADOR_EXTRA,
            aneisDosGrupos, visaoUsaAnel, VISOES_CONTAS_EM_ANEL,
-           removerOrfasDeContrato, assinaturaContas,
+           removerOrfasDeContrato, assinaturaContas, folhaDeComprovantes,
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
@@ -1082,6 +1082,49 @@ teste("a faxina muda a assinatura, então a tela grava sozinha", () => {
   const depois = modulo.removerOrfasDeContrato(antes, []);
   assert.notStrictEqual(modulo.assinaturaContas(depois), modulo.assinaturaContas(antes),
     "sem mudar a assinatura o efeito não gravaria e a órfã voltaria a aparecer");
+});
+
+console.log("\n--- folha de comprovantes ---");
+const comp = (n) => ({ url: `http://x/${n}`, public_id: n, nome: `${n}.png`, bytes: 1000, formato: "png", resourceType: "image" });
+const compPdf = { url: "http://x/p", public_id: "p", nome: "recibo.pdf", bytes: 2000, formato: "pdf", resourceType: "raw" };
+const doFornecedor = [
+  { id: "a", obraId: "o1", favorecido: "Padovan", descricao: "Parcela 2", valor: 9583.33, pago: true, valorPago: 9583.33, pagoEm: "2026-04-07", comprovante: comp("c2") },
+  { id: "b", obraId: "o1", favorecido: "Padovan", descricao: "Parcela 1", valor: 9583.33, pago: true, valorPago: 9583.33, pagoEm: "2026-03-07", comprovante: comp("c1") },
+  { id: "c", obraId: "o1", favorecido: "Padovan", descricao: "Parcela 3", valor: 9583.33, pago: true, valorPago: 9000, pagoEm: "2026-05-07", comprovante: compPdf },
+  { id: "d", obraId: "o1", favorecido: "Padovan", descricao: "Parcela 4", valor: 9583.33, pago: true, valorPago: 9583.33, pagoEm: "2026-06-07" },
+  { id: "e", obraId: "o1", favorecido: "Padovan", descricao: "Parcela 5", valor: 9583.33, pago: false, vencimento: "2026-07-07", comprovante: comp("x") },
+];
+
+teste("a folha junta só o que foi pago, em ordem de pagamento", () => {
+  const f = modulo.folhaDeComprovantes(doFornecedor, "Padovan Arquitetos");
+  assert.strictEqual(f.titulo, "Padovan Arquitetos");
+  assert.deepStrictEqual(f.linhas.map(l => l.id), ["b", "a", "c", "d"], "conta em aberto não entra, e a ordem é a das datas");
+  assert.strictEqual(f.periodo.de, "2026-03-07");
+  assert.strictEqual(f.periodo.ate, "2026-06-07");
+});
+
+teste("o total é o que saiu, não o que estava previsto", () => {
+  const f = modulo.folhaDeComprovantes(doFornecedor, "Padovan");
+  assert.strictEqual(f.total, 37749.99, "9583,33 × 3 + os 9.000 efetivamente pagos na parcela 3");
+});
+
+teste("a folha separa foto, PDF e o que não tem comprovante", () => {
+  const f = modulo.folhaDeComprovantes(doFornecedor, "Padovan");
+  assert.strictEqual(f.comImagem, 2);
+  assert.strictEqual(f.emPdf, 1, "PDF não desenha junto das fotos — vai listado");
+  assert.strictEqual(f.semComprovante, 1);
+  const pdf = f.linhas.find(l => l.id === "c");
+  assert.strictEqual(pdf.ehPdf, true);
+  assert.strictEqual(pdf.temImagem, false);
+  const sem = f.linhas.find(l => l.id === "d");
+  assert.strictEqual(sem.comprovante, null, "aparece como pendência, não some");
+});
+
+teste("fornecedor sem pagamento não gera folha", () => {
+  const f = modulo.folhaDeComprovantes([{ id: "x", pago: false, valor: 100 }], "Ninguém");
+  assert.strictEqual(f.vazio, true);
+  assert.strictEqual(modulo.folhaDeComprovantes([], "x").vazio, true);
+  assert.strictEqual(modulo.folhaDeComprovantes(null, "x").total, 0);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

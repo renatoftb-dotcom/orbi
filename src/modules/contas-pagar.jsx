@@ -974,6 +974,54 @@ function agruparContas(contas, visao, ctx) {
   return grupos;
 }
 
+// ── Folha de comprovantes ───────────────────────────────────────
+// Junta os comprovantes de um fornecedor (ou de um contrato) numa folha só,
+// para imprimir ou salvar em PDF de uma vez — em vez de abrir pagamento por
+// pagamento e baixar um arquivo de cada vez.
+//
+// Só entra conta paga: comprovante de conta em aberto não existe. Conta paga
+// SEM comprovante entra na lista também, e a folha a mostra como pendência —
+// esconder faria a folha parecer completa quando não está.
+function folhaDeComprovantes(contas, titulo) {
+  const red = (x) => Math.round(x * 100) / 100;
+  const pagas = (contas || []).filter((c) => c && c.pago);
+  const linhas = pagas.map((c) => {
+    const a = c.comprovante || null;
+    const ehPdf = !!a && (a.formato === "pdf" || a.resourceType === "raw");
+    // A folha inteira já é de um fornecedor: repetir o nome dele no título e
+    // no apoio de cada pagamento é dizer a mesma coisa três vezes.
+    const nomeDoTitulo = String(titulo || "").trim().toLowerCase();
+    const apoioBruto = typeof apoioCurtoConta === "function" ? apoioCurtoConta(c) : (c.favorecido || "");
+    return {
+      id: c.id,
+      titulo: String(c.descricao || "").trim()
+        || (typeof tituloConta === "function" ? tituloConta(c) : "Pagamento"),
+      apoio: String(apoioBruto || "").trim().toLowerCase() === nomeDoTitulo ? "" : apoioBruto,
+      pagoEm: c.pagoEm || "",
+      valor: red(Number(c.valorPago) || Number(c.valor) || 0),
+      comprovante: a,
+      // PDF não dá para desenhar na folha junto das fotos: a impressão do
+      // navegador não embute arquivo de outro domínio. Vai listado, com o
+      // link, e a folha diz que ele é um anexo à parte.
+      ehPdf,
+      temImagem: !!a && !ehPdf,
+    };
+  }).sort((a, b) => String(a.pagoEm).localeCompare(String(b.pagoEm)));
+  return {
+    titulo: titulo || "Comprovantes",
+    linhas,
+    total: red(linhas.reduce((a, l) => a + l.valor, 0)),
+    comImagem: linhas.filter((l) => l.temImagem).length,
+    emPdf: linhas.filter((l) => l.ehPdf).length,
+    semComprovante: linhas.filter((l) => !l.comprovante).length,
+    periodo: {
+      de: (linhas.find((l) => l.pagoEm) || {}).pagoEm || "",
+      ate: (linhas.filter((l) => l.pagoEm).pop() || {}).pagoEm || "",
+    },
+    vazio: linhas.length === 0,
+  };
+}
+
 // ── Anéis por grupo (fornecedor, contrato) ──────────────────────
 // A barra responde "QUANDO vou pagar" — é série temporal, e mês fora de
 // ordem não quer dizer nada. Agrupando por fornecedor ou por contrato a

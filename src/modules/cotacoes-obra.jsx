@@ -425,13 +425,16 @@ function comprimirImagem(arquivo) {
   });
 }
 
-async function enviarAnexoProposta(arquivo) {
+// O mesmo envio serve a proposta do fornecedor e o comprovante da baixa:
+// os dois são "um arquivo que chegou de fora e vira anexo de um registro".
+// Muda só a categoria, que é o que o backend usa para cota e pasta.
+async function enviarAnexo(arquivo, categoria) {
   if (!arquivo) return null;
   const pronto = await comprimirImagem(arquivo);
   if (pronto.size > COT_ANEXO_MAX) {
-    throw new Error(`Arquivo muito grande (${tamanhoLegivel(pronto.size)}). O limite é 10 MB — se for um PDF escaneado, peça ao fornecedor a versão em PDF “normal”, que costuma ser bem menor.`);
+    throw new Error(`Arquivo muito grande (${tamanhoLegivel(pronto.size)}). O limite é 10 MB — se for um PDF escaneado, peça a versão em PDF “normal”, que costuma ser bem menor.`);
   }
-  const r = await api.uploads.send(pronto, "proposta_cotacao");
+  const r = await api.uploads.send(pronto, categoria || "proposta_cotacao");
   return {
     url: r.url,
     public_id: r.public_id,
@@ -442,6 +445,8 @@ async function enviarAnexoProposta(arquivo) {
     enviadoEm: new Date().toISOString(),
   };
 }
+const enviarAnexoProposta = (arquivo) => enviarAnexo(arquivo, "proposta_cotacao");
+const enviarComprovante = (arquivo) => enviarAnexo(arquivo, "comprovante_pagamento");
 
 // ══════════════════════════════════════════════════════════════
 // UI — bloco de cotações da obra
@@ -1155,7 +1160,7 @@ function VisorProposta({ anexo, aoFechar }) {
 }
 
 // Campo de anexo: arrasta o PDF do e-mail para cá, ou clica e escolhe.
-function CampoAnexoProposta({ anexo, onTrocar, onErro }) {
+function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio }) {
   const [sobre, setSobre] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const refInput = useRef(null);
@@ -1165,7 +1170,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro }) {
     if (!arquivo) return;
     setEnviando(true);
     onErro("");
-    try { onTrocar(await enviarAnexoProposta(arquivo)); }
+    try { onTrocar(await enviarAnexo(arquivo, categoria || "proposta_cotacao")); }
     catch (e) { onErro(e.message || "Não foi possível anexar o arquivo."); }
     finally { setEnviando(false); }
   }
@@ -1209,10 +1214,10 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro }) {
       <input ref={refInput} type="file" accept="application/pdf,image/*" style={{ display: "none" }}
         onChange={e => { receber(e.target.files && e.target.files[0]); e.target.value = ""; }} />
       <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-        {enviando ? "Enviando…" : "Arraste o PDF da proposta aqui"}
+        {enviando ? "Enviando…" : (chamada || "Arraste o PDF da proposta aqui")}
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
-        ou clique para escolher — PDF ou foto, até 5 MB
+        {apoio || "ou clique para escolher — PDF ou foto, até 10 MB"}
       </div>
     </div>
   );
