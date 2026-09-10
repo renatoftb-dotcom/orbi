@@ -5251,6 +5251,8 @@ var INSUMOS_SEED = [
   { codigo:"LAJ-004", nome:"Laje Pré Moldada Treliça Piso", grupo:"Lajes", unidade:"m2", tipo:"material", precoReferencia:74.98, precoFonte:"compra_corrigida", precoData:"2023-07-12", precoNCompras:1, precoFatorInccAplicado:1.2108, aliases:["Laje Pré Moldada Treliça Piso"] },
   { codigo:"LOC-001", nome:"Locação Ferramentas -  Compactador", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:200.0, precoFonte:"compra", precoData:"2026-08-23", precoNCompras:14, precoFatorInccAplicado:1, aliases:["Locação Ferramentas -  Compactador"] },
   { codigo:"LOC-002", nome:"Locação Ferramentas - Escoras", grupo:"Locação de equipamentos", unidade:"Unidades", tipo:"material", precoReferencia:12.08, precoFonte:"compra_corrigida", precoData:"2025-07-17", precoNCompras:96, precoFatorInccAplicado:1.0876, aliases:["Locação Ferramentas - Escoras"] },
+  { codigo:"LOC-004", nome:"Locação Ferramentas - Container 2,5 x 1,5 mts", grupo:"Locação de equipamentos", unidade:"Meses", tipo:"material", precoReferencia:250.0, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Locação Ferramentas - Container 2,5 x 1,5 mts","Container de obra"], observacao:"Um por mês de obra. Preço e regra do modelo (aba SERVIÇOS)." },
+  { codigo:"LOC-005", nome:"Locação Ferramentas - Betoneira", grupo:"Locação de equipamentos", unidade:"Meses", tipo:"material", precoReferencia:280.0, precoFonte:"cotacao", precoData:null, precoNCompras:0, precoFatorInccAplicado:1, aliases:["Locação Ferramentas - Betoneira","Locação Ferramentas -  Betoneira","Betoneira"], observacao:"Por mês de obra; acima de 100 m² de área construída, duas ao mesmo tempo." },
   { codigo:"LOC-003", nome:"Maquinário - Perfuração", grupo:"Locação de equipamentos", unidade:"Mts", tipo:"material", precoReferencia:12.2, precoFonte:"compra_corrigida", precoData:"2025-03-20", precoNCompras:6, precoFatorInccAplicado:1.1092, aliases:["Maquinário - Perfuração"] },
   { codigo:"MAD-001", nome:"Telhado - Estrutura - Eucalipto S/ Tratar - Caibros 5x5", grupo:"Madeira de estrutura", unidade:"Mts", tipo:"material", precoReferencia:11.61, precoFonte:"compra_corrigida", precoData:"2024-06-05", precoNCompras:9, precoFatorInccAplicado:1.161, aliases:["Telhado - Estrutura - Eucalipto S/ Tratar - Caibros 5x5"] },
   { codigo:"MAD-002", nome:"Telhado - Estrutura - Eucalipto S/ Tratar - Ripas 2,5x5", grupo:"Madeira de estrutura", unidade:"Mts", tipo:"material", precoReferencia:2.32, precoFonte:"compra_corrigida", precoData:"2023-09-21", precoNCompras:2, precoFatorInccAplicado:1.2042, aliases:["Telhado - Estrutura - Eucalipto S/ Tratar - Ripas 2,5x5", "Telhado - Estrutura - Eucalipto S/ Tratar - Ripas 2,5x5 "] },
@@ -7652,6 +7654,7 @@ const ORD = {
   itensProjeto: 18, // hidráulica, esgoto, elétrica, louças, aquecimento — lidos do projeto de engenharia (18–24)
   pisos: 25,        // pisos e revestimentos (módulo novo, sem equivalente no VBA)
   forros: 26,       // forros (módulo novo, sem equivalente no VBA)
+  locacao: 27,      // canteiro e locações por mês de obra (aba SERVIÇOS do modelo)
   // Reforma. Demolição e entulho vêm antes de tudo (negativos) porque é o
   // que acontece primeiro na obra; a execução sobre o existente vem depois
   // de todas as etapas da parte nova.
@@ -8052,32 +8055,26 @@ const itemDoPrestador = (chave) => { const p = prestadorPorChave(chave); return 
 
 // Área de impermeabilização da obra — a metragem que paga o impermeabilizador.
 //
-// Ela NÃO é inventada aqui: sai das mesmas fórmulas de consumo de Vedatop que
-// vieram do modelo antigo. Lá o material era calculado a 3 kg/m², com 10% de
-// perda, em balde de 18 kg; dividindo o consumo de volta pelo rendimento
-// aparece a área que cada frente impermeabiliza:
+// É a mesma célula do modelo novo, que traz o rótulo em letra: FUNDAÇÃO!I2,
+// "Área de impermeabilização" = ARREDONDAR.PARA.CIMA(0,30 × perímetro × 2 +
+// 0,15 × perímetro). Ou seja, a faixa do baldrame — as duas faces de 30 cm
+// mais os 15 cm de topo — sobre o perímetro das paredes. A linha da aba
+// SERVIÇOS soma ainda o perímetro do Pav 1, e aqui ele entra com a mesma
+// faixa (no Excel o perímetro do sobrado é somado cru, em metros, a uma
+// área — o que só não aparece porque a célula está vazia nos arquivos).
 //
-//   fundação      CALC_VEDATOP_FUND      → perímetro × (2 × 0,30 + 0,15)
-//   muro divisa   CALC_VEDATOP           → o consumo do modelo equivale a
-//                                          1,54 m² por metro de muro (ele
-//                                          mistura dois rendimentos; aqui vale
-//                                          a área que aquele consumo cobre)
-//   muro arrimo   CALC_VEDATOP_ARRIMO    → altura × comprimento (face inteira)
-//   piscina       CALC_VEDATOP_TOTAL     → baldrames + paredes + fundo
-//
-// A parcela de áreas molhadas (banheiros, lavabos, cozinha e lavanderia) é a
-// única que o modelo antigo não tinha: ele impermeabilizava base de parede,
-// muros e piscina, e nunca o box. Fica separada para poder sair.
-const IMPER_FAIXA_BALDRAME = 0.75;    // 2 × 0,30 (faces) + 0,15 (topo)
-const IMPER_M2_POR_M_DIVISA = 1.54;   // área implícita no consumo do muro de divisa
-const IMPER_ALTURA_MOLHADA = 1.5;     // faixa impermeabilizada na parede molhada
+// O que NÃO entra: muro de divisa e muro de arrimo, que no modelo consomem
+// impermeabilizante mas não têm linha de prestador; e a piscina, que no
+// modelo é OUTRA linha de prestador. A piscina fica aqui como parcela
+// separada porque o VICKE tem uma linha de impermeabilizador só.
+const IMPER_FAIXA_BALDRAME = 0.75;   // 2 × 0,30 (faces) + 0,15 (topo)
 function areaImpermeabilizacao(cp) {
   const p = cp || {};
   const r1 = (x) => Math.round(x * 10) / 10;
 
-  const fundacao = numOrZero(p.perimetroParedesTerreo) * IMPER_FAIXA_BALDRAME;
-  const muroDivisa = numOrZero(p.comprimentoMuroDivisa) * IMPER_M2_POR_M_DIVISA;
-  const muroArrimo = numOrZero(p.comprimentoArrimo) * numOrZero(p.alturaArrimo);
+  const terreo = numOrZero(p.perimetroParedesTerreo) * IMPER_FAIXA_BALDRAME;
+  const pav1 = p.tipologia === "Sobrado"
+    ? numOrZero((p.pav1 || {}).perimetroParedes) * IMPER_FAIXA_BALDRAME : 0;
 
   let piscina = 0;
   if (p.temPiscina) {
@@ -8086,20 +8083,8 @@ function areaImpermeabilizacao(cp) {
             + numOrZero(pi.paredesM2Total) + numOrZero(pi.areaConstruida);
   }
 
-  let molhadas = 0;
-  const ambientes = migrarAmbientes(p.ambientes || {});
-  for (const id of Object.keys(COMODO_OBRA_PROJETO)) {
-    if ((COMODO_OBRA_PROJETO[id] || {}).revestir !== "todas") continue;
-    const n = Math.max(0, Math.round(numOrZero(ambientes[id])));
-    if (!n) continue;
-    const c = calcularComodo(comodoConfig(p, id));
-    if (!(c.area > 0)) continue;
-    molhadas += n * (c.area + c.perimetro * IMPER_ALTURA_MOLHADA);
-  }
-
-  const total = fundacao + muroDivisa + muroArrimo + piscina + molhadas;
-  return { fundacao: r1(fundacao), muroDivisa: r1(muroDivisa), muroArrimo: r1(muroArrimo),
-           piscina: r1(piscina), molhadas: r1(molhadas), total: r1(total) };
+  return { terreo: r1(terreo), pav1: r1(pav1), piscina: r1(piscina),
+           total: r1(terreo + pav1 + piscina) };
 }
 
 // Metragem automática de uma linha, lida do projeto.
@@ -12448,12 +12433,57 @@ function gerarOrcamentoObra(projeto, data) {
   forros(cp, out);
   instalacoesPorAmbiente(cp, out, data);
   itensProjeto(cp, out, data);
+  locacaoCanteiro(cp, out);
   prestadores(cp, out, data);
   if (cp.tipoObra === "reforma") execucaoNoExistente(cp, out, data);
 
   const resultado = precificarETotalizar(out, data);
   resultado.avisos = (cp._avisos || []).concat(resultado.avisos || []);
   return resultado;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CANTEIRO E LOCAÇÕES — aba SERVIÇOS do modelo novo
+// ═══════════════════════════════════════════════════════════════
+// Três itens que não dependem de metragem nenhuma: dependem do TEMPO que a
+// obra fica aberta. No Excel a quantidade é COUNT sobre a linha 69 da aba
+// CRONOGRAMA ESTIMADO — os meses que o gráfico ocupa —, e a betoneira dobra
+// quando a casa passa de 100 m² (duas frentes de massa ao mesmo tempo).
+//
+// Aqui os meses vêm do mesmo prazo paramétrico do Cronograma, arredondado
+// para cima: obra de 15,8 meses paga 16 meses de container.
+const LOCACAO_AREA_DUAS_BETONEIRAS = 100;
+function mesesDeObra(cp) {
+  const cfg = (cp && cp._dataCronograma) || null;
+  const meses = typeof prazoParametricoMeses === "function"
+    ? prazoParametricoMeses(numOrZero(cp.areaConstruida), cp.tipologia, cfg)
+    : 0;
+  return meses > 0 ? Math.ceil(meses) : 0;
+}
+function locacaoCanteiro(cp, out) {
+  const meses = mesesDeObra(cp);
+  if (!(meses > 0)) return;
+  const base = { ordem: ORD.locacao, tipo: "Bruto", etapa: "Locação Equipamentos", subEtapa: "Canteiro" };
+  const memPrazo = MEM.dado("Prazo da obra", meses, "meses", "Cronograma (prazo paramétrico, arredondado para cima)");
+
+  emitir(out, { ...base, item: "Locação Ferramentas - Container 2,5 x 1,5 mts", unidade: "Meses", qtd: meses, memoria: [
+    MEM.nota("Container de obra: um por mês, do início ao fim da obra."),
+    memPrazo,
+  ] });
+
+  const dobra = numOrZero(cp.areaConstruida) > LOCACAO_AREA_DUAS_BETONEIRAS;
+  const betoneiras = meses * (dobra ? 2 : 1);
+  emitir(out, { ...base, item: "Locação Ferramentas - Betoneira", unidade: "Meses", qtd: betoneiras, memoria: [
+    MEM.nota(`Betoneira por mês de obra. Acima de ${LOCACAO_AREA_DUAS_BETONEIRAS} m² de área construída são duas ao mesmo tempo, porque a obra abre mais de uma frente de massa.`),
+    memPrazo,
+    MEM.dado("Área construída", numOrZero(cp.areaConstruida), "m²", "bloco Geral"),
+    MEM.conta("Meses de betoneira", dobra ? "prazo × 2" : "prazo × 1", [["prazo", meses]], betoneiras, "meses"),
+  ] });
+
+  emitir(out, { ...base, subEtapa: "Entulho", item: "Caçamba de entulho 5m³", unidade: "Unidades", qtd: meses, memoria: [
+    MEM.nota("Uma caçamba de entulho por mês de obra."),
+    memPrazo,
+  ] });
 }
 
 // Cor e legenda da confiança do preço de um item (tabela do resultado).

@@ -37,7 +37,11 @@ const recorte = (nome) => {
 };
 const mClassificacao = srcCompleto.match(/const CLASSIFICACAO_OBRA = \[[^\]]*\];/);
 if (!mClassificacao) throw new Error("const CLASSIFICACAO_OBRA não encontrada");
-const src = mComodos[0] + "\n" + srcSeedComposicoes + "\n" + srcCompleto.slice(0, idx)
+// O prazo da obra mora no cronograma; a locação de canteiro depende dele.
+const srcCrono = readFileSync(join(__dirname, "src", "modules", "cronograma-obra.jsx"), "utf-8");
+const idxCrono = srcCrono.indexOf("// UI — bloco");
+const srcCronoSeed = readFileSync(join(__dirname, "src", "modules", "cronograma-seed.jsx"), "utf-8");
+const src = mComodos[0] + "\n" + srcCronoSeed + "\n" + srcCrono.slice(0, idxCrono > 0 ? idxCrono : srcCrono.length) + "\n" + srcSeedComposicoes + "\n" + srcCompleto.slice(0, idx)
   + "\n" + recorte("projetoVazio") + "\n" + recorte("projetoParaFormulario")
   + "\n" + mClassificacao[0] + "\n" + recorte("camposPreenchidos");
 
@@ -48,6 +52,7 @@ const modulo = new Function(`
     taxaGestaoObra, emitir, precoDoInsumo,
     paredesTerreo, pintura, prestadores,
     normalizarProjeto, gerarOrcamentoObra, precificarETotalizar,
+    locacaoCanteiro, mesesDeObra, prazoParametricoMeses,
     calcularEsquadria, metrosPorRegra, barrasPalhetas, ESQUADRIAS_CATALOGO,
     vidroEsquadria, acessoriosEsquadria, ESQUADRIAS_FAMILIAS, ESQUADRIAS_ACESSORIOS,
     interpretarListaColada, ETAPAS_PROJETO,
@@ -1534,14 +1539,12 @@ teste("o impermeabilizador mede a área de impermeabilização, não a casa inte
   const cp = obraP({ terreo: { area: 200, m2Parede20: 300, perimetroParedes: 60 },
                      ambientes: { banheiro: 2, suite: 1, cozinha: 1, lavanderia: 1, dormitorio: 3 } });
   const a = modulo.areaImpermeabilizacao(cp);
-  // a fundação é a mesma faixa do CALC_VEDATOP_FUND do modelo antigo:
-  // perímetro × (2 × 0,30 + 0,15)
-  assert.strictEqual(a.fundacao, 45, "60 m de perímetro × 0,75");
-  assert.ok(a.molhadas > 0, "banheiro, cozinha e lavanderia entram");
+  // é a célula "Área de impermeabilização" do modelo (FUNDAÇÃO!I2):
+  // 0,30 × perímetro × 2 + 0,15 × perímetro
+  assert.strictEqual(a.terreo, 45, "60 m de perímetro × 0,75");
+  assert.strictEqual(a.pav1, 0, "casa térrea não tem parcela de pav 1");
   assert.strictEqual(a.piscina, 0, "sem piscina não há parcela de piscina");
-  assert.strictEqual(a.muroDivisa, 0);
-  assert.strictEqual(a.muroArrimo, 0);
-  assert.strictEqual(a.total, Math.round((a.fundacao + a.molhadas) * 10) / 10);
+  assert.strictEqual(a.total, 45);
 
   const l = linha(cp, "impermeabilizador");
   assert.strictEqual(l.base, "areaImpermeabilizacao");
@@ -1559,15 +1562,38 @@ teste("o impermeabilizador mede a área de impermeabilização, não a casa inte
   assert.strictEqual(b2.piscina,
     Math.round((pi.perimetroParedes * 0.75 + pi.paredesM2Total + pi.areaConstruida) * 10) / 10);
   assert.ok(b2.piscina > 0, "com piscina a parcela entra");
+});
 
-  // os muros entram com a área que o consumo de Vedatop do modelo cobre
-  const comMuros = obraP({ terreo: { area: 200, m2Parede20: 300, perimetroParedes: 60 },
-                           externa: { comprimentoMuroDivisa: 30, alturaMuroDivisa: 2,
-                                      comprimentoArrimo: 10, alturaArrimo: 2.5 } });
-  const c3 = modulo.areaImpermeabilizacao(comMuros);
-  assert.strictEqual(c3.muroDivisa, Math.round(comMuros.comprimentoMuroDivisa * 1.54 * 10) / 10);
-  assert.strictEqual(c3.muroArrimo,
-    Math.round(comMuros.comprimentoArrimo * comMuros.alturaArrimo * 10) / 10);
+// ── Canteiro e locações (aba SERVIÇOS do modelo novo) ──────────
+teste("container, betoneira e caçamba saem por mês de obra", () => {
+  const cp = obraP({ tipologia: "Sobrado",
+    arquitetura: { areaConstruida: 125, m2ParedesTotal: 500, m2ParedesInternas: 300, m2ParedesExternas: 200 },
+    terreo: { area: 125, m2Parede20: 500, perimetroParedes: 137 } });
+  const meses = modulo.mesesDeObra(cp);
+  assert.ok(meses > 0, "sem prazo não há locação a cobrar");
+  const out = [];
+  modulo.locacaoCanteiro(cp, out);
+  const acha = (re) => out.find((i) => re.test(i.item));
+  assert.strictEqual(acha(/Container/).qtd, meses, "um container por mês");
+  assert.strictEqual(acha(/Caçamba/).qtd, meses, "uma caçamba por mês");
+  // acima de 100 m² são duas betoneiras ao mesmo tempo
+  assert.strictEqual(acha(/Betoneira/).qtd, meses * 2);
+  for (const i of out) assert.strictEqual(i.etapa, "Locação Equipamentos");
+});
+
+teste("abaixo de 100 m² a obra usa uma betoneira só", () => {
+  const cp = obraP({ arquitetura: { areaConstruida: 80, m2ParedesTotal: 200, m2ParedesInternas: 120, m2ParedesExternas: 80 },
+                     terreo: { area: 80, m2Parede20: 200, perimetroParedes: 40 } });
+  const out = [];
+  modulo.locacaoCanteiro(cp, out);
+  const bet = out.find((i) => /Betoneira/.test(i.item));
+  assert.strictEqual(bet.qtd, modulo.mesesDeObra(cp));
+});
+
+teste("sem área construída não há canteiro a locar", () => {
+  const out = [];
+  modulo.locacaoCanteiro(modulo.normalizarProjeto({ tipoObra: "nova", tipologia: "Térrea" }), out);
+  assert.strictEqual(out.length, 0);
 });
 
 teste("o marceneiro conta portas internas, não metro de casa", () => {
