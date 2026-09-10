@@ -3353,6 +3353,25 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         isMobile={isMobile}
         usuario={perm.usuario}
         onVoltar={() => setView("detalheObra")}
+        onGerarContrato={(dados) => {
+          // A cotação escolhida abre o gerador de contrato já preenchido:
+          // ofício vindo da conta do P&L, contratado e valor da proposta
+          // vencedora, e o que foi cotado no escopo. Prazo, parcelas e
+          // cláusulas seguem sendo do formulário do contrato.
+          const novo = {
+            ...contratoVazio("empreitadaMaoDeObra", cliente.id, obraAtual.id, dados.tipoId),
+            cotacaoId: dados.cotacaoId,
+            prestadorId: dados.prestadorId,
+            nomeContratado: dados.nomeContratado,
+            valor: dados.valor,
+          };
+          if (dados.escopo || dados.titulo) {
+            novo.escopo = [{ titulo: dados.titulo || "Escopo cotado", texto: dados.escopo || "" }];
+          }
+          setContratoSalvoEm(0);
+          setContratoGerando(novo);
+          setView("gerarContrato");
+        }}
       />
     );
   }

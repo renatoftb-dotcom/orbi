@@ -126,11 +126,14 @@ function registrarAprovacaoCotacao(aprovacoes, dados) {
 
 // ── Situação, em uma palavra ────────────────────────────────────
 // A ordem dos testes é a ordem do fluxo; o primeiro que casar manda.
-function situacaoCotacao(cot, aprovacoes) {
+function situacaoCotacao(cot, aprovacoes, contratos) {
   const c = cot || {};
   const ap = aprovacaoDaCotacao(aprovacoes, c.id);
-  if (c.status === "cancelada")            return { id: "cancelada",  rotulo: "Cancelada",                 cor: "#9ca3af" };
-  if (c.contaGeradaId)                     return { id: "lancada",    rotulo: "Lançada em contas a pagar", cor: "#15803d" };
+  if (c.status === "cancelada")            return { id: "cancelada",  rotulo: "Cancelada",                 cor: "#6b7280" };
+  // `contaGeradaId` é herança do fluxo antigo, que lançava direto em contas a
+  // pagar. Cotação gravada naquela época continua lendo como concluída.
+  if (contratoDaCotacao(contratos, c.id) || c.contaGeradaId)
+                                           return { id: "contratada", rotulo: "Contrato gerado",           cor: "#15803d" };
   if (ap.status === "recusada")            return { id: "recusada",   rotulo: "Recusada pelo cliente",     cor: "#dc2626" };
   if (ap.status === "aprovada")            return { id: "aprovada",   rotulo: "Aprovada pelo cliente",     cor: "#15803d" };
   if (!c.escolhidaId && !propostasDaCotacao(c).length)
@@ -140,12 +143,51 @@ function situacaoCotacao(cot, aprovacoes) {
   return { id: "escolhida", rotulo: "Escolhida", cor: "#15803d" };
 }
 
-// Só entra em contas a pagar o que já tem escolha e, quando exigido, o
-// aval do cliente. Devolve o motivo do bloqueio para a tela poder explicar.
-function podeLancarCotacao(cot, aprovacoes) {
+// O contrato da obra que nasceu desta cotação, se já existe. É o contrato
+// que diz se a cotação virou algo — não um sinalizador guardado na cotação,
+// que ficaria mentindo se o contrato fosse apagado depois.
+function contratoDaCotacao(contratos, cotacaoId) {
+  if (!cotacaoId) return null;
+  return (contratos || []).find(c => c && c.cotacaoId === cotacaoId) || null;
+}
+
+// O caminho de volta da conta do P&L para o tipo de profissional do
+// contrato: a cotação diz em que conta o gasto cai, e o contrato precisa
+// saber que ofício é. Várias contas caem em "mo_diversos"; nesse caso o
+// contrato abre em "outro" e quem escolhe é o usuário.
+function tipoDoContaId(contaId) {
+  const mapa = typeof CONTA_POR_TIPO !== "undefined" ? CONTA_POR_TIPO : {};
+  const achado = Object.keys(mapa).find(t => mapa[t] === contaId && mapa[t] !== "mo_diversos");
+  return achado || "outro";
+}
+
+// O que a cotação entrega para o contrato nascer preenchido. O resto —
+// prazo, parcelas, cláusulas — é do formulário do contrato, que já sabe
+// fazer isso.
+function dadosDoContratoDaCotacao(cot) {
+  const c = cot || {};
+  const esc = propostaEscolhida(c);
+  if (!esc) return null;
+  return {
+    cotacaoId: c.id,
+    tipoId: tipoDoContaId(c.contaId),
+    prestadorId: esc.fornecedorId || "",
+    nomeContratado: esc.favorecido || "",
+    valor: valorProposta(esc),
+    titulo: String(c.titulo || "").trim(),
+    escopo: String(c.escopo || "").trim(),
+    condicaoPagamento: esc.condicaoPagamento || "",
+    prazoDias: esc.prazoDias || "",
+  };
+}
+
+// Só vira contrato o que já tem escolha e, quando exigido, o aval do
+// cliente. Devolve o motivo do bloqueio para a tela poder explicar.
+function podeGerarContrato(cot, aprovacoes, contratos) {
   const c = cot || {};
   if (c.status === "cancelada")  return { pode: false, motivo: "A cotação foi cancelada." };
-  if (c.contaGeradaId)           return { pode: false, motivo: "Já foi lançada em contas a pagar." };
+  if (contratoDaCotacao(contratos, c.id)) return { pode: false, motivo: "O contrato desta cotação já foi gerado." };
+  if (c.contaGeradaId)           return { pode: false, motivo: "Já foi lançada em contas a pagar pelo fluxo antigo." };
   const esc = propostaEscolhida(c);
   if (!esc)                      return { pode: false, motivo: "Escolha uma proposta primeiro." };
   if (valorProposta(esc) <= 0)   return { pode: false, motivo: "A proposta escolhida está sem valor." };
@@ -205,6 +247,17 @@ function textoAutoria(obj) {
 function podeExcluirCotacao(cot) {
   const c = cot || {};
   if (c.contaGeradaId) return { pode: false, motivo: "Já foi lançada em contas a pagar — cancele a conta primeiro." };
+  return { pode: true, motivo: "" };
+}
+
+// A cotação que já virou contrato também não some: o contrato aponta para
+// ela, e apagá-la deixaria o contrato sem a origem que explica o preço.
+function podeExcluirCotacaoComContratos(cot, contratos) {
+  const base = podeExcluirCotacao(cot);
+  if (!base.pode) return base;
+  if (contratoDaCotacao(contratos, (cot || {}).id)) {
+    return { pode: false, motivo: "Virou contrato — remova o contrato primeiro." };
+  }
   return { pode: true, motivo: "" };
 }
 
@@ -284,27 +337,6 @@ function criarPrestadorRapido(campos, novoId) {
   };
 }
 
-// A conta avulsa que nasce da cotação escolhida. Vence no prazo de
-// resposta quando houver, senão hoje — o escritório ajusta na baixa.
-function contaDaCotacao(cot, hoje) {
-  const c = cot || {};
-  const esc = propostaEscolhida(c);
-  if (!esc) return null;
-  const base = typeof contaAvulsaVazia === "function" ? contaAvulsaVazia(c.obraId) : { id: (typeof uid === "function" ? uid() : "c1"), obraId: c.obraId };
-  return {
-    ...base,
-    origem: "cotacao",
-    cotacaoId: c.id,
-    contaId: c.contaId || base.contaId,
-    prestadorId: esc.fornecedorId || "",
-    favorecido: esc.favorecido || "",
-    descricao: c.titulo || "Cotação",
-    valor: valorProposta(esc),
-    vencimento: c.prazoResposta || hoje || base.vencimento,
-    observacao: esc.condicaoPagamento ? `Condição: ${esc.condicaoPagamento}` : "",
-  };
-}
-
 // Contadores do cartão da obra e do topo da tela.
 function resumoCotacoes(cotacoes, aprovacoes) {
   const lista = (cotacoes || []).filter(c => c && c.id);
@@ -315,8 +347,8 @@ function resumoCotacoes(cotacoes, aprovacoes) {
     if (s.id === "aguardando")  r.aguardandoCliente++;
     if (s.id === "aprovada")    r.aprovadas++;
     if (s.id === "recusada")    r.recusadas++;
-    if (s.id === "lancada")     r.lancadas++;
-    if (s.id === "aprovada" || s.id === "lancada") {
+    if (s.id === "contratada")  r.lancadas++;
+    if (s.id === "aprovada" || s.id === "contratada") {
       const e = economiaDaCotacao(c);
       if (e && e.economia > 0) r.economia += e.economia;
     }
@@ -435,7 +467,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -448,6 +480,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const prestadores = (data.fornecedores || []).filter(f => f && f.ativo !== false);
   const cotacoes = obra.cotacoes || [];
   const aprovacoes = obra.aprovacoesCotacao || [];
+  // quem diz se a cotação já virou algo é o contrato, não um sinalizador
+  const contratos = obra.contratos || [];
   const hoje = typeof dataParaIso === "function" ? dataParaIso(new Date()) : "";
   const dinheiro = (v) => (typeof fmtMoedaCtr === "function" ? fmtMoedaCtr(v) : "R$ " + Number(v || 0).toFixed(2));
 
@@ -735,7 +769,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   async function excluirCotacao(cot) {
-    const trava = podeExcluirCotacao(cot);
+    const trava = podeExcluirCotacaoComContratos(cot, contratos);
     if (!trava.pode) { setErro(trava.motivo); return; }
     const props = propostasDaCotacao(cot);
     const ap = aprovacaoDaCotacao(aprovacoes, cot.id);
@@ -757,17 +791,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     limparAnexos(anexosDasPropostas(props));
   }
 
-  // ── Lançar em contas a pagar (escritório) ─────────────────────
-  function lancar(cot) {
-    const trava = podeLancarCotacao(cot, aprovacoes);
+  // ── Gerar o contrato da escolha ───────────────────────────────
+  // A cotação não lança conta a pagar: ela vira CONTRATO, e é o contrato que
+  // gera as parcelas. Assim o caminho é um só — cotar, escolher, contratar,
+  // pagar — em vez de dois jeitos diferentes de a mesma despesa entrar.
+  function gerarContrato(cot) {
+    const trava = podeGerarContrato(cot, aprovacoes, contratos);
     if (!trava.pode) { setErro(trava.motivo); return; }
+    const dados = dadosDoContratoDaCotacao(cot);
+    if (!dados) { setErro("Escolha uma proposta primeiro."); return; }
     setErro("");
-    const conta = contaDaCotacao(cot, hoje);
-    gravar({
-      ...obra,
-      contasPagar: (obra.contasPagar || []).concat([conta]),
-      cotacoes: cotacoes.map(c => (c.id === cot.id ? { ...c, status: "decidida", contaGeradaId: conta.id } : c)),
-    });
+    if (onGerarContrato) onGerarContrato(dados);
   }
 
   // ── Lista ─────────────────────────────────────────────────────
@@ -807,7 +841,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             : "Nenhuma cotação nesta obra por enquanto."}
         </div>
       ) : cotacoes.map(cot => {
-        const s = situacaoCotacao(cot, aprovacoes);
+        const s = situacaoCotacao(cot, aprovacoes, contratos);
         const ap = aprovacaoDaCotacao(aprovacoes, cot.id);
         const props = propostasOrdenadas(cot);
         const esc = propostaEscolhida(cot);
@@ -815,7 +849,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         const eco = economiaDaCotacao(cot);
         const conta = typeof contaPorId === "function" ? contaPorId(cot.contaId) : null;
         const aberto = !!abertas[cot.id];
-        const trava = podeLancarCotacao(cot, aprovacoes);
+        const trava = podeGerarContrato(cot, aprovacoes, contratos);
         return (
           <div key={cot.id} style={E.card}>
             <button onClick={() => setAbertas(a => ({ ...a, [cot.id]: !a[cot.id] }))}
@@ -909,7 +943,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                               <td style={{ padding: "8px" }}>{p.condicaoPagamento || "—"}</td>
                               {podeGerenciar && (
                                 <td style={{ padding: "8px", whiteSpace: "nowrap" }}>
-                                  {!cot.contaGeradaId && (
+                                  {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                                     <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginRight: 6 }}
                                       onClick={() => trocarCotacao(cot.id, c => (escolhida
                                         ? { ...c, escolhidaId: "", escolhidoPor: "", escolhidoEm: "" }
@@ -919,7 +953,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                   )}
                                   <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5 }}
                                     onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: p }); }}>Editar</button>
-                                  {!cot.contaGeradaId && (
+                                  {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                                     <button title="Excluir esta proposta"
                                       style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginLeft: 6, color: "#dc2626" }}
                                       onClick={() => excluirProposta(cot, p)}>Excluir</button>
@@ -948,11 +982,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                 )}
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {podeGerenciar && !cot.contaGeradaId && (
+                  {podeGerenciar && !cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                     <>
                       <button style={E.btnSec} onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: propostaVazia() }); }}>+ Registrar proposta</button>
                       <button style={E.btnSec} onClick={() => { setErro(""); setFormCotacao(cot); }}>Editar cotação</button>
-                      <button style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45 }} onClick={() => lancar(cot)}>Lançar em contas a pagar</button>
+                      <button style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45 }} onClick={() => gerarContrato(cot)}>Gerar contrato</button>
                       {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
                       {podeExcluir && (
                         <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
@@ -966,7 +1000,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       <button style={E.btnSec} onClick={() => setFormDecisao({ cotacao: cot, status: "recusada" })}>Recusar</button>
                     </>
                   )}
-                  {podeGerenciar && cot.contaGeradaId && (
+                  {podeGerenciar && contratoDaCotacao(contratos, cot.id) && (
+                    <span style={{ fontSize: 12, color: "#15803d", alignSelf: "center" }}>
+                      Virou contrato — as parcelas saem de lá, na aba Contratos.
+                    </span>
+                  )}
+                  {podeGerenciar && !contratoDaCotacao(contratos, cot.id) && cot.contaGeradaId && (
                     <span style={{ fontSize: 12, color: "#15803d", alignSelf: "center" }}>Já está em contas a pagar.</span>
                   )}
                 </div>

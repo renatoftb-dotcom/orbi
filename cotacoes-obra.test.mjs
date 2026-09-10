@@ -32,7 +32,8 @@ const modulo = new Function(`
   return { cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
            propostaEscolhida, melhorProposta, economiaDaCotacao,
            aprovacaoDaCotacao, registrarAprovacaoCotacao, situacaoCotacao,
-           podeLancarCotacao, contaDaCotacao, resumoCotacoes, cotacoesAguardandoCliente,
+           podeGerarContrato, contratoDaCotacao, tipoDoContaId, dadosDoContratoDaCotacao,
+           podeExcluirCotacaoComContratos, resumoCotacoes, cotacoesAguardandoCliente,
            nomeDoFornecedor, PLANO_CONTAS,
            podeExcluirCotacao, removerProposta, removerCotacao, anexosDasPropostas,
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
@@ -94,7 +95,7 @@ teste("com uma proposta só não há economia a declarar", () => {
 });
 
 // ── Situação ────────────────────────────────────────────────────
-teste("situação acompanha o fluxo, do pedido ao lançamento", () => {
+teste("situação acompanha o fluxo, do pedido ao contrato", () => {
   const vazia = M.cotacaoVazia("o1");
   assert.strictEqual(M.situacaoCotacao(vazia, []).id, "coletando");
 
@@ -113,7 +114,13 @@ teste("situação acompanha o fluxo, do pedido ao lançamento", () => {
   const rec = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", status: "recusada", por: "Cliente" });
   assert.strictEqual(M.situacaoCotacao(escolhida, rec).id, "recusada");
 
-  assert.strictEqual(M.situacaoCotacao({ ...escolhida, contaGeradaId: "x" }, ap).id, "lancada");
+  // é o CONTRATO que fecha o ciclo — e a cotação lançada pelo fluxo antigo
+  // continua lendo como concluída
+  const comContrato = [{ id: "ctr1", cotacaoId: "ct1" }];
+  assert.strictEqual(M.situacaoCotacao(escolhida, ap, comContrato).id, "contratada");
+  assert.strictEqual(M.situacaoCotacao({ ...escolhida, contaGeradaId: "x" }, ap).id, "contratada");
+  assert.strictEqual(M.situacaoCotacao(escolhida, ap, [{ id: "ctr9", cotacaoId: "outra" }]).id, "aprovada",
+    "contrato de outra cotação não conta");
   assert.strictEqual(M.situacaoCotacao({ ...escolhida, status: "cancelada" }, ap).id, "cancelada");
 });
 
@@ -135,55 +142,78 @@ teste("decisão de uma cotação não encosta na de outra", () => {
 // ── Trava do lançamento ─────────────────────────────────────────
 teste("não lança sem escolha, sem valor nem sem o aval do cliente", () => {
   const comprando = comPropostas([9000, 7000]);
-  assert.strictEqual(M.podeLancarCotacao(comprando, []).pode, false);
+  assert.strictEqual(M.podeGerarContrato(comprando, []).pode, false);
 
   const escolhida = { ...comprando, escolhidaId: "p1" };
-  assert.strictEqual(M.podeLancarCotacao(escolhida, []).pode, false);
+  assert.strictEqual(M.podeGerarContrato(escolhida, []).pode, false);
 
   const recusada = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", status: "recusada", por: "C" });
-  assert.strictEqual(M.podeLancarCotacao(escolhida, recusada).pode, false);
+  assert.strictEqual(M.podeGerarContrato(escolhida, recusada).pode, false);
 
   const aprovada = M.registrarAprovacaoCotacao([], { cotacaoId: "ct1", status: "aprovada", por: "C" });
-  assert.strictEqual(M.podeLancarCotacao(escolhida, aprovada).pode, true);
+  assert.strictEqual(M.podeGerarContrato(escolhida, aprovada).pode, true);
 
   const semValor = { ...comPropostas([""]), escolhidaId: "p0", precisaAprovacaoCliente: false };
-  assert.strictEqual(M.podeLancarCotacao(semValor, []).pode, false);
+  assert.strictEqual(M.podeGerarContrato(semValor, []).pode, false);
 
   const jaLancada = { ...escolhida, contaGeradaId: "c9" };
-  assert.strictEqual(M.podeLancarCotacao(jaLancada, aprovada).pode, false);
+  assert.strictEqual(M.podeGerarContrato(jaLancada, aprovada).pode, false);
 });
 
 teste("cotação sem exigência de aval lança direto após a escolha", () => {
   const c = { ...comPropostas([9000, 7000]), escolhidaId: "p1", precisaAprovacaoCliente: false };
-  assert.strictEqual(M.podeLancarCotacao(c, []).pode, true);
+  assert.strictEqual(M.podeGerarContrato(c, []).pode, true);
 });
 
-// ── A conta que nasce da cotação ────────────────────────────────
-teste("a conta gerada carrega fornecedor, valor e a conta do P&L", () => {
-  const c = {
-    ...comPropostas([9000, 7000]), escolhidaId: "p1", titulo: "Esquadrias",
-    contaId: "material", prazoResposta: "2026-10-15",
-  };
-  c.propostas[1] = { ...c.propostas[1], fornecedorId: "f9", favorecido: "MB Viezzer", condicaoPagamento: "50/50" };
-  const conta = M.contaDaCotacao(c, "2026-09-09");
-  assert.strictEqual(conta.origem, "cotacao");
-  assert.strictEqual(conta.cotacaoId, "ct1");
-  assert.strictEqual(conta.contaId, "material");
-  assert.strictEqual(conta.prestadorId, "f9");
-  assert.strictEqual(conta.favorecido, "MB Viezzer");
-  assert.strictEqual(conta.valor, 7000);
-  assert.strictEqual(conta.vencimento, "2026-10-15");
-  assert.ok(/50\/50/.test(conta.observacao));
-  assert.strictEqual(conta.pago, false);
+// ── O contrato que nasce da cotação ─────────────────────────────
+teste("a cotação entrega contratado, valor e ofício para o contrato", () => {
+  // os ids saem do índice: p0 é a primeira proposta
+  const cot = { ...comPropostas([39184, 42000]), escolhidaId: "p0", titulo: "Esquadrias de alumínio",
+    escopo: "Portas de entrada e vidros vitrine", contaId: "serralheiro" };
+  cot.propostas[0] = { ...cot.propostas[0], favorecido: "MB Viezzer", fornecedorId: "f2", condicaoPagamento: "50/50", prazoDias: 40 };
+  const d = M.dadosDoContratoDaCotacao(cot);
+  assert.strictEqual(d.cotacaoId, "ct1");
+  assert.strictEqual(d.nomeContratado, "MB Viezzer");
+  assert.strictEqual(d.prestadorId, "f2");
+  assert.strictEqual(d.valor, 39184);
+  assert.strictEqual(d.tipoId, "serralheiro", "a conta do P&L diz o ofício");
+  assert.strictEqual(d.titulo, "Esquadrias de alumínio");
+  assert.strictEqual(d.escopo, "Portas de entrada e vidros vitrine");
 });
 
-teste("sem prazo de resposta a conta vence hoje", () => {
-  const c = { ...comPropostas([7000]), escolhidaId: "p0" };
-  assert.strictEqual(M.contaDaCotacao(c, "2026-09-09").vencimento, "2026-09-09");
+teste("conta sem ofício próprio abre o contrato em 'outro'", () => {
+  assert.strictEqual(M.tipoDoContaId("gesseiro"), "gesseiro");
+  assert.strictEqual(M.tipoDoContaId("taxa_admin_obra"), "gestaoObra");
+  assert.strictEqual(M.tipoDoContaId("mo_diversos"), "outro", "várias caem aqui — quem escolhe é o usuário");
+  assert.strictEqual(M.tipoDoContaId("material"), "outro");
+  assert.strictEqual(M.tipoDoContaId(""), "outro");
 });
 
-teste("sem proposta escolhida não há conta a gerar", () => {
-  assert.strictEqual(M.contaDaCotacao(comPropostas([7000]), "2026-09-09"), null);
+teste("sem proposta escolhida não há contrato a gerar", () => {
+  assert.strictEqual(M.dadosDoContratoDaCotacao(comPropostas([7000])), null);
+  assert.strictEqual(M.dadosDoContratoDaCotacao(null), null);
+});
+
+teste("o contrato já gerado tranca a cotação", () => {
+  const cot = { ...comPropostas([7000]), escolhidaId: "p0", precisaAprovacaoCliente: false };
+  const com = [{ id: "ctr1", cotacaoId: "ct1" }];
+  assert.strictEqual(M.podeGerarContrato(cot, [], []).pode, true);
+  const t = M.podeGerarContrato(cot, [], com);
+  assert.strictEqual(t.pode, false);
+  assert.ok(/já foi gerado/.test(t.motivo), t.motivo);
+  // e não dá para apagar a cotação que sustenta um contrato
+  const e = M.podeExcluirCotacaoComContratos(cot, com);
+  assert.strictEqual(e.pode, false);
+  assert.ok(/remova o contrato primeiro/.test(e.motivo), e.motivo);
+  assert.strictEqual(M.podeExcluirCotacaoComContratos(cot, []).pode, true);
+});
+
+teste("contratoDaCotacao acha pelo vínculo, não pelo palpite", () => {
+  const lista = [{ id: "a", cotacaoId: "ct1" }, { id: "b" }, null];
+  assert.strictEqual(M.contratoDaCotacao(lista, "ct1").id, "a");
+  assert.strictEqual(M.contratoDaCotacao(lista, "ct2"), null);
+  assert.strictEqual(M.contratoDaCotacao(lista, ""), null, "cotação sem id não casa com contrato sem vínculo");
+  assert.strictEqual(M.contratoDaCotacao(null, "ct1"), null);
 });
 
 // ── Resumo ──────────────────────────────────────────────────────

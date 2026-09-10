@@ -320,3 +320,41 @@ saber.
 Na tela: "Registro" ao lado de Conta do P&L e Etapa; uma linha em 10,5 px
 sob o nome do fornecedor em cada proposta; e "por Fulano em dd/mm" ao lado
 do selo "Escolhida".
+
+## O fluxo: cotar, escolher, contratar
+
+A cotação **não lança conta a pagar**. Ela vira **contrato**, e é o contrato
+que gera as parcelas. Assim o caminho é um só — cotar → escolher →
+contratar → pagar — em vez de dois jeitos diferentes de a mesma despesa
+entrar no financeiro, um deles sem contrato nenhum por trás.
+
+"Lançar em contas a pagar" saiu. No lugar, **"Gerar contrato"**: abre o
+gerador já preenchido e a cotação passa a se declarar contratada.
+
+O que a cotação entrega ao contrato (`dadosDoContratoDaCotacao`):
+
+| do lado da cotação | vira no contrato |
+|---|---|
+| conta do P&L | tipo de profissional (`tipoDoContaId`) |
+| fornecedor da proposta escolhida | contratado (prestador do cadastro) |
+| valor da proposta escolhida | valor do contrato |
+| título e escopo | o bloco de escopo detalhado |
+
+Prazo, parcelas, cláusulas e o objeto seguem sendo do formulário do
+contrato, que já sabe fazer isso. `tipoDoContaId` é o caminho de volta de
+`CONTA_POR_TIPO`; as contas que caem em `mo_diversos` abrem o contrato em
+"outro", e quem escolhe é o usuário.
+
+### Quem diz que a cotação virou algo é o contrato
+
+Não há sinalizador guardado na cotação. `contratoDaCotacao(contratos, id)`
+procura o contrato que aponta para ela (`contrato.cotacaoId`), e a situação
+sai daí. Se o contrato for removido, a cotação volta a "aprovada" e pode ser
+contratada de novo — um `contratoGeradoId` gravado ficaria mentindo.
+
+Duas travas nascem disso: cotação que já virou contrato não gera outro, e
+não pode ser excluída (`podeExcluirCotacaoComContratos`) — apagá-la deixaria
+o contrato sem a origem que explica o preço. Remova o contrato primeiro.
+
+`contaGeradaId` continua sendo lido: cotação lançada pelo fluxo antigo segue
+aparecendo como concluída, e não volta a pedir contrato.
