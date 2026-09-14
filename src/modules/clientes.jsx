@@ -190,6 +190,43 @@ function statusCliente(cliente, data) {
   return { chips, inativaEm, temAtividade };
 }
 
+// ── Visita: entrar como o cliente, e voltar ─────────────────────
+// O token de visita vem assinado pelo servidor (2 h, só para admin do
+// escritório dono do cliente). Enquanto ela dura, o login do escritório fica
+// guardado à parte para a volta ser um clique — e o recarregamento é de
+// propósito: o app inteiro relê o perfil do zero, sem sobra do estado antigo.
+const VISITA_TOKEN = "vicke-visita-token";
+const VISITA_USER  = "vicke-visita-user";
+
+function guardarLoginDoEscritorio() {
+  try {
+    const t = localStorage.getItem("vicke-token"), u = localStorage.getItem("vicke-user");
+    if (t) localStorage.setItem(VISITA_TOKEN, t);
+    if (u) localStorage.setItem(VISITA_USER, u);
+  } catch (e) { /* navegador sem storage: a volta será pelo login */ }
+}
+
+function entrarComoCliente(resposta) {
+  guardarLoginDoEscritorio();
+  localStorage.setItem("vicke-token", resposta.token);
+  localStorage.setItem("vicke-user", JSON.stringify(resposta.usuario));
+  window.location.href = "/";
+}
+
+function temVoltaDaVisita() {
+  try { return !!localStorage.getItem(VISITA_TOKEN); } catch (e) { return false; }
+}
+
+function voltarDaVisita() {
+  try {
+    const t = localStorage.getItem(VISITA_TOKEN), u = localStorage.getItem(VISITA_USER);
+    localStorage.removeItem(VISITA_TOKEN); localStorage.removeItem(VISITA_USER);
+    if (t) localStorage.setItem("vicke-token", t); else localStorage.removeItem("vicke-token");
+    if (u) localStorage.setItem("vicke-user", u); else localStorage.removeItem("vicke-user");
+  } catch (e) { /* sem storage, cai no login */ }
+  window.location.href = "/";
+}
+
 // ── Acesso do cliente à obra dele ────────────────────────────────
 // O escritório cria um login (perfil "cliente") amarrado a este cadastro.
 // Com ele, o cliente entra no mesmo site e só enxerga as obras dele: pode
@@ -226,6 +263,7 @@ function AcessoDoCliente({ cliente, card, secTit, btn, btnSec, isMobile }) {
     .then(a => setSenhaNova(a.senha_temporaria)));
   const alternar = () => rodar(() => api.clientes.acesso.ativar(cliente.id, !acesso.ativo)
     .then(a => setAcesso({ ...acesso, ativo: a.ativo })));
+  const entrar = () => rodar(() => api.clientes.acesso.entrar(cliente.id).then(entrarComoCliente));
 
   return (
     <div style={card}>
@@ -268,8 +306,16 @@ function AcessoDoCliente({ cliente, card, secTit, btn, btnSec, isMobile }) {
             </div>
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <button style={btn} disabled={ocupado || !acesso.ativo} onClick={entrar}
+              title={acesso.ativo ? "Abre o ambiente do cliente com os dados dele, sem senha" : "Reative o acesso para poder entrar"}>
+              Entrar como o cliente
+            </button>
             <button style={btnSec} disabled={ocupado} onClick={resetar}>Gerar nova senha</button>
             <button style={btnSec} disabled={ocupado} onClick={alternar}>{acesso.ativo ? "Desativar acesso" : "Reativar acesso"}</button>
+          </div>
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
+            Entrar como o cliente abre o ambiente dele exatamente como ele vê, sem precisar da senha — e continua funcionando depois que ele trocar a senha.
+            A visita dura 2 horas, fica registrada no histórico e não conta como acesso dele.
           </div>
         </>
       )}
@@ -3890,8 +3936,23 @@ function AreaCliente({ data, save, usuario, onLogout, isMobile }) {
     );
   }
 
+  // Enquanto a visita dura, a tarja fica no topo o tempo todo: sem ela é fácil
+  // esquecer que se está vendo com os olhos do cliente e estranhar o que falta.
+  const visitando = !!(usuario && usuario.visita);
+
   return (
     <div data-vk-ui="1" style={{ minHeight: "100vh", background: "#fafafb", fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}>
+      {visitando && (
+        <div style={{ background: "#eef5ff", borderBottom: `1.5px solid ${AZUL_VK}`, padding: isMobile ? "10px 16px" : "10px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div style={{ fontSize: 12.5, color: "#111827" }}>
+            Você está vendo como <strong>{cliente.nome}</strong>
+            {usuario.visita_por_nome ? ` — visita de ${usuario.visita_por_nome}` : ""}. O que você fizer aqui é gravado como se fosse o cliente.
+          </div>
+          {temVoltaDaVisita()
+            ? <button onClick={voltarDaVisita} style={{ ...C.btn, fontSize: 12, padding: "6px 14px" }}>Voltar ao escritório</button>
+            : <button onClick={onLogout} style={{ ...C.btnSec, fontSize: 12, padding: "6px 14px" }}>Encerrar visita</button>}
+        </div>
+      )}
       <div style={{ background: "#fff", borderBottom: "1px solid rgba(38,36,33,0.10)", padding: isMobile ? "12px 16px" : "14px 28px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>{cliente.nome}</div>

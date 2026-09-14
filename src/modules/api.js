@@ -73,6 +73,8 @@ const api = {
       criar:    (id, email)  => post(`/api/clientes/${id}/acesso`, { email }),
       ativar:   (id, ativo)  => put(`/api/clientes/${id}/acesso`, { ativo }),
       resetar:  (id)         => put(`/api/clientes/${id}/acesso`, { resetarSenha: true }),
+      // entra como o cliente: o servidor devolve um token de visita de 2h
+      entrar:   (id)         => post(`/api/clientes/${id}/acesso/entrar`, {}),
     },
   },
 
