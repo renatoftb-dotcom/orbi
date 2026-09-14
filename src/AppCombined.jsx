@@ -15010,7 +15010,7 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
     let mesAtual = null;
     for (let d = 0; d < Math.ceil(at.fimDias); d++) {
       const k = chaveMes(dataDoDiaUtil(ini, d));
-      if (k !== mesAtual) { marcadores.push({ mes: k, dia: d }); mesAtual = k; }
+      if (k !== mesAtual) { marcadores.push({ mes: k, dia: d, n: marcadores.length + 1 }); mesAtual = k; }
     }
   }
 
@@ -15112,9 +15112,11 @@ function CronogramaObraBloco({ obra, obras, data, save, onObraAtualizada, isMobi
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Dias</th>
                     <th style={{ padding: "6px 8px", textAlign: "right" }}>Folga</th>
                     <th style={{ padding: "6px 8px", width: "45%" }}>
+                      <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 2 }}>Meses</div>
                       <div style={{ position: "relative", height: 14 }}>
                         {marcadores.map((mk) => (
-                          <span key={mk.mes} style={{ position: "absolute", left: `${mk.dia / totalDias * 100}%`, fontSize: 9, color: "#6b7280", borderLeft: "1px solid #e5e7eb", paddingLeft: 2, whiteSpace: "nowrap" }}>{fmtMesCrono(mk.mes)}</span>
+                          <span key={mk.mes} title={fmtMesCrono(mk.mes)}
+                            style={{ position: "absolute", left: `${mk.dia / totalDias * 100}%`, fontSize: 10, color: "#6b7280", borderLeft: "1px solid #e5e7eb", paddingLeft: 3, whiteSpace: "nowrap" }}>{mk.n}</span>
                         ))}
                       </div>
                     </th>
