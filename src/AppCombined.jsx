@@ -16189,18 +16189,27 @@ function opcaoAtiva(c, id) {
   return op ? opcaoPadrao(op, o.modelo) : false;
 }
 
-// Número do contrato — sequencial, único no escritório, com 4 dígitos. É o
-// que identifica o contrato nas contas a pagar ("Contrato 0007").
-function proximoNumeroContrato(obras) {
+// Número do documento — sequencial, único no escritório, com 4 dígitos. É o
+// que identifica o compromisso nas contas a pagar: "Contrato 0007" quando há
+// contrato assinado, "Pedido 0008" quando o fornecedor entrega contra nota.
+//
+// A FILA É A MESMA para os dois. Numerar cada tipo por conta própria daria
+// um Contrato 0004 e um Pedido 0004 convivendo na mesma obra, e aí o número
+// deixa de identificar coisa alguma.
+function proximoNumeroDoc(obras) {
   let maior = 0;
+  const olhar = (v) => {
+    const n = parseInt(String(v || "").replace(/\D/g, ""), 10);
+    if (Number.isFinite(n) && n > maior) maior = n;
+  };
   for (const o of obras || []) {
-    for (const c of (o && o.contratos) || []) {
-      const n = parseInt(String((c && c.numeroContrato) || "").replace(/\D/g, ""), 10);
-      if (Number.isFinite(n) && n > maior) maior = n;
-    }
+    for (const c of (o && o.contratos) || []) olhar(c && c.numeroContrato);
+    for (const c of (o && o.cotacoes) || []) olhar(c && c.numeroPedido);
   }
   return String(maior + 1).padStart(4, "0");
 }
+const proximoNumeroContrato = proximoNumeroDoc;
+const proximoNumeroPedido = proximoNumeroDoc;
 // Rótulo do serviço contratado: o ofício do prestador, ou o objeto digitado.
 function servicoDoContrato(c) {
   const t = tipoProfissional(c && c.tipoProfissional);
@@ -17563,6 +17572,7 @@ function contasDasEntregas(dados, novoId) {
     obraId: d.obraId || "",
     contratoId: "",
     cotacaoId: d.cotacaoId || "",
+    numeroPedido: d.numeroPedido || "",
     parcela: linhas.length > 1 ? i + 1 : 0,
     parcelasTotal: linhas.length > 1 ? linhas.length : 0,
     contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
@@ -17603,6 +17613,7 @@ function contaDaCompra(d, novoId, dados) {
     obraId: dados.obraId || "",
     contratoId: "",
     cotacaoId: dados.cotacaoId || "",
+    numeroPedido: dados.numeroPedido || "",
     parcela: d.parcela || 0,
     parcelasTotal: d.parcelasTotal || 0,
     contaId: dados.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
@@ -17688,10 +17699,18 @@ function contasDeCotacao(contas, cotacaoId) {
 
 // ── Identificação da conta ──────────────────────────────────────
 // "Contrato 0007 · Serralheria · MB Viezzer · Parcela 2/6"
+// "Contrato 0007" ou "Pedido 0008" — o prefixo diz de onde a conta nasceu.
+function docDaConta(conta) {
+  const c = conta || {};
+  if (c.numeroContrato) return `Contrato ${c.numeroContrato}`;
+  if (c.numeroPedido) return `Pedido ${c.numeroPedido}`;
+  return "";
+}
+
 function tituloConta(conta) {
   const c = conta || {};
   const partes = [];
-  if (c.numeroContrato) partes.push(`Contrato ${c.numeroContrato}`);
+  if (docDaConta(c)) partes.push(docDaConta(c));
   if (c.servico) partes.push(c.servico);
   if (c.favorecido) partes.push(c.favorecido);
   if (c.parcela && c.totalParcelas) partes.push(`Parcela ${c.parcela}/${c.totalParcelas}`);
@@ -17706,7 +17725,7 @@ function tituloCurtoConta(conta) {
   const c = conta || {};
   const d = String(c.descricao || "").trim();
   const partes = [];
-  if (c.numeroContrato) partes.push(`Contrato ${c.numeroContrato}`);
+  if (docDaConta(c)) partes.push(docDaConta(c));
   // descrição curta diz mais que "Parcela 1/2" ("Entrada", "Saldo na
   // conclusão", "Portão — entrada"); parágrafo de item fica para o detalhe
   const curta = d && d.length <= CP_TITULO_CURTO && !/^Parcela \d+\/\d+/.test(d) ? d : "";
@@ -18074,6 +18093,52 @@ function acumuladoAte(contas, entradas, mes) {
 function entradaObraVazia(obraId) {
   return { id: (typeof uid === "function" ? uid() : String(Date.now())),
     obraId, contaId: "deposito_proprio", descricao: "", valor: "", data: "" };
+}
+
+// ── Recalibrar as datas de um pedido ────────────────────────────
+// O contrato se recalibra pela regra (parcelas, periodicidade) e as contas
+// renascem dela. O pedido não tem regra: as datas foram digitadas uma a uma,
+// entrega por entrega. Então aqui o que se preserva é o ESPAÇAMENTO — move-se
+// a primeira conta em aberto para a data nova e as outras andam o mesmo
+// tanto de dias. Conta paga não se mexe: a data dela é fato consumado.
+function contasDoPedido(contas, cotacaoId) {
+  return (contas || []).filter((c) => c && c.cotacaoId === cotacaoId)
+    .slice().sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+}
+
+function diasEntreIso(de, para) {
+  if (!de || !para) return 0;
+  const a = new Date(de + "T12:00:00"), b = new Date(para + "T12:00:00");
+  if (isNaN(a) || isNaN(b)) return 0;
+  return Math.round((b - a) / 86400000);
+}
+
+function recalibrarPedido(contas, cotacaoId, novaData) {
+  const doPedido = contasDoPedido(contas, cotacaoId);
+  const emAberto = doPedido.filter((c) => !c.pago);
+  if (!emAberto.length || !novaData) return contas || [];
+  const delta = diasEntreIso(emAberto[0].vencimento, String(novaData).slice(0, 10));
+  if (!delta) return contas || [];
+  const mover = new Set(emAberto.map((c) => c.id));
+  return (contas || []).map((c) => (mover.has(c.id)
+    ? { ...c, vencimento: somarDias(c.vencimento, delta) }
+    : c));
+}
+
+// A prévia do que vai mudar, no mesmo formato da do contrato.
+function previaDoPedido(contas, cotacaoId, novaData, limite) {
+  const antes = contasDoPedido(contas, cotacaoId);
+  const depois = contasDoPedido(recalibrarPedido(contas, cotacaoId, novaData), cotacaoId);
+  const porId = {};
+  for (const c of antes) porId[c.id] = c.vencimento;
+  const linhas = [];
+  let pagas = 0;
+  for (const c of depois) {
+    if (c.pago) { pagas++; continue; }
+    linhas.push({ id: c.id, descricao: c.descricao, de: porId[c.id] || "", para: c.vencimento });
+    if (limite && linhas.length >= limite) break;
+  }
+  return { linhas, pagas, total: depois.length };
 }
 
 // ── Recalibrar as datas de um contrato ──────────────────────────
@@ -21997,6 +22062,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // parcelas em aberto; as pagas ficam como estão.
   const confirmarRecalibragem = () => {
     const f = formRecalibrar; if (!f) return;
+    // Pedido: as contas andam, não há regra a regravar.
+    const pedido = (obraAtual.cotacoes || []).find(c => c.id === f.contratoId && c.contaGeradaId);
+    if (pedido) {
+      if (!f.novaData) { dialogo.alertar({ titulo: "Informe a nova data do primeiro pagamento", tipo: "aviso" }); return; }
+      gravarContas(recalibrarPedido(contasDaObra, pedido.id, f.novaData), obraAtual.id);
+      setFormRecalibrar(null);
+      return;
+    }
     const alvo = (obraAtual.contratos || []).find(c => c.id === f.contratoId);
     if (!alvo) { setFormRecalibrar(null); return; }
     const porItem = contratoPorItem(alvo);
@@ -22008,6 +22081,39 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const contasNovas = sincronizarContasDaObra(contasDaObra, contratosNovos);
     gravarObras(obras.map(o => o.id === obraAtual.id ? { ...o, contratos: contratosNovos, contasPagar: contasNovas } : o));
     setFormRecalibrar(null);
+  };
+
+  // ── O que dá para recalibrar: contratos e pedidos lançados ────
+  // Os dois geram parcelas com data, então os dois podem escorregar quando a
+  // obra ou a entrega atrasa. O rótulo traz o número do documento, que é o
+  // mesmo da conta lá embaixo — é por ele que se reconhece o grupo.
+  const alvosRecalibraveis = (() => {
+    const lista = [];
+    for (const ct of (obraAtual && obraAtual.contratos) || []) {
+      lista.push({ id: ct.id, tipo: "contrato",
+        rotulo: `${ct.numeroContrato ? `Contrato ${ct.numeroContrato} · ` : ""}${servicoDoContrato(ct)} · ${ct.nomeContratado || "Contratado"}` });
+    }
+    for (const cot of (obraAtual && obraAtual.cotacoes) || []) {
+      if (!cot.contaGeradaId) continue;
+      const contas = contasDeCotacao(contasDaObra, cot.id);
+      if (!contas.length) continue;
+      lista.push({ id: cot.id, tipo: "pedido",
+        rotulo: `${cot.numeroPedido ? `Pedido ${cot.numeroPedido} · ` : ""}${cot.titulo || "Compra"} · ${(contas[0] || {}).favorecido || "Fornecedor"}` });
+    }
+    return lista;
+  })();
+
+  const abrirRecalibragem = (id) => {
+    const pedido = (obraAtual.cotacoes || []).find(c => c.id === id && c.contaGeradaId);
+    if (pedido) {
+      const emAberto = contasDeCotacao(contasDaObra, pedido.id)
+        .filter(c => !c.pago).sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+      setFormRecalibrar({ contratoId: id, novaData: (emAberto[0] || {}).vencimento || hojeIso, itens: [], previsaoConclusao: "" });
+      return;
+    }
+    const ct = (obraAtual.contratos || []).find(x => x.id === id);
+    setFormRecalibrar({ contratoId: id, novaData: (ct && primeiroVencimentoContrato(ct)) || hojeIso,
+      itens: datasDosItens(ct), previsaoConclusao: (ct && ct.previsaoConclusao) || "" });
   };
 
   // ── Entradas da obra (aportes) — o outro lado do extrato ──────
@@ -23513,12 +23619,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ) : (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
-            {perm.podeGerenciarObra && (obraAtual.contratos || []).length > 0 && (
-              <button style={C.btnSec} onClick={() => {
-                const primeiro = (obraAtual.contratos || [])[0];
-                setFormRecalibrar({ contratoId: primeiro.id, novaData: primeiroVencimentoContrato(primeiro) || hojeIso,
-                  itens: datasDosItens(primeiro), previsaoConclusao: primeiro.previsaoConclusao || "" });
-              }}>Recalibrar datas</button>
+            {perm.podeGerenciarObra && alvosRecalibraveis.length > 0 && (
+              <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar datas</button>
             )}
           </div>
         ))}
@@ -23527,12 +23629,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             muda-se a data do primeiro pagamento e as parcelas em aberto andam
             junto. As pagas ficam onde estão. */}
         {formRecalibrar && (() => {
-          const alvo = (obraAtual.contratos || []).find(c => c.id === formRecalibrar.contratoId) || (obraAtual.contratos || [])[0];
+          const escolhido = alvosRecalibraveis.find(a => a.id === formRecalibrar.contratoId) || alvosRecalibraveis[0];
+          const ehPedido = !!escolhido && escolhido.tipo === "pedido";
+          const alvo = ehPedido ? null : (obraAtual.contratos || []).find(c => c.id === formRecalibrar.contratoId) || (obraAtual.contratos || [])[0];
           const porItem = alvo ? contratoPorItem(alvo) : false;
           const alvoNovo = !alvo ? null : porItem
             ? { ...recalibrarItens(alvo, formRecalibrar.itens || []), previsaoConclusao: formRecalibrar.previsaoConclusao || "" }
             : recalibrarContrato(alvo, formRecalibrar.novaData);
-          const previa = alvo ? previaEntreContratos(alvo, alvoNovo, contasDaObra, porItem ? 6 : 4) : { linhas: [], pagas: 0, total: 0 };
+          const previa = ehPedido
+            ? previaDoPedido(contasDaObra, escolhido.id, formRecalibrar.novaData, 6)
+            : (alvo ? previaEntreContratos(alvo, alvoNovo, contasDaObra, porItem ? 6 : 4) : { linhas: [], pagas: 0, total: 0 });
           const itensDoAlvo = ((alvo || {}).itens || []);
           const dia = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "—";
           return (
@@ -23540,36 +23646,32 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
               onClick={() => setFormRecalibrar(null)}>
               <div data-vk-ui="1" onClick={e => e.stopPropagation()}
                 style={{ background: "#fff", border: "1px solid rgba(38,36,33,0.14)", borderRadius: 16, padding: 18, width: "100%", maxWidth: 520, maxHeight: "86vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Recalibrar datas do contrato</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>
+                  {ehPedido ? "Recalibrar datas do pedido" : "Recalibrar datas do contrato"}
+                </div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>
-                  {porItem
+                  {ehPedido
+                    ? "A entrega atrasou? Informe quando vence o primeiro pagamento em aberto; os demais andam o mesmo tanto de dias, mantendo o intervalo combinado com o fornecedor."
+                    : porItem
                     ? "A obra não começou na data registrada? Ajuste abaixo o começo e a conclusão de cada item — as parcelas em aberto acompanham."
                     : "A obra não começou na data registrada? Informe quando vence o primeiro pagamento; as parcelas em aberto andam junto, na mesma periodicidade."}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 170px", gap: 12 }}>
                   <div>
-                    <label style={C.label}>Contrato</label>
+                    <label style={C.label}>Contrato ou pedido</label>
                     <select style={{ ...C.input, cursor: "pointer" }} value={formRecalibrar.contratoId}
-                      onChange={e => {
-                        const ct = (obraAtual.contratos || []).find(x => x.id === e.target.value);
-                        setFormRecalibrar({ contratoId: e.target.value, novaData: (ct && primeiroVencimentoContrato(ct)) || hojeIso,
-                          itens: datasDosItens(ct), previsaoConclusao: (ct && ct.previsaoConclusao) || "" });
-                      }}>
-                      {(obraAtual.contratos || []).map(ct => (
-                        <option key={ct.id} value={ct.id}>
-                          {`${ct.numeroContrato ? `Contrato ${ct.numeroContrato} · ` : ""}${servicoDoContrato(ct)} · ${ct.nomeContratado || "Contratado"}`}
-                        </option>
-                      ))}
+                      onChange={e => abrirRecalibragem(e.target.value)}>
+                      {alvosRecalibraveis.map(a => <option key={a.id} value={a.id}>{a.rotulo}</option>)}
                     </select>
                   </div>
-                  {!porItem && (
+                  {(ehPedido || !porItem) && (
                     <div>
                       <label style={C.label}>1º pagamento vence em</label>
                       <input style={C.input} type="date" value={formRecalibrar.novaData}
                         onChange={e => setFormRecalibrar({ ...formRecalibrar, novaData: e.target.value })} />
                     </div>
                   )}
-                  {porItem && (
+                  {!ehPedido && porItem && (
                     <div>
                       <label style={C.label}>Previsão de conclusão (padrão)</label>
                       <input style={C.input} type="date" value={formRecalibrar.previsaoConclusao || ""}
@@ -23580,7 +23682,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
                 {/* Pagamento item a item: cada item tem o seu próprio começo e
                     a sua própria conclusão — é item a item que se recalibra. */}
-                {porItem && (
+                {!ehPedido && porItem && (
                   <div style={{ marginTop: 14 }}>
                     <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
                       Este contrato paga entrada na liberação de cada item e o saldo na conclusão dele, então a recalibragem é item a item.
@@ -23805,10 +23907,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // segunda parte de uma cópia da obra sem as contas da primeira e as apaga.
   function lancarCotacaoEmContas(dados) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
-    const novas = contasDaCotacao(dados, uid);
+    // O pedido entra na mesma fila de números do contrato — quem relança um
+    // pedido desfeito reaproveita o número que já era dele.
+    const anterior = (obraAtual.cotacoes || []).find(c => c.id === dados.cotacaoId) || {};
+    const numeroPedido = anterior.numeroPedido || proximoNumeroPedido(data.obras || []);
+    const novas = contasDaCotacao({ ...dados, numeroPedido }, uid);
     if (!novas.length) return { erro: "A proposta escolhida está sem valor." };
     const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
       ...c,
+      numeroPedido,
       contaGeradaId: novas[0].id,
       lancadoEm: dados.lancadoEm || new Date().toISOString(),
       lancadoPor: dados.lancadoPor || "",

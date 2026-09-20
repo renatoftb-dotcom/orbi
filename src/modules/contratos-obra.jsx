@@ -632,18 +632,27 @@ function opcaoAtiva(c, id) {
   return op ? opcaoPadrao(op, o.modelo) : false;
 }
 
-// Número do contrato — sequencial, único no escritório, com 4 dígitos. É o
-// que identifica o contrato nas contas a pagar ("Contrato 0007").
-function proximoNumeroContrato(obras) {
+// Número do documento — sequencial, único no escritório, com 4 dígitos. É o
+// que identifica o compromisso nas contas a pagar: "Contrato 0007" quando há
+// contrato assinado, "Pedido 0008" quando o fornecedor entrega contra nota.
+//
+// A FILA É A MESMA para os dois. Numerar cada tipo por conta própria daria
+// um Contrato 0004 e um Pedido 0004 convivendo na mesma obra, e aí o número
+// deixa de identificar coisa alguma.
+function proximoNumeroDoc(obras) {
   let maior = 0;
+  const olhar = (v) => {
+    const n = parseInt(String(v || "").replace(/\D/g, ""), 10);
+    if (Number.isFinite(n) && n > maior) maior = n;
+  };
   for (const o of obras || []) {
-    for (const c of (o && o.contratos) || []) {
-      const n = parseInt(String((c && c.numeroContrato) || "").replace(/\D/g, ""), 10);
-      if (Number.isFinite(n) && n > maior) maior = n;
-    }
+    for (const c of (o && o.contratos) || []) olhar(c && c.numeroContrato);
+    for (const c of (o && o.cotacoes) || []) olhar(c && c.numeroPedido);
   }
   return String(maior + 1).padStart(4, "0");
 }
+const proximoNumeroContrato = proximoNumeroDoc;
+const proximoNumeroPedido = proximoNumeroDoc;
 // Rótulo do serviço contratado: o ofício do prestador, ou o objeto digitado.
 function servicoDoContrato(c) {
   const t = tipoProfissional(c && c.tipoProfissional);

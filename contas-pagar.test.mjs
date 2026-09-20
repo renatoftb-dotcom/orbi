@@ -25,7 +25,9 @@ const modulo = new Function(`
   ${(() => { const cp = mod("contas-pagar.jsx"); const i = cp.indexOf("// UI — gráfico do fluxo mensal");
              if (i < 0) throw new Error("Marcador de início da UI não encontrado em contas-pagar.jsx");
              return cp.slice(0, cp.lastIndexOf("// ═", i)); })()}
-  return { PLANO_CONTAS, contratoVazio, valorContrato,
+  return { recalibrarPedido, previaDoPedido, contasDoPedido, docDaConta, diasEntreIso,
+           contasDaCotacao, contasDeCotacao,
+           PLANO_CONTAS, contratoVazio, valorContrato,
            parcelasAPagar, contasDoContrato, sincronizarContasDoContrato, removerContasDoContrato,
            situacaoConta, totaisContas, realizadoPorConta, realizadoPorPrestador,
            contaDoTipo, contaAvulsaVazia, somarDias, somarMeses, vencimentoFinal, medicoesPrevistas,
@@ -1125,6 +1127,56 @@ teste("fornecedor sem pagamento não gera folha", () => {
   assert.strictEqual(f.vazio, true);
   assert.strictEqual(modulo.folhaDeComprovantes([], "x").vazio, true);
   assert.strictEqual(modulo.folhaDeComprovantes(null, "x").total, 0);
+});
+
+
+// ── recalibrar um pedido ────────────────────────────────────────
+const pedidoContas = () => ([
+  { id: "a", cotacaoId: "ct1", numeroPedido: "0004", favorecido: "Ferro Pronto", descricao: "1ª entrega", vencimento: "2026-10-02", pago: false },
+  { id: "b", cotacaoId: "ct1", numeroPedido: "0004", favorecido: "Ferro Pronto", descricao: "2ª entrega", vencimento: "2026-11-10", pago: false },
+  { id: "c", cotacaoId: "ct1", numeroPedido: "0004", favorecido: "Ferro Pronto", descricao: "3ª entrega", vencimento: "2026-12-05", pago: false },
+  { id: "z", cotacaoId: "ct2", vencimento: "2026-10-20", pago: false },
+]);
+
+teste("o pedido escorrega inteiro, mantendo o intervalo entre as entregas", () => {
+  const r = modulo.recalibrarPedido(pedidoContas(), "ct1", "2026-10-12");
+  const doPedido = r.filter(c => c.cotacaoId === "ct1");
+  assert.deepStrictEqual(doPedido.map(c => c.vencimento), ["2026-10-12", "2026-11-20", "2026-12-15"]);
+  assert.strictEqual(r.find(c => c.id === "z").vencimento, "2026-10-20", "conta de outra cotação não se mexe");
+});
+
+teste("conta paga não anda, e a régua passa a ser a primeira em aberto", () => {
+  const contas = pedidoContas();
+  contas[0].pago = true;
+  const r = modulo.recalibrarPedido(contas, "ct1", "2026-11-20");
+  const doPedido = r.filter(c => c.cotacaoId === "ct1");
+  assert.strictEqual(doPedido[0].vencimento, "2026-10-02", "a paga fica onde estava");
+  assert.deepStrictEqual(doPedido.slice(1).map(c => c.vencimento), ["2026-11-20", "2026-12-15"]);
+});
+
+teste("sem data nova, ou sem nada em aberto, nada se move", () => {
+  const contas = pedidoContas();
+  assert.deepStrictEqual(modulo.recalibrarPedido(contas, "ct1", "").map(c => c.vencimento),
+                         contas.map(c => c.vencimento));
+  const todasPagas = contas.map(c => ({ ...c, pago: true }));
+  assert.deepStrictEqual(modulo.recalibrarPedido(todasPagas, "ct1", "2026-12-01").map(c => c.vencimento),
+                         todasPagas.map(c => c.vencimento));
+});
+
+teste("a prévia do pedido diz de onde para onde cada conta vai", () => {
+  const p = modulo.previaDoPedido(pedidoContas(), "ct1", "2026-10-12", 6);
+  assert.strictEqual(p.total, 3);
+  assert.strictEqual(p.pagas, 0);
+  assert.deepStrictEqual(p.linhas.map(l => [l.de, l.para]),
+    [["2026-10-02", "2026-10-12"], ["2026-11-10", "2026-11-20"], ["2026-12-05", "2026-12-15"]]);
+});
+
+teste("a conta diz de onde nasceu: contrato ou pedido", () => {
+  assert.strictEqual(modulo.docDaConta({ numeroContrato: "0003" }), "Contrato 0003");
+  assert.strictEqual(modulo.docDaConta({ numeroPedido: "0004" }), "Pedido 0004");
+  assert.strictEqual(modulo.docDaConta({}), "");
+  assert.strictEqual(modulo.docDaConta({ numeroContrato: "0003", numeroPedido: "0004" }), "Contrato 0003");
+  assert.match(modulo.tituloConta({ numeroPedido: "0004", favorecido: "Ferro Pronto", descricao: "1ª entrega" }), /^Pedido 0004 · Ferro Pronto/);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

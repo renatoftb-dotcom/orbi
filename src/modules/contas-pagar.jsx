@@ -482,6 +482,7 @@ function contasDasEntregas(dados, novoId) {
     obraId: d.obraId || "",
     contratoId: "",
     cotacaoId: d.cotacaoId || "",
+    numeroPedido: d.numeroPedido || "",
     parcela: linhas.length > 1 ? i + 1 : 0,
     parcelasTotal: linhas.length > 1 ? linhas.length : 0,
     contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
@@ -522,6 +523,7 @@ function contaDaCompra(d, novoId, dados) {
     obraId: dados.obraId || "",
     contratoId: "",
     cotacaoId: dados.cotacaoId || "",
+    numeroPedido: dados.numeroPedido || "",
     parcela: d.parcela || 0,
     parcelasTotal: d.parcelasTotal || 0,
     contaId: dados.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
@@ -607,10 +609,18 @@ function contasDeCotacao(contas, cotacaoId) {
 
 // ── Identificação da conta ──────────────────────────────────────
 // "Contrato 0007 · Serralheria · MB Viezzer · Parcela 2/6"
+// "Contrato 0007" ou "Pedido 0008" — o prefixo diz de onde a conta nasceu.
+function docDaConta(conta) {
+  const c = conta || {};
+  if (c.numeroContrato) return `Contrato ${c.numeroContrato}`;
+  if (c.numeroPedido) return `Pedido ${c.numeroPedido}`;
+  return "";
+}
+
 function tituloConta(conta) {
   const c = conta || {};
   const partes = [];
-  if (c.numeroContrato) partes.push(`Contrato ${c.numeroContrato}`);
+  if (docDaConta(c)) partes.push(docDaConta(c));
   if (c.servico) partes.push(c.servico);
   if (c.favorecido) partes.push(c.favorecido);
   if (c.parcela && c.totalParcelas) partes.push(`Parcela ${c.parcela}/${c.totalParcelas}`);
@@ -625,7 +635,7 @@ function tituloCurtoConta(conta) {
   const c = conta || {};
   const d = String(c.descricao || "").trim();
   const partes = [];
-  if (c.numeroContrato) partes.push(`Contrato ${c.numeroContrato}`);
+  if (docDaConta(c)) partes.push(docDaConta(c));
   // descrição curta diz mais que "Parcela 1/2" ("Entrada", "Saldo na
   // conclusão", "Portão — entrada"); parágrafo de item fica para o detalhe
   const curta = d && d.length <= CP_TITULO_CURTO && !/^Parcela \d+\/\d+/.test(d) ? d : "";
@@ -993,6 +1003,52 @@ function acumuladoAte(contas, entradas, mes) {
 function entradaObraVazia(obraId) {
   return { id: (typeof uid === "function" ? uid() : String(Date.now())),
     obraId, contaId: "deposito_proprio", descricao: "", valor: "", data: "" };
+}
+
+// ── Recalibrar as datas de um pedido ────────────────────────────
+// O contrato se recalibra pela regra (parcelas, periodicidade) e as contas
+// renascem dela. O pedido não tem regra: as datas foram digitadas uma a uma,
+// entrega por entrega. Então aqui o que se preserva é o ESPAÇAMENTO — move-se
+// a primeira conta em aberto para a data nova e as outras andam o mesmo
+// tanto de dias. Conta paga não se mexe: a data dela é fato consumado.
+function contasDoPedido(contas, cotacaoId) {
+  return (contas || []).filter((c) => c && c.cotacaoId === cotacaoId)
+    .slice().sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+}
+
+function diasEntreIso(de, para) {
+  if (!de || !para) return 0;
+  const a = new Date(de + "T12:00:00"), b = new Date(para + "T12:00:00");
+  if (isNaN(a) || isNaN(b)) return 0;
+  return Math.round((b - a) / 86400000);
+}
+
+function recalibrarPedido(contas, cotacaoId, novaData) {
+  const doPedido = contasDoPedido(contas, cotacaoId);
+  const emAberto = doPedido.filter((c) => !c.pago);
+  if (!emAberto.length || !novaData) return contas || [];
+  const delta = diasEntreIso(emAberto[0].vencimento, String(novaData).slice(0, 10));
+  if (!delta) return contas || [];
+  const mover = new Set(emAberto.map((c) => c.id));
+  return (contas || []).map((c) => (mover.has(c.id)
+    ? { ...c, vencimento: somarDias(c.vencimento, delta) }
+    : c));
+}
+
+// A prévia do que vai mudar, no mesmo formato da do contrato.
+function previaDoPedido(contas, cotacaoId, novaData, limite) {
+  const antes = contasDoPedido(contas, cotacaoId);
+  const depois = contasDoPedido(recalibrarPedido(contas, cotacaoId, novaData), cotacaoId);
+  const porId = {};
+  for (const c of antes) porId[c.id] = c.vencimento;
+  const linhas = [];
+  let pagas = 0;
+  for (const c of depois) {
+    if (c.pago) { pagas++; continue; }
+    linhas.push({ id: c.id, descricao: c.descricao, de: porId[c.id] || "", para: c.vencimento });
+    if (limite && linhas.length >= limite) break;
+  }
+  return { linhas, pagas, total: depois.length };
 }
 
 // ── Recalibrar as datas de um contrato ──────────────────────────
