@@ -48,7 +48,9 @@ const modulo = new Function(`
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
            registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS,
-           CP_MAX_REGISTROS };
+           CP_MAX_REGISTROS,
+           datasDoPedido, recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos,
+           proximoNumeroDoc };
 `)();
 
 let passou = 0, falhou = 0;
@@ -1262,6 +1264,69 @@ teste("a parcela em aberto do contrato não perde o histórico na ressincronia",
   const primeira = sync.find(c => c.id === geradas[0].id);
   assert.strictEqual(primeira.observacao, "combinado por telefone");
   assert.strictEqual(modulo.registrosDaConta(primeira).length, 1);
+});
+
+// ── Recalibrar um pagamento só ──────────────────────────────────
+
+teste("as datas em aberto do pedido saem em ordem, sem as pagas", () => {
+  const contas = pedidoContas();
+  contas[0].pago = true;
+  const d = modulo.datasDoPedido(contas, "ct1");
+  assert.strictEqual(d.length, 2);
+  assert.deepStrictEqual(d.map(x => x.vencimento), ["2026-11-10", "2026-12-05"]);
+});
+
+teste("mexer numa data move só aquela conta", () => {
+  const contas = pedidoContas();
+  const datas = modulo.datasDoPedido(contas, "ct1");
+  datas[1].vencimento = "2026-11-30";
+  const r = modulo.recalibrarContasDoPedido(contas, datas, "Renato", "2026-09-20T12:00:00.000Z");
+  const doPedido = r.filter(c => c.cotacaoId === "ct1");
+  assert.deepStrictEqual(doPedido.map(c => c.vencimento), ["2026-10-02", "2026-11-30", "2026-12-05"]);
+  assert.strictEqual(modulo.registrosDaConta(doPedido[0]).length, 0, "quem não mudou não vira registro");
+  assert.strictEqual(modulo.ultimoAto(doPedido[1], "recalibrada").por, "Renato");
+});
+
+teste("conta paga não se move nem quando a data é informada", () => {
+  const contas = pedidoContas();
+  contas[0].pago = true;
+  const r = modulo.recalibrarContasDoPedido(contas, [{ id: contas[0].id, vencimento: "2027-01-01" }], "Renato");
+  assert.strictEqual(r.find(c => c.id === contas[0].id).vencimento, "2026-10-02");
+});
+
+teste("a prévia data a data mostra o que ficou parado como parado", () => {
+  const contas = pedidoContas();
+  const datas = modulo.datasDoPedido(contas, "ct1");
+  datas[0].vencimento = "2026-10-20";
+  const p = modulo.previaDatasDoPedido(contas, "ct1", datas, 8);
+  assert.deepStrictEqual(p.linhas.map(l => [l.de, l.para]),
+    [["2026-10-02", "2026-10-20"], ["2026-11-10", "2026-11-10"], ["2026-12-05", "2026-12-05"]]);
+});
+
+// ── Numeração do pedido antigo ──────────────────────────────────
+
+teste("pedido lançado sem número ganha o próximo da fila, e as contas junto", () => {
+  const obra = { id: "o1", contratos: [{ id: "x", numeroContrato: "0003" }],
+    cotacoes: [{ id: "ct1", titulo: "Aço", contaGeradaId: "a" }],
+    contasPagar: [{ id: "a", cotacaoId: "ct1" }, { id: "b", cotacaoId: "ct1" }, { id: "c", contratoId: "x", numeroContrato: "0003" }] };
+  const nova = modulo.numerarPedidosAntigos(obra, [obra]);
+  assert.strictEqual(nova.cotacoes[0].numeroPedido, "0004");
+  assert.deepStrictEqual(nova.contasPagar.map(c => c.numeroPedido || ""), ["0004", "0004", ""]);
+  assert.strictEqual(modulo.docDaConta(nova.contasPagar[0]), "Pedido 0004");
+});
+
+teste("dois pedidos sem número, do mesmo fornecedor, ganham números diferentes", () => {
+  const obra = { id: "o1", contratos: [],
+    cotacoes: [{ id: "ct1", contaGeradaId: "a" }, { id: "ct2", contaGeradaId: "b" }],
+    contasPagar: [{ id: "a", cotacaoId: "ct1" }, { id: "b", cotacaoId: "ct2" }] };
+  const nova = modulo.numerarPedidosAntigos(obra, [obra]);
+  assert.deepStrictEqual(nova.cotacoes.map(c => c.numeroPedido), ["0001", "0002"]);
+});
+
+teste("cotação sem conta gerada, ou já numerada, não é tocada", () => {
+  const obra = { id: "o1", contratos: [], contasPagar: [],
+    cotacoes: [{ id: "ct1", contaGeradaId: "", }, { id: "ct2", contaGeradaId: "b", numeroPedido: "0009" }] };
+  assert.strictEqual(modulo.numerarPedidosAntigos(obra, [obra]), null, "nada a fazer, nada se grava");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
