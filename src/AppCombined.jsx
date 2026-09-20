@@ -19197,6 +19197,66 @@ function interpretarLinhaDePedido(linha) {
   return { bruto, quantidade, unidade, termo: termo || bruto };
 }
 
+// ── Achar o parecido, do jeito que o pedreiro escreve ───────────
+// O casamento do catálogo (resolverInsumo) é de propósito exigente: ele
+// alimenta preço e orçamento, e errar lá contamina conta. Aqui o caso é
+// outro — é uma lista de compra que passa pelos seus olhos antes de valer.
+// "Arame" tem que trazer "Arame Recozido"; "tábuas de 30" tem que trazer
+// "Madeira Caixaria - Tábuas de 30cm x 3mts". Por isso a associação daqui
+// olha PALAVRA por palavra, e não a distância entre as frases inteiras.
+//
+// Mede duas coisas: quanto do que ele escreveu existe no nome do insumo
+// (cobertura), e quanto o nome do insumo diz a mais do que ele escreveu
+// (um nome muito mais longo é um palpite mais arriscado).
+function medirAssociacao(termo, nome) {
+  const a = cotSemAcento(termo).split(" ").filter(Boolean);
+  const b = cotSemAcento(nome).split(" ").filter(Boolean);
+  if (!a.length || !b.length) return { cobertura: 0, score: 0 };
+  let casados = 0, uteis = 0;
+  for (const t of a) {
+    if (t.length < 2) continue;           // "de", "x", "3" sozinhos não provam nada
+    uteis++;
+    if (b.some((x) => x === t || x.startsWith(t) || t.startsWith(x))) casados++;
+  }
+  if (!uteis) return { cobertura: 0, score: 0 };
+  const cobertura = casados / uteis;
+  const enxugado = Math.min(1, uteis / b.length);
+  return { cobertura, score: Math.round(cobertura * (0.75 + 0.25 * enxugado) * 1000) / 1000 };
+}
+
+function scoreAssociacao(termo, nome) {
+  return medirAssociacao(termo, nome).score;
+}
+
+// Os mais parecidos, do mais para o menos. Devolve candidatos — nunca
+// resolve sozinho: quem confirma é a pessoa, item a item.
+const COT_CORTE_ASSOCIACAO = 0.4;
+
+function candidatosDoPedido(termo, insumos, limite) {
+  const lista = (insumos || []).filter((i) => i && i.tipo !== "prestador");
+  const medidos = lista.map((i) => {
+    let melhor = medirAssociacao(termo, i.nome);
+    for (const al of i.aliases || []) {
+      const m = medirAssociacao(termo, al);
+      if (m.score > melhor.score) melhor = m;
+    }
+    return { insumo: i, ...melhor, compras: Number(i.precoNCompras) || 0 };
+  }).filter((r) => r.score >= COT_CORTE_ASSOCIACAO);
+
+  // "Arame" serve tanto para o recozido quanto para o farpado: o texto sozinho
+  // não desempata. Quem desempata é a SUA obra — entre dois que cobrem o que
+  // ele escreveu por igual, vem na frente o que você mais comprou. É o que
+  // faz "arame" cair em arame recozido sem ninguém ter escrito essa regra.
+  return medidos
+    .sort((a, b) =>
+      Math.round(b.cobertura * 20) - Math.round(a.cobertura * 20) ||
+      b.compras - a.compras ||
+      b.score - a.score ||
+      String(a.insumo.nome).localeCompare(String(b.insumo.nome), "pt-BR"))
+    .slice(0, limite || 6)
+    .map((r) => r.insumo);
+}
+
 // O recado vem com conversa em volta: "Bom dia Renato", "preciso do material
 // pra semana:", "obrigado". Isso não é item.
 //
@@ -19230,9 +19290,21 @@ function interpretarPedido(texto, insumos) {
     // linha sem letra nenhuma não é material
     if (!limpo || !/[a-z]/.test(limpo)) continue;
     if (ehConversaSolta(item.termo, item.quantidade)) continue;
+    const materiais = (insumos || []).filter((i) => i && i.tipo !== "prestador");
     const r = typeof resolverInsumo === "function"
-      ? resolverInsumo(item.termo, (insumos || []).filter((i) => i && i.tipo !== "prestador"))
+      ? resolverInsumo(item.termo, materiais)
       : { insumo: null, confianca: "nenhum", candidatos: [] };
+    // Casou de verdade (código, apelido, nome igual)? é esse e acabou. Não
+    // casou? aí entram os parecidos, na ordem — a primeira é a proposta.
+    const doCatalogo = (r.candidatos || []).map((c) => c.insumo);
+    const porAssociacao = r.insumo ? [] : candidatosDoPedido(item.termo, materiais, 6);
+    const vistos = {};
+    const candidatos = [...doCatalogo, ...porAssociacao].filter((c) => {
+      const k = c.codigo || c.id;
+      if (!k || vistos[k]) return false;
+      vistos[k] = 1;
+      return true;
+    });
     saida.push({
       id: (typeof uid === "function" ? uid() : String(saida.length)),
       bruto: item.bruto,
@@ -19240,8 +19312,8 @@ function interpretarPedido(texto, insumos) {
       quantidade: item.quantidade,
       unidade: item.unidade,
       insumo: r.insumo || null,
-      confianca: r.confianca,
-      candidatos: (r.candidatos || []).map((c) => c.insumo),
+      confianca: r.insumo ? r.confianca : (candidatos.length ? "sugestao" : "nenhum"),
+      candidatos,
     });
   }
   return saida;
@@ -20261,10 +20333,20 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     </div>
                     <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
                       {lidos.map((x) => {
-                        const opcoes = [
+                        const parecidos = [
                           ...(x.insumo ? [x.insumo] : []),
-                          ...x.candidatos.filter(c => !x.insumo || c.codigo !== x.insumo.codigo),
+                          ...x.candidatos.filter(c => !x.insumo || (c.codigo || c.id) !== (x.insumo.codigo || x.insumo.id)),
                         ];
+                        // Além dos parecidos, o catálogo inteiro: quando a
+                        // associação erra, trocar tem que ser um clique, não
+                        // uma volta ao formulário.
+                        const jaListado = {};
+                        for (const p of parecidos) jaListado[p.codigo || p.id] = 1;
+                        const resto = insumos
+                          .filter(i => !jaListado[i.codigo || i.id])
+                          .slice()
+                          .sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
+                        const opcoes = [...parecidos, ...resto];
                         const escolhido = x.insumo ? (x.insumo.codigo || x.insumo.id) : (x.escolhaCodigo || "");
                         const cols = isMobile ? "1fr" : "1fr 90px 96px 30px";
                         return (
@@ -20280,10 +20362,23 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                     trocar(x.id, { insumo: ins || null, escolhaCodigo: cod,
                                       unidade: ins ? (ins.unidade || x.unidade) : x.unidade });
                                   }}>
-                                  {opcoes.map(o => (
-                                    <option key={o.codigo || o.id} value={o.codigo || o.id}>{o.nome}</option>
-                                  ))}
-                                  <option value="">Fora do catálogo — “{x.termo}”</option>
+                                  {parecidos.length > 0 && (
+                                    <optgroup label="Mais parecidos com o que ele escreveu">
+                                      {parecidos.map(o => (
+                                        <option key={o.codigo || o.id} value={o.codigo || o.id}>{o.nome}</option>
+                                      ))}
+                                    </optgroup>
+                                  )}
+                                  <optgroup label="Fora do catálogo">
+                                    <option value="">Deixar como “{x.termo}”</option>
+                                  </optgroup>
+                                  {resto.length > 0 && (
+                                    <optgroup label="Todo o catálogo">
+                                      {resto.map(o => (
+                                        <option key={o.codigo || o.id} value={o.codigo || o.id}>{o.nome}</option>
+                                      ))}
+                                    </optgroup>
+                                  )}
                                 </select>
                               ) : (
                                 <input style={E.input} value={x.termo}
@@ -20299,7 +20394,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             </div>
                             {x.confirmar && x.insumo && !x.fora && (
                               <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>
-                                Parecido com o catálogo — confirme se é isso mesmo.
+                                Ele escreveu “{x.termo}” — confirme se é este mesmo, ou troque no seletor.
                               </div>
                             )}
                           </div>

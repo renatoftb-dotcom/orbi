@@ -66,7 +66,7 @@ const modulo = new Function(`
            precoEfetivo, totalNegociado, descontoDaProposta,
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
            interpretarPedido, interpretarLinhaDePedido, quantidadeDoTexto, resumoDaLeitura,
-           itemDoPedidoLido, resolverInsumo };
+           itemDoPedidoLido, resolverInsumo, scoreAssociacao, candidatosDoPedido };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1068,7 +1068,9 @@ const catalogo = [
   { id: "m2", codigo: "MAD-014", nome: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Unidades", tipo: "material", aliases: [] },
   { id: "m3", codigo: "AGR-001", nome: "Areia Fina", unidade: "m3", tipo: "material", aliases: [] },
   { id: "m5", codigo: "ACO-001", nome: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Unidades", tipo: "material", aliases: [] },
-  { id: "m7", codigo: "FER-003", nome: "Prego 17x27", unidade: "kg", tipo: "material", aliases: [] },
+  { id: "m7", codigo: "FER-003", nome: "Prego 17x27", unidade: "kg", tipo: "material", aliases: [], precoNCompras: 12 },
+  { id: "m8", codigo: "FER-010", nome: "Arame Recozido 18", unidade: "kg", tipo: "material", aliases: [], precoNCompras: 44 },
+  { id: "m9", codigo: "FER-011", nome: "Arame Farpado", unidade: "m", tipo: "material", aliases: [], precoNCompras: 0 },
   { id: "p1", codigo: "PRE-001", nome: "Pedreiro", unidade: "m2", tipo: "prestador", aliases: [] },
 ];
 
@@ -1185,10 +1187,40 @@ teste("mas quando nada vem depois, o material é o que veio antes", () => {
   assert.strictEqual(l.quantidade, 2);
 });
 
-teste("tamanho diferente não é o mesmo material", () => {
-  // o catálogo tem Prego 17x27; 17x21 é outro prego e NÃO pode casar sozinho
+teste("tamanho diferente não casa sozinho, mas aparece como sugestão", () => {
+  // o catálogo tem Prego 17x27; 17x21 é outro prego — vem como proposta para
+  // você confirmar, nunca resolvido
   const [x] = M.interpretarPedido("25 pregos 17x21", catalogo);
-  assert.strictEqual(x.insumo, null);
+  assert.strictEqual(x.insumo, null, "não vincula sozinho");
+  assert.strictEqual(x.confianca, "sugestao");
+  assert.strictEqual(x.candidatos[0].codigo, "FER-003");
+});
+
+// ── Associação por palavra ──────────────────────────────────────
+
+teste("uma palavra que existe inteira no nome já é associação forte", () => {
+  assert.ok(M.scoreAssociacao("arame", "Arame Recozido 18") > 0.7);
+  assert.ok(M.scoreAssociacao("tabuas de 30", "Madeira Caixaria - Tábuas de 30cm x 3mts") > 0.7);
+  assert.strictEqual(M.scoreAssociacao("arame", "Cimento CP-II 50kg"), 0);
+});
+
+teste("palavra curta sozinha não prova associação", () => {
+  assert.strictEqual(M.scoreAssociacao("de", "Areia Fina"), 0, "'de' não casa com nada");
+});
+
+teste("entre dois que cobrem igual, ganha o que a obra mais compra", () => {
+  // "arame" serve para recozido e farpado; o texto não desempata, o histórico sim
+  const c = M.candidatosDoPedido("arame", catalogo, 6);
+  assert.strictEqual(c[0].codigo, "FER-010", "arame recozido — 44 compras contra 0");
+  assert.strictEqual(c[1].codigo, "FER-011");
+});
+
+teste("prestador não entra na associação", () => {
+  assert.strictEqual(M.candidatosDoPedido("pedreiro", catalogo, 6).length, 0);
+});
+
+teste("associação fraca não vira sugestão", () => {
+  assert.strictEqual(M.candidatosDoPedido("telha portuguesa", catalogo, 6).length, 0);
 });
 
 teste("o 'e' que liga itens separa, e a saudação antes da vírgula cai fora", () => {
