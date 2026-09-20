@@ -51,7 +51,8 @@ const modulo = new Function(`
            prestadorRapidoVazio, criarPrestadorRapido, pareceMesmoPdf,
            nomeDeQuem, carimbar, textoAutoria, arquivoColado, nomeDoColado,
            aprovacaoDaEscolha, podeEnviarAoCliente, enviarCotacaoAoCliente,
-           limparEnvioAoCliente, cotacoesProntasParaContrato, textoUtf8Recuperado };
+           limparEnvioAoCliente, cotacoesProntasParaContrato, textoUtf8Recuperado,
+           podeLancarEmContas, dadosDoLancamento, contasDaCotacao, removerContasDaCotacao, contasDeCotacao };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -137,7 +138,8 @@ teste("situação acompanha o fluxo, do pedido ao contrato", () => {
   // continua lendo como concluída
   const comContrato = [{ id: "ctr1", cotacaoId: "ct1" }];
   assert.strictEqual(M.situacaoCotacao(escolhida, ap, comContrato).id, "contratada");
-  assert.strictEqual(M.situacaoCotacao({ ...escolhida, contaGeradaId: "x" }, ap).id, "contratada");
+  // lançada direto em contas a pagar é outro fim de linha, não "contrato gerado"
+  assert.strictEqual(M.situacaoCotacao({ ...escolhida, contaGeradaId: "x" }, ap).id, "lancada");
   assert.strictEqual(M.situacaoCotacao(escolhida, ap, [{ id: "ctr9", cotacaoId: "outra" }]).id, "aprovada",
     "contrato de outra cotação não conta");
   assert.strictEqual(M.situacaoCotacao({ ...escolhida, status: "cancelada" }, ap).id, "cancelada");
@@ -259,6 +261,69 @@ teste("a fila do cliente traz só o que depende dele", () => {
   const c = { ...comPropostas([4000, 6000]), id: "c", escolhidaId: "p0" }; // escolhida, não enviada
   const fila = M.cotacoesAguardandoCliente([a, b, c], []);
   assert.deepStrictEqual(fila.map(x => x.id), ["a"], "só o que já foi enviado depende do cliente");
+});
+
+// ── Lançar direto em contas a pagar ─────────────────────────────
+teste("fornecedor sem contrato: lança com a escolha, sem esperar o cliente", () => {
+  const semEscolha = comPropostas([9000, 12000]);
+  assert.strictEqual(M.podeLancarEmContas(semEscolha, []).pode, false, "sem escolha não há o que lançar");
+
+  // a mesma cotação que o contrato barra por falta de aval, o lançamento aceita
+  const escolhida = { ...semEscolha, escolhidaId: "p0" };
+  assert.strictEqual(M.podeGerarContrato(escolhida, [], []).pode, false);
+  assert.strictEqual(M.podeLancarEmContas(escolhida, []).pode, true);
+
+  // e depois de lançada, não lança de novo nem vira contrato
+  const lancada = { ...escolhida, contaGeradaId: "cta1" };
+  assert.strictEqual(M.podeLancarEmContas(lancada, []).pode, false);
+  assert.match(M.podeGerarContrato(lancada, [], []).motivo, /contas a pagar/);
+
+  // contrato já gerado fecha o caminho do lançamento
+  assert.strictEqual(M.podeLancarEmContas(escolhida, [{ id: "ctr1", cotacaoId: escolhida.id }]).pode, false);
+  assert.strictEqual(M.podeLancarEmContas({ ...escolhida, status: "cancelada" }, []).pode, false);
+});
+
+teste("o lançamento leva fornecedor, valor e conta da cotação", () => {
+  const c = { ...comPropostas([9000]), escolhidaId: "p0", titulo: "Aço Vergalhões", contaId: "material" };
+  const d = M.dadosDoLancamento(c);
+  assert.strictEqual(d.valor, 9000);
+  assert.strictEqual(d.descricao, "Aço Vergalhões");
+  assert.strictEqual(d.contaId, "material");
+  assert.strictEqual(d.parcelas, 1);
+  assert.strictEqual(M.dadosDoLancamento(comPropostas([9000])), null, "sem escolha não há dados");
+});
+
+teste("parcelar o lançamento divide o total e espaça os vencimentos", () => {
+  let n = 0;
+  const contas = M.contasDaCotacao({ cotacaoId: "ct1", obraId: "o1", contaId: "material",
+    favorecido: "Arcelor Mittal", descricao: "Aço Vergalhões", valor: 10000, parcelas: 3,
+    primeiroVencimento: "2026-10-05" }, () => "c" + (++n));
+  assert.strictEqual(contas.length, 3);
+  assert.strictEqual(contas.reduce((s, c) => s + c.valor, 0), 10000, "a soma fecha com o total");
+  assert.deepStrictEqual(contas.map(c => c.vencimento), ["2026-10-05", "2026-11-05", "2026-12-05"]);
+  assert.match(contas[0].descricao, /parcela 1\/3/);
+  for (const c of contas) {
+    assert.strictEqual(c.cotacaoId, "ct1");
+    assert.strictEqual(c.origem, "cotacao");
+    assert.strictEqual(c.pago, false);
+  }
+  // uma parcela só não ganha sufixo nem número de parcela
+  const uma = M.contasDaCotacao({ cotacaoId: "ct1", valor: 500, parcelas: 1, descricao: "Cimento", primeiroVencimento: "2026-10-05" }, () => "x");
+  assert.strictEqual(uma[0].descricao, "Cimento");
+  assert.strictEqual(uma[0].parcela, 0);
+  assert.strictEqual(M.contasDaCotacao({ valor: 0, parcelas: 1 }, () => "x").length, 0);
+});
+
+teste("desfazer o lançamento não apaga conta já paga", () => {
+  const contas = [
+    { id: "a", cotacaoId: "ct1", pago: false },
+    { id: "b", cotacaoId: "ct1", pago: true },
+    { id: "c", cotacaoId: "ct2", pago: false },
+  ];
+  const r = M.removerContasDaCotacao(contas, "ct1");
+  assert.deepStrictEqual(r.map(c => c.id), ["b", "c"], "a paga fica; a de outra cotação também");
+  assert.deepStrictEqual(M.contasDeCotacao(contas, "ct1").map(c => c.id), ["a", "b"]);
+  assert.strictEqual(M.removerContasDaCotacao(contas, "").length, 3);
 });
 
 // ── Enviar a escolha ao cliente ─────────────────────────────────

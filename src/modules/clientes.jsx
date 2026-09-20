@@ -3606,6 +3606,38 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // continua só do escritório, porque apagar contrato leva as parcelas junto.
   const podeContratar = !!perm.podeGerenciarObra || !!perm.isCliente;
 
+  // Cotação de fornecedor que não assina contrato: as parcelas nascem aqui,
+  // direto em contas a pagar, e ficam marcadas com a cotação de origem para o
+  // lançamento poder ser desfeito inteiro.
+  // As contas E o carimbo na cotação saem na MESMA gravação. Em duas, a
+  // segunda parte de uma cópia da obra sem as contas da primeira e as apaga.
+  function lancarCotacaoEmContas(dados) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    const novas = contasDaCotacao(dados, uid);
+    if (!novas.length) return { erro: "A proposta escolhida está sem valor." };
+    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
+      ...c,
+      contaGeradaId: novas[0].id,
+      lancadoEm: dados.lancadoEm || new Date().toISOString(),
+      lancadoPor: dados.lancadoPor || "",
+    }));
+    const atualizada = { ...obraAtual, contasPagar: [...(obraAtual.contasPagar || []), ...novas], cotacoes };
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    setObraSelecionada(atualizada);
+    return { primeiraContaId: novas[0].id, quantas: novas.length, gravado: true };
+  }
+
+  function desfazerLancamentoDaCotacao(cotacaoId) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    const restantes = removerContasDaCotacao(obraAtual.contasPagar || [], cotacaoId);
+    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c
+      : ({ ...c, contaGeradaId: "", lancadoEm: "", lancadoPor: "" }));
+    const atualizada = { ...obraAtual, contasPagar: restantes, cotacoes };
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    setObraSelecionada(atualizada);
+    return { gravado: true };
+  }
+
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     // O contrato nasce da cotação aprovada, e é aqui que se geram contratos —
@@ -3735,6 +3767,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         usuario={perm.usuario}
         onVoltar={() => setView("detalheObra")}
         onGerarContrato={abrirContratoDaCotacao}
+        onLancarContas={lancarCotacaoEmContas}
+        onDesfazerLancamento={desfazerLancamentoDaCotacao}
       />
     );
   }

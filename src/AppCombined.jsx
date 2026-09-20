@@ -17526,6 +17526,63 @@ function contaAvulsaVazia(obraId) {
   };
 }
 
+// ── Contas nascidas direto de uma cotação ───────────────────────
+// Nem toda compra vira contrato: material de fornecedor — aço, cimento,
+// esquadria pronta — se resolve na nota fiscal e no boleto. Para esses, a
+// cotação escolhida vira conta a pagar direto, sem passar pelo contrato e
+// sem esperar o aval do cliente, que é o que o contrato existe para pedir.
+//
+// As parcelas saem da mesma divisão dos contratos (o resíduo do
+// arredondamento vai na última), e todas carregam `cotacaoId` — é por ele
+// que o lançamento se desfaz inteiro, se for o caso.
+const CP_ORIGEM_COTACAO = "cotacao";
+
+function contasDaCotacao(dados, novoId) {
+  const d = dados || {};
+  const total = Math.round((Number(d.valor) || 0) * 100) / 100;
+  if (!(total > 0)) return [];
+  const qtd = Math.max(1, Math.floor(Number(d.parcelas) || 1));
+  const divisao = typeof parcelasContrato === "function"
+    ? parcelasContrato(total, qtd)
+    : { qtd, base: Math.round((total / qtd) * 100) / 100, ultima: Math.round((total / qtd) * 100) / 100, iguais: true };
+  const base = String(d.primeiroVencimento || "").slice(0, 10) || dataParaIso(new Date());
+  const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
+  const contas = [];
+  for (let i = 0; i < qtd; i++) {
+    const valor = i === qtd - 1 ? divisao.ultima : divisao.base;
+    contas.push({
+      id: id(),
+      origem: CP_ORIGEM_COTACAO,
+      obraId: d.obraId || "",
+      contratoId: "",
+      cotacaoId: d.cotacaoId || "",
+      parcela: qtd > 1 ? i + 1 : 0,
+      parcelasTotal: qtd > 1 ? qtd : 0,
+      contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+      prestadorId: d.prestadorId || "",
+      favorecido: d.favorecido || "",
+      descricao: qtd > 1 ? `${d.descricao || "Compra"} — parcela ${i + 1}/${qtd}` : (d.descricao || "Compra"),
+      valor,
+      vencimento: somarMeses(base, i),
+      pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
+    });
+  }
+  return contas;
+}
+
+// Desfazer o lançamento: some com as contas daquela cotação que ainda não
+// foram pagas. Conta paga NUNCA é removida — o dinheiro já saiu, e apagar o
+// registro esconderia um gasto real da obra.
+function removerContasDaCotacao(contas, cotacaoId) {
+  if (!cotacaoId) return contas || [];
+  return (contas || []).filter((c) => !(c && c.cotacaoId === cotacaoId && !c.pago));
+}
+
+function contasDeCotacao(contas, cotacaoId) {
+  if (!cotacaoId) return [];
+  return (contas || []).filter((c) => c && c.cotacaoId === cotacaoId);
+}
+
 // ── Identificação da conta ──────────────────────────────────────
 // "Contrato 0007 · Serralheria · MB Viezzer · Parcela 2/6"
 function tituloConta(conta) {
@@ -18313,7 +18370,9 @@ function cotacaoVazia(obraId) {
     enviadaClienteEm: "",   // quando a escolha foi mandada para o cliente ver
     enviadaClientePor: "",
     decididaEm: "",
-    contaGeradaId: "",
+    contaGeradaId: "",     // preenchido quando a cotação vira conta a pagar direto
+    lancadoEm: "",
+    lancadoPor: "",
     propostas: [],
   };
 }
@@ -18425,10 +18484,11 @@ function situacaoCotacao(cot, aprovacoes, contratos) {
   const c = cot || {};
   const ap = aprovacaoDaEscolha(c, aprovacoes);
   if (c.status === "cancelada")            return { id: "cancelada",  rotulo: "Cancelada",                 cor: "#6b7280" };
-  // `contaGeradaId` é herança do fluxo antigo, que lançava direto em contas a
-  // pagar. Cotação gravada naquela época continua lendo como concluída.
-  if (contratoDaCotacao(contratos, c.id) || c.contaGeradaId)
-                                           return { id: "contratada", rotulo: "Contrato gerado",           cor: "#15803d" };
+  if (contratoDaCotacao(contratos, c.id)) return { id: "contratada", rotulo: "Contrato gerado",           cor: "#15803d" };
+  // Fornecedor de material não assina contrato: a cotação escolhida vira
+  // conta a pagar direto. Também fecha o ciclo, mas por outro caminho — e
+  // dizer "contrato gerado" ali seria mentira na tela.
+  if (c.contaGeradaId)                     return { id: "lancada",    rotulo: "Lançada em contas a pagar", cor: "#15803d" };
   if (ap.status === "recusada")            return { id: "recusada",   rotulo: "Recusada pelo cliente",     cor: "#dc2626" };
   if (ap.status === "aprovada")            return { id: "aprovada",   rotulo: "Aprovada pelo cliente",     cor: "#15803d" };
   if (!c.escolhidaId && !propostasDaCotacao(c).length)
@@ -18478,6 +18538,44 @@ function dadosDoContratoDaCotacao(cot) {
     escopo: String(c.escopo || "").trim(),
     condicaoPagamento: esc.condicaoPagamento || "",
     prazoDias: esc.prazoDias || "",
+  };
+}
+
+// Lançar direto em contas a pagar. Diferente do contrato, NÃO espera o aval
+// do cliente: o aval existe para o que vai virar contrato de prestação de
+// serviço. Fornecedor de material entrega contra nota, e segurar o
+// lançamento até a resposta do cliente só atrasaria o pagamento.
+function podeLancarEmContas(cot, contratos) {
+  const c = cot || {};
+  if (c.status === "cancelada")  return { pode: false, motivo: "A cotação foi cancelada." };
+  if (contratoDaCotacao(contratos, c.id)) return { pode: false, motivo: "Esta cotação já virou contrato." };
+  if (c.contaGeradaId)           return { pode: false, motivo: "Já foi lançada em contas a pagar." };
+  const esc = propostaEscolhida(c);
+  if (!esc)                      return { pode: false, motivo: "Escolha uma proposta primeiro." };
+  if (valorProposta(esc) <= 0)   return { pode: false, motivo: "A proposta escolhida está sem valor." };
+  return { pode: true, motivo: "" };
+}
+
+// O que o lançamento leva para contas a pagar. Parcelas e primeiro
+// vencimento são do formulário — a condição de pagamento da proposta é texto
+// livre ("50/50", "30/60/90") e adivinhar parcela a partir dela erraria.
+function dadosDoLancamento(cot) {
+  const c = cot || {};
+  const esc = propostaEscolhida(c);
+  if (!esc) return null;
+  const prazo = Number(esc.prazoDias) || 0;
+  const hoje = typeof dataParaIso === "function" ? dataParaIso(new Date()) : "";
+  return {
+    cotacaoId: c.id,
+    obraId: c.obraId || "",
+    contaId: c.contaId || "",
+    prestadorId: esc.fornecedorId || "",
+    favorecido: esc.favorecido || "",
+    descricao: String(c.titulo || "").trim() || "Compra",
+    valor: valorProposta(esc),
+    parcelas: 1,
+    primeiroVencimento: prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : hoje,
+    observacao: esc.condicaoPagamento ? `Condição cotada: ${esc.condicaoPagamento}` : "",
   };
 }
 
@@ -18847,7 +18945,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -18874,7 +18972,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [abertas, setAbertas] = useState({});
   const [formCotacao, setFormCotacao] = useState(null);
   const [formProposta, setFormProposta] = useState(null); // { cotacaoId, proposta }
-  const [formDecisao, setFormDecisao] = useState(null);   // { cotacao, status }
+  const [formDecisao, setFormDecisao] = useState(null);
+  const [formLancamento, setFormLancamento] = useState(null);   // { cotacao, status }
   const [novoPrestador, setNovoPrestador] = useState(null); // objeto quando o cadastro está aberto
   const [visor, setVisor] = useState(null);                 // anexo aberto na janela
   const [erro, setErro] = useState("");
@@ -19193,6 +19292,39 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     limparAnexos(anexosDasPropostas(props));
   }
 
+  // ── Lançar direto em contas a pagar ───────────────────────────
+  // Fornecedor de material não assina contrato; a cotação escolhida vira
+  // conta e o ciclo fecha por aqui.
+  function abrirLancamento(cot) {
+    const trava = podeLancarEmContas(cot, contratos);
+    if (!trava.pode) { setErro(trava.motivo); return; }
+    const dados = dadosDoLancamento(cot);
+    if (!dados) { setErro("Escolha uma proposta primeiro."); return; }
+    setErro("");
+    setFormLancamento({ cotacao: cot, dados });
+  }
+
+  function confirmarLancamento(dados) {
+    if (!onLancarContas) { setErro("Lançamento indisponível nesta tela."); return; }
+    // O carimbo vai junto: quem grava é a tela da obra, numa gravação só.
+    const r = onLancarContas({ ...dados, lancadoEm: new Date().toISOString(), lancadoPor: nomeDeQuem(usuario) });
+    if (r && r.erro) { setErro(r.erro); return; }
+    setErro("");
+    setFormLancamento(null);
+  }
+
+  async function desfazerLancamento(cot) {
+    const ok = await dialogo.confirmar({
+      titulo: "Desfazer o lançamento desta cotação?",
+      mensagem: "As contas em aberto geradas por ela são removidas. Conta já paga fica como está — o dinheiro saiu e o gasto tem que continuar na obra.",
+      confirmar: "Desfazer lançamento",
+      destrutivo: true,
+    });
+    if (!ok) return;
+    setErro("");
+    if (onDesfazerLancamento) onDesfazerLancamento(cot.id);
+  }
+
   // ── Gerar o contrato da escolha ───────────────────────────────
   // A cotação não lança conta a pagar: ela vira CONTRATO, e é o contrato que
   // gera as parcelas. Assim o caminho é um só — cotar, escolher, contratar,
@@ -19421,6 +19553,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
                         style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
                         onClick={() => gerarContrato(cot)}>Gerar contrato</button>
+                      {ehEscritorio && (() => {
+                        const tl = podeLancarEmContas(cot, contratos);
+                        return (
+                          <button disabled={!tl.pode} title={tl.pode ? "Para fornecedor que não assina contrato — não espera o aval do cliente" : tl.motivo}
+                            style={{ ...E.btnSec, opacity: tl.pode ? 1 : 0.45, cursor: tl.pode ? "pointer" : "not-allowed" }}
+                            onClick={() => abrirLancamento(cot)}>Lançar em contas a pagar</button>
+                        );
+                      })()}
                       {!trava.pode && <span style={{ fontSize: 11.5, color: "#6b7280", alignSelf: "center" }}>{trava.motivo}</span>}
                       {podeExcluir && (
                         <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
@@ -19440,7 +19580,16 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     </span>
                   )}
                   {podeGerenciar && !contratoDaCotacao(contratos, cot.id) && cot.contaGeradaId && (
-                    <span style={{ fontSize: 12, color: "#15803d", alignSelf: "center" }}>Já está em contas a pagar.</span>
+                    <>
+                      <span style={{ fontSize: 12, color: "#15803d", alignSelf: "center" }}>
+                        Lançada em contas a pagar{cot.lancadoEm ? ` em ${dataCurta(cot.lancadoEm)}` : ""}
+                        {cot.lancadoPor ? ` por ${nomeGravado(cot.lancadoPor)}` : ""} — sem contrato.
+                      </span>
+                      {ehEscritorio && (
+                        <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
+                          onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -19460,7 +19609,84 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         />
       )}
 
+      {formLancamento && (
+        <CotacaoLancamento
+          cotacao={formLancamento.cotacao}
+          dados={formLancamento.dados}
+          dinheiro={dinheiro}
+          onConfirmar={confirmarLancamento}
+          onFechar={() => setFormLancamento(null)}
+        />
+      )}
+
       {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
+    </div>
+  );
+}
+
+// ── Lançar a cotação em contas a pagar ──────────────────────────
+// Só três perguntas: quantas parcelas, quando vence a primeira e em que
+// conta do P&L o gasto cai. O resto vem da proposta escolhida.
+function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) {
+  const [f, setF] = useState(dados);
+  const E = COT_ESTILO;
+  const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const qtd = Math.max(1, Math.floor(Number(f.parcelas) || 1));
+  const previa = contasDaCotacao({ ...f, parcelas: qtd }, () => "previa");
+  const contas = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
+  const grupos = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 6 }}>Lançar em contas a pagar</div>
+        <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 14 }}>
+          {cotacao.titulo} — {f.favorecido || "fornecedor"}, {dinheiro(f.valor)}. Vai direto para contas a pagar, sem contrato e sem esperar o aval do cliente.
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+          <div>
+            <label style={E.label}>Parcelas</label>
+            <input style={E.input} type="number" min="1" value={f.parcelas}
+              onChange={e => set("parcelas", e.target.value)} />
+          </div>
+          <div>
+            <label style={E.label}>Primeiro vencimento</label>
+            <input style={E.input} type="date" value={f.primeiroVencimento || ""}
+              onChange={e => set("primeiroVencimento", e.target.value)} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={E.label}>Conta do P&L</label>
+          <select style={{ ...E.input, cursor: "pointer" }} value={f.contaId} onChange={e => set("contaId", e.target.value)}>
+            {grupos.filter(g => g.id !== "receitas").map(g => (
+              <optgroup key={g.id} label={g.titulo}>
+                {contas.filter(c => c.grupo === g.id).map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={E.label}>Observação</label>
+          <input style={E.input} value={f.observacao || ""} onChange={e => set("observacao", e.target.value)} />
+        </div>
+        {previa.length > 0 && (
+          <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, padding: "8px 10px", marginBottom: 16, fontSize: 12, color: "#4b5563" }}>
+            <div style={{ fontWeight: 600, color: "#111827", marginBottom: 4 }}>
+              {previa.length === 1 ? "1 conta" : `${previa.length} contas`} a gerar
+            </div>
+            {previa.slice(0, 6).map((c, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                <span>{c.vencimento.split("-").reverse().join("/")}</span>
+                <span style={{ color: "#111827" }}>{dinheiro(c.valor)}</span>
+              </div>
+            ))}
+            {previa.length > 6 && <div style={{ marginTop: 3 }}>… e mais {previa.length - 6}</div>}
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          <button style={E.btn} onClick={() => onConfirmar({ ...f, parcelas: qtd })}>Lançar</button>
+          <button style={E.btnSec} onClick={onFechar}>Cancelar</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -23339,6 +23565,38 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // continua só do escritório, porque apagar contrato leva as parcelas junto.
   const podeContratar = !!perm.podeGerenciarObra || !!perm.isCliente;
 
+  // Cotação de fornecedor que não assina contrato: as parcelas nascem aqui,
+  // direto em contas a pagar, e ficam marcadas com a cotação de origem para o
+  // lançamento poder ser desfeito inteiro.
+  // As contas E o carimbo na cotação saem na MESMA gravação. Em duas, a
+  // segunda parte de uma cópia da obra sem as contas da primeira e as apaga.
+  function lancarCotacaoEmContas(dados) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    const novas = contasDaCotacao(dados, uid);
+    if (!novas.length) return { erro: "A proposta escolhida está sem valor." };
+    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== dados.cotacaoId ? c : ({
+      ...c,
+      contaGeradaId: novas[0].id,
+      lancadoEm: dados.lancadoEm || new Date().toISOString(),
+      lancadoPor: dados.lancadoPor || "",
+    }));
+    const atualizada = { ...obraAtual, contasPagar: [...(obraAtual.contasPagar || []), ...novas], cotacoes };
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    setObraSelecionada(atualizada);
+    return { primeiraContaId: novas[0].id, quantas: novas.length, gravado: true };
+  }
+
+  function desfazerLancamentoDaCotacao(cotacaoId) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    const restantes = removerContasDaCotacao(obraAtual.contasPagar || [], cotacaoId);
+    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c
+      : ({ ...c, contaGeradaId: "", lancadoEm: "", lancadoPor: "" }));
+    const atualizada = { ...obraAtual, contasPagar: restantes, cotacoes };
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    setObraSelecionada(atualizada);
+    return { gravado: true };
+  }
+
   if (view === "contratosDaObra" && obraSelecionada) {
     const contratosDaObra = contratos.filter(c => c.obraId === obraSelecionada.id);
     // O contrato nasce da cotação aprovada, e é aqui que se geram contratos —
@@ -23468,6 +23726,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         usuario={perm.usuario}
         onVoltar={() => setView("detalheObra")}
         onGerarContrato={abrirContratoDaCotacao}
+        onLancarContas={lancarCotacaoEmContas}
+        onDesfazerLancamento={desfazerLancamentoDaCotacao}
       />
     );
   }

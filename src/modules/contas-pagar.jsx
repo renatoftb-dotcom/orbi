@@ -445,6 +445,63 @@ function contaAvulsaVazia(obraId) {
   };
 }
 
+// ── Contas nascidas direto de uma cotação ───────────────────────
+// Nem toda compra vira contrato: material de fornecedor — aço, cimento,
+// esquadria pronta — se resolve na nota fiscal e no boleto. Para esses, a
+// cotação escolhida vira conta a pagar direto, sem passar pelo contrato e
+// sem esperar o aval do cliente, que é o que o contrato existe para pedir.
+//
+// As parcelas saem da mesma divisão dos contratos (o resíduo do
+// arredondamento vai na última), e todas carregam `cotacaoId` — é por ele
+// que o lançamento se desfaz inteiro, se for o caso.
+const CP_ORIGEM_COTACAO = "cotacao";
+
+function contasDaCotacao(dados, novoId) {
+  const d = dados || {};
+  const total = Math.round((Number(d.valor) || 0) * 100) / 100;
+  if (!(total > 0)) return [];
+  const qtd = Math.max(1, Math.floor(Number(d.parcelas) || 1));
+  const divisao = typeof parcelasContrato === "function"
+    ? parcelasContrato(total, qtd)
+    : { qtd, base: Math.round((total / qtd) * 100) / 100, ultima: Math.round((total / qtd) * 100) / 100, iguais: true };
+  const base = String(d.primeiroVencimento || "").slice(0, 10) || dataParaIso(new Date());
+  const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
+  const contas = [];
+  for (let i = 0; i < qtd; i++) {
+    const valor = i === qtd - 1 ? divisao.ultima : divisao.base;
+    contas.push({
+      id: id(),
+      origem: CP_ORIGEM_COTACAO,
+      obraId: d.obraId || "",
+      contratoId: "",
+      cotacaoId: d.cotacaoId || "",
+      parcela: qtd > 1 ? i + 1 : 0,
+      parcelasTotal: qtd > 1 ? qtd : 0,
+      contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+      prestadorId: d.prestadorId || "",
+      favorecido: d.favorecido || "",
+      descricao: qtd > 1 ? `${d.descricao || "Compra"} — parcela ${i + 1}/${qtd}` : (d.descricao || "Compra"),
+      valor,
+      vencimento: somarMeses(base, i),
+      pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
+    });
+  }
+  return contas;
+}
+
+// Desfazer o lançamento: some com as contas daquela cotação que ainda não
+// foram pagas. Conta paga NUNCA é removida — o dinheiro já saiu, e apagar o
+// registro esconderia um gasto real da obra.
+function removerContasDaCotacao(contas, cotacaoId) {
+  if (!cotacaoId) return contas || [];
+  return (contas || []).filter((c) => !(c && c.cotacaoId === cotacaoId && !c.pago));
+}
+
+function contasDeCotacao(contas, cotacaoId) {
+  if (!cotacaoId) return [];
+  return (contas || []).filter((c) => c && c.cotacaoId === cotacaoId);
+}
+
 // ── Identificação da conta ──────────────────────────────────────
 // "Contrato 0007 · Serralheria · MB Viezzer · Parcela 2/6"
 function tituloConta(conta) {
