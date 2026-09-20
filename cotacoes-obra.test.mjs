@@ -54,7 +54,10 @@ const modulo = new Function(`
            limparEnvioAoCliente, cotacoesProntasParaContrato, textoUtf8Recuperado,
            podeLancarEmContas, dadosDoLancamento, contasDaCotacao, removerContasDaCotacao, contasDeCotacao,
            contasDasEntregas, totalDasEntregas, entregaVazia, MODOS_LANCAMENTO, modoLancamento,
-           planoDoLancamento, linhasDoPagamento, resumoDoPlano };
+           planoDoLancamento, linhasDoPagamento, resumoDoPlano,
+           itemCotacaoVazio, itensDaCotacao, temListaDeItens, quantidadeDoItem, precoUnitario,
+           propostaTemPrecoPorItem, totalDosItens, itensSemPreco, valorDaProposta,
+           melhorPorItem, comparativoDaLista, textoDoPedido, qtdBR };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -775,6 +778,96 @@ teste("relançar volta com o que foi combinado da última vez", () => {
   assert.strictEqual(d.modo, "entregas");
   assert.strictEqual(d.entregas.length, 2);
   assert.strictEqual(d.entregas[0].descricao, "1ª entrega — baldrame");
+});
+
+// ── Lista de materiais ──────────────────────────────────────────
+
+const listaBase = () => ({
+  ...M.cotacaoVazia("o1"), id: "c1", titulo: "Material de alvenaria",
+  itens: [
+    { id: "i1", descricao: "Cimento CP-II 50kg", unidade: "sc", quantidade: "40" },
+    { id: "i2", descricao: "Tábua de pinus 30cm", unidade: "m", quantidade: "120" },
+    { id: "i3", descricao: "Prego 17x27", unidade: "kg", quantidade: "5" },
+  ],
+  propostas: [
+    { id: "pA", favorecido: "Loja A", valor: "", precos: { i1: "38,00", i2: "22,50", i3: "19,00" } },
+    { id: "pB", favorecido: "Loja B", valor: "", precos: { i1: "36,50", i2: "24,00", i3: "21,00" } },
+    { id: "pC", favorecido: "Loja C", valor: "3.400,00" },
+  ],
+});
+
+teste("cotação sem itens continua sendo a cotação de sempre", () => {
+  assert.strictEqual(M.temListaDeItens(M.cotacaoVazia("o1")), false);
+  assert.deepStrictEqual(M.itensDaCotacao(null), []);
+});
+
+teste("o total da proposta com preço por item é a soma, não o digitado", () => {
+  const cot = listaBase();
+  const a = cot.propostas[0];
+  // 40*38 + 120*22,50 + 5*19 = 1520 + 2700 + 95
+  assert.strictEqual(M.totalDosItens(cot, a), 4315);
+  assert.strictEqual(M.valorDaProposta(cot, a), 4315);
+});
+
+teste("loja que mandou só o total continua valendo pelo total", () => {
+  const cot = listaBase();
+  const c = cot.propostas[2];
+  assert.strictEqual(M.propostaTemPrecoPorItem(cot, c), false);
+  assert.strictEqual(M.valorDaProposta(cot, c), 3400);
+});
+
+teste("item não cotado entra como faltando, e não some da soma silenciosamente", () => {
+  const cot = listaBase();
+  cot.propostas[0].precos.i3 = "";
+  assert.deepStrictEqual(M.itensSemPreco(cot, cot.propostas[0]).map(i => i.id), ["i3"]);
+  assert.strictEqual(M.totalDosItens(cot, cot.propostas[0]), 4220, "soma só o que foi cotado");
+  const cmp = M.comparativoDaLista(cot);
+  assert.strictEqual(cmp.lojas.find(l => l.propostaId === "pA").faltando, 1);
+});
+
+teste("o melhor preço de cada item sai por item, não por loja", () => {
+  const m = M.melhorPorItem(listaBase());
+  assert.strictEqual(m.i1.favorecido, "Loja B");   // 36,50 < 38,00
+  assert.strictEqual(m.i2.favorecido, "Loja A");   // 22,50 < 24,00
+  assert.strictEqual(m.i3.favorecido, "Loja A");   // 19,00 < 21,00
+  assert.strictEqual(m.i1.total, 1460);
+});
+
+teste("dividir a compra só é sugerido quando envolve mais de uma loja e economiza", () => {
+  const cmp = M.comparativoDaLista(listaBase());
+  // A = 4315; B = 36,5*40 + 24*120 + 21*5 = 1460 + 2880 + 105 = 4445
+  assert.strictEqual(cmp.melhorInteira, 4315);
+  assert.strictEqual(cmp.totalDividido, 1460 + 2700 + 95);
+  assert.strictEqual(cmp.ganhoDaDivisao, 4315 - 4255);
+});
+
+teste("uma loja só, ou lista incompleta, não sugere divisão", () => {
+  const umaSo = { ...listaBase(), propostas: [listaBase().propostas[0]] };
+  assert.strictEqual(M.comparativoDaLista(umaSo).ganhoDaDivisao, 0);
+  const incompleta = listaBase();
+  incompleta.propostas = incompleta.propostas.map(p => p.precos ? { ...p, precos: { i1: p.precos.i1 } } : p);
+  assert.strictEqual(M.comparativoDaLista(incompleta).totalDividido, 0, "sem preço em todos os itens não há conta de divisão");
+});
+
+teste("o texto do pedido lista os itens numerados, com quantidade e unidade", () => {
+  const t = M.textoDoPedido(listaBase(), { favorecido: "Loja A" },
+    { escritorio: "Padovan Arquitetos", obra: "Loja COBOP", endereco: "Rua X, 100 — Ourinhos" });
+  assert.match(t, /^Padovan Arquitetos/);
+  assert.match(t, /PEDIDO — Material de alvenaria/);
+  assert.match(t, /Obra: Loja COBOP/);
+  assert.match(t, /1\. Cimento CP-II 50kg — 40 sc/);
+  assert.match(t, /2\. Tábua de pinus 30cm — 120 m/);
+  assert.match(t, /Fornecedor: Loja A/);
+});
+
+teste("sem lista, o texto do pedido usa a cotação de uma coisa só", () => {
+  const cot = { ...M.cotacaoVazia("o1"), titulo: "Esquadrias", quantidade: "12", unidade: "un" };
+  assert.match(M.textoDoPedido(cot, null, {}), /1\. Esquadrias — 12 un/);
+});
+
+teste("quantidade sai sem centavos quando é inteira", () => {
+  assert.strictEqual(M.qtdBR(40), "40");
+  assert.strictEqual(M.qtdBR(12.5), "12,5");
 });
 
 for (const [nome, fn] of testes) {
