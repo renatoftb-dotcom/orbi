@@ -855,17 +855,46 @@ teste("uma loja só, ou lista incompleta, não sugere divisão", () => {
 teste("o texto do pedido lista os itens numerados, com quantidade e unidade", () => {
   const t = M.textoDoPedido(listaBase(), { favorecido: "Loja A" },
     { escritorio: "Padovan Arquitetos", obra: "Loja COBOP", endereco: "Rua X, 100 — Ourinhos" });
-  assert.match(t, /^Padovan Arquitetos/);
-  assert.match(t, /PEDIDO — Material de alvenaria/);
-  assert.match(t, /Obra: Loja COBOP/);
+  assert.strictEqual(t.split("\n")[0], "Obra: Loja COBOP — Rua X, 100 — Ourinhos",
+    "nome da obra e endereço na mesma linha");
+  assert.ok(!/Entrega:/.test(t), "não é uma linha à parte");
   assert.match(t, /1\. Cimento CP-II 50kg — 40 sc/);
   assert.match(t, /2\. Tábua de pinus 30cm — 120 m/);
-  assert.match(t, /Fornecedor: Loja A/);
+});
+
+teste("nome do escritório, título da cotação e fornecedor ficam fora da mensagem", () => {
+  const t = M.textoDoPedido(listaBase(), { favorecido: "Loja A" },
+    { escritorio: "Padovan Arquitetos", obra: "Loja COBOP", endereco: "Rua X, 100" });
+  assert.ok(!/Padovan/.test(t), "a conversa já sai do WhatsApp dele");
+  assert.ok(!/PEDIDO/.test(t));
+  assert.ok(!/Material de alvenaria/.test(t), "título é nome interno");
+  assert.ok(!/Loja A/.test(t));
+});
+
+teste("sem obra nem endereço, a mensagem é só a lista", () => {
+  assert.strictEqual(M.textoDoPedido(listaBase(), null, {}).split("\n")[0], "1. Cimento CP-II 50kg — 40 sc");
+});
+
+teste("o texto do WhatsApp não leva escopo nem telefone do escritório", () => {
+  const cot = { ...listaBase(), escopo: "Diversos" };
+  const t = M.textoDoPedido(cot, null, { escritorio: "Padovan Arquitetos", obra: "Loja COBOP", contato: "14998528593" });
+  assert.ok(!/Diversos/.test(t), "o escopo fica só na folha do pedido");
+  assert.ok(!/Contato:/.test(t), "a mensagem sai do WhatsApp dele; o número é redundante");
+  assert.match(t, /1\. Cimento CP-II 50kg — 40 sc/, "a lista continua inteira");
+  assert.match(t, /^Obra: Loja COBOP/, "a obra fica — é o que a loja precisa");
+  assert.ok(!/\n\n\n/.test(t), "e não sobra linha em branco no fim");
 });
 
 teste("sem lista, o texto do pedido usa a cotação de uma coisa só", () => {
   const cot = { ...M.cotacaoVazia("o1"), titulo: "Esquadrias", quantidade: "12", unidade: "un" };
   assert.match(M.textoDoPedido(cot, null, {}), /1\. Esquadrias — 12 un/);
+});
+
+teste("a folha do pedido continua com o cabeçalho — documento não é conversa", () => {
+  // a folha lê cot.titulo e ctx.escritorio direto; o que sai dela não passa
+  // por textoDoPedido, então tirar da mensagem não tira do PDF
+  const cot = listaBase();
+  assert.strictEqual(cot.titulo, "Material de alvenaria");
 });
 
 teste("quantidade sai sem centavos quando é inteira", () => {

@@ -19060,13 +19060,15 @@ function qtdBR(n) {
 function textoDoPedido(cot, proposta, ctx) {
   const c = cot || {};
   const x = ctx || {};
+  // A mensagem é só o que a loja precisa ler: para onde vai e o que é. Nome
+  // do escritório, título da cotação e telefone ficam de fora — o título é
+  // nome interno ("Material diversos lojas"), e o resto o vendedor já tem,
+  // porque a conversa sai do WhatsApp de quem manda.
+  // Uma linha só: o nome da obra e onde ela fica. Para a loja isso é uma
+  // informação — é o endereço da entrega — e não duas.
   const linhas = [];
-  if (x.escritorio) linhas.push(x.escritorio);
-  linhas.push(`PEDIDO${c.numeroPedido ? ` ${c.numeroPedido}` : ""} — ${String(c.titulo || "Materiais").trim()}`);
-  if (x.obra) linhas.push(`Obra: ${x.obra}`);
-  if (x.endereco) linhas.push(`Entrega: ${x.endereco}`);
-  if (proposta && proposta.favorecido) linhas.push(`Fornecedor: ${proposta.favorecido}`);
-  linhas.push("");
+  const ondeVai = [x.obra, x.endereco].filter(Boolean).join(" — ");
+  if (ondeVai) { linhas.push(`Obra: ${ondeVai}`); linhas.push(""); }
   const itens = itensDaCotacao(c);
   if (itens.length) {
     itens.forEach((it, i) => {
@@ -19079,8 +19081,10 @@ function textoDoPedido(cot, proposta, ctx) {
     const qtd = q > 0 ? `${qtdBR(q)} ${c.unidade || ""}`.trim() : "";
     linhas.push(`1. ${c.titulo || "Item"}${qtd ? ` — ${qtd}` : ""}`);
   }
-  if (String(c.escopo || "").trim()) { linhas.push(""); linhas.push(String(c.escopo).trim()); }
-  if (x.contato) { linhas.push(""); linhas.push(`Contato: ${x.contato}`); }
+  // O escopo e o telefone do escritório NÃO entram: a mensagem sai do seu
+  // próprio WhatsApp, então o vendedor já sabe com quem fala e responde ali
+  // mesmo. O escopo continua na folha do pedido, que é documento e vai
+  // parar na mão de quem não estava na conversa.
   return linhas.join("\n");
 }
 
