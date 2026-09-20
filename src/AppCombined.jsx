@@ -2231,6 +2231,32 @@ const api = {
     list:   (categoria) => get(`/api/uploads${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ""}`),
   },
 
+  // ── IA: leitura do orçamento que a loja mandou ──────────────
+  // Só para os escritórios liberados no servidor. Quando falha, o erro traz
+  // `motivo` ("token", "limite", "nao_liberada"...) e quem chamou decide cair
+  // no leitor por regras.
+  ia: {
+    status: () => get("/api/ia/status"),
+    lerOrcamento: async (arquivo, itens) => {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+      const fd = new FormData();
+      fd.append("arquivo", arquivo);
+      fd.append("itens", JSON.stringify(itens || []));
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${_API_URL}/api/ia/ler-orcamento`, { method: "POST", headers, body: fd });
+      let json = null;
+      try { json = await res.json(); } catch (e) { json = null; }
+      if (!json || !json.ok) {
+        const erro = new Error((json && json.error) || "A IA não conseguiu ler este arquivo.");
+        erro.status = res.status;
+        erro.motivo = (json && json.motivo) || "falha";
+        throw erro;
+      }
+      return json.data;
+    },
+  },
+
   config: {
     get:  (chave)        => get(`/api/config/${chave}`),
     save: (chave, dados) => put(`/api/config/${chave}`, dados),
@@ -19674,6 +19700,70 @@ function lojaCadastrada(prestadores, orcamento) {
     || null;
 }
 
+// ── O que a IA leu ──────────────────────────────────────────────
+// A IA devolve o orçamento no mesmo formato do leitor por regras, mais uma
+// coisa que o leitor não sabe fazer bem: diz, linha a linha, qual item do
+// pedido aquela linha atende. Aqui isso vira o mesmo "casamento" que a
+// conferência já mostra — a tela não precisa saber quem leu.
+function orcamentoDaIA(bruto) {
+  const o = bruto || {};
+  const itens = (Array.isArray(o.itens) ? o.itens : []).map((l) => ({
+    codigo: String(l.codigo || ""),
+    descricao: String(l.descricao || ""),
+    unidade: String(l.unidade || ""),
+    quantidade: Number(l.quantidade) > 0 ? Number(l.quantidade) : 0,
+    unitario: Number(l.unitario) > 0 ? Number(l.unitario) : 0,
+    total: Number(l.total) > 0 ? Number(l.total) : 0,
+    itemDoPedido: l.itemDoPedido == null ? null : String(l.itemDoPedido),
+  })).filter((l) => l.descricao && (l.unitario > 0 || l.total > 0));
+  const somaItens = Math.round(itens.reduce((a, l) =>
+    a + (l.total > 0 ? l.total : l.unitario * l.quantidade), 0) * 100) / 100;
+  return {
+    fornecedor: String(o.fornecedor || ""), cnpj: String(o.cnpj || ""), numero: String(o.numero || ""),
+    emitido: String(o.emitido || ""), validade: String(o.validade || ""), condicao: String(o.condicao || ""),
+    total: Number(o.total) > 0 ? Number(o.total) : 0,
+    somaItens, itens,
+  };
+}
+
+// Casamento a partir do que a IA indicou. Se ela não ligou nenhuma linha a
+// nenhum item (pedido sem lista, ou resposta incompleta), vale a associação
+// por palavras do leitor — melhor um palpite conferível que a tela vazia.
+function casamentoDaIA(cot, orcamento) {
+  const itens = itensDaCotacao(cot);
+  const ids = {};
+  for (const it of itens) ids[String(it.id)] = 1;
+  const porItem = {};
+  for (const l of (orcamento || {}).itens || []) {
+    if (l.itemDoPedido && ids[l.itemDoPedido] && !porItem[l.itemDoPedido]) porItem[l.itemDoPedido] = l;
+  }
+  if (!Object.keys(porItem).length) return casarOrcamentoComItens(cot, orcamento);
+  const usadas = new Set(Object.values(porItem));
+  const casados = itens.map((it) => ({ item: it, linha: porItem[String(it.id)] || null, score: porItem[String(it.id)] ? 1 : 0 }));
+  return {
+    casados,
+    sobrando: ((orcamento || {}).itens || []).filter((l) => !usadas.has(l)),
+    achados: casados.filter((c) => c.linha).length,
+  };
+}
+
+// O que mandar para a IA sobre o pedido: o suficiente para ela reconhecer
+// cada item, e nada além disso.
+function itensParaIA(cot) {
+  return itensDaCotacao(cot).map((it) => ({
+    id: it.id, descricao: it.descricao || "", quantidade: quantidadeDoItem(it), unidade: it.unidade || "",
+  }));
+}
+
+// Frase para a tela quando a IA não leu. Token vencido e crédito esgotado
+// são coisas que o dono precisa saber; o resto é passageiro.
+function avisoDaIA(erro) {
+  const m = (erro && erro.motivo) || "";
+  if (m === "token" || m === "limite" || m === "conta") return erro.message;
+  if (m === "nao_liberada" || m === "nao_configurada") return "";
+  return "A IA não respondeu agora — usei o leitor do VICKE.";
+}
+
 // ── As unidades que a empresa já usa ────────────────────────────
 // Unidade não é campo livre de verdade: o catálogo já diz quais existem
 // ("Unidades", "kg", "m3", "Mts"). Digitar à mão gera "un", "UN", "und" para
@@ -20427,6 +20517,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [filaEnvio, setFilaEnvio] = useState(null);   // { lojas: [...], i }
   const [colando, setColando] = useState(null);       // { texto, lidos } ao ler o recado
   const [lendoPdf, setLendoPdf] = useState(false);
+  // null = ainda não perguntou. Pergunta uma vez por tela: sem a IA, anexar
+  // não pode virar dois envios do mesmo arquivo.
+  const [iaDisponivel, setIaDisponivel] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    if (!api || !api.ia) { setIaDisponivel(false); return; }
+    api.ia.status()
+      .then((d) => { if (vivo) setIaDisponivel(!!(d && d.disponivel)); })
+      .catch(() => { if (vivo) setIaDisponivel(false); });
+    return () => { vivo = false; };
+  }, []);
   const [orcamentoLido, setOrcamentoLido] = useState(null);  // { orcamento, casamento }
   const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
   const unidadesCatalogo = unidadesDoCatalogo(insumos);
@@ -20813,15 +20914,47 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   async function lerOrcamentoDaLoja(arquivo, cotacao) {
     if (!arquivo) return;
     const ehPdf = /pdf$/i.test(arquivo.type || "") || /\.pdf$/i.test(arquivo.name || "");
-    if (!ehPdf) return;                     // foto anexa normal, sem leitura
+    const ehFoto = /^image\//i.test(arquivo.type || "");
+    // Foto só a IA lê; sem ela, a foto fica anexada e os preços vão a mão.
+    if (!ehPdf && !(ehFoto && iaDisponivel)) return;
     setErro("");
     setLendoPdf(true);
+
+    let aviso = "";
+    if (iaDisponivel) {
+      try {
+        const r = await api.ia.lerOrcamento(arquivo, itensParaIA(cotacao));
+        const orcamento = orcamentoDaIA(r && r.orcamento);
+        const casamento = casamentoDaIA(cotacao, orcamento);
+        const escolhas = {};
+        for (const { item, linha } of casamento.casados) {
+          const i = linha ? orcamento.itens.indexOf(linha) : -1;
+          escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, quantidadeDoItem(item)) : 0 };
+        }
+        setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "ia" });
+        setLendoPdf(false);
+        return;
+      } catch (e) {
+        aviso = avisoDaIA(e);
+        // Crédito ou token acabaram: não adianta insistir nas próximas
+        // leituras desta tela. O leitor por regras segue sozinho.
+        if (e && (e.motivo === "token" || e.motivo === "limite" || e.motivo === "conta" || e.motivo === "nao_liberada" || e.motivo === "nao_configurada")) {
+          setIaDisponivel(false);
+        }
+      }
+    }
+    if (!ehPdf) {
+      setErro(aviso || "Não consegui ler a foto. Ela fica anexada; os preços vão a mão.");
+      setLendoPdf(false);
+      return;
+    }
+
     try {
       const linhas = await linhasDoPdf(arquivo);
       // Sem texto nenhum é PDF digitalizado (foto do papel) — não há o que
       // ler, e insistir só faria perder tempo.
       if (!linhas.length) {
-        setErro("Esse PDF é digitalizado (foto do papel), não tem texto para ler. Ele fica anexado, mas os preços vão a mão.");
+        setErro((aviso ? aviso + " " : "") + "Esse PDF é digitalizado (foto do papel), não tem texto para o leitor do VICKE. Ele fica anexado, mas os preços vão a mão.");
         setLendoPdf(false);
         return;
       }
@@ -20835,7 +20968,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         const i = linha ? orcamento.itens.indexOf(linha) : -1;
         escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, quantidadeDoItem(item)) : 0 };
       }
-      setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "" });
+      setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "", leitor: "regras", aviso });
     } catch (e) {
       setErro(e && e.message ? e.message : "Não consegui ler esse PDF.");
     }
@@ -21107,8 +21240,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               <CampoAnexoProposta anexo={p.anexo} onTrocar={a => set("anexo", a)} onErro={setErro}
                 lendo={lendoPdf}
                 aoLerPdf={comLista ? ((arq) => lerOrcamentoDaLoja(arq, cotDaProposta)) : null}
+                leFoto={comLista && !!iaDisponivel}
                 apoio={comLista
-                  ? "clique para escolher, ou cole com Ctrl+V — se for PDF, eu leio os preços e preencho a tabela acima"
+                  ? (iaDisponivel
+                    ? "clique para escolher, ou cole com Ctrl+V — PDF, foto do papel ou print: a IA lê os preços e preenche a tabela acima"
+                    : "clique para escolher, ou cole com Ctrl+V — se for PDF, eu leio os preços e preencho a tabela acima")
                   : undefined} />
             </div>
           );
@@ -21133,8 +21269,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Orçamento da loja</div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
-                  {nome ? `${nome} · ` : ""}cada loja manda o PDF de um jeito — confira, e corrija o que estiver
-                  fora do lugar antes de preencher.
+                  {nome ? `${nome} · ` : ""}
+                  <span style={{ color: "#0474f4", fontWeight: 600 }}>
+                    {orcamentoLido.leitor === "ia" ? "lido pela IA" : "lido pelo leitor do VICKE"}
+                  </span>
+                  {" "}— confira, e corrija o que estiver fora do lugar antes de preencher.
+                  {orcamentoLido.aviso ? (
+                    <div style={{ marginTop: 6, fontSize: 11.5, color: "#dc2626" }}>{orcamentoLido.aviso}</div>
+                  ) : null}
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
                   {[["Loja", o.fornecedor || "—"], ["Nº", o.numero || "—"],
@@ -22424,7 +22566,7 @@ function FolhaPedido({ cot, proposta, ctx, aoFechar }) {
 }
 
 // Campo de anexo: arrasta o PDF do e-mail para cá, ou clica e escolhe.
-function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio, aoLerPdf, lendo }) {
+function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio, aoLerPdf, lendo, leFoto }) {
   const [sobre, setSobre] = useState(false);
   const [enviando, setEnviando] = useState(false);
   // "Abrir" aqui era um link direto para a URL do storage. Como o arquivo
@@ -22447,7 +22589,8 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
       // campo só. A leitura usa o arquivo daqui, que já está na mão: não
       // baixa de volta do storage nem manda para lugar nenhum.
       const ehPdf = /pdf$/i.test(arquivo.type || "") || /\.pdf$/i.test(arquivo.name || "");
-      if (ehPdf && typeof aoLerPdf === "function") await aoLerPdf(arquivo);
+      const ehFoto = /^image\//i.test(arquivo.type || "");
+      if ((ehPdf || (ehFoto && leFoto)) && typeof aoLerPdf === "function") await aoLerPdf(arquivo);
     }
     catch (e) { onErro(e.message || "Não foi possível anexar o arquivo."); }
     finally { setEnviando(false); }

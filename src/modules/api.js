@@ -177,6 +177,32 @@ const api = {
     list:   (categoria) => get(`/api/uploads${categoria ? `?categoria=${encodeURIComponent(categoria)}` : ""}`),
   },
 
+  // ── IA: leitura do orçamento que a loja mandou ──────────────
+  // Só para os escritórios liberados no servidor. Quando falha, o erro traz
+  // `motivo` ("token", "limite", "nao_liberada"...) e quem chamou decide cair
+  // no leitor por regras.
+  ia: {
+    status: () => get("/api/ia/status"),
+    lerOrcamento: async (arquivo, itens) => {
+      const token = typeof localStorage !== "undefined" ? localStorage.getItem("vicke-token") : null;
+      const fd = new FormData();
+      fd.append("arquivo", arquivo);
+      fd.append("itens", JSON.stringify(itens || []));
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${_API_URL}/api/ia/ler-orcamento`, { method: "POST", headers, body: fd });
+      let json = null;
+      try { json = await res.json(); } catch (e) { json = null; }
+      if (!json || !json.ok) {
+        const erro = new Error((json && json.error) || "A IA não conseguiu ler este arquivo.");
+        erro.status = res.status;
+        erro.motivo = (json && json.motivo) || "falha";
+        throw erro;
+      }
+      return json.data;
+    },
+  },
+
   config: {
     get:  (chave)        => get(`/api/config/${chave}`),
     save: (chave, dados) => put(`/api/config/${chave}`, dados),

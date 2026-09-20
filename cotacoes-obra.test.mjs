@@ -70,7 +70,8 @@ const modulo = new Function(`
            unidadesDoCatalogo, opcoesDeUnidade,
            ehNumeroDeOrcamento, numeroDeOrcamento, itemDeOrcamento, dataIsoDoOrcamento,
            interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada,
-           papelDaCelula, papeisDaTabela, precoDaLinha };
+           papelDaCelula, papeisDaTabela, precoDaLinha,
+           orcamentoDaIA, casamentoDaIA, itensParaIA, avisoDaIA };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1514,6 +1515,60 @@ teste("preço da linha: sem unitário, divide o total pela quantidade do pedido"
   assert.strictEqual(M.precoDaLinha({ unitario: 43, total: 258, quantidade: 6 }), 43);
   assert.strictEqual(M.precoDaLinha({ unitario: 0, total: 190, quantidade: 0 }, 2), 95);
   assert.strictEqual(M.precoDaLinha({ unitario: 0, total: 0 }, 2), 0);
+});
+
+// ── O que a IA leu vira a mesma conferência ─────────────────────
+const lidoPelaIA = {
+  fornecedor: "OURIFER", cnpj: "08.617.563/0001-35", numero: "023698-120", emitido: "2026-08-12",
+  validade: "2026-08-15", condicao: "A Prazo", total: 573,
+  itens: [
+    { descricao: "Tijolo 8 Furos 9x19x19", unidade: "UN", quantidade: 300, unitario: 1.05, total: 315, itemDoPedido: "i2" },
+    { descricao: "Cimento Cp Ii F 50kg - Csn", unidade: "SC", quantidade: 6, unitario: 43, total: 258, itemDoPedido: "i1" },
+  ],
+};
+
+teste("a leitura da IA liga cada linha ao item que ela indicou", () => {
+  const o = M.orcamentoDaIA(lidoPelaIA);
+  const cm = M.casamentoDaIA(pedidoDoPdf, o);
+  const por = {}; cm.casados.forEach(c => { por[c.item.id] = c.linha ? c.linha.unitario : null; });
+  assert.deepStrictEqual(por, { i1: 43, i2: 1.05, i3: null });
+  assert.strictEqual(cm.achados, 2);
+  assert.strictEqual(o.somaItens, 573);
+});
+
+teste("id que não existe no pedido não casa nada, e a linha sobra", () => {
+  const o = M.orcamentoDaIA({ ...lidoPelaIA, itens: [{ ...lidoPelaIA.itens[0], itemDoPedido: "inventado" },
+                                                       lidoPelaIA.itens[1]] });
+  const cm = M.casamentoDaIA(pedidoDoPdf, o);
+  assert.strictEqual(cm.achados, 1);
+  assert.strictEqual(cm.sobrando.length, 1);
+});
+
+teste("IA que não ligou nada cai na associação por palavras", () => {
+  const o = M.orcamentoDaIA({ ...lidoPelaIA, itens: lidoPelaIA.itens.map(l => ({ ...l, itemDoPedido: null })) });
+  const cm = M.casamentoDaIA(pedidoDoPdf, o);
+  assert.strictEqual(cm.achados, 2, "o leitor por palavras acha os dois mesmo assim");
+});
+
+teste("resposta da IA com número negativo ou lixo não passa", () => {
+  const o = M.orcamentoDaIA({ total: -10, itens: [{ descricao: "X", quantidade: -1, unitario: -5, total: 0 },
+                                                  { descricao: "", quantidade: 1, unitario: 10, total: 10 }] });
+  assert.strictEqual(o.total, 0);
+  assert.deepStrictEqual(o.itens, []);
+});
+
+teste("para a IA vai só id, nome, quantidade e unidade do pedido", () => {
+  const i = M.itensParaIA(pedidoDoPdf);
+  assert.deepStrictEqual(Object.keys(i[0]).sort(), ["descricao", "id", "quantidade", "unidade"]);
+  assert.strictEqual(i[1].quantidade, 300);
+});
+
+teste("token vencido e crédito esgotado aparecem na tela; o resto não assusta", () => {
+  const e = (motivo, message) => Object.assign(new Error(message), { motivo });
+  assert.match(M.avisoDaIA(e("token", "O token da IA venceu")), /token/);
+  assert.match(M.avisoDaIA(e("limite", "O crédito mensal acabou")), /crédito/);
+  assert.strictEqual(M.avisoDaIA(e("nao_liberada", "x")), "", "escritório sem IA não recebe aviso nenhum");
+  assert.match(M.avisoDaIA(e("instavel", "x")), /leitor do VICKE/);
 });
 
 for (const [nome, fn] of testes) {
