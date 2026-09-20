@@ -67,7 +67,9 @@ const modulo = new Function(`
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
            interpretarPedido, interpretarLinhaDePedido, quantidadeDoTexto, resumoDaLeitura,
            itemDoPedidoLido, resolverInsumo, scoreAssociacao, candidatosDoPedido,
-           unidadesDoCatalogo, opcoesDeUnidade };
+           unidadesDoCatalogo, opcoesDeUnidade,
+           ehNumeroDeOrcamento, numeroDeOrcamento, itemDeOrcamento, dataIsoDoOrcamento,
+           interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1250,6 +1252,162 @@ teste("o 'e' que liga itens separa, e a saudação antes da vírgula cai fora", 
 teste("ponto e vírgula separa itens escritos na mesma linha", () => {
   const r = M.interpretarPedido("10 sacos de cimento; 1/2 m3 de areia fina", catalogo);
   assert.deepStrictEqual(r.map(x => x.quantidade), [10, 0.5]);
+});
+
+// ── Ler o orçamento que a loja mandou em PDF ────────────────────
+// As células abaixo são as que o pdf.js entrega para o orçamento de verdade
+// da OURIFER — é o papel que ele arrastou, linha por linha.
+const OURIFER = [
+  ["OURIFER"],
+  ["R.", "J.", "Ferreira", "Ltda"],
+  ["IE:", "495152605116", "-", "CNPJ/CPF:", "08.617.563/0001-35"],
+  ["Rua", "Vitorio", "Christoni,", "912", "-", "Jardim", "Santa", "Fe", "-", "Ourinhos", "-", "SP", "-", "CEP:", "19.910-060"],
+  ["Fone:", "(14)", "3324-6195", "-", "14", "99660-8300", "--", "ourifer@hotmail.com", "-"],
+  ["ORÇAMENTO"],
+  ["•", "NÚMERO:", "023698-120", "•", "DATA:", "12/08/2026", "09:50", "•", "VÁLIDO", "ATÉ", "15/08/2026", "00:00"],
+  ["Cliente:", "0006", "Cobop", "Comercio", "Ltda", "(Cobop", "Comercio", "Ltda)"],
+  ["Endereço:", "Av.", "Altino", "Arantes,", "524", "-", "Bairro:", "Centro"],
+  ["Cidade:", "Ourinhos/SP", "-", "Cep:", "19.000-031"],
+  ["Vendedor:", "0006", "Tamara", "Duarte"],
+  ["A", "Prazo", "573,00"],
+  ["Condição", "de", "Pagamento:", "Total:"],
+  ["Código", "Descrição", "Quantidade", "Unitário", "Total"],
+  ["0000000001373", "Tijolo", "8", "Furos", "9x19x19", "300", "1,05", "315,00"],
+  ["0000000002405", "Cimento", "Cp", "Ii", "F", "50kg", "-", "Csn", "6", "43,00", "258,00"],
+  ["306,000"],
+  ["TOTAL"],
+  ["573,00"],
+  ["OBRIGADO", "PELA", "PREFERENCIA"],
+  ["VOLTE", "SEMPRE", "!!!"],
+  ["1", "de", "1"],
+].map(celulas => ({ celulas, texto: celulas.join(" ") }));
+
+teste("a tabela do orçamento vira itens; cabeçalho e rodapé ficam de fora", () => {
+  const o = M.interpretarOrcamento(OURIFER);
+  assert.strictEqual(o.itens.length, 2, "só as duas linhas de mercadoria");
+  assert.deepStrictEqual(o.itens[0], { codigo: "0000000001373",
+    descricao: "Tijolo 8 Furos 9x19x19", quantidade: 300, unitario: 1.05, total: 315 });
+  assert.deepStrictEqual(o.itens[1], { codigo: "0000000002405",
+    descricao: "Cimento Cp Ii F 50kg - Csn", quantidade: 6, unitario: 43, total: 258 });
+});
+
+teste("o cabeçalho diz de quem é, o número e até quando vale", () => {
+  const o = M.interpretarOrcamento(OURIFER);
+  assert.strictEqual(o.fornecedor, "OURIFER");
+  assert.strictEqual(o.cnpj, "08.617.563/0001-35");
+  assert.strictEqual(o.numero, "023698-120");
+  assert.strictEqual(o.emitido, "2026-08-12");
+  assert.strictEqual(o.validade, "2026-08-15");
+});
+
+teste("a condição de pagamento é lida mesmo caindo na linha de cima", () => {
+  assert.strictEqual(M.interpretarOrcamento(OURIFER).condicao, "A Prazo");
+});
+
+teste("o total do papel bate com a soma dos itens", () => {
+  const o = M.interpretarOrcamento(OURIFER);
+  assert.strictEqual(o.somaItens, 573);
+  assert.strictEqual(o.total, 573);
+});
+
+teste("o rótulo da coluna 'Total' não pode virar valor do orçamento", () => {
+  // Sem número na mesma linha, o "Total:" do cabeçalho casaria com o código
+  // 0000000001373 da linha de baixo — o orçamento sairia valendo 1373.
+  assert.notStrictEqual(M.interpretarOrcamento(OURIFER).total, 1373);
+});
+
+teste("total fechado abaixo da soma entra como total do papel", () => {
+  const comDesconto = OURIFER.map(l => l.texto === "Condição de Pagamento: Total:"
+    ? { celulas: ["Condição", "de", "Pagamento:", "Total:", "550,00"], texto: "Condição de Pagamento: Total: 550,00" }
+    : l);
+  const o = M.interpretarOrcamento(comDesconto);
+  assert.strictEqual(o.total, 550);
+  assert.strictEqual(o.somaItens, 573);
+});
+
+teste("linha sem descrição ou sem número não é item", () => {
+  assert.strictEqual(M.itemDeOrcamento({ celulas: ["306,000"] }), null);
+  assert.strictEqual(M.itemDeOrcamento({ celulas: ["Código", "Descrição", "Quantidade", "Unitário", "Total"] }), null);
+  assert.strictEqual(M.itemDeOrcamento({ celulas: ["TOTAL", "2", "3", "573,00"] }), null);
+  assert.strictEqual(M.itemDeOrcamento({ celulas: ["1", "de", "1"] }), null);
+});
+
+teste("número do orçamento: ponto de milhar não vira decimal", () => {
+  assert.strictEqual(M.numeroDeOrcamento("1.234"), 1234);
+  assert.strictEqual(M.numeroDeOrcamento("1.05"), 1.05);
+  assert.strictEqual(M.numeroDeOrcamento("1.234,56"), 1234.56);
+  assert.strictEqual(M.numeroDeOrcamento("43,00"), 43);
+});
+
+teste("PDF sem tabela nenhuma não inventa item", () => {
+  const o = M.interpretarOrcamento([{ celulas: ["Bom dia, segue o orçamento."], texto: "Bom dia, segue o orçamento." }]);
+  assert.deepStrictEqual(o.itens, []);
+  assert.strictEqual(o.total, 0);
+});
+
+// ── Casar o orçamento com o pedido ──────────────────────────────
+const pedidoDoPdf = {
+  ...M.cotacaoVazia("o1"), id: "ct-pdf",
+  itens: [
+    { id: "i1", descricao: "Cimento CP-II 50kg", quantidade: 6, unidade: "Unidades" },
+    { id: "i2", descricao: "Tijolo 8 furos 9x19x19", quantidade: 300, unidade: "Unidades" },
+    { id: "i3", descricao: "Areia Fina", quantidade: 2, unidade: "m3" },
+  ],
+};
+
+teste("cada item do pedido acha seu preço, mesmo com o nome da loja diferente", () => {
+  const cm = M.casarOrcamentoComItens(pedidoDoPdf, M.interpretarOrcamento(OURIFER));
+  assert.strictEqual(cm.achados, 2);
+  const por = {};
+  cm.casados.forEach(c => { por[c.item.id] = c.linha ? c.linha.unitario : null; });
+  assert.strictEqual(por.i1, 43, "Cimento CP-II 50kg ↔ Cimento Cp Ii F 50kg - Csn");
+  assert.strictEqual(por.i2, 1.05, "Tijolo 8 furos ↔ Tijolo 8 Furos");
+  assert.strictEqual(por.i3, null, "areia não veio neste orçamento");
+});
+
+teste("a loja não cotou nada que não foi pedido", () => {
+  const cm = M.casarOrcamentoComItens(pedidoDoPdf, M.interpretarOrcamento(OURIFER));
+  assert.strictEqual(cm.sobrando.length, 0);
+});
+
+teste("item cotado que não estava no pedido fica de fora, e é avisado", () => {
+  const so = { ...pedidoDoPdf, itens: [pedidoDoPdf.itens[0]] };
+  const cm = M.casarOrcamentoComItens(so, M.interpretarOrcamento(OURIFER));
+  assert.strictEqual(cm.achados, 1);
+  assert.strictEqual(cm.sobrando.length, 1);
+  assert.strictEqual(cm.sobrando[0].descricao, "Tijolo 8 Furos 9x19x19");
+});
+
+teste("uma linha do orçamento não serve para dois itens do pedido", () => {
+  const dois = { ...pedidoDoPdf, itens: [
+    { id: "a", descricao: "Cimento CP-II 50kg", quantidade: 6, unidade: "Unidades" },
+    { id: "b", descricao: "Cimento CP-II 50kg", quantidade: 4, unidade: "Unidades" },
+  ] };
+  const cm = M.casarOrcamentoComItens(dois, M.interpretarOrcamento(OURIFER));
+  assert.strictEqual(cm.achados, 1, "a segunda linha fica sem preço, não repete a primeira");
+});
+
+// ── A loja do papel contra o cadastro ───────────────────────────
+const lojas = [
+  { id: "f1", nome: "OURIFER", cnpjCpf: "08.617.563/0001-35", ativo: true },
+  { id: "f2", nome: "Casa do Construtor", cnpjCpf: "", ativo: true },
+  { id: "f3", nome: "Ourifer Materiais Ltda", cnpjCpf: "", ativo: false },
+];
+
+teste("o CNPJ do orçamento acha a loja no cadastro", () => {
+  const f = M.lojaCadastrada(lojas, { fornecedor: "R. J. Ferreira Ltda", cnpj: "08.617.563/0001-35" });
+  assert.strictEqual(f && f.id, "f1");
+});
+
+teste("sem CNPJ, vale o nome — e acento não atrapalha", () => {
+  assert.strictEqual(M.lojaCadastrada(lojas, { fornecedor: "ourifer" }).id, "f1");
+  assert.strictEqual(M.lojaCadastrada(lojas, { fornecedor: "Casa do Construtor" }).id, "f2");
+});
+
+teste("loja desativada não é sugerida, e nome que não bate não vira palpite", () => {
+  assert.strictEqual(M.lojaCadastrada([lojas[2]], { fornecedor: "Ourifer Materiais Ltda" }), null);
+  assert.strictEqual(M.lojaCadastrada(lojas, { fornecedor: "Depósito São Jorge" }), null);
+  assert.strictEqual(M.lojaCadastrada(lojas, { fornecedor: "" }), null);
 });
 
 for (const [nome, fn] of testes) {

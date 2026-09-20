@@ -602,6 +602,191 @@ function itemDoPedidoLido(lido) {
     unidade: l.unidade || "", quantidade: l.quantidade || "" };
 }
 
+// ══════════════════════════════════════════════════════════════
+// LER O ORÇAMENTO QUE A LOJA MANDOU EM PDF
+// ══════════════════════════════════════════════════════════════
+// A loja responde num PDF do sistema dela — cabeçalho, dados do cliente e
+// uma tabela de código / descrição / quantidade / unitário / total. Digitar
+// isso de novo é onde o preço erra.
+//
+// O pdf.js já está carregado no app (é o mesmo que rasteriza a proposta),
+// então dá para ler o texto no navegador, sem mandar o arquivo para lugar
+// nenhum. PDF escaneado (foto) não tem texto e não é lido — nesse caso o
+// caminho continua sendo digitar.
+
+// Cada linha vira uma lista de CÉLULAS, não uma frase: o pdf.js entrega um
+// pedaço de texto por coluna, e é isso que permite separar "Cimento Cp Ii F
+// 50kg - Csn" de "6" e "43,00" sem depender de quantos espaços o PDF pôs.
+async function linhasDoPdf(blob) {
+  if (typeof window === "undefined" || !window.pdfjsLib) {
+    throw new Error("O leitor de PDF ainda está carregando. Tente de novo em alguns segundos.");
+  }
+  const dados = await blob.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: dados }).promise;
+  const linhas = [];
+  for (let p = 1; p <= pdf.numPages; p++) {
+    const pagina = await pdf.getPage(p);
+    const conteudo = await pagina.getTextContent();
+    const porY = {};
+    for (const it of conteudo.items || []) {
+      const txt = String(it.str || "").trim();
+      if (!txt) continue;
+      const x = (it.transform && it.transform[4]) || 0;
+      const y = Math.round(((it.transform && it.transform[5]) || 0) * 2) / 2;   // meio ponto
+      (porY[y] = porY[y] || []).push({ x, txt });
+    }
+    Object.keys(porY)
+      .map(Number)
+      .sort((a, b) => b - a)     // PDF conta de baixo para cima
+      .forEach((y) => {
+        const celulas = porY[y].sort((a, b) => a.x - b.x).map((c) => c.txt);
+        linhas.push({ celulas, texto: celulas.join(" ") });
+      });
+  }
+  return linhas;
+}
+
+// Número em pt-BR que a loja escreve: "1.234,56", "43,00", "306,000".
+const COT_RE_NUM = /^-?\d{1,3}(\.\d{3})*(,\d+)?$|^-?\d+([.,]\d+)?$/;
+
+function ehNumeroDeOrcamento(txt) {
+  const t = String(txt == null ? "" : txt).trim();
+  return !!t && COT_RE_NUM.test(t);
+}
+
+function numeroDeOrcamento(txt) {
+  const t = String(txt == null ? "" : txt).trim();
+  if (t.indexOf(",") >= 0) return numeroDoCampo(t);          // pt-BR
+  // sem vírgula: ponto pode ser milhar ("1.234") ou decimal ("1.05")
+  const m = /^(-?\d+)\.(\d+)$/.exec(t);
+  if (m) return m[2].length === 3 ? Number(m[1] + m[2]) : Number(t);
+  return numeroDoCampo(t);
+}
+
+// Uma linha da tabela: os três últimos números são quantidade, unitário e
+// total; o que vem antes é código e descrição. Linha de cabeçalho e de
+// somatório não entram — a primeira não tem número, a segunda não tem
+// descrição.
+function itemDeOrcamento(linha) {
+  const cel = ((linha || {}).celulas || []).map((c) => String(c).trim()).filter(Boolean);
+  if (cel.length < 4) return null;
+  const fim = cel.slice(-3);
+  if (!fim.every(ehNumeroDeOrcamento)) return null;
+  const antes = cel.slice(0, -3);
+  const codigo = /^\d{4,}$/.test(antes[0]) ? antes[0] : "";
+  const descricao = (codigo ? antes.slice(1) : antes).join(" ").trim();
+  if (!descricao || !/[a-zA-ZÀ-ÿ]{3}/.test(descricao)) return null;
+  if (/^total\b/i.test(descricao)) return null;
+  const quantidade = numeroDeOrcamento(fim[0]);
+  const unitario = numeroDeOrcamento(fim[1]);
+  const total = numeroDeOrcamento(fim[2]);
+  if (!(unitario > 0) && !(total > 0)) return null;
+  return { codigo, descricao, quantidade, unitario, total };
+}
+
+const COT_MESES_PT = {};
+
+function dataIsoDoOrcamento(txt) {
+  const m = /(\d{2})\/(\d{2})\/(\d{4})/.exec(String(txt || ""));
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : "";
+}
+
+// O orçamento inteiro: o cabeçalho responde de quem é e até quando vale; a
+// tabela responde quanto custa cada coisa.
+function interpretarOrcamento(linhas) {
+  const lista = (linhas || []).map((l) => (typeof l === "string" ? { celulas: [l], texto: l } : l));
+  const tudo = lista.map((l) => l.texto).join("\n");
+  const itens = [];
+  for (const l of lista) {
+    const it = itemDeOrcamento(l);
+    if (it) itens.push(it);
+  }
+  const cnpj = (/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(tudo) || [])[1] || "";
+  // o nome da loja é a primeira linha de verdade do papel — antes de
+  // qualquer rótulo ("IE:", "CNPJ", "Rua", "Fone")
+  let fornecedor = "";
+  for (const l of lista.slice(0, 8)) {
+    const t = String(l.texto || "").trim();
+    if (!t || t.length < 3) continue;
+    if (/^(ie:|cnpj|cpf|rua|av\.|avenida|fone|tel|e-?mail|or[çc]amento|n[úu]mero|data)/i.test(t)) continue;
+    if (!/[a-zA-ZÀ-ÿ]{3}/.test(t)) continue;
+    fornecedor = t;
+    break;
+  }
+  const validade = dataIsoDoOrcamento((/V[ÁA]LIDO\s+AT[ÉE][:\s]*([^•\n]+)/i.exec(tudo) || [])[1] || "");
+  const emitido = dataIsoDoOrcamento((/DATA[:\s]*([^•\n]+)/i.exec(tudo) || [])[1] || "");
+  // A condição costuma vir na mesma linha do rótulo, mas nem sempre: tem
+  // PDF em que o valor cai na linha de cima, junto do total. Então, quando a
+  // linha do rótulo não traz nada, olha-se a vizinha.
+  const limparCondicao = (t) => String(t || "")
+    .replace(/Total:?.*$/i, "")
+    .replace(/[\d.,]+\s*$/, "")
+    .replace(/^[\s:–-]+/, "")
+    .trim();
+  let condicao = limparCondicao((/Condi[çc][ãa]o\s+de\s+Pagamento[:\s]*([^\n]*)/i.exec(tudo) || [])[1] || "");
+  if (!condicao) {
+    const iRot = lista.findIndex((l) => /Condi[çc][ãa]o\s+de\s+Pagamento/i.test(l.texto || ""));
+    for (const vizinho of [lista[iRot - 1], lista[iRot + 1]]) {
+      const t = limparCondicao((vizinho || {}).texto || "");
+      if (t && t.length <= 40 && /[a-zA-ZÀ-ÿ]{3}/.test(t)) { condicao = t; break; }
+    }
+  }
+
+  // O total do papel. Só vale o "Total:" que tem número NA MESMA LINHA — sem
+  // isso o rótulo da coluna "Total" casaria com o código do primeiro item da
+  // tabela logo abaixo, e o orçamento sairia valendo o número do código.
+  // Sem total no cabeçalho, vale a soma dos itens.
+  const somaItens = Math.round(itens.reduce((a, i) => a + (i.total || 0), 0) * 100) / 100;
+  const mTotal = /Total:[^\S\n]*([\d.,]+)/i.exec(tudo);
+  const total = mTotal ? numeroDeOrcamento(mTotal[1]) : somaItens;
+  return { fornecedor, cnpj, numero: String((/N[ÚU]MERO[:\s]*([\w-]+)/i.exec(tudo) || [])[1] || ""),
+    emitido, validade, condicao, total, somaItens, itens };
+}
+
+// ── Casar o que a loja mandou com o que foi pedido ──────────────
+// A loja escreve do jeito dela ("Cimento Cp Ii F 50kg - Csn") e o pedido tem
+// o nome do catálogo. É a mesma associação por palavra do recado do pedreiro
+// — aqui só muda o que se compara.
+function casarOrcamentoComItens(cot, orcamento) {
+  const itens = itensDaCotacao(cot);
+  const doPdf = ((orcamento || {}).itens) || [];
+  const usados = {};
+  const casados = itens.map((it) => {
+    let melhor = null;
+    doPdf.forEach((linha, i) => {
+      if (usados[i]) return;
+      const score = Math.max(
+        scoreAssociacao(it.descricao, linha.descricao),
+        scoreAssociacao(linha.descricao, it.descricao));
+      if (score >= COT_CORTE_ASSOCIACAO && (!melhor || score > melhor.score)) melhor = { i, linha, score };
+    });
+    if (melhor) usados[melhor.i] = 1;
+    return { item: it, linha: melhor ? melhor.linha : null, score: melhor ? melhor.score : 0 };
+  });
+  const sobrando = doPdf.filter((_, i) => !usados[i]);
+  return { casados, sobrando, achados: casados.filter((c) => c.linha).length };
+}
+
+// A loja do papel costuma já estar cadastrada — e aí a proposta tem que
+// ficar amarrada no cadastro, não só com o nome digitado: é o cadastro que
+// leva o telefone, o CNPJ e o contrato depois. O CNPJ é a prova; o nome só
+// vale quando é o mesmo nome.
+function lojaCadastrada(prestadores, orcamento) {
+  const lista = (prestadores || []).filter((f) => f && f.ativo !== false);
+  const o = orcamento || {};
+  const so = (t) => String(t == null ? "" : t).replace(/\D/g, "");
+  if (so(o.cnpj).length >= 11) {
+    const porCnpj = lista.find((f) => so(f.cnpjCpf) && so(f.cnpjCpf) === so(o.cnpj));
+    if (porCnpj) return porCnpj;
+  }
+  const alvo = cotSemAcento(o.fornecedor || "");
+  if (!alvo) return null;
+  return lista.find((f) => cotSemAcento(f.nome) === alvo)
+    || lista.find((f) => { const n = cotSemAcento(f.nome);
+        return n && (n.startsWith(alvo + " ") || alvo.startsWith(n + " ")); })
+    || null;
+}
+
 // ── As unidades que a empresa já usa ────────────────────────────
 // Unidade não é campo livre de verdade: o catálogo já diz quais existem
 // ("Unidades", "kg", "m3", "Mts"). Digitar à mão gera "un", "UN", "und" para
@@ -1354,6 +1539,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // a próxima na lista.
   const [filaEnvio, setFilaEnvio] = useState(null);   // { lojas: [...], i }
   const [colando, setColando] = useState(null);       // { texto, lidos } ao ler o recado
+  const [lendoPdf, setLendoPdf] = useState(false);
+  const [orcamentoLido, setOrcamentoLido] = useState(null);  // { orcamento, casamento }
   const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
   const unidadesCatalogo = unidadesDoCatalogo(insumos);
   // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
@@ -1734,6 +1921,62 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   }
 
   // ── Formulário da proposta recebida ───────────────────────────
+  // Arrastar o PDF que a loja mandou: lê no próprio navegador (o arquivo não
+  // sai daqui) e mostra o que entendeu antes de preencher qualquer campo.
+  async function lerOrcamentoDaLoja(arquivo, cotacao) {
+    if (!arquivo) return;
+    const ehPdf = /pdf$/i.test(arquivo.type || "") || /\.pdf$/i.test(arquivo.name || "");
+    if (!ehPdf) { setErro("Por enquanto só leio orçamento em PDF. Foto do papel não tem texto para ler."); return; }
+    setErro("");
+    setLendoPdf(true);
+    try {
+      const linhas = await linhasDoPdf(arquivo);
+      const orcamento = interpretarOrcamento(linhas);
+      if (!orcamento.itens.length) {
+        setErro("Não achei a tabela de itens nesse PDF. Se ele for digitalizado (foto), não há texto para ler — aí é digitar à mão.");
+        setLendoPdf(false);
+        return;
+      }
+      setOrcamentoLido({ orcamento, casamento: casarOrcamentoComItens(cotacao, orcamento), nome: arquivo.name || "" });
+    } catch (e) {
+      setErro(e && e.message ? e.message : "Não consegui ler esse PDF.");
+    }
+    setLendoPdf(false);
+  }
+
+  // Passa o que foi lido para os campos da proposta. Só mexe no que o PDF
+  // respondeu: o que ele não traz fica como estava.
+  function aplicarOrcamentoLido() {
+    if (!orcamentoLido || !formProposta) return;
+    const { orcamento, casamento } = orcamentoLido;
+    setFormProposta((f) => {
+      if (!f) return f;
+      const p = { ...f.proposta };
+      const precos = { ...(p.precos || {}) };
+      for (const c of casamento.casados) {
+        if (c.linha && c.linha.unitario > 0) precos[c.item.id] = c.linha.unitario;
+      }
+      p.precos = precos;
+      // Loja já cadastrada entra pelo cadastro; senão fica só o nome do papel.
+      const cadastrada = p.fornecedorId ? null : lojaCadastrada(prestadores, orcamento);
+      if (cadastrada) {
+        p.fornecedorId = cadastrada.id;
+        if (!String(p.favorecido || "").trim()) p.favorecido = cadastrada.nome;
+      } else if (!String(p.favorecido || "").trim() && orcamento.fornecedor) {
+        p.favorecido = orcamento.fornecedor;
+      }
+      if (orcamento.condicao) p.condicaoPagamento = orcamento.condicao;
+      if (orcamento.validade) p.validade = orcamento.validade;
+      // Total do papel diferente da soma dos itens é desconto de fechamento —
+      // é para isso que serve o campo "Total fechado com a loja".
+      if (orcamento.total > 0 && Math.abs(orcamento.total - orcamento.somaItens) > 0.01) {
+        p.totalFechado = orcamento.total;
+      }
+      return { ...f, proposta: p };
+    });
+    setOrcamentoLido(null);
+  }
+
   function salvarProposta() {
     // Salvar a proposta com o cadastro aberto jogaria fora o que já foi
     // digitado nele, sem dizer nada.
@@ -1840,6 +2083,17 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             </div>
           </div>
         )}
+        {/* O caminho curto: a loja respondeu num PDF, arrasta aqui e o
+            VICKE preenche. O caminho à mão continua logo abaixo. */}
+        {(() => {
+          const cotDaProposta = cotacoes.find(c => c.id === formProposta.cotacaoId);
+          if (!cotDaProposta || !temListaDeItens(cotDaProposta)) return null;
+          return (
+            <ZonaOrcamentoPdf lendo={lendoPdf}
+              aoSoltar={(arq) => lerOrcamentoDaLoja(arq, cotDaProposta)} />
+          );
+        })()}
+
         {/* Lista: a loja pode responder item a item ou só o total. Quem
             preenche item a item ganha a comparação por item; quem recebeu só
             "R$ 3.480 tudo" deixa em branco e digita o total. */}
@@ -1949,6 +2203,67 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <label style={E.label}>Proposta enviada pelo fornecedor</label>
           <CampoAnexoProposta anexo={p.anexo} onTrocar={a => set("anexo", a)} onErro={setErro} />
         </div>
+        {orcamentoLido && (() => {
+          const { orcamento: o, casamento: cm, nome } = orcamentoLido;
+          const dia = (iso) => (iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "");
+          const desconto = o.total > 0 && Math.abs(o.total - o.somaItens) > 0.01;
+          return (
+            <div onClick={() => setOrcamentoLido(null)}
+              style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
+                alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
+              <div onClick={(e) => e.stopPropagation()}
+                style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 720,
+                  maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Orçamento da loja</div>
+                <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
+                  {nome ? `${nome} · ` : ""}confira o que eu entendi antes de preencher a proposta.
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
+                  {[["Loja", o.fornecedor || "—"], ["Nº", o.numero || "—"],
+                    ["Válido até", dia(o.validade) || "—"], ["Condição", o.condicao || "—"]].map(([r, v]) => (
+                    <div key={r}>
+                      <div style={{ fontSize: 10.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 }}>{r}</div>
+                      <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
+                  <strong style={{ color: cm.achados ? "#15803d" : "#b45309" }}>
+                    {cm.achados} de {cm.casados.length} {cm.casados.length === 1 ? "item" : "itens"} do pedido
+                  </strong>{" "}
+                  com preço neste orçamento.
+                  {cm.sobrando.length ? ` A loja cotou ${cm.sobrando.length} ${cm.sobrando.length === 1 ? "item" : "itens"} que não estavam no pedido — esses ficam de fora.` : ""}
+                </div>
+                <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
+                  {cm.casados.map(({ item, linha }) => (
+                    <div key={item.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 96px",
+                      gap: 10, padding: "8px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center" }}>
+                      <span style={{ fontSize: 12.5, color: "#111827" }}>{item.descricao || "Item"}</span>
+                      <span style={{ fontSize: 11.5, color: linha ? "#4b5563" : "#b45309" }}>
+                        {linha ? `“${linha.descricao}”` : "não veio neste orçamento"}
+                      </span>
+                      <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
+                        {linha && linha.unitario > 0 ? dinheiro(linha.unitario) : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>
+                  Soma dos itens cotados: <strong>{dinheiro(o.somaItens)}</strong>
+                  {desconto ? ` · total do papel ${dinheiro(o.total)} — a diferença entra como desconto de fechamento.` : "."}
+                </div>
+                <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+                  <button style={E.btnSec} onClick={() => setOrcamentoLido(null)}>Cancelar</button>
+                  <button style={{ ...E.btn, opacity: cm.achados ? 1 : 0.45, cursor: cm.achados ? "pointer" : "not-allowed" }}
+                    disabled={!cm.achados} onClick={aplicarOrcamentoLido}>
+                    Preencher a proposta
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {erro && <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 12 }}>{erro}</div>}
         <div style={{ display: "flex", gap: 10 }}>
           <button style={E.btn} onClick={salvarProposta}>Salvar proposta</button>
@@ -2958,6 +3273,34 @@ function ComparativoLista({ cot, dinheiro, isMobile }) {
         {cmp.ganhoDaDivisao > 0
           ? `Comprando cada item onde está mais barato sairia ${dinheiro(cmp.totalDividido)} — ${dinheiro(cmp.ganhoDaDivisao)} a menos que a loja mais barata na lista inteira. Por enquanto a escolha é de uma loja só; dividir o pedido entre lojas é o próximo passo.`
           : "O verde marca o melhor preço de cada item."}
+      </div>
+    </div>
+  );
+}
+
+// ── Arrastar o orçamento da loja ────────────────────────────────
+function ZonaOrcamentoPdf({ aoSoltar, lendo }) {
+  const E = COT_ESTILO;
+  const [sobre, setSobre] = useState(false);
+  const refInput = useRef(null);
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
+      onDragLeave={() => setSobre(false)}
+      onDrop={(e) => { e.preventDefault(); setSobre(false); aoSoltar(e.dataTransfer.files && e.dataTransfer.files[0]); }}
+      onClick={() => refInput.current && refInput.current.click()}
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); refInput.current && refInput.current.click(); } }}
+      style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
+        padding: "14px", textAlign: "center", cursor: "pointer", marginBottom: 14,
+        background: sobre ? "#f0f7ff" : "#fafafa", transition: "all .15s ease" }}>
+      <input ref={refInput} type="file" accept="application/pdf" style={{ display: "none" }}
+        onChange={(e) => { aoSoltar(e.target.files && e.target.files[0]); e.target.value = ""; }} />
+      <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
+        {lendo ? "Lendo o orçamento…" : "Arraste aqui o orçamento em PDF que a loja mandou"}
+      </div>
+      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
+        O VICKE lê os preços e preenche a proposta — você confere antes. O arquivo é lido aqui no navegador.
       </div>
     </div>
   );
