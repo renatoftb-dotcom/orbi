@@ -2148,7 +2148,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
             </div>
             <div>
               <label style={C.label}>Valor estimado (R$) *</label>
-              <input style={C.input} type="number" step="0.01" value={formItemPL.valor} onChange={e => setFormItemPL({ ...formItemPL, valor: e.target.value })} placeholder="0,00" />
+              <CampoCtrNum tipo="moeda" style={C.input} valor={formItemPL.valor}
+                onChange={v => setFormItemPL({ ...formItemPL, valor: v })} placeholder="0,00" />
             </div>
           </div>
           <div style={{ marginBottom: 16 }}>

@@ -1259,7 +1259,7 @@ function ProdutividadeEditor({ data, save, podeEditar }) {
                   <td style={{ padding: "4px 8px", color: "#6b7280" }}>{s ? s.codigo : "—"}</td>
                   <td style={{ padding: "4px 8px", textAlign: "right", color: "#4b5563" }}>{s ? formatoBRL(s.desonerado) : "—"}</td>
                   <td style={{ padding: "4px 8px", textAlign: "right", color: "#4b5563" }}>{s ? formatoBRL(s.onerado) : "—"}</td>
-                  <td style={{ padding: "3px 8px", textAlign: "right" }}><input type="number" step="0.01" min="0" style={input} disabled={!podeEditar} value={ov != null ? ov : ""} placeholder="—" onChange={(e) => setPrecoHora(o.id, e.target.value)} /></td>
+                  <td style={{ padding: "3px 8px", textAlign: "right" }}><CampoCtrNum tipo="moeda" style={input} disabled={!podeEditar} valor={ov != null ? ov : ""} placeholder="—" onChange={(v) => setPrecoHora(o.id, v)} /></td>
                   <td style={{ padding: "4px 8px", textAlign: "right", fontWeight: 600 }}>{at ? formatoBRL(at.preco) : "—"}{at && at.fonte === "escritório" ? <span style={{ color: "#b45309", fontWeight: 400, fontSize: 10, marginLeft: 4 }}>escritório</span> : null}</td>
                 </tr>
               );

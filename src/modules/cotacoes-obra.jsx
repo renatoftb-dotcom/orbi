@@ -591,6 +591,13 @@ async function enviarAnexo(arquivo, categoria) {
 const enviarAnexoProposta = (arquivo) => enviarAnexo(arquivo, "proposta_cotacao");
 const enviarComprovante = (arquivo) => enviarAnexo(arquivo, "comprovante_pagamento");
 
+// ── Números em português, nos campos ────────────────────────────
+// Dinheiro e percentual usam o campo do contrato (CampoCtrNum): os dígitos
+// entram pela direita e as duas casas aparecem sozinhas — digitar 970000 dá
+// "9.700,00", sem vírgula na mão. Quantidade e prazo usam o campo do
+// orçamento (CampoNumeroBR), que deixa digitar livre e formata ao sair, para
+// "12,5 m²" continuar possível sem forçar centavos em tudo.
+
 // ══════════════════════════════════════════════════════════════
 // UI — bloco de cotações da obra
 // ══════════════════════════════════════════════════════════════
@@ -704,7 +711,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>Quantidade</label>
-            <input style={E.input} value={formCotacao.quantidade} onChange={e => set("quantidade", e.target.value)} placeholder="12" />
+            <CampoNumeroBR estilo={E.input} valor={formCotacao.quantidade} casas={2}
+              aoMudar={(v) => set("quantidade", v)} placeholder="12" />
           </div>
           <div>
             <label style={E.label}>Unidade</label>
@@ -860,11 +868,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>Valor</label>
-            <input style={E.input} value={p.valor} onChange={e => set("valor", e.target.value)} placeholder="12.500,00" />
+            <CampoCtrNum tipo="moeda" style={E.input} valor={p.valor}
+              onChange={(v) => set("valor", v)} placeholder="12.500,00" />
           </div>
           <div>
             <label style={E.label}>Prazo de entrega (dias)</label>
-            <input style={E.input} value={p.prazoDias} onChange={e => set("prazoDias", e.target.value)} placeholder="30" />
+            <CampoCtrNum tipo="inteiro" style={E.input} valor={p.prazoDias}
+              onChange={(v) => set("prazoDias", v)} placeholder="30" />
           </div>
           <div>
             <label style={E.label}>Condição de pagamento</label>
@@ -1360,8 +1370,8 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <label style={E.label}>Parcelas</label>
-              <input style={E.input} type="number" min="1" value={f.parcelas}
-                onChange={e => set("parcelas", e.target.value)} />
+              <CampoCtrNum tipo="inteiro" style={E.input} valor={f.parcelas}
+                onChange={(v) => set("parcelas", v)} placeholder="1" />
             </div>
             <div>
               <label style={E.label}>Primeiro vencimento</label>
@@ -1375,8 +1385,8 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
           <div style={{ display: "grid", gridTemplateColumns: f.modo === "sinalParcelas" ? "110px 1fr 90px 1fr" : "110px 1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <label style={E.label}>Sinal (%)</label>
-              <input style={E.input} type="number" min="0" max="100" value={f.sinalPct}
-                onChange={e => set("sinalPct", e.target.value)} />
+              <CampoCtrNum tipo="pct" style={E.input} valor={f.sinalPct}
+                onChange={(v) => set("sinalPct", v)} placeholder="50%" />
             </div>
             <div>
               <label style={E.label}>Vencimento do sinal</label>
@@ -1386,8 +1396,8 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
             {f.modo === "sinalParcelas" && (
               <div>
                 <label style={E.label}>Parcelas</label>
-                <input style={E.input} type="number" min="1" value={f.parcelas}
-                  onChange={e => set("parcelas", e.target.value)} />
+                <CampoCtrNum tipo="inteiro" style={E.input} valor={f.parcelas}
+                  onChange={(v) => set("parcelas", v)} placeholder="1" />
               </div>
             )}
             <div>
@@ -1410,8 +1420,8 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
               <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 130px 150px 34px", gap: 8, marginBottom: 6, alignItems: "center" }}>
                 <input style={E.input} value={e.descricao || ""} placeholder={`Entrega ${i + 1}`}
                   onChange={(ev) => setEntrega(i, "descricao", ev.target.value)} />
-                <input style={E.input} inputMode="decimal" value={e.valor === "" || e.valor == null ? "" : e.valor}
-                  placeholder="0,00" onChange={(ev) => setEntrega(i, "valor", ev.target.value)} />
+                <CampoCtrNum tipo="moeda" style={E.input} valor={e.valor}
+                  placeholder="0,00" onChange={(v) => setEntrega(i, "valor", v)} />
                 <input style={E.input} type="date" value={e.vencimento || ""}
                   onChange={(ev) => setEntrega(i, "vencimento", ev.target.value)} />
                 <button type="button" onClick={() => delEntrega(i)}
