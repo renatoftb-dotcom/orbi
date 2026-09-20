@@ -19809,6 +19809,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [copiado, setCopiado] = useState("");
   const [pedirLojas, setPedirLojas] = useState(null);   // cotação com o painel aberto
   const [buscaLoja, setBuscaLoja] = useState("");
+  const [lojasMarcadas, setLojasMarcadas] = useState({});
+  // Fila de envio: o WhatsApp não manda para várias de uma vez, e o
+  // navegador só deixa abrir UMA janela por clique — a primeira consome o
+  // gesto do usuário e as outras seriam bloqueadas em silêncio. Então a
+  // seleção é múltipla e o envio é guiado: um toque por loja, sem procurar
+  // a próxima na lista.
+  const [filaEnvio, setFilaEnvio] = useState(null);   // { lojas: [...], i }
   const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
   // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
   const ctxPedido = {
@@ -19827,6 +19834,28 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     const atualizada = registrarEnvioDaLista(cot, fornecedor, nomeDeQuem(usuario));
     trocarCotacao(cot.id, () => atualizada);
     setPedirLojas(atualizada);
+  }
+
+  function iniciarFila(cot, lista) {
+    if (!lista.length) return;
+    abrirWhatsAppDaLoja(cot, lista[0].fornecedor);
+    setFilaEnvio({ lojas: lista, i: 1 });
+  }
+
+  function proximaDaFila() {
+    const f = filaEnvio;
+    if (!f || !pedirLojas) return;
+    const alvo = f.lojas[f.i];
+    if (!alvo) { setFilaEnvio(null); return; }
+    abrirWhatsAppDaLoja(pedirLojas, alvo.fornecedor);
+    setFilaEnvio({ ...f, i: f.i + 1 });
+  }
+
+  function fecharPainelLojas() {
+    setPedirLojas(null);
+    setFilaEnvio(null);
+    setLojasMarcadas({});
+    setBuscaLoja("");
   }
 
   function copiarPedido(cot, proposta) {
@@ -20668,7 +20697,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
 
       {pedirLojas && (
-        <div onClick={() => setPedirLojas(null)}
+        <div onClick={fecharPainelLojas}
           style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
             alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
           <div onClick={(e) => e.stopPropagation()}
@@ -20677,47 +20706,99 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Pedir preço às lojas</div>
             <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
               {pedirLojas.titulo || "Lista"} · {itensDaCotacao(pedirLojas).length} {itensDaCotacao(pedirLojas).length === 1 ? "item" : "itens"}.
-              Cada botão abre a conversa da loja com a lista já escrita — você confere e aperta enviar lá. Mande para quantas quiser.
+              Marque as lojas e clique em Enviar: cada conversa abre com a lista já escrita, e quem aperta enviar é você, lá no WhatsApp.
             </div>
             <input style={{ ...E.input, marginBottom: 10 }} value={buscaLoja} placeholder="Achar a loja pelo nome"
               onChange={(e) => setBuscaLoja(e.target.value)} />
-            <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
-              {(() => {
-                const lojas = lojasParaPedir(prestadores, pedirLojas, buscaLoja);
-                if (!lojas.length) {
-                  return <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
-                    Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
-                  </div>;
-                }
-                return lojas.map(({ fornecedor: f, envio, jaCotou, link }) => (
-                  <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
-                    padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.nome || "Sem nome"}</div>
-                      <div style={{ fontSize: 11.5, color: "#6b7280" }}>
-                        {[f.telefone || "sem telefone no cadastro", f.cidade].filter(Boolean).join(" · ")}
-                        {jaCotou ? " · já respondeu" : envio ? ` · enviado em ${dataCurta(envio.em)}` : ""}
+            {(() => {
+              const lojas = lojasParaPedir(prestadores, pedirLojas, buscaLoja);
+              const comLink = lojas.filter((l) => l.link);
+              const marcadas = comLink.filter((l) => lojasMarcadas[l.fornecedor.id]);
+              const fila = filaEnvio;
+              const faltam = fila ? fila.lojas.slice(fila.i) : [];
+              const enviadas = enviosDaLista(pedirLojas).length;
+              return (
+                <>
+                  <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
+                    {!lojas.length ? (
+                      <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
+                        Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
                       </div>
-                    </div>
-                    <button type="button" disabled={!link} title={link ? "" : "Cadastre o telefone desta loja"}
-                      style={{ ...(envio || jaCotou ? E.btnSec : E.btn), opacity: link ? 1 : 0.45,
-                        cursor: link ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}
-                      onClick={() => abrirWhatsAppDaLoja(pedirLojas, f)}>
-                      {envio ? "Reenviar" : "WhatsApp"}
-                    </button>
+                    ) : lojas.map(({ fornecedor: f, envio, jaCotou, link }) => (
+                      <label key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                        padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", cursor: link ? "pointer" : "default" }}>
+                        <span style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+                          <input type="checkbox" disabled={!link} checked={!!lojasMarcadas[f.id] && !!link}
+                            onChange={(e) => setLojasMarcadas((m) => ({ ...m, [f.id]: e.target.checked }))}
+                            style={{ cursor: link ? "pointer" : "not-allowed" }} />
+                          <span style={{ minWidth: 0 }}>
+                            <span style={{ display: "block", fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.nome || "Sem nome"}</span>
+                            <span style={{ display: "block", fontSize: 11.5, color: "#6b7280" }}>
+                              {[f.telefone || "sem telefone no cadastro", f.cidade].filter(Boolean).join(" · ")}
+                              {jaCotou ? " · já respondeu" : envio ? ` · enviado em ${dataCurta(envio.em)}` : ""}
+                            </span>
+                          </span>
+                        </span>
+                        <button type="button" disabled={!link} title={link ? "" : "Cadastre o telefone desta loja"}
+                          style={{ ...E.btnSec, padding: "5px 11px", fontSize: 11.5, opacity: link ? 1 : 0.45,
+                            cursor: link ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}
+                          onClick={(e) => { e.preventDefault(); abrirWhatsAppDaLoja(pedirLojas, f); }}>
+                          {envio ? "Reenviar" : "Enviar"}
+                        </button>
+                      </label>
+                    ))}
                   </div>
-                ));
-              })()}
-            </div>
-            {erro && <div style={{ fontSize: 12, color: "#dc2626", marginTop: 10 }}>{erro}</div>}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, color: "#4b5563" }}>
-                {enviosDaLista(pedirLojas).length
-                  ? `Lista enviada para ${enviosDaLista(pedirLojas).length} ${enviosDaLista(pedirLojas).length === 1 ? "loja" : "lojas"}.`
-                  : "Ainda não foi enviada para nenhuma loja."}
-              </span>
-              <button style={E.btnSec} onClick={() => setPedirLojas(null)}>Fechar</button>
-            </div>
+                  {erro && <div style={{ fontSize: 12, color: "#dc2626", marginTop: 10 }}>{erro}</div>}
+
+                  {fila ? (
+                    <div style={{ marginTop: 14, border: "1px solid rgba(4,116,244,0.22)", background: "#eef5ff",
+                      borderRadius: 12, padding: "12px 14px" }}>
+                      {faltam.length ? (
+                        <>
+                          <div style={{ fontSize: 12.5, color: "#111827", marginBottom: 10 }}>
+                            {fila.i} de {fila.lojas.length} enviadas. O navegador só abre uma conversa por clique, então a próxima vai neste botão.
+                          </div>
+                          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                            <button style={E.btn} onClick={proximaDaFila}>
+                              Abrir {faltam[0].fornecedor.nome || "a próxima"}
+                            </button>
+                            <button style={E.btnSec} onClick={() => setFilaEnvio(null)}>Parar</button>
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                          <span style={{ fontSize: 12.5, color: "#15803d", fontWeight: 600 }}>
+                            Pronto — {fila.lojas.length} {fila.lojas.length === 1 ? "loja" : "lojas"} nesta rodada.
+                          </span>
+                          <button style={E.btnSec} onClick={() => { setFilaEnvio(null); setLojasMarcadas({}); }}>Nova seleção</button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+                      <span style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                        <button type="button" style={{ ...E.btnSec, padding: "5px 11px", fontSize: 11.5 }}
+                          onClick={() => setLojasMarcadas(marcadas.length === comLink.length
+                            ? {}
+                            : Object.fromEntries(comLink.map((l) => [l.fornecedor.id, true])))}>
+                          {marcadas.length === comLink.length && comLink.length ? "Limpar seleção" : "Selecionar todas"}
+                        </button>
+                        <span style={{ fontSize: 11.5, color: "#4b5563" }}>
+                          {enviadas ? `Já enviada para ${enviadas} ${enviadas === 1 ? "loja" : "lojas"}.` : "Ainda não foi enviada."}
+                        </span>
+                      </span>
+                      <span style={{ display: "flex", gap: 8 }}>
+                        <button style={E.btnSec} onClick={fecharPainelLojas}>Fechar</button>
+                        <button style={{ ...E.btn, opacity: marcadas.length ? 1 : 0.45, cursor: marcadas.length ? "pointer" : "not-allowed" }}
+                          disabled={!marcadas.length} onClick={() => iniciarFila(pedirLojas, marcadas)}>
+                          Enviar para {marcadas.length || 0}
+                        </button>
+                      </span>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
