@@ -284,9 +284,51 @@ function vencimentoFinal(c) {
 }
 
 // ── Contas geradas pelo contrato ────────────────────────────────
+// ── Uma parcela fora da régua ───────────────────────────────────
+// A parcela em aberto de um contrato é REESCRITA pela regra toda vez que a
+// tela abre (parcelas, periodicidade, primeiro vencimento). Por isso mudar a
+// data de uma delas direto na conta não adianta: no próximo render a regra
+// escreve por cima. O ajuste mora no CONTRATO, como exceção anotada, e é
+// aplicado por cima do que a regra gerou.
+//
+// É o caso do empreiteiro que pediu para adiar só a terceira medição: as
+// outras seguem combinadas, e reescrever todas seria desfazer um acerto que
+// ninguém desfez.
+function ajustesDoContrato(contrato) {
+  return (contrato && contrato.ajustesVencimento) || {};
+}
+
+function ajustarVencimentos(contrato, datas) {
+  const c = contrato || {};
+  // O que a regra diria sem exceção nenhuma. Data igual à da regra NÃO vira
+  // exceção — e uma exceção que voltou a coincidir com a regra é apagada.
+  // Guardar as três parcelas quando só uma mudou congelaria as outras: mexer
+  // na periodicidade do contrato depois não moveria mais nada.
+  const daRegra = {};
+  for (const l of contasDoContrato({ ...c, ajustesVencimento: null })) daRegra[l.id] = l.vencimento;
+  const ajustes = { ...ajustesDoContrato(c) };
+  for (const d of datas || []) {
+    if (!d || !d.id || !d.vencimento) continue;
+    const nova = String(d.vencimento).slice(0, 10);
+    if (daRegra[d.id] === nova) delete ajustes[d.id];
+    else ajustes[d.id] = nova;
+  }
+  if (!Object.keys(ajustes).length) return limparAjustes(c);
+  return { ...c, ajustesVencimento: ajustes };
+}
+
+// Recalibrar o contrato inteiro é reescrever o calendário dele — as exceções
+// anotadas antes deixam de fazer sentido e saem junto.
+function limparAjustes(contrato) {
+  const c = { ...(contrato || {}) };
+  delete c.ajustesVencimento;
+  return c;
+}
+
 function contasDoContrato(contrato) {
   const c = contrato || {};
   const servico = typeof servicoDoContrato === "function" ? servicoDoContrato(c) : "Serviços";
+  const ajustes = ajustesDoContrato(c);
   return parcelasAPagar(c).map((p, idx) => ({
     id: `${c.id}:${idx + 1}`,
     origem: "contrato",
@@ -301,8 +343,9 @@ function contasDoContrato(contrato) {
     favorecido: c.nomeContratado || "",
     descricao: p.descricao,
     valor: p.valor,
-    vencimento: p.vencimento || "",
-    estimada: !!p.estimada,
+    vencimento: ajustes[`${c.id}:${idx + 1}`] || p.vencimento || "",
+    ajustada: !!ajustes[`${c.id}:${idx + 1}`],
+    estimada: !!p.estimada && !ajustes[`${c.id}:${idx + 1}`],
     pago: false,
     pagoEm: "",
     valorPago: "",
@@ -699,7 +742,10 @@ function registrosDaConta(conta) {
 
 function cpDiaBR(iso) {
   if (!iso) return "";
-  const d = new Date(iso);
+  const s = String(iso);
+  // "2026-11-05" sozinho é meia-noite UTC, que em Brasília ainda é dia 4 —
+  // por isso a data sem hora entra ao meio-dia, como no resto do app.
+  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(s) ? s + "T12:00:00" : s);
   return isNaN(d) ? "" : d.toLocaleDateString("pt-BR");
 }
 
@@ -1143,12 +1189,6 @@ function recalibrarPedido(contas, cotacaoId, novaData, quem, agoraIso) {
 // combinado, e mover todas seria reescrever um acerto que ninguém desfez.
 // Então a telinha tem os dois caminhos, e este é o segundo — cada conta em
 // aberto com a data dela.
-function datasDoPedido(contas, cotacaoId) {
-  return contasDoPedido(contas, cotacaoId)
-    .filter((c) => !c.pago)
-    .map((c) => ({ id: c.id, descricao: c.descricao || "", vencimento: c.vencimento || "" }));
-}
-
 function recalibrarContasDoPedido(contas, datas, quem, agoraIso) {
   const porId = {};
   for (const d of datas || []) {
@@ -1175,6 +1215,36 @@ function previaDatasDoPedido(contas, cotacaoId, datas, limite) {
   let pagas = 0;
   for (const c of depois) {
     if (c.pago) { pagas++; continue; }
+    linhas.push({ id: c.id, descricao: c.descricao, de: porId[c.id] || "", para: c.vencimento });
+    if (limite && linhas.length >= limite) break;
+  }
+  return { linhas, pagas, total: depois.length };
+}
+
+// ── Pagamentos em aberto de um documento ────────────────────────
+// Serve aos dois: contrato (contratoId) e pedido (cotacaoId). É a lista que
+// a telinha mostra quando se quer mexer num pagamento só.
+function pagamentosEmAberto(contas, alvoId, tipo) {
+  const campo = tipo === "pedido" ? "cotacaoId" : "contratoId";
+  return (contas || [])
+    .filter((c) => c && c[campo] === alvoId && !c.pago)
+    .slice()
+    .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)))
+    .map((c) => ({ id: c.id, descricao: c.descricao || "", vencimento: c.vencimento || "" }));
+}
+
+// A prévia de um ajuste de contrato: gera as contas com a exceção aplicada e
+// compara com as de agora.
+function previaAjusteContrato(contrato, contas, datas, limite) {
+  const antes = (contas || []).filter((c) => c && c.contratoId === (contrato || {}).id);
+  const porId = {};
+  for (const c of antes) porId[c.id] = c.vencimento;
+  const depois = contasDoContrato(ajustarVencimentos(contrato, datas));
+  const linhas = [];
+  let pagas = 0;
+  for (const c of depois) {
+    const anterior = antes.find((x) => x.id === c.id);
+    if (anterior && anterior.pago) { pagas++; continue; }
     linhas.push({ id: c.id, descricao: c.descricao, de: porId[c.id] || "", para: c.vencimento });
     if (limite && linhas.length >= limite) break;
   }

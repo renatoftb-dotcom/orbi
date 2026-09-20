@@ -29,6 +29,10 @@ function cotacaoVazia(obraId) {
     etapaId: "",
     quantidade: "",
     unidade: "",
+    // Lista de materiais: quando tem item aqui, a cotação deixa de ser "uma
+    // coisa só com uma quantidade" e vira a lista do pedido da loja. Vazia,
+    // tudo segue como antes — cotação de esquadria, de serralheiro.
+    itens: [],
     prazoResposta: "",
     precisaAprovacaoCliente: true,
     status: "aberta",       // aberta | decidida | cancelada
@@ -93,6 +97,156 @@ function propostaPorId(cot, id) {
 
 function propostaEscolhida(cot) {
   return propostaPorId(cot, (cot || {}).escolhidaId);
+}
+
+// ══════════════════════════════════════════════════════════════
+// LISTA DE MATERIAIS — o pedido da loja
+// ══════════════════════════════════════════════════════════════
+// Cimento, tábua, prego, linha de pedreiro: ninguém cota isso "uma coisa de
+// cada vez". Cota-se uma LISTA, e a loja responde de dois jeitos — um total
+// pela lista inteira, ou preço de cada item. Os dois cabem aqui: o preço por
+// item, quando existe, manda; quando não existe, vale o total digitado.
+//
+// O total da proposta (`p.valor`) continua sendo o número que o resto do
+// sistema usa — contas a pagar, economia, contrato. Com preço por item ele
+// passa a ser CALCULADO e regravado ao salvar a proposta, em vez de digitado.
+function itemCotacaoVazio() {
+  return {
+    id: (typeof uid === "function" ? uid() : String(Date.now()) + Math.random().toString(36).slice(2, 6)),
+    insumoId: "", codigo: "", descricao: "", unidade: "", quantidade: "",
+  };
+}
+
+function itensDaCotacao(cot) {
+  return ((cot || {}).itens) || [];
+}
+
+function temListaDeItens(cot) {
+  return itensDaCotacao(cot).length > 0;
+}
+
+function numeroDoCampo(v) {
+  if (typeof numeroDeCampo === "function") return numeroDeCampo(v);
+  const n = parseFloat(String(v == null ? "" : v).replace(/\./g, "").replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
+function quantidadeDoItem(it) {
+  return numeroDoCampo((it || {}).quantidade);
+}
+
+function precoUnitario(proposta, itemId) {
+  return numeroDoCampo(((proposta || {}).precos || {})[itemId]);
+}
+
+function propostaTemPrecoPorItem(cot, proposta) {
+  return itensDaCotacao(cot).some((it) => precoUnitario(proposta, it.id) > 0);
+}
+
+// Soma do que a loja cotou. Item que ela não preencheu entra como zero e
+// aparece à parte como "faltando" — somar por cima escondendo a falta daria
+// um total mais barato que o da loja completa, e a comparação mentiria.
+function totalDosItens(cot, proposta) {
+  let total = 0;
+  for (const it of itensDaCotacao(cot)) {
+    total += precoUnitario(proposta, it.id) * quantidadeDoItem(it);
+  }
+  return Math.round(total * 100) / 100;
+}
+
+function itensSemPreco(cot, proposta) {
+  return itensDaCotacao(cot).filter((it) => !(precoUnitario(proposta, it.id) > 0));
+}
+
+// O valor que vale para esta proposta: a soma dos itens quando há preço por
+// item, senão o total digitado.
+function valorDaProposta(cot, proposta) {
+  return propostaTemPrecoPorItem(cot, proposta) ? totalDosItens(cot, proposta) : valorProposta(proposta);
+}
+
+// Qual loja está mais barata em cada item. É o que permite olhar a lista e
+// ver que o cimento é numa e a madeira é na outra.
+function melhorPorItem(cot) {
+  const r = {};
+  for (const it of itensDaCotacao(cot)) {
+    let melhor = null;
+    for (const p of propostasDaCotacao(cot)) {
+      const u = precoUnitario(p, it.id);
+      if (!(u > 0)) continue;
+      if (!melhor || u < melhor.unitario) melhor = { propostaId: p.id, favorecido: p.favorecido || "", unitario: u };
+    }
+    if (melhor) r[it.id] = { ...melhor, total: Math.round(melhor.unitario * quantidadeDoItem(it) * 100) / 100 };
+  }
+  return r;
+}
+
+// O quadro da comparação: cada loja com o seu total, quantos itens cotou, e
+// quanto sairia comprando cada item na loja mais barata dele.
+function comparativoDaLista(cot) {
+  const itens = itensDaCotacao(cot);
+  const props = propostasDaCotacao(cot);
+  const porItem = melhorPorItem(cot);
+  const lojas = props.map((p) => {
+    const faltando = itensSemPreco(cot, p);
+    return {
+      propostaId: p.id,
+      favorecido: p.favorecido || "",
+      porItem: propostaTemPrecoPorItem(cot, p),
+      total: valorDaProposta(cot, p),
+      cotados: itens.length - faltando.length,
+      faltando: faltando.length,
+    };
+  });
+  const completas = lojas.filter((l) => l.porItem && l.faltando === 0 && l.total > 0);
+  const melhorInteira = completas.length ? Math.min(...completas.map((l) => l.total)) : 0;
+  const totalDividido = Object.keys(porItem).length === itens.length && itens.length
+    ? Math.round(itens.reduce((a, it) => a + (porItem[it.id] ? porItem[it.id].total : 0), 0) * 100) / 100
+    : 0;
+  const lojasDaDivisao = new Set(Object.values(porItem).map((m) => m.propostaId));
+  return {
+    itens, lojas, porItem, melhorInteira, totalDividido,
+    // dividir só vale a pena se de fato envolve mais de uma loja E economiza
+    ganhoDaDivisao: melhorInteira > 0 && totalDividido > 0 && lojasDaDivisao.size > 1
+      ? Math.round((melhorInteira - totalDividido) * 100) / 100
+      : 0,
+  };
+}
+
+// ── O pedido, do jeito que vai para a loja ──────────────────────
+// Dois formatos do mesmo conteúdo: texto para colar na conversa do vendedor
+// e folha para imprimir ou anexar.
+// 12 vira "12", 12,5 vira "12,5" — quantidade de material raramente tem
+// centavos, e "12,00 sacos" soa errado no pedido.
+function qtdBR(n) {
+  const v = Number(n) || 0;
+  return v.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function textoDoPedido(cot, proposta, ctx) {
+  const c = cot || {};
+  const x = ctx || {};
+  const linhas = [];
+  if (x.escritorio) linhas.push(x.escritorio);
+  linhas.push(`PEDIDO${c.numeroPedido ? ` ${c.numeroPedido}` : ""} — ${String(c.titulo || "Materiais").trim()}`);
+  if (x.obra) linhas.push(`Obra: ${x.obra}`);
+  if (x.endereco) linhas.push(`Entrega: ${x.endereco}`);
+  if (proposta && proposta.favorecido) linhas.push(`Fornecedor: ${proposta.favorecido}`);
+  linhas.push("");
+  const itens = itensDaCotacao(c);
+  if (itens.length) {
+    itens.forEach((it, i) => {
+      const q = quantidadeDoItem(it);
+      const qtd = q > 0 ? `${qtdBR(q)} ${it.unidade || ""}`.trim() : "";
+      linhas.push(`${i + 1}. ${it.descricao || "Item"}${qtd ? ` — ${qtd}` : ""}`);
+    });
+  } else {
+    const q = numeroDoCampo(c.quantidade);
+    const qtd = q > 0 ? `${qtdBR(q)} ${c.unidade || ""}`.trim() : "";
+    linhas.push(`1. ${c.titulo || "Item"}${qtd ? ` — ${qtd}` : ""}`);
+  }
+  if (String(c.escopo || "").trim()) { linhas.push(""); linhas.push(String(c.escopo).trim()); }
+  if (x.contato) { linhas.push(""); linhas.push(`Contato: ${x.contato}`); }
+  return linhas.join("\n");
 }
 
 function melhorProposta(cot) {
@@ -758,6 +912,25 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [detalhePag, setDetalhePag] = useState(null);       // cotação com os pagamentos abertos
   // datas em edição na janelinha: null = só leitura
   const [datasPag, setDatasPag] = useState(null);
+  const [folhaPedido, setFolhaPedido] = useState(null);     // { cot, proposta }
+  const [copiado, setCopiado] = useState("");
+  const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
+  // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
+  const ctxPedido = {
+    escritorio: ((data.escritorio || {}).nome) || "",
+    obra: obra.nome || "",
+    endereco: [obra.endereco, obra.cidade, obra.estado].filter(Boolean).join(", "),
+    contato: ((data.escritorio || {}).telefone) || "",
+  };
+  function copiarPedido(cot, proposta) {
+    const txt = textoDoPedido(cot, proposta, ctxPedido);
+    const fim = () => { setCopiado(cot.id); setTimeout(() => setCopiado(""), 2500); };
+    if (typeof navigator !== "undefined" && navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(txt).then(fim, () => setErro("O navegador não deixou copiar. Abra o pedido em PDF."));
+      return;
+    }
+    setErro("O navegador não deixou copiar. Abra o pedido em PDF.");
+  }
   const [erro, setErro] = useState("");
 
   // Grava a obra sem encostar nas obras dos outros clientes: `obras` aqui é
@@ -813,16 +986,66 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <textarea style={{ ...E.input, minHeight: 74, resize: "vertical" }} value={formCotacao.escopo} onChange={e => set("escopo", e.target.value)}
             placeholder="Janelas de correr, linha 25, vidro temperado 6mm, com instalação." />
         </div>
+        {/* Lista de materiais. Cotação de esquadria continua com uma
+            quantidade só; pedido de loja é uma lista, e os dois convivem — a
+            lista, quando existe, substitui a quantidade única. */}
+        {(() => {
+          const itens = formCotacao.itens || [];
+          const setItens = (novos) => set("itens", novos);
+          const addInsumo = (ins) => setItens([...itens, {
+            ...itemCotacaoVazio(), insumoId: ins.id || ins.codigo || "", codigo: ins.codigo || "",
+            descricao: ins.nome || "", unidade: ins.unidade || "", quantidade: "" }]);
+          const cols = isMobile ? "1fr" : "1fr 110px 90px 34px";
+          return (
+            <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>
+                Lista de materiais {itens.length ? `· ${itens.length} ${itens.length === 1 ? "item" : "itens"}` : ""}
+              </div>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
+                Para pedido de loja — cimento, prego, tábua, argamassa. Ache o material pelo nome e diga a quantidade; com a lista preenchida, a quantidade única acima deixa de valer.
+              </div>
+              <SeletorInsumo insumos={insumos} aoEscolher={addInsumo} isMobile={isMobile} />
+              {itens.length > 0 && (
+                <div style={{ marginTop: 12 }}>
+                  {!isMobile && (
+                    <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 4 }}>
+                      <span style={E.label}>Material</span><span style={E.label}>Quantidade</span><span style={E.label}>Unidade</span><span />
+                    </div>
+                  )}
+                  {itens.map((it, i) => (
+                    <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 8, alignItems: "center" }}>
+                      <input style={E.input} value={it.descricao}
+                        onChange={e => setItens(itens.map((x, j) => j === i ? { ...x, descricao: e.target.value } : x))} />
+                      <CampoNumeroBR estilo={E.input} valor={it.quantidade} casas={2} placeholder="0"
+                        aoMudar={(v) => setItens(itens.map((x, j) => j === i ? { ...x, quantidade: v } : x))} />
+                      <input style={E.input} value={it.unidade} placeholder="un"
+                        onChange={e => setItens(itens.map((x, j) => j === i ? { ...x, unidade: e.target.value } : x))} />
+                      <button type="button" title="Tirar da lista" style={{ ...E.btnSec, padding: "6px 9px", color: "#dc2626" }}
+                        onClick={() => setItens(itens.filter((_, j) => j !== i))}>×</button>
+                    </div>
+                  ))}
+                  <button type="button" style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 11px" }}
+                    onClick={() => setItens([...itens, itemCotacaoVazio()])}>+ Item fora do catálogo</button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 14 }}>
-          <div>
-            <label style={E.label}>Quantidade</label>
-            <CampoNumeroBR estilo={E.input} valor={formCotacao.quantidade} casas={2}
-              aoMudar={(v) => set("quantidade", v)} placeholder="12" />
-          </div>
-          <div>
-            <label style={E.label}>Unidade</label>
-            <input style={E.input} value={formCotacao.unidade} onChange={e => set("unidade", e.target.value)} placeholder="un / m² / vb" />
-          </div>
+          {!temListaDeItens(formCotacao) && (
+            <div>
+              <label style={E.label}>Quantidade</label>
+              <CampoNumeroBR estilo={E.input} valor={formCotacao.quantidade} casas={2}
+                aoMudar={(v) => set("quantidade", v)} placeholder="12" />
+            </div>
+          )}
+          {!temListaDeItens(formCotacao) && (
+            <div>
+              <label style={E.label}>Unidade</label>
+              <input style={E.input} value={formCotacao.unidade} onChange={e => set("unidade", e.target.value)} placeholder="un / m² / vb" />
+            </div>
+          )}
           <div>
             <label style={E.label}>Etapa da obra</label>
             <select style={E.input} value={formCotacao.etapaId} onChange={e => set("etapaId", e.target.value)}>
@@ -881,7 +1104,13 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     trocarCotacao(cotacaoId, c => {
       const lista = c.propostas || [];
       const existe = lista.some(x => x.id === proposta.id);
-      const p = carimbar({ ...proposta, favorecido: nome }, usuario, !existe);
+      // Com preço por item, o total deixa de ser digitado e passa a ser a
+      // soma — assim o resto do sistema (economia, contas a pagar, contrato)
+      // continua lendo um número só, sem saber que existe lista.
+      const comTotal = propostaTemPrecoPorItem(c, proposta)
+        ? { ...proposta, valor: totalDosItens(c, proposta) }
+        : proposta;
+      const p = carimbar({ ...comTotal, favorecido: nome }, usuario, !existe);
       return { ...c, propostas: existe ? lista.map(x => (x.id === p.id ? p : x)) : lista.concat([p]) };
     });
     setFormProposta(null);
@@ -970,6 +1199,58 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             </div>
           </div>
         )}
+        {/* Lista: a loja pode responder item a item ou só o total. Quem
+            preenche item a item ganha a comparação por item; quem recebeu só
+            "R$ 3.480 tudo" deixa em branco e digita o total. */}
+        {(() => {
+          const cotDaProposta = cotacoes.find(c => c.id === formProposta.cotacaoId);
+          if (!cotDaProposta || !temListaDeItens(cotDaProposta)) return null;
+          const itens = itensDaCotacao(cotDaProposta);
+          const setPreco = (itemId, v) => set("precos", { ...(p.precos || {}), [itemId]: v });
+          const somaAtual = totalDosItens(cotDaProposta, p);
+          const preenchidos = itens.length - itensSemPreco(cotDaProposta, p).length;
+          const cols = isMobile ? "1fr 120px" : "1fr 110px 80px 130px 120px";
+          return (
+            <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Preço item a item</div>
+              <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
+                Preencha o unitário do que esta loja cotou. O que ficar em branco entra como não cotado. Se a loja só mandou o total, deixe tudo em branco e use o campo Valor abaixo.
+              </div>
+              {!isMobile && (
+                <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 4 }}>
+                  <span style={E.label}>Material</span><span style={E.label}>Qtd.</span><span style={E.label}>Un.</span>
+                  <span style={E.label}>Unitário (R$)</span><span style={{ ...E.label, textAlign: "right" }}>Total</span>
+                </div>
+              )}
+              {itens.map(it => {
+                const q = quantidadeDoItem(it);
+                const u = precoUnitario(p, it.id);
+                return (
+                  <div key={it.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 8, alignItems: "center" }}>
+                    <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || "Item"}</span>
+                    {!isMobile && <span style={{ fontSize: 12, color: "#4b5563" }}>{q > 0 ? qtdBR(q) : "—"}</span>}
+                    {!isMobile && <span style={{ fontSize: 12, color: "#4b5563" }}>{it.unidade || "—"}</span>}
+                    <CampoCtrNum tipo="moeda" style={E.input} valor={(p.precos || {})[it.id]}
+                      onChange={(v) => setPreco(it.id, v)} placeholder="0,00" />
+                    {!isMobile && (
+                      <span style={{ fontSize: 12.5, color: "#111827", fontWeight: 600, textAlign: "right" }}>
+                        {u > 0 ? dinheiro(u * q) : "—"}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {preenchidos > 0 && (
+                <div style={{ fontSize: 12, color: "#111827", borderTop: "1px solid rgba(38,36,33,0.10)", paddingTop: 8, marginTop: 4 }}>
+                  <strong>{dinheiro(somaAtual)}</strong> em {preenchidos} de {itens.length} {itens.length === 1 ? "item" : "itens"}
+                  {preenchidos < itens.length ? " — o resto fica como não cotado por esta loja." : "."}
+                  {" "}É este o valor que vai ser gravado como total da proposta.
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 14, marginBottom: 14 }}>
           <div>
             <label style={E.label}>Valor</label>
@@ -1313,6 +1594,10 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   </div>
                 )}
 
+                {temListaDeItens(cot) && (
+                  <ComparativoLista cot={cot} dinheiro={dinheiro} isMobile={isMobile} />
+                )}
+
                 {eco && eco.economia > 0 && (
                   <div style={{ fontSize: 12, color: "#15803d", marginBottom: 12 }}>
                     Economia de {dinheiro(eco.economia)} em relação à proposta mais cara ({dinheiro(eco.maior)}).
@@ -1381,6 +1666,16 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       )}
                     </>
                   )}
+                  {temListaDeItens(cot) && (
+                    <>
+                      <button style={E.btnSec} onClick={() => setFolhaPedido({ cot, proposta: propostaEscolhida(cot) })}>
+                        Pedido (PDF)
+                      </button>
+                      <button style={E.btnSec} onClick={() => copiarPedido(cot, propostaEscolhida(cot))}>
+                        {copiado === cot.id ? "Copiado ✓" : "Copiar para WhatsApp"}
+                      </button>
+                    </>
+                  )}
                   {ehCliente && (s.id === "aguardando" || s.id === "aEnviar") && (
                     <>
                       <button style={E.btn} onClick={() => setFormDecisao({ cotacao: cot, status: "aprovada" })}>Aprovar</button>
@@ -1429,6 +1724,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       )}
 
       {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
+
+      {folhaPedido && (
+        <FolhaPedido cot={folhaPedido.cot} proposta={folhaPedido.proposta} ctx={ctxPedido}
+          aoFechar={() => setFolhaPedido(null)} />
+      )}
 
       {detalhePag && (
         <div onClick={() => { setDatasPag(null); setDetalhePag(null); }}
@@ -1771,6 +2071,294 @@ function VisorProposta({ anexo, aoFechar }) {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Comparar a lista loja por loja ──────────────────────────────
+// Numa lista de vinte materiais, o total de cada loja diz pouco: uma é mais
+// barata no cimento e mais cara na madeira. Aqui o melhor preço de cada item
+// fica marcado, e o rodapé diz quanto sairia comprando cada coisa onde ela
+// está mais barata — que é a conta que decide se vale dividir o pedido.
+function ComparativoLista({ cot, dinheiro, isMobile }) {
+  const E = COT_ESTILO;
+  const cmp = comparativoDaLista(cot);
+  const comPreco = cmp.lojas.filter((l) => l.porItem);
+  if (!cmp.itens.length) return null;
+  const th = { padding: "6px 8px", fontSize: 11, color: "#4b5563", fontWeight: 600, textAlign: "left", whiteSpace: "nowrap" };
+  const td = { padding: "6px 8px", fontSize: 12, color: "#111827", borderTop: "1px solid rgba(38,36,33,0.06)" };
+
+  if (!comPreco.length) {
+    return (
+      <div style={{ ...E.quadro, padding: 0, marginBottom: 12, overflow: "hidden" }}>
+        <div style={{ background: "#fafafa", padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)", fontSize: 12, fontWeight: 700, color: "#111827" }}>
+          Lista · {cmp.itens.length} {cmp.itens.length === 1 ? "item" : "itens"}
+        </div>
+        {cmp.itens.map((it) => (
+          <div key={it.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "6px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+            <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || "Item"}</span>
+            <span style={{ fontSize: 12, color: "#4b5563" }}>
+              {quantidadeDoItem(it) > 0 ? `${qtdBR(quantidadeDoItem(it))} ${it.unidade || ""}`.trim() : "—"}
+            </span>
+          </div>
+        ))}
+        <div style={{ padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.08)", fontSize: 11, color: "#6b7280" }}>
+          Nenhuma loja respondeu item a item ainda — as propostas acima são pelo total da lista.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...E.quadro, padding: 0, marginBottom: 12, overflow: "hidden" }}>
+      <div style={{ background: "#fafafa", padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)", fontSize: 12, fontWeight: 700, color: "#111827" }}>
+        Preço por item · {comPreco.length} {comPreco.length === 1 ? "loja" : "lojas"}
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", minWidth: isMobile ? 480 : 0 }}>
+          <thead>
+            <tr style={{ background: "#fff" }}>
+              <th style={th}>Material</th>
+              <th style={{ ...th, textAlign: "right" }}>Qtd.</th>
+              {comPreco.map((l) => (
+                <th key={l.propostaId} style={{ ...th, textAlign: "right" }}>{l.favorecido || "Loja"}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {cmp.itens.map((it) => {
+              const melhor = cmp.porItem[it.id];
+              return (
+                <tr key={it.id}>
+                  <td style={td}>
+                    {it.descricao || "Item"}
+                    {it.unidade ? <span style={{ color: "#6b7280" }}> · {it.unidade}</span> : null}
+                  </td>
+                  <td style={{ ...td, textAlign: "right", color: "#4b5563" }}>
+                    {quantidadeDoItem(it) > 0 ? qtdBR(quantidadeDoItem(it)) : "—"}
+                  </td>
+                  {comPreco.map((l) => {
+                    const p = propostaPorId(cot, l.propostaId);
+                    const u = precoUnitario(p, it.id);
+                    const ganhou = melhor && melhor.propostaId === l.propostaId && comPreco.length > 1;
+                    return (
+                      <td key={l.propostaId} style={{ ...td, textAlign: "right",
+                        color: u > 0 ? (ganhou ? "#15803d" : "#111827") : "#9ca3af",
+                        fontWeight: ganhou ? 700 : 400 }}>
+                        {u > 0 ? dinheiro(u) : "—"}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+            <tr>
+              <td style={{ ...td, fontWeight: 700, borderTop: "1.5px solid rgba(38,36,33,0.18)" }}>Total da lista</td>
+              <td style={{ ...td, borderTop: "1.5px solid rgba(38,36,33,0.18)" }} />
+              {comPreco.map((l) => (
+                <td key={l.propostaId} style={{ ...td, textAlign: "right", fontWeight: 700,
+                  borderTop: "1.5px solid rgba(38,36,33,0.18)" }}>
+                  {l.total > 0 ? dinheiro(l.total) : "—"}
+                  {l.faltando > 0 && (
+                    <div style={{ fontSize: 10.5, fontWeight: 400, color: "#b45309" }}>
+                      faltam {l.faltando} {l.faltando === 1 ? "item" : "itens"}
+                    </div>
+                  )}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style={{ padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.08)", fontSize: 11.5, color: "#4b5563" }}>
+        {cmp.ganhoDaDivisao > 0
+          ? `Comprando cada item onde está mais barato sairia ${dinheiro(cmp.totalDividido)} — ${dinheiro(cmp.ganhoDaDivisao)} a menos que a loja mais barata na lista inteira. Por enquanto a escolha é de uma loja só; dividir o pedido entre lojas é o próximo passo.`
+          : "O verde marca o melhor preço de cada item."}
+      </div>
+    </div>
+  );
+}
+
+// ── Escolher insumo da lista, sem sair do formulário ────────────
+// Montar um pedido de loja é escolher vinte coisas em sequência. Um <select>
+// com 200 opções, ou um formulário por item, matam isso. Aqui se digita
+// "cimen", aparecem as opções, Enter põe na lista e o campo já está limpo
+// para o próximo.
+function SeletorInsumo({ insumos, aoEscolher, isMobile }) {
+  const E = COT_ESTILO;
+  const [termo, setTermo] = useState("");
+  const [aberto, setAberto] = useState(false);
+  const [marcado, setMarcado] = useState(0);
+  // Sem acento também acha: ninguém digita "tábua" nem "cerâmica" com acento
+  // no meio de um pedido de vinte itens.
+  const semAcento = (t) => (typeof normalizarTexto === "function"
+    ? normalizarTexto(t)
+    : String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  const busca = semAcento(termo).trim();
+  const achados = !busca ? [] : (insumos || [])
+    .filter((i) => i && i.tipo !== "prestador")
+    .filter((i) => {
+      const alvo = semAcento([i.nome, i.codigo, i.grupo, ...(i.aliases || [])].join(" "));
+      return busca.split(/\s+/).every((t) => alvo.indexOf(t) >= 0);
+    })
+    .slice(0, 8);
+
+  const escolher = (ins) => {
+    if (!ins) return;
+    aoEscolher(ins);
+    setTermo(""); setAberto(false); setMarcado(0);
+  };
+
+  return (
+    <div style={{ position: "relative" }}>
+      <input style={E.input} value={termo} placeholder="Digite para achar o material — cimento, prego, tábua…"
+        onChange={(e) => { setTermo(e.target.value); setAberto(true); setMarcado(0); }}
+        onFocus={() => setAberto(true)}
+        onBlur={() => setTimeout(() => setAberto(false), 150)}
+        onKeyDown={(e) => {
+          if (!achados.length) return;
+          if (e.key === "ArrowDown") { e.preventDefault(); setMarcado((m) => Math.min(m + 1, achados.length - 1)); }
+          if (e.key === "ArrowUp") { e.preventDefault(); setMarcado((m) => Math.max(m - 1, 0)); }
+          if (e.key === "Enter") { e.preventDefault(); escolher(achados[marcado]); }
+          if (e.key === "Escape") setAberto(false);
+        }} />
+      {aberto && achados.length > 0 && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 40, background: "#fff",
+          border: "1px solid rgba(38,36,33,0.16)", borderRadius: 10, marginTop: 4, overflow: "hidden",
+          boxShadow: "0 14px 34px -14px rgba(17,24,39,0.35)" }}>
+          {achados.map((i, k) => (
+            <div key={i.codigo || i.id || k} onMouseDown={(e) => { e.preventDefault(); escolher(i); }}
+              onMouseEnter={() => setMarcado(k)}
+              style={{ padding: "7px 11px", cursor: "pointer", background: k === marcado ? "#eef5ff" : "#fff",
+                borderTop: k ? "1px solid rgba(38,36,33,0.06)" : "none" }}>
+              <div style={{ fontSize: 12.5, color: "#111827" }}>{i.nome}</div>
+              <div style={{ fontSize: 11, color: "#6b7280" }}>
+                {[i.codigo, i.grupo, i.unidade].filter(Boolean).join(" · ")}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {busca && !achados.length && (
+        <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 4 }}>
+          Nenhum insumo com esse nome. Dá para pôr o item à mão na linha abaixo.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── A folha do pedido, para imprimir ou salvar em PDF ───────────
+// Mesma mecânica da folha de comprovantes: a folha vira a única coisa da
+// página na hora de imprimir, e o navegador salva em PDF.
+const COT_CSS_PEDIDO = `
+@page { size: A4 portrait; margin: 14mm; }
+body[data-vk-imprimindo-pedido="1"] > *:not([data-vk-pedido="1"]) { display: none !important; }
+body[data-vk-imprimindo-pedido="1"] [data-vk-pedido="1"] {
+  position: static !important; inset: auto !important; overflow: visible !important;
+  background: #fff !important; padding: 0 !important; width: auto !important; height: auto !important;
+}
+[data-vk-pedido="1"] [data-vk-so-tela="1"] { display: none !important; }
+`;
+
+function FolhaPedido({ cot, proposta, ctx, aoFechar }) {
+  const alvo = useRef(null);
+  useEffect(() => {
+    const el = alvo.current || (typeof document !== "undefined" && document.querySelector('[data-vk-pedido="1"]'));
+    if (!el || typeof document === "undefined") return;
+    const estilo = document.createElement("style");
+    estilo.textContent = COT_CSS_PEDIDO;
+    document.head.appendChild(estilo);
+    const antes = () => document.body.setAttribute("data-vk-imprimindo-pedido", "1");
+    const depois = () => document.body.removeAttribute("data-vk-imprimindo-pedido");
+    window.addEventListener("beforeprint", antes);
+    window.addEventListener("afterprint", depois);
+    const esc = (e) => { if (e.key === "Escape") aoFechar(); };
+    document.addEventListener("keydown", esc);
+    return () => {
+      window.removeEventListener("beforeprint", antes);
+      window.removeEventListener("afterprint", depois);
+      document.removeEventListener("keydown", esc);
+      depois();
+      if (estilo.parentNode) estilo.parentNode.removeChild(estilo);
+    };
+  }, [aoFechar]);
+
+  const E = COT_ESTILO;
+  const x = ctx || {};
+  const itens = itensDaCotacao(cot);
+  const rotulo = { fontSize: 9.5, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.4 };
+  const th = { padding: "6px 8px", fontSize: 10.5, color: "#4b5563", fontWeight: 700, textAlign: "left", borderBottom: "1px solid rgba(38,36,33,0.2)" };
+  const td = { padding: "6px 8px", fontSize: 11.5, color: "#111827", borderBottom: "1px solid rgba(38,36,33,0.08)", verticalAlign: "top" };
+
+  return (
+    <div data-vk-pedido="1" ref={alvo}
+      style={{ position: "fixed", inset: 0, background: "#fff", zIndex: 9000, overflow: "auto", padding: 24 }}>
+      <div data-vk-so-tela="1" style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginBottom: 16 }}>
+        <button style={E.btn} onClick={() => window.print()}>Imprimir / salvar PDF</button>
+        <button style={E.btnSec} onClick={aoFechar}>Fechar</button>
+      </div>
+      <div style={{ maxWidth: 760, margin: "0 auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16,
+          borderBottom: "2px solid #111827", paddingBottom: 10, marginBottom: 14 }}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: "#111827" }}>
+              Pedido de materiais{cot.numeroPedido ? ` ${cot.numeroPedido}` : ""}
+            </div>
+            <div style={{ fontSize: 12, color: "#4b5563", marginTop: 2 }}>{cot.titulo || "Materiais"}</div>
+          </div>
+          <div style={{ textAlign: "right", fontSize: 11, color: "#4b5563" }}>
+            <div style={{ fontWeight: 700, color: "#111827" }}>{x.escritorio || ""}</div>
+            <div>{new Date().toLocaleDateString("pt-BR")}</div>
+          </div>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 14 }}>
+          <div><div style={rotulo}>Obra</div><div style={{ fontSize: 12.5, color: "#111827" }}>{x.obra || "—"}</div></div>
+          <div><div style={rotulo}>Fornecedor</div><div style={{ fontSize: 12.5, color: "#111827" }}>{(proposta && proposta.favorecido) || "—"}</div></div>
+          {x.endereco ? <div style={{ gridColumn: "1 / -1" }}><div style={rotulo}>Entrega</div><div style={{ fontSize: 12.5, color: "#111827" }}>{x.endereco}</div></div> : null}
+        </div>
+        <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, width: 28 }}>#</th>
+              <th style={th}>Material</th>
+              <th style={{ ...th, width: 90, textAlign: "right" }}>Qtd.</th>
+              <th style={{ ...th, width: 70 }}>Un.</th>
+              {proposta ? <th style={{ ...th, width: 90, textAlign: "right" }}>Unitário</th> : null}
+              {proposta ? <th style={{ ...th, width: 96, textAlign: "right" }}>Total</th> : null}
+            </tr>
+          </thead>
+          <tbody>
+            {(itens.length ? itens : [{ id: "u", descricao: cot.titulo, unidade: cot.unidade, quantidade: cot.quantidade }]).map((it, i) => {
+              const q = quantidadeDoItem(it);
+              const u = proposta ? precoUnitario(proposta, it.id) : 0;
+              return (
+                <tr key={it.id}>
+                  <td style={td}>{i + 1}</td>
+                  <td style={td}>{it.descricao || "—"}</td>
+                  <td style={{ ...td, textAlign: "right" }}>{q > 0 ? qtdBR(q) : "—"}</td>
+                  <td style={td}>{it.unidade || "—"}</td>
+                  {proposta ? <td style={{ ...td, textAlign: "right" }}>{u > 0 ? fmtMoedaCtr(u) : "—"}</td> : null}
+                  {proposta ? <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{u > 0 ? fmtMoedaCtr(u * q) : "—"}</td> : null}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {proposta && valorDaProposta(cot, proposta) > 0 && (
+          <div style={{ textAlign: "right", fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 12 }}>
+            Total: {fmtMoedaCtr(valorDaProposta(cot, proposta))}
+          </div>
+        )}
+        {String(cot.escopo || "").trim() ? (
+          <div style={{ fontSize: 11.5, color: "#4b5563", whiteSpace: "pre-wrap", borderTop: "1px solid rgba(38,36,33,0.12)", paddingTop: 10 }}>
+            {cot.escopo}
+          </div>
+        ) : null}
+        {x.contato ? (
+          <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>Contato: {x.contato}</div>
+        ) : null}
       </div>
     </div>
   );

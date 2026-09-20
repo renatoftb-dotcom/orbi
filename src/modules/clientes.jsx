@@ -3788,6 +3788,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     return { primeiraContaId: novas[0].id, quantas: novas.length, gravado: true };
   }
 
+  // Recalibrar as entregas de um pedido sem sair da cotação: é lá que se
+  // olha o combinado com o fornecedor, e é lá que se descobre que a entrega
+  // mudou de data. As contas a pagar são as mesmas — só quem as move muda.
+  function recalibrarPedidoDaCotacao(cotacaoId, datas) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    const agora = new Date().toISOString();
+    const contasNovas = recalibrarContasDoPedido(obraAtual.contasPagar || [], datas, quemSou(), agora);
+    if (assinaturaContas(contasNovas) === assinaturaContas(obraAtual.contasPagar || [])) {
+      return { erro: "Nenhuma data mudou." };
+    }
+    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c
+      : ({ ...c, recalibradoPor: quemSou(), recalibradoEm: agora }));
+    const atualizada = { ...obraAtual, contasPagar: contasNovas, cotacoes };
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    setObraSelecionada(atualizada);
+    return { gravado: true };
+  }
+
   function desfazerLancamentoDaCotacao(cotacaoId) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
     const restantes = removerContasDaCotacao(obraAtual.contasPagar || [], cotacaoId);
@@ -3939,6 +3957,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
+        onRecalibrarPedido={recalibrarPedidoDaCotacao}
       />
     );
   }
