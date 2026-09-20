@@ -39,6 +39,9 @@ function cotacaoVazia(obraId) {
     contaGeradaId: "",     // preenchido quando a cotação vira conta a pagar direto
     lancadoEm: "",
     lancadoPor: "",
+    // o que foi combinado com o fornecedor (modo, entregas, datas) — ver
+    // planoDoLancamento
+    pagamento: null,
     propostas: [],
   };
 }
@@ -231,6 +234,10 @@ function dadosDoLancamento(cot) {
   if (!esc) return null;
   const prazo = Number(esc.prazoDias) || 0;
   const hoje = typeof dataParaIso === "function" ? dataParaIso(new Date()) : "";
+  // Relançar não recomeça do zero: o que foi combinado da última vez volta
+  // preenchido, porque quem desfez um lançamento quase sempre vai refazer o
+  // mesmo com um ajuste.
+  const p = c.pagamento || {};
   return {
     cotacaoId: c.id,
     obraId: c.obraId || "",
@@ -239,14 +246,109 @@ function dadosDoLancamento(cot) {
     favorecido: esc.favorecido || "",
     descricao: String(c.titulo || "").trim() || "Compra",
     valor: valorProposta(esc),
-    modo: "parcelas",             // ver MODOS_LANCAMENTO
-    parcelas: 1,
-    primeiroVencimento: prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : hoje,
-    sinalPct: 50,
-    vencimentoSaldo: "",
-    entregas: [],
+    modo: p.modo || "parcelas",   // ver MODOS_LANCAMENTO
+    parcelas: p.parcelas || 1,
+    primeiroVencimento: p.primeiroVencimento
+      || (prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : hoje),
+    sinalPct: p.sinalPct == null ? 50 : p.sinalPct,
+    vencimentoSaldo: p.vencimentoSaldo || "",
+    entregas: (p.entregas || []).map((e) => ({ ...e })),
     observacao: esc.condicaoPagamento ? `Condição cotada: ${esc.condicaoPagamento}` : "",
   };
+}
+
+// ── O que foi combinado com o fornecedor ────────────────────────
+// As contas a pagar são a EXECUÇÃO do acerto: elas escorregam de data,
+// recebem baixa, somem se o lançamento for desfeito. O acerto em si — três
+// entregas, estes valores, estas datas — é outra coisa, e é o que alguém
+// procura meses depois ao abrir a cotação. Por isso fica gravado aqui, na
+// cotação, e não só nas contas que nasceram dele.
+function planoDoLancamento(dados) {
+  const d = dados || {};
+  const modo = (typeof modoLancamento === "function" ? modoLancamento(d.modo) : { id: d.modo || "parcelas" }).id;
+  const plano = {
+    modo,
+    valor: Math.round((Number(d.valor) || 0) * 100) / 100,
+    definidoEm: d.lancadoEm || new Date().toISOString(),
+    definidoPor: d.lancadoPor || "",
+  };
+  if (modo === "entregas") {
+    plano.entregas = (d.entregas || [])
+      .filter((e) => e && (typeof valorDaEntrega === "function" ? valorDaEntrega(e) : Number(e.valor)) > 0)
+      .map((e, i) => ({
+        descricao: String(e.descricao || "").trim() || `Entrega ${i + 1}`,
+        valor: typeof valorDaEntrega === "function" ? valorDaEntrega(e) : Number(e.valor) || 0,
+        vencimento: String(e.vencimento || "").slice(0, 10),
+      }));
+    return plano;
+  }
+  plano.parcelas = Math.max(1, Math.floor(Number(d.parcelas) || 1));
+  plano.primeiroVencimento = String(d.primeiroVencimento || "").slice(0, 10);
+  if (modo === "sinalFinal" || modo === "sinalParcelas") {
+    plano.sinalPct = Math.min(100, Math.max(0, Number(d.sinalPct) || 0));
+    plano.vencimentoSaldo = String(d.vencimentoSaldo || "").slice(0, 10);
+  }
+  return plano;
+}
+
+// A tabelinha que a cotação mostra. A fonte preferida são as CONTAS, porque
+// é nelas que a data recalibrada e a baixa aparecem; o plano guardado entra
+// quando não há contas (lançamento desfeito), para o acerto não sumir da
+// tela junto com elas.
+function linhasDoPagamento(cot, contas, hoje) {
+  const c = cot || {};
+  const daCotacao = (contas || [])
+    .filter((x) => x && x.cotacaoId === c.id)
+    .slice()
+    .sort((a, b) => String(a.vencimento).localeCompare(String(b.vencimento)));
+  // A conta carrega o nome da compra no começo da descrição ("Aço Vergalhões
+  // — 1ª entrega"), porque no contas a pagar ela aparece sozinha, longe da
+  // cotação. Aqui dentro da própria cotação esse prefixo só repete o título
+  // da tela, então sai.
+  const semPrefixo = (txt) => {
+    const t = String(txt || "");
+    const titulo = String(c.titulo || "").trim();
+    if (!titulo) return t;
+    for (const tracinho of [" — ", " - "]) {
+      const p = titulo + tracinho;
+      if (t.startsWith(p) && t.length > p.length) return t.slice(p.length);
+    }
+    return t;
+  };
+  if (daCotacao.length) {
+    return {
+      fonte: "contas",
+      linhas: daCotacao.map((x) => ({
+        id: x.id,
+        descricao: semPrefixo(x.descricao) || "Pagamento",
+        valor: x.pago ? (Number(x.valorPago) || Number(x.valor) || 0) : Number(x.valor) || 0,
+        vencimento: x.vencimento || "",
+        pago: !!x.pago,
+        pagoEm: x.pagoEm || "",
+        vencida: !x.pago && !!x.vencimento && !!hoje && x.vencimento < hoje,
+      })),
+    };
+  }
+  const p = c.pagamento;
+  if (!p) return { fonte: "", linhas: [] };
+  const nome = String(c.titulo || "Compra").trim() || "Compra";
+  if (p.modo === "entregas") {
+    return { fonte: "plano", linhas: (p.entregas || []).map((e, i) => ({
+      id: `e${i}`, descricao: e.descricao, valor: e.valor, vencimento: e.vencimento, pago: false, vencida: false })) };
+  }
+  // fora de "entregas" o plano é uma regra, não uma lista — descrevê-la em
+  // uma linha é mais honesto do que reconstruir parcelas que não existem
+  return { fonte: "plano", linhas: [{ id: "p0", descricao: `${nome} — ${resumoDoPlano(p)}`,
+    valor: p.valor, vencimento: p.primeiroVencimento, pago: false, vencida: false }] };
+}
+
+function resumoDoPlano(plano) {
+  const p = plano || {};
+  const n = Math.max(1, Math.floor(Number(p.parcelas) || 1));
+  if (p.modo === "entregas") return `${(p.entregas || []).length} entregas`;
+  if (p.modo === "sinalFinal") return `sinal de ${p.sinalPct || 0}% e saldo na entrega`;
+  if (p.modo === "sinalParcelas") return `sinal de ${p.sinalPct || 0}% e saldo em ${n}x`;
+  return n > 1 ? `${n} parcelas mensais` : "parcela única";
 }
 
 // Só vira contrato o que já tem escolha e, quando exigido, o aval do
@@ -1214,6 +1316,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   </div>
                 )}
 
+                <QuadroPagamentosCotacao cot={cot} contas={obra.contasPagar || []} hoje={hoje}
+                  dinheiro={dinheiro} isMobile={isMobile} />
+
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {podeGerenciar && !cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                     <>
@@ -1618,6 +1723,13 @@ function VisorProposta({ anexo, aoFechar }) {
 function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio }) {
   const [sobre, setSobre] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  // "Abrir" aqui era um link direto para a URL do storage. Como o arquivo
+  // sobe SEM a extensão .pdf (é o que faz o storage aceitar entregá-lo), ele
+  // volta como octet-stream e o navegador não tem escolha: baixa para a pasta
+  // de downloads com um nome sem extensão, que é o "arquivo estranho".
+  // O visor resolve porque busca o arquivo, confere o cabeçalho %PDF e o
+  // reembala como application/pdf antes de mostrar.
+  const [vendo, setVendo] = useState(false);
   const refInput = useRef(null);
   const E = COT_ESTILO;
 
@@ -1677,8 +1789,9 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", wordBreak: "break-all" }}>{anexo.nome}</div>
           <div style={{ fontSize: 11, color: "#6b7280" }}>{tamanhoLegivel(anexo.bytes)}</div>
         </div>
-        <a href={anexo.url} target="_blank" rel="noopener noreferrer" style={{ ...E.btnSec, textDecoration: "none", display: "inline-block" }}>Abrir</a>
+        <button type="button" style={E.btnSec} onClick={() => setVendo(true)}>Abrir</button>
         <button style={E.btnSec} onClick={remover}>Remover</button>
+        {vendo && <VisorProposta anexo={anexo} aoFechar={() => setVendo(false)} />}
       </div>
     );
   }
@@ -1704,6 +1817,65 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
         {apoio || "clique para escolher, ou cole com Ctrl+V — PDF ou foto, até 10 MB"}
+      </div>
+    </div>
+  );
+}
+
+// ── O quadro de pagamentos, dentro da cotação ───────────────────
+// Definir três entregas com valor e data é um acerto com o fornecedor. Ele
+// tem que estar aqui, onde se abre a cotação, e não só espalhado por quatro
+// linhas do contas a pagar — lá está o fluxo do mês, aqui está a compra.
+function QuadroPagamentosCotacao({ cot, contas, hoje, dinheiro, isMobile }) {
+  const E = COT_ESTILO;
+  const { fonte, linhas } = linhasDoPagamento(cot, contas, hoje);
+  if (!linhas.length) return null;
+  const p = cot.pagamento || {};
+  const total = Math.round(linhas.reduce((a, l) => a + (Number(l.valor) || 0), 0) * 100) / 100;
+  const pagas = linhas.filter((l) => l.pago);
+  const dia = (iso) => (iso ? new Date(String(iso).slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR") : "—");
+  const cols = isMobile ? "1fr 96px" : "1fr 120px 110px 92px";
+  return (
+    <div style={{ ...E.quadro, padding: 0, marginBottom: 12, overflow: "hidden" }}>
+      <div style={{ background: "#fafafa", padding: "8px 12px", borderBottom: "1px solid rgba(38,36,33,0.10)",
+        display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "baseline" }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#111827" }}>
+          {cot.numeroPedido ? `Pedido ${cot.numeroPedido} · ` : ""}Pagamentos combinados
+        </span>
+        <span style={{ fontSize: 11.5, color: "#4b5563" }}>
+          {p.modo ? `${resumoDoPlano(p)} · ` : ""}{dinheiro(total)}
+          {pagas.length ? ` · ${pagas.length} de ${linhas.length} pago${pagas.length === 1 ? "" : "s"}` : ""}
+        </span>
+      </div>
+      {!isMobile && (
+        <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, padding: "6px 12px",
+          borderBottom: "1px solid rgba(38,36,33,0.08)", fontSize: 11, color: "#6b7280", fontWeight: 600 }}>
+          <div>Etapa</div><div>Vencimento</div><div style={{ textAlign: "right" }}>Valor</div><div>Situação</div>
+        </div>
+      )}
+      {linhas.map((l) => (
+        <div key={l.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, padding: "7px 12px",
+          borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center" }}>
+          <div style={{ fontSize: 12.5, color: "#111827" }}>{l.descricao}</div>
+          {!isMobile && <div style={{ fontSize: 12, color: "#4b5563" }}>{dia(l.vencimento)}</div>}
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{dinheiro(l.valor)}</div>
+          {!isMobile && (
+            <div style={{ fontSize: 11.5, color: l.pago ? "#15803d" : l.vencida ? "#b45309" : "#4b5563" }}>
+              {l.pago ? `Pago ${dia(l.pagoEm)}` : l.vencida ? "Vencido" : "Em aberto"}
+            </div>
+          )}
+          {isMobile && (
+            <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: l.pago ? "#15803d" : l.vencida ? "#b45309" : "#6b7280" }}>
+              {dia(l.vencimento)} · {l.pago ? `pago ${dia(l.pagoEm)}` : l.vencida ? "vencido" : "em aberto"}
+            </div>
+          )}
+        </div>
+      ))}
+      <div style={{ padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.08)", fontSize: 11, color: "#6b7280" }}>
+        {fonte === "plano"
+          ? "Este é o acerto registrado — o lançamento em contas a pagar foi desfeito, então não há contas correspondentes no momento."
+          : "As datas acompanham as contas a pagar: recalibrar lá muda o que aparece aqui."}
+        {p.definidoPor ? ` Combinado por ${nomeGravado(p.definidoPor)}${dataCurta(p.definidoEm) ? ` em ${dataCurta(p.definidoEm)}` : ""}.` : ""}
       </div>
     </div>
   );
