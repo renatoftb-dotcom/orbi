@@ -18799,6 +18799,11 @@ function propostaVazia() {
     fornecedorId: "",
     favorecido: "",
     valor: "",
+    // cotação item a item: unitário de cada item da lista (ver precoUnitario)
+    precos: {},
+    // "leva tudo por X" — o total de fechamento, quando a loja dá desconto
+    // na lista inteira (ver valoresComDesconto)
+    totalFechado: "",
     prazoDias: "",
     condicaoPagamento: "",
     validade: "",
@@ -18901,10 +18906,92 @@ function itensSemPreco(cot, proposta) {
   return itensDaCotacao(cot).filter((it) => !(precoUnitario(proposta, it.id) > 0));
 }
 
-// O valor que vale para esta proposta: a soma dos itens quando há preço por
+// O total de UM item, pelo preço de tabela.
+function totalBrutoItem(cot, proposta, item) {
+  return Math.round(precoUnitario(proposta, item.id) * quantidadeDoItem(item) * 100) / 100;
+}
+
+// Unitário a partir do total do item — o outro sentido do mesmo campo. A
+// loja tanto manda "40,00 o saco" quanto "1.200,00 os trinta sacos", e as
+// duas contas são a mesma; quem digita escolhe por onde entra.
+//
+// O unitário é o que fica gravado, porque é ele que compara loja com loja.
+// Seis casas evitam que 1.000,00 em 3 unidades volte como 999,99.
+function unitarioDoTotal(total, quantidade) {
+  // aceita tanto número quanto o texto em pt-BR de um formulário
+  const q = numeroDoCampo(quantidade);
+  const t = numeroDoCampo(total);
+  if (!(q > 0)) return 0;
+  return Math.round((t / q) * 1e6) / 1e6;
+}
+
+// ── O total fechado com a loja ──────────────────────────────────
+// "Leva tudo por 2.300" não é um preço novo de cada item: é um desconto no
+// fechamento. Guardar só o total jogaria fora a cotação item a item, que é o
+// que permite comparar. Então guardam-se os dois — os preços de tabela e o
+// total negociado — e o desconto é DISTRIBUÍDO proporcionalmente para a
+// conta fechar, sem apagar o que a loja tinha cotado.
+function totalNegociadoDigitado(proposta) {
+  return numeroDoCampo((proposta || {}).totalFechado);
+}
+
+// Os valores de cada item depois do desconto. A sobra dos arredondamentos
+// vai para o último item com valor — sem isso a soma das partes não bate com
+// o total combinado, e é justamente o total que foi combinado.
+function valoresComDesconto(cot, proposta) {
+  const bruto = totalDosItens(cot, proposta);
+  const alvo = totalNegociadoDigitado(proposta);
+  if (!(bruto > 0) || !(alvo > 0) || alvo === bruto) return null;
+  const comValor = itensDaCotacao(cot).filter((it) => totalBrutoItem(cot, proposta, it) > 0);
+  if (!comValor.length) return null;
+  const r = {};
+  let acumulado = 0;
+  comValor.forEach((it, i) => {
+    if (i === comValor.length - 1) {
+      r[it.id] = Math.round((alvo - acumulado) * 100) / 100;
+      return;
+    }
+    const v = Math.round(totalBrutoItem(cot, proposta, it) * (alvo / bruto) * 100) / 100;
+    r[it.id] = v;
+    acumulado = Math.round((acumulado + v) * 100) / 100;
+  });
+  return r;
+}
+
+// O total do item como ele de fato vai sair: com desconto quando há desconto.
+function totalEfetivoItem(cot, proposta, item) {
+  const d = valoresComDesconto(cot, proposta);
+  if (d && d[item.id] != null) return d[item.id];
+  return totalBrutoItem(cot, proposta, item);
+}
+
+// O unitário efetivo — é por ele que se compara loja com loja, porque é o
+// preço que se vai pagar.
+function precoEfetivo(cot, proposta, item) {
+  const q = quantidadeDoItem(item);
+  if (!(q > 0)) return precoUnitario(proposta, item.id);
+  return Math.round((totalEfetivoItem(cot, proposta, item) / q) * 1e6) / 1e6;
+}
+
+function totalNegociado(cot, proposta) {
+  const bruto = totalDosItens(cot, proposta);
+  const alvo = totalNegociadoDigitado(proposta);
+  return valoresComDesconto(cot, proposta) ? alvo : bruto;
+}
+
+function descontoDaProposta(cot, proposta) {
+  const bruto = totalDosItens(cot, proposta);
+  if (!valoresComDesconto(cot, proposta)) return null;
+  const alvo = totalNegociadoDigitado(proposta);
+  const dif = Math.round((bruto - alvo) * 100) / 100;
+  return { bruto, alvo, valor: Math.abs(dif), desconto: dif > 0,
+    pct: bruto > 0 ? Math.round((Math.abs(dif) / bruto) * 1000) / 10 : 0 };
+}
+
+// O valor que vale para esta proposta: o total fechado quando há preço por
 // item, senão o total digitado.
 function valorDaProposta(cot, proposta) {
-  return propostaTemPrecoPorItem(cot, proposta) ? totalDosItens(cot, proposta) : valorProposta(proposta);
+  return propostaTemPrecoPorItem(cot, proposta) ? totalNegociado(cot, proposta) : valorProposta(proposta);
 }
 
 // Qual loja está mais barata em cada item. É o que permite olhar a lista e
@@ -18914,7 +19001,10 @@ function melhorPorItem(cot) {
   for (const it of itensDaCotacao(cot)) {
     let melhor = null;
     for (const p of propostasDaCotacao(cot)) {
-      const u = precoUnitario(p, it.id);
+      if (!(precoUnitario(p, it.id) > 0)) continue;
+      // compara pelo preço EFETIVO: a loja que deu desconto no fechamento
+      // está mais barata de verdade, e é assim que ela tem que aparecer
+      const u = precoEfetivo(cot, p, it);
       if (!(u > 0)) continue;
       if (!melhor || u < melhor.unitario) melhor = { propostaId: p.id, favorecido: p.favorecido || "", unitario: u };
     }
@@ -19851,7 +19941,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       // soma — assim o resto do sistema (economia, contas a pagar, contrato)
       // continua lendo um número só, sem saber que existe lista.
       const comTotal = propostaTemPrecoPorItem(c, proposta)
-        ? { ...proposta, valor: totalDosItens(c, proposta) }
+        ? { ...proposta, valor: totalNegociado(c, proposta) }
         : proposta;
       const p = carimbar({ ...comTotal, favorecido: nome }, usuario, !existe);
       return { ...c, propostas: existe ? lista.map(x => (x.id === p.id ? p : x)) : lista.concat([p]) };
@@ -19952,17 +20042,21 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           const setPreco = (itemId, v) => set("precos", { ...(p.precos || {}), [itemId]: v });
           const somaAtual = totalDosItens(cotDaProposta, p);
           const preenchidos = itens.length - itensSemPreco(cotDaProposta, p).length;
-          const cols = isMobile ? "1fr 120px" : "1fr 110px 80px 130px 120px";
+          const desc = descontoDaProposta(cotDaProposta, p);
+          const cols = isMobile
+            ? "1fr 120px"
+            : (desc ? "1fr 72px 68px 118px 118px 108px" : "1fr 84px 76px 130px 130px");
           return (
             <div style={{ border: "1px solid rgba(38,36,33,0.14)", borderRadius: 12, padding: 12, marginBottom: 14 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: "#111827", marginBottom: 2 }}>Preço item a item</div>
               <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
-                Preencha o unitário do que esta loja cotou. O que ficar em branco entra como não cotado. Se a loja só mandou o total, deixe tudo em branco e use o campo Valor abaixo.
+                Preencha o unitário OU o total de cada item — um acerta o outro. O que ficar em branco entra como não cotado. Se a loja não cotou item a item e só mandou um preço pela lista inteira, deixe tudo em branco aqui e use o campo Valor lá embaixo.
               </div>
               {!isMobile && (
                 <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, marginBottom: 4 }}>
                   <span style={E.label}>Material</span><span style={E.label}>Qtd.</span><span style={E.label}>Un.</span>
-                  <span style={E.label}>Unitário (R$)</span><span style={{ ...E.label, textAlign: "right" }}>Total</span>
+                  <span style={E.label}>Unitário (R$)</span><span style={E.label}>Total do item (R$)</span>
+                  {desc ? <span style={{ ...E.label, textAlign: "right" }}>Com desconto</span> : null}
                 </div>
               )}
               {itens.map(it => {
@@ -19973,21 +20067,46 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || "Item"}</span>
                     {!isMobile && <span style={{ fontSize: 12, color: "#4b5563" }}>{q > 0 ? qtdBR(q) : "—"}</span>}
                     {!isMobile && <span style={{ fontSize: 12, color: "#4b5563" }}>{it.unidade || "—"}</span>}
+                    {/* Os dois campos são o MESMO dado por dois caminhos: o que
+                        se grava é sempre o unitário, e o total do item é ele
+                        vezes a quantidade. Digitar de um lado acerta o outro. */}
                     <CampoCtrNum tipo="moeda" style={E.input} valor={(p.precos || {})[it.id]}
                       onChange={(v) => setPreco(it.id, v)} placeholder="0,00" />
-                    {!isMobile && (
-                      <span style={{ fontSize: 12.5, color: "#111827", fontWeight: 600, textAlign: "right" }}>
-                        {u > 0 ? dinheiro(u * q) : "—"}
+                    <CampoCtrNum tipo="moeda" style={{ ...E.input, opacity: q > 0 ? 1 : 0.5 }}
+                      valor={u > 0 ? Math.round(u * q * 100) / 100 : ""}
+                      onChange={(v) => setPreco(it.id, unitarioDoTotal(v, q))}
+                      placeholder={q > 0 ? "0,00" : "sem qtd."} />
+                    {desc && !isMobile && (
+                      <span style={{ fontSize: 12.5, color: desc.desconto ? "#15803d" : "#b45309", fontWeight: 600, textAlign: "right" }}>
+                        {u > 0 ? dinheiro(totalEfetivoItem(cotDaProposta, p, it)) : "—"}
                       </span>
                     )}
                   </div>
                 );
               })}
               {preenchidos > 0 && (
-                <div style={{ fontSize: 12, color: "#111827", borderTop: "1px solid rgba(38,36,33,0.10)", paddingTop: 8, marginTop: 4 }}>
-                  <strong>{dinheiro(somaAtual)}</strong> em {preenchidos} de {itens.length} {itens.length === 1 ? "item" : "itens"}
-                  {preenchidos < itens.length ? " — o resto fica como não cotado por esta loja." : "."}
-                  {" "}É este o valor que vai ser gravado como total da proposta.
+                <div style={{ borderTop: "1px solid rgba(38,36,33,0.10)", paddingTop: 10, marginTop: 4 }}>
+                  <div style={{ fontSize: 12, color: "#111827", marginBottom: 10 }}>
+                    Soma dos itens: <strong>{dinheiro(somaAtual)}</strong> em {preenchidos} de {itens.length} {itens.length === 1 ? "item" : "itens"}
+                    {preenchidos < itens.length ? " — o resto fica como não cotado por esta loja." : "."}
+                  </div>
+                  {/* "Leva tudo por 2.300" — o desconto de fechamento não
+                      apaga o que a loja cotou: ele é distribuído. */}
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "200px 1fr", gap: 12, alignItems: "center" }}>
+                    <div>
+                      <label style={E.label}>Total fechado com a loja</label>
+                      <CampoCtrNum tipo="moeda" style={E.input} valor={p.totalFechado}
+                        onChange={(v) => set("totalFechado", v)} placeholder="opcional" />
+                    </div>
+                    <div style={{ fontSize: 11.5, color: desc ? (desc.desconto ? "#15803d" : "#b45309") : "#4b5563" }}>
+                      {desc
+                        ? `${desc.desconto ? "Desconto" : "Acréscimo"} de ${dinheiro(desc.valor)} (${String(desc.pct).replace(".", ",")}%) sobre ${dinheiro(desc.bruto)} — distribuído item a item, proporcional ao valor de cada um, para fechar exatamente ${dinheiro(desc.alvo)}.`
+                        : "Se a loja fechou a lista inteira por um valor menor, digite aqui. O desconto é distribuído item a item, e os preços de tabela acima ficam guardados como estão."}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: "#111827", marginTop: 10 }}>
+                    Total da proposta: <strong>{dinheiro(valorDaProposta(cotDaProposta, p))}</strong>
+                  </div>
                 </div>
               )}
             </div>
@@ -20883,7 +21002,7 @@ function ComparativoLista({ cot, dinheiro, isMobile }) {
                   </td>
                   {comPreco.map((l) => {
                     const p = propostaPorId(cot, l.propostaId);
-                    const u = precoUnitario(p, it.id);
+                    const u = precoEfetivo(cot, p, it);
                     const ganhou = melhor && melhor.propostaId === l.propostaId && comPreco.length > 1;
                     return (
                       <td key={l.propostaId} style={{ ...td, textAlign: "right",
@@ -21075,7 +21194,9 @@ function FolhaPedido({ cot, proposta, ctx, aoFechar }) {
           <tbody>
             {(itens.length ? itens : [{ id: "u", descricao: cot.titulo, unidade: cot.unidade, quantidade: cot.quantidade }]).map((it, i) => {
               const q = quantidadeDoItem(it);
-              const u = proposta ? precoUnitario(proposta, it.id) : 0;
+              // o pedido leva o preço que vai ser pago — com o desconto de
+              // fechamento já distribuído
+              const u = proposta ? precoEfetivo(cot, proposta, it) : 0;
               return (
                 <tr key={it.id}>
                   <td style={td}>{i + 1}</td>
@@ -21083,7 +21204,7 @@ function FolhaPedido({ cot, proposta, ctx, aoFechar }) {
                   <td style={{ ...td, textAlign: "right" }}>{q > 0 ? qtdBR(q) : "—"}</td>
                   <td style={td}>{it.unidade || "—"}</td>
                   {proposta ? <td style={{ ...td, textAlign: "right" }}>{u > 0 ? fmtMoedaCtr(u) : "—"}</td> : null}
-                  {proposta ? <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{u > 0 ? fmtMoedaCtr(u * q) : "—"}</td> : null}
+                  {proposta ? <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{u > 0 ? fmtMoedaCtr(totalEfetivoItem(cot, proposta, it)) : "—"}</td> : null}
                 </tr>
               );
             })}

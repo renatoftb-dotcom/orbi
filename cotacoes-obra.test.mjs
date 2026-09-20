@@ -57,7 +57,9 @@ const modulo = new Function(`
            planoDoLancamento, linhasDoPagamento, resumoDoPlano,
            itemCotacaoVazio, itensDaCotacao, temListaDeItens, quantidadeDoItem, precoUnitario,
            propostaTemPrecoPorItem, totalDosItens, itensSemPreco, valorDaProposta,
-           melhorPorItem, comparativoDaLista, textoDoPedido, qtdBR };
+           melhorPorItem, comparativoDaLista, textoDoPedido, qtdBR,
+           unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
+           precoEfetivo, totalNegociado, descontoDaProposta };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -868,6 +870,102 @@ teste("sem lista, o texto do pedido usa a cotação de uma coisa só", () => {
 teste("quantidade sai sem centavos quando é inteira", () => {
   assert.strictEqual(M.qtdBR(40), "40");
   assert.strictEqual(M.qtdBR(12.5), "12,5");
+});
+
+// ── Unitário ↔ total do item ────────────────────────────────────
+
+teste("o unitário sai do total do item, e vice-versa", () => {
+  assert.strictEqual(M.unitarioDoTotal(1200, 30), 40);
+  assert.strictEqual(M.unitarioDoTotal("870,00", 30), 29);
+  assert.strictEqual(M.unitarioDoTotal(1000, 3), 333.333333, "guarda casas para a volta fechar");
+  assert.strictEqual(Math.round(333.333333 * 3 * 100) / 100, 1000, "e a volta fecha");
+});
+
+teste("sem quantidade não dá para tirar unitário de total", () => {
+  assert.strictEqual(M.unitarioDoTotal(1200, 0), 0);
+  assert.strictEqual(M.unitarioDoTotal(1200, ""), 0);
+});
+
+// ── Desconto de fechamento ──────────────────────────────────────
+
+const comDesconto = (total) => {
+  const c = listaBase();
+  c.propostas[0].totalFechado = total;
+  return c;
+};
+
+teste("sem total fechado, nada é distribuído", () => {
+  const cot = listaBase();
+  assert.strictEqual(M.valoresComDesconto(cot, cot.propostas[0]), null);
+  assert.strictEqual(M.totalNegociado(cot, cot.propostas[0]), 4315);
+  assert.strictEqual(M.descontoDaProposta(cot, cot.propostas[0]), null);
+});
+
+teste("o desconto é proporcional e a soma bate com o total combinado", () => {
+  const cot = comDesconto(4000);          // bruto 4315
+  const p = cot.propostas[0];
+  const v = M.valoresComDesconto(cot, p);
+  const soma = Math.round(Object.values(v).reduce((a, x) => a + x, 0) * 100) / 100;
+  assert.strictEqual(soma, 4000, "as partes somam exatamente o total combinado");
+  // cimento: 1520/4315 * 4000 = 1409,04...
+  assert.strictEqual(v.i1, 1409.04);
+  assert.strictEqual(M.totalNegociado(cot, p), 4000);
+  assert.strictEqual(M.valorDaProposta(cot, p), 4000);
+});
+
+teste("a sobra do arredondamento vai para o último item, não some", () => {
+  const cot = { ...listaBase(), itens: [
+    { id: "a", descricao: "x", unidade: "un", quantidade: "1" },
+    { id: "b", descricao: "y", unidade: "un", quantidade: "1" },
+    { id: "c", descricao: "z", unidade: "un", quantidade: "1" },
+  ] };
+  cot.propostas = [{ id: "p1", favorecido: "L", precos: { a: "10,00", b: "10,00", c: "10,00" }, totalFechado: "10,00" }];
+  const v = M.valoresComDesconto(cot, cot.propostas[0]);
+  const soma = Math.round(Object.values(v).reduce((a, x) => a + x, 0) * 100) / 100;
+  assert.strictEqual(soma, 10);
+  assert.deepStrictEqual([v.a, v.b], [3.33, 3.33]);
+  assert.strictEqual(v.c, 3.34, "o último absorve o centavo que falta");
+});
+
+teste("item sem preço não recebe desconto nenhum", () => {
+  const cot = comDesconto(4000);
+  cot.propostas[0].precos.i3 = "";
+  const v = M.valoresComDesconto(cot, cot.propostas[0]);
+  assert.strictEqual(v.i3, undefined);
+  const soma = Math.round(Object.values(v).reduce((a, x) => a + x, 0) * 100) / 100;
+  assert.strictEqual(soma, 4000);
+});
+
+teste("o desconto muda o unitário efetivo, sem apagar o preço de tabela", () => {
+  const cot = comDesconto(4000);
+  const p = cot.propostas[0];
+  const it = cot.itens[0];
+  assert.strictEqual(M.precoUnitario(p, "i1"), 38, "o que a loja cotou fica guardado");
+  assert.strictEqual(M.totalBrutoItem(cot, p, it), 1520);
+  assert.strictEqual(M.totalEfetivoItem(cot, p, it), 1409.04);
+  assert.strictEqual(M.precoEfetivo(cot, p, it), 35.226);
+});
+
+teste("o resumo do desconto diz quanto e quantos por cento", () => {
+  const d = M.descontoDaProposta(comDesconto(4000), comDesconto(4000).propostas[0]);
+  assert.strictEqual(d.desconto, true);
+  assert.strictEqual(d.valor, 315);
+  assert.strictEqual(d.bruto, 4315);
+  assert.strictEqual(d.alvo, 4000);
+});
+
+teste("total fechado maior que a soma é acréscimo, e é dito como tal", () => {
+  const d = M.descontoDaProposta(comDesconto(4500), comDesconto(4500).propostas[0]);
+  assert.strictEqual(d.desconto, false);
+  assert.strictEqual(d.valor, 185);
+});
+
+teste("a loja que deu desconto ganha a comparação por item", () => {
+  // A cota 38,00 o cimento e B cota 36,50; com 30% de desconto A fica menor
+  const cot = listaBase();
+  cot.propostas[0].totalFechado = "3.000,00";   // bruto 4315
+  const m = M.melhorPorItem(cot);
+  assert.strictEqual(m.i1.favorecido, "Loja A", "o preço efetivo é o que vale");
 });
 
 for (const [nome, fn] of testes) {
