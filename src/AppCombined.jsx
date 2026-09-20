@@ -19181,7 +19181,12 @@ function interpretarLinhaDePedido(linha) {
   } else if (meio) {
     quantidade = quantidadeDoTexto(meio.valor);
     unidade = meio.unidade || "";
-    resto = (t.slice(0, meio.index) + " " + t.slice(meio.index + meio.tamanho)).trim();
+    // "compra pra nois 30 sacos DE CIMENTO": numa frase corrida o material
+    // vem depois da quantidade, e o que vem antes é conversa. Mas em "prego
+    // 17x27 2 kg" não sobra nada depois — aí o material é o que veio antes.
+    const depois = t.slice(meio.index + meio.tamanho).trim();
+    const antes = t.slice(0, meio.index).trim();
+    resto = /[a-zA-ZÀ-ÿ]{3}/.test(depois) ? depois : antes;
   } else if (fim) {
     quantidade = quantidadeDoTexto(fim[1]);
     resto = t.slice(0, fim.index).trim();
@@ -19209,8 +19214,12 @@ function ehConversaSolta(termo, quantidade) {
 }
 
 function interpretarPedido(texto, insumos) {
+  // O recado nem sempre vem em lista. Muitas vezes é uma frase só: "compra
+  // 30 sacos de cimento, 40 tábuas de 30, 25 pregos 17x21 e 20 quilos de
+  // arame". Vírgula, ponto e vírgula e o "e" que liga os itens separam tão
+  // bem quanto a quebra de linha.
   const linhas = String(texto == null ? "" : texto)
-    .split(/\r?\n|;/)
+    .split(/\r?\n|[;,]|\s+e\s+|\s+\+\s+/i)
     .map((l) => l.trim())
     .filter(Boolean);
   const saida = [];

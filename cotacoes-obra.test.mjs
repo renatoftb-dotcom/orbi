@@ -1163,6 +1163,40 @@ teste("sem insumo, o item guarda o texto do pedreiro", () => {
   assert.strictEqual(it.insumoId, "");
 });
 
+teste("o recado num parágrafo só também vira lista", () => {
+  const r = M.interpretarPedido(
+    "Renato compra pra nois 30 sacos de cimento, 40 tábuas de 30, 25 pregos 17x21 e 20 quilos de arame",
+    catalogo.concat([{ id: "m8", codigo: "FER-010", nome: "Arame Recozido", unidade: "kg", tipo: "material", aliases: ["Arame"] }]));
+  assert.strictEqual(r.length, 4, "vírgula e 'e' separam tão bem quanto quebra de linha");
+  assert.deepStrictEqual(r.map(x => x.quantidade), [30, 40, 25, 20]);
+  assert.strictEqual(r[0].insumo.codigo, "CIM-001");
+  assert.strictEqual(r[3].insumo.codigo, "FER-010");
+});
+
+teste("numa frase corrida, o material é o que vem DEPOIS da quantidade", () => {
+  const [x] = M.interpretarPedido("Renato compra pra nois 30 sacos de cimento", catalogo);
+  assert.strictEqual(x.termo, "cimento", "'compra pra nois' não entra na descrição");
+  assert.strictEqual(x.quantidade, 30);
+});
+
+teste("mas quando nada vem depois, o material é o que veio antes", () => {
+  const l = M.interpretarLinhaDePedido("prego 17x27 2 kg");
+  assert.strictEqual(l.termo, "prego 17x27");
+  assert.strictEqual(l.quantidade, 2);
+});
+
+teste("tamanho diferente não é o mesmo material", () => {
+  // o catálogo tem Prego 17x27; 17x21 é outro prego e NÃO pode casar sozinho
+  const [x] = M.interpretarPedido("25 pregos 17x21", catalogo);
+  assert.strictEqual(x.insumo, null);
+});
+
+teste("o 'e' que liga itens separa, e a saudação antes da vírgula cai fora", () => {
+  const r = M.interpretarPedido("bom dia, preciso de 10 sacos de cimento e 1/2 m3 de areia fina", catalogo);
+  assert.strictEqual(r.length, 2);
+  assert.deepStrictEqual(r.map(x => x.quantidade), [10, 0.5]);
+});
+
 teste("ponto e vírgula separa itens escritos na mesma linha", () => {
   const r = M.interpretarPedido("10 sacos de cimento; 1/2 m3 de areia fina", catalogo);
   assert.deepStrictEqual(r.map(x => x.quantidade), [10, 0.5]);
