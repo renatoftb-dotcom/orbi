@@ -1716,6 +1716,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Tudo que é gravado daqui leva o nome de quem gravou — é o que permite
   // abrir uma baixa meses depois e saber de quem foi a mão.
   const quemSou = () => nomeDeQuem(perm.usuario);
+  const dataDoDia = (iso) => (iso ? new Date(String(iso).slice(0, 10) + "T12:00:00").toLocaleDateString("pt-BR") : "");
   // ── Cadastro do escritório (contratado dos contratos de gestão) ──
   const abrirFormEscritorio = () => {
     const e = data.escritorio || {};
@@ -1828,7 +1829,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== pedido.id ? c
         : ({ ...c, recalibradoPor: quemSou(), recalibradoEm: agora }));
       const contasNovas = f.modo === "uma"
-        ? recalibrarContasDoPedido(contasDaObra, f.itens || [], quemSou(), agora)
+        ? recalibrarContasDoPedido(contasDaObra, f.pagamentos || [], quemSou(), agora)
         : recalibrarPedido(contasDaObra, pedido.id, f.novaData, quemSou(), agora);
       gravarObras(obras.map(o => o.id !== obraAtual.id ? o : ({ ...o, cotacoes, contasPagar: contasNovas })));
       setFormRecalibrar(null);
@@ -1837,15 +1838,30 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const alvo = (obraAtual.contratos || []).find(c => c.id === f.contratoId);
     if (!alvo) { setFormRecalibrar(null); return; }
     const porItem = contratoPorItem(alvo);
-    if (!porItem && !f.novaData) { dialogo.alertar({ titulo: "Informe a nova data do primeiro pagamento", tipo: "aviso" }); return; }
-    // A parcela em aberto do contrato é reescrita pela regra, então o ato
-    // não cabe nela: fica no contrato, que é o que de fato mudou.
-    const recalibrado = { ...(porItem
-      ? { ...recalibrarItens(alvo, f.itens || []), previsaoConclusao: f.previsaoConclusao || "" }
-      : recalibrarContrato(alvo, f.novaData)),
-      recalibradoPor: quemSou(), recalibradoEm: new Date().toISOString() };
+    const umaSo = f.modo === "uma";
+    if (!umaSo && !porItem && !f.novaData) { dialogo.alertar({ titulo: "Informe a nova data do primeiro pagamento", tipo: "aviso" }); return; }
+    const agoraCt = new Date().toISOString();
+    // A parcela em aberto do contrato é reescrita pela regra toda vez que a
+    // tela abre, então nem a recalibragem nem o ajuste de uma parcela cabem
+    // nela: os dois moram no contrato. Recalibrar tudo REESCREVE o calendário,
+    // e por isso apaga as exceções anotadas antes — elas eram exceções àquele
+    // calendário, não a este.
+    const recalibrado = { ...(umaSo
+      ? ajustarVencimentos(alvo, f.pagamentos || [])
+      : (porItem
+          ? { ...recalibrarItens(limparAjustes(alvo), f.itens || []), previsaoConclusao: f.previsaoConclusao || "" }
+          : recalibrarContrato(limparAjustes(alvo), f.novaData))),
+      recalibradoPor: quemSou(), recalibradoEm: agoraCt };
     const contratosNovos = (obraAtual.contratos || []).map(c => c.id === alvo.id ? recalibrado : c);
-    const contasNovas = sincronizarContasDaObra(contasDaObra, contratosNovos);
+    // O que de fato andou também conta a própria história — a conta regerada
+    // preserva os registros da anterior, então o carimbo sobrevive.
+    const antesPorId = {};
+    for (const c of contasDaObra) antesPorId[c.id] = c.vencimento;
+    const contasNovas = sincronizarContasDaObra(contasDaObra, contratosNovos).map(c => {
+      if (!c || c.pago || !antesPorId[c.id] || antesPorId[c.id] === c.vencimento) return c;
+      return registrarAto(c, "recalibrada", quemSou(), agoraCt,
+        `${dataDoDia(antesPorId[c.id])} → ${dataDoDia(c.vencimento)}`);
+    });
     gravarObras(obras.map(o => o.id === obraAtual.id ? { ...o, contratos: contratosNovos, contasPagar: contasNovas } : o));
     setFormRecalibrar(null);
   };
@@ -1873,14 +1889,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   const abrirRecalibragem = (id) => {
     const pedido = (obraAtual.cotacoes || []).find(c => c.id === id && c.contaGeradaId);
     if (pedido) {
-      const datas = datasDoPedido(contasDaObra, pedido.id);
-      setFormRecalibrar({ contratoId: id, novaData: (datas[0] || {}).vencimento || hojeIso,
-        itens: datas, previsaoConclusao: "", modo: "junto" });
+      const pagamentos = pagamentosEmAberto(contasDaObra, pedido.id, "pedido");
+      setFormRecalibrar({ contratoId: id, novaData: (pagamentos[0] || {}).vencimento || hojeIso,
+        itens: [], pagamentos, previsaoConclusao: "", modo: "junto" });
       return;
     }
     const ct = (obraAtual.contratos || []).find(x => x.id === id);
     setFormRecalibrar({ contratoId: id, novaData: (ct && primeiroVencimentoContrato(ct)) || hojeIso,
-      itens: datasDosItens(ct), previsaoConclusao: (ct && ct.previsaoConclusao) || "" });
+      itens: datasDosItens(ct), pagamentos: pagamentosEmAberto(contasDaObra, id, "contrato"),
+      previsaoConclusao: (ct && ct.previsaoConclusao) || "", modo: "junto" });
   };
 
   // ── Entradas da obra (aportes) — o outro lado do extrato ──────
@@ -3410,12 +3427,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
           const alvoNovo = !alvo ? null : porItem
             ? { ...recalibrarItens(alvo, formRecalibrar.itens || []), previsaoConclusao: formRecalibrar.previsaoConclusao || "" }
             : recalibrarContrato(alvo, formRecalibrar.novaData);
-          const umaAUma = ehPedido && formRecalibrar.modo === "uma";
+          const umaAUma = formRecalibrar.modo === "uma";
           const previa = ehPedido
             ? (umaAUma
-                ? previaDatasDoPedido(contasDaObra, escolhido.id, formRecalibrar.itens || [], 8)
+                ? previaDatasDoPedido(contasDaObra, escolhido.id, formRecalibrar.pagamentos || [], 8)
                 : previaDoPedido(contasDaObra, escolhido.id, formRecalibrar.novaData, 6))
-            : (alvo ? previaEntreContratos(alvo, alvoNovo, contasDaObra, porItem ? 6 : 4) : { linhas: [], pagas: 0, total: 0 });
+            : (!alvo ? { linhas: [], pagas: 0, total: 0 }
+                : umaAUma
+                  ? previaAjusteContrato(alvo, contasDaObra, formRecalibrar.pagamentos || [], 8)
+                  : previaEntreContratos(alvo, alvoNovo, contasDaObra, porItem ? 6 : 4));
           const itensDoAlvo = ((alvo || {}).itens || []);
           const dia = (iso) => iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "—";
           return (
@@ -3427,10 +3447,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                   {ehPedido ? "Recalibrar datas do pedido" : "Recalibrar datas do contrato"}
                 </div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 14 }}>
-                  {ehPedido
-                    ? (umaAUma
-                        ? "Uma entrega saiu da data e as outras não? Ajuste abaixo o vencimento de cada pagamento em aberto — só os que você mexer mudam."
-                        : "A entrega toda atrasou? Informe quando vence o primeiro pagamento em aberto; os demais andam o mesmo tanto de dias, mantendo o intervalo combinado com o fornecedor.")
+                  {umaAUma
+                    ? "Um pagamento saiu da data e os outros não? Ajuste abaixo o vencimento de cada um — só os que você mexer mudam."
+                    : ehPedido
+                    ? "A entrega toda atrasou? Informe quando vence o primeiro pagamento em aberto; os demais andam o mesmo tanto de dias, mantendo o intervalo combinado com o fornecedor."
                     : porItem
                     ? "A obra não começou na data registrada? Ajuste abaixo o começo e a conclusão de cada item — as parcelas em aberto acompanham."
                     : "A obra não começou na data registrada? Informe quando vence o primeiro pagamento; as parcelas em aberto andam junto, na mesma periodicidade."}
@@ -3442,12 +3462,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       onChange={e => abrirRecalibragem(e.target.value)}>
                       {alvosRecalibraveis.map(a => <option key={a.id} value={a.id}>{a.rotulo}</option>)}
                     </select>
-                    {ehPedido && (
+                    {(
                       <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                         {[["junto", "Todos os pagamentos"], ["uma", "Um pagamento só"]].map(([id, nome]) => (
                           <button key={id} type="button"
                             onClick={() => setFormRecalibrar({ ...formRecalibrar, modo: id,
-                              itens: datasDoPedido(contasDaObra, escolhido.id) })}
+                              pagamentos: pagamentosEmAberto(contasDaObra, escolhido.id, escolhido.tipo) })}
                             style={{ border: `1.5px solid ${formRecalibrar.modo === id ? AZUL_VK : "rgba(38,36,33,0.16)"}`,
                               background: "#fff", color: formRecalibrar.modo === id ? AZUL_VK : "#4b5563",
                               borderRadius: 20, padding: "6px 14px", fontSize: 12,
@@ -3458,14 +3478,14 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                       </div>
                     )}
                   </div>
-                  {((ehPedido && !umaAUma) || (!ehPedido && !porItem)) && (
+                  {!umaAUma && (ehPedido || !porItem) && (
                     <div>
                       <label style={C.label}>1º pagamento vence em</label>
                       <input style={C.input} type="date" value={formRecalibrar.novaData}
                         onChange={e => setFormRecalibrar({ ...formRecalibrar, novaData: e.target.value })} />
                     </div>
                   )}
-                  {!ehPedido && porItem && (
+                  {!umaAUma && !ehPedido && porItem && (
                     <div>
                       <label style={C.label}>Previsão de conclusão (padrão)</label>
                       <input style={C.input} type="date" value={formRecalibrar.previsaoConclusao || ""}
@@ -3477,16 +3497,16 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 {umaAUma && (
                   <div style={{ marginTop: 14 }}>
                     <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
-                      Pagamentos em aberto deste pedido. O que já foi pago não aparece — a data dele é fato consumado.
+                      Pagamentos em aberto {ehPedido ? "deste pedido" : "deste contrato"}. O que já foi pago não aparece — a data dele é fato consumado.
                     </div>
-                    {(formRecalibrar.itens || []).length === 0 ? (
-                      <div style={{ fontSize: 12, color: "#4b5563" }}>Nenhum pagamento em aberto neste pedido.</div>
-                    ) : (formRecalibrar.itens || []).map((it, i) => (
+                    {(formRecalibrar.pagamentos || []).length === 0 ? (
+                      <div style={{ fontSize: 12, color: "#4b5563" }}>Nenhum pagamento em aberto {ehPedido ? "neste pedido" : "neste contrato"}.</div>
+                    ) : (formRecalibrar.pagamentos || []).map((it, i) => (
                       <div key={it.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 170px", gap: 8, marginBottom: 8, alignItems: "center" }}>
                         <span style={{ fontSize: 12.5, color: "#111827" }}>{it.descricao || `Pagamento ${i + 1}`}</span>
                         <input style={C.input} type="date" value={it.vencimento || ""}
                           onChange={e => setFormRecalibrar({ ...formRecalibrar,
-                            itens: (formRecalibrar.itens || []).map((x, j) => j === i ? { ...x, vencimento: e.target.value } : x) })} />
+                            pagamentos: (formRecalibrar.pagamentos || []).map((x, j) => j === i ? { ...x, vencimento: e.target.value } : x) })} />
                       </div>
                     ))}
                   </div>
@@ -3494,7 +3514,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
 
                 {/* Pagamento item a item: cada item tem o seu próprio começo e
                     a sua própria conclusão — é item a item que se recalibra. */}
-                {!ehPedido && porItem && (
+                {!umaAUma && !ehPedido && porItem && (
                   <div style={{ marginTop: 14 }}>
                     <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
                       Este contrato paga entrada na liberação de cada item e o saldo na conclusão dele, então a recalibragem é item a item.
@@ -3553,10 +3573,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 })()}
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
                   {previa.pagas > 0 ? `${previa.pagas} parcela${previa.pagas === 1 ? "" : "s"} já paga${previa.pagas === 1 ? "" : "s"} fica${previa.pagas === 1 ? "" : "m"} como está${previa.pagas === 1 ? "" : "ão"}. ` : ""}
-                  {ehPedido
-                    ? (umaAUma
+                  {umaAUma
+                    ? (ehPedido
                         ? "Só os pagamentos cuja data você mudou se movem; os demais ficam onde estão."
-                        : "As contas em aberto deste pedido andam junto; o que já foi pago fica onde está.")
+                        : "Só os pagamentos cuja data você mudou se movem. Eles passam a ser exceções à regra do contrato — recalibrar todos, depois, refaz o calendário e desfaz as exceções.")
+                    : ehPedido
+                    ? "As contas em aberto deste pedido andam junto; o que já foi pago fica onde está."
                     : porItem
                     ? "Cada item passa a ter o seu próprio começo e a sua própria conclusão; item sem conclusão própria usa a previsão padrão acima."
                     : "O contrato passa a dizer que a primeira parcela vence nesta data."}
@@ -3757,6 +3779,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
       contaGeradaId: novas[0].id,
       lancadoEm: dados.lancadoEm || new Date().toISOString(),
       lancadoPor: dados.lancadoPor || "",
+      // o acerto fica na cotação; as contas são a execução dele
+      pagamento: planoDoLancamento({ ...dados, numeroPedido }),
     }));
     const atualizada = { ...obraAtual, contasPagar: [...(obraAtual.contasPagar || []), ...novas], cotacoes };
     gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));

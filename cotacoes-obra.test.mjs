@@ -53,7 +53,8 @@ const modulo = new Function(`
            aprovacaoDaEscolha, podeEnviarAoCliente, enviarCotacaoAoCliente,
            limparEnvioAoCliente, cotacoesProntasParaContrato, textoUtf8Recuperado,
            podeLancarEmContas, dadosDoLancamento, contasDaCotacao, removerContasDaCotacao, contasDeCotacao,
-           contasDasEntregas, totalDasEntregas, entregaVazia, MODOS_LANCAMENTO, modoLancamento };
+           contasDasEntregas, totalDasEntregas, entregaVazia, MODOS_LANCAMENTO, modoLancamento,
+           planoDoLancamento, linhasDoPagamento, resumoDoPlano };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -699,6 +700,83 @@ teste("o print colado ganha nome com data", () => {
 });
 
 let falhas = 0;
+// ── O acerto fica gravado na cotação ────────────────────────────
+
+const dadosEntregas = () => ({
+  cotacaoId: "c1", obraId: "o1", descricao: "Aço Vergalhões", valor: 9690, modo: "entregas",
+  lancadoEm: "2026-09-20T12:00:00.000Z", lancadoPor: "Renato",
+  entregas: [
+    { descricao: "1ª entrega — baldrame", valor: "3.200,00", vencimento: "2026-10-05" },
+    { descricao: "2ª entrega — colunas", valor: "2.490,00", vencimento: "2026-11-05" },
+    { descricao: "", valor: "", vencimento: "" },
+  ],
+});
+
+teste("o plano guarda as entregas com valor, sem as linhas vazias", () => {
+  const p = M.planoDoLancamento(dadosEntregas());
+  assert.strictEqual(p.modo, "entregas");
+  assert.strictEqual(p.entregas.length, 2, "linha sem valor não é entrega");
+  assert.deepStrictEqual(p.entregas[0], { descricao: "1ª entrega — baldrame", valor: 3200, vencimento: "2026-10-05" });
+  assert.strictEqual(p.definidoPor, "Renato");
+});
+
+teste("fora de entregas o plano guarda a regra, não uma lista", () => {
+  const p = M.planoDoLancamento({ valor: 12000, modo: "sinalParcelas", parcelas: 3, sinalPct: 40,
+    primeiroVencimento: "2026-10-05", vencimentoSaldo: "2026-11-05" });
+  assert.strictEqual(p.sinalPct, 40);
+  assert.strictEqual(p.parcelas, 3);
+  assert.strictEqual(p.entregas, undefined);
+  assert.strictEqual(M.resumoDoPlano(p), "sinal de 40% e saldo em 3x");
+});
+
+teste("a tabelinha vem das contas quando elas existem — é lá que a data anda", () => {
+  const plano = M.planoDoLancamento(dadosEntregas());
+  const cot = { id: "c1", titulo: "Aço Vergalhões", pagamento: plano };
+  const contas = [
+    { id: "a", cotacaoId: "c1", descricao: "1ª entrega — baldrame", valor: 3200, vencimento: "2026-10-05", pago: true, pagoEm: "2026-10-03", valorPago: 3150 },
+    { id: "b", cotacaoId: "c1", descricao: "2ª entrega — colunas", valor: 2490, vencimento: "2026-11-25" },
+    { id: "z", cotacaoId: "outra", descricao: "de outra compra", valor: 100, vencimento: "2026-10-01" },
+  ];
+  const r = M.linhasDoPagamento(cot, contas, "2026-12-01");
+  assert.strictEqual(r.fonte, "contas");
+  assert.strictEqual(r.linhas.length, 2, "conta de outra cotação não entra");
+  assert.strictEqual(r.linhas[0].valor, 3150, "pago mostra o que saiu de verdade");
+  assert.strictEqual(r.linhas[1].vencimento, "2026-11-25", "a data recalibrada aparece aqui");
+  assert.strictEqual(r.linhas[1].vencida, true);
+});
+
+teste("a linha não repete o nome da compra dentro da própria cotação", () => {
+  const cot = { id: "c1", titulo: "Aço Vergalhões" };
+  const contas = [
+    { id: "a", cotacaoId: "c1", descricao: "Aço Vergalhões — 1ª entrega", valor: 10, vencimento: "2026-10-05" },
+    { id: "b", cotacaoId: "c1", descricao: "Cimento — saldo", valor: 10, vencimento: "2026-10-06" },
+    { id: "c", cotacaoId: "c1", descricao: "Aço Vergalhões", valor: 10, vencimento: "2026-10-07" },
+  ];
+  assert.deepStrictEqual(M.linhasDoPagamento(cot, contas, "2026-09-01").linhas.map(l => l.descricao),
+    ["1ª entrega", "Cimento — saldo", "Aço Vergalhões"]);
+});
+
+teste("sem contas, o acerto registrado continua na tela", () => {
+  const cot = { id: "c1", titulo: "Aço", pagamento: M.planoDoLancamento(dadosEntregas()) };
+  const r = M.linhasDoPagamento(cot, [], "2026-09-20");
+  assert.strictEqual(r.fonte, "plano");
+  assert.deepStrictEqual(r.linhas.map(l => l.descricao), ["1ª entrega — baldrame", "2ª entrega — colunas"]);
+});
+
+teste("cotação sem plano e sem contas não mostra quadro nenhum", () => {
+  assert.deepStrictEqual(M.linhasDoPagamento({ id: "c1" }, [], "2026-09-20").linhas, []);
+});
+
+teste("relançar volta com o que foi combinado da última vez", () => {
+  const cot = { ...M.cotacaoVazia("o1"), id: "c1", titulo: "Aço",
+    propostas: [{ id: "p1", favorecido: "Ferro Pronto", valor: 9690, prazoDias: 7 }], escolhidaId: "p1",
+    pagamento: M.planoDoLancamento(dadosEntregas()) };
+  const d = M.dadosDoLancamento(cot);
+  assert.strictEqual(d.modo, "entregas");
+  assert.strictEqual(d.entregas.length, 2);
+  assert.strictEqual(d.entregas[0].descricao, "1ª entrega — baldrame");
+});
+
 for (const [nome, fn] of testes) {
   try { fn(); console.log("  ok   " + nome); }
   catch (e) { falhas++; console.log("  FALHOU " + nome + "\n         " + e.message); }
