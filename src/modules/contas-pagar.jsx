@@ -1137,6 +1137,75 @@ function recalibrarPedido(contas, cotacaoId, novaData, quem, agoraIso) {
   });
 }
 
+// ── Um pagamento só, em vez do pedido inteiro ───────────────────
+// Escorregar tudo junto serve quando a obra atrasou e a entrega toda foi
+// junto. Não serve quando UMA entrega atrasou: aí as outras continuam no dia
+// combinado, e mover todas seria reescrever um acerto que ninguém desfez.
+// Então a telinha tem os dois caminhos, e este é o segundo — cada conta em
+// aberto com a data dela.
+function datasDoPedido(contas, cotacaoId) {
+  return contasDoPedido(contas, cotacaoId)
+    .filter((c) => !c.pago)
+    .map((c) => ({ id: c.id, descricao: c.descricao || "", vencimento: c.vencimento || "" }));
+}
+
+function recalibrarContasDoPedido(contas, datas, quem, agoraIso) {
+  const porId = {};
+  for (const d of datas || []) {
+    if (d && d.id && d.vencimento) porId[d.id] = String(d.vencimento).slice(0, 10);
+  }
+  const agora = agoraIso || new Date().toISOString();
+  return (contas || []).map((c) => {
+    // conta paga não se mexe, e data igual não é mudança nenhuma
+    if (!c || c.pago || !porId[c.id] || porId[c.id] === c.vencimento) return c;
+    const movida = { ...c, vencimento: porId[c.id] };
+    return quem
+      ? registrarAto(movida, "recalibrada", quem, agora,
+          `${cpDiaBR(c.vencimento)} → ${cpDiaBR(movida.vencimento)}`)
+      : movida;
+  });
+}
+
+function previaDatasDoPedido(contas, cotacaoId, datas, limite) {
+  const antes = contasDoPedido(contas, cotacaoId);
+  const depois = contasDoPedido(recalibrarContasDoPedido(contas, datas), cotacaoId);
+  const porId = {};
+  for (const c of antes) porId[c.id] = c.vencimento;
+  const linhas = [];
+  let pagas = 0;
+  for (const c of depois) {
+    if (c.pago) { pagas++; continue; }
+    linhas.push({ id: c.id, descricao: c.descricao, de: porId[c.id] || "", para: c.vencimento });
+    if (limite && linhas.length >= limite) break;
+  }
+  return { linhas, pagas, total: depois.length };
+}
+
+// ── Pedido lançado antes de existir número ──────────────────────
+// A numeração compartilhada com o contrato chegou depois, e quem já tinha
+// lançado ficou com um pedido sem número: na lista ele aparece pelo nome do
+// fornecedor, e dois pedidos para o MESMO fornecedor viram dois itens
+// idênticos, impossíveis de distinguir. Então o número é atribuído na
+// primeira vez que a tela abre, seguindo a fila de sempre, e desce para as
+// contas que já tinham nascido dele.
+function numerarPedidosAntigos(obra, obras) {
+  const cots = (obra && obra.cotacoes) || [];
+  const faltando = cots.filter((c) => c && c.contaGeradaId && !c.numeroPedido);
+  if (!faltando.length) return null;
+  let n = parseInt(String(proximoNumeroDoc(obras)).replace(/\D/g, ""), 10);
+  if (!Number.isFinite(n)) n = 1;
+  const novos = {};
+  for (const c of faltando) { novos[c.id] = String(n).padStart(4, "0"); n++; }
+  return {
+    ...obra,
+    cotacoes: cots.map((c) => (novos[c.id] ? { ...c, numeroPedido: novos[c.id] } : c)),
+    contasPagar: ((obra && obra.contasPagar) || []).map((x) =>
+      x && x.cotacaoId && novos[x.cotacaoId] && !x.numeroPedido
+        ? { ...x, numeroPedido: novos[x.cotacaoId] }
+        : x),
+  };
+}
+
 // A prévia do que vai mudar, no mesmo formato da do contrato.
 function previaDoPedido(contas, cotacaoId, novaData, limite) {
   const antes = contasDoPedido(contas, cotacaoId);

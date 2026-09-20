@@ -49,8 +49,9 @@ const modulo = new Function(`
            proximoNumeroContrato, servicoDoContrato, fluxoMensal,
            registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS,
            CP_MAX_REGISTROS,
-           datasDoPedido, recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos,
-           proximoNumeroDoc };
+           recalibrarContasDoPedido, previaDatasDoPedido, numerarPedidosAntigos,
+           pagamentosEmAberto, ajustarVencimentos, limparAjustes, ajustesDoContrato,
+           previaAjusteContrato, proximoNumeroDoc };
 `)();
 
 let passou = 0, falhou = 0;
@@ -1268,17 +1269,17 @@ teste("a parcela em aberto do contrato não perde o histórico na ressincronia",
 
 // ── Recalibrar um pagamento só ──────────────────────────────────
 
-teste("as datas em aberto do pedido saem em ordem, sem as pagas", () => {
+teste("os pagamentos em aberto do pedido saem em ordem, sem os pagos", () => {
   const contas = pedidoContas();
   contas[0].pago = true;
-  const d = modulo.datasDoPedido(contas, "ct1");
+  const d = modulo.pagamentosEmAberto(contas, "ct1", "pedido");
   assert.strictEqual(d.length, 2);
   assert.deepStrictEqual(d.map(x => x.vencimento), ["2026-11-10", "2026-12-05"]);
 });
 
 teste("mexer numa data move só aquela conta", () => {
   const contas = pedidoContas();
-  const datas = modulo.datasDoPedido(contas, "ct1");
+  const datas = modulo.pagamentosEmAberto(contas, "ct1", "pedido");
   datas[1].vencimento = "2026-11-30";
   const r = modulo.recalibrarContasDoPedido(contas, datas, "Renato", "2026-09-20T12:00:00.000Z");
   const doPedido = r.filter(c => c.cotacaoId === "ct1");
@@ -1296,7 +1297,7 @@ teste("conta paga não se move nem quando a data é informada", () => {
 
 teste("a prévia data a data mostra o que ficou parado como parado", () => {
   const contas = pedidoContas();
-  const datas = modulo.datasDoPedido(contas, "ct1");
+  const datas = modulo.pagamentosEmAberto(contas, "ct1", "pedido");
   datas[0].vencimento = "2026-10-20";
   const p = modulo.previaDatasDoPedido(contas, "ct1", datas, 8);
   assert.deepStrictEqual(p.linhas.map(l => [l.de, l.para]),
@@ -1327,6 +1328,85 @@ teste("cotação sem conta gerada, ou já numerada, não é tocada", () => {
   const obra = { id: "o1", contratos: [], contasPagar: [],
     cotacoes: [{ id: "ct1", contaGeradaId: "", }, { id: "ct2", contaGeradaId: "b", numeroPedido: "0009" }] };
   assert.strictEqual(modulo.numerarPedidosAntigos(obra, [obra]), null, "nada a fazer, nada se grava");
+});
+
+// ── Uma parcela do contrato fora da régua ───────────────────────
+
+const ctBase = () => base({ valor: 12000, parcelas: 3, periodicidade: "mensais", primeiroVencimento: "2026-10-05" });
+
+teste("o ajuste vence a regra na parcela ajustada, e só nela", () => {
+  const ct = ctBase();
+  const antes = modulo.contasDoContrato(ct).map(c => c.vencimento);
+  const ajustado = modulo.ajustarVencimentos(ct, [{ id: `${ct.id}:2`, vencimento: "2026-11-25" }]);
+  const depois = modulo.contasDoContrato(ajustado);
+  assert.strictEqual(depois[0].vencimento, antes[0]);
+  assert.strictEqual(depois[1].vencimento, "2026-11-25");
+  assert.strictEqual(depois[2].vencimento, antes[2]);
+  assert.strictEqual(depois[1].ajustada, true);
+});
+
+teste("o ajuste sobrevive à ressincronização — é para isso que ele mora no contrato", () => {
+  const ct = ctBase();
+  const ajustado = modulo.ajustarVencimentos(ct, [{ id: `${ct.id}:2`, vencimento: "2026-11-25" }]);
+  const contas = modulo.contasDoContrato(ajustado);
+  const sync = modulo.sincronizarContasDoContrato(contas, ajustado);
+  assert.strictEqual(sync.find(c => c.id === `${ct.id}:2`).vencimento, "2026-11-25");
+});
+
+teste("data igual à da regra não vira exceção, e exceção desfeita some", () => {
+  const ct = ctBase();
+  const daRegra = modulo.contasDoContrato(ct).map(c => ({ id: c.id, vencimento: c.vencimento }));
+  assert.deepStrictEqual(modulo.ajustesDoContrato(modulo.ajustarVencimentos(ct, daRegra)), {},
+    "mandar as datas da própria regra não anota exceção nenhuma");
+  const mexido = modulo.ajustarVencimentos(ct, [{ id: `${ct.id}:2`, vencimento: "2026-11-25" }]);
+  assert.deepStrictEqual(Object.keys(modulo.ajustesDoContrato(mexido)), [`${ct.id}:2`], "só a que mudou");
+  const desfeito = modulo.ajustarVencimentos(mexido, [{ id: `${ct.id}:2`, vencimento: daRegra[1].vencimento }]);
+  assert.deepStrictEqual(modulo.ajustesDoContrato(desfeito), {}, "voltou para a regra, deixa de ser exceção");
+});
+
+teste("a parcela não ajustada continua seguindo a regra quando o contrato muda", () => {
+  const ct = ctBase();
+  const ajustado = modulo.ajustarVencimentos(ct, [{ id: `${ct.id}:2`, vencimento: "2026-11-25" }]);
+  const outro = { ...ajustado, primeiroVencimento: "2026-10-20" };
+  const contas = modulo.contasDoContrato(outro);
+  assert.strictEqual(contas[0].vencimento, "2026-10-20", "a 1ª acompanhou o contrato");
+  assert.strictEqual(contas[1].vencimento, "2026-11-25", "a exceção continua sendo exceção");
+  assert.strictEqual(contas[2].vencimento, "2026-12-20", "a 3ª acompanhou o contrato");
+});
+
+teste("recalibrar o contrato inteiro apaga as exceções do calendário antigo", () => {
+  const ct = modulo.ajustarVencimentos(ctBase(), [{ id: "x:2", vencimento: "2026-11-25" }]);
+  assert.ok(Object.keys(modulo.ajustesDoContrato(ct)).length);
+  assert.deepStrictEqual(modulo.ajustesDoContrato(modulo.limparAjustes(ct)), {});
+});
+
+teste("a prévia do ajuste do contrato mostra parado como parado", () => {
+  const ct = ctBase();
+  const contas = modulo.contasDoContrato(ct);
+  const p = modulo.previaAjusteContrato(ct, contas, [{ id: `${ct.id}:3`, vencimento: "2026-12-20" }], 8);
+  assert.strictEqual(p.linhas.length, 3);
+  assert.strictEqual(p.linhas[0].de, p.linhas[0].para);
+  assert.strictEqual(p.linhas[2].para, "2026-12-20");
+});
+
+teste("parcela paga não entra na lista nem na prévia do ajuste", () => {
+  const ct = ctBase();
+  const contas = modulo.contasDoContrato(ct).map((c, i) => i === 0 ? { ...c, pago: true } : c);
+  assert.deepStrictEqual(modulo.pagamentosEmAberto(contas, ct.id, "contrato").map(p => p.id),
+    [`${ct.id}:2`, `${ct.id}:3`]);
+  const p = modulo.previaAjusteContrato(ct, contas, [], 8);
+  assert.strictEqual(p.pagas, 1);
+  assert.strictEqual(p.linhas.length, 2);
+});
+
+teste("o dia no registro não escorrega para a véspera em fuso negativo", () => {
+  const antes = process.env.TZ;
+  process.env.TZ = "America/Sao_Paulo";
+  const contas = pedidoContas();
+  const r = modulo.recalibrarPedido(contas, "ct1", "2026-10-12", "Renato", "2026-09-20T12:00:00.000Z");
+  const ato = modulo.ultimoAto(r.find(c => c.cotacaoId === "ct1"), "recalibrada");
+  process.env.TZ = antes;
+  assert.strictEqual(ato.detalhe, "02/10/2026 → 12/10/2026");
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);
