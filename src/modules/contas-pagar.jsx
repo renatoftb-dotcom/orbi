@@ -456,8 +456,58 @@ function contaAvulsaVazia(obraId) {
 // que o lançamento se desfaz inteiro, se for o caso.
 const CP_ORIGEM_COTACAO = "cotacao";
 
+function entregaVazia() { return { descricao: "", valor: "", vencimento: "" }; }
+
+// O campo da entrega é digitado à mão, em português: "9.690,00" tem que valer
+// o mesmo que 9690. É o mesmo parser que lê o valor das propostas.
+function valorDaEntrega(e) {
+  const v = (e || {}).valor;
+  if (typeof numeroDeCampo === "function") return numeroDeCampo(v);
+  const n = parseFloat(String(v == null ? "" : v).replace(/\./g, "").replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
+// Entrega parcelada NÃO é parcela: cada entrega tem nome, valor próprio e
+// data própria, e o fornecedor recebe na entrega. Uma conta por linha, com o
+// nome da entrega na descrição — é assim que a obra reconhece o pagamento
+// quando o caminhão chega.
+function contasDasEntregas(dados, novoId) {
+  const d = dados || {};
+  const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
+  const hoje = dataParaIso(new Date());
+  const linhas = (d.entregas || []).filter((e) => e && valorDaEntrega(e) > 0);
+  return linhas.map((e, i) => ({
+    id: id(),
+    origem: CP_ORIGEM_COTACAO,
+    obraId: d.obraId || "",
+    contratoId: "",
+    cotacaoId: d.cotacaoId || "",
+    parcela: linhas.length > 1 ? i + 1 : 0,
+    parcelasTotal: linhas.length > 1 ? linhas.length : 0,
+    contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    prestadorId: d.prestadorId || "",
+    favorecido: d.favorecido || "",
+    descricao: [String(d.descricao || "Compra").trim(), String(e.descricao || "").trim()].filter(Boolean).join(" — ")
+               || `Entrega ${i + 1}`,
+    valor: Math.round(valorDaEntrega(e) * 100) / 100,
+    vencimento: String(e.vencimento || "").slice(0, 10) || hoje,
+    pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
+  }));
+}
+
+// Soma das entregas, para a tela poder avisar quando ela não fecha com o
+// valor cotado — divergir é permitido (entrega a mais, saldo negociado),
+// mas passar batido não.
+function totalDasEntregas(entregas) {
+  const soma = (entregas || []).reduce((s, e) => s + valorDaEntrega(e), 0);
+  return Math.round(soma * 100) / 100;
+}
+
 function contasDaCotacao(dados, novoId) {
   const d = dados || {};
+  if (d.modo === "entregas" || (d.entregas || []).some((e) => e && valorDaEntrega(e) > 0)) {
+    return contasDasEntregas(d, novoId);
+  }
   const total = Math.round((Number(d.valor) || 0) * 100) / 100;
   if (!(total > 0)) return [];
   const qtd = Math.max(1, Math.floor(Number(d.parcelas) || 1));

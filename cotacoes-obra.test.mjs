@@ -52,7 +52,8 @@ const modulo = new Function(`
            nomeDeQuem, carimbar, textoAutoria, arquivoColado, nomeDoColado,
            aprovacaoDaEscolha, podeEnviarAoCliente, enviarCotacaoAoCliente,
            limparEnvioAoCliente, cotacoesProntasParaContrato, textoUtf8Recuperado,
-           podeLancarEmContas, dadosDoLancamento, contasDaCotacao, removerContasDaCotacao, contasDeCotacao };
+           podeLancarEmContas, dadosDoLancamento, contasDaCotacao, removerContasDaCotacao, contasDeCotacao,
+           contasDasEntregas, totalDasEntregas, entregaVazia };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -312,6 +313,47 @@ teste("parcelar o lançamento divide o total e espaça os vencimentos", () => {
   assert.strictEqual(uma[0].descricao, "Cimento");
   assert.strictEqual(uma[0].parcela, 0);
   assert.strictEqual(M.contasDaCotacao({ valor: 0, parcelas: 1 }, () => "x").length, 0);
+});
+
+teste("entrega parcelada: cada uma com nome, valor e data própria", () => {
+  let n = 0;
+  const contas = M.contasDaCotacao({ cotacaoId: "ct1", obraId: "o1", contaId: "material",
+    favorecido: "Ferro Pronto", descricao: "Aço Vergalhões", valor: 9690, modo: "entregas",
+    entregas: [
+      { descricao: "1ª entrega — ferro do baldrame", valor: "3.200,00", vencimento: "2026-10-02" },
+      { descricao: "2ª entrega — ferro das colunas", valor: 2490, vencimento: "2026-11-10" },
+      { descricao: "3ª entrega — ferro da laje", valor: 4000, vencimento: "2026-12-05" },
+    ] }, () => "c" + (++n));
+  assert.strictEqual(contas.length, 3);
+  // valor digitado em português vale o mesmo que número
+  assert.strictEqual(contas[0].valor, 3200);
+  assert.deepStrictEqual(contas.map(c => c.vencimento), ["2026-10-02", "2026-11-10", "2026-12-05"]);
+  assert.strictEqual(contas[0].descricao, "Aço Vergalhões — 1ª entrega — ferro do baldrame");
+  for (const c of contas) { assert.strictEqual(c.cotacaoId, "ct1"); assert.strictEqual(c.favorecido, "Ferro Pronto"); }
+  // entrega sem valor não vira conta
+  const so2 = M.contasDaCotacao({ cotacaoId: "ct1", valor: 100, modo: "entregas", descricao: "X",
+    entregas: [{ descricao: "a", valor: 50 }, { descricao: "b", valor: "" }] }, () => "x");
+  assert.strictEqual(so2.length, 1);
+});
+
+teste("a soma das entregas pode divergir do cotado, e o total diz isso", () => {
+  const e = [{ valor: "3.200,00" }, { valor: 2490 }, { valor: 4000 }];
+  assert.strictEqual(M.totalDasEntregas(e), 9690);
+  assert.strictEqual(M.totalDasEntregas([{ valor: 100 }, { valor: "" }]), 100);
+  assert.strictEqual(M.totalDasEntregas([]), 0);
+  // entregas mandam mesmo sem o modo marcado — é o que tem valor que conta
+  const c = M.contasDaCotacao({ cotacaoId: "ct1", valor: 9690, parcelas: 3, descricao: "Aço",
+    entregas: [{ descricao: "única", valor: 9690, vencimento: "2026-10-02" }] }, () => "x");
+  assert.strictEqual(c.length, 1);
+  assert.strictEqual(c[0].valor, 9690);
+});
+
+teste("o lançamento nasce em parcelas, com a lista de entregas vazia", () => {
+  const cot = { ...comPropostas([9000]), escolhidaId: "p0", titulo: "Aço", contaId: "material" };
+  const d = M.dadosDoLancamento(cot);
+  assert.strictEqual(d.modo, "parcelas");
+  assert.deepStrictEqual(d.entregas, []);
+  assert.deepStrictEqual(M.entregaVazia(), { descricao: "", valor: "", vencimento: "" });
 });
 
 teste("desfazer o lançamento não apaga conta já paga", () => {

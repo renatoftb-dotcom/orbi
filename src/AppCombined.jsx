@@ -17537,8 +17537,58 @@ function contaAvulsaVazia(obraId) {
 // que o lançamento se desfaz inteiro, se for o caso.
 const CP_ORIGEM_COTACAO = "cotacao";
 
+function entregaVazia() { return { descricao: "", valor: "", vencimento: "" }; }
+
+// O campo da entrega é digitado à mão, em português: "9.690,00" tem que valer
+// o mesmo que 9690. É o mesmo parser que lê o valor das propostas.
+function valorDaEntrega(e) {
+  const v = (e || {}).valor;
+  if (typeof numeroDeCampo === "function") return numeroDeCampo(v);
+  const n = parseFloat(String(v == null ? "" : v).replace(/\./g, "").replace(",", "."));
+  return isNaN(n) ? 0 : n;
+}
+
+// Entrega parcelada NÃO é parcela: cada entrega tem nome, valor próprio e
+// data própria, e o fornecedor recebe na entrega. Uma conta por linha, com o
+// nome da entrega na descrição — é assim que a obra reconhece o pagamento
+// quando o caminhão chega.
+function contasDasEntregas(dados, novoId) {
+  const d = dados || {};
+  const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
+  const hoje = dataParaIso(new Date());
+  const linhas = (d.entregas || []).filter((e) => e && valorDaEntrega(e) > 0);
+  return linhas.map((e, i) => ({
+    id: id(),
+    origem: CP_ORIGEM_COTACAO,
+    obraId: d.obraId || "",
+    contratoId: "",
+    cotacaoId: d.cotacaoId || "",
+    parcela: linhas.length > 1 ? i + 1 : 0,
+    parcelasTotal: linhas.length > 1 ? linhas.length : 0,
+    contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    prestadorId: d.prestadorId || "",
+    favorecido: d.favorecido || "",
+    descricao: [String(d.descricao || "Compra").trim(), String(e.descricao || "").trim()].filter(Boolean).join(" — ")
+               || `Entrega ${i + 1}`,
+    valor: Math.round(valorDaEntrega(e) * 100) / 100,
+    vencimento: String(e.vencimento || "").slice(0, 10) || hoje,
+    pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
+  }));
+}
+
+// Soma das entregas, para a tela poder avisar quando ela não fecha com o
+// valor cotado — divergir é permitido (entrega a mais, saldo negociado),
+// mas passar batido não.
+function totalDasEntregas(entregas) {
+  const soma = (entregas || []).reduce((s, e) => s + valorDaEntrega(e), 0);
+  return Math.round(soma * 100) / 100;
+}
+
 function contasDaCotacao(dados, novoId) {
   const d = dados || {};
+  if (d.modo === "entregas" || (d.entregas || []).some((e) => e && valorDaEntrega(e) > 0)) {
+    return contasDasEntregas(d, novoId);
+  }
   const total = Math.round((Number(d.valor) || 0) * 100) / 100;
   if (!(total > 0)) return [];
   const qtd = Math.max(1, Math.floor(Number(d.parcelas) || 1));
@@ -18573,8 +18623,10 @@ function dadosDoLancamento(cot) {
     favorecido: esc.favorecido || "",
     descricao: String(c.titulo || "").trim() || "Compra",
     valor: valorProposta(esc),
+    modo: "parcelas",             // parcelas iguais | entregas nomeadas
     parcelas: 1,
     primeiroVencimento: prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : hoje,
+    entregas: [],
     observacao: esc.condicaoPagamento ? `Condição cotada: ${esc.condicaoPagamento}` : "",
   };
 }
@@ -19631,29 +19683,106 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
   const [f, setF] = useState(dados);
   const E = COT_ESTILO;
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
+  const porEntrega = f.modo === "entregas";
   const qtd = Math.max(1, Math.floor(Number(f.parcelas) || 1));
+  const entregas = f.entregas || [];
+  const setEntrega = (i, k, v) => setF(x => ({ ...x, entregas: (x.entregas || []).map((e, j) => j === i ? { ...e, [k]: v } : e) }));
+  const addEntrega = () => setF(x => {
+    const lista = x.entregas || [];
+    const ultima = lista[lista.length - 1];
+    return { ...x, entregas: lista.concat([{
+      descricao: `Entrega ${lista.length + 1}`,
+      valor: "",
+      vencimento: (ultima && ultima.vencimento) || x.primeiroVencimento || "",
+    }]) };
+  });
+  const delEntrega = (i) => setF(x => ({ ...x, entregas: (x.entregas || []).filter((_, j) => j !== i) }));
+  // Trocar para "por entrega" já abre a primeira linha com o valor cheio: o
+  // caso comum é a primeira entrega valer tudo e ele ir quebrando dali.
+  const trocarModo = (modo) => setF(x => ({
+    ...x, modo,
+    entregas: modo === "entregas" && !(x.entregas || []).length
+      ? [{ descricao: "Entrega 1", valor: x.valor, vencimento: x.primeiroVencimento || "" }]
+      : x.entregas,
+  }));
+
   const previa = contasDaCotacao({ ...f, parcelas: qtd }, () => "previa");
+  const somaEntregas = totalDasEntregas(entregas);
+  const diferenca = Math.round((somaEntregas - (Number(f.valor) || 0)) * 100) / 100;
   const contas = typeof PLANO_CONTAS !== "undefined" ? PLANO_CONTAS : [];
   const grupos = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
+  const podeLancar = previa.length > 0;
+
+  const opcao = (id, titulo, apoio) => (
+    <label key={id} style={{ display: "flex", gap: 8, alignItems: "flex-start", border: `1.5px solid ${f.modo === id ? "#0474f4" : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: "#fff" }}>
+      <input type="radio" name="cot-lanc-modo" checked={f.modo === id} onChange={() => trocarModo(id)} style={{ marginTop: 2, cursor: "pointer" }} />
+      <span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{titulo}</span>
+        <span style={{ display: "block", fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>{apoio}</span>
+      </span>
+    </label>
+  );
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20, zIndex: 60 }}>
-      <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto" }}>
+      <div style={{ background: "#fff", borderRadius: 16, padding: 20, width: "100%", maxWidth: 620, maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: "#111827", marginBottom: 6 }}>Lançar em contas a pagar</div>
         <div style={{ fontSize: 12.5, color: "#4b5563", marginBottom: 14 }}>
           {cotacao.titulo} — {f.favorecido || "fornecedor"}, {dinheiro(f.valor)}. Vai direto para contas a pagar, sem contrato e sem esperar o aval do cliente.
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-          <div>
-            <label style={E.label}>Parcelas</label>
-            <input style={E.input} type="number" min="1" value={f.parcelas}
-              onChange={e => set("parcelas", e.target.value)} />
-          </div>
-          <div>
-            <label style={E.label}>Primeiro vencimento</label>
-            <input style={E.input} type="date" value={f.primeiroVencimento || ""}
-              onChange={e => set("primeiroVencimento", e.target.value)} />
-          </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
+          {opcao("parcelas", "Parcelas iguais", "Divide o valor cotado em parcelas mensais.")}
+          {opcao("entregas", "Por entrega", "Cada entrega com nome, valor e data de pagamento.")}
         </div>
+
+        {!porEntrega && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={E.label}>Parcelas</label>
+              <input style={E.input} type="number" min="1" value={f.parcelas}
+                onChange={e => set("parcelas", e.target.value)} />
+            </div>
+            <div>
+              <label style={E.label}>Primeiro vencimento</label>
+              <input style={E.input} type="date" value={f.primeiroVencimento || ""}
+                onChange={e => set("primeiroVencimento", e.target.value)} />
+            </div>
+          </div>
+        )}
+
+        {porEntrega && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 130px 150px 34px", gap: 8, marginBottom: 4 }}>
+              <span style={E.label}>Entrega</span>
+              <span style={E.label}>Valor</span>
+              <span style={E.label}>Pagamento</span>
+              <span />
+            </div>
+            {entregas.map((e, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 130px 150px 34px", gap: 8, marginBottom: 6, alignItems: "center" }}>
+                <input style={E.input} value={e.descricao || ""} placeholder={`Entrega ${i + 1}`}
+                  onChange={(ev) => setEntrega(i, "descricao", ev.target.value)} />
+                <input style={E.input} inputMode="decimal" value={e.valor === "" || e.valor == null ? "" : e.valor}
+                  placeholder="0,00" onChange={(ev) => setEntrega(i, "valor", ev.target.value)} />
+                <input style={E.input} type="date" value={e.vencimento || ""}
+                  onChange={(ev) => setEntrega(i, "vencimento", ev.target.value)} />
+                <button type="button" onClick={() => delEntrega(i)}
+                  style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", fontFamily: "inherit", fontSize: 16 }}>×</button>
+              </div>
+            ))}
+            <button type="button" style={{ ...E.btnSec, marginTop: 4 }} onClick={addEntrega}>＋ Adicionar entrega</button>
+            {entregas.length > 0 && (
+              <div style={{ fontSize: 11.5, marginTop: 8, color: Math.abs(diferenca) < 0.005 ? "#4b5563" : "#b45309" }}>
+                Soma das entregas: <strong style={{ color: "#111827" }}>{dinheiro(somaEntregas)}</strong>
+                {Math.abs(diferenca) < 0.005
+                  ? " — fecha com o valor cotado."
+                  : ` — ${diferenca > 0 ? "acima" : "abaixo"} do cotado em ${dinheiro(Math.abs(diferenca))}. Dá para lançar assim mesmo, se foi o combinado.`}
+              </div>
+            )}
+          </div>
+        )}
+
         <div style={{ marginBottom: 12 }}>
           <label style={E.label}>Conta do P&L</label>
           <select style={{ ...E.input, cursor: "pointer" }} value={f.contaId} onChange={e => set("contaId", e.target.value)}>
@@ -19668,22 +19797,31 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
           <label style={E.label}>Observação</label>
           <input style={E.input} value={f.observacao || ""} onChange={e => set("observacao", e.target.value)} />
         </div>
-        {previa.length > 0 && (
+
+        {previa.length > 0 ? (
           <div style={{ border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, padding: "8px 10px", marginBottom: 16, fontSize: 12, color: "#4b5563" }}>
             <div style={{ fontWeight: 600, color: "#111827", marginBottom: 4 }}>
-              {previa.length === 1 ? "1 conta" : `${previa.length} contas`} a gerar
+              {previa.length === 1 ? "1 conta a gerar" : `${previa.length} contas a gerar`}
             </div>
-            {previa.slice(0, 6).map((c, i) => (
+            {previa.slice(0, 8).map((c, i) => (
               <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                <span>{c.vencimento.split("-").reverse().join("/")}</span>
-                <span style={{ color: "#111827" }}>{dinheiro(c.valor)}</span>
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {c.vencimento.split("-").reverse().join("/")}{porEntrega ? ` · ${c.descricao}` : ""}
+                </span>
+                <span style={{ color: "#111827", whiteSpace: "nowrap" }}>{dinheiro(c.valor)}</span>
               </div>
             ))}
-            {previa.length > 6 && <div style={{ marginTop: 3 }}>… e mais {previa.length - 6}</div>}
+            {previa.length > 8 && <div style={{ marginTop: 3 }}>… e mais {previa.length - 8}</div>}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11.5, color: "#b45309", marginBottom: 16 }}>
+            {porEntrega ? "Dê um valor a pelo menos uma entrega." : "A proposta escolhida está sem valor."}
           </div>
         )}
+
         <div style={{ display: "flex", gap: 10 }}>
-          <button style={E.btn} onClick={() => onConfirmar({ ...f, parcelas: qtd })}>Lançar</button>
+          <button style={{ ...E.btn, opacity: podeLancar ? 1 : 0.45, cursor: podeLancar ? "pointer" : "not-allowed" }}
+            disabled={!podeLancar} onClick={() => onConfirmar({ ...f, parcelas: qtd })}>Lançar</button>
           <button style={E.btnSec} onClick={onFechar}>Cancelar</button>
         </div>
       </div>
