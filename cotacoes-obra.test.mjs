@@ -17,6 +17,8 @@ const cpSrc = mod("contas-pagar.jsx");
 const corteCp = (() => { const i = cpSrc.indexOf("// UI — gráfico do fluxo mensal");
   if (i < 0) throw new Error("Marcador de início da UI não encontrado em contas-pagar.jsx");
   return cpSrc.lastIndexOf("// ═", i); })();
+const insSrc = mod("insumos.jsx");
+const corteIns = insSrc.lastIndexOf("// ═", insSrc.indexOf("// CÓDIGO"));
 const cotSrc = mod("cotacoes-obra.jsx");
 const corteCot = cotSrc.indexOf("// UI — bloco de cotações da obra");
 if (corteCot < 0) throw new Error("Marcador de início da UI não encontrado em cotacoes-obra.jsx");
@@ -40,6 +42,8 @@ const modulo = new Function(`
   ${cronoSrc.slice(0, corteCrono)}
   ${contratosSrc.slice(0, corteCtr)}
   ${cpSrc.slice(0, corteCp)}
+  var INSUMO_GRUPOS = [];
+  ${insSrc.slice(0, corteIns)}
   ${cotSrc.slice(0, cotSrc.lastIndexOf("// ═", corteCot))}
   return { cotacaoVazia, propostaVazia, valorProposta, propostasOrdenadas, propostaPorId,
            propostaEscolhida, melhorProposta, economiaDaCotacao,
@@ -60,7 +64,9 @@ const modulo = new Function(`
            melhorPorItem, comparativoDaLista, textoDoPedido, qtdBR,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
            precoEfetivo, totalNegociado, descontoDaProposta,
-           linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir };
+           linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
+           interpretarPedido, interpretarLinhaDePedido, quantidadeDoTexto, resumoDaLeitura,
+           itemDoPedidoLido, resolverInsumo };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1053,6 +1059,113 @@ teste("loja sem telefone aparece, mas sem link", () => {
   const forn = [{ id: "f1", nome: "Sem Fone", ativo: true, telefone: "" }];
   const [l] = M.lojasParaPedir(forn, M.cotacaoVazia("o1"), "");
   assert.strictEqual(l.link, "", "a loja continua visível para você cadastrar o telefone");
+});
+
+// ── Ler o recado do pedreiro ────────────────────────────────────
+
+const catalogo = [
+  { id: "m1", codigo: "CIM-001", nome: "Cimento CP-II 50kg", unidade: "Unidades", tipo: "material", aliases: ["Sacos de cimento 50kg", "Cimento"] },
+  { id: "m2", codigo: "MAD-014", nome: "Madeira Caixaria - Tábuas de 30cm x 3mts", unidade: "Unidades", tipo: "material", aliases: [] },
+  { id: "m3", codigo: "AGR-001", nome: "Areia Fina", unidade: "m3", tipo: "material", aliases: [] },
+  { id: "m5", codigo: "ACO-001", nome: "Aço - Barras de CA50 10.0mm 12mts", unidade: "Unidades", tipo: "material", aliases: [] },
+  { id: "m7", codigo: "FER-003", nome: "Prego 17x27", unidade: "kg", tipo: "material", aliases: [] },
+  { id: "p1", codigo: "PRE-001", nome: "Pedreiro", unidade: "m2", tipo: "prestador", aliases: [] },
+];
+
+teste("quantidade sai do começo da linha, com a embalagem fora da descrição", () => {
+  const l = M.interpretarLinhaDePedido("10 sacos de cimento");
+  assert.strictEqual(l.quantidade, 10);
+  assert.strictEqual(l.unidade, "sacos");
+  assert.strictEqual(l.termo, "cimento", "o 'de' da embalagem também sai");
+});
+
+teste("fração e 'meio' viram número", () => {
+  assert.strictEqual(M.quantidadeDoTexto("1/2"), 0.5);
+  assert.strictEqual(M.quantidadeDoTexto("meia"), 0.5);
+  assert.strictEqual(M.quantidadeDoTexto("2,5"), 2.5);
+  assert.strictEqual(M.interpretarLinhaDePedido("1/2 m3 de areia fina").quantidade, 0.5);
+});
+
+teste("marcador de lista some, mas 2.5 não vira 5", () => {
+  assert.strictEqual(M.interpretarLinhaDePedido("- 30 tabuas de 30cm").quantidade, 30);
+  assert.strictEqual(M.interpretarLinhaDePedido("1) 4 sacos de cal").quantidade, 4);
+  assert.strictEqual(M.interpretarLinhaDePedido("2.5 m3 de areia").quantidade, 2.5);
+});
+
+teste("número no fim também é quantidade", () => {
+  const l = M.interpretarLinhaDePedido("argamassa ac 3  5");
+  assert.strictEqual(l.quantidade, 5);
+  assert.strictEqual(l.termo, "argamassa ac 3");
+});
+
+teste("medida colada no material não vira quantidade", () => {
+  // "10mm" é especificação, não quantidade — quem manda é o 20 do começo
+  const l = M.interpretarLinhaDePedido("20 barras de ca50 10mm");
+  assert.strictEqual(l.quantidade, 20);
+  assert.match(l.termo, /ca50 10mm/);
+  // sem número no começo e sem unidade, não se inventa quantidade
+  const s = M.interpretarLinhaDePedido("tabuas de 30cm x 3mts");
+  assert.strictEqual(s.quantidade, "", "chutar quantidade é pior que perguntar");
+});
+
+teste("a conversa em volta não vira item", () => {
+  const r = M.interpretarPedido("Bom dia Renato\npreciso do material pra semana:\n10 sacos de cimento\nobrigado", catalogo);
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r[0].insumo.codigo, "CIM-001");
+});
+
+teste("mas saudação com quantidade continua sendo pedido", () => {
+  const r = M.interpretarPedido("preciso de 10 sacos de cimento", catalogo);
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r[0].quantidade, 10);
+});
+
+teste("acerto por apelido entra resolvido; parecido entra como sugestão", () => {
+  const r = M.interpretarPedido("10 sacos de cimento\n20 barras de ca50 10mm\n2 latas de massa corrida", catalogo);
+  assert.strictEqual(r[0].confianca, "alias");
+  assert.strictEqual(r[0].insumo.nome, "Cimento CP-II 50kg");
+  assert.strictEqual(r[1].insumo, null, "parecido NÃO é vinculado sozinho");
+  assert.strictEqual(r[1].confianca, "sugestao");
+  assert.strictEqual(r[1].candidatos[0].codigo, "ACO-001");
+  assert.strictEqual(r[2].confianca, "nenhum", "o que não existe no catálogo entra solto");
+  assert.strictEqual(r[2].termo, "massa corrida");
+});
+
+teste("prestador de serviço não entra na leitura de material", () => {
+  assert.strictEqual(M.interpretarPedido("1 pedreiro", catalogo).length, 1);
+  assert.strictEqual(M.interpretarPedido("1 pedreiro", catalogo)[0].insumo, null);
+});
+
+teste("o resumo conta o que foi achado e o que falta decidir", () => {
+  const r = M.interpretarPedido("10 sacos de cimento\n20 barras de ca50 10mm\n2 latas de massa corrida\ncal hidratada", catalogo);
+  const res = M.resumoDaLeitura(r);
+  assert.strictEqual(res.total, 4);
+  assert.strictEqual(res.achados, 1);
+  assert.strictEqual(res.sugeridos, 1);
+  assert.strictEqual(res.soltos, 2);
+  assert.strictEqual(res.semQuantidade, 1);
+});
+
+teste("a linha lida vira item: insumo manda no nome e na unidade", () => {
+  const [c] = M.interpretarPedido("10 sacos de cimento", catalogo);
+  const it = M.itemDoPedidoLido(c);
+  assert.strictEqual(it.descricao, "Cimento CP-II 50kg");
+  assert.strictEqual(it.unidade, "Unidades", "a unidade vem do catálogo, não do 'sacos'");
+  assert.strictEqual(it.quantidade, 10);
+  assert.strictEqual(it.codigo, "CIM-001");
+});
+
+teste("sem insumo, o item guarda o texto do pedreiro", () => {
+  const [c] = M.interpretarPedido("2 latas de massa corrida", catalogo);
+  const it = M.itemDoPedidoLido(c);
+  assert.strictEqual(it.descricao, "massa corrida");
+  assert.strictEqual(it.unidade, "latas");
+  assert.strictEqual(it.insumoId, "");
+});
+
+teste("ponto e vírgula separa itens escritos na mesma linha", () => {
+  const r = M.interpretarPedido("10 sacos de cimento; 1/2 m3 de areia fina", catalogo);
+  assert.deepStrictEqual(r.map(x => x.quantidade), [10, 0.5]);
 });
 
 for (const [nome, fn] of testes) {

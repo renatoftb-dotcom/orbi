@@ -345,6 +345,182 @@ function textoDoPedido(cot, proposta, ctx) {
   return linhas.join("\n");
 }
 
+// ══════════════════════════════════════════════════════════════
+// LER O PEDIDO DO PEDREIRO
+// ══════════════════════════════════════════════════════════════
+// A mensagem chega como ela é: "10 sacos de cimento / 30 tabuas de 30cm x
+// 3mts / meio metro de areia". Ninguém vai digitar isso de novo item a item.
+//
+// O que se faz aqui é PROPOR: separa as linhas, tira a quantidade, e procura
+// cada material no catálogo. Acerto exato entra resolvido; parecido entra
+// como sugestão para você escolher; o que não bate com nada entra como item
+// solto, com o texto do pedreiro. Nada é vinculado por parecença sozinho —
+// é a mesma regra do resto do VICKE, e é o que impede uma lista de compra
+// nascer com o material errado dentro.
+
+// Palavras de EMBALAGEM e MEDIDA que podem sair da descrição sem perder o
+// material. "Barra", "tábua" e "vara" ficam de fora de propósito: elas fazem
+// parte do nome do insumo ("Aço - Barras de CA50"), e tirá-las quebraria a
+// busca.
+const COT_UNIDADES_PEDIDO = [
+  "unidades", "unidade", "unid", "und", "un",
+  "pecas", "peca", "pcs", "pc",
+  "sacos", "saco", "sc",
+  "caixas", "caixa", "cx",
+  "latas", "lata", "baldes", "balde", "galoes", "galao",
+  "rolos", "rolo", "fardos", "fardo", "pacotes", "pacote",
+  "milheiros", "milheiro", "duzias", "duzia", "dz",
+  "quilos", "quilo", "kilos", "kilo", "kg",
+  "litros", "litro", "lts", "lt",
+  "metros", "metro", "mts", "mt",
+  "m2", "m3",
+];
+
+function cotSemAcento(t) {
+  return typeof normalizarTexto === "function"
+    ? normalizarTexto(t)
+    : String(t == null ? "" : t).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+// "1/2" → 0,5; "2,5" → 2,5; "meia"/"meio" → 0,5
+function quantidadeDoTexto(txt) {
+  const t = String(txt == null ? "" : txt).trim();
+  if (/^mei[oa]$/i.test(cotSemAcento(t))) return 0.5;
+  const fr = /^(\d+)\s*\/\s*(\d+)$/.exec(t);
+  if (fr) {
+    const b = Number(fr[2]);
+    return b ? Math.round((Number(fr[1]) / b) * 1e4) / 1e4 : 0;
+  }
+  // com vírgula, o ponto é separador de milhar ("1.200,5"); sem vírgula, um
+  // ponto sozinho é decimal ("2.5") — tirar o ponto aí viraria 25
+  const limpo = t.indexOf(",") >= 0 ? t.replace(/\./g, "").replace(",", ".") : t;
+  const n = parseFloat(limpo);
+  return Number.isFinite(n) ? n : 0;
+}
+
+// Uma linha do recado. Devolve o que dá para afirmar; o que não dá fica
+// vazio, para a pessoa preencher — chutar quantidade é pior que perguntar.
+function interpretarLinhaDePedido(linha) {
+  const bruto = String(linha == null ? "" : linha).trim();
+  // tira marcador de lista ("- ", "• ", "1) ", "2. ") sem comer "2.5"
+  let t = bruto.replace(/^[\s\-–—*•▪·]+/, "").replace(/^\d{1,2}[\).]\s+/, "").trim();
+  if (!t) return null;
+
+  const uni = COT_UNIDADES_PEDIDO.join("|");
+  let quantidade = "";
+  let unidade = "";
+  let resto = t;
+
+  // 1) começa com número (ou "meio/meia") — é o jeito que quase todo mundo escreve
+  const inicio = new RegExp(`^(mei[oa]|\\d+\\s*/\\s*\\d+|\\d+(?:[.,]\\d+)?)\\s*(${uni})?\\b\\.?\\s*`, "i").exec(t);
+  // 2) número colado numa unidade em qualquer lugar ("prego 17x27 2 kg").
+  //    Medida que faz parte da descrição não conta: em "tábuas de 30cm x
+  //    3mts" o "3mts" é o tamanho da tábua, não quantas são — e o que marca
+  //    isso é o "x" colado antes ou depois.
+  const meio = (() => {
+    const re = new RegExp(`\\b(\\d+(?:[.,]\\d+)?)\\s*(${uni})\\b\\.?`, "gi");
+    let m2;
+    while ((m2 = re.exec(t))) {
+      const antes = t.slice(Math.max(0, m2.index - 4), m2.index);
+      const depois = t.slice(m2.index + m2[0].length, m2.index + m2[0].length + 4);
+      if (/[x×]\s*$/i.test(antes) || /^\s*[x×]\b/i.test(depois)) continue;
+      return { valor: m2[1], unidade: m2[2], index: m2.index, tamanho: m2[0].length };
+    }
+    return null;
+  })();
+  // 3) número solto no fim ("cimento 10")
+  const fim = /\s(\d+(?:[.,]\d+)?)\s*$/.exec(t);
+
+  if (inicio) {
+    quantidade = quantidadeDoTexto(inicio[1]);
+    unidade = inicio[2] || "";
+    resto = t.slice(inicio[0].length);
+  } else if (meio) {
+    quantidade = quantidadeDoTexto(meio.valor);
+    unidade = meio.unidade || "";
+    resto = (t.slice(0, meio.index) + " " + t.slice(meio.index + meio.tamanho)).trim();
+  } else if (fim) {
+    quantidade = quantidadeDoTexto(fim[1]);
+    resto = t.slice(0, fim.index).trim();
+  }
+
+  // o "de" que sobra depois de tirar a embalagem: "sacos DE cimento"
+  const termo = resto.replace(/^(de|do|da|dos|das)\s+/i, "").replace(/^[\s:,-]+/, "").trim();
+  return { bruto, quantidade, unidade, termo: termo || bruto };
+}
+
+// O recado vem com conversa em volta: "Bom dia Renato", "preciso do material
+// pra semana:", "obrigado". Isso não é item.
+//
+// A regra só descarta quando a linha NÃO tem quantidade — "preciso de 10
+// sacos de cimento" começa com "preciso" e continua sendo um pedido. Sem
+// essa trava, a saudação levaria material junto.
+const COT_ABERTURA_PEDIDO = /^(bom|boa|ola|oi|e ai|eai|obrigad[oa]s?|valeu|abraco|por favor|pfvr?|pf|blz|ok|beleza|preciso|precisa|precisamos|manda|mandar|me ve|me da|segue|lista|pedido|material|materiais|compra|comprar|falta|faltou|entao)\b/;
+
+function ehConversaSolta(termo, quantidade) {
+  if (Number(quantidade) > 0) return false;
+  const t = cotSemAcento(termo);
+  if (!t) return true;
+  if (/:$/.test(String(termo).trim())) return true;   // "material da semana:"
+  return COT_ABERTURA_PEDIDO.test(t);
+}
+
+function interpretarPedido(texto, insumos) {
+  const linhas = String(texto == null ? "" : texto)
+    .split(/\r?\n|;/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const saida = [];
+  for (const l of linhas) {
+    const item = interpretarLinhaDePedido(l);
+    if (!item) continue;
+    const limpo = cotSemAcento(item.termo);
+    // linha sem letra nenhuma não é material
+    if (!limpo || !/[a-z]/.test(limpo)) continue;
+    if (ehConversaSolta(item.termo, item.quantidade)) continue;
+    const r = typeof resolverInsumo === "function"
+      ? resolverInsumo(item.termo, (insumos || []).filter((i) => i && i.tipo !== "prestador"))
+      : { insumo: null, confianca: "nenhum", candidatos: [] };
+    saida.push({
+      id: (typeof uid === "function" ? uid() : String(saida.length)),
+      bruto: item.bruto,
+      termo: item.termo,
+      quantidade: item.quantidade,
+      unidade: item.unidade,
+      insumo: r.insumo || null,
+      confianca: r.confianca,
+      candidatos: (r.candidatos || []).map((c) => c.insumo),
+    });
+  }
+  return saida;
+}
+
+// Quantas o VICKE achou sozinho, quantas precisam de você.
+function resumoDaLeitura(lidos) {
+  const l = lidos || [];
+  return {
+    total: l.length,
+    achados: l.filter((x) => x.insumo).length,
+    sugeridos: l.filter((x) => !x.insumo && x.candidatos.length).length,
+    soltos: l.filter((x) => !x.insumo && !x.candidatos.length).length,
+    semQuantidade: l.filter((x) => !(Number(x.quantidade) > 0)).length,
+  };
+}
+
+// A linha lida vira item da lista. Insumo escolhido manda na unidade e no
+// nome; sem insumo, vale o texto do pedreiro.
+function itemDoPedidoLido(lido) {
+  const l = lido || {};
+  const base = typeof itemCotacaoVazio === "function" ? itemCotacaoVazio() : { id: String(Math.random()) };
+  if (l.insumo) {
+    return { ...base, insumoId: l.insumo.id || l.insumo.codigo || "", codigo: l.insumo.codigo || "",
+      descricao: l.insumo.nome || l.termo, unidade: l.insumo.unidade || l.unidade || "",
+      quantidade: l.quantidade || "" };
+  }
+  return { ...base, insumoId: "", codigo: "", descricao: l.termo || l.bruto,
+    unidade: l.unidade || "", quantidade: l.quantidade || "" };
+}
+
 // ── Mandar a lista para as lojas ────────────────────────────────
 // O pedido de material vira preço quando chega em três ou quatro lojas. O
 // VICKE não manda a mensagem — ele abre a conversa com o vendedor já com a
@@ -1073,6 +1249,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   // seleção é múltipla e o envio é guiado: um toque por loja, sem procurar
   // a próxima na lista.
   const [filaEnvio, setFilaEnvio] = useState(null);   // { lojas: [...], i }
+  const [colando, setColando] = useState(null);       // { texto, lidos } ao ler o recado
   const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
   // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
   const ctxPedido = {
@@ -1197,6 +1374,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
               <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 10 }}>
                 Para pedido de loja — cimento, prego, tábua, argamassa. Ache o material pelo nome e diga a quantidade; com a lista preenchida, a quantidade única acima deixa de valer.
               </div>
+              <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                <button type="button" style={{ ...E.btnSec, fontSize: 11.5, padding: "5px 11px" }}
+                  onClick={() => setColando({ texto: "", lidos: null })}>
+                  Colar o pedido do pedreiro
+                </button>
+              </div>
               <SeletorInsumo insumos={insumos} aoEscolher={addInsumo} isMobile={isMobile} />
               {itens.length > 0 && (
                 <div style={{ marginTop: 12 }}>
@@ -1260,6 +1443,137 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <button style={E.btn} onClick={salvarCotacao}>Salvar cotação</button>
           <button style={E.btnSec} onClick={() => { setFormCotacao(null); setErro(""); }}>Cancelar</button>
         </div>
+
+        {colando && (() => {
+          const lidos = colando.lidos;
+          const res = colando.resumo || null;
+          const trocar = (id, muda) => setColando(c => ({ ...c, lidos: c.lidos.map(x => x.id === id ? { ...x, ...muda } : x) }));
+          const aceitos = (lidos || []).filter(x => !x.fora);
+          return (
+            <div onClick={() => setColando(null)}
+              style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
+                alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
+              <div onClick={(e) => e.stopPropagation()}
+                style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 760,
+                  maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Pedido do pedreiro</div>
+                <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
+                  {!lidos
+                    ? "Cole a mensagem como ela veio, do jeito que ele escreveu. O VICKE separa as linhas, tira a quantidade e procura cada material no catálogo."
+                    : "Confira antes de entrar na lista. O que o VICKE achou no catálogo vem marcado; o parecido fica como escolha sua; o que não existe entra com o texto dele."}
+                </div>
+
+                {!lidos ? (
+                  <>
+                    <textarea style={{ ...E.input, minHeight: 200, resize: "vertical", fontFamily: "inherit" }}
+                      value={colando.texto} autoFocus
+                      onChange={(e) => setColando(c => ({ ...c, texto: e.target.value }))}
+                      placeholder={"Bom dia Renato\npreciso do material pra semana:\n10 sacos de cimento\n- 30 tabuas de 30cm x 3mts\n1/2 m3 de areia fina\n2 latas de massa corrida\nobrigado"} />
+                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+                      <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
+                      <button style={{ ...E.btn, opacity: colando.texto.trim() ? 1 : 0.45, cursor: colando.texto.trim() ? "pointer" : "not-allowed" }}
+                        disabled={!colando.texto.trim()}
+                        onClick={() => setColando(c => {
+                          const cru = interpretarPedido(c.texto, insumos);
+                          // O mais parecido já entra escolhido — senão você
+                          // escolheria à mão as mesmas três linhas toda vez.
+                          // Mas fica marcado em âmbar e contado como "para
+                          // confirmar": a leitura propõe, quem decide é você.
+                          return { ...c, resumo: resumoDaLeitura(cru),
+                            lidos: cru.map(x => (x.insumo || !x.candidatos.length
+                              ? x
+                              : { ...x, insumo: x.candidatos[0], confirmar: true })) };
+                        })}>
+                        Ler o pedido
+                      </button>
+                    </div>
+                  </>
+                ) : !lidos.length ? (
+                  <>
+                    <div style={{ fontSize: 12.5, color: "#4b5563" }}>
+                      Não deu para achar item nenhum nesse texto. Volte e confira se veio a lista mesmo.
+                    </div>
+                    <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
+                      <button style={E.btnSec} onClick={() => setColando({ texto: colando.texto, lidos: null })}>Voltar ao texto</button>
+                      <button style={E.btnSec} onClick={() => setColando(null)}>Fechar</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
+                      {res.total} {res.total === 1 ? "linha" : "linhas"} ·{" "}
+                      <span style={{ color: "#15803d", fontWeight: 600 }}>{res.achados} no catálogo</span>
+                      {res.sugeridos ? ` · ${res.sugeridos} para você confirmar` : ""}
+                      {res.soltos ? ` · ${res.soltos} fora do catálogo` : ""}
+                      {res.semQuantidade ? ` · ${res.semQuantidade} sem quantidade` : ""}
+                    </div>
+                    <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
+                      {lidos.map((x) => {
+                        const opcoes = [
+                          ...(x.insumo ? [x.insumo] : []),
+                          ...x.candidatos.filter(c => !x.insumo || c.codigo !== x.insumo.codigo),
+                        ];
+                        const escolhido = x.insumo ? (x.insumo.codigo || x.insumo.id) : (x.escolhaCodigo || "");
+                        const cols = isMobile ? "1fr" : "1fr 90px 96px 30px";
+                        return (
+                          <div key={x.id} style={{ padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)",
+                            background: x.fora ? "#fafafa" : "#fff", opacity: x.fora ? 0.55 : 1 }}>
+                            <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>“{x.bruto}”</div>
+                            <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center" }}>
+                              {opcoes.length ? (
+                                <select style={{ ...E.input, cursor: "pointer" }} value={escolhido}
+                                  onChange={(e) => {
+                                    const cod = e.target.value;
+                                    const ins = opcoes.find(o => (o.codigo || o.id) === cod);
+                                    trocar(x.id, { insumo: ins || null, escolhaCodigo: cod,
+                                      unidade: ins ? (ins.unidade || x.unidade) : x.unidade });
+                                  }}>
+                                  {opcoes.map(o => (
+                                    <option key={o.codigo || o.id} value={o.codigo || o.id}>{o.nome}</option>
+                                  ))}
+                                  <option value="">Fora do catálogo — “{x.termo}”</option>
+                                </select>
+                              ) : (
+                                <input style={E.input} value={x.termo}
+                                  onChange={(e) => trocar(x.id, { termo: e.target.value })} />
+                              )}
+                              <CampoNumeroBR estilo={E.input} valor={x.quantidade} casas={2} placeholder="qtd"
+                                aoMudar={(v) => trocar(x.id, { quantidade: v })} />
+                              <input style={E.input} value={(x.insumo && x.insumo.unidade) || x.unidade || ""}
+                                placeholder="un" onChange={(e) => trocar(x.id, { unidade: e.target.value })} />
+                              <button type="button" title={x.fora ? "Voltar para a lista" : "Não incluir"}
+                                style={{ ...E.btnSec, padding: "6px 9px", color: x.fora ? "#111827" : "#dc2626" }}
+                                onClick={() => trocar(x.id, { fora: !x.fora })}>{x.fora ? "+" : "×"}</button>
+                            </div>
+                            {x.confirmar && x.insumo && !x.fora && (
+                              <div style={{ fontSize: 11, color: "#b45309", marginTop: 4 }}>
+                                Parecido com o catálogo — confirme se é isso mesmo.
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <div style={{ display: "flex", gap: 10, justifyContent: "space-between", marginTop: 14, flexWrap: "wrap" }}>
+                      <button style={E.btnSec} onClick={() => setColando({ texto: colando.texto, lidos: null })}>Voltar ao texto</button>
+                      <span style={{ display: "flex", gap: 8 }}>
+                        <button style={E.btnSec} onClick={() => setColando(null)}>Cancelar</button>
+                        <button style={{ ...E.btn, opacity: aceitos.length ? 1 : 0.45, cursor: aceitos.length ? "pointer" : "not-allowed" }}
+                          disabled={!aceitos.length}
+                          onClick={() => {
+                            set("itens", [...(formCotacao.itens || []), ...aceitos.map(itemDoPedidoLido)]);
+                            setColando(null);
+                          }}>
+                          Pôr {aceitos.length} na lista
+                        </button>
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </div>
     );
   }
