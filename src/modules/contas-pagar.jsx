@@ -503,6 +503,37 @@ function totalDasEntregas(entregas) {
   return Math.round(soma * 100) / 100;
 }
 
+// As formas de pagar de uma compra — as mesmas do contrato, menos a medição,
+// que é de serviço executado e não de material entregue. "Item a item" do
+// contrato é a entrega daqui: o que muda de nome é a coisa que se paga.
+const MODOS_LANCAMENTO = [
+  { id: "parcelas",     nome: "Parcelas iguais",        resumo: "O valor cotado dividido em parcelas mensais." },
+  { id: "entregas",     nome: "Por entrega",            resumo: "Cada entrega com nome, valor e data de pagamento." },
+  { id: "sinalFinal",   nome: "Sinal + saldo no final", resumo: "Um percentual na compra e o restante na entrega." },
+  { id: "sinalParcelas", nome: "Sinal + parcelas",      resumo: "Um percentual na compra e o saldo dividido em parcelas." },
+];
+function modoLancamento(id) { return MODOS_LANCAMENTO.find((m) => m.id === id) || MODOS_LANCAMENTO[0]; }
+
+// Uma conta, do jeito que o lançamento monta todas.
+function contaDaCompra(d, novoId, dados) {
+  return {
+    id: novoId(),
+    origem: CP_ORIGEM_COTACAO,
+    obraId: dados.obraId || "",
+    contratoId: "",
+    cotacaoId: dados.cotacaoId || "",
+    parcela: d.parcela || 0,
+    parcelasTotal: d.parcelasTotal || 0,
+    contaId: dados.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
+    prestadorId: dados.prestadorId || "",
+    favorecido: dados.favorecido || "",
+    descricao: d.descricao,
+    valor: Math.round((Number(d.valor) || 0) * 100) / 100,
+    vencimento: d.vencimento,
+    pago: false, pagoEm: "", valorPago: "", observacao: dados.observacao || "",
+  };
+}
+
 function contasDaCotacao(dados, novoId) {
   const d = dados || {};
   if (d.modo === "entregas" || (d.entregas || []).some((e) => e && valorDaEntrega(e) > 0)) {
@@ -510,31 +541,53 @@ function contasDaCotacao(dados, novoId) {
   }
   const total = Math.round((Number(d.valor) || 0) * 100) / 100;
   if (!(total > 0)) return [];
+  const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
+  const nome = String(d.descricao || "Compra").trim() || "Compra";
+  const base = String(d.primeiroVencimento || "").slice(0, 10) || dataParaIso(new Date());
+
+  if (d.modo === "sinalFinal" || d.modo === "sinalParcelas") {
+    const pct = Math.min(100, Math.max(0, Number(d.sinalPct) || 0));
+    const e = typeof entradaESaldo === "function"
+      ? entradaESaldo(total, pct, Math.max(1, Math.floor(Number(d.parcelas) || 1)))
+      : null;
+    if (!e) return [];
+    const saidas = [];
+    if (e.entrada > 0) {
+      saidas.push(contaDaCompra({ descricao: `${nome} — sinal`, valor: e.entrada, vencimento: base }, id, d));
+    }
+    if (e.saldo > 0) {
+      if (d.modo === "sinalFinal") {
+        saidas.push(contaDaCompra({ descricao: `${nome} — saldo na entrega`, valor: e.saldo,
+          vencimento: String(d.vencimentoSaldo || "").slice(0, 10) || base }, id, d));
+      } else {
+        const qtdP = e.parcelas.qtd;
+        const ini = String(d.vencimentoSaldo || "").slice(0, 10) || somarMeses(base, 1);
+        for (let i = 0; i < qtdP; i++) {
+          saidas.push(contaDaCompra({
+            descricao: qtdP > 1 ? `${nome} — parcela ${i + 1}/${qtdP}` : `${nome} — saldo`,
+            valor: i === qtdP - 1 ? e.parcelas.ultima : e.parcelas.base,
+            vencimento: somarMeses(ini, i),
+            parcela: qtdP > 1 ? i + 1 : 0, parcelasTotal: qtdP > 1 ? qtdP : 0,
+          }, id, d));
+        }
+      }
+    }
+    return saidas;
+  }
+
   const qtd = Math.max(1, Math.floor(Number(d.parcelas) || 1));
   const divisao = typeof parcelasContrato === "function"
     ? parcelasContrato(total, qtd)
     : { qtd, base: Math.round((total / qtd) * 100) / 100, ultima: Math.round((total / qtd) * 100) / 100, iguais: true };
-  const base = String(d.primeiroVencimento || "").slice(0, 10) || dataParaIso(new Date());
-  const id = typeof novoId === "function" ? novoId : (typeof uid === "function" ? uid : () => String(Date.now()));
   const contas = [];
   for (let i = 0; i < qtd; i++) {
-    const valor = i === qtd - 1 ? divisao.ultima : divisao.base;
-    contas.push({
-      id: id(),
-      origem: CP_ORIGEM_COTACAO,
-      obraId: d.obraId || "",
-      contratoId: "",
-      cotacaoId: d.cotacaoId || "",
+    contas.push(contaDaCompra({
+      descricao: qtd > 1 ? `${nome} — parcela ${i + 1}/${qtd}` : nome,
+      valor: i === qtd - 1 ? divisao.ultima : divisao.base,
+      vencimento: somarMeses(base, i),
       parcela: qtd > 1 ? i + 1 : 0,
       parcelasTotal: qtd > 1 ? qtd : 0,
-      contaId: d.contaId || (typeof PLANO_CONTAS !== "undefined" && PLANO_CONTAS[0] ? PLANO_CONTAS[0].id : "material"),
-      prestadorId: d.prestadorId || "",
-      favorecido: d.favorecido || "",
-      descricao: qtd > 1 ? `${d.descricao || "Compra"} — parcela ${i + 1}/${qtd}` : (d.descricao || "Compra"),
-      valor,
-      vencimento: somarMeses(base, i),
-      pago: false, pagoEm: "", valorPago: "", observacao: d.observacao || "",
-    });
+    }, id, d));
   }
   return contas;
 }

@@ -239,9 +239,11 @@ function dadosDoLancamento(cot) {
     favorecido: esc.favorecido || "",
     descricao: String(c.titulo || "").trim() || "Compra",
     valor: valorProposta(esc),
-    modo: "parcelas",             // parcelas iguais | entregas nomeadas
+    modo: "parcelas",             // ver MODOS_LANCAMENTO
     parcelas: 1,
     primeiroVencimento: prazo > 0 && typeof somarDias === "function" ? somarDias(hoje, prazo) : hoje,
+    sinalPct: 50,
+    vencimentoSaldo: "",
     entregas: [],
     observacao: esc.condicaoPagamento ? `Condição cotada: ${esc.condicaoPagamento}` : "",
   };
@@ -1300,6 +1302,8 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
   const E = COT_ESTILO;
   const set = (k, v) => setF(x => ({ ...x, [k]: v }));
   const porEntrega = f.modo === "entregas";
+  // "Item a item" do contrato é a entrega aqui: o que se paga por vez é a
+  // entrega do fornecedor, não o item de um objeto fabricado.
   const qtd = Math.max(1, Math.floor(Number(f.parcelas) || 1));
   const entregas = f.entregas || [];
   const setEntrega = (i, k, v) => setF(x => ({ ...x, entregas: (x.entregas || []).map((e, j) => j === i ? { ...e, [k]: v } : e) }));
@@ -1329,12 +1333,13 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
   const grupos = typeof GRUPOS_PL !== "undefined" ? GRUPOS_PL : [];
   const podeLancar = previa.length > 0;
 
-  const opcao = (id, titulo, apoio) => (
-    <label key={id} style={{ display: "flex", gap: 8, alignItems: "flex-start", border: `1.5px solid ${f.modo === id ? "#0474f4" : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: "#fff" }}>
-      <input type="radio" name="cot-lanc-modo" checked={f.modo === id} onChange={() => trocarModo(id)} style={{ marginTop: 2, cursor: "pointer" }} />
+  const comSinal = f.modo === "sinalFinal" || f.modo === "sinalParcelas";
+  const opcao = (m) => (
+    <label key={m.id} style={{ display: "flex", gap: 8, alignItems: "flex-start", border: `1.5px solid ${f.modo === m.id ? "#0474f4" : "rgba(38,36,33,0.14)"}`, borderRadius: 10, padding: "9px 11px", cursor: "pointer", background: "#fff" }}>
+      <input type="radio" name="cot-lanc-modo" checked={f.modo === m.id} onChange={() => trocarModo(m.id)} style={{ marginTop: 2, cursor: "pointer" }} />
       <span>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{titulo}</span>
-        <span style={{ display: "block", fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>{apoio}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{m.nome}</span>
+        <span style={{ display: "block", fontSize: 11.5, color: "#4b5563", marginTop: 2 }}>{m.resumo}</span>
       </span>
     </label>
   );
@@ -1348,11 +1353,10 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
-          {opcao("parcelas", "Parcelas iguais", "Divide o valor cotado em parcelas mensais.")}
-          {opcao("entregas", "Por entrega", "Cada entrega com nome, valor e data de pagamento.")}
+          {MODOS_LANCAMENTO.map(opcao)}
         </div>
 
-        {!porEntrega && (
+        {f.modo === "parcelas" && (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
             <div>
               <label style={E.label}>Parcelas</label>
@@ -1363,6 +1367,33 @@ function CotacaoLancamento({ cotacao, dados, dinheiro, onConfirmar, onFechar }) 
               <label style={E.label}>Primeiro vencimento</label>
               <input style={E.input} type="date" value={f.primeiroVencimento || ""}
                 onChange={e => set("primeiroVencimento", e.target.value)} />
+            </div>
+          </div>
+        )}
+
+        {comSinal && (
+          <div style={{ display: "grid", gridTemplateColumns: f.modo === "sinalParcelas" ? "110px 1fr 90px 1fr" : "110px 1fr 1fr", gap: 12, marginBottom: 12 }}>
+            <div>
+              <label style={E.label}>Sinal (%)</label>
+              <input style={E.input} type="number" min="0" max="100" value={f.sinalPct}
+                onChange={e => set("sinalPct", e.target.value)} />
+            </div>
+            <div>
+              <label style={E.label}>Vencimento do sinal</label>
+              <input style={E.input} type="date" value={f.primeiroVencimento || ""}
+                onChange={e => set("primeiroVencimento", e.target.value)} />
+            </div>
+            {f.modo === "sinalParcelas" && (
+              <div>
+                <label style={E.label}>Parcelas</label>
+                <input style={E.input} type="number" min="1" value={f.parcelas}
+                  onChange={e => set("parcelas", e.target.value)} />
+              </div>
+            )}
+            <div>
+              <label style={E.label}>{f.modo === "sinalFinal" ? "Vencimento do saldo" : "1º vencimento do saldo"}</label>
+              <input style={E.input} type="date" value={f.vencimentoSaldo || ""}
+                onChange={e => set("vencimentoSaldo", e.target.value)} />
             </div>
           </div>
         )}

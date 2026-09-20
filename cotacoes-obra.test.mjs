@@ -53,7 +53,7 @@ const modulo = new Function(`
            aprovacaoDaEscolha, podeEnviarAoCliente, enviarCotacaoAoCliente,
            limparEnvioAoCliente, cotacoesProntasParaContrato, textoUtf8Recuperado,
            podeLancarEmContas, dadosDoLancamento, contasDaCotacao, removerContasDaCotacao, contasDeCotacao,
-           contasDasEntregas, totalDasEntregas, entregaVazia };
+           contasDasEntregas, totalDasEntregas, entregaVazia, MODOS_LANCAMENTO, modoLancamento };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -346,6 +346,50 @@ teste("a soma das entregas pode divergir do cotado, e o total diz isso", () => {
     entregas: [{ descricao: "única", valor: 9690, vencimento: "2026-10-02" }] }, () => "x");
   assert.strictEqual(c.length, 1);
   assert.strictEqual(c[0].valor, 9690);
+});
+
+teste("sinal + saldo no final: duas contas, nas datas de cada uma", () => {
+  let n = 0;
+  const contas = M.contasDaCotacao({ cotacaoId: "ct1", descricao: "Aço Vergalhões", valor: 10000,
+    modo: "sinalFinal", sinalPct: 40, primeiroVencimento: "2026-10-01", vencimentoSaldo: "2026-11-20" },
+    () => "c" + (++n));
+  assert.strictEqual(contas.length, 2);
+  assert.deepStrictEqual(contas.map(c => c.valor), [4000, 6000]);
+  assert.deepStrictEqual(contas.map(c => c.vencimento), ["2026-10-01", "2026-11-20"]);
+  assert.match(contas[0].descricao, /sinal/);
+  assert.match(contas[1].descricao, /saldo na entrega/);
+  // sem data do saldo, ele cai na data do sinal — nada fica sem vencimento
+  const semData = M.contasDaCotacao({ cotacaoId: "ct1", descricao: "X", valor: 100, modo: "sinalFinal",
+    sinalPct: 50, primeiroVencimento: "2026-10-01" }, () => "x");
+  assert.strictEqual(semData[1].vencimento, "2026-10-01");
+});
+
+teste("sinal + parcelas: o saldo é que se divide, não o total", () => {
+  let n = 0;
+  const contas = M.contasDaCotacao({ cotacaoId: "ct1", descricao: "Aço", valor: 10000,
+    modo: "sinalParcelas", sinalPct: 40, parcelas: 3,
+    primeiroVencimento: "2026-10-01", vencimentoSaldo: "2026-11-01" }, () => "c" + (++n));
+  assert.strictEqual(contas.length, 4, "o sinal mais três parcelas");
+  assert.strictEqual(contas[0].valor, 4000);
+  assert.strictEqual(contas.slice(1).reduce((s, c) => s + c.valor, 0), 6000, "as parcelas somam o saldo");
+  assert.deepStrictEqual(contas.map(c => c.vencimento), ["2026-10-01", "2026-11-01", "2026-12-01", "2027-01-01"]);
+  // sinal de 100% não deixa saldo a parcelar
+  const tudo = M.contasDaCotacao({ cotacaoId: "ct1", descricao: "X", valor: 500, modo: "sinalParcelas",
+    sinalPct: 100, parcelas: 3, primeiroVencimento: "2026-10-01" }, () => "x");
+  assert.strictEqual(tudo.length, 1);
+  assert.strictEqual(tudo[0].valor, 500);
+  // e sinal de 0% é o saldo inteiro parcelado, sem linha de sinal
+  const semSinal = M.contasDaCotacao({ cotacaoId: "ct1", descricao: "X", valor: 900, modo: "sinalParcelas",
+    sinalPct: 0, parcelas: 3, primeiroVencimento: "2026-10-01", vencimentoSaldo: "2026-10-01" }, () => "x");
+  assert.strictEqual(semSinal.length, 3);
+  assert.strictEqual(semSinal.reduce((s, c) => s + c.valor, 0), 900);
+});
+
+teste("as quatro formas de pagar estão no painel, e a medição não", () => {
+  assert.deepStrictEqual(M.MODOS_LANCAMENTO.map(m => m.id),
+    ["parcelas", "entregas", "sinalFinal", "sinalParcelas"]);
+  for (const m of M.MODOS_LANCAMENTO) { assert.ok(m.nome); assert.ok(m.resumo); }
+  assert.strictEqual(M.modoLancamento("inexistente").id, "parcelas", "cai no padrão");
 });
 
 teste("o lançamento nasce em parcelas, com a lista de entregas vazia", () => {
