@@ -66,7 +66,8 @@ const modulo = new Function(`
            precoEfetivo, totalNegociado, descontoDaProposta,
            linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir,
            interpretarPedido, interpretarLinhaDePedido, quantidadeDoTexto, resumoDaLeitura,
-           itemDoPedidoLido, resolverInsumo, scoreAssociacao, candidatosDoPedido };
+           itemDoPedidoLido, resolverInsumo, scoreAssociacao, candidatosDoPedido,
+           unidadesDoCatalogo, opcoesDeUnidade };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1194,6 +1195,23 @@ teste("tamanho diferente não casa sozinho, mas aparece como sugestão", () => {
   assert.strictEqual(x.insumo, null, "não vincula sozinho");
   assert.strictEqual(x.confianca, "sugestao");
   assert.strictEqual(x.candidatos[0].codigo, "FER-003");
+});
+
+// ── Unidades ────────────────────────────────────────────────────
+
+teste("as unidades saem do catálogo, as mais usadas primeiro", () => {
+  const u = M.unidadesDoCatalogo([
+    { unidade: "kg" }, { unidade: "Unidades" }, { unidade: "Unidades" },
+    { unidade: "m3" }, { unidade: "Unidades" }, { unidade: "" }, { unidade: "kg" }, {},
+  ]);
+  assert.deepStrictEqual(u, ["Unidades", "kg", "m3"], "vazio não vira unidade");
+});
+
+teste("o que o pedreiro escreveu não se perde: entra em cima da lista", () => {
+  const u = ["Unidades", "kg"];
+  assert.deepStrictEqual(M.opcoesDeUnidade("sacos", u), ["sacos", "Unidades", "kg"]);
+  assert.deepStrictEqual(M.opcoesDeUnidade("kg", u), ["Unidades", "kg"], "não duplica o que já existe");
+  assert.deepStrictEqual(M.opcoesDeUnidade("", u), ["Unidades", "kg"]);
 });
 
 // ── Associação por palavra ──────────────────────────────────────

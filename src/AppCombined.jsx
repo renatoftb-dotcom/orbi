@@ -19345,6 +19345,29 @@ function itemDoPedidoLido(lido) {
     unidade: l.unidade || "", quantidade: l.quantidade || "" };
 }
 
+// ── As unidades que a empresa já usa ────────────────────────────
+// Unidade não é campo livre de verdade: o catálogo já diz quais existem
+// ("Unidades", "kg", "m3", "Mts"). Digitar à mão gera "un", "UN", "und" para
+// a mesma coisa, e aí o pedido sai com três unidades diferentes para o mesmo
+// material. A lista sai do próprio catálogo, na ordem do que mais aparece.
+function unidadesDoCatalogo(insumos) {
+  const conta = {};
+  for (const i of insumos || []) {
+    const u = String((i && i.unidade) || "").trim();
+    if (u) conta[u] = (conta[u] || 0) + 1;
+  }
+  return Object.keys(conta).sort((a, b) => conta[b] - conta[a] || a.localeCompare(b, "pt-BR"));
+}
+
+// O que o pedreiro escreveu ("sacos", "quilos") não está no catálogo, mas
+// também não se joga fora — entra na lista, em cima, para você trocar ou
+// manter com um clique.
+function opcoesDeUnidade(valor, unidades) {
+  const v = String(valor == null ? "" : valor).trim();
+  const lista = unidades || [];
+  return v && lista.indexOf(v) < 0 ? [v, ...lista] : lista;
+}
+
 // ── Mandar a lista para as lojas ────────────────────────────────
 // O pedido de material vira preço quando chega em três ou quatro lojas. O
 // VICKE não manda a mensagem — ele abre a conversa com o vendedor já com a
@@ -20075,6 +20098,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [filaEnvio, setFilaEnvio] = useState(null);   // { lojas: [...], i }
   const [colando, setColando] = useState(null);       // { texto, lidos } ao ler o recado
   const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
+  const unidadesCatalogo = unidadesDoCatalogo(insumos);
   // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
   const ctxPedido = {
     escritorio: ((data.escritorio || {}).nome) || "",
@@ -20218,8 +20242,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         onChange={e => setItens(itens.map((x, j) => j === i ? { ...x, descricao: e.target.value } : x))} />
                       <CampoNumeroBR estilo={E.input} valor={it.quantidade} casas={2} placeholder="0"
                         aoMudar={(v) => setItens(itens.map((x, j) => j === i ? { ...x, quantidade: v } : x))} />
-                      <input style={E.input} value={it.unidade} placeholder="un"
-                        onChange={e => setItens(itens.map((x, j) => j === i ? { ...x, unidade: e.target.value } : x))} />
+                      <CampoUnidade valor={it.unidade} unidades={unidadesCatalogo}
+                        aoMudar={(v) => setItens(itens.map((x, j) => j === i ? { ...x, unidade: v } : x))} />
                       <button type="button" title="Tirar da lista" style={{ ...E.btnSec, padding: "6px 9px", color: "#dc2626" }}
                         onClick={() => setItens(itens.filter((_, j) => j !== i))}>×</button>
                     </div>
@@ -20354,7 +20378,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                             background: x.fora ? "#fafafa" : "#fff", opacity: x.fora ? 0.55 : 1 }}>
                             <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 4 }}>“{x.bruto}”</div>
                             <div style={{ display: "grid", gridTemplateColumns: cols, gap: 8, alignItems: "center" }}>
-                              {opcoes.length ? (
+                              {/* A setinha existe SEMPRE: mesmo quando nada
+                                  se parece, o catálogo inteiro está a um
+                                  clique. E quando fica fora do catálogo, o
+                                  texto dele continua editável logo abaixo. */}
+                              <div style={{ display: "grid", gap: 6, minWidth: 0 }}>
                                 <select style={{ ...E.input, cursor: "pointer" }} value={escolhido}
                                   onChange={(e) => {
                                     const cod = e.target.value;
@@ -20380,14 +20408,16 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                     </optgroup>
                                   )}
                                 </select>
-                              ) : (
-                                <input style={E.input} value={x.termo}
-                                  onChange={(e) => trocar(x.id, { termo: e.target.value })} />
-                              )}
+                                {!x.insumo && (
+                                  <input style={{ ...E.input, fontSize: 12 }} value={x.termo}
+                                    placeholder="como vai aparecer no pedido"
+                                    onChange={(e) => trocar(x.id, { termo: e.target.value })} />
+                                )}
+                              </div>
                               <CampoNumeroBR estilo={E.input} valor={x.quantidade} casas={2} placeholder="qtd"
                                 aoMudar={(v) => trocar(x.id, { quantidade: v })} />
-                              <input style={E.input} value={(x.insumo && x.insumo.unidade) || x.unidade || ""}
-                                placeholder="un" onChange={(e) => trocar(x.id, { unidade: e.target.value })} />
+                              <CampoUnidade valor={(x.insumo && x.insumo.unidade) || x.unidade || ""}
+                                unidades={unidadesCatalogo} aoMudar={(v) => trocar(x.id, { unidade: v })} />
                               <button type="button" title={x.fora ? "Voltar para a lista" : "Não incluir"}
                                 style={{ ...E.btnSec, padding: "6px 9px", color: x.fora ? "#111827" : "#dc2626" }}
                                 onClick={() => trocar(x.id, { fora: !x.fora })}>{x.fora ? "+" : "×"}</button>
@@ -21673,6 +21703,19 @@ function ComparativoLista({ cot, dinheiro, isMobile }) {
           : "O verde marca o melhor preço de cada item."}
       </div>
     </div>
+  );
+}
+
+// Campo de unidade: sempre com a setinha, nunca texto solto.
+function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
+  const E = COT_ESTILO;
+  const lista = opcoesDeUnidade(valor, unidades);
+  return (
+    <select style={{ ...(estilo || E.input), cursor: "pointer" }} value={valor || ""}
+      onChange={(e) => aoMudar(e.target.value)}>
+      <option value="">—</option>
+      {lista.map((u) => <option key={u} value={u}>{u}</option>)}
+    </select>
   );
 }
 
