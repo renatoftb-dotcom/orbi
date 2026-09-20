@@ -69,7 +69,8 @@ const modulo = new Function(`
            itemDoPedidoLido, resolverInsumo, scoreAssociacao, candidatosDoPedido,
            unidadesDoCatalogo, opcoesDeUnidade,
            ehNumeroDeOrcamento, numeroDeOrcamento, itemDeOrcamento, dataIsoDoOrcamento,
-           interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada };
+           interpretarOrcamento, casarOrcamentoComItens, lojaCadastrada,
+           papelDaCelula, papeisDaTabela, precoDaLinha };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -1285,9 +1286,9 @@ const OURIFER = [
 teste("a tabela do orçamento vira itens; cabeçalho e rodapé ficam de fora", () => {
   const o = M.interpretarOrcamento(OURIFER);
   assert.strictEqual(o.itens.length, 2, "só as duas linhas de mercadoria");
-  assert.deepStrictEqual(o.itens[0], { codigo: "0000000001373",
+  assert.deepStrictEqual(o.itens[0], { codigo: "0000000001373", unidade: "",
     descricao: "Tijolo 8 Furos 9x19x19", quantidade: 300, unitario: 1.05, total: 315 });
-  assert.deepStrictEqual(o.itens[1], { codigo: "0000000002405",
+  assert.deepStrictEqual(o.itens[1], { codigo: "0000000002405", unidade: "",
     descricao: "Cimento Cp Ii F 50kg - Csn", quantidade: 6, unitario: 43, total: 258 });
 });
 
@@ -1408,6 +1409,111 @@ teste("loja desativada não é sugerida, e nome que não bate não vira palpite"
   assert.strictEqual(M.lojaCadastrada([lojas[2]], { fornecedor: "Ourifer Materiais Ltda" }), null);
   assert.strictEqual(M.lojaCadastrada(lojas, { fornecedor: "Depósito São Jorge" }), null);
   assert.strictEqual(M.lojaCadastrada(lojas, { fornecedor: "" }), null);
+});
+
+// ── Cada loja manda o PDF de um jeito ───────────────────────────
+// Nenhuma dessas tabelas tem o desenho da OURIFER. O que sustenta a leitura
+// é o cabeçalho e a conta quantidade × unitário = total.
+const papel = (...linhas) => linhas.map(celulas => ({ celulas, texto: celulas.join(" ") }));
+const itens1 = (...linhas) => M.interpretarOrcamento(papel(...linhas)).itens;
+const um = (...linhas) => { const i = itens1(...linhas); assert.strictEqual(i.length, 1, "esperava um item, veio " + i.length); return i[0]; };
+
+teste("formato com unidade no meio e rótulos abreviados", () => {
+  const i = um(["Produto", "Un", "Qtde", "Vl. Unit.", "Vl. Total"],
+               ["Cimento CP II 50kg", "SC", "6", "43,00", "258,00"]);
+  assert.strictEqual(i.descricao, "Cimento CP II 50kg");
+  assert.strictEqual(i.unidade, "SC");
+  assert.strictEqual(i.unitario, 43);
+  assert.strictEqual(i.total, 258);
+});
+
+teste("formato sem coluna de total: o total sai da conta", () => {
+  const i = um(["Descrição", "Quant.", "Preço Unit."], ["Areia média", "4", "95,00"]);
+  assert.strictEqual(i.quantidade, 4);
+  assert.strictEqual(i.unitario, 95);
+  assert.strictEqual(i.total, 380);
+});
+
+teste("formato sem coluna de unitário: o unitário sai da divisão", () => {
+  const i = um(["Descrição", "Qtd", "Total"], ["Areia fina", "2", "190,00"]);
+  assert.strictEqual(i.unitario, 95);
+  assert.strictEqual(i.total, 190);
+});
+
+teste("coluna de desconto no meio não vira preço", () => {
+  const i = um(["Item", "Qtde", "Unitário", "Desc.", "Total"],
+               ["Tinta acrílica 18L", "2", "289,90", "0,00", "579,80"]);
+  assert.strictEqual(i.unitario, 289.9, "o 0,00 do desconto não pode virar o preço");
+  assert.strictEqual(i.total, 579.8);
+});
+
+teste("quantidade na frente da descrição, sem cabeçalho nenhum", () => {
+  const i = um(["300", "UN", "Tijolo 8 furos", "1,05", "315,00"]);
+  assert.strictEqual(i.descricao, "Tijolo 8 furos", "o 300 é quantidade, não parte do nome");
+  assert.strictEqual(i.codigo, "", "e também não é código");
+  assert.strictEqual(i.quantidade, 300);
+  assert.strictEqual(i.unitario, 1.05);
+});
+
+teste("cifrão grudado no número não atrapalha", () => {
+  const i = um(["Prego 17x27", "5", "R$ 19,90", "R$ 99,50"]);
+  assert.strictEqual(i.unitario, 19.9);
+  assert.strictEqual(i.total, 99.5);
+});
+
+teste("milhar com ponto: 1.200 é mil e duzentos", () => {
+  const i = um(["Bloco estrutural", "1.200", "3,45", "4.140,00"]);
+  assert.strictEqual(i.quantidade, 1200);
+  assert.strictEqual(i.total, 4140);
+});
+
+teste("número dentro do nome do material continua no nome", () => {
+  const i = um(["Vergalhão CA-50 10,0mm 12m", "20", "48,90", "978,00"]);
+  assert.strictEqual(i.descricao, "Vergalhão CA-50 10,0mm 12m");
+  assert.strictEqual(i.quantidade, 20);
+});
+
+teste("linha de somatório e linha de recado não viram item", () => {
+  assert.deepStrictEqual(itens1(["Total Geral", "1.234,00"]), []);
+  assert.deepStrictEqual(itens1(["Subtotal", "10", "1,00", "10,00"]), []);
+  assert.deepStrictEqual(itens1(["Prazo de entrega", "15"]), []);
+  assert.deepStrictEqual(itens1(["Observação: entrega em", "5", "dias"]), []);
+});
+
+teste("o que está acima do cabeçalho da tabela nunca é item", () => {
+  const itens = itens1(["Condição: A Prazo", "573,00"],
+                       ["Vendedor Tamara", "6", "43,00", "258,00"],
+                       ["Descrição", "Qtde", "Unitário", "Total"],
+                       ["Cimento CP II", "6", "43,00", "258,00"]);
+  assert.strictEqual(itens.length, 1);
+  assert.strictEqual(itens[0].descricao, "Cimento CP II");
+});
+
+teste("cabeçalho que não bate com a linha cede lugar à conta", () => {
+  // o cabeçalho tem 3 colunas numéricas, a linha só traz 2 — vale a conta
+  const i = um(["Descrição", "Qtde", "Unitário", "Total"], ["Cal hidratada 20kg", "8", "17,50"]);
+  assert.strictEqual(i.unitario, 17.5);
+  assert.strictEqual(i.total, 140);
+});
+
+teste("cabeçalho errado para a linha não estraga o preço", () => {
+  // a loja mandou (qtd, total) onde o cabeçalho diz (qtd, unitário, total):
+  // a conta não fecha, então o cabeçalho é descartado para esta linha
+  const i = um(["Descrição", "Qtde", "Unitário", "Total"], ["Massa corrida 18L", "3", "89,00", "267,00"]);
+  assert.strictEqual(i.unitario, 89);
+  assert.strictEqual(i.total, 267);
+});
+
+teste("o mesmo papel da OURIFER continua lido do mesmo jeito", () => {
+  const o = M.interpretarOrcamento(OURIFER);
+  assert.strictEqual(o.itens.length, 2);
+  assert.strictEqual(o.itens[1].unitario, 43);
+});
+
+teste("preço da linha: sem unitário, divide o total pela quantidade do pedido", () => {
+  assert.strictEqual(M.precoDaLinha({ unitario: 43, total: 258, quantidade: 6 }), 43);
+  assert.strictEqual(M.precoDaLinha({ unitario: 0, total: 190, quantidade: 0 }, 2), 95);
+  assert.strictEqual(M.precoDaLinha({ unitario: 0, total: 0 }, 2), 0);
 });
 
 for (const [nome, fn] of testes) {

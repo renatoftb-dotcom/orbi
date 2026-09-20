@@ -646,16 +646,23 @@ async function linhasDoPdf(blob) {
   return linhas;
 }
 
-// Número em pt-BR que a loja escreve: "1.234,56", "43,00", "306,000".
+// Número em pt-BR que a loja escreve: "1.234,56", "43,00", "R$ 43,00".
 const COT_RE_NUM = /^-?\d{1,3}(\.\d{3})*(,\d+)?$|^-?\d+([.,]\d+)?$/;
 
+// O cifrão vem ora grudado no número, ora numa célula só dele; o espaço às
+// vezes é o fino (\u00a0). Nada disso muda o valor.
+function limparNumeroOrc(txt) {
+  return String(txt == null ? "" : txt).replace(/\u00a0/g, " ").replace(/R\$/gi, "").trim();
+}
+
 function ehNumeroDeOrcamento(txt) {
-  const t = String(txt == null ? "" : txt).trim();
-  return !!t && COT_RE_NUM.test(t);
+  const t = limparNumeroOrc(txt);
+  if (!t || /%$/.test(t)) return false;      // desconto em % não é valor
+  return COT_RE_NUM.test(t);
 }
 
 function numeroDeOrcamento(txt) {
-  const t = String(txt == null ? "" : txt).trim();
+  const t = limparNumeroOrc(txt);
   if (t.indexOf(",") >= 0) return numeroDoCampo(t);          // pt-BR
   // sem vírgula: ponto pode ser milhar ("1.234") ou decimal ("1.05")
   const m = /^(-?\d+)\.(\d+)$/.exec(t);
@@ -663,25 +670,146 @@ function numeroDeOrcamento(txt) {
   return numeroDoCampo(t);
 }
 
-// Uma linha da tabela: os três últimos números são quantidade, unitário e
-// total; o que vem antes é código e descrição. Linha de cabeçalho e de
-// somatório não entram — a primeira não tem número, a segunda não tem
-// descrição.
-function itemDeOrcamento(linha) {
+// ── O formato muda de loja para loja ────────────────────────────
+// Cada sistema emite o orçamento do jeito dele: uma tem coluna de código,
+// outra não; uma escreve "Qtde", outra "Quant."; uma põe a unidade antes do
+// preço, outra nem tem unidade; tem tabela sem coluna de total e tabela com
+// coluna de desconto no meio. Então não dá para contar casas fixas.
+//
+// Duas âncoras seguram a leitura, e as duas independem do desenho:
+//   1. o cabeçalho da tabela, que diz o que é cada coluna; e
+//   2. a conta: quantidade × unitário = total. Essa não mente.
+// Quando as duas concordam, o preço está certo. Quando só uma existe, ela
+// vale. Quando nenhuma fecha, a linha entra como está e você corrige na
+// conferência — é para isso que a conferência existe.
+
+const COT_RE_UNIDADE_TABELA = /^(un|und|unid|unidade|unidades|pc|p[çc]|peca|pe[çc]a|cx|caixa|sc|saco|kg|g|ton|m|mt|mts|metro|m2|m²|m3|m³|l|lt|lata|br|barra|rl|rolo|pt|pct|pacote|jg|cj|conj|ml|par|dz|fd|gl|vb)\.?$/i;
+
+// Cada rótulo de coluna, no que ele significa. A ordem importa: "Un." é
+// unidade, "Unit." é preço — o teste da unidade vem antes e exige a célula
+// inteira, senão "Unitário" seria lido como unidade.
+function papelDaCelula(txt) {
+  const t = String(txt == null ? "" : txt).trim();
+  if (!t) return "";
+  if (/^(un|und|unid|unidade)\.?$/i.test(t)) return "unidade";
+  if (/^(qtd|qtde|quant|qt)\b/i.test(t)) return "quantidade";
+  if (/(unit|unt)/i.test(t)) return "unitario";
+  if (/^(pre[çc]o|p\.?\s*un|vl\.?\s*un|valor\s*un)/i.test(t)) return "unitario";
+  if (/^(total|subtotal|sub-total|vl\.?\s*tot|valor\s*tot|v\.?\s*tot|l[íi]quido)/i.test(t)) return "total";
+  // "Descrição" antes de "Desc.": a coluna do desconto abrevia igualzinho ao
+  // começo da palavra descrição, e trocar as duas embaralha a tabela inteira.
+  if (/^(descri|produto|item|mercadoria|material|especifica|discrimina)/i.test(t)) return "descricao";
+  if (/^(desc|ipi|icms|aliq|al[íi]q|%)/i.test(t)) return "outro";       // coluna numérica que não uso
+  if (/^(c[óo]d|ref)/i.test(t)) return "codigo";
+  return "";
+}
+
+// Acha a linha que é o cabeçalho da tabela e devolve a ORDEM das colunas
+// numéricas — é isso que permite ler "Qtde | Desconto | Unitário | Total"
+// sem confundir o desconto com o preço.
+function papeisDaTabela(linhas) {
+  let melhor = null;
+  (linhas || []).forEach((l, i) => {
+    const cel = ((l || {}).celulas || []).map((c) => String(c).trim()).filter(Boolean);
+    if (!cel.length) return;
+    if (cel.some(ehNumeroDeOrcamento)) return;          // cabeçalho não tem número
+    const papeis = cel.map(papelDaCelula);
+    const numericos = papeis.filter((p) => p === "quantidade" || p === "unitario" || p === "total" || p === "outro");
+    const nota = numericos.filter((p) => p !== "outro").length + (papeis.indexOf("descricao") >= 0 ? 1 : 0);
+    if (nota >= 2 && (!melhor || nota > melhor.nota)) melhor = { i, nota, papeis: numericos };
+  });
+  return melhor;
+}
+
+// Uma linha da tabela vira item. Os números do fim são os valores; o que
+// vem antes é código, descrição e unidade. Cabeçalho e linha de somatório
+// não passam: o primeiro não tem número, o segundo não tem descrição.
+function itemDeOrcamento(linha, papeis) {
   const cel = ((linha || {}).celulas || []).map((c) => String(c).trim()).filter(Boolean);
-  if (cel.length < 4) return null;
-  const fim = cel.slice(-3);
-  if (!fim.every(ehNumeroDeOrcamento)) return null;
-  const antes = cel.slice(0, -3);
-  const codigo = /^\d{4,}$/.test(antes[0]) ? antes[0] : "";
-  const descricao = (codigo ? antes.slice(1) : antes).join(" ").trim();
+  if (cel.length < 2) return null;
+
+  // De trás para a frente: os números do fim são os valores, e uma unidade
+  // ("UN", "SC") no meio deles não interrompe a contagem.
+  const valores = [];
+  let unidade = "";
+  let k = cel.length - 1;
+  while (k >= 0) {
+    if (ehNumeroDeOrcamento(cel[k])) { valores.unshift(numeroDeOrcamento(cel[k])); k--; continue; }
+    if (COT_RE_UNIDADE_TABELA.test(cel[k]) && valores.length) { unidade = cel[k].replace(/\.$/, ""); k--; continue; }
+    break;
+  }
+  if (!valores.length) return null;
+
+  const cabeca = cel.slice(0, k + 1);
+  // Código de produto tem cara de código: zeros à esquerda ou quatro dígitos
+  // para cima. "300" na frente da descrição é quantidade, não código — e
+  // confundir os dois estraga o preço da linha inteira.
+  const codigo = /^0\d{2,}$|^\d{4,}$/.test(cabeca[0] || "") ? cabeca[0] : "";
+  // A descrição começa na primeira palavra de verdade: número solto antes
+  // dela é código ou quantidade, nunca nome de material. Já número DEPOIS
+  // ("Tijolo 8 Furos") é parte do nome e fica.
+  const iNome = cabeca.findIndex((c) => /[a-zA-ZÀ-ÿ]{3}/.test(c) && !COT_RE_UNIDADE_TABELA.test(c));
+  if (iNome < 0) return null;
+  const palavras = cabeca.slice(iNome).filter((c) => !COT_RE_UNIDADE_TABELA.test(c));
+  if (!unidade) {
+    const u = cabeca.find((c) => COT_RE_UNIDADE_TABELA.test(c));
+    if (u) unidade = u.replace(/\.$/, "");
+  }
+  const descricao = palavras.join(" ").trim();
   if (!descricao || !/[a-zA-ZÀ-ÿ]{3}/.test(descricao)) return null;
-  if (/^total\b/i.test(descricao)) return null;
-  const quantidade = numeroDeOrcamento(fim[0]);
-  const unitario = numeroDeOrcamento(fim[1]);
-  const total = numeroDeOrcamento(fim[2]);
+  if (/^(total|subtotal|sub-total|soma)\b/i.test(descricao)) return null;
+
+  // Números que ficaram ANTES da descrição: tem loja que põe a quantidade na
+  // frente ("300 UN Tijolo ... 1,05 315,00").
+  const naFrente = [];
+  for (let i = codigo ? 1 : 0; i < iNome; i++) if (ehNumeroDeOrcamento(cel[i])) naFrente.push(numeroDeOrcamento(cel[i]));
+
+  const bate = (a, b, c) => a > 0 && b > 0 && c > 0 && Math.abs(a * b - c) <= Math.max(0.02, c * 0.012);
+  let quantidade = 0, unitario = 0, total = 0;
+
+  // 1. O cabeçalho manda, quando o número de colunas bate com o da linha.
+  if (papeis && papeis.length && papeis.length === valores.length) {
+    papeis.forEach((p, i) => {
+      if (p === "quantidade") quantidade = valores[i];
+      else if (p === "unitario") unitario = valores[i];
+      else if (p === "total") total = valores[i];
+    });
+    // Se a conta não fecha, o cabeçalho não serviu para esta linha.
+    if (quantidade > 0 && unitario > 0 && total > 0 && !bate(quantidade, unitario, total)) {
+      quantidade = 0; unitario = 0; total = 0;
+    }
+  }
+
+  // 2. A conta: dois números que multiplicados dão um terceiro.
+  if (!(unitario > 0) || !(total > 0)) {
+    let achou = null;
+    for (let c = valores.length - 1; c >= 2 && !achou; c--)
+      for (let a = 0; a < c && !achou; a++)
+        for (let b = a + 1; b < c && !achou; b++)
+          if (bate(valores[a], valores[b], valores[c])) achou = { q: valores[a], u: valores[b], t: valores[c] };
+    // quantidade na frente da descrição
+    if (!achou && valores.length >= 2 && naFrente.length) {
+      const q = naFrente[naFrente.length - 1];
+      for (let b = 0; b < valores.length - 1 && !achou; b++)
+        for (let c = b + 1; c < valores.length && !achou; c++)
+          if (bate(q, valores[b], valores[c])) achou = { q, u: valores[b], t: valores[c] };
+    }
+    if (achou) { quantidade = achou.q; unitario = achou.u; total = achou.t; }
+  }
+
+  // 3. Nada fechou: dois números no fim são quantidade e unitário — é o
+  //    desenho mais comum de tabela sem coluna de total.
+  if (!(unitario > 0) && !(total > 0) && valores.length === 2) {
+    quantidade = valores[0]; unitario = valores[1];
+  }
+
+  // 4. Preencher o que falta, sempre pela conta.
+  if (quantidade > 0 && unitario > 0 && !(total > 0)) total = Math.round(quantidade * unitario * 100) / 100;
+  if (quantidade > 0 && total > 0 && !(unitario > 0)) unitario = Math.round((total / quantidade) * 10000) / 10000;
+  if (unitario > 0 && total > 0 && !(quantidade > 0)) quantidade = Math.round((total / unitario) * 1000) / 1000;
+
   if (!(unitario > 0) && !(total > 0)) return null;
-  return { codigo, descricao, quantidade, unitario, total };
+  return { codigo, descricao, unidade, quantidade, unitario, total };
 }
 
 const COT_MESES_PT = {};
@@ -696,11 +824,16 @@ function dataIsoDoOrcamento(txt) {
 function interpretarOrcamento(linhas) {
   const lista = (linhas || []).map((l) => (typeof l === "string" ? { celulas: [l], texto: l } : l));
   const tudo = lista.map((l) => l.texto).join("\n");
+  // Achado o cabeçalho, a tabela começa embaixo dele: o que está acima é
+  // papel timbrado, dados do cliente e o total do rodapé do cabeçalho — e
+  // nada disso pode virar item.
+  const cab = papeisDaTabela(lista);
   const itens = [];
-  for (const l of lista) {
-    const it = itemDeOrcamento(l);
+  lista.forEach((l, i) => {
+    if (cab && i <= cab.i) return;
+    const it = itemDeOrcamento(l, cab ? cab.papeis : null);
     if (it) itens.push(it);
-  }
+  });
   const cnpj = (/(\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2})/.exec(tudo) || [])[1] || "";
   // o nome da loja é a primeira linha de verdade do papel — antes de
   // qualquer rótulo ("IE:", "CNPJ", "Rua", "Fone")
@@ -741,6 +874,17 @@ function interpretarOrcamento(linhas) {
   const total = mTotal ? numeroDeOrcamento(mTotal[1]) : somaItens;
   return { fornecedor, cnpj, numero: String((/N[ÚU]MERO[:\s]*([\w-]+)/i.exec(tudo) || [])[1] || ""),
     emitido, validade, condicao, total, somaItens, itens };
+}
+
+// A loja pode ter mandado só o total da linha, sem o unitário. Com a
+// quantidade do pedido em mãos, o unitário sai da divisão — que é o que
+// interessa, porque é por unitário que o VICKE compara e lança.
+function precoDaLinha(linha, quantidade) {
+  const l = linha || {};
+  if (l.unitario > 0) return l.unitario;
+  const q = Number(quantidade || l.quantidade || 0);
+  if (l.total > 0 && q > 0) return Math.round((l.total / q) * 10000) / 10000;
+  return 0;
 }
 
 // ── Casar o que a loja mandou com o que foi pedido ──────────────
@@ -1926,18 +2070,29 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   async function lerOrcamentoDaLoja(arquivo, cotacao) {
     if (!arquivo) return;
     const ehPdf = /pdf$/i.test(arquivo.type || "") || /\.pdf$/i.test(arquivo.name || "");
-    if (!ehPdf) { setErro("Por enquanto só leio orçamento em PDF. Foto do papel não tem texto para ler."); return; }
+    if (!ehPdf) return;                     // foto anexa normal, sem leitura
     setErro("");
     setLendoPdf(true);
     try {
       const linhas = await linhasDoPdf(arquivo);
-      const orcamento = interpretarOrcamento(linhas);
-      if (!orcamento.itens.length) {
-        setErro("Não achei a tabela de itens nesse PDF. Se ele for digitalizado (foto), não há texto para ler — aí é digitar à mão.");
+      // Sem texto nenhum é PDF digitalizado (foto do papel) — não há o que
+      // ler, e insistir só faria perder tempo.
+      if (!linhas.length) {
+        setErro("Esse PDF é digitalizado (foto do papel), não tem texto para ler. Ele fica anexado, mas os preços vão a mão.");
         setLendoPdf(false);
         return;
       }
-      setOrcamentoLido({ orcamento, casamento: casarOrcamentoComItens(cotacao, orcamento), nome: arquivo.name || "" });
+      const orcamento = interpretarOrcamento(linhas);
+      const casamento = casarOrcamentoComItens(cotacao, orcamento);
+      // Mesmo sem reconhecer a tabela a conferência abre: cada loja escreve
+      // o orçamento de um jeito, e é lá que você aponta a linha certa ou
+      // digita o preço — melhor que devolver um erro e nada mais.
+      const escolhas = {};
+      for (const { item, linha } of casamento.casados) {
+        const i = linha ? orcamento.itens.indexOf(linha) : -1;
+        escolhas[item.id] = { i, preco: linha ? precoDaLinha(linha, quantidadeDoItem(item)) : 0 };
+      }
+      setOrcamentoLido({ orcamento, casamento, escolhas, nome: arquivo.name || "" });
     } catch (e) {
       setErro(e && e.message ? e.message : "Não consegui ler esse PDF.");
     }
@@ -1953,8 +2108,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       if (!f) return f;
       const p = { ...f.proposta };
       const precos = { ...(p.precos || {}) };
+      // Vale o que está na tela da conferência, não o que o leitor achou:
+      // se ele trocou a linha ou digitou o preço, é esse que entra.
       for (const c of casamento.casados) {
-        if (c.linha && c.linha.unitario > 0) precos[c.item.id] = c.linha.unitario;
+        const esc = (orcamentoLido.escolhas || {})[c.item.id] || {};
+        if (esc.preco > 0) precos[c.item.id] = esc.preco;
       }
       p.precos = precos;
       // Loja já cadastrada entra pelo cadastro; senão fica só o nome do papel.
@@ -1967,9 +2125,18 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       }
       if (orcamento.condicao) p.condicaoPagamento = orcamento.condicao;
       if (orcamento.validade) p.validade = orcamento.validade;
-      // Total do papel diferente da soma dos itens é desconto de fechamento —
-      // é para isso que serve o campo "Total fechado com a loja".
-      if (orcamento.total > 0 && Math.abs(orcamento.total - orcamento.somaItens) > 0.01) {
+      // Total do papel diferente da soma do que foi confirmado é desconto de
+      // fechamento — é para isso que serve o campo "Total fechado com a loja".
+      // Só vale quando a lista inteira veio DO PAPEL. Item que ficou sem
+      // preço, ou preço que você digitou porque a loja não cotou, deixam a
+      // soma maior que o papel — e aí a diferença não é desconto, é buraco:
+      // fechar por 573 abateria justamente o que não estava no orçamento.
+      const itensDoPedido = itensDaCotacao(cotacoes.find((c) => c.id === f.cotacaoId));
+      const todosDoPapel = itensDoPedido.length > 0 && itensDoPedido.every((it) =>
+        precos[it.id] > 0 && ((orcamentoLido.escolhas || {})[it.id] || {}).i >= 0);
+      const somaConfirmada = Math.round(itensDoPedido.reduce((a, it) =>
+        a + (precos[it.id] || 0) * quantidadeDoItem(it), 0) * 100) / 100;
+      if (todosDoPapel && orcamento.total > 0 && Math.abs(orcamento.total - somaConfirmada) > 0.01) {
         p.totalFechado = orcamento.total;
       }
       return { ...f, proposta: p };
@@ -2083,17 +2250,6 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
             </div>
           </div>
         )}
-        {/* O caminho curto: a loja respondeu num PDF, arrasta aqui e o
-            VICKE preenche. O caminho à mão continua logo abaixo. */}
-        {(() => {
-          const cotDaProposta = cotacoes.find(c => c.id === formProposta.cotacaoId);
-          if (!cotDaProposta || !temListaDeItens(cotDaProposta)) return null;
-          return (
-            <ZonaOrcamentoPdf lendo={lendoPdf}
-              aoSoltar={(arq) => lerOrcamentoDaLoja(arq, cotDaProposta)} />
-          );
-        })()}
-
         {/* Lista: a loja pode responder item a item ou só o total. Quem
             preenche item a item ganha a comparação por item; quem recebeu só
             "R$ 3.480 tudo" deixa em branco e digita o total. */}
@@ -2199,24 +2355,43 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
           <label style={E.label}>Observação</label>
           <input style={E.input} value={p.observacao} onChange={e => set("observacao", e.target.value)} placeholder="Não inclui a instalação." />
         </div>
-        <div style={{ marginBottom: 18 }}>
-          <label style={E.label}>Proposta enviada pelo fornecedor</label>
-          <CampoAnexoProposta anexo={p.anexo} onTrocar={a => set("anexo", a)} onErro={setErro} />
-        </div>
+        {(() => {
+          const cotDaProposta = cotacoes.find(c => c.id === formProposta.cotacaoId);
+          const comLista = !!cotDaProposta && temListaDeItens(cotDaProposta);
+          return (
+            <div style={{ marginBottom: 18 }}>
+              <label style={E.label}>Proposta enviada pelo fornecedor</label>
+              <CampoAnexoProposta anexo={p.anexo} onTrocar={a => set("anexo", a)} onErro={setErro}
+                lendo={lendoPdf}
+                aoLerPdf={comLista ? ((arq) => lerOrcamentoDaLoja(arq, cotDaProposta)) : null}
+                apoio={comLista
+                  ? "clique para escolher, ou cole com Ctrl+V — se for PDF, eu leio os preços e preencho a tabela acima"
+                  : undefined} />
+            </div>
+          );
+        })()}
         {orcamentoLido && (() => {
           const { orcamento: o, casamento: cm, nome } = orcamentoLido;
+          const escolhas = orcamentoLido.escolhas || {};
           const dia = (iso) => (iso ? new Date(iso + "T12:00:00").toLocaleDateString("pt-BR") : "");
-          const desconto = o.total > 0 && Math.abs(o.total - o.somaItens) > 0.01;
+          const trocarEscolha = (id, mudanca) => setOrcamentoLido((x) => x && ({
+            ...x, escolhas: { ...(x.escolhas || {}), [id]: { ...((x.escolhas || {})[id] || {}), ...mudanca } } }));
+          const comPreco = cm.casados.filter(({ item }) => ((escolhas[item.id] || {}).preco || 0) > 0);
+          const soma = Math.round(comPreco.reduce((a, { item }) =>
+            a + (escolhas[item.id].preco * quantidadeDoItem(item)), 0) * 100) / 100;
+          const desconto = o.total > 0 && Math.abs(o.total - soma) > 0.01;
+          const cols = isMobile ? "1fr" : "1fr 1.2fr 110px";
           return (
             <div onClick={() => setOrcamentoLido(null)}
               style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
                 alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
               <div onClick={(e) => e.stopPropagation()}
-                style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 720,
+                style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 780,
                   maxHeight: "88vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
                 <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Orçamento da loja</div>
                 <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
-                  {nome ? `${nome} · ` : ""}confira o que eu entendi antes de preencher a proposta.
+                  {nome ? `${nome} · ` : ""}cada loja manda o PDF de um jeito — confira, e corrija o que estiver
+                  fora do lugar antes de preencher.
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 10, marginBottom: 12 }}>
                   {[["Loja", o.fornecedor || "—"], ["Nº", o.numero || "—"],
@@ -2228,34 +2403,62 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   ))}
                 </div>
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginBottom: 8 }}>
-                  <strong style={{ color: cm.achados ? "#15803d" : "#b45309" }}>
-                    {cm.achados} de {cm.casados.length} {cm.casados.length === 1 ? "item" : "itens"} do pedido
-                  </strong>{" "}
-                  com preço neste orçamento.
-                  {cm.sobrando.length ? ` A loja cotou ${cm.sobrando.length} ${cm.sobrando.length === 1 ? "item" : "itens"} que não estavam no pedido — esses ficam de fora.` : ""}
+                  {o.itens.length ? (
+                    <>
+                      <strong style={{ color: comPreco.length ? "#15803d" : "#b45309" }}>
+                        {comPreco.length} de {cm.casados.length} {cm.casados.length === 1 ? "item" : "itens"} do pedido
+                      </strong>{" "}
+                      com preço.
+                      {cm.sobrando.length ? ` A loja cotou ${cm.sobrando.length} ${cm.sobrando.length === 1 ? "linha" : "linhas"} que não estavam no pedido — a setinha mostra todas.` : ""}
+                    </>
+                  ) : (
+                    <span style={{ color: "#b45309" }}>
+                      Não reconheci a tabela desse PDF — o desenho dele é diferente. Os preços vão a mão aqui embaixo;
+                      o arquivo fica anexado do mesmo jeito.
+                    </span>
+                  )}
                 </div>
                 <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
-                  {cm.casados.map(({ item, linha }) => (
-                    <div key={item.id} style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 96px",
-                      gap: 10, padding: "8px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center" }}>
-                      <span style={{ fontSize: 12.5, color: "#111827" }}>{item.descricao || "Item"}</span>
-                      <span style={{ fontSize: 11.5, color: linha ? "#4b5563" : "#b45309" }}>
-                        {linha ? `“${linha.descricao}”` : "não veio neste orçamento"}
-                      </span>
-                      <span style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", textAlign: isMobile ? "left" : "right" }}>
-                        {linha && linha.unitario > 0 ? dinheiro(linha.unitario) : "—"}
-                      </span>
-                    </div>
-                  ))}
+                  {cm.casados.map(({ item }) => {
+                    const esc = escolhas[item.id] || { i: -1, preco: 0 };
+                    const qtd = quantidadeDoItem(item);
+                    return (
+                      <div key={item.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 10,
+                        padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center" }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, color: "#111827" }}>{item.descricao || "Item"}</div>
+                          <div style={{ fontSize: 11, color: "#6b7280" }}>{qtdBR(qtd)} {item.unidade || ""}</div>
+                        </div>
+                        {/* A setinha com TODAS as linhas do PDF: quando a
+                            associação erra — e com tanto formato diferente
+                            ela erra — apontar a linha certa é um clique. */}
+                        <select style={{ ...E.input, cursor: "pointer" }} value={String(esc.i)}
+                          onChange={(e) => {
+                            const i = Number(e.target.value);
+                            const linha = i >= 0 ? o.itens[i] : null;
+                            trocarEscolha(item.id, { i, preco: linha ? precoDaLinha(linha, qtd) : 0 });
+                          }}>
+                          <option value="-1">— não veio neste orçamento —</option>
+                          {o.itens.map((l, i) => (
+                            <option key={i} value={String(i)}>
+                              {l.descricao}{precoDaLinha(l, 0) > 0 ? ` · ${dinheiro(precoDaLinha(l, 0))}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <CampoNumeroBR estilo={E.input} valor={esc.preco || ""} casas={2} placeholder="0,00"
+                          aoMudar={(v) => trocarEscolha(item.id, { preco: v })} />
+                      </div>
+                    );
+                  })}
                 </div>
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 10 }}>
-                  Soma dos itens cotados: <strong>{dinheiro(o.somaItens)}</strong>
-                  {desconto ? ` · total do papel ${dinheiro(o.total)} — a diferença entra como desconto de fechamento.` : "."}
+                  Soma do que tem preço: <strong>{dinheiro(soma)}</strong>
+                  {desconto ? ` · o papel fecha em ${dinheiro(o.total)} — a diferença entra como desconto de fechamento.` : "."}
                 </div>
                 <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 14 }}>
                   <button style={E.btnSec} onClick={() => setOrcamentoLido(null)}>Cancelar</button>
-                  <button style={{ ...E.btn, opacity: cm.achados ? 1 : 0.45, cursor: cm.achados ? "pointer" : "not-allowed" }}
-                    disabled={!cm.achados} onClick={aplicarOrcamentoLido}>
+                  <button style={{ ...E.btn, opacity: comPreco.length ? 1 : 0.45, cursor: comPreco.length ? "pointer" : "not-allowed" }}
+                    disabled={!comPreco.length} onClick={aplicarOrcamentoLido}>
                     Preencher a proposta
                   </button>
                 </div>
@@ -3278,34 +3481,6 @@ function ComparativoLista({ cot, dinheiro, isMobile }) {
   );
 }
 
-// ── Arrastar o orçamento da loja ────────────────────────────────
-function ZonaOrcamentoPdf({ aoSoltar, lendo }) {
-  const E = COT_ESTILO;
-  const [sobre, setSobre] = useState(false);
-  const refInput = useRef(null);
-  return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setSobre(true); }}
-      onDragLeave={() => setSobre(false)}
-      onDrop={(e) => { e.preventDefault(); setSobre(false); aoSoltar(e.dataTransfer.files && e.dataTransfer.files[0]); }}
-      onClick={() => refInput.current && refInput.current.click()}
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); refInput.current && refInput.current.click(); } }}
-      style={{ border: `1.5px dashed ${sobre ? "#0474f4" : "rgba(38,36,33,0.22)"}`, borderRadius: 12,
-        padding: "14px", textAlign: "center", cursor: "pointer", marginBottom: 14,
-        background: sobre ? "#f0f7ff" : "#fafafa", transition: "all .15s ease" }}>
-      <input ref={refInput} type="file" accept="application/pdf" style={{ display: "none" }}
-        onChange={(e) => { aoSoltar(e.target.files && e.target.files[0]); e.target.value = ""; }} />
-      <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-        {lendo ? "Lendo o orçamento…" : "Arraste aqui o orçamento em PDF que a loja mandou"}
-      </div>
-      <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
-        O VICKE lê os preços e preenche a proposta — você confere antes. O arquivo é lido aqui no navegador.
-      </div>
-    </div>
-  );
-}
-
 // Campo de unidade: sempre com a setinha, nunca texto solto.
 function CampoUnidade({ valor, unidades, aoMudar, estilo }) {
   const E = COT_ESTILO;
@@ -3506,7 +3681,7 @@ function FolhaPedido({ cot, proposta, ctx, aoFechar }) {
 }
 
 // Campo de anexo: arrasta o PDF do e-mail para cá, ou clica e escolhe.
-function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio }) {
+function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio, aoLerPdf, lendo }) {
   const [sobre, setSobre] = useState(false);
   const [enviando, setEnviando] = useState(false);
   // "Abrir" aqui era um link direto para a URL do storage. Como o arquivo
@@ -3523,7 +3698,14 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
     if (!arquivo) return;
     setEnviando(true);
     onErro("");
-    try { onTrocar(await enviarAnexo(arquivo, categoria || "proposta_cotacao")); }
+    try {
+      onTrocar(await enviarAnexo(arquivo, categoria || "proposta_cotacao"));
+      // O arquivo que a loja mandou é a proposta E a fonte dos preços — um
+      // campo só. A leitura usa o arquivo daqui, que já está na mão: não
+      // baixa de volta do storage nem manda para lugar nenhum.
+      const ehPdf = /pdf$/i.test(arquivo.type || "") || /\.pdf$/i.test(arquivo.name || "");
+      if (ehPdf && typeof aoLerPdf === "function") await aoLerPdf(arquivo);
+    }
     catch (e) { onErro(e.message || "Não foi possível anexar o arquivo."); }
     finally { setEnviando(false); }
   }
@@ -3575,6 +3757,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", wordBreak: "break-all" }}>{anexo.nome}</div>
           <div style={{ fontSize: 11, color: "#6b7280" }}>{tamanhoLegivel(anexo.bytes)}</div>
         </div>
+        {lendo && <div style={{ fontSize: 11.5, color: "#0474f4", fontWeight: 600 }}>lendo os preços…</div>}
         <button type="button" style={E.btnSec} onClick={() => setVendo(true)}>Abrir</button>
         <button style={E.btnSec} onClick={remover}>Remover</button>
         {vendo && <VisorProposta anexo={anexo} aoFechar={() => setVendo(false)} />}
@@ -3599,7 +3782,7 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
       <input ref={refInput} type="file" accept="application/pdf,image/*" style={{ display: "none" }}
         onChange={e => { receber(e.target.files && e.target.files[0]); e.target.value = ""; }} />
       <div style={{ fontSize: 12.5, color: "#111827", fontWeight: 600 }}>
-        {enviando ? "Enviando…" : (chamada || "Arraste o PDF da proposta aqui")}
+        {enviando ? (lendo ? "Lendo os preços…" : "Enviando…") : (chamada || "Arraste o PDF da proposta aqui")}
       </div>
       <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 3 }}>
         {apoio || "clique para escolher, ou cole com Ctrl+V — PDF ou foto, até 10 MB"}
