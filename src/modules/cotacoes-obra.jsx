@@ -33,6 +33,8 @@ function cotacaoVazia(obraId) {
     // coisa só com uma quantidade" e vira a lista do pedido da loja. Vazia,
     // tudo segue como antes — cotação de esquadria, de serralheiro.
     itens: [],
+    // lojas para quem a lista já foi mandada (ver registrarEnvioDaLista)
+    enviosLista: [],
     prazoResposta: "",
     precisaAprovacaoCliente: true,
     status: "aberta",       // aberta | decidida | cancelada
@@ -337,6 +339,60 @@ function textoDoPedido(cot, proposta, ctx) {
   if (String(c.escopo || "").trim()) { linhas.push(""); linhas.push(String(c.escopo).trim()); }
   if (x.contato) { linhas.push(""); linhas.push(`Contato: ${x.contato}`); }
   return linhas.join("\n");
+}
+
+// ── Mandar a lista para as lojas ────────────────────────────────
+// O pedido de material vira preço quando chega em três ou quatro lojas. O
+// VICKE não manda a mensagem — ele abre a conversa com o vendedor já com a
+// lista escrita, e quem aperta enviar é você. Melhor assim: o texto passa
+// pelos seus olhos antes de sair, e a conversa fica no seu WhatsApp.
+function linkWhatsApp(telefone, msg) {
+  const num = String(telefone == null ? "" : telefone).replace(/\D/g, "");
+  // 10 dígitos é o mínimo de um fixo com DDD; abaixo disso não é telefone
+  if (num.length < 10) return "";
+  const completo = num.startsWith("55") ? num : `55${num}`;
+  return `https://wa.me/${completo}${msg ? `?text=${encodeURIComponent(msg)}` : ""}`;
+}
+
+function enviosDaLista(cot) {
+  return ((cot || {}).enviosLista) || [];
+}
+
+function envioParaLoja(cot, fornecedorId) {
+  return enviosDaLista(cot).find((e) => e && e.fornecedorId === fornecedorId) || null;
+}
+
+// Reenviar não duplica: fica o último, que é o que responde "quando foi que
+// eu mandei para essa loja?".
+function registrarEnvioDaLista(cot, fornecedor, quem, agoraIso) {
+  const c = cot || {};
+  const f = fornecedor || {};
+  if (!f.id) return c;
+  const linha = { fornecedorId: f.id, nome: f.nome || "", em: agoraIso || new Date().toISOString(), por: quem || "" };
+  return { ...c, enviosLista: [...enviosDaLista(c).filter((e) => e.fornecedorId !== f.id), linha] };
+}
+
+// As lojas da vez: as que já receberam vêm primeiro, porque é nelas que se
+// volta para cobrar resposta.
+function lojasParaPedir(fornecedores, cot, busca) {
+  const termo = String(busca || "").trim().toLowerCase();
+  const semAcento = (t) => (typeof normalizarTexto === "function"
+    ? normalizarTexto(t)
+    : String(t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+  const alvo = semAcento(termo);
+  return (fornecedores || [])
+    .filter((f) => f && f.ativo !== false)
+    .filter((f) => !alvo || semAcento([f.nome, f.categoria, f.cidade].join(" ")).indexOf(alvo) >= 0)
+    .map((f) => {
+      const env = envioParaLoja(cot, f.id);
+      const jaCotou = propostasDaCotacao(cot).some((p) => p.fornecedorId === f.id);
+      return { fornecedor: f, envio: env, jaCotou, link: linkWhatsApp(f.telefone, "") };
+    })
+    .sort((a, b) => {
+      const peso = (x) => (x.jaCotou ? 0 : x.envio ? 1 : 2);
+      if (peso(a) !== peso(b)) return peso(a) - peso(b);
+      return String(a.fornecedor.nome || "").localeCompare(String(b.fornecedor.nome || ""), "pt-BR");
+    });
 }
 
 function melhorProposta(cot) {
@@ -1004,6 +1060,8 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [datasPag, setDatasPag] = useState(null);
   const [folhaPedido, setFolhaPedido] = useState(null);     // { cot, proposta }
   const [copiado, setCopiado] = useState("");
+  const [pedirLojas, setPedirLojas] = useState(null);   // cotação com o painel aberto
+  const [buscaLoja, setBuscaLoja] = useState("");
   const insumos = (data.materiais || []).filter(i => i && i.ativo !== false);
   // O que o pedido precisa dizer além da lista: de quem parte e para onde vai.
   const ctxPedido = {
@@ -1012,6 +1070,18 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     endereco: [obra.endereco, obra.cidade, obra.estado].filter(Boolean).join(", "),
     contato: ((data.escritorio || {}).telefone) || "",
   };
+  // Abre a conversa da loja com a lista escrita e marca que foi mandado.
+  // Quem aperta enviar é o usuário, dentro do WhatsApp dele.
+  function abrirWhatsAppDaLoja(cot, fornecedor) {
+    const link = linkWhatsApp(fornecedor.telefone, textoDoPedido(cot, null, ctxPedido));
+    if (!link) { setErro(`${fornecedor.nome || "Esta loja"} não tem telefone no cadastro.`); return; }
+    setErro("");
+    if (typeof window !== "undefined") window.open(link, "_blank", "noopener");
+    const atualizada = registrarEnvioDaLista(cot, fornecedor, nomeDeQuem(usuario));
+    trocarCotacao(cot.id, () => atualizada);
+    setPedirLojas(atualizada);
+  }
+
   function copiarPedido(cot, proposta) {
     const txt = textoDoPedido(cot, proposta, ctxPedido);
     const fim = () => { setCopiado(cot.id); setTimeout(() => setCopiado(""), 2500); };
@@ -1787,6 +1857,12 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                   )}
                   {temListaDeItens(cot) && (
                     <>
+                      {podeGerenciar && (
+                        <button style={E.btn} onClick={() => { setErro(""); setPedirLojas(cot); }}>
+                          Pedir preço às lojas
+                          {enviosDaLista(cot).length ? ` · ${enviosDaLista(cot).length}` : ""}
+                        </button>
+                      )}
                       <button style={E.btnSec} onClick={() => setFolhaPedido({ cot, proposta: propostaEscolhida(cot) })}>
                         Pedido (PDF)
                       </button>
@@ -1843,6 +1919,61 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       )}
 
       {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
+
+      {pedirLojas && (
+        <div onClick={() => setPedirLojas(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
+            alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 560,
+              maxHeight: "86vh", display: "flex", flexDirection: "column", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827" }}>Pedir preço às lojas</div>
+            <div style={{ fontSize: 12.5, color: "#4b5563", marginTop: 4, marginBottom: 12 }}>
+              {pedirLojas.titulo || "Lista"} · {itensDaCotacao(pedirLojas).length} {itensDaCotacao(pedirLojas).length === 1 ? "item" : "itens"}.
+              Cada botão abre a conversa da loja com a lista já escrita — você confere e aperta enviar lá. Mande para quantas quiser.
+            </div>
+            <input style={{ ...E.input, marginBottom: 10 }} value={buscaLoja} placeholder="Achar a loja pelo nome"
+              onChange={(e) => setBuscaLoja(e.target.value)} />
+            <div style={{ overflowY: "auto", border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10 }}>
+              {(() => {
+                const lojas = lojasParaPedir(prestadores, pedirLojas, buscaLoja);
+                if (!lojas.length) {
+                  return <div style={{ padding: "12px 14px", fontSize: 12.5, color: "#4b5563" }}>
+                    Nenhum fornecedor com esse nome. Cadastre em Prestadores de Serviços, com o telefone.
+                  </div>;
+                }
+                return lojas.map(({ fornecedor: f, envio, jaCotou, link }) => (
+                  <div key={f.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10,
+                    padding: "9px 12px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{f.nome || "Sem nome"}</div>
+                      <div style={{ fontSize: 11.5, color: "#6b7280" }}>
+                        {[f.telefone || "sem telefone no cadastro", f.cidade].filter(Boolean).join(" · ")}
+                        {jaCotou ? " · já respondeu" : envio ? ` · enviado em ${dataCurta(envio.em)}` : ""}
+                      </div>
+                    </div>
+                    <button type="button" disabled={!link} title={link ? "" : "Cadastre o telefone desta loja"}
+                      style={{ ...(envio || jaCotou ? E.btnSec : E.btn), opacity: link ? 1 : 0.45,
+                        cursor: link ? "pointer" : "not-allowed", whiteSpace: "nowrap" }}
+                      onClick={() => abrirWhatsAppDaLoja(pedirLojas, f)}>
+                      {envio ? "Reenviar" : "WhatsApp"}
+                    </button>
+                  </div>
+                ));
+              })()}
+            </div>
+            {erro && <div style={{ fontSize: 12, color: "#dc2626", marginTop: 10 }}>{erro}</div>}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: "#4b5563" }}>
+                {enviosDaLista(pedirLojas).length
+                  ? `Lista enviada para ${enviosDaLista(pedirLojas).length} ${enviosDaLista(pedirLojas).length === 1 ? "loja" : "lojas"}.`
+                  : "Ainda não foi enviada para nenhuma loja."}
+              </span>
+              <button style={E.btnSec} onClick={() => setPedirLojas(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {folhaPedido && (
         <FolhaPedido cot={folhaPedido.cot} proposta={folhaPedido.proposta} ctx={ctxPedido}

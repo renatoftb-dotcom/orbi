@@ -59,7 +59,8 @@ const modulo = new Function(`
            propostaTemPrecoPorItem, totalDosItens, itensSemPreco, valorDaProposta,
            melhorPorItem, comparativoDaLista, textoDoPedido, qtdBR,
            unitarioDoTotal, totalBrutoItem, valoresComDesconto, totalEfetivoItem,
-           precoEfetivo, totalNegociado, descontoDaProposta };
+           precoEfetivo, totalNegociado, descontoDaProposta,
+           linkWhatsApp, enviosDaLista, envioParaLoja, registrarEnvioDaLista, lojasParaPedir };
 `.replace(/__seq/g, "globalThis.__seq"))();
 globalThis.__seq = 0;
 
@@ -966,6 +967,63 @@ teste("a loja que deu desconto ganha a comparação por item", () => {
   cot.propostas[0].totalFechado = "3.000,00";   // bruto 4315
   const m = M.melhorPorItem(cot);
   assert.strictEqual(m.i1.favorecido, "Loja A", "o preço efetivo é o que vale");
+});
+
+// ── Mandar a lista para as lojas ────────────────────────────────
+
+teste("o link do WhatsApp põe o 55 e leva a lista no texto", () => {
+  const l = M.linkWhatsApp("(14) 99999-0000", "PEDIDO — Cimento");
+  assert.match(l, /^https:\/\/wa\.me\/5514999990000\?text=/);
+  assert.match(decodeURIComponent(l), /PEDIDO — Cimento/);
+  assert.match(M.linkWhatsApp("5514999990000", "x"), /^https:\/\/wa\.me\/5514999990000\?/, "não duplica o 55");
+});
+
+teste("telefone curto demais não vira link", () => {
+  assert.strictEqual(M.linkWhatsApp("1234", "x"), "");
+  assert.strictEqual(M.linkWhatsApp("", "x"), "");
+  assert.strictEqual(M.linkWhatsApp(null, "x"), "");
+});
+
+teste("o envio fica registrado, e reenviar não duplica a loja", () => {
+  const cot = { ...M.cotacaoVazia("o1"), id: "c1" };
+  const f = { id: "f1", nome: "Casa do Construtor" };
+  let c2 = M.registrarEnvioDaLista(cot, f, "Renato", "2026-09-20T12:00:00.000Z");
+  assert.strictEqual(M.enviosDaLista(c2).length, 1);
+  assert.strictEqual(M.envioParaLoja(c2, "f1").por, "Renato");
+  c2 = M.registrarEnvioDaLista(c2, f, "Renato", "2026-09-21T12:00:00.000Z");
+  assert.strictEqual(M.enviosDaLista(c2).length, 1, "a mesma loja não entra duas vezes");
+  assert.strictEqual(M.envioParaLoja(c2, "f1").em, "2026-09-21T12:00:00.000Z", "fica o último envio");
+});
+
+teste("fornecedor sem id não entra na lista de envios", () => {
+  const cot = M.cotacaoVazia("o1");
+  assert.strictEqual(M.enviosDaLista(M.registrarEnvioDaLista(cot, { nome: "x" }, "R")).length, 0);
+});
+
+teste("quem já respondeu vem primeiro, depois quem recebeu, depois o resto", () => {
+  const forn = [
+    { id: "f1", nome: "Zeta", ativo: true, telefone: "14999990000" },
+    { id: "f2", nome: "Alfa", ativo: true, telefone: "14999990001" },
+    { id: "f3", nome: "Beta", ativo: true, telefone: "14999990002" },
+    { id: "f4", nome: "Inativa", ativo: false, telefone: "14999990003" },
+  ];
+  let cot = { ...M.cotacaoVazia("o1"), id: "c1",
+    propostas: [{ id: "p1", fornecedorId: "f3", favorecido: "Beta" }] };
+  cot = M.registrarEnvioDaLista(cot, forn[0], "R", "2026-09-20T12:00:00.000Z");
+  const ordem = M.lojasParaPedir(forn, cot, "").map(x => x.fornecedor.nome);
+  assert.deepStrictEqual(ordem, ["Beta", "Zeta", "Alfa"], "inativa fica de fora");
+});
+
+teste("a busca de loja ignora acento", () => {
+  const forn = [{ id: "f1", nome: "Depósito Ourinhos", ativo: true, telefone: "14999990000" }];
+  assert.strictEqual(M.lojasParaPedir(forn, M.cotacaoVazia("o1"), "deposito").length, 1);
+  assert.strictEqual(M.lojasParaPedir(forn, M.cotacaoVazia("o1"), "xyz").length, 0);
+});
+
+teste("loja sem telefone aparece, mas sem link", () => {
+  const forn = [{ id: "f1", nome: "Sem Fone", ativo: true, telefone: "" }];
+  const [l] = M.lojasParaPedir(forn, M.cotacaoVazia("o1"), "");
+  assert.strictEqual(l.link, "", "a loja continua visível para você cadastrar o telefone");
 });
 
 for (const [nome, fn] of testes) {
