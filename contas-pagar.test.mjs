@@ -46,7 +46,9 @@ const modulo = new Function(`
            recalibrarContrato, previaRecalibragem, primeiroVencimentoContrato,
            contratoPorItem, recalibrarItens, datasDosItens, previaEntreContratos,
            tituloCurtoConta, apoioCurtoConta, tituloConta, detalheConta,
-           proximoNumeroContrato, servicoDoContrato, fluxoMensal };
+           proximoNumeroContrato, servicoDoContrato, fluxoMensal,
+           registrarAto, registrosDaConta, textoDoAto, ultimoAto, contaPaga, contaEmAberto, CP_ATOS,
+           CP_MAX_REGISTROS };
 `)();
 
 let passou = 0, falhou = 0;
@@ -1177,6 +1179,89 @@ teste("a conta diz de onde nasceu: contrato ou pedido", () => {
   assert.strictEqual(modulo.docDaConta({}), "");
   assert.strictEqual(modulo.docDaConta({ numeroContrato: "0003", numeroPedido: "0004" }), "Contrato 0003");
   assert.match(modulo.tituloConta({ numeroPedido: "0004", favorecido: "Ferro Pronto", descricao: "1ª entrega" }), /^Pedido 0004 · Ferro Pronto/);
+});
+
+// ── Quem fez o quê ──────────────────────────────────────────────
+
+teste("a baixa grava quem deu, quando e com que comprovante", () => {
+  const conta = { id: "c1", valor: 1000, pago: false };
+  const paga = modulo.contaPaga(conta, { pagoEm: "2026-09-10", valorPago: 1000,
+    comprovante: { nome: "pix.png" } }, "Renato", "2026-09-20T12:00:00.000Z");
+  assert.strictEqual(paga.pago, true);
+  assert.strictEqual(paga.pagoEm, "2026-09-10");
+  assert.strictEqual(paga.contabilizadoEm, "2026-09-20");
+  const atos = modulo.registrosDaConta(paga).map(r => r.ato);
+  assert.deepStrictEqual(atos, ["paga", "comprovante"], "baixa e anexo são dois atos");
+  assert.strictEqual(modulo.ultimoAto(paga, "paga").por, "Renato");
+  assert.strictEqual(modulo.registrosDaConta(paga)[1].detalhe, "pix.png");
+});
+
+teste("baixa sem comprovante não inventa ato de anexo", () => {
+  const paga = modulo.contaPaga({ id: "c1", valor: 500 }, { pagoEm: "2026-09-10", valorPago: 500 },
+    "Cliente", "2026-09-20T12:00:00.000Z");
+  assert.deepStrictEqual(modulo.registrosDaConta(paga).map(r => r.ato), ["paga"]);
+  assert.strictEqual(paga.comprovante, null);
+});
+
+teste("desfazer registra o ato e preserva o comprovante", () => {
+  const paga = modulo.contaPaga({ id: "c1", valor: 500 }, { pagoEm: "2026-09-10", valorPago: 500,
+    comprovante: { nome: "pix.png" } }, "Renato", "2026-09-20T12:00:00.000Z");
+  const aberta = modulo.contaEmAberto(paga, "Cliente", "2026-09-21T12:00:00.000Z");
+  assert.strictEqual(aberta.pago, false);
+  assert.strictEqual(aberta.valorPago, "");
+  assert.ok(aberta.comprovante, "o documento do pagamento que houve não se apaga");
+  const atos = modulo.registrosDaConta(aberta);
+  assert.strictEqual(atos[atos.length - 1].ato, "desfeita");
+  assert.strictEqual(atos[atos.length - 1].por, "Cliente");
+});
+
+teste("pagar de novo empilha a história, não a sobrescreve", () => {
+  let c = modulo.contaPaga({ id: "c1", valor: 100 }, { pagoEm: "2026-09-10", valorPago: 100 }, "A", "2026-09-10T12:00:00.000Z");
+  c = modulo.contaEmAberto(c, "B", "2026-09-11T12:00:00.000Z");
+  c = modulo.contaPaga(c, { pagoEm: "2026-09-12", valorPago: 100 }, "C", "2026-09-12T12:00:00.000Z");
+  assert.deepStrictEqual(modulo.registrosDaConta(c).map(r => r.por), ["A", "B", "C"]);
+  assert.strictEqual(modulo.ultimoAto(c, "paga").por, "C");
+});
+
+teste("o histórico tem teto e corta o começo, não o fim", () => {
+  let c = { id: "c1" };
+  for (let i = 0; i < modulo.CP_MAX_REGISTROS + 5; i++) c = modulo.registrarAto(c, "editada", `u${i}`, "2026-09-20T12:00:00.000Z");
+  const r = modulo.registrosDaConta(c);
+  assert.strictEqual(r.length, modulo.CP_MAX_REGISTROS);
+  assert.strictEqual(r[r.length - 1].por, `u${modulo.CP_MAX_REGISTROS + 4}`);
+});
+
+teste("o texto do ato sai legível", () => {
+  assert.strictEqual(modulo.textoDoAto({ ato: "paga", por: "Renato", em: "2026-09-20T12:00:00.000Z" }),
+    "Pagamento registrado por Renato em 20/09/2026");
+  assert.strictEqual(modulo.textoDoAto({ ato: "criada", por: "", em: "" }), "Conta lançada");
+});
+
+teste("recalibrar o pedido registra o ato em cada conta que andou", () => {
+  const contas = pedidoContas();
+  const r = modulo.recalibrarPedido(contas, "ct1", "2026-10-12", "Cliente", "2026-09-20T12:00:00.000Z");
+  const doPedido = r.filter(c => c.cotacaoId === "ct1");
+  for (const c of doPedido) {
+    const ato = modulo.ultimoAto(c, "recalibrada");
+    assert.ok(ato, "cada conta movida conta a própria mudança");
+    assert.strictEqual(ato.por, "Cliente");
+    assert.match(ato.detalhe, /→/);
+  }
+  // sem nome, nada de registro — é o caminho de quem só simula a prévia
+  const semNome = modulo.recalibrarPedido(contas, "ct1", "2026-10-12");
+  assert.strictEqual(modulo.registrosDaConta(semNome.find(c => c.cotacaoId === "ct1")).length, 0);
+});
+
+teste("a parcela em aberto do contrato não perde o histórico na ressincronia", () => {
+  const ct = base({ valor: 12000, parcelas: 2, dataInicio: "2026-01-10" });
+  const geradas = modulo.contasDoContrato({ ...ct, obraId: "o1" });
+  const comNota = geradas.map((c, i) => i === 0
+    ? modulo.registrarAto({ ...c, observacao: "combinado por telefone" }, "editada", "Renato", "2026-09-20T12:00:00.000Z")
+    : c);
+  const sync = modulo.sincronizarContasDoContrato(comNota, { ...ct, obraId: "o1" });
+  const primeira = sync.find(c => c.id === geradas[0].id);
+  assert.strictEqual(primeira.observacao, "combinado por telefone");
+  assert.strictEqual(modulo.registrosDaConta(primeira).length, 1);
 });
 
 console.log(`\n${passou} passou, ${falhou} falhou`);

@@ -327,7 +327,9 @@ function sincronizarContasDoContrato(contas, contrato) {
     // CLASSIFICAÇÃO acompanha o contrato: mudou a conta do plano, o extrato
     // do mês passado passa a mostrá-la no lugar certo
     if (anterior.pago) return { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
-    return { ...nova, observacao: anterior.observacao || "" };
+    // a parcela em aberto é reescrita pela regra do contrato, mas o que
+    // alguém anotou ou registrou nela não é da regra — fica
+    return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [] };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
@@ -442,6 +444,7 @@ function contaAvulsaVazia(obraId) {
     prestadorId: "", favorecido: "", descricao: "", valor: "",
     vencimento: dataParaIso(new Date()),
     pago: false, pagoEm: "", valorPago: "", observacao: "",
+    registros: [],
   };
 }
 
@@ -657,6 +660,97 @@ function detalheConta(conta) {
   const m = /^(?:Parcela|Medição) \d+\/\d+ \((.+)\)$/.exec(d);
   if (m) return m[1];
   return c.parcela && c.totalParcelas && /^Parcela \d+\/\d+$/.test(d) ? "" : d;
+}
+
+// ── Quem fez o quê, e quando ────────────────────────────────────
+// A tela é a mesma para o escritório e para o cliente, e os dois dão baixa
+// na MESMA conta. Sem nome em cada ato, abrir o mês vira adivinhação: "essa
+// baixa foi você ou fui eu?". Então tudo que muda uma conta deixa registro.
+//
+// É uma LISTA de atos, não um punhado de campos: pagamento desfeito e
+// refeito é uma história, não um estado. Conta antiga não tem lista nenhuma
+// e continua valendo — aparece sem histórico, que é a verdade sobre ela:
+// ninguém sabe quem deu aquela baixa.
+const CP_ATOS = {
+  criada: "Conta lançada",
+  editada: "Conta editada",
+  paga: "Pagamento registrado",
+  desfeita: "Pagamento desfeito",
+  comprovante: "Comprovante anexado",
+  comprovanteRemovido: "Comprovante removido",
+  recalibrada: "Datas recalibradas",
+};
+// Teto por conta: o histórico é para consultar, não para virar arquivo. O
+// que se corta é o começo, porque o que interessa é sempre o que houve por
+// último.
+const CP_MAX_REGISTROS = 30;
+
+function registrarAto(conta, ato, quem, agoraIso, detalhe) {
+  const c = conta || {};
+  const linha = { ato, por: String(quem || "").trim(), em: agoraIso || new Date().toISOString() };
+  if (detalhe) linha.detalhe = detalhe;
+  const lista = [...(c.registros || []), linha];
+  return { ...c, registros: lista.slice(-CP_MAX_REGISTROS) };
+}
+
+function registrosDaConta(conta) {
+  return ((conta || {}).registros || []).filter((r) => r && r.ato);
+}
+
+function cpDiaBR(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleDateString("pt-BR");
+}
+
+// "Pagamento registrado por Renato em 20/09/2026"
+function textoDoAto(registro) {
+  const r = registro || {};
+  const nome = typeof textoUtf8Recuperado === "function" ? textoUtf8Recuperado(r.por) : r.por;
+  const partes = [CP_ATOS[r.ato] || r.ato];
+  if (nome) partes.push(`por ${nome}`);
+  if (cpDiaBR(r.em)) partes.push(`em ${cpDiaBR(r.em)}`);
+  const base = partes.join(" ");
+  return r.detalhe ? `${base} · ${r.detalhe}` : base;
+}
+
+// O último ato de um tipo — para a linha curta ("Pago por X") sem abrir o
+// histórico inteiro.
+function ultimoAto(conta, ato) {
+  const lista = registrosDaConta(conta).filter((r) => r.ato === ato);
+  return lista.length ? lista[lista.length - 1] : null;
+}
+
+// Dar baixa. O comprovante entra junto e é ato à parte: anexar comprovante
+// depois, sem mexer no pagamento, também tem dono.
+function contaPaga(conta, dados, quem, agoraIso) {
+  const c = conta || {};
+  const d = dados || {};
+  const agora = agoraIso || new Date().toISOString();
+  const antes = c.comprovante || null;
+  const depois = d.comprovante || null;
+  let nova = {
+    ...c,
+    pago: true,
+    pagoEm: d.pagoEm || "",
+    valorPago: Math.round((Number(d.valorPago) || Number(c.valor) || 0) * 100) / 100,
+    contabilizadoEm: String(agora).slice(0, 10),
+    comprovante: depois,
+  };
+  nova = registrarAto(nova, "paga", quem, agora);
+  const mudouAnexo = JSON.stringify(antes || null) !== JSON.stringify(depois || null);
+  if (mudouAnexo && depois) nova = registrarAto(nova, "comprovante", quem, agora, depois.nome || "");
+  if (mudouAnexo && !depois && antes) nova = registrarAto(nova, "comprovanteRemovido", quem, agora);
+  return nova;
+}
+
+// Desfazer. O comprovante fica: ele é do pagamento que houve, e apagá-lo
+// junto perderia o documento por causa de um clique errado.
+function contaEmAberto(conta, quem, agoraIso) {
+  const c = conta || {};
+  const agora = agoraIso || new Date().toISOString();
+  return registrarAto({ ...c, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" },
+    "desfeita", quem, agora);
 }
 
 // ── Extrato mensal da obra (P&L realizado) ──────────────────────
@@ -1023,16 +1117,24 @@ function diasEntreIso(de, para) {
   return Math.round((b - a) / 86400000);
 }
 
-function recalibrarPedido(contas, cotacaoId, novaData) {
+function recalibrarPedido(contas, cotacaoId, novaData, quem, agoraIso) {
   const doPedido = contasDoPedido(contas, cotacaoId);
   const emAberto = doPedido.filter((c) => !c.pago);
   if (!emAberto.length || !novaData) return contas || [];
   const delta = diasEntreIso(emAberto[0].vencimento, String(novaData).slice(0, 10));
   if (!delta) return contas || [];
   const mover = new Set(emAberto.map((c) => c.id));
-  return (contas || []).map((c) => (mover.has(c.id)
-    ? { ...c, vencimento: somarDias(c.vencimento, delta) }
-    : c));
+  const agora = agoraIso || new Date().toISOString();
+  // A conta do pedido não é reescrita por regra nenhuma (as datas foram
+  // digitadas à mão), então é nela mesma que o ato fica registrado.
+  return (contas || []).map((c) => {
+    if (!mover.has(c.id)) return c;
+    const movida = { ...c, vencimento: somarDias(c.vencimento, delta) };
+    return quem
+      ? registrarAto(movida, "recalibrada", quem, agora,
+          `${cpDiaBR(c.vencimento)} → ${cpDiaBR(movida.vencimento)}`)
+      : movida;
+  });
 }
 
 // A prévia do que vai mudar, no mesmo formato da do contrato.

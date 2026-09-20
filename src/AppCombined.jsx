@@ -17417,7 +17417,9 @@ function sincronizarContasDoContrato(contas, contrato) {
     // CLASSIFICAÇÃO acompanha o contrato: mudou a conta do plano, o extrato
     // do mês passado passa a mostrá-la no lugar certo
     if (anterior.pago) return { ...anterior, contaId: nova.contaId, servico: nova.servico, favorecido: nova.favorecido };
-    return { ...nova, observacao: anterior.observacao || "" };
+    // a parcela em aberto é reescrita pela regra do contrato, mas o que
+    // alguém anotou ou registrou nela não é da regra — fica
+    return { ...nova, observacao: anterior.observacao || "", registros: anterior.registros || [] };
   });
   // parcela paga que não existe mais no contrato continua na lista: o
   // dinheiro saiu, e sumir com ela esconderia um pagamento real
@@ -17532,6 +17534,7 @@ function contaAvulsaVazia(obraId) {
     prestadorId: "", favorecido: "", descricao: "", valor: "",
     vencimento: dataParaIso(new Date()),
     pago: false, pagoEm: "", valorPago: "", observacao: "",
+    registros: [],
   };
 }
 
@@ -17747,6 +17750,97 @@ function detalheConta(conta) {
   const m = /^(?:Parcela|Medição) \d+\/\d+ \((.+)\)$/.exec(d);
   if (m) return m[1];
   return c.parcela && c.totalParcelas && /^Parcela \d+\/\d+$/.test(d) ? "" : d;
+}
+
+// ── Quem fez o quê, e quando ────────────────────────────────────
+// A tela é a mesma para o escritório e para o cliente, e os dois dão baixa
+// na MESMA conta. Sem nome em cada ato, abrir o mês vira adivinhação: "essa
+// baixa foi você ou fui eu?". Então tudo que muda uma conta deixa registro.
+//
+// É uma LISTA de atos, não um punhado de campos: pagamento desfeito e
+// refeito é uma história, não um estado. Conta antiga não tem lista nenhuma
+// e continua valendo — aparece sem histórico, que é a verdade sobre ela:
+// ninguém sabe quem deu aquela baixa.
+const CP_ATOS = {
+  criada: "Conta lançada",
+  editada: "Conta editada",
+  paga: "Pagamento registrado",
+  desfeita: "Pagamento desfeito",
+  comprovante: "Comprovante anexado",
+  comprovanteRemovido: "Comprovante removido",
+  recalibrada: "Datas recalibradas",
+};
+// Teto por conta: o histórico é para consultar, não para virar arquivo. O
+// que se corta é o começo, porque o que interessa é sempre o que houve por
+// último.
+const CP_MAX_REGISTROS = 30;
+
+function registrarAto(conta, ato, quem, agoraIso, detalhe) {
+  const c = conta || {};
+  const linha = { ato, por: String(quem || "").trim(), em: agoraIso || new Date().toISOString() };
+  if (detalhe) linha.detalhe = detalhe;
+  const lista = [...(c.registros || []), linha];
+  return { ...c, registros: lista.slice(-CP_MAX_REGISTROS) };
+}
+
+function registrosDaConta(conta) {
+  return ((conta || {}).registros || []).filter((r) => r && r.ato);
+}
+
+function cpDiaBR(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return isNaN(d) ? "" : d.toLocaleDateString("pt-BR");
+}
+
+// "Pagamento registrado por Renato em 20/09/2026"
+function textoDoAto(registro) {
+  const r = registro || {};
+  const nome = typeof textoUtf8Recuperado === "function" ? textoUtf8Recuperado(r.por) : r.por;
+  const partes = [CP_ATOS[r.ato] || r.ato];
+  if (nome) partes.push(`por ${nome}`);
+  if (cpDiaBR(r.em)) partes.push(`em ${cpDiaBR(r.em)}`);
+  const base = partes.join(" ");
+  return r.detalhe ? `${base} · ${r.detalhe}` : base;
+}
+
+// O último ato de um tipo — para a linha curta ("Pago por X") sem abrir o
+// histórico inteiro.
+function ultimoAto(conta, ato) {
+  const lista = registrosDaConta(conta).filter((r) => r.ato === ato);
+  return lista.length ? lista[lista.length - 1] : null;
+}
+
+// Dar baixa. O comprovante entra junto e é ato à parte: anexar comprovante
+// depois, sem mexer no pagamento, também tem dono.
+function contaPaga(conta, dados, quem, agoraIso) {
+  const c = conta || {};
+  const d = dados || {};
+  const agora = agoraIso || new Date().toISOString();
+  const antes = c.comprovante || null;
+  const depois = d.comprovante || null;
+  let nova = {
+    ...c,
+    pago: true,
+    pagoEm: d.pagoEm || "",
+    valorPago: Math.round((Number(d.valorPago) || Number(c.valor) || 0) * 100) / 100,
+    contabilizadoEm: String(agora).slice(0, 10),
+    comprovante: depois,
+  };
+  nova = registrarAto(nova, "paga", quem, agora);
+  const mudouAnexo = JSON.stringify(antes || null) !== JSON.stringify(depois || null);
+  if (mudouAnexo && depois) nova = registrarAto(nova, "comprovante", quem, agora, depois.nome || "");
+  if (mudouAnexo && !depois && antes) nova = registrarAto(nova, "comprovanteRemovido", quem, agora);
+  return nova;
+}
+
+// Desfazer. O comprovante fica: ele é do pagamento que houve, e apagá-lo
+// junto perderia o documento por causa de um clique errado.
+function contaEmAberto(conta, quem, agoraIso) {
+  const c = conta || {};
+  const agora = agoraIso || new Date().toISOString();
+  return registrarAto({ ...c, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" },
+    "desfeita", quem, agora);
 }
 
 // ── Extrato mensal da obra (P&L realizado) ──────────────────────
@@ -18113,16 +18207,24 @@ function diasEntreIso(de, para) {
   return Math.round((b - a) / 86400000);
 }
 
-function recalibrarPedido(contas, cotacaoId, novaData) {
+function recalibrarPedido(contas, cotacaoId, novaData, quem, agoraIso) {
   const doPedido = contasDoPedido(contas, cotacaoId);
   const emAberto = doPedido.filter((c) => !c.pago);
   if (!emAberto.length || !novaData) return contas || [];
   const delta = diasEntreIso(emAberto[0].vencimento, String(novaData).slice(0, 10));
   if (!delta) return contas || [];
   const mover = new Set(emAberto.map((c) => c.id));
-  return (contas || []).map((c) => (mover.has(c.id)
-    ? { ...c, vencimento: somarDias(c.vencimento, delta) }
-    : c));
+  const agora = agoraIso || new Date().toISOString();
+  // A conta do pedido não é reescrita por regra nenhuma (as datas foram
+  // digitadas à mão), então é nela mesma que o ato fica registrado.
+  return (contas || []).map((c) => {
+    if (!mover.has(c.id)) return c;
+    const movida = { ...c, vencimento: somarDias(c.vencimento, delta) };
+    return quem
+      ? registrarAto(movida, "recalibrada", quem, agora,
+          `${cpDiaBR(c.vencimento)} → ${cpDiaBR(movida.vencimento)}`)
+      : movida;
+  });
 }
 
 // A prévia do que vai mudar, no mesmo formato da do contrato.
@@ -19735,7 +19837,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
                         style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
                         onClick={() => gerarContrato(cot)}>Gerar contrato</button>
-                      {ehEscritorio && (() => {
+                      {/* Lançar direto em contas a pagar vale para os dois: é o
+                          caminho do fornecedor que entrega contra nota e não
+                          assina contrato, e quem paga esse fornecedor tanto pode
+                          ser o escritório quanto o cliente. */}
+                      {podeGerenciar && (() => {
                         const tl = podeLancarEmContas(cot, contratos);
                         return (
                           <button disabled={!tl.pode} title={tl.pode ? "Para fornecedor que não assina contrato — não espera o aval do cliente" : tl.motivo}
@@ -19767,7 +19873,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         Lançada em contas a pagar{cot.lancadoEm ? ` em ${dataCurta(cot.lancadoEm)}` : ""}
                         {cot.lancadoPor ? ` por ${nomeGravado(cot.lancadoPor)}` : ""} — sem contrato.
                       </span>
-                      {ehEscritorio && (
+                      {podeGerenciar && (
                         <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
                           onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
                       )}
@@ -21968,6 +22074,10 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // fatia deste. Gravar a fatia por cima da coleção apagava as obras dos
   // outros clientes — por isso toda escrita passa por aqui.
   const gravarObras = (fatia) => save({ ...data, obras: mesclarPorCliente(data.obras, cliente.id, fatia) });
+  // Escritório e cliente usam esta mesma tela e mexem nas mesmas contas.
+  // Tudo que é gravado daqui leva o nome de quem gravou — é o que permite
+  // abrir uma baixa meses depois e saber de quem foi a mão.
+  const quemSou = () => nomeDeQuem(perm.usuario);
   // ── Cadastro do escritório (contratado dos contratos de gestão) ──
   const abrirFormEscritorio = () => {
     const e = data.escritorio || {};
@@ -22032,7 +22142,8 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!f.descricao?.trim()) { dialogo.alertar({ titulo: "Informe a descrição da conta", tipo: "aviso" }); return; }
     if (!(Number(f.valor) > 0)) { dialogo.alertar({ titulo: "Informe um valor maior que zero", tipo: "aviso" }); return; }
     const existe = contasDaObra.some(c => c.id === f.id);
-    gravarContas(existe ? contasDaObra.map(c => c.id === f.id ? f : c) : [...contasDaObra, f]);
+    const carimbada = registrarAto(f, existe ? "editada" : "criada", quemSou());
+    gravarContas(existe ? contasDaObra.map(c => c.id === f.id ? carimbada : c) : [...contasDaObra, carimbada]);
     setFormConta(null);
   };
   // Pagar registra o realizado na própria conta — é ela que alimenta o
@@ -22040,7 +22151,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
   // Desfazer é imediato; pagar abre a telinha da data de contabilização.
   const alternarPagamento = (conta) => {
     if (conta.pago) {
-      const atualizada = { ...conta, pago: false, pagoEm: "", valorPago: "", contabilizadoEm: "" };
+      const atualizada = contaEmAberto(conta, quemSou());
       gravarContas(contasDaObra.map(c => c.id === conta.id ? atualizada : c), conta.obraId);
       return;
     }
@@ -22053,8 +22164,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const f = formPagamento; if (!f) return;
     const valor = numeroDeCampo(f.valorPago) || Number(f.conta.valor) || 0;
     if (!f.dataContab) { dialogo.alertar({ titulo: "Informe a data de contabilização", tipo: "aviso" }); return; }
-    const atualizada = { ...f.conta, pago: true, pagoEm: f.dataContab, valorPago: valor, contabilizadoEm: hojeIso,
-      comprovante: f.comprovante || null };
+    const atualizada = contaPaga(f.conta, { pagoEm: f.dataContab, valorPago: valor, comprovante: f.comprovante || null }, quemSou());
     gravarContas(contasDaObra.map(c => c.id === f.conta.id ? atualizada : c), f.conta.obraId);
     setFormPagamento(null);
   };
@@ -22066,7 +22176,11 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const pedido = (obraAtual.cotacoes || []).find(c => c.id === f.contratoId && c.contaGeradaId);
     if (pedido) {
       if (!f.novaData) { dialogo.alertar({ titulo: "Informe a nova data do primeiro pagamento", tipo: "aviso" }); return; }
-      gravarContas(recalibrarPedido(contasDaObra, pedido.id, f.novaData), obraAtual.id);
+      const agora = new Date().toISOString();
+      const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== pedido.id ? c
+        : ({ ...c, recalibradoPor: quemSou(), recalibradoEm: agora }));
+      gravarObras(obras.map(o => o.id !== obraAtual.id ? o : ({ ...o, cotacoes,
+        contasPagar: recalibrarPedido(contasDaObra, pedido.id, f.novaData, quemSou(), agora) })));
       setFormRecalibrar(null);
       return;
     }
@@ -22074,9 +22188,12 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     if (!alvo) { setFormRecalibrar(null); return; }
     const porItem = contratoPorItem(alvo);
     if (!porItem && !f.novaData) { dialogo.alertar({ titulo: "Informe a nova data do primeiro pagamento", tipo: "aviso" }); return; }
-    const recalibrado = porItem
+    // A parcela em aberto do contrato é reescrita pela regra, então o ato
+    // não cabe nela: fica no contrato, que é o que de fato mudou.
+    const recalibrado = { ...(porItem
       ? { ...recalibrarItens(alvo, f.itens || []), previsaoConclusao: f.previsaoConclusao || "" }
-      : recalibrarContrato(alvo, f.novaData);
+      : recalibrarContrato(alvo, f.novaData)),
+      recalibradoPor: quemSou(), recalibradoEm: new Date().toISOString() };
     const contratosNovos = (obraAtual.contratos || []).map(c => c.id === alvo.id ? recalibrado : c);
     const contasNovas = sincronizarContasDaObra(contasDaObra, contratosNovos);
     gravarObras(obras.map(o => o.id === obraAtual.id ? { ...o, contratos: contratosNovos, contasPagar: contasNovas } : o));
@@ -22786,11 +22903,18 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     const salvar = () => {
       if (!g.tipoProfissional) { dialogo.alertar({ titulo: "Escolha o tipo de profissional", mensagem: "O contrato começa pelo tipo de profissional — é ele que define o regime e o objeto.", tipo: "aviso" }); return null; }
       if (!g.prestadorId && !g.nomeContratado?.trim()) { dialogo.alertar({ titulo: "Escolha o prestador", mensagem: "Selecione um prestador cadastrado, cadastre um novo ou digite o nome do contratado.", tipo: "aviso" }); return null; }
-      const novo = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total,
+      const novo0 = { ...g, nomeContratado: prest ? prest.nome : g.nomeContratado, valor: total,
         // número sequencial atribuído na primeira gravação e mantido depois
         numeroContrato: g.numeroContrato || proximoNumeroContrato(data.obras || []),
         geradoEm: g.geradoEm || new Date().toISOString(), atualizadoEm: new Date().toISOString() };
-      const existe = contratos.some(c => c.id === novo.id);
+      const existe = contratos.some(c => c.id === novo0.id);
+      // Contrato antigo não tem "criado por" — não dá para inventar quem
+      // gerou antes disso existir. O que dá é registrar a partir daqui: na
+      // primeira vez que ele for salvo de novo, ganha o carimbo de quem
+      // salvou, e a criação continua em branco, que é a verdade.
+      const agoraCtr = new Date().toISOString();
+      const novo = { ...novo0, salvoPor: quemSou(), salvoEm: agoraCtr,
+        ...(existe ? {} : { criadoPor: novo0.criadoPor || quemSou(), criadoEm: novo0.criadoEm || agoraCtr }) };
       const listaContratos = existe ? contratos.map(c => c.id === novo.id ? novo : c) : [...contratos, novo];
       // salvar o contrato alimenta as contas a pagar da obra na mesma gravação
       const contasAtualizadas = sincronizarContasDoContrato(contasDaObra, { ...novo, obraId: obraSelecionada.id });
@@ -23619,7 +23743,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         ) : (
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
             <button style={C.btnSec} onClick={() => setFormConta(contaAvulsaVazia(obraSelecionada.id))}>＋ Nova conta</button>
-            {perm.podeGerenciarObra && alvosRecalibraveis.length > 0 && (
+            {alvosRecalibraveis.length > 0 && (
               <button style={C.btnSec} onClick={() => abrirRecalibragem(alvosRecalibraveis[0].id)}>Recalibrar datas</button>
             )}
           </div>
@@ -23716,7 +23840,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                 <div style={{ marginTop: 14, border: "1px solid rgba(38,36,33,0.12)", borderRadius: 10, overflow: "hidden" }}>
                   <div style={{ background: "#fafafa", padding: "7px 11px", fontSize: 11.5, fontWeight: 700, color: "#111827" }}>Como ficam as parcelas em aberto</div>
                   {previa.linhas.length === 0 ? (
-                    <div style={{ padding: "10px 11px", fontSize: 12, color: "#4b5563" }}>Nenhuma parcela em aberto neste contrato.</div>
+                    <div style={{ padding: "10px 11px", fontSize: 12, color: "#4b5563" }}>Nenhuma parcela em aberto neste {ehPedido ? "pedido" : "contrato"}.</div>
                   ) : previa.linhas.map(l => (
                     <div key={l.id} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "7px 11px", borderTop: "1px solid rgba(38,36,33,0.06)" }}>
                       <span style={{ fontSize: 12, color: "#4b5563" }}>{l.descricao}</span>
@@ -23729,9 +23853,21 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     </div>
                   )}
                 </div>
+                {(() => {
+                  const doc = ehPedido
+                    ? (obraAtual.cotacoes || []).find(c => c.id === (escolhido || {}).id)
+                    : alvo;
+                  return doc && doc.recalibradoPor ? (
+                    <div style={{ fontSize: 11.5, color: "#6b7280", marginTop: 8 }}>
+                      Recalibrado por último por {nomeGravado(doc.recalibradoPor)}{dataCurta(doc.recalibradoEm) ? ` em ${dataCurta(doc.recalibradoEm)}` : ""}.
+                    </div>
+                  ) : null;
+                })()}
                 <div style={{ fontSize: 11.5, color: "#4b5563", marginTop: 8 }}>
                   {previa.pagas > 0 ? `${previa.pagas} parcela${previa.pagas === 1 ? "" : "s"} já paga${previa.pagas === 1 ? "" : "s"} fica${previa.pagas === 1 ? "" : "m"} como está${previa.pagas === 1 ? "" : "ão"}. ` : ""}
-                  {porItem
+                  {ehPedido
+                    ? "As contas em aberto deste pedido andam junto; o que já foi pago fica onde está."
+                    : porItem
                     ? "Cada item passa a ter o seu próprio começo e a sua própria conclusão; item sem conclusão própria usa a previsão padrão acima."
                     : "O contrato passa a dizer que a primeira parcela vence nesta data."}
                 </div>
@@ -23832,11 +23968,23 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                                       ["Contabilizado em", c.pago ? dataBR(c.pagoEm) : ""],
                                       ["Registrado em", c.pago ? dataBR(c.contabilizadoEm) : ""],
                                       ["Valor pago", c.pago ? fmtMoedaCtr(Number(c.valorPago) || Number(c.valor) || 0) : ""],
+                                      ["Baixa dada por", c.pago ? nomeGravado((ultimoAto(c, "paga") || {}).por) : ""],
                                       ["Observação", c.observacao]].filter(([, v]) => v).map(([rot, v]) => (
                                         <div key={rot} style={{ fontSize: 11.5, color: "#4b5563" }}>
                                           <span style={{ color: "#6b7280" }}>{rot}: </span><span style={{ color: "#111827" }}>{v}</span>
                                         </div>
                                       ))}
+                                    {/* O histórico é a resposta para "quem mexeu nisso?" — a
+                                        mesma conta é do escritório e do cliente. Conta de antes
+                                        deste registro não tem histórico, e é isso que ela diz. */}
+                                    {registrosDaConta(c).length > 0 && (
+                                      <div style={{ marginTop: 6, paddingTop: 6, borderTop: "1px solid rgba(38,36,33,0.08)" }}>
+                                        <div style={{ fontSize: 11, color: "#6b7280", marginBottom: 3 }}>Histórico</div>
+                                        {registrosDaConta(c).slice().reverse().map((r, i) => (
+                                          <div key={i} style={{ fontSize: 11.5, color: "#4b5563" }}>{textoDoAto(r)}</div>
+                                        ))}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
@@ -24007,6 +24155,15 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
                     {aceiteDoContrato(contrato.id) && (
                       <div style={{ fontSize: 11.5, color: AZUL_VK, marginTop: 6, fontWeight: 600 }}>
                         Aceite de {textoUtf8Recuperado(aceiteDoContrato(contrato.id).por)} em {new Date(aceiteDoContrato(contrato.id).em).toLocaleDateString("pt-BR")}
+                      </div>
+                    )}
+                    {/* Quem gerou, quem salvou por último, quem escorregou as
+                        datas. Contrato gerado antes disto existir aparece sem
+                        a linha — carimbo retroativo seria invenção. */}
+                    {(textoAutoria(contrato) || contrato.recalibradoPor) && (
+                      <div style={{ fontSize: 11, color: "#6b7280", marginTop: 6 }}>
+                        {textoAutoria(contrato)}
+                        {contrato.recalibradoPor ? `${textoAutoria(contrato) ? " · " : ""}datas recalibradas por ${nomeGravado(contrato.recalibradoPor)}${dataCurta(contrato.recalibradoEm) ? ` em ${dataCurta(contrato.recalibradoEm)}` : ""}` : ""}
                       </div>
                     )}
                   </div>

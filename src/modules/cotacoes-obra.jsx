@@ -1233,7 +1233,11 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                       <button disabled={!trava.pode} title={trava.pode ? "" : trava.motivo}
                         style={{ ...E.btn, opacity: trava.pode ? 1 : 0.45, cursor: trava.pode ? "pointer" : "not-allowed" }}
                         onClick={() => gerarContrato(cot)}>Gerar contrato</button>
-                      {ehEscritorio && (() => {
+                      {/* Lançar direto em contas a pagar vale para os dois: é o
+                          caminho do fornecedor que entrega contra nota e não
+                          assina contrato, e quem paga esse fornecedor tanto pode
+                          ser o escritório quanto o cliente. */}
+                      {podeGerenciar && (() => {
                         const tl = podeLancarEmContas(cot, contratos);
                         return (
                           <button disabled={!tl.pode} title={tl.pode ? "Para fornecedor que não assina contrato — não espera o aval do cliente" : tl.motivo}
@@ -1265,7 +1269,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         Lançada em contas a pagar{cot.lancadoEm ? ` em ${dataCurta(cot.lancadoEm)}` : ""}
                         {cot.lancadoPor ? ` por ${nomeGravado(cot.lancadoPor)}` : ""} — sem contrato.
                       </span>
-                      {ehEscritorio && (
+                      {podeGerenciar && (
                         <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
                           onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
                       )}
