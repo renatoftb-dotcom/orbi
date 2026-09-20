@@ -755,6 +755,7 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [formLancamento, setFormLancamento] = useState(null);   // { cotacao, status }
   const [novoPrestador, setNovoPrestador] = useState(null); // objeto quando o cadastro está aberto
   const [visor, setVisor] = useState(null);                 // anexo aberto na janela
+  const [detalhePag, setDetalhePag] = useState(null);       // cotação com os pagamentos abertos
   const [erro, setErro] = useState("");
 
   // Grava a obra sem encostar nas obras dos outros clientes: `obras` aqui é
@@ -1269,8 +1270,24 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                       {escolhida ? "Desfazer" : "Escolher"}
                                     </button>
                                   )}
+                                  {/* Os pagamentos combinados pertencem ao
+                                      fornecedor escolhido, então o caminho
+                                      até eles é a linha dele. Embaixo do
+                                      cartão a tabela competia com a lista de
+                                      propostas e confundia as duas coisas. */}
+                                  {escolhida && linhasDoPagamento(cot, obra.contasPagar || [], hoje).linhas.length > 0 && (
+                                    <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginRight: 6 }}
+                                      onClick={() => setDetalhePag(cot)}>Detalhe</button>
+                                  )}
                                   <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5 }}
                                     onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: p }); }}>Editar</button>
+                                  {/* Desfazer o lançamento é ação sobre ESTE
+                                      fornecedor, não sobre a cotação: mora ao
+                                      lado dos pagamentos que ele gerou. */}
+                                  {escolhida && cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
+                                    <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginLeft: 6, color: "#dc2626" }}
+                                      onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
+                                  )}
                                   {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                                     <button title="Excluir esta proposta"
                                       style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginLeft: 6, color: "#dc2626" }}
@@ -1315,9 +1332,6 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     {ap.motivo ? ` — ${ap.motivo}` : ""}
                   </div>
                 )}
-
-                <QuadroPagamentosCotacao cot={cot} contas={obra.contasPagar || []} hoje={hoje}
-                  dinheiro={dinheiro} isMobile={isMobile} />
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {podeGerenciar && !cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
@@ -1374,10 +1388,6 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         Lançada em contas a pagar{cot.lancadoEm ? ` em ${dataCurta(cot.lancadoEm)}` : ""}
                         {cot.lancadoPor ? ` por ${nomeGravado(cot.lancadoPor)}` : ""} — sem contrato.
                       </span>
-                      {podeGerenciar && (
-                        <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
-                          onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
-                      )}
                     </>
                   )}
                 </div>
@@ -1409,6 +1419,28 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       )}
 
       {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
+
+      {detalhePag && (
+        <div onClick={() => setDetalhePag(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
+            alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 620,
+              maxHeight: "86vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+            {/* o título do quadro logo abaixo já diz "Pagamentos combinados"
+                e traz o número do pedido — aqui fica o de quem é */}
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 12 }}>
+              {detalhePag.titulo || "Compra"}
+              {propostaEscolhida(detalhePag) ? ` · ${propostaEscolhida(detalhePag).favorecido}` : ""}
+            </div>
+            <QuadroPagamentosCotacao cot={detalhePag} contas={obra.contasPagar || []} hoje={hoje}
+              dinheiro={dinheiro} isMobile={isMobile} />
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button style={E.btnSec} onClick={() => setDetalhePag(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

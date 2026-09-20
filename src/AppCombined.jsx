@@ -19467,7 +19467,7 @@ function selo(cor, texto) {
   );
 }
 
-function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento }) {
+function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile, onVoltar, usuario, onGerarContrato, onLancarContas, onDesfazerLancamento, onRecalibrarPedido }) {
   const perm = getPermissoes();
   // O módulo é o mesmo dos dois lados: o cliente cria cotação, registra a
   // proposta que recebeu do fornecedor e escolhe, como o escritório. O que
@@ -19498,6 +19498,9 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
   const [formLancamento, setFormLancamento] = useState(null);   // { cotacao, status }
   const [novoPrestador, setNovoPrestador] = useState(null); // objeto quando o cadastro está aberto
   const [visor, setVisor] = useState(null);                 // anexo aberto na janela
+  const [detalhePag, setDetalhePag] = useState(null);       // cotação com os pagamentos abertos
+  // datas em edição na janelinha: null = só leitura
+  const [datasPag, setDatasPag] = useState(null);
   const [erro, setErro] = useState("");
 
   // Grava a obra sem encostar nas obras dos outros clientes: `obras` aqui é
@@ -19838,6 +19841,14 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
     setFormLancamento(null);
   }
 
+  function salvarDatasDoPedido() {
+    if (!detalhePag || !datasPag || !onRecalibrarPedido) return;
+    const r = onRecalibrarPedido(detalhePag.id, datasPag);
+    if (r && r.erro) { setErro(r.erro); setDatasPag(null); return; }
+    setErro("");
+    setDatasPag(null);
+  }
+
   async function desfazerLancamento(cot) {
     const ok = await dialogo.confirmar({
       titulo: "Desfazer o lançamento desta cotação?",
@@ -20012,8 +20023,24 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                                       {escolhida ? "Desfazer" : "Escolher"}
                                     </button>
                                   )}
+                                  {/* Os pagamentos combinados pertencem ao
+                                      fornecedor escolhido, então o caminho
+                                      até eles é a linha dele. Embaixo do
+                                      cartão a tabela competia com a lista de
+                                      propostas e confundia as duas coisas. */}
+                                  {escolhida && linhasDoPagamento(cot, obra.contasPagar || [], hoje).linhas.length > 0 && (
+                                    <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginRight: 6 }}
+                                      onClick={() => setDetalhePag(cot)}>Detalhe</button>
+                                  )}
                                   <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5 }}
                                     onClick={() => { setErro(""); setFormProposta({ cotacaoId: cot.id, proposta: p }); }}>Editar</button>
+                                  {/* Desfazer o lançamento é ação sobre ESTE
+                                      fornecedor, não sobre a cotação: mora ao
+                                      lado dos pagamentos que ele gerou. */}
+                                  {escolhida && cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
+                                    <button style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginLeft: 6, color: "#dc2626" }}
+                                      onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
+                                  )}
                                   {!cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
                                     <button title="Excluir esta proposta"
                                       style={{ ...E.btnSec, padding: "5px 10px", fontSize: 11.5, marginLeft: 6, color: "#dc2626" }}
@@ -20058,9 +20085,6 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                     {ap.motivo ? ` — ${ap.motivo}` : ""}
                   </div>
                 )}
-
-                <QuadroPagamentosCotacao cot={cot} contas={obra.contasPagar || []} hoje={hoje}
-                  dinheiro={dinheiro} isMobile={isMobile} />
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {podeGerenciar && !cot.contaGeradaId && !contratoDaCotacao(contratos, cot.id) && (
@@ -20117,10 +20141,6 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
                         Lançada em contas a pagar{cot.lancadoEm ? ` em ${dataCurta(cot.lancadoEm)}` : ""}
                         {cot.lancadoPor ? ` por ${nomeGravado(cot.lancadoPor)}` : ""} — sem contrato.
                       </span>
-                      {podeGerenciar && (
-                        <button style={{ ...E.btnSec, color: "#dc2626", marginLeft: "auto" }}
-                          onClick={() => desfazerLancamento(cot)}>Desfazer lançamento</button>
-                      )}
                     </>
                   )}
                 </div>
@@ -20152,6 +20172,43 @@ function CotacoesObraView({ obra, obras, data, save, onObraAtualizada, isMobile,
       )}
 
       {visor && <VisorProposta anexo={visor} aoFechar={() => setVisor(null)} />}
+
+      {detalhePag && (
+        <div onClick={() => { setDatasPag(null); setDetalhePag(null); }}
+          style={{ position: "fixed", inset: 0, background: "rgba(17,24,39,0.45)", display: "flex",
+            alignItems: "center", justifyContent: "center", padding: 16, zIndex: 70 }}>
+          <div onClick={(e) => e.stopPropagation()}
+            style={{ background: "#fff", borderRadius: 16, padding: 18, width: "100%", maxWidth: 620,
+              maxHeight: "86vh", overflowY: "auto", boxShadow: "0 20px 60px -20px rgba(17,24,39,0.45)" }}>
+            {/* o título do quadro logo abaixo já diz "Pagamentos combinados"
+                e traz o número do pedido — aqui fica o de quem é */}
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111827", marginBottom: 12 }}>
+              {detalhePag.titulo || "Compra"}
+              {propostaEscolhida(detalhePag) ? ` · ${propostaEscolhida(detalhePag).favorecido}` : ""}
+            </div>
+            <QuadroPagamentosCotacao cot={detalhePag} contas={obra.contasPagar || []} hoje={hoje}
+              dinheiro={dinheiro} isMobile={isMobile} datasEdit={datasPag}
+              aoMudarData={(id, v) => setDatasPag((ds) => (ds || []).map(x => x.id === id ? { ...x, vencimento: v } : x))} />
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, flexWrap: "wrap" }}>
+              {datasPag ? (
+                <>
+                  <button style={E.btnSec} onClick={() => setDatasPag(null)}>Cancelar</button>
+                  <button style={E.btn} onClick={() => salvarDatasDoPedido()}>Salvar datas</button>
+                </>
+              ) : (
+                <>
+                  {podeGerenciar && onRecalibrarPedido && detalhePag.contaGeradaId && (
+                    <button style={E.btnSec} onClick={() => setDatasPag(pagamentosEmAberto(obra.contasPagar || [], detalhePag.id, "pedido"))}>
+                      Recalibrar datas
+                    </button>
+                  )}
+                  <button style={E.btnSec} onClick={() => { setDatasPag(null); setDetalhePag(null); }}>Fechar</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -20569,10 +20626,17 @@ function CampoAnexoProposta({ anexo, onTrocar, onErro, categoria, chamada, apoio
 // Definir três entregas com valor e data é um acerto com o fornecedor. Ele
 // tem que estar aqui, onde se abre a cotação, e não só espalhado por quatro
 // linhas do contas a pagar — lá está o fluxo do mês, aqui está a compra.
-function QuadroPagamentosCotacao({ cot, contas, hoje, dinheiro, isMobile }) {
+function QuadroPagamentosCotacao({ cot, contas, hoje, dinheiro, isMobile, datasEdit, aoMudarData }) {
   const E = COT_ESTILO;
   const { fonte, linhas } = linhasDoPagamento(cot, contas, hoje);
   if (!linhas.length) return null;
+  // Em edição a coluna do vencimento vira campo. Conta paga não entra: a
+  // data dela é fato consumado, e mexer nela falsificaria o realizado.
+  const emEdicao = !!datasEdit;
+  const dataDe = (id) => {
+    const l = (datasEdit || []).find((x) => x.id === id);
+    return l ? l.vencimento : "";
+  };
   const p = cot.pagamento || {};
   const total = Math.round(linhas.reduce((a, l) => a + (Number(l.valor) || 0), 0) * 100) / 100;
   const pagas = linhas.filter((l) => l.pago);
@@ -20600,24 +20664,32 @@ function QuadroPagamentosCotacao({ cot, contas, hoje, dinheiro, isMobile }) {
         <div key={l.id} style={{ display: "grid", gridTemplateColumns: cols, gap: 8, padding: "7px 12px",
           borderTop: "1px solid rgba(38,36,33,0.06)", alignItems: "center" }}>
           <div style={{ fontSize: 12.5, color: "#111827" }}>{l.descricao}</div>
-          {!isMobile && <div style={{ fontSize: 12, color: "#4b5563" }}>{dia(l.vencimento)}</div>}
+          {!isMobile && (emEdicao && !l.pago
+            ? <input type="date" style={{ ...E.input, padding: "4px 7px", fontSize: 12 }}
+                value={dataDe(l.id)} onChange={(e) => aoMudarData(l.id, e.target.value)} />
+            : <div style={{ fontSize: 12, color: "#4b5563" }}>{dia(l.vencimento)}</div>)}
           <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827", textAlign: isMobile ? "left" : "right" }}>{dinheiro(l.valor)}</div>
           {!isMobile && (
             <div style={{ fontSize: 11.5, color: l.pago ? "#15803d" : l.vencida ? "#b45309" : "#4b5563" }}>
               {l.pago ? `Pago ${dia(l.pagoEm)}` : l.vencida ? "Vencido" : "Em aberto"}
             </div>
           )}
-          {isMobile && (
-            <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: l.pago ? "#15803d" : l.vencida ? "#b45309" : "#6b7280" }}>
-              {dia(l.vencimento)} · {l.pago ? `pago ${dia(l.pagoEm)}` : l.vencida ? "vencido" : "em aberto"}
-            </div>
-          )}
+          {isMobile && (emEdicao && !l.pago
+            ? <div style={{ gridColumn: "1 / -1" }}>
+                <input type="date" style={{ ...E.input, padding: "4px 7px", fontSize: 12 }}
+                  value={dataDe(l.id)} onChange={(e) => aoMudarData(l.id, e.target.value)} />
+              </div>
+            : <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: l.pago ? "#15803d" : l.vencida ? "#b45309" : "#6b7280" }}>
+                {dia(l.vencimento)} · {l.pago ? `pago ${dia(l.pagoEm)}` : l.vencida ? "vencido" : "em aberto"}
+              </div>)}
         </div>
       ))}
       <div style={{ padding: "7px 12px", borderTop: "1px solid rgba(38,36,33,0.08)", fontSize: 11, color: "#6b7280" }}>
         {fonte === "plano"
           ? "Este é o acerto registrado — o lançamento em contas a pagar foi desfeito, então não há contas correspondentes no momento."
-          : "As datas acompanham as contas a pagar: recalibrar lá muda o que aparece aqui."}
+          : emEdicao
+          ? "Mude o vencimento do que saiu da data. Só as linhas que você alterar se movem, e as pagas não se mexem."
+          : "São as mesmas contas a pagar: o que mudar aqui muda lá, e o que mudar lá aparece aqui."}
         {p.definidoPor ? ` Combinado por ${nomeGravado(p.definidoPor)}${dataCurta(p.definidoEm) ? ` em ${dataCurta(p.definidoEm)}` : ""}.` : ""}
       </div>
     </div>
@@ -24461,6 +24533,24 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
     return { primeiraContaId: novas[0].id, quantas: novas.length, gravado: true };
   }
 
+  // Recalibrar as entregas de um pedido sem sair da cotação: é lá que se
+  // olha o combinado com o fornecedor, e é lá que se descobre que a entrega
+  // mudou de data. As contas a pagar são as mesmas — só quem as move muda.
+  function recalibrarPedidoDaCotacao(cotacaoId, datas) {
+    if (!obraAtual) return { erro: "Obra não encontrada." };
+    const agora = new Date().toISOString();
+    const contasNovas = recalibrarContasDoPedido(obraAtual.contasPagar || [], datas, quemSou(), agora);
+    if (assinaturaContas(contasNovas) === assinaturaContas(obraAtual.contasPagar || [])) {
+      return { erro: "Nenhuma data mudou." };
+    }
+    const cotacoes = (obraAtual.cotacoes || []).map(c => c.id !== cotacaoId ? c
+      : ({ ...c, recalibradoPor: quemSou(), recalibradoEm: agora }));
+    const atualizada = { ...obraAtual, contasPagar: contasNovas, cotacoes };
+    gravarObras(obras.map(o => o.id === obraAtual.id ? atualizada : o));
+    setObraSelecionada(atualizada);
+    return { gravado: true };
+  }
+
   function desfazerLancamentoDaCotacao(cotacaoId) {
     if (!obraAtual) return { erro: "Obra não encontrada." };
     const restantes = removerContasDaCotacao(obraAtual.contasPagar || [], cotacaoId);
@@ -24612,6 +24702,7 @@ function GestaoObraPanel({ cliente, data, save, isMobile, obraInicial, onSairDaO
         onGerarContrato={abrirContratoDaCotacao}
         onLancarContas={lancarCotacaoEmContas}
         onDesfazerLancamento={desfazerLancamentoDaCotacao}
+        onRecalibrarPedido={recalibrarPedidoDaCotacao}
       />
     );
   }
